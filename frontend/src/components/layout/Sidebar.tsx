@@ -91,7 +91,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
   const initials = user?.username?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <aside className="w-14 lg:w-56 bg-[#020617] border-r border-[#1E293B] flex flex-col py-4 shrink-0">
+    <aside className="w-14 lg:w-56 h-screen bg-[#020617] border-r border-[#1E293B] flex flex-col py-4 shrink-0">
       {/* Logo area */}
       <div className="px-3 mb-5 flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs font-bold text-white shrink-0">
