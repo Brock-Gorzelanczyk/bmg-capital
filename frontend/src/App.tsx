@@ -66,11 +66,15 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, gcTime: 1000 * 60 * 10 } },
 });
 
+// v2 key busts any old corrupted cache from previous deploys
+const CACHE_KEY = "BMG_QUERY_CACHE_v2";
+try { window.localStorage.removeItem("REACT_QUERY_OFFLINE_CACHE"); } catch {}
+
 let persister: ReturnType<typeof createSyncStoragePersister>;
 try {
-  persister = createSyncStoragePersister({ storage: window.localStorage });
+  persister = createSyncStoragePersister({ storage: window.localStorage, key: CACHE_KEY });
 } catch {
-  persister = createSyncStoragePersister({ storage: window.sessionStorage });
+  persister = createSyncStoragePersister({ storage: window.sessionStorage, key: CACHE_KEY });
 }
 
 function AppInner() {

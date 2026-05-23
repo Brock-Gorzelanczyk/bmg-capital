@@ -304,11 +304,12 @@ function PaperAccountWidget() {
 function PortfolioWidget() {
   const navigate = useNavigate();
   const quotes = useMarketStore((s) => s.quotes);
-  const { data: portfolios = [], isLoading } = useQuery({
+  const { data: rawPortfolios, isLoading } = useQuery({
     queryKey: ["portfolios"],
     queryFn: getPortfolios,
     staleTime: 30_000,
   });
+  const portfolios: any[] = Array.isArray(rawPortfolios) ? rawPortfolios : [];
 
   if (isLoading) {
     return (
@@ -322,7 +323,7 @@ function PortfolioWidget() {
     );
   }
 
-  const allPositions = portfolios.flatMap((p) => p.positions);
+  const allPositions = portfolios.flatMap((p: any) => Array.isArray(p.positions) ? p.positions : []);
   const totalValue = allPositions.reduce((sum, pos) => sum + pos.shares * (quotes[pos.symbol]?.price ?? 0), 0);
   const totalCost = allPositions.reduce((sum, pos) => sum + pos.cost_basis, 0);
   const totalGain = totalValue - totalCost;
@@ -398,7 +399,7 @@ function StrategyWidget() {
     queryFn: getTrades,
     staleTime: 55_000,
   });
-  const trades: any[] = tradesData?.trades ?? [];
+  const trades: any[] = Array.isArray(tradesData?.trades) ? tradesData.trades : [];
 
   if (isLoading) {
     return (
@@ -463,21 +464,25 @@ function StrategyWidget() {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { data: indices = [], isLoading: indicesLoading } = useQuery({
+  const { data: rawIndices, isLoading: indicesLoading } = useQuery({
     queryKey: ["market-overview"],
     queryFn: getMarketOverview,
     refetchInterval: 60_000,
   });
-  const { data: sectors = [], isLoading: sectorsLoading } = useQuery({
+  const { data: rawSectors, isLoading: sectorsLoading } = useQuery({
     queryKey: ["sectors"],
     queryFn: getSectorPerformance,
     refetchInterval: 60_000,
   });
-  const { data: news = [], isLoading: newsLoading } = useQuery({
+  const { data: rawNews, isLoading: newsLoading } = useQuery({
     queryKey: ["news"],
     queryFn: () => getNews(),
     staleTime: 300_000,
   });
+
+  const indices: any[] = Array.isArray(rawIndices) ? rawIndices : [];
+  const sectors: any[] = Array.isArray(rawSectors) ? rawSectors : [];
+  const news: any[] = Array.isArray(rawNews) ? rawNews : [];
 
   const briefLoading = indicesLoading || sectorsLoading;
   const maxSectorMove = Math.max(...sectors.map((s: any) => Math.abs(s.change_pct)), 0.1);
