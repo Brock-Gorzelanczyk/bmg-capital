@@ -112,7 +112,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
         </button>
       </div>
 
-      <nav className="flex flex-col gap-4 px-2 flex-1 overflow-y-auto">
+      <nav className="flex flex-col gap-4 px-2 flex-1 overflow-y-auto min-h-0">
         <NavSection label="TRADING" items={NAV_PRIMARY} />
         <NavSection label="MARKETS" items={NAV_MARKETS} />
 
