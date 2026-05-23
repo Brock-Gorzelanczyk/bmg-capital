@@ -71,8 +71,8 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if len(body.password) < 1:
+        raise HTTPException(status_code=400, detail="Password required")
 
     user = User(
         email=body.email.lower().strip(),

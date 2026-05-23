@@ -21,7 +21,7 @@ export default function LoginPage() {
 
     if (mode === "register") {
       if (password !== confirm) { setError("Passwords do not match"); return; }
-      if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+      if (password.length < 1) { setError("Password required"); return; }
     }
 
     setLoading(true);
