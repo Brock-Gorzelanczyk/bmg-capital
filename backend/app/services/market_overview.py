@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List
+
+from alpaca.data.enums import DataFeed
+from alpaca.data.requests import StockSnapshotRequest
+
+from app.alpaca.client import get_historical_client
+
+logger = logging.getLogger(__name__)
+
+INDEX_SYMBOLS: List[str] = ["SPY", "QQQ", "DIA", "IWM"]
+
+
+async def get_market_overview() -> List[Dict[str, Any]]:
+    """Return price/change data for the four major index ETFs."""
+    try:
+        client = get_historical_client()
+        req = StockSnapshotRequest(symbol_or_symbols=INDEX_SYMBOLS, feed=DataFeed.IEX)
+        snapshots = client.get_stock_snapshot(req)
+        result: List[Dict[str, Any]] = []
+        for symbol in INDEX_SYMBOLS:
+            if symbol in snapshots:
+                snap = snapshots[symbol]
+                daily = snap.daily_bar
+                prev = snap.previous_daily_bar
+                price = float(daily.close) if daily else 0.0
+                prev_close = float(prev.close) if prev else price
+                change = price - prev_close
+                change_pct = (change / prev_close * 100) if prev_close else 0.0
+                result.append(
+                    {
+                        "symbol": symbol,
+                        "price": price,
+                        "change": change,
+                        "change_pct": change_pct,
+                        "volume": float(daily.volume) if daily else 0.0,
+                    }
+                )
+        return result
+    except Exception as e:
+        logger.error(f"Market overview error: {e}")
+        return []

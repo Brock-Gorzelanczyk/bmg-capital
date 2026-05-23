@@ -1,0 +1,601 @@
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { LayoutList, X, Check } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import CandlestickChart, { type ChartHandle, type TradeLevels } from "@/components/chart/CandlestickChart";
+import RsiChart from "@/components/chart/RsiChart";
+import MacdChart from "@/components/chart/MacdChart";
+import OscillatorPane from "@/components/chart/OscillatorPane";
+import TvTopBar from "@/components/chart/TvTopBar";
+import TvBottomBar, { type Period, PERIOD_CONFIGS } from "@/components/chart/TvBottomBar";
+import DrawingToolbar from "@/components/chart/DrawingToolbar";
+import IndicatorsModal from "@/components/chart/IndicatorsModal";
+import WatchlistPanel from "@/components/panels/WatchlistPanel";
+import OrderTicket from "@/components/trading/OrderTicket";
+import { useBars } from "@/hooks/useBars";
+import { useMarketStore } from "@/store";
+import { getDrawings, saveDrawings } from "@/api/chartDrawings";
+import { formatCurrency, formatVolume, cn } from "@/lib/utils";
+import type { ChartType, DrawingTool, HoveredBar, Drawing } from "@/types/chart";
+
+const OVERLAY_COLORS: Record<string, string> = {
+  SMA_20: "#f59e0b", SMA_50: "#3b82f6", SMA_200: "#8b5cf6",
+  EMA_20: "#fbbf24", EMA_50: "#60a5fa", EMA_200: "#a78bfa",
+  DEMA_20: "#f472b6",
+  VWAP: "#06b6d4",
+  BB_20_upper: "#64748b", BB_20_middle: "#94a3b8", BB_20_lower: "#64748b",
+  ICHI_tenkan: "#26a69a",
+  ICHI_kijun: "#ef5350",
+  ICHI_senkou_a: "rgba(38,166,154,0.1)",
+  ICHI_senkou_b: "rgba(239,83,80,0.1)",
+  PSAR: "#9c27b0",
+  DONCHIAN_upper: "#607d8b",
+  DONCHIAN_mid: "#90a4ae",
+  DONCHIAN_lower: "#607d8b",
+  KELTNER_upper: "#ff9800",
+  KELTNER_mid: "#ffb74d",
+  KELTNER_lower: "#ff9800",
+};
+
+function indicatorLabel(key: string): string {
+  if (key === "VWAP") return "VWAP";
+  return key.replace(/_/g, " ");
+}
+
+function isOverlayKey(key: string): boolean {
+  return key.startsWith("SMA_") || key.startsWith("EMA_") || key.startsWith("DEMA_")
+    || key === "VWAP" || key === "PSAR"
+    || key.startsWith("ICHI_") || key.startsWith("DONCHIAN_") || key.startsWith("KELTNER_")
+    || key.endsWith("_upper") || key.endsWith("_middle") || key.endsWith("_lower");
+}
+
+const toUnix = (t: string) => Math.floor(new Date(t).getTime() / 1000);
+
+const PRESET_LABELS: Record<string, string> = {
+  canslim_leaders: "CAN SLIM Leaders",
+  stage2_breakout: "Stage 2 Breakout",
+  momentum_surge: "Momentum Surge",
+  high_rs_momentum: "High RS Leaders",
+  power_trend: "Power Trend",
+  mean_reversion_quality: "Quality Dip Buy",
+  deep_value_bounce: "Quality Oversold",
+  volatility_contraction: "Volatility Squeeze",
+  ema_stack_uptrend: "EMA Stack",
+  consecutive_gains: "Momentum Continuation",
+  rsi_oversold: "RSI Oversold",
+  golden_cross: "Golden Cross",
+  macd_bullish: "MACD Crossover",
+  volume_surge: "Volume Surge",
+  breakout_52w: "52-Week High",
+};
+
+const PRESET_INDICATOR_MAP: Record<string, string[]> = {
+  canslim_leaders:        ["SMA_50", "SMA_200", "RSI_14"],
+  stage2_breakout:        ["SMA_50", "SMA_200", "RSI_14"],
+  momentum_surge:         ["RSI_14", "SMA_50"],
+  high_rs_momentum:       ["RSI_14", "SMA_50"],
+  power_trend:            ["EMA_20", "EMA_50", "EMA_200"],
+  mean_reversion_quality: ["SMA_200", "RSI_14"],
+  deep_value_bounce:      ["SMA_200", "RSI_14"],
+  volatility_contraction: ["BB_20", "SMA_50"],
+  ema_stack_uptrend:      ["EMA_20", "EMA_50", "EMA_200"],
+  consecutive_gains:      ["RSI_14"],
+  rsi_oversold:           ["RSI_14"],
+  golden_cross:           ["SMA_50", "SMA_200"],
+  macd_bullish:           ["MACD"],
+  volume_surge:           ["SMA_20", "SMA_50"],
+  breakout_52w:           ["SMA_50", "SMA_200"],
+};
+
+function getStoredSymbol() {
+  try { return localStorage.getItem("bmg_symbol") ?? "AAPL"; } catch { return "AAPL"; }
+}
+
+// ── Debounce helper ────────────────────────────────────────────────────────────
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+export default function ChartPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [symbol, setSymbol] = useState(() => searchParams.get("symbol") ?? getStoredSymbol());
+  const [period, setPeriod] = useState<Period>("1Y");
+  const [chartType, setChartType] = useState<ChartType>("candle");
+  const [activeIndicators, setActiveIndicators] = useState<Set<string>>(new Set(["SMA_20", "SMA_50"]));
+  const [activeTool, setActiveTool] = useState<DrawingTool>("cursor");
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [pendingTrendStart, setPendingTrendStart] = useState<{ time: number; price: number } | null>(null);
+  const [hoveredBar, setHoveredBar] = useState<HoveredBar | null>(null);
+  const [showIndicatorsModal, setShowIndicatorsModal] = useState(false);
+  const [showWatchlist, setShowWatchlist] = useState(true);
+  const [compareSymbol, setCompareSymbol] = useState<string | null>(null);
+  const [proMode, setProMode] = useState(false);
+  const [showOrderTicket, setShowOrderTicket] = useState(false);
+  const [savedIndicator, setSavedIndicator] = useState(false);
+
+  const presetKey = searchParams.get("preset") ?? null;
+
+  const tradeLevels = useMemo<TradeLevels | undefined>(() => {
+    const entry     = parseFloat(searchParams.get("entry")     ?? "");
+    const stop      = parseFloat(searchParams.get("stop")      ?? "");
+    const target    = parseFloat(searchParams.get("target")    ?? "");
+    const exitPrice = parseFloat(searchParams.get("exitPrice") ?? "");
+    const entryDate  = searchParams.get("entryDate")  ?? undefined;
+    const exitDate   = searchParams.get("exitDate")   ?? undefined;
+    const exitReason = searchParams.get("exitReason") ?? undefined;
+    if (!isNaN(entry) || !isNaN(stop) || !isNaN(target) || !isNaN(exitPrice)) {
+      return {
+        entry:     isNaN(entry)     ? undefined : entry,
+        stop:      isNaN(stop)      ? undefined : stop,
+        target:    isNaN(target)    ? undefined : target,
+        exitPrice: isNaN(exitPrice) ? undefined : exitPrice,
+        entryDate,
+        exitDate,
+        exitReason,
+      };
+    }
+    return undefined;
+  }, [searchParams]);
+
+  // Derive timeframe + start date from period, or from trade levels when viewing a historical trade
+  const { timeframe, start } = useMemo(() => {
+    if (tradeLevels?.entryDate) {
+      const d = new Date(tradeLevels.entryDate);
+      d.setDate(d.getDate() - 30);
+      return { timeframe: "1Day", start: d.toISOString().slice(0, 10) };
+    }
+    const cfg = PERIOD_CONFIGS[period];
+    return { timeframe: cfg.timeframe, start: cfg.getStart() };
+  }, [period, tradeLevels]);
+  const presetIndsRef = useRef<string[]>([]);
+  const [presetActive, setPresetActive] = useState(true);
+  const [showPresetBanner, setShowPresetBanner] = useState(!!presetKey);
+
+  const chartRef = useRef<ChartHandle>(null);
+  const liveBar = useMarketStore((s) => s.liveBars[symbol]);
+
+  const indicatorsParam = Array.from(activeIndicators).join(",");
+  const { data, isLoading } = useBars(symbol, timeframe, indicatorsParam || undefined, start);
+  const { data: compareData } = useBars(compareSymbol ?? "", timeframe, undefined, start);
+
+  const bars = data?.bars ?? [];
+  const indicators = data?.indicators ?? {};
+
+  // ── Drawing persistence ────────────────────────────────────────────────────
+  // Load drawings when symbol/timeframe changes
+  useEffect(() => {
+    if (!symbol || !timeframe) return;
+    getDrawings(symbol, timeframe)
+      .then((res) => {
+        if (res.drawings && Array.isArray(res.drawings)) {
+          setDrawings(res.drawings);
+        }
+      })
+      .catch(() => {
+        // Backend may not be available; silently ignore
+      });
+  }, [symbol, timeframe]);
+
+  // Debounced save: persist drawings 500ms after last change
+  const debouncedDrawings = useDebounce(drawings, 500);
+  const saveRef = useRef({ symbol, timeframe });
+  useEffect(() => { saveRef.current = { symbol, timeframe }; }, [symbol, timeframe]);
+
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    // Skip the very first render so we don't overwrite loaded drawings
+    if (isInitialMount.current) { isInitialMount.current = false; return; }
+    const { symbol: sym, timeframe: tf } = saveRef.current;
+    saveDrawings(sym, tf, debouncedDrawings)
+      .then(() => {
+        setSavedIndicator(true);
+        setTimeout(() => setSavedIndicator(false), 1500);
+      })
+      .catch(() => {});
+  }, [debouncedDrawings]);
+
+  // Live bar updates
+  useEffect(() => {
+    if (liveBar && chartRef.current) {
+      chartRef.current.updateBar({
+        t: liveBar.timestamp, o: liveBar.open, h: liveBar.high,
+        l: liveBar.low, c: liveBar.close, v: liveBar.volume,
+      });
+    }
+  }, [liveBar]);
+
+  // Auto-enable preset indicators when arriving from the screener
+  useEffect(() => {
+    if (!presetKey) return;
+    const inds = PRESET_INDICATOR_MAP[presetKey] ?? [];
+    presetIndsRef.current = inds;
+    setActiveIndicators((prev) => new Set([...prev, ...inds]));
+    setPresetActive(true);
+    setShowPresetBanner(true);
+  }, [presetKey]);
+
+  const handlePresetToggle = () => {
+    const inds = presetIndsRef.current;
+    if (presetActive) {
+      setActiveIndicators((prev) => { const n = new Set(prev); inds.forEach((k) => n.delete(k)); return n; });
+    } else {
+      setActiveIndicators((prev) => new Set([...prev, ...inds]));
+    }
+    setPresetActive((p) => !p);
+  };
+
+  const handleSymbolChange = (s: string) => {
+    setSymbol(s);
+    setSearchParams({ symbol: s });
+    try { localStorage.setItem("bmg_symbol", s); } catch {}
+    // Clear local drawings; new ones load via useEffect
+    setDrawings([]);
+    setPendingTrendStart(null);
+    isInitialMount.current = true;
+  };
+
+  const handleAddDrawing = useCallback((partial: Omit<Drawing, "id">) => {
+    if (partial.type === "trendline") {
+      if (!pendingTrendStart) {
+        setPendingTrendStart(partial.p1!);
+      } else {
+        setDrawings((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), type: "trendline", p1: pendingTrendStart, p2: partial.p1!, color: "#2196f3" },
+        ]);
+        setPendingTrendStart(null);
+      }
+    } else {
+      setDrawings((prev) => [...prev, { id: crypto.randomUUID(), ...partial }]);
+    }
+  }, [pendingTrendStart]);
+
+  const handleClearDrawings = () => {
+    setDrawings([]);
+    setPendingTrendStart(null);
+    setActiveTool("cursor");
+  };
+
+  // Price display fallback to last bar
+  const displayBar = hoveredBar ?? (bars.length > 0 ? {
+    time: 0,
+    open: bars.at(-1)!.o,
+    high: bars.at(-1)!.h,
+    low: bars.at(-1)!.l,
+    close: bars.at(-1)!.c,
+    volume: bars.at(-1)!.v,
+  } : null);
+
+  const isUp = displayBar ? displayBar.close >= displayBar.open : true;
+  const priceColor = isUp ? "#26a69a" : "#ef5350";
+
+  // Find bar index matching the hovered crosshair time for indicator overlay
+  const hoveredIdx = useMemo(() => {
+    if (!hoveredBar) return bars.length - 1;
+    const idx = bars.findIndex((b) => toUnix(b.t) === hoveredBar.time);
+    return idx >= 0 ? idx : bars.length - 1;
+  }, [hoveredBar, bars]);
+
+  const overlayIndicators = useMemo(() =>
+    Object.entries(indicators).filter(([k]) => isOverlayKey(k)),
+    [indicators]
+  );
+
+  // Existing sub-pane indicators
+  const hasRsi   = "RSI_14"    in indicators;
+  const hasMacd  = "MACD_line" in indicators;
+  const hasStoch = "STOCH_k"   in indicators;
+  const hasWillR = "WILLR"     in indicators;
+  const hasCci   = "CCI"       in indicators;
+  const hasObv   = "OBV"       in indicators;
+  const hasAtr   = "ATR"       in indicators;
+
+  // New indicator checks
+  const hasAdx      = "ADX"          in indicators;
+  const hasIchimoku = "ICHI_tenkan"  in indicators;
+  const hasPsar     = "PSAR"         in indicators;
+  const hasDonchian = "DONCHIAN_upper" in indicators;
+  const hasKeltner  = "KELTNER_upper"  in indicators;
+  const hasCmf      = "CMF"          in indicators;
+  const hasMfi      = "MFI"          in indicators;
+  const hasRoc      = "ROC"          in indicators;
+
+  // Sub-pane indicators are only visible in pro mode
+  const showSubPanes = proMode;
+
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden bg-[#131722] text-[#d1d4dc]">
+      {/* Top bar */}
+      <TvTopBar
+        symbol={symbol}
+        chartType={chartType}
+        onSymbolChange={handleSymbolChange}
+        onChartTypeChange={setChartType}
+        onIndicatorsClick={() => setShowIndicatorsModal(true)}
+        onWatchlistToggle={() => setShowWatchlist((s) => !s)}
+        showWatchlist={showWatchlist}
+        compareSymbol={compareSymbol ?? undefined}
+        onCompare={(s) => setCompareSymbol(s)}
+        proMode={proMode}
+        onProModeToggle={() => setProMode((p) => !p)}
+        onTradeClick={() => setShowOrderTicket(true)}
+      />
+
+      {/* Preset context banner */}
+      {showPresetBanner && presetKey && PRESET_LABELS[presetKey] && (
+        <div className="h-8 border-b border-[#2a2e39] bg-[#1e222d] flex items-center px-3 gap-3 shrink-0">
+          <span className="text-[11px] text-[#4a4e5b]">Screened by</span>
+          <span className="text-[11px] font-semibold text-[#d1d4dc]">{PRESET_LABELS[presetKey]}</span>
+          <button
+            onClick={handlePresetToggle}
+            title={presetActive ? "Hide preset indicators" : "Show preset indicators"}
+            className={cn(
+              "w-8 h-4 rounded-full relative transition-colors shrink-0 focus:outline-none",
+              presetActive ? "bg-[#2962ff]" : "bg-[#2a2e39]"
+            )}
+          >
+            <span className={cn(
+              "absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all",
+              presetActive ? "left-[18px]" : "left-0.5"
+            )} />
+          </button>
+          <span className="text-[10px] text-[#4a4e5b]">{presetActive ? "on" : "off"}</span>
+          <button
+            onClick={() => setShowPresetBanner(false)}
+            className="ml-auto text-[#4a4e5b] hover:text-[#d1d4dc]"
+            title="Dismiss"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* Main area */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left drawing toolbar — only visible in pro mode */}
+        {proMode && (
+          <DrawingToolbar
+            activeTool={activeTool}
+            onChange={setActiveTool}
+            onClearAll={handleClearDrawings}
+          />
+        )}
+
+        {/* Chart area */}
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* OHLCV info overlay */}
+          <div className="absolute top-0 left-0 z-10 pointer-events-none flex items-center gap-0 px-2 pt-1.5 flex-wrap">
+            <span className="text-[#d1d4dc] font-semibold text-xs mr-2">{symbol}</span>
+            {displayBar && (
+              <>
+                <span className="text-[#4a4e5b] text-[11px] mr-1.5">O</span>
+                <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.open.toFixed(2)}</span>
+                <span className="text-[#4a4e5b] text-[11px] mr-1.5">H</span>
+                <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.high.toFixed(2)}</span>
+                <span className="text-[#4a4e5b] text-[11px] mr-1.5">L</span>
+                <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.low.toFixed(2)}</span>
+                <span className="text-[#4a4e5b] text-[11px] mr-1.5">C</span>
+                <span className="text-[11px] font-semibold mr-2" style={{ color: priceColor }}>{displayBar.close.toFixed(2)}</span>
+                <span className="text-[#4a4e5b] text-[11px] mr-1.5">V</span>
+                <span className="text-[#4a4e5b] text-[11px] mr-3">{formatVolume(displayBar.volume)}</span>
+              </>
+            )}
+            {overlayIndicators.map(([key, vals]) => {
+              const val = vals[hoveredIdx];
+              if (val == null) return null;
+              const color = OVERLAY_COLORS[key] ?? "#94a3b8";
+              return (
+                <span key={key} className="flex items-center gap-0.5 mr-2">
+                  <span style={{ color }} className="text-[9px] leading-none">●</span>
+                  <span style={{ color }} className="text-[11px]">
+                    {indicatorLabel(key)} {val.toFixed(2)}
+                  </span>
+                </span>
+              );
+            })}
+            {pendingTrendStart && (
+              <span className="ml-3 text-[11px] text-[#d1d4dc]">Click second point to complete trend line</span>
+            )}
+          </div>
+
+          {/* Saved drawings indicator */}
+          {savedIndicator && (
+            <div className="absolute top-1 right-16 z-20 flex items-center gap-1 bg-[#1e222d] border border-[#2a2e39] rounded px-2 py-0.5 text-[10px] text-[#26a69a] pointer-events-none animate-in fade-in duration-200">
+              <Check size={10} />
+              saved
+            </div>
+          )}
+
+          {/* Main chart */}
+          <div className="flex-1 overflow-hidden">
+            {isLoading ? (
+              <div className="w-full h-full flex items-center justify-center text-[#4a4e5b] text-sm">
+                Loading {symbol}...
+              </div>
+            ) : (
+              <CandlestickChart
+                ref={chartRef}
+                bars={bars}
+                indicators={indicators}
+                chartType={chartType}
+                activeTool={proMode ? activeTool : "cursor"}
+                drawings={drawings}
+                tradeLevels={tradeLevels}
+                compareBars={compareData?.bars}
+                compareSymbol={compareSymbol ?? undefined}
+                onCrosshairMove={setHoveredBar}
+                onAddDrawing={handleAddDrawing}
+              />
+            )}
+          </div>
+
+          {/* Sub-panes — only shown in pro mode */}
+          {showSubPanes && (
+            <>
+              {hasRsi && !isLoading && (
+                <RsiChart bars={bars} values={indicators.RSI_14} height={100} />
+              )}
+              {hasMacd && !isLoading && (
+                <MacdChart
+                  bars={bars}
+                  macdLine={indicators.MACD_line}
+                  macdSignal={indicators.MACD_signal ?? []}
+                  macdHist={indicators.MACD_hist ?? []}
+                  height={100}
+                />
+              )}
+              {hasStoch && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.STOCH_k}
+                  color1="#f97316"
+                  label1="%K"
+                  line2={indicators.STOCH_d}
+                  color2="#3b82f6"
+                  label2="%D"
+                  levels={[{ price: 80, color: "#787b86" }, { price: 20, color: "#787b86" }]}
+                  title="Stochastic (14,3,3)"
+                  height={100}
+                  explainTerm="Stochastic Oscillator"
+                />
+              )}
+              {hasWillR && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.WILLR}
+                  color1="#14b8a6"
+                  label1="%R"
+                  levels={[{ price: -20, color: "#787b86" }, { price: -80, color: "#787b86" }]}
+                  title="Williams %R (14)"
+                  height={100}
+                />
+              )}
+              {hasCci && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.CCI}
+                  color1="#e879f9"
+                  levels={[{ price: 100, color: "#787b86" }, { price: -100, color: "#787b86" }]}
+                  title="CCI (20)"
+                  height={100}
+                />
+              )}
+              {hasObv && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.OBV}
+                  color1="#fbbf24"
+                  title="OBV"
+                  height={100}
+                />
+              )}
+              {hasAtr && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.ATR}
+                  color1="#64748b"
+                  title="ATR (14)"
+                  height={100}
+                />
+              )}
+              {hasAdx && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.ADX}
+                  color1="#fbbf24"
+                  label1="ADX"
+                  line2={indicators.ADX_pos}
+                  color2="#22c55e"
+                  label2="+DI"
+                  levels={[{ price: 25, color: "#787b86" }]}
+                  title="ADX (14)"
+                  height={100}
+                  explainTerm="ADX (Average Directional Index)"
+                />
+              )}
+              {hasCmf && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.CMF}
+                  color1="#06b6d4"
+                  levels={[{ price: 0, color: "#787b86" }]}
+                  title="CMF (20)"
+                  height={100}
+                />
+              )}
+              {hasMfi && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.MFI}
+                  color1="#a78bfa"
+                  levels={[{ price: 80, color: "#787b86" }, { price: 20, color: "#787b86" }]}
+                  title="MFI (14)"
+                  height={100}
+                />
+              )}
+              {hasRoc && !isLoading && (
+                <OscillatorPane
+                  bars={bars}
+                  line1={indicators.ROC}
+                  color1="#fb923c"
+                  levels={[{ price: 0, color: "#787b86" }]}
+                  title="ROC (12)"
+                  height={100}
+                />
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Right watchlist */}
+        {showWatchlist ? (
+          <WatchlistPanel
+            activeSymbol={symbol}
+            onSymbolClick={handleSymbolChange}
+            onClose={() => setShowWatchlist(false)}
+          />
+        ) : (
+          <button
+            onClick={() => setShowWatchlist(true)}
+            title="Show watchlist"
+            className="w-8 shrink-0 flex flex-col items-center justify-center border-l border-[#2a2e39] bg-[#131722] hover:bg-[#1e222d] text-[#4a4e5b] hover:text-[#d1d4dc] transition-colors gap-1"
+          >
+            <LayoutList size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Bottom bar — period selector + status */}
+      <TvBottomBar
+        period={period}
+        onPeriodChange={setPeriod}
+        symbol={symbol}
+        displayPrice={displayBar?.close}
+        displayVolume={displayBar?.volume}
+        drawingCount={drawings.length}
+      />
+
+      {/* Indicators modal */}
+      {showIndicatorsModal && (
+        <IndicatorsModal
+          active={activeIndicators}
+          onChange={setActiveIndicators}
+          onClose={() => setShowIndicatorsModal(false)}
+        />
+      )}
+
+      {/* Order ticket modal */}
+      {showOrderTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#020617]/80 backdrop-blur-sm">
+          <div className="w-96">
+            <OrderTicket symbol={symbol} onClose={() => setShowOrderTicket(false)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

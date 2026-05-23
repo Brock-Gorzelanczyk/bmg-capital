@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 2%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 6%;
+    --card-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+    --font-sans: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-[#020617] text-[#F8FAFC];
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Thin dark scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #020617; }
+  ::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+  /* Focus ring */
+  :focus-visible {
+    outline: 2px solid #3B82F6;
+    outline-offset: 2px;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Lesson body typography ─────────────────────────────────────────────── */
+.lesson-body {
+  color: #d4d4d8; /* zinc-300 */
+  line-height: 1.75;
+  font-size: 0.9375rem;
+}
+.lesson-body h2 {
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 1.75rem 0 0.75rem;
+  padding-top: 0.25rem;
+}
+.lesson-body h3 {
+  color: #e4e4e7;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem;
+}
+.lesson-body p { margin: 0.75rem 0; }
+.lesson-body ul, .lesson-body ol { padding-left: 1.5rem; margin: 0.75rem 0; }
+.lesson-body li { margin: 0.35rem 0; }
+.lesson-body strong { color: #fff; font-weight: 600; }
+.lesson-body em { color: #a1a1aa; font-style: italic; }
+.lesson-body code {
+  background: #18181b;
+  color: #a3e635;
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.lesson-callout {
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 0.875rem;
+}
+.lesson-callout.info { background: rgba(59,130,246,0.07); border-color: rgba(59,130,246,0.2); color: #93c5fd; }
+.lesson-callout.info strong { color: #bfdbfe; }
+.lesson-callout.warning { background: rgba(245,158,11,0.07); border-color: rgba(245,158,11,0.2); color: #fcd34d; }
+.lesson-callout.warning strong { color: #fef3c7; }
+.lesson-callout.success { background: rgba(16,185,129,0.07); border-color: rgba(16,185,129,0.2); color: #6ee7b7; }
+.lesson-callout.success strong { color: #d1fae5; }
+.lesson-callout ul, .lesson-callout ol { padding-left: 1.25rem; margin: 0.5rem 0; }
+.lesson-callout li { margin: 0.25rem 0; }
+
+.lesson-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  margin: 1rem 0;
+}
+.lesson-table th {
+  text-align: left;
+  color: #71717a;
+  font-weight: 600;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #27272a;
+}
+.lesson-table td {
+  padding: 0.5rem 0.75rem;
+  color: #d4d4d8;
+  border-bottom: 1px solid #18181b;
+}
+.lesson-table tr:last-child td { border-bottom: none; }

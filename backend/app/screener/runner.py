@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any, Dict, List
+
+import pandas as pd
+import yfinance as yf
+
+from app.alpaca.assets import get_universe
+from app.screener.filters import apply_filters, build_filters
+
+logger = logging.getLogger(__name__)
+
+
+import time
+
+
+def _fetch_bars_sync(symbols: List[str], period: str = "1y") -> Dict[str, pd.DataFrame]:
+    """Batch download daily bars via yfinance in chunks with rate-limit delays."""
+    result: Dict[str, pd.DataFrame] = {}
+    batch_size = 50  # smaller batches = less pressure on Yahoo Finance
+
+    for i in range(0, len(symbols), batch_size):
+        chunk = symbols[i : i + batch_size]
+        try:
+            raw = yf.download(
+                tickers=chunk,
+                period=period,
+                interval="1d",
+                auto_adjust=True,
+                group_by="ticker",
+                threads=False,  # sequential to avoid triggering rate limits
+                progress=False,
+            )
+            if raw.empty:
+                continue
+
+            single = len(chunk) == 1
+            for sym in chunk:
+                try:
+                    df = raw.copy() if single else raw[sym].copy()
+                    df.columns = [str(c).lower() for c in df.columns]
+                    df = df[["open", "high", "low", "close", "volume"]].dropna()
+                    if len(df) > 1:
+                        result[sym] = df
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.error(f"yfinance batch fetch error for chunk starting at {chunk[0]}: {e}")
+
+        # Pause between batches to stay under Yahoo Finance rate limits
+        if i + batch_size < len(symbols):
+            time.sleep(2)
+
+    return result
+
+
+async def fetch_bars_batch(symbols: List[str], period: str = "1y") -> Dict[str, pd.DataFrame]:
+    """Async wrapper around the synchronous yfinance batch fetch."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: _fetch_bars_sync(symbols, period))
+
+
+def run_screen_sync(filter_configs: List[dict], all_bars: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
+    """Apply filters to pre-fetched bars. Used by daily automation to avoid re-downloading."""
+    filters = build_filters(filter_configs)
+    matching: List[Dict[str, Any]] = []
+    for symbol, df in all_bars.items():
+        if len(df) < 2:
+            continue
+        try:
+            passes = apply_filters(df, filters)
+            if passes:
+                change_pct = float((df["close"].iloc[-1] / df["close"].iloc[-2] - 1) * 100)
+                change_5d = float((df["close"].iloc[-1] / df["close"].iloc[-6] - 1) * 100) if len(df) >= 6 else change_pct
+                avg_vol = float(df["volume"].iloc[-21:-1].mean()) if len(df) >= 22 else float(df["volume"].mean())
+                rel_volume = round(float(df["volume"].iloc[-1] / avg_vol), 2) if avg_vol > 0 else 1.0
+                matching.append({
+                    "symbol": symbol,
+                    "price": float(df["close"].iloc[-1]),
+                    "change_pct": change_pct,
+                    "change_5d": change_5d,
+                    "volume": float(df["volume"].iloc[-1]),
+                    "rel_volume": rel_volume,
+                })
+        except Exception as e:
+            logger.debug(f"Filter error for {symbol}: {e}")
+    return sorted(matching, key=lambda x: abs(x["change_pct"]), reverse=True)
+
+
+async def run_screen(filter_configs: List[dict]) -> List[Dict[str, Any]]:
+    """Run a screen across the entire universe (downloads bars independently).
+    For bulk screener runs, prefer run_screen_sync with shared bars."""
+    universe = get_universe()
+    filters = build_filters(filter_configs)
+
+    all_bars = await fetch_bars_batch(universe)
+    return run_screen_sync(filter_configs, all_bars)

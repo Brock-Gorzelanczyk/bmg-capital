@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from datetime import date
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+from app.config import settings
+from app.db.base import Base
+from app.db.session import engine, SessionLocal
+from app.db.models import *  # noqa: F401,F403 — registers all models with Base.metadata
+from app.db.migration import run_migrations
+from app.alpaca.stream import stream_manager
+from app.screener.scheduler import scheduler, setup_scheduler
+from app.ws.manager import connection_manager
+from app.ws.router import router as ws_router
+from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, social, tiers, chart_drawings
+
+logger = logging.getLogger(__name__)
+
+
+async def _startup_strategy_scan() -> None:
+    """Run strategy automation for all users who haven't had a scan today."""
+    from app.db.models.strategy import DailyEquitySnapshot
+    from app.db.models.users import User
+    from app.screener.daily_runner import run_daily_automation
+
+    db = SessionLocal()
+    try:
+        users = db.query(User).filter(User.is_active.is_(True)).all()
+        if not users:
+            logger.info("No users registered yet — skipping startup strategy scan")
+            return
+        user_ids_needing_scan = []
+        for user in users:
+            already_ran = db.query(DailyEquitySnapshot).filter(
+                DailyEquitySnapshot.snapshot_date == date.today(),
+                DailyEquitySnapshot.user_id == user.id,
+            ).first()
+            if not already_ran:
+                user_ids_needing_scan.append(user.id)
+    finally:
+        db.close()
+
+    if not user_ids_needing_scan:
+        logger.info("Strategy automation already ran today for all users — skipping")
+        return
+
+    for user_id in user_ids_needing_scan:
+        logger.info(f"Strategy automation: starting startup scan for user {user_id}…")
+        try:
+            result = await run_daily_automation(user_id=user_id)
+            logger.info(f"Strategy startup scan complete for user {user_id}: {result}")
+        except Exception as e:
+            logger.error(f"Strategy startup scan failed for user {user_id}: {e}", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create all database tables (no-op if they already exist)
+    Base.metadata.create_all(bind=engine)
+    # Add any missing columns to existing tables
+    run_migrations(engine)
+
+    # Wire Alpaca stream events to connected WebSocket clients
+    stream_manager.on_quote(connection_manager.send_to_symbol_subscribers)
+    stream_manager.on_bar(connection_manager.send_to_symbol_subscribers)
+
+    # Start the live data stream and background scheduler
+    await stream_manager.start()
+    setup_scheduler()
+    scheduler.start()
+
+    # Kick off strategy scan in background — won't block server startup
+    asyncio.create_task(_startup_strategy_scan())
+
+    yield
+
+    # Graceful shutdown
+    await stream_manager.stop()
+    scheduler.shutdown()
+
+
+app = FastAPI(
+    title="BMG Capital API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Routers
+app.include_router(ws_router)
+app.include_router(auth.router)
+app.include_router(bars.router)
+app.include_router(screener.router)
+app.include_router(watchlist.router)
+app.include_router(portfolio.router)
+app.include_router(alerts.router)
+app.include_router(market.router)
+app.include_router(news.router)
+app.include_router(earnings.router)
+app.include_router(strategy.router)
+app.include_router(backtest.router)
+app.include_router(research.router)
+app.include_router(paper.router)
+app.include_router(screens.router)
+app.include_router(learn.router)
+app.include_router(explain.router)
+app.include_router(options.router)
+app.include_router(notifications.router)
+app.include_router(discovery.router)
+app.include_router(onboarding.router)
+app.include_router(journal.router)
+app.include_router(social.router)
+app.include_router(tiers.router)
+app.include_router(chart_drawings.router)
+
+
+@app.get("/health", tags=["health"])
+async def health():
+    """Simple liveness check."""
+    return {"status": "ok"}
+
+
+# Serve the Vite frontend build (production only — skipped if dist/ doesn't exist)
+_STATIC_DIR = Path(__file__).parent.parent / "static"
+if _STATIC_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(_STATIC_DIR / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        index = _STATIC_DIR / "index.html"
+        return FileResponse(str(index))
