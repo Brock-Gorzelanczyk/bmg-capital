@@ -20,8 +20,10 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   panelOpen: false,
   unreadCount: 0,
 
-  setNotifications: (notifications) =>
-    set({ notifications, unreadCount: notifications.filter((n) => !n.is_read).length }),
+  setNotifications: (notifications) => {
+    const safe = Array.isArray(notifications) ? notifications : [];
+    set({ notifications: safe, unreadCount: safe.filter((n) => !n.is_read).length });
+  },
 
   addNotification: (n) =>
     set((s) => {

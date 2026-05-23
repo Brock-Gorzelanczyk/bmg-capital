@@ -48,12 +48,13 @@ export default function NotificationPanel() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const { data = [], isLoading } = useQuery({
+  const { data: rawData, isLoading } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => getNotifications(),
     staleTime: 30_000,
     enabled: panelOpen,
   });
+  const data = Array.isArray(rawData) ? rawData : [];
 
   useEffect(() => {
     if (data.length > 0) setNotifications(data);

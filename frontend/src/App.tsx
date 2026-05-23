@@ -1,8 +1,6 @@
 import { Component, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { QueryClient } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -47,7 +45,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             </pre>
             <button
               onClick={() => {
-                localStorage.removeItem("REACT_QUERY_OFFLINE_CACHE");
+                ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2"].forEach(k => {
+                  try { localStorage.removeItem(k); } catch {}
+                });
                 window.location.reload();
               }}
               className="bg-white text-black text-sm font-semibold px-4 py-2 rounded-lg hover:bg-zinc-200"
@@ -62,20 +62,14 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, gcTime: 1000 * 60 * 10 } },
+// Wipe all old persisted caches so stale data can never crash the app
+["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2"].forEach(k => {
+  try { window.localStorage.removeItem(k); } catch {}
 });
 
-// v2 key busts any old corrupted cache from previous deploys
-const CACHE_KEY = "BMG_QUERY_CACHE_v2";
-try { window.localStorage.removeItem("REACT_QUERY_OFFLINE_CACHE"); } catch {}
-
-let persister: ReturnType<typeof createSyncStoragePersister>;
-try {
-  persister = createSyncStoragePersister({ storage: window.localStorage, key: CACHE_KEY });
-} catch {
-  persister = createSyncStoragePersister({ storage: window.sessionStorage, key: CACHE_KEY });
-}
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 } },
+});
 
 function AppInner() {
   useWebSocket();
@@ -111,7 +105,7 @@ function AppInner() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
+      <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <ErrorBoundary>
             <Routes>
@@ -129,7 +123,7 @@ export default function App() {
             <Toaster position="bottom-right" theme="dark" richColors />
           </ErrorBoundary>
         </BrowserRouter>
-      </PersistQueryClientProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 }
