@@ -30,6 +30,7 @@ const NAV_ACCOUNT = [
   { to: "/portfolio", label: "Portfolio", Icon: Briefcase },
   { to: "/paper", label: "Paper Trading", Icon: PlayCircle },
   { to: "/journal", label: "Trade Journal", Icon: BookOpen },
+  { to: "/settings", label: "Settings", Icon: Settings },
   { to: "/alerts", label: "Alerts", Icon: Bell },
   { to: "/notifications", label: "Notifications", Icon: Inbox },
 ];
@@ -142,6 +143,14 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
               )}
             </NavLink>
           ))}
+          {/* Sign out — directly below Settings */}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 py-2 px-3 w-full rounded-lg text-sm font-medium text-[#475569] hover:text-[#EF4444] hover:bg-[#EF4444]/8 transition-colors duration-150 cursor-pointer"
+          >
+            <LogOut size={17} />
+            <span className="hidden lg:block">Sign out</span>
+          </button>
         </div>
 
         {/* COMMUNITY section */}
@@ -177,23 +186,8 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
         </div>
       </nav>
 
-      {/* Bottom: Settings + user */}
-      <div className="px-2 mt-2 pt-3 border-t border-[#1E293B] space-y-1">
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn(
-              "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
-              isActive
-                ? "border-l-2 border-[#3B82F6] bg-[rgba(59,130,246,0.08)] text-[#F8FAFC] pl-[calc(0.75rem-2px)] pr-3"
-                : "text-[#475569] hover:text-[#94A3B8] hover:bg-[#1E293B]/60 px-3"
-            )
-          }
-        >
-          <Settings size={17} />
-          <span className="hidden lg:block">Settings</span>
-        </NavLink>
-
+      {/* Bottom: user row */}
+      <div className="px-2 mt-2 pt-3 border-t border-[#1E293B]">
         <div className="flex items-center gap-2.5 px-3 py-2">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs text-white font-bold shrink-0">
             {initials}
@@ -201,13 +195,6 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
           <span className="hidden lg:block text-[#94A3B8] text-xs font-medium truncate flex-1">
             {user?.username ?? ""}
           </span>
-          <button
-            onClick={handleLogout}
-            title="Sign out"
-            className="text-[#475569] hover:text-[#EF4444] transition-colors duration-150 ml-auto cursor-pointer"
-          >
-            <LogOut size={15} />
-          </button>
         </div>
       </div>
     </aside>
