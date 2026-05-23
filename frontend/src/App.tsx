@@ -26,6 +26,7 @@ import Onboarding from "@/pages/Onboarding";
 import JournalPage from "@/pages/JournalPage";
 import Social from "@/pages/Social";
 import UpgradePage from "@/pages/UpgradePage";
+import SettingsPage from "@/pages/Settings";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 
@@ -97,6 +98,7 @@ function AppInner() {
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>
   );

@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, LineChart, Filter, BookMarked, Briefcase, Bell,
   FlaskConical, LogOut, Newspaper, Calendar, Microscope, PlayCircle, Search,
-  GraduationCap, Layers, Inbox, Compass, BookOpen, Users, Crown,
+  GraduationCap, Layers, Inbox, Compass, BookOpen, Users, Crown, Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -177,10 +177,25 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
         </div>
       </nav>
 
-      {/* Bottom user section */}
-      <div className="px-2 mt-4 pt-4 border-t border-[#1E293B]">
-        <div className="flex items-center gap-2.5 px-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs text-white font-bold shrink-0">
+      {/* Bottom: Settings + user */}
+      <div className="px-2 mt-2 pt-3 border-t border-[#1E293B] space-y-1">
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
+              isActive
+                ? "border-l-2 border-[#3B82F6] bg-[rgba(59,130,246,0.08)] text-[#F8FAFC] pl-[calc(0.75rem-2px)] pr-3"
+                : "text-[#475569] hover:text-[#94A3B8] hover:bg-[#1E293B]/60 px-3"
+            )
+          }
+        >
+          <Settings size={17} />
+          <span className="hidden lg:block">Settings</span>
+        </NavLink>
+
+        <div className="flex items-center gap-2.5 px-3 py-2">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs text-white font-bold shrink-0">
             {initials}
           </div>
           <span className="hidden lg:block text-[#94A3B8] text-xs font-medium truncate flex-1">
@@ -189,7 +204,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="text-[#475569] hover:text-[#F8FAFC] transition-colors duration-150 ml-auto cursor-pointer"
+            className="text-[#475569] hover:text-[#EF4444] transition-colors duration-150 ml-auto cursor-pointer"
           >
             <LogOut size={15} />
           </button>

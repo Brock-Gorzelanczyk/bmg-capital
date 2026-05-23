@@ -62,7 +62,7 @@ async def get_bars(
             days_back = 59
         else:                  # 1Min
             days_back = 7
-        max_days = YF_MAX_DAYS.get(timeframe, 3650)
+        max_days = YF_MAX_DAYS.get(timeframe, 20000)
         days_back = min(days_back, max_days)
         start_dt = end_dt - timedelta(days=days_back)
     else:
