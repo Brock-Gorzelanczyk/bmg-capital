@@ -112,7 +112,8 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
         </button>
       </div>
 
-      <nav className="flex flex-col gap-4 px-2 flex-1 overflow-y-auto min-h-0">
+      <nav className="flex-1 overflow-y-auto min-h-0 px-2">
+        <div className="space-y-4 pb-2">
         <NavSection label="TRADING" items={NAV_PRIMARY} />
         <NavSection label="MARKETS" items={NAV_MARKETS} />
 
@@ -183,6 +184,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
               <span className="hidden lg:block">{label}</span>
             </NavLink>
           ))}
+        </div>
         </div>
       </nav>
 
