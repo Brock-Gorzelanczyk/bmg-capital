@@ -187,10 +187,10 @@ export const TICKER_NAMES: Record<string, string> = {
   ZETA: "Zeta Global Holdings", WING: "Wingstop Inc.",
   TXRH: "Texas Roadhouse", SHAK: "Shake Shack Inc.", DKS: "Dick's Sporting Goods",
   LULU: "Lululemon Athletica", BOOT: "Boot Barn Holdings", FIVE: "Five Below",
-  RH: "RH (Restoration Hardware)", ULTA: "Ulta Beauty",
-  SAIA: "Saia Inc.", ODFL: "Old Dominion Freight Line",
+  RH: "RH (Restoration Hardware)",
+  SAIA: "Saia Inc.",
   KNSL: "Kinsale Capital Group", MEDP: "Medpace Holdings",
-  FRPT: "Freshpet Inc.", CELH: "Celsius Holdings",
+  FRPT: "Freshpet Inc.",
   UPLD: "Upland Software", YEXT: "Yext Inc.", YELP: "Yelp Inc.",
   TRIP: "Tripadvisor Inc.",
   // Major ETFs

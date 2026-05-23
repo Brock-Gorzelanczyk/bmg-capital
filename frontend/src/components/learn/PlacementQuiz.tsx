@@ -7,7 +7,7 @@ interface Props {
   onComplete: (trackId: string) => void;
 }
 
-const QUESTIONS = [
+const QUESTIONS: { id: string; question: string; options: { label: string; score: Record<string, number> }[] }[] = [
   {
     id: "q1",
     question: "How would you describe your investing experience?",

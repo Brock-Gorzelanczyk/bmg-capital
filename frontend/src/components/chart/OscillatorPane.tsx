@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createChart, LineSeries, ColorType, LineStyle } from "lightweight-charts";
-import type { IChartApi, ISeriesApi } from "lightweight-charts";
+import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 import type { Bar } from "@/types/market";
 import ExplainButton from "@/components/explain/ExplainButton";
 
@@ -23,7 +23,7 @@ interface Props {
   explainTerm?: string;
 }
 
-const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as unknown as number;
+const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as UTCTimestamp;
 
 export default function OscillatorPane({
   bars, line1, color1, label1, line2, color2, label2,

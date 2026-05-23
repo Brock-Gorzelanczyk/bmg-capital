@@ -58,7 +58,7 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["watchlists"] }); qc.invalidateQueries({ queryKey: ["wl-snapshot"] }); },
   });
 
-  const symbols: string[] = activeWl?.symbols?.map((s: any) => s.symbol) ?? [];
+  const symbols: string[] = (activeWl as any)?.symbols?.map((s: any) => s.symbol) ?? [];
 
   return (
     <div className="w-56 flex flex-col border-l border-[#1f1f1f] bg-[#0a0a0a] shrink-0 overflow-hidden">

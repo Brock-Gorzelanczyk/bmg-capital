@@ -47,6 +47,9 @@ interface Props {
   showWatchlist: boolean;
   compareSymbol?: string;
   onCompare?: (s: string | null) => void;
+  proMode?: boolean;
+  onProModeToggle?: () => void;
+  onTradeClick?: () => void;
 }
 
 export default function TvTopBar({

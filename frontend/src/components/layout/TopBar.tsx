@@ -33,7 +33,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   // Seed store on mount
   const { data } = useQuery({
     queryKey: ["notifications"],
-    queryFn: getNotifications,
+    queryFn: () => getNotifications(),
     staleTime: 60_000,
   });
   useEffect(() => { if (data) setNotifications(data); }, [data, setNotifications]);

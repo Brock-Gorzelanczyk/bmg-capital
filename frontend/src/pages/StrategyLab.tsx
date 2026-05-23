@@ -925,7 +925,7 @@ function BacktestSection() {
               <div className="bg-[#1E293B] border border-[#334155] rounded-xl px-3 py-2.5">
                 <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">Avg Win Rate</div>
                 <div className="text-sm font-bold text-white font-mono">
-                  {(strategies.reduce((a, s) => a + s.win_rate, 0) / strategies.length).toFixed(1)}%
+                  {(strategies.reduce((a: number, s: any) => a + s.win_rate, 0) / strategies.length).toFixed(1)}%
                 </div>
                 <div className="text-[10px] text-[#475569]">across all strategies</div>
               </div>
@@ -960,7 +960,7 @@ function BacktestSection() {
                   </tr>
                 </thead>
                 <tbody>
-                  {strategies.map((s, i) => {
+                  {strategies.map((s: any, i: number) => {
                     const strat = STRATEGIES.find((x) => x.key === s.strategy_key);
                     const isSelected = selectedKey === s.strategy_key;
                     const ret = s.total_return_pct ?? 0;
@@ -1241,7 +1241,7 @@ function Empty({ icon, text, sub }: { icon: React.ReactNode; text: string; sub: 
   );
 }
 
-function TH({ children }: { children: React.ReactNode }) {
+function TH({ children }: { children?: React.ReactNode }) {
   return <th className="px-4 py-2.5 text-left text-[11px] text-[#475569] font-medium uppercase tracking-wider">{children}</th>;
 }
 function TD({ children, className }: { children: React.ReactNode; className?: string }) {

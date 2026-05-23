@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createChart, LineSeries, ColorType } from "lightweight-charts";
-import type { IChartApi, ISeriesApi } from "lightweight-charts";
+import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 import type { Bar } from "@/types/market";
 import ExplainButton from "@/components/explain/ExplainButton";
 
@@ -10,7 +10,7 @@ interface Props {
   height?: number;
 }
 
-const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as unknown as number;
+const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as UTCTimestamp;
 
 export default function RsiChart({ bars, values, height = 100 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);

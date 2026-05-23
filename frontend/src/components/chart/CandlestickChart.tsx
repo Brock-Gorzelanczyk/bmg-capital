@@ -9,7 +9,7 @@ import {
   ColorType,
   LineStyle,
 } from "lightweight-charts";
-import type { IChartApi, ISeriesApi, IPriceLine } from "lightweight-charts";
+import type { IChartApi, ISeriesApi, IPriceLine, UTCTimestamp } from "lightweight-charts";
 import type { Bar } from "@/types/market";
 import type { ChartType, DrawingTool, HoveredBar, Drawing } from "@/types/chart";
 
@@ -77,7 +77,7 @@ function isOverlay(key: string): boolean {
     || key.endsWith("_upper") || key.endsWith("_middle") || key.endsWith("_lower");
 }
 
-const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as unknown as number;
+const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as UTCTimestamp;
 
 function computeHA(bars: Bar[]): Bar[] {
   const out: Bar[] = [];
@@ -336,8 +336,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
             color: d.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
           });
           s.setData([
-            { time: d.p1.time as unknown as number, value: d.p1.price },
-            { time: d.p2.time as unknown as number, value: d.p2.price },
+            { time: d.p1.time as UTCTimestamp, value: d.p1.price },
+            { time: d.p2.time as UTCTimestamp, value: d.p2.price },
           ]);
           trendSeriesRef.current[d.id] = s;
         }
@@ -425,7 +425,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
       if (!compareSeriesRef.current) {
         compareSeriesRef.current = chartRef.current.addSeries(LineSeries, {
           color: "#f59e0b",
-          lineWidth: 1.5,
+          lineWidth: 2,
           priceLineVisible: false,
           lastValueVisible: true,
           crosshairMarkerVisible: false,

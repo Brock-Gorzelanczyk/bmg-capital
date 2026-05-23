@@ -201,9 +201,9 @@ export default function NotificationsPage() {
   const qc = useQueryClient();
   const { setNotifications } = useNotificationStore();
 
-  const { data: notifications = [], isLoading } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery<AppNotification[]>({
     queryKey: ["notifications"],
-    queryFn: getNotifications,
+    queryFn: () => getNotifications(),
     staleTime: 30_000,
     select: (data) => { setNotifications(data); return data; },
   });

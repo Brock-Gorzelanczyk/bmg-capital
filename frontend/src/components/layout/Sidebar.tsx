@@ -73,9 +73,10 @@ function NavSection({ label, items }: { label: string; items: typeof NAV_PRIMARY
 
 interface Props {
   onOpenPalette?: () => void;
+  onClose?: () => void;
 }
 
-export default function Sidebar({ onOpenPalette }: Props) {
+export default function Sidebar({ onOpenPalette, onClose }: Props) {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const streak = useLearnStore((s) => s.progress?.streak ?? 0);

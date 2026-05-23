@@ -519,7 +519,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                 <label className="text-xs text-[#475569] mb-1.5 block">Trailing Amount</label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    {trailingType === "dollars" && (
+                    {trailingType === "amount" && (
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569] text-sm font-mono">$</span>
                     )}
                     <input
@@ -531,7 +531,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                       placeholder="0.00"
                       className={cn(
                         "w-full bg-[#1E293B] border border-[#334155] text-[#F8FAFC] font-mono text-sm rounded-xl py-2.5 pr-3 placeholder-[#334155] outline-none focus:border-[#475569] transition-colors",
-                        trailingType === "dollars" ? "pl-7" : "pl-3"
+                        trailingType === "amount" ? "pl-7" : "pl-3"
                       )}
                     />
                   </div>
