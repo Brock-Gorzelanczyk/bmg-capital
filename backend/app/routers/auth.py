@@ -27,7 +27,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str
+    email: str  # accepts username or email
     password: str
 
 
@@ -90,7 +90,10 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == body.email.lower().strip()).first()
+    identifier = body.email.strip()
+    user = db.query(User).filter(User.email == identifier.lower()).first()
+    if not user:
+        user = db.query(User).filter(User.username == identifier).first()
     if not user or not _verify_password(body.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

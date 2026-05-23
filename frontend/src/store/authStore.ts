@@ -26,6 +26,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await client.post("/auth/login", { email, password });
     const { access_token, user } = res.data;
     localStorage.setItem("bmg_token", access_token);
+    localStorage.removeItem("REACT_QUERY_OFFLINE_CACHE");
     set({ token: access_token, user });
   },
 
@@ -33,6 +34,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await client.post("/auth/register", { email, username, password });
     const { access_token, user } = res.data;
     localStorage.setItem("bmg_token", access_token);
+    localStorage.removeItem("REACT_QUERY_OFFLINE_CACHE");
     set({ token: access_token, user });
   },
 
