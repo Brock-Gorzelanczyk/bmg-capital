@@ -8,6 +8,9 @@ from sqlalchemy.engine import Engine
 logger = logging.getLogger(__name__)
 
 _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
+    "paper_transactions": [
+        ("notes", "VARCHAR"),
+    ],
     "strategy_trades": [
         ("candidate_since",  "DATETIME"),
         ("entry_trigger",    "VARCHAR"),

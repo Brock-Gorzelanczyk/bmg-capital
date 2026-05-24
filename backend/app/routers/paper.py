@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 from datetime import datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -84,11 +86,13 @@ def _apply_fill_to_position(
     if side == "buy":
         existing = db.query(PaperPosition).filter_by(user_id=user_id, symbol=symbol).first()
         if existing:
-            total_qty = existing.qty + qty
-            existing.avg_cost = round(
-                (existing.avg_cost * existing.qty + fill_price * qty) / total_qty, 6
-            )
-            existing.qty = total_qty
+            old_cost = Decimal(str(existing.avg_cost))
+            old_qty = Decimal(str(existing.qty))
+            new_price = Decimal(str(fill_price))
+            new_qty = Decimal(str(qty))
+            total = old_qty + new_qty
+            existing.avg_cost = float((old_cost * old_qty + new_price * new_qty) / total)
+            existing.qty = float(total)
             if prev_close and existing.prev_close is None:
                 existing.prev_close = prev_close
         else:
@@ -156,7 +160,11 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
 
     for p in positions:
         q = quotes.get(p.symbol)
-        current_price = q["last"] if q else p.avg_cost
+        if q:
+            current_price = q["last"]
+        else:
+            current_price = getattr(p, "last_price", None) or p.avg_cost
+            logger.warning(f"Quote fetch failed for {p.symbol}, using fallback price")
         prev_close = p.prev_close if p.prev_close is not None else (q["prev_close"] if q else p.avg_cost)
 
         market_value = round(current_price * p.qty, 2)
@@ -189,9 +197,8 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
     equity = round(acct.cash + total_positions_value, 2)
     total_pnl = round(equity - acct.starting_balance, 2)
     total_pnl_pct = round((total_pnl / acct.starting_balance * 100) if acct.starting_balance else 0.0, 4)
-    day_pnl_pct = round(
-        (day_pnl_total / (equity - day_pnl_total) * 100) if (equity - day_pnl_total) != 0 else 0.0, 4
-    )
+    baseline = equity - day_pnl_total
+    day_pnl_pct = round((day_pnl_total / baseline * 100) if baseline > 0 else 0.0, 4)
 
     return {
         "cash": round(acct.cash, 2),
@@ -235,7 +242,10 @@ class OrderRequest(BaseModel):
     @field_validator("symbol")
     @classmethod
     def validate_symbol(cls, v):
-        return v.upper().strip()
+        v = v.upper().strip()
+        if not re.match(r'^[A-Z]{1,5}$', v) and not re.match(r'^[A-Z]{1,4}\.[A-Z]$', v):
+            raise ValueError("Invalid symbol format")
+        return v
 
     @field_validator("order_type")
     @classmethod
@@ -266,6 +276,8 @@ async def place_order(
         raise HTTPException(status_code=400, detail="qty must be positive")
     if req.notional is not None and req.notional <= 0:
         raise HTTPException(status_code=400, detail="notional must be positive")
+    if req.notional is not None and req.notional < 1.0:
+        raise HTTPException(status_code=400, detail="Minimum order size is $1.00")
 
     acct = _get_or_create_account(db, user.id)
 
@@ -330,41 +342,42 @@ async def place_order(
             _apply_fill_to_position(
                 db, user.id, req.symbol, req.side, qty, fill_price, quote.get("prev_close"), order.id
             )
-        except HTTPException:
+
+            # Handle bracket: create TP and SL child working orders
+            if req.take_profit_price or req.stop_loss_price:
+                child_side = "sell" if req.side == "buy" else "buy"
+                if req.take_profit_price:
+                    tp = PaperOrder(
+                        user_id=user.id,
+                        symbol=req.symbol,
+                        side=child_side,
+                        qty=qty,
+                        order_type="limit",
+                        limit_price=req.take_profit_price,
+                        tif="gtc",
+                        status="working",
+                        parent_order_id=order.id,
+                    )
+                    db.add(tp)
+                if req.stop_loss_price:
+                    sl = PaperOrder(
+                        user_id=user.id,
+                        symbol=req.symbol,
+                        side=child_side,
+                        qty=qty,
+                        order_type="stop",
+                        stop_price=req.stop_loss_price,
+                        tif="gtc",
+                        status="working",
+                        parent_order_id=order.id,
+                    )
+                    db.add(sl)
+
+            db.commit()
+        except Exception:
             db.rollback()
             raise
 
-        # Handle bracket: create TP and SL child working orders
-        if req.take_profit_price or req.stop_loss_price:
-            child_side = "sell" if req.side == "buy" else "buy"
-            if req.take_profit_price:
-                tp = PaperOrder(
-                    user_id=user.id,
-                    symbol=req.symbol,
-                    side=child_side,
-                    qty=qty,
-                    order_type="limit",
-                    limit_price=req.take_profit_price,
-                    tif="gtc",
-                    status="working",
-                    parent_order_id=order.id,
-                )
-                db.add(tp)
-            if req.stop_loss_price:
-                sl = PaperOrder(
-                    user_id=user.id,
-                    symbol=req.symbol,
-                    side=child_side,
-                    qty=qty,
-                    order_type="stop",
-                    stop_price=req.stop_loss_price,
-                    tif="gtc",
-                    status="working",
-                    parent_order_id=order.id,
-                )
-                db.add(sl)
-
-        db.commit()
         db.refresh(order)
         return _serialize_order(order)
 
@@ -564,11 +577,22 @@ def get_snapshots(
 
 @router.post("/reset")
 def reset_account(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    """Reset paper trading account to starting balance."""
+    """Reset paper trading account to starting balance. Preserves transaction ledger."""
     db.query(PaperPosition).filter_by(user_id=user.id).delete()
     db.query(PaperOrder).filter_by(user_id=user.id).delete()
-    db.query(PaperTransaction).filter_by(user_id=user.id).delete()
     db.query(PaperDailySnapshot).filter_by(user_id=user.id).delete()
+    # DO NOT delete PaperTransaction — it's the financial ledger.
+    # Add a reset marker transaction instead.
+    reset_txn = PaperTransaction(
+        user_id=user.id,
+        symbol="RESET",
+        side="reset",
+        qty=0,
+        fill_price=0,
+        cost_basis=0,
+        notes=f"Account reset at {datetime.utcnow().isoformat()}",
+    )
+    db.add(reset_txn)
 
     acct = db.query(PaperAccount).filter_by(user_id=user.id).first()
     if acct:

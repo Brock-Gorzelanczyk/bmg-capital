@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,6 +14,20 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db.models.users import User
 from app.dependencies import get_db
+
+_RATE_STORE: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT = 10   # max attempts
+_RATE_WINDOW = 60  # seconds
+
+
+def _check_rate_limit(key: str) -> None:
+    now = time.monotonic()
+    window = _RATE_STORE[key]
+    # drop old entries
+    _RATE_STORE[key] = [t for t in window if now - t < _RATE_WINDOW]
+    if len(_RATE_STORE[key]) >= _RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again in a minute.")
+    _RATE_STORE[key].append(now)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -69,12 +85,15 @@ def _user_dict(user: User) -> dict:
 
 @router.post("/register", response_model=TokenResponse)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    _check_rate_limit(body.email.lower().strip())
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
-    if len(body.password) < 1:
-        raise HTTPException(status_code=400, detail="Password required")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not any(c.isdigit() or not c.isalnum() for c in body.password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one digit or special character")
 
     user = User(
         email=body.email.lower().strip(),
@@ -90,6 +109,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
+    _check_rate_limit(body.email.lower().strip())
     identifier = body.email.strip()
     user = db.query(User).filter(User.email == identifier.lower()).first()
     if not user:

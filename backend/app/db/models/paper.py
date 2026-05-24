@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 from sqlalchemy import DateTime, Float, Integer, String, Boolean, JSON, func
@@ -14,7 +14,7 @@ class PaperAccount(Base):
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True, unique=True)
     cash: Mapped[float] = mapped_column(Float, nullable=False, default=STARTING_BALANCE)
     starting_balance: Mapped[float] = mapped_column(Float, nullable=False, default=STARTING_BALANCE)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())
 
 class PaperPosition(Base):
     __tablename__ = "paper_positions"
@@ -24,7 +24,7 @@ class PaperPosition(Base):
     qty: Mapped[float] = mapped_column(Float, nullable=False)
     avg_cost: Mapped[float] = mapped_column(Float, nullable=False)
     prev_close: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # for day P&L
-    opened_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
+    opened_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())
 
 class PaperOrder(Base):
     __tablename__ = "paper_orders"
@@ -51,21 +51,22 @@ class PaperOrder(Base):
     parent_order_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # for bracket/OCO legs
     filled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())
 
 class PaperTransaction(Base):
     """Realized P&L ledger — one row per fill that closes or reduces a position."""
     __tablename__ = "paper_transactions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    order_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    order_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     symbol: Mapped[str] = mapped_column(String, nullable=False)
-    side: Mapped[str] = mapped_column(String, nullable=False)  # buy | sell
+    side: Mapped[str] = mapped_column(String, nullable=False)  # buy | sell | reset
     qty: Mapped[float] = mapped_column(Float, nullable=False)
     fill_price: Mapped[float] = mapped_column(Float, nullable=False)
     cost_basis: Mapped[float] = mapped_column(Float, nullable=False)  # avg_cost at time of sell
     realized_pnl: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
+    notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())
 
 class PaperDailySnapshot(Base):
     """End-of-day equity snapshot for performance chart."""
@@ -77,4 +78,4 @@ class PaperDailySnapshot(Base):
     cash: Mapped[float] = mapped_column(Float, nullable=False)
     positions_value: Mapped[float] = mapped_column(Float, nullable=False)
     day_pnl: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())

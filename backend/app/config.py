@@ -1,4 +1,5 @@
 from __future__ import annotations
+import warnings
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
@@ -32,6 +33,14 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if self.jwt_secret == "bmg-capital-secret-change-in-production":
+            warnings.warn(
+                "WARNING: Using default JWT secret. Set JWT_SECRET env var in production!",
+                stacklevel=2,
+            )
 
 
 settings = Settings()
