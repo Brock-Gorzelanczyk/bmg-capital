@@ -12,9 +12,10 @@ export interface HoveredBar {
 
 export interface Drawing {
   id: string;
-  type: "hline" | "trendline";
+  type: "hline" | "trendline" | "rect" | "fib" | "text";
   price?: number;
   p1?: { time: number; price: number };
   p2?: { time: number; price: number };
   color: string;
+  label?: string;
 }

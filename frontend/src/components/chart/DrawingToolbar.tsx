@@ -6,9 +6,9 @@ const TOOLS: { tool: DrawingTool; Icon: React.ElementType; label: string; functi
   { tool: "cursor", Icon: MousePointer2, label: "Cursor", functional: true },
   { tool: "hline", Icon: Minus, label: "Horizontal Line", functional: true },
   { tool: "trendline", Icon: TrendingUp, label: "Trend Line", functional: true },
-  { tool: "rect", Icon: Square, label: "Rectangle", functional: false },
-  { tool: "fib", Icon: GitBranch, label: "Fibonacci", functional: false },
-  { tool: "text", Icon: Type, label: "Text", functional: false },
+  { tool: "rect", Icon: Square, label: "Rectangle", functional: true },
+  { tool: "fib", Icon: GitBranch, label: "Fibonacci", functional: true },
+  { tool: "text", Icon: Type, label: "Text", functional: true },
 ];
 
 interface Props {

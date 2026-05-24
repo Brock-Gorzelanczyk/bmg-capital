@@ -1,4 +1,4 @@
-import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useRef, useImperativeHandle, forwardRef, useState, useMemo } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -102,7 +102,10 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
     const priceLinesRef = useRef<Record<string, IPriceLine>>({});
     const tradeLevelLinesRef = useRef<Record<string, IPriceLine>>({});
     const trendSeriesRef = useRef<Record<string, ISeriesApi<"Line">>>({});
+    const fibLinesRef = useRef<Record<string, IPriceLine[]>>({});
+    const textLinesRef = useRef<Record<string, IPriceLine>>({});
     const compareSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+    const [overlayVersion, setOverlayVersion] = useState(0);
 
     // Stable refs for callbacks so chart subscriptions don't need re-registration
     const onCrosshairMoveRef = useRef(onCrosshairMove);
@@ -150,6 +153,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
       volSeriesRef.current = vol;
       chartRef.current = chart;
 
+      chart.timeScale().subscribeVisibleLogicalRangeChange(() => setOverlayVersion((v) => v + 1));
+
       chart.subscribeCrosshairMove((param) => {
         if (!param.seriesData?.size || !param.point) {
           onCrosshairMoveRef.current(null);
@@ -175,10 +180,16 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         if (price === null) return;
         if (tool === "hline") {
           onAddDrawingRef.current({ type: "hline", price, color: "#787b86" });
-        } else if (tool === "trendline") {
+        } else if (tool === "trendline" || tool === "rect" || tool === "fib") {
           const time = chart.timeScale().coordinateToTime(param.point.x);
           if (time !== null) {
-            onAddDrawingRef.current({ type: "trendline", p1: { price, time: time as number }, color: "#2196f3" });
+            const colors: Record<string, string> = { trendline: "#2196f3", rect: "#f59e0b", fib: "#9c27b0" };
+            onAddDrawingRef.current({ type: tool, p1: { price, time: time as number }, color: colors[tool] });
+          }
+        } else if (tool === "text") {
+          const time = chart.timeScale().coordinateToTime(param.point.x);
+          if (time !== null) {
+            onAddDrawingRef.current({ type: "text", p1: { price, time: time as number }, color: "#d1d4dc" });
           }
         }
       });
@@ -192,6 +203,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         priceLinesRef.current = {};
         tradeLevelLinesRef.current = {};
         trendSeriesRef.current = {};
+        fibLinesRef.current = {};
+        textLinesRef.current = {};
         compareSeriesRef.current = null;
       };
     }, []);
@@ -324,6 +337,22 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         }
       });
 
+      Object.keys(fibLinesRef.current).forEach((id) => {
+        if (!ids.has(id)) {
+          fibLinesRef.current[id].forEach((pl) => {
+            try { (mainSeriesRef.current as ISeriesApi<"Candlestick">).removePriceLine(pl); } catch {}
+          });
+          delete fibLinesRef.current[id];
+        }
+      });
+
+      Object.keys(textLinesRef.current).forEach((id) => {
+        if (!ids.has(id)) {
+          try { (mainSeriesRef.current as ISeriesApi<"Candlestick">).removePriceLine(textLinesRef.current[id]); } catch {}
+          delete textLinesRef.current[id];
+        }
+      });
+
       drawings.forEach((d) => {
         if (d.type === "hline" && d.price != null && !priceLinesRef.current[d.id]) {
           priceLinesRef.current[d.id] = (mainSeriesRef.current as ISeriesApi<"Candlestick">).createPriceLine({
@@ -340,6 +369,28 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
             { time: d.p2.time as UTCTimestamp, value: d.p2.price },
           ]);
           trendSeriesRef.current[d.id] = s;
+        }
+        if (d.type === "fib" && d.p1 && d.p2 && !fibLinesRef.current[d.id]) {
+          const hi = Math.max(d.p1.price, d.p2.price);
+          const lo = Math.min(d.p1.price, d.p2.price);
+          const range = hi - lo;
+          const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+          const FIB_COLORS = ["#ef5350", "#f59e0b", "#26a69a", "#2196f3", "#26a69a", "#f59e0b", "#ef5350"];
+          fibLinesRef.current[d.id] = FIB_LEVELS.map((level, i) => {
+            const price = hi - range * level;
+            return (mainSeriesRef.current as ISeriesApi<"Candlestick">).createPriceLine({
+              price, color: FIB_COLORS[i], lineWidth: 1,
+              lineStyle: LineStyle.Dashed, axisLabelVisible: true,
+              title: `Fib ${(level * 100).toFixed(1)}%`,
+            });
+          });
+        }
+        if (d.type === "text" && d.p1 && d.label && !textLinesRef.current[d.id]) {
+          textLinesRef.current[d.id] = (mainSeriesRef.current as ISeriesApi<"Candlestick">).createPriceLine({
+            price: d.p1.price, color: d.color, lineWidth: 1,
+            lineStyle: LineStyle.Dotted, axisLabelVisible: true,
+            title: d.label,
+          });
         }
       });
     }, [drawings]);
@@ -435,12 +486,40 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
       compareSeriesRef.current.setData(normalized);
     }, [compareBars, compareSymbol, bars]);
 
+    const rectOverlays = useMemo(() => {
+      if (!chartRef.current || !mainSeriesRef.current) return [];
+      const tc = chartRef.current.timeScale();
+      const ser = mainSeriesRef.current as ISeriesApi<"Candlestick">;
+      return drawings
+        .filter((d) => d.type === "rect" && d.p1 && d.p2)
+        .flatMap((d) => {
+          const x1 = tc.timeToCoordinate(d.p1!.time as UTCTimestamp);
+          const x2 = tc.timeToCoordinate(d.p2!.time as UTCTimestamp);
+          const y1 = ser.priceToCoordinate(d.p1!.price);
+          const y2 = ser.priceToCoordinate(d.p2!.price);
+          if (x1 === null || x2 === null || y1 === null || y2 === null) return [];
+          return [{ id: d.id, x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1), color: d.color }];
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [overlayVersion, drawings]);
+
+    const cursor = activeTool === "cursor" ? "default" : activeTool === "eraser" ? "not-allowed" : "crosshair";
+
     return (
-      <div
-        ref={containerRef}
-        className="w-full h-full"
-        style={{ cursor: activeTool === "cursor" ? "default" : activeTool === "eraser" ? "not-allowed" : "crosshair" }}
-      />
+      <div className="w-full h-full relative">
+        <div ref={containerRef} className="absolute inset-0" style={{ cursor }} />
+        {rectOverlays.length > 0 && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+            {rectOverlays.map((r) => (
+              <rect
+                key={r.id}
+                x={r.x} y={r.y} width={r.w} height={r.h}
+                fill={r.color + "22"} stroke={r.color} strokeWidth={1}
+              />
+            ))}
+          </svg>
+        )}
+      </div>
     );
   }
 );

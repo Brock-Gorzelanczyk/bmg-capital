@@ -111,6 +111,10 @@ export default function ChartPage() {
   const [activeTool, setActiveTool] = useState<DrawingTool>("cursor");
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [pendingTrendStart, setPendingTrendStart] = useState<{ time: number; price: number } | null>(null);
+  const [pendingRectStart, setPendingRectStart] = useState<{ time: number; price: number } | null>(null);
+  const [pendingFibStart, setPendingFibStart] = useState<{ time: number; price: number } | null>(null);
+  const [pendingTextPoint, setPendingTextPoint] = useState<{ time: number; price: number } | null>(null);
+  const [textInputValue, setTextInputValue] = useState("");
   const [hoveredBar, setHoveredBar] = useState<HoveredBar | null>(null);
   const [showIndicatorsModal, setShowIndicatorsModal] = useState(false);
   const [showWatchlist, setShowWatchlist] = useState(true);
@@ -253,14 +257,40 @@ export default function ChartPage() {
         ]);
         setPendingTrendStart(null);
       }
+    } else if (partial.type === "rect") {
+      if (!pendingRectStart) {
+        setPendingRectStart(partial.p1!);
+      } else {
+        setDrawings((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), type: "rect", p1: pendingRectStart, p2: partial.p1!, color: "#f59e0b" },
+        ]);
+        setPendingRectStart(null);
+      }
+    } else if (partial.type === "fib") {
+      if (!pendingFibStart) {
+        setPendingFibStart(partial.p1!);
+      } else {
+        setDrawings((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), type: "fib", p1: pendingFibStart, p2: partial.p1!, color: "#9c27b0" },
+        ]);
+        setPendingFibStart(null);
+      }
+    } else if (partial.type === "text") {
+      setPendingTextPoint(partial.p1!);
+      setTextInputValue("");
     } else {
       setDrawings((prev) => [...prev, { id: crypto.randomUUID(), ...partial }]);
     }
-  }, [pendingTrendStart]);
+  }, [pendingTrendStart, pendingRectStart, pendingFibStart]);
 
   const handleClearDrawings = () => {
     setDrawings([]);
     setPendingTrendStart(null);
+    setPendingRectStart(null);
+    setPendingFibStart(null);
+    setPendingTextPoint(null);
     setActiveTool("cursor");
   };
 
@@ -410,6 +440,15 @@ export default function ChartPage() {
             {pendingTrendStart && (
               <span className="ml-3 text-[11px] text-[#d1d4dc]">Click second point to complete trend line</span>
             )}
+            {pendingRectStart && (
+              <span className="ml-3 text-[11px] text-[#f59e0b]">Click opposite corner to complete rectangle</span>
+            )}
+            {pendingFibStart && (
+              <span className="ml-3 text-[11px] text-[#9c27b0]">Click second point to complete Fibonacci</span>
+            )}
+            {pendingTextPoint && (
+              <span className="ml-3 text-[11px] text-[#d1d4dc]">Type label and press Enter</span>
+            )}
           </div>
 
           {/* Saved drawings indicator */}
@@ -420,8 +459,38 @@ export default function ChartPage() {
             </div>
           )}
 
+          {/* Text label input overlay */}
+          {pendingTextPoint && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+              <div className="pointer-events-auto bg-[#1e222d] border border-[#2a2e39] rounded-lg px-3 py-2 flex items-center gap-2 shadow-xl">
+                <input
+                  autoFocus
+                  type="text"
+                  value={textInputValue}
+                  onChange={(e) => setTextInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && textInputValue.trim()) {
+                      setDrawings((prev) => [
+                        ...prev,
+                        { id: crypto.randomUUID(), type: "text", p1: pendingTextPoint, color: "#d1d4dc", label: textInputValue.trim() },
+                      ]);
+                      setPendingTextPoint(null);
+                      setTextInputValue("");
+                    } else if (e.key === "Escape") {
+                      setPendingTextPoint(null);
+                      setTextInputValue("");
+                    }
+                  }}
+                  placeholder="Label text…"
+                  className="bg-transparent text-[#d1d4dc] text-sm outline-none w-40 placeholder:text-[#4a4e5b]"
+                />
+                <span className="text-[#4a4e5b] text-[10px]">Enter ↵</span>
+              </div>
+            </div>
+          )}
+
           {/* Main chart */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden relative">
             {isLoading ? (
               <div className="w-full h-full flex items-center justify-center text-[#4a4e5b] text-sm">
                 Loading {symbol}...
