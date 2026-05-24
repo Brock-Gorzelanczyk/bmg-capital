@@ -1,12 +1,114 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { LogOut, User, Crown, Zap, Star, ExternalLink, AlertCircle, TrendingUp } from "lucide-react";
+import { LogOut, User, Crown, Zap, Star, ExternalLink, AlertCircle, TrendingUp, MessageCircle, Send, X, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { getMyTier, createPortal } from "@/api/tiers";
 import { useTierStore } from "@/store/tierStore";
+import client from "@/api/client";
 import type { TierName } from "@/api/tiers";
+
+interface ChatMessage { role: "user" | "assistant"; content: string; }
+
+function SupportChat() {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "assistant", content: "Hi! I'm your 24/7 support agent. I know everything about this app — ask me anything!" },
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, open]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+    const next: ChatMessage[] = [...messages, { role: "user", content: text }];
+    setMessages(next);
+    setInput("");
+    setLoading(true);
+    try {
+      const { data } = await client.post<{ reply: string }>("/support/chat", { messages: next });
+      setMessages((m) => [...m, { role: "assistant", content: data.reply }]);
+    } catch {
+      setMessages((m) => [...m, { role: "assistant", content: "Sorry, I ran into an issue. Try again in a moment." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1E293B]/40 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Bot size={14} className="text-[#3B82F6]" />
+          <span className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest">Support Agent</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22C55E]/15 text-[#22C55E] font-semibold">24/7</span>
+        </div>
+        <span className="text-[#475569] text-xs">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-[#1E293B]">
+          <div className="h-72 overflow-y-auto px-4 py-3 space-y-3">
+            {messages.map((m, i) => (
+              <div key={i} className={cn("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}>
+                {m.role === "assistant" && (
+                  <div className="w-6 h-6 rounded-full bg-[#3B82F6]/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <Bot size={12} className="text-[#3B82F6]" />
+                  </div>
+                )}
+                <div className={cn(
+                  "max-w-[80%] text-xs rounded-2xl px-3 py-2 leading-relaxed",
+                  m.role === "user"
+                    ? "bg-[#3B82F6] text-white rounded-tr-sm"
+                    : "bg-[#1E293B] text-[#94A3B8] rounded-tl-sm"
+                )}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div className="flex gap-2 justify-start">
+                <div className="w-6 h-6 rounded-full bg-[#3B82F6]/20 flex items-center justify-center shrink-0">
+                  <Bot size={12} className="text-[#3B82F6]" />
+                </div>
+                <div className="bg-[#1E293B] text-[#475569] text-xs rounded-2xl rounded-tl-sm px-3 py-2">
+                  <span className="animate-pulse">Thinking…</span>
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+          <div className="flex items-center gap-2 px-3 pb-3 pt-2 border-t border-[#1E293B]">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+              placeholder="Ask anything about the app…"
+              disabled={loading}
+              className="flex-1 bg-[#1E293B] border border-[#334155] text-white text-xs px-3 py-2 rounded-lg placeholder-[#475569] focus:outline-none focus:border-[#3B82F6] disabled:opacity-50"
+            />
+            <button
+              onClick={send}
+              disabled={!input.trim() || loading}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#3B82F6] hover:bg-[#2563EB] text-white disabled:opacity-40 transition-colors shrink-0"
+            >
+              <Send size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const TIER_META: Record<TierName, { label: string; Icon: typeof Star; color: string; bg: string }> = {
   free:    { label: "Free",    Icon: Star,  color: "text-[#94A3B8]", bg: "bg-[#1E293B]" },
@@ -173,6 +275,9 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      {/* Support Agent */}
+      <SupportChat />
     </div>
   );
 }

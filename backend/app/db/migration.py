@@ -9,12 +9,13 @@ logger = logging.getLogger(__name__)
 
 _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "strategy_trades": [
-        ("candidate_since", "DATETIME"),
-        ("entry_trigger",   "VARCHAR"),
-        ("entry_notes",     "VARCHAR"),
-        ("atr",             "FLOAT"),
-        ("risk_dollars",    "FLOAT"),
-        ("user_id",         "INTEGER"),
+        ("candidate_since",  "DATETIME"),
+        ("entry_trigger",    "VARCHAR"),
+        ("entry_notes",      "VARCHAR"),
+        ("atr",              "FLOAT"),
+        ("risk_dollars",     "FLOAT"),
+        ("user_id",          "INTEGER"),
+        ("last_known_price", "FLOAT"),
     ],
     "watchlists": [
         ("user_id", "INTEGER"),

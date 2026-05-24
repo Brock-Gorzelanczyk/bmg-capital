@@ -62,7 +62,7 @@ def _now() -> datetime:
 
 
 def _enrich_trade(t: StrategyTrade, prices: Dict[str, float]) -> Dict[str, Any]:
-    current = prices.get(t.symbol) if t.status in ("open", "candidate") else t.exit_price
+    current = (prices.get(t.symbol) or t.last_known_price) if t.status in ("open", "candidate") else t.exit_price
     ep = t.exit_price if t.status == "closed" else current
     pnl = ((ep - t.entry_price) * t.shares) if (ep and t.entry_price and t.entry_price > 0 and t.shares) else None
     pnl_pct = ((ep - t.entry_price) / t.entry_price * 100) if (ep and t.entry_price and t.entry_price > 0) else None
@@ -103,27 +103,33 @@ def _settle_open_trades(trades: List[StrategyTrade], prices: Dict[str, float], d
     """Apply stop/target/time exits to open positions (read-time settlement)."""
     now = _now()
     today = date.today()
+    dirty = False
     for t in trades:
         if t.status != "open" or not t.entry_price or t.entry_price <= 0:
             continue
         current = prices.get(t.symbol)
-        if not current:
-            continue
-        days_held = (today - t.entry_date.date()).days if t.entry_date else 0
-        reason = None
-        if current <= t.stop_price:
-            reason = "stop"
-        elif current >= t.target_price:
-            reason = "target"
-        elif days_held >= 30:
-            reason = "time"
-        if reason:
-            t.status = "closed"
-            t.exit_price = current
-            t.exit_date = now
-            t.exit_reason = reason
+        if current:
+            # Persist the last seen live price so weekend/closed-market views stay accurate
+            if t.last_known_price != current:
+                t.last_known_price = current
+                dirty = True
+            days_held = (today - t.entry_date.date()).days if t.entry_date else 0
+            reason = None
+            if current <= t.stop_price:
+                reason = "stop"
+            elif current >= t.target_price:
+                reason = "target"
+            elif days_held >= 30:
+                reason = "time"
+            if reason:
+                t.status = "closed"
+                t.exit_price = current
+                t.exit_date = now
+                t.exit_reason = reason
+                dirty = True
             db.add(t)
-    db.commit()
+    if dirty:
+        db.commit()
 
 
 @router.get("/trades")
@@ -197,7 +203,7 @@ async def get_summary(
     losses = [t for t in closed if t.exit_price <= t.entry_price]
     realized_pnl = sum((t.exit_price - t.entry_price) * t.shares for t in closed)
     open_pnl = sum(
-        (prices.get(t.symbol, t.entry_price) - t.entry_price) * t.shares
+        ((prices.get(t.symbol) or t.last_known_price or t.entry_price) - t.entry_price) * t.shares
         for t in open_trades
         if t.entry_price and t.entry_price > 0 and t.shares
     )

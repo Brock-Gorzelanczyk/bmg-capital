@@ -59,16 +59,16 @@ export interface Plan {
 }
 
 export const getMyTier = (): Promise<MyTierResponse> =>
-  client.get("/api/tiers/me").then((r) => r.data);
+  client.get("/tiers/me").then((r) => r.data);
 
 export const getPlans = (): Promise<{ plans: Plan[] }> =>
-  client.get("/api/tiers/plans").then((r) => r.data);
+  client.get("/tiers/plans").then((r) => r.data);
 
 export const startTrial = (): Promise<{ ok: boolean; trial_ends_at: string }> =>
-  client.post("/api/tiers/start-trial").then((r) => r.data);
+  client.post("/tiers/start-trial").then((r) => r.data);
 
 export const createCheckout = (plan: TierName, interval: "monthly" | "annual"): Promise<{ url: string }> =>
-  client.post("/api/tiers/checkout", { plan, interval }).then((r) => r.data);
+  client.post("/tiers/checkout", { plan, interval }).then((r) => r.data);
 
 export const createPortal = (): Promise<{ url: string }> =>
-  client.post("/api/tiers/portal").then((r) => r.data);
+  client.post("/tiers/portal").then((r) => r.data);

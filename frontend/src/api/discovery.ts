@@ -37,13 +37,13 @@ export interface InsiderTrade {
 }
 
 export const getThemes = (): Promise<{ themes: Theme[] }> =>
-  client.get("/api/discovery/themes").then((r) => r.data);
+  client.get("/discovery/themes").then((r) => r.data);
 
 export const getIPOs = (daysAhead = 90): Promise<{ ipos: IPO[] }> =>
-  client.get("/api/discovery/ipos", { params: { days_ahead: daysAhead } }).then((r) => r.data);
+  client.get("/discovery/ipos", { params: { days_ahead: daysAhead } }).then((r) => r.data);
 
 export const getInsiders = (limit = 50): Promise<{ insiders: InsiderTrade[] }> =>
-  client.get("/api/discovery/insiders", { params: { limit } }).then((r) => r.data);
+  client.get("/discovery/insiders", { params: { limit } }).then((r) => r.data);
 
 export const getSectorPerformance = (): Promise<{ sectors: { sector: string; symbol: string; price: number; change_pct: number }[] }> =>
-  client.get("/api/market/sectors").then((r) => r.data);
+  client.get("/market/sectors").then((r) => r.data);

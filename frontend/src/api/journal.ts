@@ -45,16 +45,16 @@ export interface CreateEntryBody {
 }
 
 export const getEntries = (symbol?: string): Promise<JournalEntry[]> =>
-  client.get("/api/journal", { params: symbol ? { symbol } : {} }).then((r) => r.data);
+  client.get("/journal", { params: symbol ? { symbol } : {} }).then((r) => r.data);
 
 export const getStats = (): Promise<JournalStats> =>
-  client.get("/api/journal/stats").then((r) => r.data);
+  client.get("/journal/stats").then((r) => r.data);
 
 export const createEntry = (body: CreateEntryBody): Promise<JournalEntry> =>
-  client.post("/api/journal", body).then((r) => r.data);
+  client.post("/journal", body).then((r) => r.data);
 
 export const updateEntry = (id: number, body: CreateEntryBody): Promise<JournalEntry> =>
-  client.patch(`/api/journal/${id}`, body).then((r) => r.data);
+  client.patch(`/journal/${id}`, body).then((r) => r.data);
 
 export const deleteEntry = (id: number): Promise<{ ok: boolean }> =>
-  client.delete(`/api/journal/${id}`).then((r) => r.data);
+  client.delete(`/journal/${id}`).then((r) => r.data);
