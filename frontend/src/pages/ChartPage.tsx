@@ -183,9 +183,7 @@ export default function ChartPage() {
           setDrawings(res.drawings);
         }
       })
-      .catch(() => {
-        // Backend may not be available; silently ignore
-      });
+      .catch((err) => console.error("Chart error:", err));
   }, [symbol, timeframe]);
 
   // Debounced save: persist drawings 500ms after last change
@@ -203,7 +201,7 @@ export default function ChartPage() {
         setSavedIndicator(true);
         setTimeout(() => setSavedIndicator(false), 1500);
       })
-      .catch(() => {});
+      .catch((err) => console.error("Chart error:", err));
   }, [debouncedDrawings]);
 
   // Live bar updates
@@ -239,7 +237,7 @@ export default function ChartPage() {
   const handleSymbolChange = (s: string) => {
     setSymbol(s);
     setSearchParams({ symbol: s });
-    try { localStorage.setItem("bmg_symbol", s); } catch {}
+    try { localStorage.setItem("bmg_symbol", s); } catch (err) { console.error("Chart error:", err); }
     // Clear local drawings; new ones load via useEffect
     setDrawings([]);
     setPendingTrendStart(null);

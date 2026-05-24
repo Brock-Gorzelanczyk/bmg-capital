@@ -66,7 +66,9 @@ export function useWebSocket() {
   useEffect(() => {
     connect();
     return () => {
-      wsRef.current?.close();
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+        wsRef.current.close();
+      }
     };
   }, [connect]);
 

@@ -114,13 +114,18 @@ export default function Onboarding() {
             </div>
             <button
               onClick={() => setStep(1)}
-              className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold py-3.5 rounded-2xl transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-[#3B82F6] hover:bg-[#2563EB] active:scale-[0.98] text-white font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2"
             >
               Get started <ChevronRight size={18} />
             </button>
             <button
               onClick={async () => {
-                try { await seedDemo(); } catch {}
+                try {
+                  await seedDemo();
+                } catch (err) {
+                  console.error("Demo seed failed:", err);
+                  // Don't block onboarding for this
+                }
                 localStorage.setItem("bmg_onboarded", "1");
                 navigate("/");
               }}

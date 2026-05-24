@@ -49,7 +49,7 @@ function NavSection({ label, items }: { label: string; items: typeof NAV_PRIMARY
   return (
     <div>
       <div className="px-3 mb-1.5 hidden lg:block">
-        <span className="text-[9px] font-semibold text-[#475569] uppercase tracking-widest">{label}</span>
+        <span className="text-[10px] font-semibold text-[#334155] uppercase tracking-[0.12em]">{label}</span>
       </div>
       {items.map(({ to, label, Icon }) => (
         <NavLink
@@ -60,8 +60,8 @@ function NavSection({ label, items }: { label: string; items: typeof NAV_PRIMARY
             cn(
               "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
               isActive
-                ? "border-l-2 border-[#3B82F6] bg-[rgba(59,130,246,0.08)] text-[#F8FAFC] pl-[calc(0.75rem-2px)] pr-3"
-                : "text-[#475569] hover:text-[#94A3B8] hover:bg-[#1E293B]/60 px-3"
+                ? "bg-[#1E293B] text-[#F8FAFC] px-3"
+                : "text-[#64748B] hover:text-[#94A3B8] hover:bg-[#0F172A] px-3"
             )
           }
         >
@@ -93,13 +93,13 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
   const initials = user?.username?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <aside className="w-14 lg:w-56 h-screen bg-[#020617] border-r border-[#1E293B] flex flex-col py-4 shrink-0">
+    <aside className="w-14 lg:w-56 h-screen bg-[#0B1120] border-r border-[#1E293B] flex flex-col py-4 shrink-0">
       {/* Logo area */}
       <div className="px-3 mb-5 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs font-bold text-white shrink-0">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-lg shadow-blue-900/30">
           B
         </div>
-        <span className="text-[#F8FAFC] font-bold tracking-tight hidden lg:block text-sm">BMG Capital</span>
+        <span className="text-[#F1F5F9] font-bold tracking-tight hidden lg:block text-sm">BMG Capital</span>
       </div>
 
       {/* Cmd+K search trigger */}
@@ -122,7 +122,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
         {/* ACCOUNT section with unread badge on Notifications */}
         <div>
           <div className="px-3 mb-1.5 hidden lg:block">
-            <span className="text-[9px] font-semibold text-[#475569] uppercase tracking-widest">Account</span>
+            <span className="text-[10px] font-semibold text-[#334155] uppercase tracking-[0.12em]">Account</span>
           </div>
           {NAV_ACCOUNT.map(({ to, label, Icon }) => (
             <NavLink
@@ -132,8 +132,8 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
                 cn(
                   "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
                   isActive
-                    ? "border-l-2 border-[#3B82F6] bg-[rgba(59,130,246,0.08)] text-[#F8FAFC] pl-[calc(0.75rem-2px)] pr-3"
-                    : "text-[#475569] hover:text-[#94A3B8] hover:bg-[#1E293B]/60 px-3"
+                    ? "bg-[#1E293B] text-[#F8FAFC] px-3"
+                    : "text-[#64748B] hover:text-[#94A3B8] hover:bg-[#0F172A] px-3"
                 )
               }
             >
@@ -162,7 +162,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
         {/* LEARN section with streak badge */}
         <div>
           <div className="px-3 mb-1.5 hidden lg:flex items-center justify-between">
-            <span className="text-[9px] font-semibold text-[#475569] uppercase tracking-widest">Learn</span>
+            <span className="text-[10px] font-semibold text-[#334155] uppercase tracking-[0.12em]">Learn</span>
             {streak > 0 && <StreakBadge streak={streak} size="sm" />}
           </div>
           {NAV_LEARN.map(({ to, label, Icon }) => (
@@ -174,11 +174,11 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
                   "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
                   to === "/upgrade"
                     ? isActive
-                      ? "border-l-2 border-[#F59E0B] bg-[rgba(245,158,11,0.08)] text-[#F59E0B] pl-[calc(0.75rem-2px)] pr-3"
-                      : "text-[#F59E0B]/60 hover:text-[#F59E0B] hover:bg-[#1E293B]/60 px-3"
+                      ? "bg-[#F59E0B]/10 text-[#F59E0B] px-3"
+                      : "text-[#F59E0B]/60 hover:text-[#F59E0B] hover:bg-[#0F172A] px-3"
                     : isActive
-                    ? "border-l-2 border-[#3B82F6] bg-[rgba(59,130,246,0.08)] text-[#F8FAFC] pl-[calc(0.75rem-2px)] pr-3"
-                    : "text-[#475569] hover:text-[#94A3B8] hover:bg-[#1E293B]/60 px-3"
+                    ? "bg-[#1E293B] text-[#F8FAFC] px-3"
+                    : "text-[#64748B] hover:text-[#94A3B8] hover:bg-[#0F172A] px-3"
                 )
               }
             >

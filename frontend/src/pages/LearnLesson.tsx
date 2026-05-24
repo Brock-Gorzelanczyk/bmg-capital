@@ -14,6 +14,14 @@ import XPToast from "@/components/learn/XPToast";
 import CertificateGenerator from "@/components/learn/CertificateGenerator";
 import { cn } from "@/lib/utils";
 
+function sanitizeHtml(html: string): string {
+  // Remove script tags and event handlers
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/javascript:/gi, '');
+}
+
 const TYPE_ICON: Record<string, React.ReactNode> = {
   article: <BookOpen size={14} />,
   video: <Video size={14} />,
@@ -145,7 +153,7 @@ export default function LearnLesson() {
       <div
         ref={bodyRef}
         className="lesson-body"
-        dangerouslySetInnerHTML={{ __html: lesson.body }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(lesson.body) }}
       />
 
       {/* Quiz */}
@@ -230,7 +238,7 @@ export default function LearnLesson() {
           {nextLessonItem ? (
             <button
               onClick={() => navigate(`/learn/lesson/${nextLessonItem.id}`)}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-[#3B82F6] text-[#F8FAFC] rounded-xl font-semibold text-sm hover:bg-[#2563EB] transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-3 bg-[#3B82F6] text-[#F8FAFC] rounded-xl font-semibold text-sm hover:bg-[#2563EB] active:scale-[0.98] transition-all shadow-lg shadow-blue-900/30"
             >
               Next: {nextLessonItem.title} <ChevronRight size={16} />
             </button>

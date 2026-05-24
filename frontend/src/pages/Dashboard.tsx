@@ -96,11 +96,11 @@ function MorningBrief({
 
   return (
     <div
-      className="rounded-xl p-5 border-l-4 relative overflow-hidden"
+      className="rounded-2xl p-5 border-l-4 relative overflow-hidden"
       style={{
-        background: "linear-gradient(135deg, #0F172A 0%, #1E293B 100%)",
+        background: "linear-gradient(135deg, #0D1526 0%, #1E293B 100%)",
         borderLeftColor: "#F59E0B",
-        border: "1px solid #1E293B",
+        border: "1px solid #1A2744",
         borderLeft: "4px solid #F59E0B",
       }}
     >
@@ -152,12 +152,12 @@ function IndexCard({ symbol, price, change, change_pct }: {
     <div
       onClick={() => navigate(`/chart?symbol=${symbol}`)}
       className={cn(
-        "bg-[#0F172A] border border-[#1E293B] rounded-xl p-5 flex flex-col gap-2 hover:border-[#3B82F6]/50 hover:bg-[#0F172A]/80 transition-colors duration-150 cursor-pointer relative overflow-hidden group",
+        "bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5 flex flex-col gap-2 hover:border-[#3B82F6]/50 hover:bg-[#0F172A]/80 transition-colors duration-150 cursor-pointer relative overflow-hidden group",
       )}
       style={{ borderTop: `2px solid ${isPos ? "#22C55E" : "#EF4444"}` }}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[#94A3B8] text-xs font-medium tracking-wide uppercase">
+        <span className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em]">
           {INDEX_NAMES[symbol] ?? symbol}
         </span>
         <div className="flex items-center gap-1.5">
@@ -165,16 +165,17 @@ function IndexCard({ symbol, price, change, change_pct }: {
           <LineChart size={11} className="text-[#334155] group-hover:text-[#3B82F6] transition-colors" />
         </div>
       </div>
-      <div className="text-2xl font-bold text-[#F8FAFC] tracking-tight font-sans">
+      <div className="text-xl font-semibold text-[#F8FAFC] tracking-tight font-mono">
         {formatCurrency(price)}
       </div>
-      <div className={cn(
-        "flex items-center gap-1.5 text-sm font-medium",
-        isPos ? "text-[#22C55E]" : "text-[#EF4444]"
-      )}>
-        {isPos ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-        <span className="font-mono">{isPos ? "+" : ""}{formatPercent(change_pct)}</span>
-        <span className="text-[#475569] font-normal font-mono">({isPos ? "+" : ""}{change.toFixed(2)})</span>
+      <div className="flex items-center gap-2">
+        <span className={cn(
+          "text-xs font-semibold px-2 py-0.5 rounded-full",
+          isPos ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]"
+        )}>
+          {isPos ? "+" : ""}{formatPercent(change_pct)}
+        </span>
+        <span className="text-[#475569] text-xs font-mono">({isPos ? "+" : ""}{change.toFixed(2)})</span>
       </div>
       <div className="h-0.5 rounded-full mt-1 overflow-hidden bg-[#1E293B]">
         <div
@@ -258,33 +259,39 @@ function PaperAccountWidget() {
   if (isLoading) {
     return <SkeletonCard className="h-28" />;
   }
-  if (isError || !account) return null;
+  if (isError) return (
+    <div className="text-[#94A3B8] text-sm p-4">Failed to load data. Please refresh.</div>
+  );
+  if (!account) return null;
 
   const isPos = account.day_pnl >= 0;
   const hasPositions = account.positions.length > 0;
 
   return (
-    <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4 flex items-center justify-between gap-4">
+    <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-4 flex items-center justify-between gap-4">
       <div className="flex items-center gap-4">
         <div>
-          <div className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest mb-1">
+          <div className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] mb-1">
             Paper Portfolio
           </div>
-          <div className="text-lg font-bold text-[#F8FAFC] font-mono">
+          <div className="text-2xl font-semibold text-[#F8FAFC] font-mono">
             {formatCurrency(account.equity)}
           </div>
         </div>
         <div className="h-8 w-px bg-[#1E293B]" />
         <div>
-          <div className="text-[10px] text-[#475569] mb-1">Day P&amp;L</div>
-          <div className={cn("text-sm font-semibold font-mono", isPos ? "text-[#22C55E]" : "text-[#EF4444]")}>
+          <div className="text-xs text-[#64748B] mb-1">Day P&amp;L</div>
+          <span className={cn(
+            "text-xs font-semibold px-2 py-0.5 rounded-full",
+            isPos ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]"
+          )}>
             {isPos ? "+" : ""}{formatCurrency(account.day_pnl)}
-          </div>
+          </span>
         </div>
         <div className="h-8 w-px bg-[#1E293B]" />
         <div>
-          <div className="text-[10px] text-[#475569] mb-1">Positions</div>
-          <div className="text-sm font-semibold text-[#F8FAFC]">
+          <div className="text-xs text-[#64748B] mb-1">Positions</div>
+          <div className="text-lg font-semibold text-[#F8FAFC]">
             {hasPositions ? account.positions.length : "—"}
           </div>
         </div>
@@ -313,7 +320,7 @@ function PortfolioWidget() {
 
   if (isLoading) {
     return (
-      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-5 space-y-4">
+      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5 space-y-4">
         <Skeleton height={14} className="w-24" />
         <Skeleton height={32} className="w-36" />
         <div className="space-y-2.5 pt-2">
@@ -339,9 +346,9 @@ function PortfolioWidget() {
     .slice(0, 4);
 
   return (
-    <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-5">
+    <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest flex items-center gap-1.5">
+        <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] flex items-center gap-1.5">
           <Briefcase size={12} /> Portfolio
         </h2>
         <button onClick={() => navigate("/portfolio")} className="text-[#475569] hover:text-[#F8FAFC] text-xs flex items-center gap-1 transition-colors duration-150 cursor-pointer">
@@ -356,11 +363,18 @@ function PortfolioWidget() {
       ) : (
         <>
           <div className="mb-4 pb-4 border-b border-[#1E293B]">
-            <div className="text-2xl font-bold text-[#F8FAFC]">{formatCurrency(totalValue)}</div>
+            <div className="text-2xl font-semibold text-[#F8FAFC] font-mono">{formatCurrency(totalValue)}</div>
             {totalCost > 0 && (
-              <div className={cn("flex items-center gap-1.5 text-sm font-medium mt-1", isPos ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                {isPos ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-                <span className="font-mono">{isPos ? "+" : ""}{formatCurrency(totalGain)} ({formatPercent(gainPct)})</span>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className={cn(
+                  "text-xs font-semibold px-2 py-0.5 rounded-full",
+                  isPos ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]"
+                )}>
+                  {isPos ? "+" : ""}{formatPercent(gainPct)}
+                </span>
+                <span className={cn("text-xs font-mono", isPos ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                  {isPos ? "+" : ""}{formatCurrency(totalGain)}
+                </span>
               </div>
             )}
           </div>
@@ -403,7 +417,7 @@ function StrategyWidget() {
 
   if (isLoading) {
     return (
-      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-5 space-y-4">
+      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5 space-y-4">
         <Skeleton height={14} className="w-32" />
         <div className="space-y-2">
           {[1, 2, 3].map((i) => <Skeleton key={i} height={36} />)}
@@ -416,9 +430,9 @@ function StrategyWidget() {
   const watching = trades.filter((t) => t.status === "candidate").slice(0, 4);
 
   return (
-    <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-5">
+    <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest flex items-center gap-1.5">
+        <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] flex items-center gap-1.5">
           <FlaskConical size={12} /> Strategy Signals
         </h2>
         <button onClick={() => navigate("/strategy")} className="text-[#475569] hover:text-[#F8FAFC] text-xs flex items-center gap-1 transition-colors duration-150 cursor-pointer">
@@ -539,8 +553,8 @@ export default function Dashboard() {
       {/* Sectors + News */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sector Performance */}
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-5">
-          <h2 className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest mb-4">Sector Performance</h2>
+        <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
+          <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] mb-4">Sector Performance</h2>
           {sectorsLoading ? (
             <div className="space-y-3">
               {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -563,8 +577,8 @@ export default function Dashboard() {
         </div>
 
         {/* Market News */}
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-5">
-          <h2 className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest mb-4">Market News</h2>
+        <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
+          <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] mb-4">Market News</h2>
           {newsLoading ? (
             <div className="space-y-4">
               {[1, 2, 3, 4, 5].map((i) => (

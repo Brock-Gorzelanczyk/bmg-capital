@@ -66,9 +66,9 @@ export default function Settings() {
       <h1 className="text-xl font-bold text-[#F8FAFC] mb-2">Settings</h1>
 
       {/* Account info */}
-      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
+      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-[#1E293B]">
-          <span className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest">Account</span>
+          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em]">Account</span>
         </div>
         <div className="divide-y divide-[#1E293B]">
           <div className="flex items-center justify-between px-4 py-3">
@@ -86,9 +86,9 @@ export default function Settings() {
       </div>
 
       {/* Subscription */}
-      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
+      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-[#1E293B]">
-          <span className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest">Subscription</span>
+          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em]">Subscription</span>
         </div>
         <div className="p-4 space-y-3">
           {/* Current tier badge */}
@@ -159,9 +159,9 @@ export default function Settings() {
       </div>
 
       {/* Sign out */}
-      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
+      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-[#1E293B]">
-          <span className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest">Session</span>
+          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em]">Session</span>
         </div>
         <div className="p-4">
           <button

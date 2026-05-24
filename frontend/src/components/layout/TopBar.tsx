@@ -39,7 +39,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   useEffect(() => { if (data) setNotifications(data); }, [data, setNotifications]);
 
   return (
-    <header className="h-12 backdrop-blur-md bg-[#020617]/90 border-b border-[#1E293B] flex items-center px-3 md:px-4 gap-2 md:gap-4 shrink-0">
+    <header className="h-14 backdrop-blur-md bg-[#0B1120]/95 border-b border-[#1E293B] flex items-center px-3 md:px-4 gap-2 md:gap-4 shrink-0">
       {/* Hamburger — mobile only */}
       <button
         onClick={onMenuToggle}
@@ -53,7 +53,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
         onSelect={(s) => navigate(`/chart?symbol=${s}`)}
         placeholder="Search ticker… AAPL"
         className="flex-1 max-w-xs"
-        inputClassName="w-full h-8 bg-[#0F172A] text-[#F8FAFC] text-sm px-3 rounded-l border border-[#334155] focus:outline-none focus:border-[#3B82F6] placeholder-[#475569] uppercase transition-colors duration-150"
+        inputClassName="w-full h-9 bg-[#0D1526] text-[#F8FAFC] text-sm px-3 rounded-l border border-[#1A2744] focus:outline-none focus:border-[#3B82F6] focus:bg-[#0F172A] placeholder-[#475569] uppercase transition-colors duration-150"
       />
 
       <div className="flex items-center gap-2 md:gap-3 ml-auto">
