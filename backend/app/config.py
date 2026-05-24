@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     jwt_secret: str = "bmg-capital-secret-change-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_days: int = 30
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_plus_monthly: str = ""
+    stripe_price_plus_annual: str = ""
+    stripe_price_premium_monthly: str = ""
+    stripe_price_premium_annual: str = ""
+    app_url: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),

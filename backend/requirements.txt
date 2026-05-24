@@ -16,3 +16,4 @@ websockets>=14.0
 yfinance>=0.2.50
 python-jose[cryptography]==3.3.0
 bcrypt==4.2.1
+stripe>=8.0.0

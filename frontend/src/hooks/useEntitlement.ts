@@ -1,35 +1,38 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getMyTier } from "@/api/tiers";
-import type { TierFeatures } from "@/api/tiers";
+import { useTierStore } from "@/store/tierStore";
+import type { Entitlements } from "@/api/tiers";
 
-const FREE_FEATURES: TierFeatures = {
-  paper_trading: true,
-  basic_screener: true,
-  learn: true,
-  watchlist_limit: 10,
-  alerts_limit: 3,
-  strategy_backtest: false,
-  options_lab: false,
-  social: true,
-  ai_explain: false,
-  advanced_charts: false,
-};
-
+/**
+ * Loads the user's tier from the API, syncs to tierStore, and exposes helpers.
+ * Use `can()` for boolean feature gates, `canNum()` for numeric limits.
+ */
 export function useEntitlement() {
+  const store = useTierStore();
+
   const { data } = useQuery({
     queryKey: ["tier-me"],
     queryFn: getMyTier,
     staleTime: 1000 * 60 * 5,
   });
 
-  const tier = data?.tier ?? "free";
-  const features = data?.features ?? FREE_FEATURES;
+  useEffect(() => {
+    if (data) store.setTierData(data);
+  }, [data]);
 
-  function can(feature: keyof TierFeatures): boolean {
-    const v = features[feature];
-    if (typeof v === "boolean") return v;
-    return (v as number) !== 0;
-  }
-
-  return { tier, features, can };
+  return {
+    tier: store.tier,
+    entitlements: store.entitlements,
+    loaded: store.loaded,
+    /** True if the boolean feature is enabled for this tier */
+    can: (feature: keyof Entitlements): boolean => store.can(feature),
+    /** True if the numeric limit is >= required (-1 = unlimited) */
+    canNum: (feature: keyof Entitlements, required: number): boolean => store.canNum(feature, required),
+    /** Get the raw numeric value of a limit (-1 = unlimited) */
+    limit: (feature: keyof Entitlements): number => {
+      const val = store.entitlements[feature];
+      return typeof val === "number" ? val : 0;
+    },
+  };
 }

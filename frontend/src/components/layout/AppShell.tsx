@@ -8,6 +8,8 @@ import CommandPalette from "@/components/ui/CommandPalette";
 import ExplainPanel from "@/components/explain/ExplainPanel";
 import NotificationPanel from "@/components/notifications/NotificationPanel";
 import { getTrades, getCandidates, getSummary, getLog, getEquity, getRegime } from "@/api/strategy";
+import { getMyTier } from "@/api/tiers";
+import { useTierStore } from "@/store/tierStore";
 import { cn } from "@/lib/utils";
 
 const BOTTOM_NAV = [
@@ -32,6 +34,9 @@ export default function AppShell() {
     qc.prefetchQuery({ queryKey: ["strategy-log"],        queryFn: () => getLog(80), staleTime: 55_000 });
     qc.prefetchQuery({ queryKey: ["strategy-equity"],     queryFn: getEquity,        staleTime: 290_000 });
     qc.prefetchQuery({ queryKey: ["strategy-regime"],     queryFn: getRegime,        staleTime: 290_000 });
+    qc.fetchQuery({ queryKey: ["tier-me"], queryFn: getMyTier, staleTime: 300_000 })
+      .then((d) => { if (d) useTierStore.getState().setTierData(d); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {

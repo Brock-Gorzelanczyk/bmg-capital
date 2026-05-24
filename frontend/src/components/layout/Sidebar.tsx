@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useLearnStore } from "@/store/learnStore";
 import { useNotificationStore } from "@/store/notificationStore";
+import { useTierStore } from "@/store/tierStore";
 import StreakBadge from "@/components/learn/StreakBadge";
 
 const NAV_PRIMARY = [
@@ -82,6 +83,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
   const navigate = useNavigate();
   const streak = useLearnStore((s) => s.progress?.streak ?? 0);
   const notifUnread = useNotificationStore((s) => s.unreadCount);
+  const tier = useTierStore((s) => s.tier);
 
   const handleLogout = () => {
     logout();
@@ -194,9 +196,17 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs text-white font-bold shrink-0">
             {initials}
           </div>
-          <span className="hidden lg:block text-[#94A3B8] text-xs font-medium truncate flex-1">
-            {user?.username ?? ""}
-          </span>
+          <div className="hidden lg:flex flex-col flex-1 min-w-0">
+            <span className="text-[#94A3B8] text-xs font-medium truncate">{user?.username ?? ""}</span>
+            {tier !== "free" && (
+              <span className={cn(
+                "text-[9px] font-bold uppercase tracking-wider",
+                tier === "premium" ? "text-[#F59E0B]" : "text-[#3B82F6]"
+              )}>
+                {tier === "premium" ? "Premium" : "Plus"}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </aside>

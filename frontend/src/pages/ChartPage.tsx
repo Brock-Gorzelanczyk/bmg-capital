@@ -11,8 +11,10 @@ import DrawingToolbar from "@/components/chart/DrawingToolbar";
 import IndicatorsModal from "@/components/chart/IndicatorsModal";
 import WatchlistPanel from "@/components/panels/WatchlistPanel";
 import OrderTicket from "@/components/trading/OrderTicket";
+import PaywallSheet from "@/components/paywall/PaywallSheet";
 import { useBars } from "@/hooks/useBars";
 import { useMarketStore } from "@/store";
+import { useTierStore } from "@/store/tierStore";
 import { getDrawings, saveDrawings } from "@/api/chartDrawings";
 import { formatCurrency, formatVolume, cn } from "@/lib/utils";
 import type { ChartType, DrawingTool, HoveredBar, Drawing } from "@/types/chart";
@@ -115,6 +117,8 @@ export default function ChartPage() {
   const [compareSymbol, setCompareSymbol] = useState<string | null>(null);
   const [proMode, setProMode] = useState(false);
   const [showOrderTicket, setShowOrderTicket] = useState(false);
+  const [showProPaywall, setShowProPaywall] = useState(false);
+  const canProMode = useTierStore((s) => s.can("pro_mode"));
   const [savedIndicator, setSavedIndicator] = useState(false);
 
   const presetKey = searchParams.get("preset") ?? null;
@@ -321,7 +325,13 @@ export default function ChartPage() {
         compareSymbol={compareSymbol ?? undefined}
         onCompare={(s) => setCompareSymbol(s)}
         proMode={proMode}
-        onProModeToggle={() => setProMode((p) => !p)}
+        onProModeToggle={() => {
+          if (!proMode && !canProMode) {
+            setShowProPaywall(true);
+          } else {
+            setProMode((p) => !p);
+          }
+        }}
         onTradeClick={() => setShowOrderTicket(true)}
       />
 
@@ -596,6 +606,14 @@ export default function ChartPage() {
           </div>
         </div>
       )}
+
+      <PaywallSheet
+        open={showProPaywall}
+        onClose={() => setShowProPaywall(false)}
+        requiredTier="plus"
+        featureLabel="Pro Mode"
+        featureDescription="Sub-pane indicators, drawing tools, and advanced chart analysis require Plus or Premium."
+      />
     </div>
   );
 }
