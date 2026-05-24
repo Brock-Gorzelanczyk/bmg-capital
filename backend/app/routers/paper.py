@@ -4,8 +4,8 @@ import asyncio
 import logging
 import random
 import re
-from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -294,7 +294,7 @@ async def place_order(
         if qty <= 0:
             raise HTTPException(status_code=400, detail="Computed qty is zero — notional too small")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # -----------------------------------------------------------------------
     # Market orders: fill immediately
@@ -494,14 +494,14 @@ def cancel_order(
         raise HTTPException(status_code=400, detail=f"Cannot cancel order with status '{order.status}'")
 
     order.status = "cancelled"
-    order.cancelled_at = datetime.utcnow()
+    order.cancelled_at = datetime.now(timezone.utc)
 
     # Also cancel any child bracket orders
     children = db.query(PaperOrder).filter_by(parent_order_id=order_id, user_id=user.id).all()
     for child in children:
         if child.status == "working":
             child.status = "cancelled"
-            child.cancelled_at = datetime.utcnow()
+            child.cancelled_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(order)
@@ -590,7 +590,7 @@ def reset_account(db: Session = Depends(get_db), user=Depends(get_current_user))
         qty=0,
         fill_price=0,
         cost_basis=0,
-        notes=f"Account reset at {datetime.utcnow().isoformat()}",
+        notes=f"Account reset at {datetime.now(timezone.utc).isoformat()}",
     )
     db.add(reset_txn)
 
@@ -654,7 +654,7 @@ async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user
             quotes[sym] = q
 
     # 3. Create positions and initial filled orders (representing entry buys)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     total_positions_value = 0.0
 
     for symbol, qty, cost_mult in DEMO_POSITIONS:
