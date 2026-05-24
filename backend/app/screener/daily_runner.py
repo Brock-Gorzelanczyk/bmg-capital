@@ -92,6 +92,9 @@ def _get_prices_sync(symbols: List[str]) -> Dict[str, float]:
     if not symbols:
         return {}
     prices: Dict[str, float] = {}
+    missing: List[str] = []
+
+    # Real-time prices when market is open
     try:
         tickers = yf.Tickers(" ".join(symbols))
         for sym in symbols:
@@ -99,10 +102,39 @@ def _get_prices_sync(symbols: List[str]) -> Dict[str, float]:
                 p = tickers.tickers[sym].fast_info.last_price
                 if p and p > 0:
                     prices[sym] = float(p)
+                else:
+                    missing.append(sym)
             except Exception:
-                pass
+                missing.append(sym)
     except Exception as e:
         logger.error(f"Price fetch error: {e}")
+        missing = list(symbols)
+
+    # Fallback for market-closed / missing: last close from recent history
+    if missing:
+        try:
+            data = yf.download(missing, period="5d", progress=False, auto_adjust=True)
+            if not data.empty:
+                closes = data["Close"]
+                if len(missing) == 1:
+                    col = closes.dropna()
+                    if not col.empty:
+                        last = col.iloc[-1]
+                        if last and last > 0:
+                            prices[missing[0]] = float(last)
+                else:
+                    for sym in missing:
+                        try:
+                            col = closes[sym].dropna()
+                            if not col.empty:
+                                last = col.iloc[-1]
+                                if last and last > 0:
+                                    prices[sym] = float(last)
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.warning(f"Price history fallback error: {e}")
+
     return prices
 
 

@@ -7,6 +7,7 @@ import TopBar from "./TopBar";
 import CommandPalette from "@/components/ui/CommandPalette";
 import ExplainPanel from "@/components/explain/ExplainPanel";
 import NotificationPanel from "@/components/notifications/NotificationPanel";
+import SupportChatWidget from "@/components/support/SupportChatWidget";
 import { getTrades, getCandidates, getSummary, getLog, getEquity, getRegime } from "@/api/strategy";
 import { getMyTier } from "@/api/tiers";
 import { useTierStore } from "@/store/tierStore";
@@ -117,6 +118,7 @@ export default function AppShell() {
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <ExplainPanel />
       <NotificationPanel />
+      <SupportChatWidget />
     </div>
   );
 }
