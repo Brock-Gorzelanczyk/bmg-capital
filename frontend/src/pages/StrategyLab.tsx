@@ -527,6 +527,7 @@ export default function StrategyLab() {
   const portfolioValue = overall.portfolio_value ?? baseline;
   const totalReturn    = portfolioValue - baseline;
   const totalReturnPct = (totalReturn / baseline) * 100;
+  const dayPnl = overall.day_pnl ?? 0;
 
   // Per-strategy quick lookup
   const presetStatsMap = useMemo(() => {
@@ -605,6 +606,7 @@ export default function StrategyLab() {
         {/* Stat pills */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
           <StatPill label="Open P&L"    value={`${overall.open_pnl >= 0 ? "+" : ""}${fmt$(overall.open_pnl)}`} color={pnlColor(overall.open_pnl)} />
+          <StatPill label="Day's P&L"   value={dayPnl !== 0 ? `${dayPnl >= 0 ? "+" : ""}${fmt$(dayPnl)}` : "—"} color={dayPnl !== 0 ? pnlColor(dayPnl) : "text-[#475569]"} sub="vs prev close" />
           <StatPill label="Win Rate"    value={overall.total_closed > 0 ? `${overall.win_rate}%` : "—"} sub={overall.total_closed > 0 ? `${overall.wins}W · ${overall.losses}L` : "no closed trades"} />
           <StatPill label="Expectancy"  value={overall.total_closed > 0 ? fmtPct(overall.expectancy) : "—"} color={pnlColor(overall.expectancy)} sub="avg per trade" />
           <StatPill label="Max Drawdown" value={overall.max_drawdown_pct > 0 ? `-${overall.max_drawdown_pct?.toFixed(1)}%` : "—"} color={overall.max_drawdown_pct > 15 ? "text-[#EF4444]" : "text-[#94A3B8]"} />

@@ -33,6 +33,7 @@ class StrategyTrade(Base):
     risk_dollars: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     last_known_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    prev_close: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
 
 class DailyLog(Base):

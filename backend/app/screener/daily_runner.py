@@ -138,6 +138,36 @@ def _get_prices_sync(symbols: List[str]) -> Dict[str, float]:
     return prices
 
 
+def _get_prev_closes_sync(symbols: List[str]) -> Dict[str, float]:
+    """Return the previous session's closing price for each symbol."""
+    if not symbols:
+        return {}
+    prev: Dict[str, float] = {}
+    try:
+        data = yf.download(symbols, period="5d", progress=False, auto_adjust=True)
+        if not data.empty:
+            closes = data["Close"]
+            if len(symbols) == 1:
+                col = closes.dropna()
+                if len(col) >= 2:
+                    prev[symbols[0]] = float(col.iloc[-2])
+                elif len(col) == 1:
+                    prev[symbols[0]] = float(col.iloc[-1])
+            else:
+                for sym in symbols:
+                    try:
+                        col = closes[sym].dropna()
+                        if len(col) >= 2:
+                            prev[sym] = float(col.iloc[-2])
+                        elif len(col) == 1:
+                            prev[sym] = float(col.iloc[-1])
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.warning(f"Prev-close fetch error: {e}")
+    return prev
+
+
 def _add_log(
     db: Session,
     log_date: date,

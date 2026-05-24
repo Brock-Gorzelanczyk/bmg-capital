@@ -16,6 +16,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("risk_dollars",     "FLOAT"),
         ("user_id",          "INTEGER"),
         ("last_known_price", "FLOAT"),
+        ("prev_close",       "FLOAT"),
     ],
     "watchlists": [
         ("user_id", "INTEGER"),

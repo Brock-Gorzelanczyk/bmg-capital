@@ -21,6 +21,7 @@ from app.screener.daily_runner import (
     _check_regime_sync,
     _fetch_bars_sync,
     _get_prices_sync,
+    _get_prev_closes_sync,
     run_daily_automation,
 )
 
@@ -61,11 +62,13 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _enrich_trade(t: StrategyTrade, prices: Dict[str, float]) -> Dict[str, Any]:
+def _enrich_trade(t: StrategyTrade, prices: Dict[str, float], prev_closes: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     current = (prices.get(t.symbol) or t.last_known_price) if t.status in ("open", "candidate") else t.exit_price
     ep = t.exit_price if t.status == "closed" else current
     pnl = ((ep - t.entry_price) * t.shares) if (ep and t.entry_price and t.entry_price > 0 and t.shares) else None
     pnl_pct = ((ep - t.entry_price) / t.entry_price * 100) if (ep and t.entry_price and t.entry_price > 0) else None
+    prev_close = (prev_closes or {}).get(t.symbol) if t.status == "open" else None
+    day_pnl = round((current - prev_close) * t.shares, 2) if (current and prev_close and t.shares and t.status == "open") else None
     days_held = 0
     if t.status == "candidate" and t.candidate_since:
         days_held = (date.today() - t.candidate_since.date()).days
@@ -95,6 +98,7 @@ def _enrich_trade(t: StrategyTrade, prices: Dict[str, float]) -> Dict[str, Any]:
         "exit_reason": t.exit_reason,
         "pnl": round(pnl, 2) if pnl is not None else None,
         "pnl_pct": round(pnl_pct, 2) if pnl_pct is not None else None,
+        "day_pnl": day_pnl,
         "days_held": days_held,
     }
 
@@ -187,6 +191,7 @@ async def get_summary(
 
     loop = asyncio.get_running_loop()
     prices = await loop.run_in_executor(None, lambda: _get_prices_cached(open_syms))
+    prev_closes = await loop.run_in_executor(None, lambda: _get_prev_closes_sync(open_syms))
     _settle_open_trades(open_trades, prices, db)
 
     closed = [
@@ -206,6 +211,12 @@ async def get_summary(
         ((prices.get(t.symbol) or t.last_known_price or t.entry_price) - t.entry_price) * t.shares
         for t in open_trades
         if t.entry_price and t.entry_price > 0 and t.shares
+    )
+    day_pnl = sum(
+        ((prices.get(t.symbol) or t.last_known_price or 0) - prev_closes[t.symbol]) * t.shares
+        for t in open_trades
+        if t.entry_price and t.entry_price > 0 and t.shares and t.symbol in prev_closes
+        and (prices.get(t.symbol) or t.last_known_price)
     )
 
     avg_win = (sum((t.exit_price - t.entry_price) / t.entry_price * 100 for t in wins) / len(wins)) if wins else 0
@@ -272,6 +283,7 @@ async def get_summary(
             "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
             "total_pnl": round(realized_pnl, 2),
             "open_pnl": round(open_pnl, 2),
+            "day_pnl": round(day_pnl, 2),
             "portfolio_value": round(PAPER_PORTFOLIO + realized_pnl + open_pnl, 2),
             "open_positions": open_count,
             "candidates": candidates_count,
