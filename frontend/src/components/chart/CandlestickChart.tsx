@@ -137,13 +137,18 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         layout: { background: { type: ColorType.Solid, color: TV.bg }, textColor: TV.text },
         grid: { vertLines: { color: TV.grid }, horzLines: { color: TV.grid } },
         crosshair: { mode: 1 },
-        rightPriceScale: { borderColor: TV.border },
+        rightPriceScale: {
+          borderColor: TV.border,
+          // TradingView-style margins: 5% top breathing room, 12% bottom reserved for volume bars
+          scaleMargins: { top: 0.05, bottom: 0.12 },
+        },
         timeScale: {
           borderColor: TV.border,
           timeVisible: true,
           secondsVisible: false,
-          fixLeftEdge: true,
-          fixRightEdge: true,
+          fixLeftEdge: true,   // no blank space before first bar
+          fixRightEdge: true,  // no blank space after last bar
+          rightOffset: 5,      // 5 empty bars to the right of the last candle (TradingView default)
           lockVisibleTimeRangeOnResize: true,
         },
         autoSize: true,
