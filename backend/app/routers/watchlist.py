@@ -190,5 +190,5 @@ async def get_watchlist_snapshot(
                 result.append({"symbol": symbol, "price": None, "error": "no data"})
         return {"watchlist_id": watchlist_id, "snapshots": result}
     except Exception as e:
-        logger.error(f"Snapshot error for watchlist {watchlist_id}: {e}")
+        logger.error(f"Snapshot error for watchlist {watchlist_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

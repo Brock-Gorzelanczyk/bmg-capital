@@ -106,7 +106,7 @@ async def explain(
             text = await _call_anthropic(prompt, term)
             return {"term": term, "explanation": text, "source": "ai", "mode": mode, "related": []}
         except Exception as e:
-            logger.warning(f"Anthropic API failed for '{term}': {e}")
+            logger.warning(f"Anthropic API failed for '{term}': {e}", exc_info=True)
 
     if settings.openai_api_key:
         prompt = _simple_prompt(term, context) if mode == "simple" else _detailed_prompt(term, context)
@@ -114,7 +114,7 @@ async def explain(
             text = await _call_openai(prompt)
             return {"term": term, "explanation": text, "source": "ai", "mode": mode, "related": []}
         except Exception as e:
-            logger.warning(f"OpenAI API failed for '{term}': {e}")
+            logger.warning(f"OpenAI API failed for '{term}': {e}", exc_info=True)
 
     # Fallback: curated glossary
     entry = lookup(term)

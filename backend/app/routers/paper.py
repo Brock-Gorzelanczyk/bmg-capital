@@ -5,7 +5,7 @@ import logging
 import random
 import re
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_EVEN
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,6 +25,20 @@ from app.services.fill_simulator import get_quote, simulate_fill
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/paper", tags=["paper"])
+
+
+# ---------------------------------------------------------------------------
+# Decimal helpers (H20)
+# ---------------------------------------------------------------------------
+
+def _d(v) -> Decimal:
+    """Convert float/int/str to Decimal safely."""
+    return Decimal(str(v)) if v is not None else Decimal("0")
+
+
+def _money(v: Decimal) -> float:
+    """Round to 4dp for storage; 2dp display happens in serializer."""
+    return float(v.quantize(Decimal("0.0001"), rounding=ROUND_HALF_EVEN))
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +128,8 @@ def _apply_fill_to_position(
                 detail=f"Insufficient shares. Have {position.qty:.4f}, selling {qty:.4f}",
             )
         cost_basis = position.avg_cost
-        realized_pnl = round((fill_price - cost_basis) * qty, 4)
+        # H20: use Decimal for realized P&L calculation
+        realized_pnl = _money((_d(fill_price) - _d(cost_basis)) * _d(qty))
         txn = PaperTransaction(
             user_id=user_id,
             order_id=order_id,
@@ -160,6 +175,7 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
 
     for p in positions:
         q = quotes.get(p.symbol)
+        stale = q is None  # H8: track if quote is missing
         if q:
             current_price = q["last"]
         else:
@@ -167,13 +183,21 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
             logger.warning(f"Quote fetch failed for {p.symbol}, using fallback price")
         prev_close = p.prev_close if p.prev_close is not None else (q["prev_close"] if q else p.avg_cost)
 
-        market_value = round(current_price * p.qty, 2)
-        cost_basis_total = round(p.avg_cost * p.qty, 2)
-        unrealized_pnl = round(market_value - cost_basis_total, 2)
-        unrealized_pnl_pct = round((unrealized_pnl / cost_basis_total * 100) if cost_basis_total else 0.0, 4)
+        # H20: use Decimal for all financial math
+        d_price = _d(current_price)
+        d_qty = _d(p.qty)
+        d_avg_cost = _d(p.avg_cost)
+        d_prev_close = _d(prev_close)
 
-        pos_day_pnl = round((current_price - prev_close) * p.qty, 2)
-        pos_day_pnl_pct = round(((current_price - prev_close) / prev_close * 100) if prev_close else 0.0, 4)
+        market_value = _money(d_price * d_qty)
+        cost_basis_total = _money(d_avg_cost * d_qty)
+        d_unrealized_pnl = _d(market_value) - _d(cost_basis_total)
+        unrealized_pnl = _money(d_unrealized_pnl)
+        unrealized_pnl_pct = _money(d_unrealized_pnl / _d(cost_basis_total) * _d(100)) if cost_basis_total else 0.0
+
+        d_pos_day_pnl = (d_price - d_prev_close) * d_qty
+        pos_day_pnl = _money(d_pos_day_pnl)
+        pos_day_pnl_pct = _money(d_pos_day_pnl / d_prev_close * _d(100)) if prev_close else 0.0
 
         total_positions_value += market_value
         day_pnl_total += pos_day_pnl
@@ -192,13 +216,16 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
             "day_pnl_pct": pos_day_pnl_pct,
             "prev_close": prev_close,
             "opened_at": p.opened_at.isoformat(),
+            "price_stale": stale,  # H8: frontend warning indicator
         })
 
-    equity = round(acct.cash + total_positions_value, 2)
-    total_pnl = round(equity - acct.starting_balance, 2)
-    total_pnl_pct = round((total_pnl / acct.starting_balance * 100) if acct.starting_balance else 0.0, 4)
-    baseline = equity - day_pnl_total
-    day_pnl_pct = round((day_pnl_total / baseline * 100) if baseline > 0 else 0.0, 4)
+    d_equity = _d(acct.cash) + _d(total_positions_value)
+    equity = _money(d_equity)
+    d_total_pnl = d_equity - _d(acct.starting_balance)
+    total_pnl = _money(d_total_pnl)
+    total_pnl_pct = _money(d_total_pnl / _d(acct.starting_balance) * _d(100)) if acct.starting_balance else 0.0
+    d_baseline = d_equity - _d(day_pnl_total)
+    day_pnl_pct = _money(_d(day_pnl_total) / d_baseline * _d(100)) if float(d_baseline) > 0 else 0.0
 
     return {
         "cash": round(acct.cash, 2),
@@ -301,7 +328,8 @@ async def place_order(
     # -----------------------------------------------------------------------
     if req.order_type == "market":
         fill_price, slippage = simulate_fill(req.side, quote, "market")
-        total_cost = round(fill_price * qty, 2)
+        # H20: use Decimal for total cost calculation
+        total_cost = _money(_d(fill_price) * _d(qty))
 
         if req.side == "buy":
             if acct.cash < total_cost:
@@ -309,7 +337,9 @@ async def place_order(
                     status_code=400,
                     detail=f"Insufficient buying power. Need ${total_cost:,.2f}, have ${acct.cash:,.2f}",
                 )
+            _delta = -total_cost
             acct.cash = round(acct.cash - total_cost, 2)
+            logger.info(f"CASH_CHANGE user={user.id} delta={_delta:.4f} new_balance={acct.cash:.4f} reason='market buy {req.symbol} qty={qty}'")
         else:
             position = db.query(PaperPosition).filter_by(user_id=user.id, symbol=req.symbol).first()
             if not position or position.qty < qty - 1e-6:
@@ -318,7 +348,9 @@ async def place_order(
                     status_code=400,
                     detail=f"Insufficient shares. Have {have:.4f}, selling {qty:.4f}",
                 )
+            _delta = total_cost
             acct.cash = round(acct.cash + total_cost, 2)
+            logger.info(f"CASH_CHANGE user={user.id} delta={_delta:.4f} new_balance={acct.cash:.4f} reason='market sell {req.symbol} qty={qty}'")
 
         order = PaperOrder(
             user_id=user.id,
@@ -373,10 +405,13 @@ async def place_order(
                     )
                     db.add(sl)
 
-            db.commit()
-        except Exception:
+            db.commit()  # H15: single commit at the end of entire fill sequence
+        except HTTPException:
             db.rollback()
             raise
+        except Exception:
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Order processing failed. Please try again.")
 
         db.refresh(order)
         return _serialize_order(order)
@@ -406,10 +441,19 @@ async def place_order(
     if req.order_type == "limit":
         if req.limit_price is None:
             raise HTTPException(status_code=400, detail="limit_price required for limit orders")
-        if req.side == "buy" and req.limit_price > quote["ask"] * 1.05:
-            logger.warning(f"Limit buy price {req.limit_price} well above ask {quote['ask']}")
-        if req.side == "sell" and req.limit_price < quote["bid"] * 0.95:
-            logger.warning(f"Limit sell price {req.limit_price} well below bid {quote['bid']}")
+        ask = quote.get("ask", 0)
+        bid = quote.get("bid", 0)
+        # H11: hard-reject limit orders that are unreasonably priced
+        if req.side == "buy" and ask and req.limit_price > ask * 1.05:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Limit buy price ${req.limit_price} is more than 5% above current ask ${ask:.2f}. Use a market order or lower your limit.",
+            )
+        if req.side == "sell" and bid and req.limit_price < bid * 0.95:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Limit sell price ${req.limit_price} is more than 5% below current bid ${bid:.2f}.",
+            )
 
     # Reserve buying power for working buy orders
     if req.side == "buy":
@@ -492,6 +536,14 @@ def cancel_order(
         raise HTTPException(status_code=404, detail="Order not found")
     if order.status != "working":
         raise HTTPException(status_code=400, detail=f"Cannot cancel order with status '{order.status}'")
+
+    # C7: SQLite cannot enforce FK constraints via ALTER TABLE.
+    # If any PaperTransaction references this order, soft-cancel only (never hard delete).
+    has_txn = db.query(PaperTransaction).filter_by(order_id=order.id).first()
+    if has_txn:
+        order.status = "cancelled"
+        db.commit()
+        return {"ok": True}
 
     order.status = "cancelled"
     order.cancelled_at = datetime.now(timezone.utc)
@@ -578,35 +630,41 @@ def get_snapshots(
 @router.post("/reset")
 def reset_account(db: Session = Depends(get_db), user=Depends(get_current_user)):
     """Reset paper trading account to starting balance. Preserves transaction ledger."""
-    db.query(PaperPosition).filter_by(user_id=user.id).delete()
-    db.query(PaperOrder).filter_by(user_id=user.id).delete()
-    db.query(PaperDailySnapshot).filter_by(user_id=user.id).delete()
-    # DO NOT delete PaperTransaction — it's the financial ledger.
-    # Add a reset marker transaction instead.
-    reset_txn = PaperTransaction(
-        user_id=user.id,
-        symbol="RESET",
-        side="reset",
-        qty=0,
-        fill_price=0,
-        cost_basis=0,
-        notes=f"Account reset at {datetime.now(timezone.utc).isoformat()}",
-    )
-    db.add(reset_txn)
-
-    acct = db.query(PaperAccount).filter_by(user_id=user.id).first()
-    if acct:
-        acct.cash = STARTING_BALANCE
-        acct.starting_balance = STARTING_BALANCE
-    else:
-        acct = PaperAccount(
+    try:
+        db.query(PaperPosition).filter_by(user_id=user.id).delete()
+        db.query(PaperOrder).filter_by(user_id=user.id).delete()
+        db.query(PaperDailySnapshot).filter_by(user_id=user.id).delete()
+        # DO NOT delete PaperTransaction — it's the financial ledger.
+        # Add a reset marker transaction instead.
+        reset_txn = PaperTransaction(
             user_id=user.id,
-            cash=STARTING_BALANCE,
-            starting_balance=STARTING_BALANCE,
+            symbol="RESET",
+            side="reset",
+            qty=0,
+            fill_price=0,
+            cost_basis=0,
+            notes=f"Account reset at {datetime.now(timezone.utc).isoformat()}",
         )
-        db.add(acct)
-    db.commit()
-    return {"status": "reset", "cash": STARTING_BALANCE}
+        db.add(reset_txn)
+
+        acct = db.query(PaperAccount).filter_by(user_id=user.id).first()
+        if acct:
+            acct.cash = STARTING_BALANCE
+            acct.starting_balance = STARTING_BALANCE
+            logger.info(f"CASH_CHANGE user={user.id} delta={STARTING_BALANCE:.4f} new_balance={acct.cash:.4f} reason='account reset'")
+        else:
+            acct = PaperAccount(
+                user_id=user.id,
+                cash=STARTING_BALANCE,
+                starting_balance=STARTING_BALANCE,
+            )
+            db.add(acct)
+            logger.info(f"CASH_CHANGE user={user.id} delta={STARTING_BALANCE:.4f} new_balance={STARTING_BALANCE:.4f} reason='account created on reset'")
+        db.commit()
+        return {"status": "reset", "cash": STARTING_BALANCE}
+    except Exception:
+        db.rollback()
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -614,14 +672,13 @@ def reset_account(db: Session = Depends(get_db), user=Depends(get_current_user))
 # ---------------------------------------------------------------------------
 
 DEMO_POSITIONS = [
-    # (symbol, qty, cost_multiplier)
-    ("AAPL", 15, 0.82),
-    ("NVDA", 8, 0.70),
-    ("MSFT", 12, 0.88),
-    ("TSLA", 10, 1.15),
-    ("AMZN", 6, 0.79),
-    ("SPY", 20, 0.92),
-    ("META", 5, 0.75),
+    {"symbol": "AAPL", "qty": 15, "cost_pct_of_current": 0.82},
+    {"symbol": "NVDA", "qty": 8,  "cost_pct_of_current": 0.70},
+    {"symbol": "MSFT", "qty": 12, "cost_pct_of_current": 0.88},
+    {"symbol": "TSLA", "qty": 10, "cost_pct_of_current": 1.15},
+    {"symbol": "AMZN", "qty": 6,  "cost_pct_of_current": 0.79},
+    {"symbol": "SPY",  "qty": 20, "cost_pct_of_current": 0.92},
+    {"symbol": "META", "qty": 5,  "cost_pct_of_current": 0.75},
 ]
 
 DEMO_CASH = 35_000.0
@@ -630,147 +687,165 @@ DEMO_CASH = 35_000.0
 @router.post("/seed-demo")
 async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user)):
     """Reset account and populate with a realistic demo portfolio."""
-    # 1. Reset everything
-    db.query(PaperPosition).filter_by(user_id=user.id).delete()
-    db.query(PaperOrder).filter_by(user_id=user.id).delete()
-    db.query(PaperTransaction).filter_by(user_id=user.id).delete()
-    db.query(PaperDailySnapshot).filter_by(user_id=user.id).delete()
+    try:
+        # 1. Reset positions, orders, and snapshots — but NOT PaperTransaction (financial ledger)
+        db.query(PaperPosition).filter_by(user_id=user.id).delete()
+        db.query(PaperOrder).filter_by(user_id=user.id).delete()
+        # DO NOT delete PaperTransaction records — insert a seed marker instead
+        db.query(PaperDailySnapshot).filter_by(user_id=user.id).delete()
 
-    acct = db.query(PaperAccount).filter_by(user_id=user.id).first()
-    if not acct:
-        acct = PaperAccount(user_id=user.id, cash=DEMO_CASH, starting_balance=STARTING_BALANCE)
-        db.add(acct)
-    else:
-        acct.cash = DEMO_CASH
-        acct.starting_balance = STARTING_BALANCE
-    db.commit()
-
-    # 2. Fetch current prices in parallel
-    symbols = [s for s, _, _ in DEMO_POSITIONS]
-    quotes_list = await asyncio.gather(*[get_quote(s) for s in symbols], return_exceptions=True)
-    quotes = {}
-    for sym, q in zip(symbols, quotes_list):
-        if isinstance(q, dict):
-            quotes[sym] = q
-
-    # 3. Create positions and initial filled orders (representing entry buys)
-    now = datetime.now(timezone.utc)
-    total_positions_value = 0.0
-
-    for symbol, qty, cost_mult in DEMO_POSITIONS:
-        q = quotes.get(symbol)
-        current_price = q["last"] if q else 150.0  # fallback
-        avg_cost = round(current_price * cost_mult, 2)
-        prev_close = q.get("prev_close", current_price) if q else current_price
-
-        pos = PaperPosition(
+        # H7: insert seed marker transaction instead of deleting records
+        seed_txn = PaperTransaction(
             user_id=user.id,
-            symbol=symbol,
-            qty=qty,
-            avg_cost=avg_cost,
-            prev_close=prev_close,
-            opened_at=now - timedelta(days=random.randint(30, 90)),
+            symbol="SEED",
+            side="seed",
+            qty=0,
+            fill_price=0,
+            cost_basis=0,
+            notes=f"Demo seed at {datetime.now(timezone.utc).isoformat()}",
         )
-        db.add(pos)
-        total_positions_value += current_price * qty
+        db.add(seed_txn)
 
-        # Historical buy order
-        entry_order = PaperOrder(
-            user_id=user.id,
-            symbol=symbol,
-            side="buy",
-            qty=qty,
-            order_type="market",
-            tif="day",
-            status="filled",
-            fill_price=avg_cost,
-            fill_qty=qty,
-            slippage=round(avg_cost * 0.0001, 4),
-            filled_at=now - timedelta(days=random.randint(30, 90)),
-            created_at=now - timedelta(days=random.randint(30, 90)),
-        )
-        db.add(entry_order)
+        acct = db.query(PaperAccount).filter_by(user_id=user.id).first()
+        if not acct:
+            acct = PaperAccount(user_id=user.id, cash=DEMO_CASH, starting_balance=STARTING_BALANCE)
+            db.add(acct)
+            logger.info(f"CASH_CHANGE user={user.id} delta={DEMO_CASH:.4f} new_balance={DEMO_CASH:.4f} reason='demo seed account created'")
+        else:
+            acct.cash = DEMO_CASH
+            acct.starting_balance = STARTING_BALANCE
+            logger.info(f"CASH_CHANGE user={user.id} delta={DEMO_CASH:.4f} new_balance={acct.cash:.4f} reason='demo seed reset'")
+        db.commit()
 
-    db.commit()
+        # 2. Fetch current prices in parallel
+        symbols = [p["symbol"] for p in DEMO_POSITIONS]
+        quotes_list = await asyncio.gather(*[get_quote(s) for s in symbols], return_exceptions=True)
+        quotes = {}
+        for sym, q in zip(symbols, quotes_list):
+            if isinstance(q, dict):
+                quotes[sym] = q
 
-    # 4. Create a few sample sell transactions (realized P&L)
-    sample_sells = [
-        ("AAPL", 5, 0.78, 0.95),   # bought cheaper, sold at a small gain
-        ("TSLA", 3, 1.20, 1.05),   # small realized loss
-    ]
-    for sym, qty_sold, buy_mult, sell_mult in sample_sells:
-        q = quotes.get(sym)
-        base_price = q["last"] if q else 150.0
-        buy_price = round(base_price * buy_mult, 2)
-        sell_price = round(base_price * sell_mult, 2)
-        sell_order = PaperOrder(
-            user_id=user.id,
-            symbol=sym,
-            side="sell",
-            qty=qty_sold,
-            order_type="market",
-            tif="day",
-            status="filled",
-            fill_price=sell_price,
-            fill_qty=qty_sold,
-            slippage=round(sell_price * 0.0001, 4),
-            filled_at=now - timedelta(days=random.randint(5, 20)),
-            created_at=now - timedelta(days=random.randint(5, 20)),
-        )
-        db.add(sell_order)
-        db.flush()
-        txn = PaperTransaction(
-            user_id=user.id,
-            order_id=sell_order.id,
-            symbol=sym,
-            side="sell",
-            qty=qty_sold,
-            fill_price=sell_price,
-            cost_basis=buy_price,
-            realized_pnl=round((sell_price - buy_price) * qty_sold, 4),
-        )
-        db.add(txn)
+        # 3. Create positions and initial filled orders (representing entry buys)
+        now = datetime.now(timezone.utc)
+        total_positions_value = 0.0
 
-    db.commit()
+        for dp in DEMO_POSITIONS:
+            symbol = dp["symbol"]
+            qty = dp["qty"]
+            cost_mult = dp["cost_pct_of_current"]
+            q = quotes.get(symbol)
+            current_price = q["last"] if q else 150.0  # fallback
+            avg_cost = round(current_price * cost_mult, 2)
+            prev_close = q.get("prev_close", current_price) if q else current_price
 
-    # 5. Create 90 daily snapshots simulating equity growth from $100K
-    # Build a smooth curve with some daily noise
-    base_equity = STARTING_BALANCE
-    snapshots_equity = base_equity
-    final_equity = round(DEMO_CASH + total_positions_value, 2)
-    total_gain = final_equity - base_equity
-    # Distribute gain over 90 days with noise
-    daily_drift = total_gain / 90
+            pos = PaperPosition(
+                user_id=user.id,
+                symbol=symbol,
+                qty=qty,
+                avg_cost=avg_cost,
+                prev_close=prev_close,
+                opened_at=now - timedelta(days=random.randint(30, 90)),
+            )
+            db.add(pos)
+            total_positions_value += current_price * qty
 
-    today = now.date()
-    prev_snap_equity = base_equity
-    for i in range(90, 0, -1):
-        snap_date = today - timedelta(days=i)
-        day_fraction = (90 - i) / 90
-        trend_equity = base_equity + total_gain * day_fraction
-        noise = trend_equity * random.uniform(-0.008, 0.012)  # -0.8% to +1.2% noise
-        snap_equity = round(max(trend_equity + noise, base_equity * 0.85), 2)
-        day_pnl = round(snap_equity - prev_snap_equity, 2)
-        snap_positions_value = round(snap_equity * 0.65, 2)  # ~65% invested
-        snap_cash = round(snap_equity - snap_positions_value, 2)
+            # Historical buy order
+            entry_order = PaperOrder(
+                user_id=user.id,
+                symbol=symbol,
+                side="buy",
+                qty=qty,
+                order_type="market",
+                tif="day",
+                status="filled",
+                fill_price=avg_cost,
+                fill_qty=qty,
+                slippage=round(avg_cost * 0.0001, 4),
+                filled_at=now - timedelta(days=random.randint(30, 90)),
+                created_at=now - timedelta(days=random.randint(30, 90)),
+            )
+            db.add(entry_order)
 
-        snap = PaperDailySnapshot(
-            user_id=user.id,
-            date=snap_date.isoformat(),
-            equity=snap_equity,
-            cash=snap_cash,
-            positions_value=snap_positions_value,
-            day_pnl=day_pnl,
-        )
-        db.add(snap)
-        prev_snap_equity = snap_equity
+        db.commit()
 
-    db.commit()
+        # 4. Create a few sample sell transactions (realized P&L)
+        sample_sells = [
+            ("AAPL", 5, 0.78, 0.95),   # bought cheaper, sold at a small gain
+            ("TSLA", 3, 1.20, 1.05),   # small realized loss
+        ]
+        for sym, qty_sold, buy_mult, sell_mult in sample_sells:
+            q = quotes.get(sym)
+            base_price = q["last"] if q else 150.0
+            buy_price = round(base_price * buy_mult, 2)
+            sell_price = round(base_price * sell_mult, 2)
+            sell_order = PaperOrder(
+                user_id=user.id,
+                symbol=sym,
+                side="sell",
+                qty=qty_sold,
+                order_type="market",
+                tif="day",
+                status="filled",
+                fill_price=sell_price,
+                fill_qty=qty_sold,
+                slippage=round(sell_price * 0.0001, 4),
+                filled_at=now - timedelta(days=random.randint(5, 20)),
+                created_at=now - timedelta(days=random.randint(5, 20)),
+            )
+            db.add(sell_order)
+            db.flush()
+            txn = PaperTransaction(
+                user_id=user.id,
+                order_id=sell_order.id,
+                symbol=sym,
+                side="sell",
+                qty=qty_sold,
+                fill_price=sell_price,
+                cost_basis=buy_price,
+                realized_pnl=round((sell_price - buy_price) * qty_sold, 4),
+            )
+            db.add(txn)
 
-    return {
-        "status": "seeded",
-        "cash": DEMO_CASH,
-        "positions": len(DEMO_POSITIONS),
-        "equity_estimate": round(DEMO_CASH + total_positions_value, 2),
-        "snapshots": 90,
-    }
+        db.commit()
+
+        # 5. Create 90 daily snapshots simulating equity growth from $100K
+        # Build a smooth curve with some daily noise
+        base_equity = STARTING_BALANCE
+        final_equity = round(DEMO_CASH + total_positions_value, 2)
+        total_gain = final_equity - base_equity
+
+        today = now.date()
+        prev_snap_equity = base_equity
+        for i in range(90, 0, -1):
+            snap_date = today - timedelta(days=i)
+            day_fraction = (90 - i) / 90
+            trend_equity = base_equity + total_gain * day_fraction
+            noise = trend_equity * random.uniform(-0.008, 0.012)  # -0.8% to +1.2% noise
+            snap_equity = round(max(trend_equity + noise, base_equity * 0.85), 2)
+            day_pnl = round(snap_equity - prev_snap_equity, 2)
+            snap_positions_value = round(snap_equity * 0.65, 2)  # ~65% invested
+            snap_cash = round(snap_equity - snap_positions_value, 2)
+
+            snap = PaperDailySnapshot(
+                user_id=user.id,
+                date=snap_date.isoformat(),
+                equity=snap_equity,
+                cash=snap_cash,
+                positions_value=snap_positions_value,
+                day_pnl=day_pnl,
+            )
+            db.add(snap)
+            prev_snap_equity = snap_equity
+
+        db.commit()
+
+        return {
+            "status": "seeded",
+            "cash": DEMO_CASH,
+            "positions": len(DEMO_POSITIONS),
+            "equity_estimate": round(DEMO_CASH + total_positions_value, 2),
+            "snapshots": 90,
+        }
+    except Exception:
+        db.rollback()
+        raise

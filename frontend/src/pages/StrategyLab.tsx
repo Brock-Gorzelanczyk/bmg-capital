@@ -605,8 +605,8 @@ export default function StrategyLab() {
 
         {/* Stat pills */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          <StatPill label="Open P&L"    value={`${overall.open_pnl >= 0 ? "+" : ""}${fmt$(overall.open_pnl)}`} color={pnlColor(overall.open_pnl)} />
-          <StatPill label="Day's P&L"   value={dayPnl !== 0 ? `${dayPnl >= 0 ? "+" : ""}${fmt$(dayPnl)}` : "—"} color={dayPnl !== 0 ? pnlColor(dayPnl) : "text-[#475569]"} sub="vs prev close" />
+          <StatPill label="Open P&L"    value={overall.open_pnl !== 0 ? `${overall.open_pnl >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(overall.open_pnl))}` : "—"} color={pnlColor(overall.open_pnl)} />
+          <StatPill label="Day's P&L"   value={dayPnl !== 0 ? `${dayPnl >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(dayPnl))}` : "—"} color={dayPnl !== 0 ? pnlColor(dayPnl) : "text-[#475569]"} sub="vs prev close" />
           <StatPill label="Win Rate"    value={overall.total_closed > 0 ? `${overall.win_rate}%` : "—"} sub={overall.total_closed > 0 ? `${overall.wins}W · ${overall.losses}L` : "no closed trades"} />
           <StatPill label="Expectancy"  value={overall.total_closed > 0 ? fmtPct(overall.expectancy) : "—"} color={pnlColor(overall.expectancy)} sub="avg per trade" />
           <StatPill label="Max Drawdown" value={overall.max_drawdown_pct > 0 ? `-${overall.max_drawdown_pct?.toFixed(1)}%` : "—"} color={overall.max_drawdown_pct > 15 ? "text-[#EF4444]" : "text-[#94A3B8]"} />
@@ -1286,10 +1286,13 @@ function OpenTable({ trades, onClose, onChart, onRowClick }: { trades: any[]; on
                 </TD>
                 <TD className="font-mono text-xs text-[#94A3B8]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</TD>
                 <TD>
-                  <div className={cn("font-mono text-sm font-bold", pos ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                    {t.pnl_pct != null ? fmtPct(t.pnl_pct) : "—"}
+                  <div
+                    className={cn("font-mono text-sm font-bold", pos ? "text-[#22C55E]" : "text-[#EF4444]")}
+                    aria-label={t.pnl != null ? `${pos ? "Gain" : "Loss"}: ${fmt$(Math.abs(t.pnl), 0)}` : undefined}
+                  >
+                    {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
                   </div>
-                  {t.pnl != null && <div className={cn("text-[10px] font-mono", pos ? "text-[#22C55E]/60" : "text-[#EF4444]/60")}>{t.pnl >= 0 ? "+" : ""}{fmt$(t.pnl, 0)}</div>}
+                  {t.pnl != null && <div className={cn("text-[10px] font-mono", pos ? "text-[#22C55E]/60" : "text-[#EF4444]/60")}>{pos ? "▲" : "▼"} {fmt$(Math.abs(t.pnl), 0)}</div>}
                 </TD>
                 <TD className="text-xs font-mono">
                   <span className="text-[#EF4444]/70">{t.stop_price ? `$${t.stop_price.toFixed(2)}` : "—"}</span>
@@ -1388,8 +1391,11 @@ function ClosedTable({ trades, onChart }: { trades: any[]; onChart: OnChart }) {
                   {t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"} → {t.exit_price ? `$${t.exit_price.toFixed(2)}` : "—"}
                 </TD>
                 <TD>
-                  <div className={cn("font-mono text-sm font-bold", pos ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                    {t.pnl_pct != null ? fmtPct(t.pnl_pct) : "—"}
+                  <div
+                    className={cn("font-mono text-sm font-bold", pos ? "text-[#22C55E]" : "text-[#EF4444]")}
+                    aria-label={t.pnl_pct != null ? `${pos ? "Gain" : "Loss"}: ${Math.abs(t.pnl_pct).toFixed(2)}%` : undefined}
+                  >
+                    {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
                   </div>
                 </TD>
                 <TD className="text-xs text-[#475569]">{t.days_held}d</TD>
@@ -1435,8 +1441,11 @@ function PerformanceTable({ byPreset }: { byPreset: any[] }) {
                   </TD>
                   <TD className="text-xs font-mono text-[#22C55E]">{s.avg_win_pct > 0 ? `+${s.avg_win_pct.toFixed(1)}%` : "—"}</TD>
                   <TD className="text-xs font-mono text-[#EF4444]">{s.avg_loss_pct < 0 ? `${s.avg_loss_pct.toFixed(1)}%` : "—"}</TD>
-                  <TD className={cn("text-sm font-bold font-mono", s.total_pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                    {s.total_pnl >= 0 ? "+" : ""}{fmt$(s.total_pnl, 0)}
+                  <TD
+                    className={cn("text-sm font-bold font-mono", s.total_pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}
+                    aria-label={`${s.total_pnl >= 0 ? "Gain" : "Loss"}: ${fmt$(Math.abs(s.total_pnl), 0)}`}
+                  >
+                    {s.total_pnl >= 0 ? "▲" : "▼"} {fmt$(Math.abs(s.total_pnl), 0)}
                   </TD>
                 </tr>
               );

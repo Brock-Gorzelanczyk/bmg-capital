@@ -234,7 +234,7 @@ async def portfolio_summary(
                 if daily:
                     prices[sym] = float(daily.close)
     except Exception as e:
-        logger.error(f"Snapshot fetch error for portfolio {portfolio_id}: {e}")
+        logger.error(f"Snapshot fetch error for portfolio {portfolio_id}: {e}", exc_info=True)
 
     enriched: List[Dict[str, Any]] = []
     total_value = 0.0

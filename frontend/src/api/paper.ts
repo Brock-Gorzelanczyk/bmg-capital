@@ -64,6 +64,7 @@ export interface PlaceOrderBody {
   trailing_type?: "amount" | "percent" | null;
   tif?: "day" | "gtc" | "ioc" | "fok";
   extended_hours?: boolean;
+  idempotency_key?: string;
 }
 
 export interface PaperTransaction {

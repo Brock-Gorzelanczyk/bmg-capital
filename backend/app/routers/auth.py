@@ -92,8 +92,10 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username already taken")
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    if not any(c.isdigit() or not c.isalnum() for c in body.password):
-        raise HTTPException(status_code=400, detail="Password must contain at least one digit or special character")
+    has_digit = any(c.isdigit() for c in body.password)
+    has_special = any(not c.isalnum() for c in body.password)
+    if not (has_digit or has_special):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number or special character")
 
     user = User(
         email=body.email.lower().strip(),

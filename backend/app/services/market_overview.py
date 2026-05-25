@@ -40,5 +40,5 @@ async def get_market_overview() -> List[Dict[str, Any]]:
                 )
         return result
     except Exception as e:
-        logger.error(f"Market overview error: {e}")
+        logger.error(f"Market overview error: {e}", exc_info=True)
         return []

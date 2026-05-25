@@ -120,11 +120,12 @@ function TicketModal({ symbol, defaultSide, onClose }: TicketModalProps) {
 interface PositionsTabProps {
   positions: PaperPosition[];
   isLoading: boolean;
+  isError: boolean;
   onSelectPosition: (pos: PaperPosition) => void;
   onTrade: (symbol: string, side: "buy" | "sell") => void;
 }
 
-function PositionsTab({ positions, isLoading, onSelectPosition, onTrade }: PositionsTabProps) {
+function PositionsTab({ positions, isLoading, isError, onSelectPosition, onTrade }: PositionsTabProps) {
   const quotes = useMarketStore((s) => s.quotes);
 
   if (isLoading) {
@@ -137,43 +138,101 @@ function PositionsTab({ positions, isLoading, onSelectPosition, onTrade }: Posit
     );
   }
 
+  if (isError) {
+    return (
+      <div className="text-[#EF4444] text-sm text-center py-8">Failed to load positions. Please refresh.</div>
+    );
+  }
+
   if (positions.length === 0) {
     return (
       <div className="py-16 text-center text-[#475569]">
         <Plus size={32} className="mx-auto mb-3 text-[#1E293B]" />
-        <p className="text-sm font-medium text-[#94A3B8]">No positions</p>
+        <p className="text-sm font-medium text-[#94A3B8]">No open positions.</p>
         <p className="text-xs mt-1">Use the order ticket to place your first trade.</p>
       </div>
     );
   }
 
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
-            <th className="text-left px-4 py-2.5">Symbol</th>
-            <th className="text-right px-4 py-2.5">Qty</th>
-            <th className="text-right px-4 py-2.5">Avg Cost</th>
-            <th className="text-right px-4 py-2.5">Current</th>
-            <th className="text-right px-4 py-2.5">Market Value</th>
-            <th className="text-right px-4 py-2.5">Unrealized P&L</th>
-            <th className="text-right px-4 py-2.5">Day P&L</th>
-            <th className="px-4 py-2.5" />
-          </tr>
-        </thead>
-        <tbody>
-          {positions.map((pos) => {
-            const livePrice = quotes[pos.symbol]?.price ?? pos.current_price;
-            const mv = pos.qty * livePrice;
-            const pnl = mv - pos.cost_basis;
-            const pnlPct = pos.cost_basis > 0 ? (pnl / pos.cost_basis) * 100 : 0;
-            const prevClose = pos.prev_close > 0 ? pos.prev_close : livePrice;
-            const dayPnl = (livePrice - prevClose) * pos.qty;
-            const dayPnlPct = prevClose > 0 ? ((livePrice - prevClose) / prevClose) * 100 : 0;
-            const info = COMPANY_INFO[pos.symbol];
+  const rows = positions.map((pos) => {
+    const livePrice = quotes[pos.symbol]?.price ?? pos.current_price;
+    const mv = pos.qty * livePrice;
+    const pnl = mv - pos.cost_basis;
+    const pnlPct = pos.cost_basis > 0 ? (pnl / pos.cost_basis) * 100 : 0;
+    const prevClose = pos.prev_close > 0 ? pos.prev_close : livePrice;
+    const dayPnl = (livePrice - prevClose) * pos.qty;
+    const dayPnlPct = prevClose > 0 ? ((livePrice - prevClose) / prevClose) * 100 : 0;
+    const info = COMPANY_INFO[pos.symbol];
+    return { pos, livePrice, mv, pnl, pnlPct, dayPnl, dayPnlPct, info };
+  });
 
-            return (
+  return (
+    <div>
+      {/* Mobile card list */}
+      <div className="md:hidden divide-y divide-[#1E293B]">
+        {rows.map(({ pos, livePrice, mv, pnl, pnlPct, dayPnl, dayPnlPct, info }) => (
+          <div
+            key={pos.id}
+            onClick={() => onSelectPosition(pos)}
+            className="p-4 cursor-pointer active:bg-[#1E293B]/40 transition-colors"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <span className="font-mono font-bold text-[#F8FAFC] text-base">{pos.symbol}</span>
+                {info && <div className="text-[11px] text-[#475569] mt-0.5">{info.name}</div>}
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-mono font-semibold text-[#F8FAFC]">{livePrice > 0 ? formatCurrency(mv) : "—"}</div>
+                <div className="text-[11px] text-[#475569]">
+                  {pos.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} sh @ {formatCurrency(pos.avg_cost)}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-[#0B1120] rounded-lg px-3 py-2">
+                <div className="text-[9px] text-[#475569] uppercase tracking-wide mb-1">Current</div>
+                <div className="text-xs font-mono text-[#F8FAFC]">{livePrice > 0 ? formatCurrency(livePrice) : "—"}</div>
+              </div>
+              <div className="bg-[#0B1120] rounded-lg px-3 py-2">
+                <div className="text-[9px] text-[#475569] uppercase tracking-wide mb-1">Total P&L</div>
+                <div className={cn("text-xs font-mono font-semibold", pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                  {pnl >= 0 ? "▲" : "▼"} {formatCurrency(Math.abs(pnl))}
+                </div>
+                <div className={cn("text-[9px]", pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                  {Math.abs(pnlPct).toFixed(2)}%
+                </div>
+              </div>
+              <div className="bg-[#0B1120] rounded-lg px-3 py-2">
+                <div className="text-[9px] text-[#475569] uppercase tracking-wide mb-1">Day P&L</div>
+                <div className={cn("text-xs font-mono", dayPnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                  {dayPnl >= 0 ? "▲" : "▼"} {formatCurrency(Math.abs(dayPnl))}
+                </div>
+                <div className={cn("text-[9px]", dayPnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                  {Math.abs(dayPnlPct).toFixed(2)}%
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
+              <th className="text-left px-4 py-2.5">Symbol</th>
+              <th className="text-right px-4 py-2.5">Qty</th>
+              <th className="text-right px-4 py-2.5">Avg Cost</th>
+              <th className="text-right px-4 py-2.5">Current</th>
+              <th className="text-right px-4 py-2.5">Market Value</th>
+              <th className="text-right px-4 py-2.5">Unrealized P&L</th>
+              <th className="text-right px-4 py-2.5">Day P&L</th>
+              <th className="px-4 py-2.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ pos, livePrice, mv, pnl, pnlPct, dayPnl, dayPnlPct, info }) => (
               <tr
                 key={pos.id}
                 className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/40 cursor-pointer transition-colors group"
@@ -195,13 +254,19 @@ function PositionsTab({ positions, isLoading, onSelectPosition, onTrade }: Posit
                 <td className="px-4 py-3 text-right font-mono text-[#F8FAFC]">
                   {formatCurrency(mv)}
                 </td>
-                <td className={cn("px-4 py-3 text-right font-mono font-semibold", pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                  <div>{pnl >= 0 ? "+" : ""}{formatCurrency(pnl)}</div>
-                  <div className="text-xs opacity-75">{formatPercent(pnlPct)}</div>
+                <td
+                  className={cn("px-4 py-3 text-right font-mono font-semibold", pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}
+                  aria-label={`${pnl >= 0 ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(pnl))}`}
+                >
+                  <div>{pnl >= 0 ? "▲" : "▼"} {formatCurrency(Math.abs(pnl))}</div>
+                  <div className="text-xs opacity-75">{pnlPct >= 0 ? "▲" : "▼"} {Math.abs(pnlPct).toFixed(2)}%</div>
                 </td>
-                <td className={cn("px-4 py-3 text-right font-mono", dayPnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                  <div>{dayPnl >= 0 ? "+" : ""}{formatCurrency(dayPnl)}</div>
-                  <div className="text-xs opacity-75">{formatPercent(dayPnlPct)}</div>
+                <td
+                  className={cn("px-4 py-3 text-right font-mono", dayPnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}
+                  aria-label={`${dayPnl >= 0 ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(dayPnl))}`}
+                >
+                  <div>{dayPnl >= 0 ? "▲" : "▼"} {formatCurrency(Math.abs(dayPnl))}</div>
+                  <div className="text-xs opacity-75">{dayPnlPct >= 0 ? "▲" : "▼"} {Math.abs(dayPnlPct).toFixed(2)}%</div>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button
@@ -213,10 +278,10 @@ function PositionsTab({ positions, isLoading, onSelectPosition, onTrade }: Posit
                   <ChevronRight size={14} className="text-[#334155] group-hover:text-[#475569] transition-colors inline" />
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -276,75 +341,125 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
       </div>
 
       {isLoading ? (
-        <table className="w-full text-sm">
-          <tbody>{Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={7} />)}</tbody>
-        </table>
+        <div className="divide-y divide-[#1E293B]">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="p-4 flex justify-between">
+              <div className="space-y-2">
+                <div className="h-4 w-16 bg-[#1E293B] animate-pulse rounded" />
+                <div className="h-3 w-24 bg-[#1E293B] animate-pulse rounded" />
+              </div>
+              <div className="h-4 w-20 bg-[#1E293B] animate-pulse rounded" />
+            </div>
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="py-14 text-center text-[#475569]">
           <p className="text-sm">No orders</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
-                <th className="text-left px-4 py-2.5">Symbol</th>
-                <th className="text-left px-4 py-2.5">Side</th>
-                <th className="text-left px-4 py-2.5">Type</th>
-                <th className="text-right px-4 py-2.5">Qty</th>
-                <th className="text-right px-4 py-2.5">Fill Price</th>
-                <th className="text-left px-4 py-2.5">Status</th>
-                <th className="text-right px-4 py-2.5">Time</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((o) => (
-                <tr key={o.id} className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/30 transition-colors">
-                  <td className="px-4 py-3 font-mono font-bold text-[#F8FAFC]">{o.symbol}</td>
-                  <td className="px-4 py-3">
+        <div>
+          {/* Mobile card list */}
+          <div className="md:hidden divide-y divide-[#1E293B]">
+            {filtered.map((o) => (
+              <div key={o.id} className="p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-[#F8FAFC]">{o.symbol}</span>
                     <span className={cn(
-                      "text-xs font-bold px-2 py-0.5 rounded-full",
-                      o.side === "buy"
-                        ? "bg-emerald-900/40 text-emerald-400"
-                        : "bg-rose-900/40 text-red-400"
+                      "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                      o.side === "buy" ? "bg-emerald-900/40 text-emerald-400" : "bg-rose-900/40 text-red-400"
                     )}>
                       {o.side.toUpperCase()}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-[#94A3B8] capitalize">
-                    {o.order_type.replace("_", " ")}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-[#94A3B8]">
-                    {(o.fill_qty ?? o.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-[#F8FAFC]">
-                    {o.fill_price ? formatCurrency(o.fill_price) : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="flex items-center gap-1.5 text-xs text-[#94A3B8]">
-                      {STATUS_ICONS[o.status]}
-                      {STATUS_LABEL[o.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-[#475569] text-xs">
-                    {o.filled_at ? timeAgo(o.filled_at) : timeAgo(o.created_at)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
+                  </div>
+                  <span className="flex items-center gap-1 text-xs text-[#94A3B8]">
+                    {STATUS_ICONS[o.status]}
+                    {STATUS_LABEL[o.status]}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-[#475569]">
+                  <span className="capitalize">{o.order_type.replace("_", " ")} · {(o.fill_qty ?? o.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })} sh</span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-[#94A3B8]">{o.fill_price ? formatCurrency(o.fill_price) : "—"}</span>
+                    <span>{o.filled_at ? timeAgo(o.filled_at) : timeAgo(o.created_at)}</span>
                     {o.status === "working" && (
                       <button
                         onClick={() => cancelMut.mutate(o.id)}
                         disabled={cancelMut.isPending}
-                        className="flex items-center gap-1 text-xs text-[#475569] hover:text-red-400 transition-colors disabled:opacity-50"
+                        className="text-[#475569] hover:text-red-400 transition-colors disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
                       >
-                        <X size={12} /> Cancel
+                        <X size={14} />
                       </button>
                     )}
-                  </td>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
+                  <th className="text-left px-4 py-2.5">Symbol</th>
+                  <th className="text-left px-4 py-2.5">Side</th>
+                  <th className="text-left px-4 py-2.5">Type</th>
+                  <th className="text-right px-4 py-2.5">Qty</th>
+                  <th className="text-right px-4 py-2.5">Fill Price</th>
+                  <th className="text-left px-4 py-2.5">Status</th>
+                  <th className="text-right px-4 py-2.5">Time</th>
+                  <th className="px-4 py-2.5" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((o) => (
+                  <tr key={o.id} className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/30 transition-colors">
+                    <td className="px-4 py-3 font-mono font-bold text-[#F8FAFC]">{o.symbol}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn(
+                        "text-xs font-bold px-2 py-0.5 rounded-full",
+                        o.side === "buy"
+                          ? "bg-emerald-900/40 text-emerald-400"
+                          : "bg-rose-900/40 text-red-400"
+                      )}>
+                        {o.side.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[#94A3B8] capitalize">
+                      {o.order_type.replace("_", " ")}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-[#94A3B8]">
+                      {(o.fill_qty ?? o.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-[#F8FAFC]">
+                      {o.fill_price ? formatCurrency(o.fill_price) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="flex items-center gap-1.5 text-xs text-[#94A3B8]">
+                        {STATUS_ICONS[o.status]}
+                        {STATUS_LABEL[o.status]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-[#475569] text-xs">
+                      {o.filled_at ? timeAgo(o.filled_at) : timeAgo(o.created_at)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {o.status === "working" && (
+                        <button
+                          onClick={() => cancelMut.mutate(o.id)}
+                          disabled={cancelMut.isPending}
+                          className="flex items-center gap-1 text-xs text-[#475569] hover:text-red-400 transition-colors disabled:opacity-50"
+                        >
+                          <X size={12} /> Cancel
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -378,19 +493,50 @@ function ActivityTab() {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
-            <th className="text-left px-4 py-2.5">Symbol</th>
-            <th className="text-left px-4 py-2.5">Side</th>
-            <th className="text-right px-4 py-2.5">Qty</th>
-            <th className="text-right px-4 py-2.5">Fill Price</th>
-            <th className="text-right px-4 py-2.5">Realized P&L</th>
-            <th className="text-right px-4 py-2.5">Date</th>
-          </tr>
-        </thead>
-        <tbody>
+    <div>
+      {/* Mobile card list */}
+      <div className="md:hidden divide-y divide-[#1E293B]">
+        {txns.map((t: PaperTransaction) => {
+          const pnlPositive = t.realized_pnl >= 0;
+          return (
+            <div key={t.id} className="p-4">
+              <div className="flex items-start justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-[#F8FAFC]">{t.symbol}</span>
+                  <span className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                    t.side === "buy" ? "bg-emerald-900/40 text-emerald-400" : "bg-rose-900/40 text-red-400"
+                  )}>
+                    {t.side.toUpperCase()}
+                  </span>
+                </div>
+                <span className={cn("text-sm font-mono font-semibold", pnlPositive ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                  {pnlPositive ? "▲" : "▼"} {formatCurrency(Math.abs(t.realized_pnl))}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-[#475569]">
+                <span>{t.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} sh @ <span className="font-mono text-[#94A3B8]">{formatCurrency(t.fill_price)}</span></span>
+                <span>{fmtDate(t.created_at)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
+              <th className="text-left px-4 py-2.5">Symbol</th>
+              <th className="text-left px-4 py-2.5">Side</th>
+              <th className="text-right px-4 py-2.5">Qty</th>
+              <th className="text-right px-4 py-2.5">Fill Price</th>
+              <th className="text-right px-4 py-2.5">Realized P&L</th>
+              <th className="text-right px-4 py-2.5">Date</th>
+            </tr>
+          </thead>
+          <tbody>
           {txns.map((t: PaperTransaction) => {
             const pnlPositive = t.realized_pnl >= 0;
             return (
@@ -421,8 +567,9 @@ function ActivityTab() {
               </tr>
             );
           })}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -438,7 +585,7 @@ export default function PaperTrading() {
   const [selectedPosition, setSelectedPosition] = useState<PaperPosition | null>(null);
   const [fabSymbol, setFabSymbol] = useState("AAPL");
 
-  const { data: account, isLoading } = useQuery({
+  const { data: account, isLoading, isError: accountError } = useQuery({
     queryKey: ["paper-account"],
     queryFn: getAccount,
     staleTime: 10_000,
@@ -499,7 +646,13 @@ export default function PaperTrading() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => seedMut.mutate()}
+            onClick={() => {
+              const confirmed = window.confirm(
+                "Seed demo will clear your existing positions and orders, then add sample positions. Your transaction history will be preserved. Continue?"
+              );
+              if (!confirmed) return;
+              seedMut.mutate();
+            }}
             disabled={seedMut.isPending}
             className="flex items-center gap-1.5 text-xs font-semibold text-[#F59E0B] bg-yellow-900/20 border border-yellow-800/40 px-3 py-1.5 rounded-lg hover:bg-yellow-900/40 transition-colors disabled:opacity-50"
           >
@@ -507,7 +660,13 @@ export default function PaperTrading() {
             {seedMut.isPending ? "Seeding…" : "Seed Demo"}
           </button>
           <button
-            onClick={() => setShowReset(true)}
+            onClick={() => {
+              const confirmed = window.confirm(
+                "Reset will clear all your positions and orders, returning your account to $100,000 cash. Transaction history is preserved. This cannot be undone. Continue?"
+              );
+              if (!confirmed) return;
+              setShowReset(true);
+            }}
             className="flex items-center gap-1.5 text-xs font-semibold text-[#475569] hover:text-[#EF4444] transition-colors px-3 py-1.5 rounded-lg hover:bg-red-950/20"
           >
             <RotateCcw size={13} />
@@ -556,22 +715,30 @@ export default function PaperTrading() {
             </div>
 
             <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1">Day's P&L</div>
-              <div className={cn("text-xl font-mono font-bold", isDayUp ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                {isDayUp ? "+" : ""}{formatCurrency(dayPnl)}
+              <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1">
+                Day's P&L <span className="normal-case font-normal opacity-60">vs prev close</span>
+              </div>
+              <div
+                className={cn("text-xl font-mono font-bold", isDayUp ? "text-[#22C55E]" : "text-[#EF4444]")}
+                aria-label={`${isDayUp ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(dayPnl))}`}
+              >
+                {isDayUp ? "▲" : "▼"} {formatCurrency(Math.abs(dayPnl))}
               </div>
               <div className={cn("text-xs font-mono mt-0.5", isDayUp ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                {formatPercent(dayPnlPct)}
+                {isDayUp ? "▲" : "▼"} {Math.abs(dayPnlPct).toFixed(2)}%
               </div>
             </div>
 
             <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
               <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1">Total P&L</div>
-              <div className={cn("text-lg font-mono font-semibold", isTotalUp ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                {isTotalUp ? "+" : ""}{formatCurrency(totalPnl)}
+              <div
+                className={cn("text-lg font-mono font-semibold", isTotalUp ? "text-[#22C55E]" : "text-[#EF4444]")}
+                aria-label={`${isTotalUp ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(totalPnl))}`}
+              >
+                {isTotalUp ? "▲" : "▼"} {formatCurrency(Math.abs(totalPnl))}
               </div>
               <div className={cn("text-xs font-mono mt-0.5", isTotalUp ? "text-[#22C55E]" : "text-[#EF4444]")}>
-                {formatPercent(totalPnlPct)}
+                {isTotalUp ? "▲" : "▼"} {Math.abs(totalPnlPct).toFixed(2)}%
               </div>
             </div>
 
@@ -621,6 +788,7 @@ export default function PaperTrading() {
           <PositionsTab
             positions={positions}
             isLoading={isLoading}
+            isError={accountError}
             onSelectPosition={(pos) => {
               setSelectedPosition(pos);
               setFabSymbol(pos.symbol);

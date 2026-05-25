@@ -20,13 +20,8 @@ async def websocket_stream(ws: WebSocket) -> None:
     await connection_manager.connect(client_id, ws)
     logger.info(f"WebSocket client connected: {client_id}")
 
-    # Register stream callbacks to forward messages to subscribed clients.
-    # Only register once per server lifetime; the stream_manager deduplicates
-    # because connection_manager.send_to_symbol_subscribers already filters by
-    # symbol subscriptions.  Adding on each connect is fine because the
-    # stream_manager stores them in a plain list — a minor overhead but safe.
-    stream_manager.on_quote(connection_manager.send_to_symbol_subscribers)
-    stream_manager.on_bar(connection_manager.send_to_symbol_subscribers)
+    # NOTE: stream callbacks are registered once at startup in main.py lifespan,
+    # not here, to avoid duplicate registrations per connection.
 
     try:
         while True:
@@ -50,11 +45,11 @@ async def websocket_stream(ws: WebSocket) -> None:
                     logger.warning(f"Unknown WS action from {client_id}: {action}")
 
             except Exception as e:
-                logger.error(f"WS message parse error for {client_id}: {e}")
+                logger.error(f"WS message parse error for {client_id}: {e}", exc_info=True)
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket client disconnected: {client_id}")
     except Exception as e:
-        logger.error(f"WebSocket error for {client_id}: {e}")
+        logger.error(f"WebSocket error for {client_id}: {e}", exc_info=True)
     finally:
         connection_manager.disconnect(client_id)

@@ -1,8 +1,8 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useWsStore, useAlertStore, useUiStore, useNotificationStore } from "@/store";
+import { useWsStore, useAlertStore, useUiStore, useNotificationStore, useMarketStore } from "@/store";
 import { getNotifications } from "@/api/notifications";
 import SymbolSearch from "@/components/ui/SymbolSearch";
 import { DEMO_MODE } from "@/lib/demoMode";
@@ -29,6 +29,16 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   const mode = useUiStore((s) => s.mode);
   const toggleMode = useUiStore((s) => s.toggleMode);
   const { unreadCount, openPanel, setNotifications } = useNotificationStore();
+  const lastQuoteTime = useMarketStore((s) => s.lastQuoteTime);
+  const [now, setNow] = useState(Date.now());
+
+  // Keep `now` fresh so the stale check updates automatically
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const isStale = lastQuoteTime > 0 && now - lastQuoteTime > 10000;
 
   // Seed store on mount
   const { data } = useQuery({
@@ -63,6 +73,10 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
             <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
             Demo
           </div>
+        )}
+        {/* Stale data indicator */}
+        {isStale && (
+          <span className="text-[9px] text-[#F59E0B] px-1.5 py-0.5 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/20">Data delayed</span>
         )}
         {/* Market status pill */}
         <div className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[#1E293B] bg-[#0F172A]">

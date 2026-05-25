@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getMarketOverview, getSectorPerformance, getNews } from "@/api/market";
@@ -33,7 +33,6 @@ function MorningBrief({
   const [displayText, setDisplayText] = useState("");
   const [briefText, setBriefText] = useState("");
   const [animKey, setAnimKey] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const buildBrief = useCallback(() => {
     if (!indices.length) return "";
@@ -64,19 +63,23 @@ function MorningBrief({
     setDisplayText("");
 
     let i = 0;
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      i++;
-      setDisplayText(text.slice(0, i));
-      if (i >= text.length && intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }, 18);
+    let lastTime = 0;
+    let rafId: number;
+    const CHAR_INTERVAL = 18; // ms per character
 
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    const tick = (timestamp: number) => {
+      if (timestamp - lastTime >= CHAR_INTERVAL) {
+        i++;
+        setDisplayText(text.slice(0, i));
+        lastTime = timestamp;
+      }
+      if (i < text.length) {
+        rafId = requestAnimationFrame(tick);
+      }
     };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, [animKey, isLoading, buildBrief, indices.length]);
 
   const handleRefresh = () => {
@@ -105,11 +108,14 @@ function MorningBrief({
       }}
     >
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-base">🌅</span>
-          <h2 className="text-sm font-semibold text-[#F8FAFC]">Morning Brief</h2>
-          <span className="text-xs text-[#475569] font-mono">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-base shrink-0">🌅</span>
+          <h2 className="text-sm font-semibold text-[#F8FAFC] shrink-0">Morning Brief</h2>
+          <span className="text-xs text-[#475569] font-mono truncate hidden sm:block">
             {dateLabel} · {timeLabel}
+          </span>
+          <span className="text-xs text-[#475569] font-mono truncate sm:hidden">
+            {timeLabel}
           </span>
         </div>
         <button
@@ -268,40 +274,40 @@ function PaperAccountWidget() {
   const hasPositions = account.positions.length > 0;
 
   return (
-    <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-4 flex items-center justify-between gap-4">
-      <div className="flex items-center gap-4">
+    <div
+      onClick={() => navigate("/paper")}
+      className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-4 cursor-pointer hover:border-[#3B82F6]/30 transition-colors duration-150"
+    >
+      <div className="flex items-start justify-between gap-2 mb-3">
         <div>
-          <div className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] mb-1">
+          <div className="text-[10px] font-semibold text-[#64748B] uppercase tracking-[0.1em] mb-0.5">
             Paper Portfolio
           </div>
-          <div className="text-2xl font-semibold text-[#F8FAFC] font-mono">
+          <div className="text-2xl font-semibold text-[#F8FAFC] font-mono leading-none">
             {formatCurrency(account.equity)}
           </div>
         </div>
-        <div className="h-8 w-px bg-[#1E293B]" />
-        <div>
-          <div className="text-xs text-[#64748B] mb-1">Day P&amp;L</div>
-          <span className={cn(
-            "text-xs font-semibold px-2 py-0.5 rounded-full",
-            isPos ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]"
-          )}>
-            {isPos ? "+" : ""}{formatCurrency(account.day_pnl)}
+        <span className="text-[#475569] text-xs flex items-center gap-1 shrink-0 mt-1">
+          View <ArrowRight size={11} />
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-[#0B1120] rounded-xl px-3 py-2">
+          <div className="text-[10px] text-[#64748B] mb-0.5">Day P&amp;L</div>
+          <span
+            className={cn("text-sm font-semibold font-mono", isPos ? "text-[#22C55E]" : "text-[#EF4444]")}
+            aria-label={`${isPos ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(account.day_pnl))}`}
+          >
+            {isPos ? "▲" : "▼"} {formatCurrency(Math.abs(account.day_pnl))}
           </span>
         </div>
-        <div className="h-8 w-px bg-[#1E293B]" />
-        <div>
-          <div className="text-xs text-[#64748B] mb-1">Positions</div>
-          <div className="text-lg font-semibold text-[#F8FAFC]">
+        <div className="bg-[#0B1120] rounded-xl px-3 py-2">
+          <div className="text-[10px] text-[#64748B] mb-0.5">Positions</div>
+          <div className="text-sm font-semibold text-[#F8FAFC]">
             {hasPositions ? account.positions.length : "—"}
           </div>
         </div>
       </div>
-      <button
-        onClick={() => navigate("/paper")}
-        className="text-[#475569] hover:text-[#F8FAFC] text-xs flex items-center gap-1 transition-colors duration-150 shrink-0 cursor-pointer"
-      >
-        View Portfolio <ArrowRight size={11} />
-      </button>
     </div>
   );
 }

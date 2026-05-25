@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import warnings
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,6 +38,11 @@ class Settings(BaseSettings):
     def __init__(self, **data):
         super().__init__(**data)
         if self.jwt_secret == "bmg-capital-secret-change-in-production":
+            env = os.environ.get("ENVIRONMENT", os.environ.get("ENV", "")).lower()
+            if env == "production":
+                raise RuntimeError(
+                    "FATAL: Using default JWT secret in production. Set JWT_SECRET env var!"
+                )
             warnings.warn(
                 "WARNING: Using default JWT secret. Set JWT_SECRET env var in production!",
                 stacklevel=2,

@@ -35,7 +35,7 @@ async def get_quote(symbol: str) -> Optional[dict]:
             prev_close = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else last
             return {"bid": bid, "ask": ask, "last": last, "prev_close": prev_close}
         except Exception as e:
-            logger.error(f"Quote fetch error {symbol}: {e}")
+            logger.error(f"Quote fetch error {symbol}: {e}", exc_info=True)
             return None
     return await asyncio.to_thread(_fetch)
 

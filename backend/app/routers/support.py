@@ -83,7 +83,7 @@ async def support_chat(
                 text = resp.json()["content"][0]["text"]
                 return {"reply": text}
         except Exception as e:
-            logger.warning(f"Support chat Anthropic error: {e}")
+            logger.warning(f"Support chat Anthropic error: {e}", exc_info=True)
 
     if settings.openai_api_key:
         try:
@@ -104,7 +104,7 @@ async def support_chat(
                 text = resp.json()["choices"][0]["message"]["content"]
                 return {"reply": text}
         except Exception as e:
-            logger.warning(f"Support chat OpenAI error: {e}")
+            logger.warning(f"Support chat OpenAI error: {e}", exc_info=True)
 
     return {
         "reply": (

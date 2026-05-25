@@ -67,6 +67,8 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
   const [errorMsg, setErrorMsg] = useState("");
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const idempotencyKeyRef = useRef(crypto.randomUUID());
+  const [submitting, setSubmitting] = useState(false);
 
   const { data: account } = useQuery({
     queryKey: ["paper-account"],
@@ -96,6 +98,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
   const mutation = useMutation({
     mutationFn: (body: PlaceOrderBody) => placeOrder(body),
     onMutate: () => {
+      setSubmitting(true);
       setTicketState("placing");
     },
     onSuccess: (order) => {
@@ -105,6 +108,9 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
       setFillPrice(order.fill_price);
       setFillQty(order.fill_qty);
       setTicketState("filled");
+      // Reset idempotency key after successful order
+      idempotencyKeyRef.current = crypto.randomUUID();
+      setSubmitting(false);
       const qty = order.fill_qty ?? order.qty;
       const price = order.fill_price;
       const sideLabel = order.side === "buy" ? "Bought" : "Sold";
@@ -114,15 +120,17 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
         toast.success(`Order placed: ${sideLabel} ${qty} ${order.symbol}`);
       }
     },
-    onError: (e: any) => {
+    onError: (e: Error & { response?: { data?: { detail?: string } } }) => {
       setErrorMsg(e?.response?.data?.detail ?? "Order failed. Please try again.");
       setTicketState("error");
+      setSubmitting(false);
     },
   });
 
   function buildOrderBody(): PlaceOrderBody {
     const sym = symbol.trim().toUpperCase();
     const body: PlaceOrderBody = { symbol: sym, side, tif, extended_hours: extendedHours };
+    body.idempotency_key = idempotencyKeyRef.current;
 
     if (proMode) {
       body.order_type = orderType === "bracket" ? "market" : orderType;
@@ -168,6 +176,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
     setErrorMsg("");
     setFillPrice(null);
     setFillQty(null);
+    setSubmitting(false);
   }
 
   // Validation
@@ -235,6 +244,13 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           ))}
         </div>
 
+        {orderType === "limit" && (
+          <div className="flex items-start gap-2 bg-[#F59E0B]/10 border border-[#F59E0B]/20 rounded-lg px-3 py-2 mt-2">
+            <AlertCircle size={12} className="text-[#F59E0B] shrink-0 mt-0.5" />
+            <span className="text-[10px] text-[#F59E0B]">Limit orders may not fill immediately. Your order will remain open until the price reaches your limit.</span>
+          </div>
+        )}
+
         <div className="text-xs text-[#475569] text-center mb-4">
           Market orders fill immediately at the live price. Estimated total may vary slightly.
         </div>
@@ -248,7 +264,8 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           </button>
           <button
             onClick={handleConfirm}
-            className={cn("flex-1 py-2.5 rounded-xl text-sm transition-all", theme.btn)}
+            disabled={mutation.isPending || submitting}
+            className={cn("flex-1 py-2.5 rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed", theme.btn)}
           >
             Confirm {isBuy ? "Buy" : "Sell"}
           </button>
@@ -324,7 +341,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
 
   // ── Idle / input ─────────────────────────────────────────────────────────────
   return (
-    <div className={cn("bg-[#0F172A] rounded-2xl flex flex-col", compact ? "p-4" : "p-5")}>
+    <div id="order-panel" className={cn("bg-[#0F172A] rounded-2xl flex flex-col", compact ? "p-4" : "p-5")}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -354,10 +371,13 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
       </div>
 
       {/* Buy / Sell tabs */}
-      <div className="flex mb-4 border-b border-[#1E293B]">
+      <div role="tablist" aria-label="Order side" className="flex mb-4 border-b border-[#1E293B]">
         {(["buy", "sell"] as const).map((s) => (
           <button
             key={s}
+            role="tab"
+            aria-selected={side === s}
+            aria-controls="order-panel"
             onClick={() => setSide(s)}
             className={cn(
               "flex-1 pb-2.5 text-sm font-semibold transition-all duration-150 border-b-2 -mb-px",

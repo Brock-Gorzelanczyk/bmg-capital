@@ -66,5 +66,5 @@ async def get_sector_performance() -> List[Dict[str, Any]]:
                 )
         return result if result else STATIC_SECTORS
     except Exception as e:
-        logger.error(f"Sector error: {e}")
+        logger.error(f"Sector error: {e}", exc_info=True)
         return STATIC_SECTORS

@@ -47,7 +47,7 @@ def _fetch_bars_sync(symbols: List[str], period: str = "1y") -> Dict[str, pd.Dat
                 except Exception:
                     continue
         except Exception as e:
-            logger.error(f"yfinance batch fetch error for chunk starting at {chunk[0]}: {e}")
+            logger.error(f"yfinance batch fetch error for chunk starting at {chunk[0]}: {e}", exc_info=True)
 
         # Pause between batches to stay under Yahoo Finance rate limits
         if i + batch_size < len(symbols):

@@ -36,7 +36,7 @@ class StreamManager:
             try:
                 await self._stream.stop_ws()
             except Exception as e:
-                logger.error(f"Error stopping stream: {e}")
+                logger.error(f"Error stopping stream: {e}", exc_info=True)
         if self._task:
             self._task.cancel()
             try:
@@ -59,7 +59,7 @@ class StreamManager:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Stream error: {e}. Reconnecting in 5s...")
+                logger.error(f"Stream error: {e}. Reconnecting in 5s...", exc_info=True)
                 await asyncio.sleep(5)
 
     async def subscribe(self, symbols: List[str]) -> None:
@@ -74,7 +74,7 @@ class StreamManager:
                 await self._stream.subscribe_quotes(self._on_quote, *to_add)
                 await self._stream.subscribe_bars(self._on_bar, *to_add)
             except Exception as e:
-                logger.error(f"Subscribe error: {e}")
+                logger.error(f"Subscribe error: {e}", exc_info=True)
 
     async def unsubscribe(self, symbols: List[str]) -> None:
         to_remove = set(symbols) & self._subscribed
@@ -84,13 +84,15 @@ class StreamManager:
                 await self._stream.unsubscribe_quotes(*to_remove)
                 await self._stream.unsubscribe_bars(*to_remove)
             except Exception as e:
-                logger.error(f"Unsubscribe error: {e}")
+                logger.error(f"Unsubscribe error: {e}", exc_info=True)
 
     def on_quote(self, cb: Callable) -> None:
-        self._quote_callbacks.append(cb)
+        if cb not in self._quote_callbacks:
+            self._quote_callbacks.append(cb)
 
     def on_bar(self, cb: Callable) -> None:
-        self._bar_callbacks.append(cb)
+        if cb not in self._bar_callbacks:
+            self._bar_callbacks.append(cb)
 
     async def _on_quote(self, data: Any) -> None:
         bid = float(data.bid_price) if data.bid_price else 0.0
@@ -108,7 +110,7 @@ class StreamManager:
             try:
                 await cb(data.symbol, msg)
             except Exception as e:
-                logger.error(f"Quote callback error: {e}")
+                logger.error(f"Quote callback error: {e}", exc_info=True)
 
     async def _on_bar(self, data: Any) -> None:
         msg: Dict[str, Any] = {
@@ -125,7 +127,7 @@ class StreamManager:
             try:
                 await cb(data.symbol, msg)
             except Exception as e:
-                logger.error(f"Bar callback error: {e}")
+                logger.error(f"Bar callback error: {e}", exc_info=True)
 
 
 stream_manager = StreamManager()

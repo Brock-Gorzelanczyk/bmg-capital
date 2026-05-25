@@ -57,5 +57,5 @@ async def get_news(
                 for a in articles
             ]
     except Exception as e:
-        logger.error(f"News fetch error: {e}")
+        logger.error(f"News fetch error: {e}", exc_info=True)
         return []

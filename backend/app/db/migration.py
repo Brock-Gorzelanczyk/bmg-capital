@@ -54,9 +54,42 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
 }
 
 
+def _ensure_migration_log(conn) -> None:
+    """Create the schema_migrations tracking table if it doesn't exist."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            migration_name VARCHAR NOT NULL UNIQUE,
+            applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.commit()
+
+
+def _migration_already_ran(conn, name: str) -> bool:
+    """Return True if this migration has already been applied."""
+    try:
+        result = conn.execute(
+            text("SELECT 1 FROM schema_migrations WHERE migration_name = :n"), {"n": name}
+        ).fetchone()
+        return result is not None
+    except Exception:
+        return False
+
+
+def _record_migration(conn, name: str) -> None:
+    """Record a migration as applied."""
+    conn.execute(
+        text("INSERT OR IGNORE INTO schema_migrations (migration_name) VALUES (:n)"), {"n": name}
+    )
+    conn.commit()
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
+        _ensure_migration_log(conn)
+
         for table_name, columns in _TABLE_MIGRATIONS.items():
             try:
                 existing = {
@@ -66,12 +99,17 @@ def run_migrations(engine: Engine) -> None:
             except Exception:
                 continue
             for col_name, col_type in columns:
-                if col_name not in existing:
+                migration_name = f"{table_name}.{col_name}"
+                if col_name not in existing and not _migration_already_ran(conn, migration_name):
                     try:
                         conn.execute(
                             text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
                         )
                         conn.commit()
+                        _record_migration(conn, migration_name)
                         logger.info(f"Migration: added {table_name}.{col_name}")
                     except Exception as e:
-                        logger.warning(f"Migration skipped {table_name}.{col_name}: {e}")
+                        logger.warning(f"Migration skipped {table_name}.{col_name}: {e}", exc_info=True)
+                elif col_name in existing and not _migration_already_ran(conn, migration_name):
+                    # Column already exists but wasn't tracked — record it now
+                    _record_migration(conn, migration_name)

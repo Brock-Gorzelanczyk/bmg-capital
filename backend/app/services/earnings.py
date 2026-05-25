@@ -48,5 +48,5 @@ async def get_earnings_calendar(days_ahead: int = 14) -> List[Dict[str, Any]]:
                 if e.get("symbol")
             ]
     except Exception as e:
-        logger.error(f"Earnings fetch error: {e}")
+        logger.error(f"Earnings fetch error: {e}", exc_info=True)
         return []

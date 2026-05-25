@@ -82,5 +82,5 @@ async def get_fundamentals(symbol: str) -> Dict[str, Any]:
     try:
         return await asyncio.to_thread(_fetch)
     except Exception as e:
-        logger.error(f"Research fetch error for {symbol}: {e}")
+        logger.error(f"Research fetch error for {symbol}: {e}", exc_info=True)
         return {"symbol": symbol.upper(), "error": str(e)}

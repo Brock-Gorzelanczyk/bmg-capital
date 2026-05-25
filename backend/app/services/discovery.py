@@ -135,7 +135,7 @@ async def get_themes_with_performance() -> List[Dict[str, Any]]:
             result.append({**theme, "avg_change_pct": avg_change, "constituents": constituents})
         return result
     except Exception as e:
-        logger.warning(f"Theme performance fetch failed: {e} — returning static")
+        logger.warning(f"Theme performance fetch failed: {e} — returning static", exc_info=True)
         return [{**t, "avg_change_pct": 0.0, "constituents": [{"symbol": s, "change_pct": 0.0, "price": 0.0} for s in t["tickers"]]} for t in THEMES]
 
 
@@ -179,7 +179,7 @@ async def get_ipo_calendar(days_ahead: int = 90) -> List[Dict[str, Any]]:
                 if e.get("symbol")
             ]
     except Exception as e:
-        logger.warning(f"IPO calendar fetch failed: {e}")
+        logger.warning(f"IPO calendar fetch failed: {e}", exc_info=True)
         return _DEMO_IPOS
 
 
@@ -235,5 +235,5 @@ async def get_insider_trades(limit: int = 50) -> List[Dict[str, Any]]:
                 })
             return results[:limit]
     except Exception as e:
-        logger.warning(f"Insider trades fetch failed: {e}")
+        logger.warning(f"Insider trades fetch failed: {e}", exc_info=True)
         return _DEMO_INSIDERS

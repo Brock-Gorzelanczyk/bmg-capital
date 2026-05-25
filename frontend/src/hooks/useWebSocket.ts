@@ -8,6 +8,7 @@ export function useWebSocket() {
   const retryDelay = useRef(1000);
   const updateQuote = useMarketStore((s) => s.updateQuote);
   const updateBar = useMarketStore((s) => s.updateBar);
+  const setLastQuoteTime = useMarketStore((s) => s.setLastQuoteTime);
   const addNotification = useAlertStore((s) => s.addNotification);
   const setStatus = useWsStore((s) => s.setStatus);
 
@@ -26,6 +27,7 @@ export function useWebSocket() {
         const msg = JSON.parse(event.data as string);
         if (msg.type === "quote") {
           updateQuote(msg.symbol, msg as Quote);
+          useMarketStore.getState().setLastQuoteTime(Date.now());
         } else if (msg.type === "bar") {
           updateBar(msg.symbol, msg as LiveBar);
         } else if (msg.type === "alert" || msg.type === "signal") {
@@ -46,10 +48,11 @@ export function useWebSocket() {
 
     ws.onclose = () => {
       setStatus("disconnected");
+      const delay = Math.min(retryDelay.current, 30000);
       retryDelay.current = Math.min(retryDelay.current * 2, 30000);
-      setTimeout(connect, retryDelay.current);
+      setTimeout(connect, delay);
     };
-  }, [updateQuote, updateBar, addNotification, setStatus]);
+  }, [updateQuote, updateBar, addNotification, setStatus, setLastQuoteTime]);
 
   const subscribe = useCallback((symbols: string[]) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

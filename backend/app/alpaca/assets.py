@@ -40,5 +40,5 @@ def get_universe() -> List[str]:
                 logger.info(f"Loaded universe from {path}: {len(data)} symbols")
                 return [str(s).upper() for s in data]
     except Exception as e:
-        logger.warning(f"Could not load universe.json: {e} — using default universe")
+        logger.warning(f"Could not load universe.json: {e} — using default universe", exc_info=True)
     return list(DEFAULT_UNIVERSE)

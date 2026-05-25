@@ -146,18 +146,23 @@ def complete_lesson(
     # Update level
     p.level = _xp_to_level(p.xp)
 
-    # Update streak (UTC dates only)
-    today = date.today()
+    # Update streak with 25-hour grace window to handle timezone edge cases
+    now_utc = datetime.now(timezone.utc)
+    today = now_utc.date()
     if p.last_activity_date is None:
         p.streak = 1
     elif p.last_activity_date == today:
         pass  # same day, no change
-    elif p.last_activity_date == today - timedelta(days=1):
-        p.streak += 1
-    elif p.last_activity_date == today - timedelta(days=2) and p.streak_freezes > 0:
-        p.streak_freezes -= 1  # burn a freeze
     else:
-        p.streak = 1
+        days_since = (today - p.last_activity_date).days
+        hours_since = days_since * 24
+        if days_since == 1 or hours_since <= 25:
+            # consecutive day or within 25-hour grace window
+            p.streak += 1
+        elif days_since == 2 and p.streak_freezes > 0:
+            p.streak_freezes -= 1  # burn a freeze
+        else:
+            p.streak = 1
 
     if p.streak > p.longest_streak:
         p.longest_streak = p.streak

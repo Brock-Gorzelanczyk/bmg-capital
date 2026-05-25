@@ -107,7 +107,7 @@ def _get_prices_sync(symbols: List[str]) -> Dict[str, float]:
             except Exception:
                 missing.append(sym)
     except Exception as e:
-        logger.error(f"Price fetch error: {e}")
+        logger.error(f"Price fetch error: {e}", exc_info=True)
         missing = list(symbols)
 
     # Fallback for market-closed / missing: last close from recent history
@@ -133,7 +133,7 @@ def _get_prices_sync(symbols: List[str]) -> Dict[str, float]:
                         except Exception:
                             pass
         except Exception as e:
-            logger.warning(f"Price history fallback error: {e}")
+            logger.warning(f"Price history fallback error: {e}", exc_info=True)
 
     return prices
 
@@ -164,7 +164,7 @@ def _get_prev_closes_sync(symbols: List[str]) -> Dict[str, float]:
                     except Exception:
                         pass
     except Exception as e:
-        logger.warning(f"Prev-close fetch error: {e}")
+        logger.warning(f"Prev-close fetch error: {e}", exc_info=True)
     return prev
 
 
@@ -207,7 +207,7 @@ def _check_regime_sync() -> str:
         sma200 = df["close"].rolling(200).mean().iloc[-1]
         return "bull" if df["close"].iloc[-1] > sma200 else "risk_off"
     except Exception as e:
-        logger.error(f"Regime check failed: {e}")
+        logger.error(f"Regime check failed: {e}", exc_info=True)
         return "unknown"
 
 
@@ -228,7 +228,7 @@ async def _collect_screen_results(regime: str, universe_bars: Dict[str, Any]) ->
             results[preset_key] = {r["symbol"] for r in matches}
             logger.info(f"Screened {preset_key}: {len(results[preset_key])} hits")
         except Exception as e:
-            logger.error(f"Screen error for {preset_key}: {e}")
+            logger.error(f"Screen error for {preset_key}: {e}", exc_info=True)
     return results
 
 
