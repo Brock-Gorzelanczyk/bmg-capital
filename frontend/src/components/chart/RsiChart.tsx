@@ -24,7 +24,7 @@ export default function RsiChart({ bars, values, height = 100 }: Props) {
       grid: { vertLines: { color: "#111111" }, horzLines: { color: "#111111" } },
       crosshair: { mode: 1 },
       rightPriceScale: { borderColor: "#1f1f1f", scaleMargins: { top: 0.05, bottom: 0.05 } },
-      timeScale: { borderColor: "#1f1f1f", timeVisible: false, visible: false, fixLeftEdge: true, fixRightEdge: true },
+      timeScale: { borderColor: "#1f1f1f", timeVisible: false, visible: false },
       autoSize: true,
     });
 

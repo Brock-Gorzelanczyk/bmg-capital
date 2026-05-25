@@ -146,9 +146,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
           borderColor: TV.border,
           timeVisible: true,
           secondsVisible: false,
-          fixLeftEdge: true,   // no blank space before first bar
-          fixRightEdge: true,  // no blank space after last bar
-          rightOffset: 5,      // 5 empty bars to the right of the last candle (TradingView default)
+          rightOffset: 5,
           lockVisibleTimeRangeOnResize: true,
         },
         autoSize: true,
