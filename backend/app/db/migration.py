@@ -8,6 +8,18 @@ from sqlalchemy.engine import Engine
 logger = logging.getLogger(__name__)
 
 _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
+    "user_tiers": [
+        ("billing_interval",       "VARCHAR"),
+        ("trial_ends_at",          "DATETIME"),
+        ("current_period_end",     "DATETIME"),
+        ("stripe_customer_id",     "VARCHAR"),
+        ("stripe_subscription_id", "VARCHAR"),
+        ("stripe_sub_id",          "VARCHAR"),
+        ("aum_override",           "VARCHAR"),
+        ("aum_override_until",     "DATETIME"),
+        ("cancel_at_period_end",   "BOOLEAN"),
+        ("updated_at",             "DATETIME"),
+    ],
     "paper_transactions": [
         ("notes", "VARCHAR"),
     ],

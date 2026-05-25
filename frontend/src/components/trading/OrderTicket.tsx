@@ -125,7 +125,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
     const body: PlaceOrderBody = { symbol: sym, side, tif, extended_hours: extendedHours };
 
     if (proMode) {
-      body.order_type = orderType;
+      body.order_type = orderType === "bracket" ? "market" : orderType;
       if (inputMode === "dollars" && dollarAmount) body.notional = parseFloat(dollarAmount);
       else if (sharesAmount) body.qty = parseFloat(sharesAmount);
 
