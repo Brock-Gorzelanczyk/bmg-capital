@@ -41,7 +41,7 @@ export default function OscillatorPane({
       grid: { vertLines: { color: "#111111" }, horzLines: { color: "#111111" } },
       crosshair: { mode: 1 },
       rightPriceScale: { borderColor: "#1f1f1f", scaleMargins: { top: 0.1, bottom: 0.1 } },
-      timeScale: { borderColor: "#1f1f1f", visible: false },
+      timeScale: { borderColor: "#1f1f1f", visible: false, fixLeftEdge: true, fixRightEdge: true },
       autoSize: true,
     });
 

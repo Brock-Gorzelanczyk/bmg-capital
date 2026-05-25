@@ -138,7 +138,14 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         grid: { vertLines: { color: TV.grid }, horzLines: { color: TV.grid } },
         crosshair: { mode: 1 },
         rightPriceScale: { borderColor: TV.border },
-        timeScale: { borderColor: TV.border, timeVisible: true, secondsVisible: false },
+        timeScale: {
+          borderColor: TV.border,
+          timeVisible: true,
+          secondsVisible: false,
+          fixLeftEdge: true,
+          fixRightEdge: true,
+          lockVisibleTimeRangeOnResize: true,
+        },
         autoSize: true,
       });
 
