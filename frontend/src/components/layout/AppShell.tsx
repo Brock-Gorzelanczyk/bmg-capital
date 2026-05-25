@@ -96,7 +96,10 @@ export default function AppShell() {
       </div>
 
       {/* Bottom navigation — mobile only */}
-      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-[#0F172A] border-t border-[#1E293B] flex z-30 safe-area-pb">
+      <div
+        className="fixed bottom-0 left-0 right-0 md:hidden bg-[#0B1120]/95 backdrop-blur-md border-t border-[#1E293B] flex z-30"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         {BOTTOM_NAV.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
@@ -104,13 +107,20 @@ export default function AppShell() {
             end={to === "/"}
             className={({ isActive }) =>
               cn(
-                "flex-1 flex flex-col items-center gap-1 py-2 text-[10px] transition-colors",
+                "flex-1 flex flex-col items-center gap-1 py-3 text-[10px] transition-colors relative min-h-[52px] justify-center",
                 isActive ? "text-[#3B82F6]" : "text-[#475569]"
               )
             }
           >
-            <Icon size={20} />
-            <span>{label}</span>
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#3B82F6] rounded-full" />
+                )}
+                <Icon size={20} />
+                <span className="font-medium">{label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </div>
