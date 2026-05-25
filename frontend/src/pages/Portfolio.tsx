@@ -552,58 +552,112 @@ function HoldingsTab({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-[#1E293B]">
-            <SortHeader col="symbol" className="text-left px-4">Symbol</SortHeader>
-            <SortHeader col="shares" className="text-right px-3">Shares</SortHeader>
-            <SortHeader col="avg_cost" className="text-right px-3">Avg Cost</SortHeader>
-            <SortHeader col="current_price" className="text-right px-3">Current</SortHeader>
-            <SortHeader col="market_value" className="text-right px-3">Mkt Value</SortHeader>
-            <SortHeader col="day_pnl" className="text-right px-3">Day P&L</SortHeader>
-            <SortHeader col="unrealized_pnl" className="text-right px-4">Total Return</SortHeader>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((pos) => {
-            const dayPct = pos.day_pnl_pct * 100;
-            const totalPct = pos.unrealized_pnl_pct * 100;
-            return (
-              <tr
-                key={pos.id}
-                onClick={() => onSelectPosition(pos)}
-                className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/40 cursor-pointer transition-colors"
-              >
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <MiniSparkline symbol={pos.symbol} />
-                    <div>
-                      <div className="font-mono font-bold text-[#F8FAFC]">{pos.symbol}</div>
-                      {TICKER_NAMES[pos.symbol] && (
-                        <div className="text-[11px] text-[#475569] max-w-[120px] truncate">{TICKER_NAMES[pos.symbol]}</div>
-                      )}
-                    </div>
-                    <SectorPill symbol={pos.symbol} />
+    <div>
+      {/* Mobile card list */}
+      <div className="md:hidden divide-y divide-[#1E293B]">
+        {sorted.map((pos) => {
+          const dayPct = pos.day_pnl_pct * 100;
+          const totalPct = pos.unrealized_pnl_pct * 100;
+          return (
+            <div
+              key={pos.id}
+              onClick={() => onSelectPosition(pos)}
+              className="p-4 cursor-pointer active:bg-[#1E293B]/40 transition-colors"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <MiniSparkline symbol={pos.symbol} />
+                  <div>
+                    <div className="font-mono font-bold text-[#F8FAFC]">{pos.symbol}</div>
+                    {TICKER_NAMES[pos.symbol] && (
+                      <div className="text-[11px] text-[#475569] truncate max-w-[120px]">{TICKER_NAMES[pos.symbol]}</div>
+                    )}
                   </div>
-                </td>
-                <td className="px-3 py-2.5 text-right font-mono text-[#94A3B8]">{pos.qty}</td>
-                <td className="px-3 py-2.5 text-right font-mono text-[#94A3B8]">{formatCurrency(pos.avg_cost)}</td>
-                <td className="px-3 py-2.5 text-right font-mono text-[#F8FAFC]">{formatCurrency(pos.current_price)}</td>
-                <td className="px-3 py-2.5 text-right font-mono text-[#F8FAFC] font-medium">{formatCurrency(pos.market_value)}</td>
-                <td className={cn("px-3 py-2.5 text-right font-mono", pnlColor(pos.day_pnl))}>
-                  <div className="font-medium">{pnlSign(pos.day_pnl)}{formatCurrency(pos.day_pnl)}</div>
-                  <div className="text-xs opacity-80">{dayPct >= 0 ? "+" : ""}{dayPct.toFixed(2)}%</div>
-                </td>
-                <td className={cn("px-4 py-2.5 text-right font-mono", pnlColor(pos.unrealized_pnl))}>
-                  <div className="font-medium">{pnlSign(pos.unrealized_pnl)}{formatCurrency(pos.unrealized_pnl)}</div>
-                  <div className="text-xs opacity-80">{totalPct >= 0 ? "+" : ""}{totalPct.toFixed(2)}%</div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-mono font-semibold text-[#F8FAFC]">{formatCurrency(pos.market_value)}</div>
+                  <div className="text-[11px] text-[#475569]">{pos.qty} sh @ {formatCurrency(pos.avg_cost)}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-[#0B1120] rounded-lg px-3 py-2">
+                  <div className="text-[9px] text-[#475569] uppercase tracking-wide mb-0.5">Day P&L</div>
+                  <div className={cn("text-xs font-mono font-medium", pnlColor(pos.day_pnl))}>
+                    {pnlSign(pos.day_pnl)}{formatCurrency(Math.abs(pos.day_pnl))}
+                  </div>
+                  <div className={cn("text-[9px]", pnlColor(pos.day_pnl))}>
+                    {dayPct >= 0 ? "+" : ""}{dayPct.toFixed(2)}%
+                  </div>
+                </div>
+                <div className="bg-[#0B1120] rounded-lg px-3 py-2">
+                  <div className="text-[9px] text-[#475569] uppercase tracking-wide mb-0.5">Total Return</div>
+                  <div className={cn("text-xs font-mono font-medium", pnlColor(pos.unrealized_pnl))}>
+                    {pnlSign(pos.unrealized_pnl)}{formatCurrency(Math.abs(pos.unrealized_pnl))}
+                  </div>
+                  <div className={cn("text-[9px]", pnlColor(pos.unrealized_pnl))}>
+                    {totalPct >= 0 ? "+" : ""}{totalPct.toFixed(2)}%
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#1E293B]">
+              <SortHeader col="symbol" className="text-left px-4">Symbol</SortHeader>
+              <SortHeader col="shares" className="text-right px-3">Shares</SortHeader>
+              <SortHeader col="avg_cost" className="text-right px-3">Avg Cost</SortHeader>
+              <SortHeader col="current_price" className="text-right px-3">Current</SortHeader>
+              <SortHeader col="market_value" className="text-right px-3">Mkt Value</SortHeader>
+              <SortHeader col="day_pnl" className="text-right px-3">Day P&L</SortHeader>
+              <SortHeader col="unrealized_pnl" className="text-right px-4">Total Return</SortHeader>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((pos) => {
+              const dayPct = pos.day_pnl_pct * 100;
+              const totalPct = pos.unrealized_pnl_pct * 100;
+              return (
+                <tr
+                  key={pos.id}
+                  onClick={() => onSelectPosition(pos)}
+                  className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/40 cursor-pointer transition-colors"
+                >
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <MiniSparkline symbol={pos.symbol} />
+                      <div>
+                        <div className="font-mono font-bold text-[#F8FAFC]">{pos.symbol}</div>
+                        {TICKER_NAMES[pos.symbol] && (
+                          <div className="text-[11px] text-[#475569] max-w-[120px] truncate">{TICKER_NAMES[pos.symbol]}</div>
+                        )}
+                      </div>
+                      <SectorPill symbol={pos.symbol} />
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-[#94A3B8]">{pos.qty}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-[#94A3B8]">{formatCurrency(pos.avg_cost)}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-[#F8FAFC]">{formatCurrency(pos.current_price)}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-[#F8FAFC] font-medium">{formatCurrency(pos.market_value)}</td>
+                  <td className={cn("px-3 py-2.5 text-right font-mono", pnlColor(pos.day_pnl))}>
+                    <div className="font-medium">{pnlSign(pos.day_pnl)}{formatCurrency(pos.day_pnl)}</div>
+                    <div className="text-xs opacity-80">{dayPct >= 0 ? "+" : ""}{dayPct.toFixed(2)}%</div>
+                  </td>
+                  <td className={cn("px-4 py-2.5 text-right font-mono", pnlColor(pos.unrealized_pnl))}>
+                    <div className="font-medium">{pnlSign(pos.unrealized_pnl)}{formatCurrency(pos.unrealized_pnl)}</div>
+                    <div className="text-xs opacity-80">{totalPct >= 0 ? "+" : ""}{totalPct.toFixed(2)}%</div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
