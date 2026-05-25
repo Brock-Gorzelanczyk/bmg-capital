@@ -738,6 +738,9 @@ export default function StrategyLab() {
         </div>
       </div>
 
+      {/* ── Daily Recap ────────────────────────────────────────────── */}
+      <DailyRecapSection />
+
       {/* ── Strategy cards ─────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -860,9 +863,6 @@ export default function StrategyLab() {
 
       {/* ── Backtest section ────────────────────────────────────── */}
       <BacktestSection />
-
-      {/* ── Daily Recap section ─────────────────────────────────── */}
-      <DailyRecapSection />
 
       <TradeDetailDrawer trade={selectedTrade} onClose={() => setSelectedTrade(null)} />
       {infoModal && <StrategyInfoModal strategyKey={infoModal} onClose={() => setInfoModal(null)} />}
