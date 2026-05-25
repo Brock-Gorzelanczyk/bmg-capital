@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import DateTime, Date, Float, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Date, Float, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -34,6 +34,8 @@ class StrategyTrade(Base):
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     last_known_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     prev_close: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    paper_order_placed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
+    paper_sell_placed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
 
 
 class DailyLog(Base):

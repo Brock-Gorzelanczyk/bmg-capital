@@ -24,6 +24,7 @@ import yfinance as yf
 from sqlalchemy.orm import Session
 
 from app.db.models.strategy import DailyEquitySnapshot, DailyLog, StrategyTrade
+from app.db.models.paper import PaperAccount, PaperOrder, PaperPosition, PaperTransaction, STARTING_BALANCE
 from app.db.session import SessionLocal
 from app.screener.entry_triggers import (
     CANDIDATE_MAX_DAYS,
@@ -473,6 +474,239 @@ def _snapshot_equity(
 
 
 # ---------------------------------------------------------------------------
+# Auto-trading bridge: sync StrategyTrade records → PaperOrders
+# ---------------------------------------------------------------------------
+
+def _get_or_create_paper_account(db: Session, user_id: int) -> PaperAccount:
+    acct = db.query(PaperAccount).filter_by(user_id=user_id).first()
+    if not acct:
+        acct = PaperAccount(
+            user_id=user_id,
+            cash=STARTING_BALANCE,
+            starting_balance=STARTING_BALANCE,
+        )
+        db.add(acct)
+        db.flush()
+    return acct
+
+
+def _sync_paper_orders(db: Session, user_id: int) -> None:
+    """
+    Bridge between StrategyTrade records and the paper trading system.
+
+    1. For every open StrategyTrade that hasn't been placed yet (paper_order_placed=False),
+       create a BUY PaperOrder, update PaperPosition, and deduct cash.
+    2. For every closed StrategyTrade that was placed (paper_order_placed=True) but whose
+       exit hasn't been placed yet (paper_sell_placed=False), create a SELL PaperOrder,
+       update/remove PaperPosition, add cash, and write a PaperTransaction.
+    """
+    today = date.today()
+    now = _now()
+
+    # ------------------------------------------------------------------
+    # Part 1: Open trades without a BUY order
+    # ------------------------------------------------------------------
+    unplaced_buys = db.query(StrategyTrade).filter(
+        StrategyTrade.status == "open",
+        StrategyTrade.user_id == user_id,
+        StrategyTrade.paper_order_placed.is_(False),
+    ).all()
+
+    # Also catch rows where the column is NULL (older records before migration)
+    unplaced_buys_null = db.query(StrategyTrade).filter(
+        StrategyTrade.status == "open",
+        StrategyTrade.user_id == user_id,
+        StrategyTrade.paper_order_placed.is_(None),
+    ).all()
+    unplaced_buys = unplaced_buys + unplaced_buys_null
+
+    for trade in unplaced_buys:
+        if not trade.entry_price or trade.entry_price <= 0 or not trade.shares or trade.shares <= 0:
+            logger.warning(f"Skipping auto-buy for {trade.symbol} (trade {trade.id}): invalid price/shares")
+            trade.paper_order_placed = True  # mark to avoid retry spam
+            db.add(trade)
+            continue
+
+        acct = _get_or_create_paper_account(db, user_id)
+        total_cost = round(trade.entry_price * trade.shares, 4)
+
+        if acct.cash < total_cost:
+            logger.warning(
+                f"Auto-buy skipped for {trade.symbol} (trade {trade.id}): "
+                f"need ${total_cost:.2f}, have ${acct.cash:.2f}"
+            )
+            continue
+
+        # Create the filled BUY order
+        buy_order = PaperOrder(
+            user_id=user_id,
+            symbol=trade.symbol,
+            side="buy",
+            qty=trade.shares,
+            order_type="market",
+            tif="day",
+            status="filled",
+            fill_price=trade.entry_price,
+            fill_qty=trade.shares,
+            slippage=0.0,
+            filled_at=trade.entry_date or now,
+        )
+        db.add(buy_order)
+        db.flush()  # need buy_order.id
+
+        # Update / create PaperPosition
+        existing_pos = db.query(PaperPosition).filter_by(user_id=user_id, symbol=trade.symbol).first()
+        if existing_pos:
+            old_qty = existing_pos.qty
+            new_qty = trade.shares
+            total_qty = old_qty + new_qty
+            existing_pos.avg_cost = round(
+                (existing_pos.avg_cost * old_qty + trade.entry_price * new_qty) / total_qty, 6
+            )
+            existing_pos.qty = round(total_qty, 6)
+        else:
+            db.add(PaperPosition(
+                user_id=user_id,
+                symbol=trade.symbol,
+                qty=trade.shares,
+                avg_cost=trade.entry_price,
+            ))
+
+        # Deduct cash
+        acct.cash = round(acct.cash - total_cost, 2)
+        logger.info(
+            f"CASH_CHANGE user={user_id} delta={-total_cost:.4f} "
+            f"new_balance={acct.cash:.4f} reason='auto-buy {trade.symbol} "
+            f"qty={trade.shares} @ {trade.entry_price}'"
+        )
+
+        trade.paper_order_placed = True
+        db.add(trade)
+
+        # Log the auto-entry event
+        _add_log(
+            db, today, "auto_entry",
+            "Auto-placed by strategy agent",
+            user_id=user_id,
+            symbol=trade.symbol,
+            preset_key=trade.preset_key,
+            price=trade.entry_price,
+            trade_id=trade.id,
+        )
+        logger.info(f"Auto-buy placed: {trade.symbol} {trade.shares} shares @ ${trade.entry_price}")
+
+    # ------------------------------------------------------------------
+    # Part 2: Closed trades that need a SELL order
+    # ------------------------------------------------------------------
+    unplaced_sells = db.query(StrategyTrade).filter(
+        StrategyTrade.status == "closed",
+        StrategyTrade.user_id == user_id,
+        StrategyTrade.paper_order_placed.is_(True),
+        StrategyTrade.paper_sell_placed.is_(False),
+    ).all()
+
+    unplaced_sells_null = db.query(StrategyTrade).filter(
+        StrategyTrade.status == "closed",
+        StrategyTrade.user_id == user_id,
+        StrategyTrade.paper_order_placed.is_(True),
+        StrategyTrade.paper_sell_placed.is_(None),
+    ).all()
+    unplaced_sells = unplaced_sells + unplaced_sells_null
+
+    for trade in unplaced_sells:
+        if not trade.exit_price or trade.exit_price <= 0 or not trade.shares or trade.shares <= 0:
+            logger.warning(f"Skipping auto-sell for {trade.symbol} (trade {trade.id}): invalid exit_price/shares")
+            trade.paper_sell_placed = True
+            db.add(trade)
+            continue
+
+        position = db.query(PaperPosition).filter_by(user_id=user_id, symbol=trade.symbol).first()
+        if not position:
+            logger.warning(
+                f"Auto-sell skipped for {trade.symbol} (trade {trade.id}): no open position found"
+            )
+            trade.paper_sell_placed = True
+            db.add(trade)
+            continue
+
+        # Sell quantity is the lesser of strategy shares and actual position qty
+        sell_qty = min(trade.shares, position.qty)
+        if sell_qty <= 0:
+            logger.warning(f"Auto-sell skipped for {trade.symbol} (trade {trade.id}): position qty is 0")
+            trade.paper_sell_placed = True
+            db.add(trade)
+            continue
+
+        total_proceeds = round(trade.exit_price * sell_qty, 4)
+        cost_basis = position.avg_cost
+        realized_pnl = round((trade.exit_price - cost_basis) * sell_qty, 4)
+
+        # Create filled SELL order
+        sell_order = PaperOrder(
+            user_id=user_id,
+            symbol=trade.symbol,
+            side="sell",
+            qty=sell_qty,
+            order_type="market",
+            tif="day",
+            status="filled",
+            fill_price=trade.exit_price,
+            fill_qty=sell_qty,
+            slippage=0.0,
+            filled_at=trade.exit_date or now,
+        )
+        db.add(sell_order)
+        db.flush()
+
+        # Write PaperTransaction (realized P&L ledger)
+        db.add(PaperTransaction(
+            user_id=user_id,
+            order_id=sell_order.id,
+            symbol=trade.symbol,
+            side="sell",
+            qty=sell_qty,
+            fill_price=trade.exit_price,
+            cost_basis=cost_basis,
+            realized_pnl=realized_pnl,
+            notes=f"Auto-close by strategy agent ({trade.exit_reason or 'unknown'})",
+        ))
+
+        # Update / remove PaperPosition
+        remaining_qty = round(position.qty - sell_qty, 6)
+        if remaining_qty < 0.0001:
+            db.delete(position)
+        else:
+            position.qty = remaining_qty
+
+        # Add cash back
+        acct = _get_or_create_paper_account(db, user_id)
+        acct.cash = round(acct.cash + total_proceeds, 2)
+        logger.info(
+            f"CASH_CHANGE user={user_id} delta={total_proceeds:.4f} "
+            f"new_balance={acct.cash:.4f} reason='auto-sell {trade.symbol} "
+            f"qty={sell_qty} @ {trade.exit_price} pnl={realized_pnl:.2f}'"
+        )
+
+        trade.paper_sell_placed = True
+        db.add(trade)
+
+        _add_log(
+            db, today, "auto_exit",
+            f"Auto-closed by strategy agent ({trade.exit_reason or 'unknown'}) "
+            f"P&L: ${realized_pnl:+.2f}",
+            user_id=user_id,
+            symbol=trade.symbol,
+            preset_key=trade.preset_key,
+            price=trade.exit_price,
+            trade_id=trade.id,
+        )
+        logger.info(
+            f"Auto-sell placed: {trade.symbol} {sell_qty} shares @ ${trade.exit_price} "
+            f"| P&L ${realized_pnl:+.2f}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main daily job
 # ---------------------------------------------------------------------------
 
@@ -543,6 +777,9 @@ async def run_daily_automation(user_id: int) -> Dict:
 
         # 8. Equity snapshot
         _snapshot_equity(db, today, prices, len(entered), len(exited), user_id)
+
+        # 9. Sync paper orders for all open/closed strategy trades
+        _sync_paper_orders(db, user_id)
 
         db.commit()
         logger.info(f"=== Daily automation complete for user {user_id}: {len(entered)} entries, {len(exited)} exits ===")

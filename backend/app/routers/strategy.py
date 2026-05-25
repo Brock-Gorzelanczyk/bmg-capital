@@ -361,6 +361,16 @@ async def get_regime():
     return {"regime": regime}
 
 
+@router.get("/monitor-status")
+async def get_monitor_status():
+    """
+    Return 24/7 monitor status: last scan time, signals, and current market phase.
+    Market status is derived live from the current ET time.
+    """
+    from app.screener.scheduler import get_monitor_status
+    return get_monitor_status()
+
+
 async def _run_daily_wrapper(user_id: int):
     try:
         logger.info(f"Background run-now starting for user {user_id}...")

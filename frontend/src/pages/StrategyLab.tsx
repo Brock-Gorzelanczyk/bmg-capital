@@ -5,17 +5,23 @@ import { toast } from "sonner";
 import {
   FlaskConical, X, Play, TrendingUp, TrendingDown, AlertTriangle,
   Eye, Clock, CheckCircle2, RefreshCw, ExternalLink, BarChart2, Info,
+  Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getTrades, getCandidates, getSummary, getLog, getEquity, getRegime, runNow, closeTrade,
   getBacktestStatus, runBacktest, getBacktestResults, getBacktestDetail,
 } from "@/api/strategy";
+import {
+  getMonitorStatus, getRecaps, getLatestRecap, generateRecap,
+  type DailyRecap,
+} from "@/api/recap";
 import { TICKER_NAMES } from "@/data/tickerNames";
 import { COMPANY_INFO, SECTOR_COLOR } from "@/data/companyInfo";
 import SectorPill from "@/components/ui/SectorPill";
 import TradeDetailDrawer, { type EnrichedTrade } from "@/components/strategy/TradeDetailDrawer";
 import ExplainButton from "@/components/explain/ExplainButton";
+import DailyRecapCard from "@/components/recap/DailyRecapCard";
 
 // ─── Strategy metadata ────────────────────────────────────────────────────────
 
@@ -457,6 +463,123 @@ function SymCell({ symbol, preset, onClick }: { symbol: string; preset: string; 
   );
 }
 
+// ─── Monitor Badge ────────────────────────────────────────────────────────────
+
+function relativeTime(isoString: string | null): string {
+  if (!isoString) return "never";
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function MonitorBadge() {
+  const { data: status } = useQuery({
+    queryKey: ["monitor-status"],
+    queryFn: getMonitorStatus,
+    refetchInterval: 60_000,
+    staleTime: 55_000,
+  });
+
+  if (!status) return null;
+
+  const isOpen       = status.market_status === "open";
+  const isPreOrAfter = status.market_status === "pre-market" || status.market_status === "after-hours";
+
+  const dotCls = isOpen
+    ? "bg-[#22C55E] animate-pulse"
+    : isPreOrAfter
+    ? "bg-[#3B82F6]"
+    : "bg-[#475569]";
+
+  const label = isOpen
+    ? `LIVE · Scanned ${status.stocks_scanned} stocks`
+    : status.market_status === "pre-market"
+    ? "PRE-MARKET"
+    : status.market_status === "after-hours"
+    ? "AFTER HOURS"
+    : "CLOSED";
+
+  return (
+    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#1E293B] border border-[#334155]">
+      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dotCls)} />
+      <div className="flex flex-col leading-none">
+        <span className="text-[10px] font-semibold text-[#F8FAFC] font-mono tracking-wide">{label}</span>
+        {status.last_scan_at && (
+          <span className="text-[9px] text-[#475569] font-mono mt-0.5">
+            Last scan: {relativeTime(status.last_scan_at)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Daily Recap Section ──────────────────────────────────────────────────────
+
+function DailyRecapSection() {
+  const qc = useQueryClient();
+  const [generating, setGenerating] = useState(false);
+
+  const { data: recaps = [] } = useQuery({
+    queryKey: ["daily-recaps"],
+    queryFn: getRecaps,
+    staleTime: 300_000,
+  });
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      await generateRecap();
+      qc.invalidateQueries({ queryKey: ["daily-recaps"] });
+      qc.invalidateQueries({ queryKey: ["recap-latest"] });
+      toast.success("Recap generated");
+    } catch {
+      toast.error("Failed to generate recap");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const latest5 = recaps.slice(0, 5);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Calendar size={14} className="text-[#94A3B8]" />
+          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-widest">Daily Recaps</span>
+        </div>
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[#334155] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-zinc-500 transition-colors disabled:opacity-40"
+        >
+          <RefreshCw size={11} className={generating ? "animate-spin" : ""} />
+          {generating ? "Generating…" : "Generate Recap"}
+        </button>
+      </div>
+
+      {latest5.length === 0 ? (
+        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl px-4 py-6 text-center">
+          <Calendar size={24} className="text-[#334155] mx-auto mb-2" />
+          <p className="text-sm text-[#475569]">No recaps yet</p>
+          <p className="text-xs text-[#334155] mt-1">Recaps generate automatically at 4:15 PM ET or click Generate above</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {latest5.map((recap, i) => (
+            <DailyRecapCard key={recap.id} recap={recap} defaultExpanded={i === 0} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function StrategyLab() {
@@ -572,6 +695,7 @@ export default function StrategyLab() {
           <span className="text-[11px] text-[#475569] hidden md:block">· 19 strategies · $100k paper · auto-runs 4:05 PM ET</span>
         </div>
         <div className="flex items-center gap-2">
+          <MonitorBadge />
           <RegimePill regime={regime} />
           <button
             onClick={handleRunNow}
@@ -736,6 +860,9 @@ export default function StrategyLab() {
 
       {/* ── Backtest section ────────────────────────────────────── */}
       <BacktestSection />
+
+      {/* ── Daily Recap section ─────────────────────────────────── */}
+      <DailyRecapSection />
 
       <TradeDetailDrawer trade={selectedTrade} onClose={() => setSelectedTrade(null)} />
       {infoModal && <StrategyInfoModal strategyKey={infoModal} onClose={() => setInfoModal(null)} />}

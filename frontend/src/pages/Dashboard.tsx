@@ -5,12 +5,14 @@ import { getMarketOverview, getSectorPerformance, getNews } from "@/api/market";
 import { getPortfolios } from "@/api/portfolio";
 import { getTrades } from "@/api/strategy";
 import { getAccount } from "@/api/paper";
+import { getLatestRecap } from "@/api/recap";
 import { useMarketStore } from "@/store";
 import { formatCurrency, formatPercent, cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown, ExternalLink, ArrowRight, Briefcase, FlaskConical, RefreshCw, LineChart } from "lucide-react";
+import { TrendingUp, TrendingDown, ExternalLink, ArrowRight, Briefcase, FlaskConical, RefreshCw, LineChart, Calendar } from "lucide-react";
 import SectorPill from "@/components/ui/SectorPill";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { generateMorningBrief } from "@/lib/demoBrief";
+import DailyRecapCard from "@/components/recap/DailyRecapCard";
 
 const INDEX_NAMES: Record<string, string> = {
   SPY: "S&P 500", QQQ: "NASDAQ 100", DIA: "Dow Jones", IWM: "Russell 2000",
@@ -481,6 +483,45 @@ function StrategyWidget() {
   );
 }
 
+// ── Latest Recap Widget ───────────────────────────────────────────────────────
+
+function LatestRecapWidget() {
+  const { data: recap, isLoading } = useQuery({
+    queryKey: ["recap-latest"],
+    queryFn: getLatestRecap,
+    staleTime: 300_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5 space-y-3">
+        <Skeleton height={12} className="w-28" />
+        <Skeleton height={36} />
+        <Skeleton height={14} className="w-4/5" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] flex items-center gap-1.5">
+          <Calendar size={12} /> Daily Recap
+        </h2>
+      </div>
+      {recap ? (
+        <DailyRecapCard recap={recap} defaultExpanded={false} />
+      ) : (
+        <div className="flex flex-col items-center justify-center py-5 text-center gap-2">
+          <Calendar size={24} className="text-[#334155]" />
+          <p className="text-sm text-[#475569]">Daily recap generates at 4:15 PM ET</p>
+          <p className="text-xs text-[#334155]">Check back after market close</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -555,6 +596,9 @@ export default function Dashboard() {
         <PortfolioWidget />
         <StrategyWidget />
       </div>
+
+      {/* Latest Recap */}
+      <LatestRecapWidget />
 
       {/* Sectors + News */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
