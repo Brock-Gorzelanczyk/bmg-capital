@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getAccount,
@@ -578,12 +579,24 @@ function ActivityTab() {
 
 export default function PaperTrading() {
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [activeTab, setActiveTab] = useState<PageTab>("positions");
   const [showReset, setShowReset] = useState(false);
   const [ticketModal, setTicketModal] = useState<{ symbol: string; side: "buy" | "sell" } | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<PaperPosition | null>(null);
   const [fabSymbol, setFabSymbol] = useState("AAPL");
+
+  // Auto-open order ticket when navigated from Portfolio with ?symbol=&side=
+  useEffect(() => {
+    const sym = searchParams.get("symbol");
+    const side = searchParams.get("side");
+    if (sym) {
+      setFabSymbol(sym);
+      setTicketModal({ symbol: sym, side: side === "sell" ? "sell" : "buy" });
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   const { data: account, isLoading, isError: accountError } = useQuery({
     queryKey: ["paper-account"],

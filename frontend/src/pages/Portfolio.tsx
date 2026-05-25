@@ -357,7 +357,7 @@ function PieChart_({ slices, size = 140 }: { slices: PieSlice[]; size?: number }
 interface DrawerProps {
   position: PaperPosition | null;
   onClose: () => void;
-  onTrade: (symbol: string) => void;
+  onTrade: (symbol: string, side: "buy" | "sell") => void;
 }
 
 function PositionDrawer({ position, onClose, onTrade }: DrawerProps) {
@@ -458,13 +458,13 @@ function PositionDrawer({ position, onClose, onTrade }: DrawerProps) {
         {/* Action buttons */}
         <div className="border-t border-[#1E293B] px-4 py-3 grid grid-cols-2 gap-2">
           <button
-            onClick={() => onTrade(position.symbol)}
+            onClick={() => onTrade(position.symbol, "buy")}
             className="flex items-center justify-center gap-1.5 bg-[#22C55E]/10 hover:bg-[#22C55E]/20 border border-[#22C55E]/30 text-[#22C55E] font-semibold text-sm py-2 rounded-lg transition-colors cursor-pointer"
           >
             <ArrowUpRight size={14} /> Buy More
           </button>
           <button
-            onClick={() => onTrade(position.symbol)}
+            onClick={() => onTrade(position.symbol, "sell")}
             className="flex items-center justify-center gap-1.5 bg-[#EF4444]/10 hover:bg-[#EF4444]/20 border border-[#EF4444]/30 text-[#EF4444] font-semibold text-sm py-2 rounded-lg transition-colors cursor-pointer"
           >
             <ArrowDownRight size={14} /> Sell
@@ -1140,7 +1140,7 @@ export default function Portfolio() {
       <PositionDrawer
         position={selectedPosition}
         onClose={() => setSelectedPosition(null)}
-        onTrade={(symbol) => navigate(`/paper?symbol=${symbol}`)}
+        onTrade={(symbol, side) => navigate(`/paper?symbol=${symbol}&side=${side}`)}
       />
     </div>
   );
