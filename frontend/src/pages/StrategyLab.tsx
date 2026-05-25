@@ -22,6 +22,7 @@ import SectorPill from "@/components/ui/SectorPill";
 import TradeDetailDrawer, { type EnrichedTrade } from "@/components/strategy/TradeDetailDrawer";
 import ExplainButton from "@/components/explain/ExplainButton";
 import DailyRecapCard from "@/components/recap/DailyRecapCard";
+import PnlCalendar from "@/components/strategy/PnlCalendar";
 
 // ─── Strategy metadata ────────────────────────────────────────────────────────
 
@@ -738,8 +739,11 @@ export default function StrategyLab() {
         </div>
       </div>
 
-      {/* ── Daily Recap ────────────────────────────────────────────── */}
-      <DailyRecapSection />
+      {/* ── Daily Recap + P&L Calendar ──────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <DailyRecapSection />
+        <PnlCalendar />
+      </div>
 
       {/* ── Strategy cards ─────────────────────────────────────────── */}
       <div>

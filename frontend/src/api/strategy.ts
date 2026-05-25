@@ -21,6 +21,27 @@ export const getRegime = () =>
 export const runNow = () =>
   client.post("/strategy/run-now").then((r) => r.data);
 
+export interface PnlDay {
+  date: string;
+  day_pnl: number;
+  day_pnl_pct: number;
+  portfolio_value: number;
+  new_entries: number;
+  exits_today: number;
+  open_positions: number;
+  trades: Array<{
+    event_type: string;
+    symbol: string;
+    preset_label: string;
+    price: number | null;
+    pnl_pct: number | null;
+    notes: string;
+  }>;
+}
+
+export const getPnlCalendar = (): Promise<{ days: PnlDay[] }> =>
+  client.get("/strategy/pnl-calendar").then((r) => r.data);
+
 export const closeTrade = (id: number) =>
   client.delete(`/strategy/trades/${id}`).then((r) => r.data);
 

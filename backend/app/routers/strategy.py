@@ -355,6 +355,62 @@ async def get_equity(
     }
 
 
+@router.get("/pnl-calendar")
+async def get_pnl_calendar(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return day-by-day P&L data for the calendar view."""
+    snaps = db.execute(
+        select(DailyEquitySnapshot)
+        .where(DailyEquitySnapshot.user_id == current_user.id)
+        .order_by(DailyEquitySnapshot.snapshot_date.asc())
+    ).scalars().all()
+
+    # Build day_pnl as equity change vs previous day
+    days = []
+    for i, s in enumerate(snaps):
+        prev_value = snaps[i - 1].portfolio_value if i > 0 else PAPER_PORTFOLIO
+        day_pnl = round(s.portfolio_value - prev_value, 2)
+        day_pnl_pct = round(day_pnl / prev_value * 100, 2) if prev_value else 0.0
+        days.append({
+            "date": s.snapshot_date.isoformat(),
+            "day_pnl": day_pnl,
+            "day_pnl_pct": day_pnl_pct,
+            "portfolio_value": round(s.portfolio_value, 2),
+            "new_entries": s.new_entries,
+            "exits_today": s.exits_today,
+            "open_positions": s.open_positions,
+        })
+
+    # Attach DailyLog trade events per date
+    all_logs = db.execute(
+        select(DailyLog)
+        .where(
+            DailyLog.user_id == current_user.id,
+            DailyLog.event_type.in_(["entry", "exit", "auto_entry", "auto_exit"]),
+        )
+        .order_by(DailyLog.log_date.asc(), DailyLog.logged_at.asc())
+    ).scalars().all()
+
+    logs_by_date: dict = {}
+    for log in all_logs:
+        key = log.log_date.isoformat() if hasattr(log.log_date, "isoformat") else str(log.log_date)
+        logs_by_date.setdefault(key, []).append({
+            "event_type": log.event_type,
+            "symbol": log.symbol,
+            "preset_label": log.preset_label,
+            "price": log.price,
+            "pnl_pct": log.pnl_pct,
+            "notes": log.notes,
+        })
+
+    for d in days:
+        d["trades"] = logs_by_date.get(d["date"], [])
+
+    return {"days": days}
+
+
 @router.get("/regime")
 async def get_regime():
     regime = await _get_regime_cached()

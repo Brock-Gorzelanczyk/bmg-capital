@@ -73,13 +73,42 @@ def _fetch_strategy_summary(db: Session, user_id: int, target_date: date) -> dic
     )
 
     if snapshot:
+        # day_pnl = today's equity minus yesterday's equity
+        from app.screener.daily_runner import PAPER_PORTFOLIO
+        prev_snap = (
+            db.query(DailyEquitySnapshot)
+            .filter(
+                DailyEquitySnapshot.user_id == user_id,
+                DailyEquitySnapshot.snapshot_date < target_date,
+            )
+            .order_by(DailyEquitySnapshot.snapshot_date.desc())
+            .first()
+        )
+        prev_value = prev_snap.portfolio_value if prev_snap else PAPER_PORTFOLIO
+        day_pnl = round(snapshot.portfolio_value - prev_value, 2)
+        day_pnl_pct = round(day_pnl / prev_value * 100, 2) if prev_value else 0.0
+
+        # Grab today's trades from DailyLog for narrative detail
+        from app.db.models.strategy import DailyLog
+        today_logs = (
+            db.query(DailyLog)
+            .filter(
+                DailyLog.user_id == user_id,
+                DailyLog.log_date == target_date,
+                DailyLog.event_type.in_(["entry", "exit", "auto_entry", "auto_exit"]),
+            )
+            .all()
+        )
+        trade_symbols = [lg.symbol for lg in today_logs if lg.symbol]
+
         return {
             "new_entries": snapshot.new_entries,
             "exits": snapshot.exits_today,
             "open_positions": snapshot.open_positions,
             "portfolio_value": round(snapshot.portfolio_value, 2),
-            "day_pnl": round(snapshot.open_pnl + snapshot.realized_pnl, 2),
-            "day_pnl_pct": None,  # snapshot doesn't store this directly
+            "day_pnl": day_pnl,
+            "day_pnl_pct": day_pnl_pct,
+            "trade_symbols": trade_symbols,
         }
 
     # No snapshot yet — compute from raw trades
@@ -166,14 +195,22 @@ def _build_narrative(
 
     market_sentence = f"{market_phrase}{spy_phrase}."
 
-    # Strategy sentence
+    # Strategy performance sentence
     new_entries = strategy.get("new_entries") or 0
-    if new_entries == 0:
-        strategy_sentence = "Your strategy agent held steady with no new entries."
-    elif new_entries == 1:
-        strategy_sentence = "Your strategy agent opened 1 new position."
+    exits = strategy.get("exits") or 0
+    open_pos = strategy.get("open_positions") or 0
+    trade_symbols = strategy.get("trade_symbols") or []
+
+    if new_entries == 0 and exits == 0:
+        strategy_sentence = f"The strategy agent held steady — no new entries or exits. {open_pos} position{'s' if open_pos != 1 else ''} currently open."
     else:
-        strategy_sentence = f"Your strategy agent opened {new_entries} new positions."
+        parts_s = []
+        if new_entries:
+            sym_str = f" ({', '.join(trade_symbols[:3])}{'…' if len(trade_symbols) > 3 else ''})" if trade_symbols else ""
+            parts_s.append(f"opened {new_entries} new position{'s' if new_entries != 1 else ''}{sym_str}")
+        if exits:
+            parts_s.append(f"closed {exits} trade{'s' if exits != 1 else ''}")
+        strategy_sentence = f"The strategy agent {' and '.join(parts_s)}. {open_pos} position{'s' if open_pos != 1 else ''} now open."
 
     # P&L sentence
     pnl_sentence = ""
@@ -183,23 +220,25 @@ def _build_narrative(
     if day_pnl is not None:
         direction = "gained" if day_pnl >= 0 else "lost"
         pnl_str = f"${abs(day_pnl):,.2f}"
+        pv_str = f" (portfolio at ${portfolio_value:,.2f})" if portfolio_value else ""
         if day_pnl_pct is not None:
-            pnl_sentence = f"Portfolio {direction} {pnl_str} ({abs(day_pnl_pct):.2f}%) today."
+            pnl_sentence = f"Paper portfolio {direction} {pnl_str} ({abs(day_pnl_pct):.2f}%){pv_str}."
         else:
-            pnl_sentence = f"Portfolio {direction} {pnl_str} today."
+            pnl_sentence = f"Paper portfolio {direction} {pnl_str}{pv_str}."
 
-    # Candidates sentence
+    # Candidates / watchlist sentence
     candidates_count = len(top_setups)
-    if candidates_count > 0:
-        candidates_sentence = f"Currently monitoring {candidates_count} candidate{'s' if candidates_count != 1 else ''} across active strategies."
-    else:
-        candidates_sentence = "No candidates currently being monitored."
+    candidates_sentence = (
+        f"Watching {candidates_count} setup{'s' if candidates_count != 1 else ''} across 19 strategies."
+        if candidates_count > 0
+        else "No new setups are being monitored."
+    )
 
-    # Top setup sentence
+    # Top setup
     top_setup_sentence = ""
     if top_setups:
         top = top_setups[0]
-        top_setup_sentence = f"Top setup: {top['symbol']} showing {top['preset']} pattern."
+        top_setup_sentence = f"Highest-priority setup: {top['symbol']} on the {top['preset']} strategy."
 
     parts = [market_sentence, strategy_sentence]
     if pnl_sentence:
