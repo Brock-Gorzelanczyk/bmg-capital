@@ -512,18 +512,18 @@ export default function Dashboard() {
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20 md:pb-6">
       {/* Header */}
-      <div className="flex items-baseline justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-[#F8FAFC] tracking-tight">Market Overview</h1>
-          <p className="text-[#475569] text-sm mt-0.5">
+          <p className="text-[#475569] text-sm mt-0.5 truncate">
             {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </p>
         </div>
         {sectors.length > 0 && (
-          <div className="flex items-center gap-4 text-xs">
-            <span className="text-[#22C55E] font-medium">{advancers} advancing</span>
+          <div className="flex items-center gap-2 text-xs shrink-0 mt-1">
+            <span className="text-[#22C55E] font-medium">{advancers}<span className="hidden sm:inline"> advancing</span><span className="sm:hidden">↑</span></span>
             <span className="text-[#334155]">·</span>
-            <span className="text-[#EF4444] font-medium">{decliners} declining</span>
+            <span className="text-[#EF4444] font-medium">{decliners}<span className="hidden sm:inline"> declining</span><span className="sm:hidden">↓</span></span>
           </div>
         )}
       </div>
