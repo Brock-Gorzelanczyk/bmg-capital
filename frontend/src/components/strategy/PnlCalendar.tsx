@@ -168,7 +168,9 @@ export default function PnlCalendar() {
         {cells.map((day, i) => {
           if (day === null) return <div key={i} />;
           const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const pnlDay = dayMap.get(dateStr);
+          const dow = new Date(year, month, day).getDay(); // 0=Sun, 6=Sat
+          const isWeekend = dow === 0 || dow === 6;
+          const pnlDay = isWeekend ? undefined : dayMap.get(dateStr);
           const isToday = dateStr === todayStr;
           const isUp = pnlDay && pnlDay.day_pnl >= 0;
           const isBigUp = pnlDay && pnlDay.day_pnl_pct > 1;

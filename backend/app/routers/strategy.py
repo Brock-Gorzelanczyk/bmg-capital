@@ -367,12 +367,16 @@ async def get_pnl_calendar(
         .order_by(DailyEquitySnapshot.snapshot_date.asc())
     ).scalars().all()
 
-    # Build day_pnl as equity change vs previous day
+    # Build day_pnl as equity change vs previous TRADING day (skip weekends)
     days = []
-    for i, s in enumerate(snaps):
-        prev_value = snaps[i - 1].portfolio_value if i > 0 else PAPER_PORTFOLIO
-        day_pnl = round(s.portfolio_value - prev_value, 2)
-        day_pnl_pct = round(day_pnl / prev_value * 100, 2) if prev_value else 0.0
+    last_trading_value = PAPER_PORTFOLIO
+    for s in snaps:
+        # isoweekday: 6=Saturday, 7=Sunday — skip non-trading days
+        if s.snapshot_date.isoweekday() >= 6:
+            continue
+        day_pnl = round(s.portfolio_value - last_trading_value, 2)
+        day_pnl_pct = round(day_pnl / last_trading_value * 100, 2) if last_trading_value else 0.0
+        last_trading_value = s.portfolio_value
         days.append({
             "date": s.snapshot_date.isoformat(),
             "day_pnl": day_pnl,

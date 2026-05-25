@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 
 async def _startup_strategy_scan() -> None:
     """Run strategy automation for all users who haven't had a scan today."""
+    # Never run automation on weekends — markets are closed
+    if date.today().isoweekday() >= 6:
+        logger.info("Startup strategy scan skipped — weekend")
+        return
+
     from app.db.models.strategy import DailyEquitySnapshot
     from app.db.models.users import User
     from app.screener.daily_runner import run_daily_automation

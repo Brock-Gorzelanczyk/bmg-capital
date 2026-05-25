@@ -426,6 +426,8 @@ def _snapshot_equity(
     exits_today: int,
     user_id: int,
 ) -> None:
+    if today.isoweekday() >= 6:  # never snapshot on weekends
+        return
     # Realized P&L from all closed non-expired trades for this user
     closed = db.query(StrategyTrade).filter(
         StrategyTrade.status == "closed",
