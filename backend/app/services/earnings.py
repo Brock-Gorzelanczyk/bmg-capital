@@ -16,41 +16,25 @@ _cache_lock = threading.Lock()
 _cache: Dict[str, Any] = {}
 _CACHE_TTL = 6 * 3600  # 6 hours
 
+# Keep list short enough that fetching finishes in <10s (3 workers × ~60 stocks)
 MAJOR_STOCKS = [
-    # Mega-cap tech
-    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "META", "TSLA",
-    # Finance
-    "JPM", "BAC", "GS", "MS", "C", "WFC", "BLK", "V", "MA", "AXP", "PYPL",
-    # Healthcare / pharma
-    "JNJ", "UNH", "PFE", "MRK", "ABBV", "LLY", "BMY", "AMGN", "GILD", "CVS",
-    "TMO", "DHR", "ABT", "VRTX", "REGN", "ZTS", "BIIB",
-    # Consumer staples / discretionary
-    "WMT", "COST", "HD", "MCD", "SBUX", "NKE", "KO", "PEP", "PG", "MDLZ",
-    "LOW", "TGT", "AMZN", "BKNG", "MAR",
-    # Industrials / defense
-    "HON", "CAT", "DE", "BA", "GE", "RTX", "LMT", "NOC", "UPS", "FDX",
-    "CSX", "UNP", "NSC",
-    # Tech / semiconductors
-    "ADBE", "CRM", "ORCL", "CSCO", "IBM", "INTC", "AMD", "QCOM", "AVGO",
-    "TXN", "MU", "LRCX", "KLAC", "AMAT", "MRVL", "MCHP",
-    # Software / cloud
-    "NOW", "SNOW", "DDOG", "NET", "CRWD", "PANW", "ZS", "OKTA", "PLTR",
-    "SHOP", "UBER", "ABNB", "NFLX", "SPOT",
-    # Energy
-    "XOM", "CVX", "COP", "SLB", "OXY", "PSX", "MPC", "HAL", "EOG",
-    # Telecom / media
-    "T", "VZ", "CMCSA", "DIS", "PARA",
-    # Financial tech / fintech
-    "SQ", "COIN", "HOOD", "SOFI", "AFRM",
-    # Auto
-    "F", "GM", "TSLA", "RIVN",
-    # Misc large cap
-    "LIN", "NEE", "ACN", "MSCI", "SPGI", "ICE", "CME", "BRK-B",
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B",
+    "JPM", "BAC", "GS", "MS", "C", "V", "MA", "AXP",
+    "JNJ", "UNH", "PFE", "MRK", "ABBV", "LLY", "AMGN", "GILD",
+    "WMT", "COST", "HD", "MCD", "SBUX", "NKE", "KO", "PEP", "PG",
+    "HON", "CAT", "BA", "GE", "RTX", "LMT", "UPS", "FDX",
+    "ADBE", "CRM", "ORCL", "CSCO", "IBM", "INTC", "AMD", "QCOM", "AVGO", "TXN",
+    "NOW", "SNOW", "DDOG", "NET", "CRWD", "PANW", "PLTR", "NFLX",
+    "XOM", "CVX", "COP", "SLB",
+    "T", "VZ", "CMCSA", "DIS",
+    "PYPL", "SQ", "COIN", "UBER", "ABNB", "SHOP",
 ]
 
 # Deduplicate while preserving order
 _seen: set = set()
 MAJOR_STOCKS = [s for s in MAJOR_STOCKS if not (s in _seen or _seen.add(s))]  # type: ignore[func-returns-value]
+
+_FETCH_TIMEOUT = 8  # seconds per symbol before we give up
 
 
 def _fetch_one(symbol: str, from_date: datetime, to_date: datetime) -> Optional[Dict[str, Any]]:
@@ -63,7 +47,7 @@ def _fetch_one(symbol: str, from_date: datetime, to_date: datetime) -> Optional[
         if not earnings_dates:
             return None
         for ed in earnings_dates:
-            if hasattr(ed, "year"):  # datetime.date or datetime.datetime
+            if hasattr(ed, "year"):
                 if from_date.date() <= ed <= to_date.date():
                     return {
                         "symbol": symbol,
@@ -89,13 +73,20 @@ async def get_earnings_calendar(days_ahead: int = 14) -> List[Dict[str, Any]]:
     now = datetime.utcnow()
     end = now + timedelta(days=days_ahead)
 
-    loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor(max_workers=25) as executor:
-        futures = [
-            loop.run_in_executor(executor, _fetch_one, sym, now, end)
-            for sym in MAJOR_STOCKS
-        ]
-        results = await asyncio.gather(*futures, return_exceptions=True)
+    loop = asyncio.get_running_loop()
+    # 6 workers keeps resource usage modest; each request has an 8s timeout via asyncio.wait_for
+    with ThreadPoolExecutor(max_workers=6, thread_name_prefix="earnings") as executor:
+        async def _bounded(sym: str) -> Optional[Dict[str, Any]]:
+            try:
+                return await asyncio.wait_for(
+                    loop.run_in_executor(executor, _fetch_one, sym, now, end),
+                    timeout=_FETCH_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                logger.debug("earnings timeout for %s", sym)
+                return None
+
+        results = await asyncio.gather(*[_bounded(s) for s in MAJOR_STOCKS], return_exceptions=True)
 
     data = [r for r in results if isinstance(r, dict)]
     data.sort(key=lambda x: x["date"])
