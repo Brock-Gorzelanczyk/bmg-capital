@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Star, RotateCw, X, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -342,12 +343,14 @@ function CoinTable({
   watchlist,
   onToggleWatch,
   onTrade,
+  onChart,
   showSparklineUrl = false,
 }: {
   coins: CoinGeckoData[];
   watchlist: Set<string>;
   onToggleWatch: (id: string) => void;
   onTrade: (coin: CoinGeckoData) => void;
+  onChart: (coin: CoinGeckoData) => void;
   showSparklineUrl?: boolean;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
@@ -415,7 +418,10 @@ function CoinTable({
 
               {/* Name + Logo */}
               <td className="px-3 py-2.5">
-                <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => onChart(coin)}
+                  className="flex items-center gap-2.5 text-left hover:opacity-80 transition-opacity cursor-pointer"
+                >
                   {coin.image
                     ? <img src={coin.image} alt={coin.symbol} className="w-6 h-6 rounded-full flex-shrink-0" />
                     : <div className="w-6 h-6 rounded-full bg-[var(--bg-elevated-2)] flex-shrink-0" />}
@@ -423,7 +429,7 @@ function CoinTable({
                     <span className="font-semibold text-[var(--text-primary)] text-xs">{coin.name}</span>
                     <span className="ml-1.5 text-[var(--text-tertiary)] text-[10px] font-mono">{coin.symbol}</span>
                   </div>
-                </div>
+                </button>
               </td>
 
               {/* Price */}
@@ -755,6 +761,7 @@ type Tab = "top" | "trending" | "watchlist" | "holdings" | "strategies";
 
 export default function CryptoLab() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("top");
   const [tradingCoin, setTradingCoin] = useState<CoinGeckoData | null>(null);
   const [watchlist, setWatchlist] = useState<Set<string>>(loadWatchlist);
@@ -789,6 +796,10 @@ export default function CryptoLab() {
   const trendingCoins = trending?.coins ?? [];
   const watchlistCoins = useMemo(() => coins.filter((c) => watchlist.has(c.id)), [coins, watchlist]);
   const cash = account?.cash ?? 0;
+
+  const handleChart = useCallback((coin: CoinGeckoData) => {
+    navigate(`/chart?symbol=${coin.symbol}-USD`);
+  }, [navigate]);
 
   const toggleWatch = useCallback((id: string) => {
     setWatchlist((prev) => {
@@ -900,6 +911,7 @@ export default function CryptoLab() {
             watchlist={watchlist}
             onToggleWatch={toggleWatch}
             onTrade={setTradingCoin}
+            onChart={handleChart}
             showSparklineUrl={tab === "trending"}
           />
         )}
