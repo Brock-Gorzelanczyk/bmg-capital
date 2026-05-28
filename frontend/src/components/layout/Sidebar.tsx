@@ -113,7 +113,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-elevated)]/80 border border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] transition-colors duration-150 text-xs cursor-pointer backdrop-blur-sm"
         >
           <Search size={13} />
-          <span className="hidden lg:block flex-1 text-left">Search…</span>
+          <span className="hidden lg:block flex-1 text-left">Ask BMG Intelligence…</span>
           <kbd className="hidden lg:block text-[10px] bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
         </button>
       </div>

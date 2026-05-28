@@ -5,6 +5,7 @@ import { House, LineChart, PlayCircle, BookOpen, GraduationCap } from "lucide-re
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import CommandPalette from "@/components/ui/CommandPalette";
+import CopilotModal from "@/components/ui/CopilotModal";
 import ExplainPanel from "@/components/explain/ExplainPanel";
 import NotificationPanel from "@/components/notifications/NotificationPanel";
 import SupportChatWidget from "@/components/support/SupportChatWidget";
@@ -26,6 +27,7 @@ export default function AppShell() {
   const isChart = pathname === "/chart";
   const qc = useQueryClient();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -43,6 +45,12 @@ export default function AppShell() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        e.preventDefault();
+        setCopilotOpen((o) => !o);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "k") {
         const tag = (e.target as HTMLElement).tagName;
         if (tag === "INPUT" || tag === "TEXTAREA") return;
         e.preventDefault();
@@ -76,7 +84,7 @@ export default function AppShell() {
         )}
       >
         <Sidebar
-          onOpenPalette={() => { setPaletteOpen(true); setSidebarOpen(false); }}
+          onOpenPalette={() => { setCopilotOpen(true); setSidebarOpen(false); }}
           onClose={() => setSidebarOpen(false)}
         />
       </div>
@@ -126,6 +134,7 @@ export default function AppShell() {
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CopilotModal open={copilotOpen} onClose={() => setCopilotOpen(false)} />
       <ExplainPanel />
       <NotificationPanel />
       <SupportChatWidget />
