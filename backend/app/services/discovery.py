@@ -4,9 +4,12 @@ All endpoints degrade gracefully when API keys are absent.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -151,15 +154,12 @@ async def get_ipo_calendar(days_ahead: int = 90) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     seen: set = set()
 
-    # Fetch current month + next month(s) to cover days_ahead window
     months_needed = max(1, (days_ahead // 30) + 2)
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             for month_offset in range(months_needed):
                 target = today.replace(day=1)
-                # advance by month_offset months
                 for _ in range(month_offset):
-                    # move to first of next month
                     if target.month == 12:
                         target = target.replace(year=target.year + 1, month=1)
                     else:
@@ -174,147 +174,221 @@ async def get_ipo_calendar(days_ahead: int = 90) -> List[Dict[str, Any]]:
                     if resp.status_code != 200:
                         continue
                     data = resp.json().get("data", {})
-                    for section, status in [("upcomingTable", "upcoming"), ("recentTable", "priced")]:
-                        rows = data.get(section, {}).get("rows") or []
-                        for row in rows:
-                            sym = (row.get("proposedTickerSymbol") or "").strip()
-                            if not sym or sym in seen:
+
+                    # Upcoming IPOs — data["upcoming"]["upcomingTable"]["rows"]
+                    upcoming_rows = (
+                        data.get("upcoming", {})
+                            .get("upcomingTable", {})
+                            .get("rows") or []
+                    )
+                    for row in upcoming_rows:
+                        sym = (row.get("proposedTickerSymbol") or "").strip()
+                        if not sym or sym in seen:
+                            continue
+                        seen.add(sym)
+                        raw_date = row.get("expectedPriceDate") or ""
+                        try:
+                            dt = datetime.strptime(raw_date, "%m/%d/%Y").date()
+                            iso_date = str(dt)
+                            if (dt - today).days > days_ahead:
                                 continue
-                            seen.add(sym)
-                            # Parse expected date
-                            raw_date = row.get("expectedPriceDate") or row.get("pricedDate") or ""
-                            try:
-                                dt = datetime.strptime(raw_date, "%m/%d/%Y").date()
-                                iso_date = str(dt)
-                                if status == "upcoming" and (dt - today).days > days_ahead:
-                                    continue
-                            except Exception:
-                                iso_date = raw_date
-                            price_range = row.get("proposedSharePrice") or "TBD"
-                            results.append({
-                                "company":     row.get("companyName") or sym,
-                                "symbol":      sym,
-                                "date":        iso_date,
-                                "price_range": price_range,
-                                "exchange":    row.get("exchange") or "—",
-                                "shares":      row.get("sharesOffered") or "",
-                                "status":      status,
-                            })
+                        except Exception:
+                            iso_date = raw_date
+                        results.append({
+                            "company":     row.get("companyName") or sym,
+                            "symbol":      sym,
+                            "date":        iso_date,
+                            "price_range": row.get("proposedSharePrice") or "TBD",
+                            "exchange":    row.get("proposedExchange") or "—",
+                            "shares":      row.get("sharesOffered") or "",
+                            "status":      "upcoming",
+                        })
+
+                    # Priced IPOs — data["priced"]["rows"]
+                    priced_rows = data.get("priced", {}).get("rows") or []
+                    for row in priced_rows:
+                        sym = (row.get("proposedTickerSymbol") or "").strip()
+                        if not sym or sym in seen:
+                            continue
+                        seen.add(sym)
+                        raw_date = row.get("pricedDate") or ""
+                        try:
+                            dt = datetime.strptime(raw_date, "%m/%d/%Y").date()
+                            iso_date = str(dt)
+                        except Exception:
+                            iso_date = raw_date
+                        results.append({
+                            "company":     row.get("companyName") or sym,
+                            "symbol":      sym,
+                            "date":        iso_date,
+                            "price_range": row.get("proposedSharePrice") or "TBD",
+                            "exchange":    row.get("proposedExchange") or "—",
+                            "shares":      row.get("sharesOffered") or "",
+                            "status":      "priced",
+                        })
+
                 except Exception as me:
                     logger.warning(f"Nasdaq IPO month {date_str} failed: {me}")
     except Exception as e:
         logger.warning(f"IPO calendar fetch failed: {e}", exc_info=True)
 
-    # Sort upcoming first by date, then recent by date desc
     results.sort(key=lambda x: (x["status"] != "upcoming", x.get("date", "")))
     return results
 
 
-# ── Insider transactions — OpenInsider (aggregates SEC Form 4, no key) ───────
+# ── Insider transactions — SEC EDGAR Form 4 (official SEC data, no key) ──────
 
-_OPENINSIDER_URL = "https://openinsider.com/screener"
-_OPENINSIDER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 BMGCapital/1.0",
-    "Accept": "text/html,application/xhtml+xml",
+_EDGAR_HEADERS = {
+    "User-Agent": "BMGCapital research@bmgcapital.com",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept": "text/html,application/xml,application/json",
 }
 
-# Trade type codes → buy/sell
-_TX_MAP = {
-    "P": "buy",   # Purchase
-    "S": "sell",  # Sale
-    "S-": "sell", # Sale (planned)
-    "S+": "sell", # Sale (auto)
-}
-
-
-def _parse_number(s: str) -> int:
-    """'1,234,567' → 1234567"""
-    try:
-        return int(s.replace(",", "").replace("+", "").strip())
-    except Exception:
-        return 0
-
-
-def _parse_value(s: str) -> int:
-    """'$1.2M' or '$123,456' → int dollars"""
-    try:
-        s = s.strip().lstrip("$").replace(",", "")
-        if s.endswith("M"):
-            return int(float(s[:-1]) * 1_000_000)
-        if s.endswith("K"):
-            return int(float(s[:-1]) * 1_000)
-        if s.endswith("B"):
-            return int(float(s[:-1]) * 1_000_000_000)
-        return int(float(s))
-    except Exception:
-        return 0
+# 5-minute in-memory cache
+_insider_cache: Tuple[Optional[datetime], List[Dict[str, Any]]] = (None, [])
 
 
 async def get_insider_trades(limit: int = 50) -> List[Dict[str, Any]]:
+    """
+    Fetch recent insider P (purchase) and S (sale) transactions from SEC EDGAR
+    Form 4 filings via the EDGAR EFTS search API + direct XML parsing.
+    Cache: 5 minutes.
+    """
+    global _insider_cache
+    cached_at, cached_data = _insider_cache
+    if cached_at and (datetime.utcnow() - cached_at).total_seconds() < 300:
+        return cached_data
+
+    today = datetime.utcnow().date()
+    start_date = (today - timedelta(days=30)).isoformat()
+    results: List[Dict[str, Any]] = []
+    sem = asyncio.Semaphore(10)
+
     try:
-        from bs4 import BeautifulSoup
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=8.0, headers=_EDGAR_HEADERS) as client:
+            # Step 1: Fetch recent Form 4 filings from EDGAR EFTS search
             resp = await client.get(
-                _OPENINSIDER_URL,
+                "https://efts.sec.gov/LATEST/search-index",
                 params={
-                    "form": "4",
-                    "cnt": str(min(limit, 100)),
-                    "Action": "1",
-                    # Filter: purchases + sales, min value $50k
-                    "vl": "50",
-                    "xp": "1",
-                    "xs": "1",
+                    "forms": "4",
+                    "dateRange": "custom",
+                    "startdt": start_date,
+                    "enddt": today.isoformat(),
                 },
-                headers=_OPENINSIDER_HEADERS,
             )
             resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        table = soup.find("table", {"class": "tinytable"})
-        if not table:
-            raise ValueError("OpenInsider table not found")
+            hits = resp.json().get("hits", {}).get("hits", [])[:100]
 
-        rows = table.find("tbody").find_all("tr")  # type: ignore[union-attr]
-        results: List[Dict[str, Any]] = []
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 12:
-                continue
-            # Columns (0-indexed): 0=X, 1=Filing Date, 2=Trade Date, 3=Ticker,
-            # 4=Company, 5=Insider Name, 6=Title, 7=Trade Type, 8=Price,
-            # 9=Qty, 10=Owned, 11=ΔOwn%, 12=Value
-            ticker = cols[3].get_text(strip=True)
-            company = cols[4].get_text(strip=True)
-            insider = cols[5].get_text(strip=True)
-            title = cols[6].get_text(strip=True)
-            tx_code = cols[7].get_text(strip=True).split()[0] if cols[7].get_text(strip=True) else ""
-            trade_date = cols[2].get_text(strip=True)
-            qty = _parse_number(cols[9].get_text(strip=True))
-            value = _parse_value(cols[12].get_text(strip=True)) if len(cols) > 12 else 0
+            async def process_filing(hit: Dict[str, Any]) -> List[Dict[str, Any]]:
+                src = hit.get("_source", {})
+                adsh = src.get("adsh", "")
+                ciks = src.get("ciks", [])
+                if not adsh or not ciks:
+                    return []
 
-            ttype = _TX_MAP.get(tx_code)
-            if not ttype or not ticker or qty == 0:
-                continue
+                # First CIK is the reporting person (filer); use without leading zeros
+                filer_cik = ciks[0].lstrip("0") or ciks[0]
+                adsh_no_dash = adsh.replace("-", "")
 
-            # Normalise date YYYY-MM-DD
-            try:
-                dt = datetime.strptime(trade_date, "%Y-%m-%d").date()
-                iso_date = str(dt)
-            except Exception:
-                iso_date = trade_date
+                async with sem:
+                    try:
+                        # Fetch the filing index page (listed under filer's CIK)
+                        idx_url = (
+                            f"https://www.sec.gov/Archives/edgar/data"
+                            f"/{filer_cik}/{adsh_no_dash}/{adsh}-index.htm"
+                        )
+                        idx_resp = await client.get(idx_url, timeout=5.0)
+                        if idx_resp.status_code != 200:
+                            return []
 
-            results.append({
-                "symbol":      ticker,
-                "company":     company,
-                "name":        insider,
-                "title":       title,
-                "transaction": ttype,
-                "shares":      qty,
-                "value":       value,
-                "date":        iso_date,
-            })
-            if len(results) >= limit:
-                break
-        return results
+                        # Extract the raw XML link (skip xslF345X06 styled version)
+                        xml_links = re.findall(
+                            r'href="(/Archives/edgar/data/[^"]+\.xml)"',
+                            idx_resp.text,
+                        )
+                        raw_links = [l for l in xml_links if "xslF345X06" not in l]
+                        if not raw_links:
+                            return []
+
+                        # Fetch the Form 4 XML
+                        xml_resp = await client.get(
+                            f"https://www.sec.gov{raw_links[0]}", timeout=5.0
+                        )
+                        if xml_resp.status_code != 200:
+                            return []
+
+                        root = ET.fromstring(xml_resp.text)
+
+                        # Issuer info
+                        ticker_el  = root.find("issuer/issuerTradingSymbol")
+                        company_el = root.find("issuer/issuerName")
+                        ticker  = (ticker_el.text  or "").strip() if ticker_el  is not None else ""
+                        company = (company_el.text or "").strip() if company_el is not None else ""
+                        if not ticker:
+                            return []
+
+                        # Reporting owner info
+                        owner_el = root.find("reportingOwner")
+                        insider, title = "", ""
+                        if owner_el is not None:
+                            n = owner_el.find("reportingOwnerId/rptOwnerName")
+                            t = owner_el.find("reportingOwnerRelationship/officerTitle")
+                            insider = (n.text or "").strip() if n is not None else ""
+                            title   = (t.text or "").strip() if t is not None else ""
+
+                        # Non-derivative transactions: P = purchase, S = sale only
+                        txs: List[Dict[str, Any]] = []
+                        table = root.find("nonDerivativeTable")
+                        if table:
+                            for tx in table.findall("nonDerivativeTransaction"):
+                                code_el   = tx.find("transactionCoding/transactionCode")
+                                shares_el = tx.find("transactionAmounts/transactionShares/value")
+                                price_el  = tx.find("transactionAmounts/transactionPricePerShare/value")
+                                date_el   = tx.find("transactionDate/value")
+
+                                code = (code_el.text or "").strip() if code_el is not None else ""
+                                if code not in ("P", "S"):
+                                    continue
+                                try:
+                                    shares    = abs(float((shares_el.text or "0").replace(",", ""))) if shares_el is not None else 0.0
+                                    price_per = float((price_el.text or "0").replace(",", ""))       if price_el  is not None else 0.0
+                                except Exception:
+                                    continue
+                                if shares < 1:
+                                    continue
+                                value = round(shares * price_per)
+                                if value < 5_000:
+                                    continue
+                                tx_date = (date_el.text or "").strip() if date_el is not None else src.get("file_date", "")
+                                txs.append({
+                                    "symbol":      ticker,
+                                    "company":     company,
+                                    "name":        insider,
+                                    "title":       title,
+                                    "transaction": "buy" if code == "P" else "sell",
+                                    "shares":      int(shares),
+                                    "value":       value,
+                                    "date":        tx_date,
+                                })
+                        return txs
+
+                    except Exception as e:
+                        logger.debug(f"Filing {adsh}: {e}")
+                        return []
+
+            # Process all filings concurrently (semaphore limits to 10 at a time)
+            tasks = [process_filing(h) for h in hits]
+            gathered = await asyncio.gather(*tasks, return_exceptions=True)
+            for item in gathered:
+                if isinstance(item, list):
+                    results.extend(item)
+
     except Exception as e:
-        logger.warning(f"OpenInsider scrape failed: {e}", exc_info=True)
-        return []
+        logger.warning(f"SEC EDGAR insider trades failed: {e}", exc_info=True)
+
+    # Buys first, then by value descending
+    results.sort(key=lambda x: (x["transaction"] != "buy", -x["value"]))
+    results = results[:limit]
+
+    _insider_cache = (datetime.utcnow(), results)
+    return results

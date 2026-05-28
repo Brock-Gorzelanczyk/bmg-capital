@@ -1177,7 +1177,6 @@ const EXIT_BADGE: Record<string, { label: string; cls: string }> = {
 function CryptoStrategyPanel() {
   const qc = useQueryClient();
   const [running, setRunning] = useState(false);
-  const [runCountdown, setRunCountdown] = useState<number | null>(null);
   const [stratTab, setStratTab] = useState<"open" | "watch" | "closed">("open");
 
   const { data: tradesData } = useQuery({
@@ -1204,33 +1203,28 @@ function CryptoStrategyPanel() {
   const handleRunNow = async () => {
     setRunning(true);
     try {
-      await runCryptoStrategyNow();
-      // Count down while the background task runs (~20s for 28 coins × all strategies)
-      let secs = 20;
-      setRunCountdown(secs);
-      await new Promise<void>((resolve) => {
-        const iv = setInterval(() => {
-          secs -= 1;
-          if (secs <= 0) {
-            clearInterval(iv);
-            setRunCountdown(null);
-            resolve();
-          } else {
-            setRunCountdown(secs);
-          }
-        }, 1000);
-      });
+      const result = await runCryptoStrategyNow();
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] }),
         qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] }),
         qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] }),
       ]);
-      toast.success("Screening complete — check Watching tab for candidates");
+      const entries   = result?.entries       ?? 0;
+      const newCands  = result?.new_candidates ?? 0;
+      const scanned   = result?.coins_scanned  ?? 0;
+      if (entries > 0) {
+        setStratTab("open");
+        toast.success(`Screening done — ${entries} new position${entries !== 1 ? "s" : ""} opened (${scanned} coins scanned)`);
+      } else if (newCands > 0) {
+        setStratTab("watch");
+        toast.success(`Screening done — ${newCands} candidate${newCands !== 1 ? "s" : ""} added to Watching`);
+      } else {
+        toast.success(`Screening done — no new signals (${scanned} coins scanned)`);
+      }
     } catch {
-      toast.error("Run failed");
+      toast.error("Screening failed — check connection");
     } finally {
       setRunning(false);
-      setRunCountdown(null);
     }
   };
 
@@ -1267,7 +1261,7 @@ function CryptoStrategyPanel() {
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--accent-positive)] text-black font-semibold hover:opacity-90 disabled:opacity-50 transition-all cursor-pointer"
         >
           <RotateCw size={11} className={running ? "animate-spin" : ""} />
-          {runCountdown !== null ? `Screening… ${runCountdown}s` : running ? "Starting…" : "Run Now"}
+          {running ? "Screening…" : "Run Now"}
         </button>
       </div>
 

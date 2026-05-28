@@ -13,7 +13,7 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -271,12 +271,11 @@ async def get_crypto_equity(
 
 @router.post("/run-now")
 async def run_crypto_now(
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
-    """Trigger an immediate crypto automation run in the background."""
-    background_tasks.add_task(run_crypto_automation, user_id=current_user.id)
-    return {"queued": True, "message": "Crypto automation run queued"}
+    """Run crypto automation synchronously and return the result."""
+    result = await run_crypto_automation(user_id=current_user.id)
+    return {"done": True, **result}
 
 
 @router.get("/quiz-status")
