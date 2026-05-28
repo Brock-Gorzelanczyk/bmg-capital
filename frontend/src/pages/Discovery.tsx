@@ -232,10 +232,7 @@ function IPOsTab() {
 
   return (
     <div className="space-y-3">
-      <p className="text-[var(--text-tertiary)] text-sm">
-        Upcoming and recent IPOs.{" "}
-        {!ipos.length ? "" : <span className="text-[var(--text-tertiary)]">Showing demo data — add FMP API key for live listings.</span>}
-      </p>
+      <p className="text-[var(--text-tertiary)] text-sm">Upcoming and recent IPOs via Nasdaq.</p>
       {isLoading ? (
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => (
@@ -301,10 +298,7 @@ function InsidersTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[var(--text-tertiary)] text-sm">
-          Recent Form 4 filings.{" "}
-          <span className="text-[var(--text-tertiary)]">Showing demo data — add FMP API key for live filings.</span>
-        </p>
+        <p className="text-[var(--text-tertiary)] text-sm">Recent Form 4 filings via OpenInsider (SEC data).</p>
         <div className="flex items-center gap-1 bg-[var(--bg-elevated-2)] p-0.5 rounded-lg">
           {(["all", "buy", "sell"] as const).map((f) => (
             <button
