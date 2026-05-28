@@ -45,6 +45,12 @@ CRYPTO_CONVICTION: dict[str, float] = {
     "altseason_index":          1.0,
     "eth_btc_ratio":            1.1,
     "narrative_basket":         0.9,
+    # Phase 2 on-chain
+    "nupl_signal":              1.3,   # macro accumulation — high conviction
+    "mvrv_zscore":              1.4,   # historically very reliable BTC bottom signal
+    "sopr_reversal":            1.2,   # SOPR cost-basis bounce
+    "exchange_netflow":         1.1,   # OI-proxy signal
+    "stablecoin_ratio":         1.0,   # SSR dry-powder signal
 }
 
 # Per-preset R-multiple override (target = entry + atr * 1.5 * R)
@@ -59,6 +65,12 @@ CRYPTO_R_MULTIPLES: dict[str, float] = {
     "rsi_oversold_crypto":      2.0,
     "oversold_bounce":          2.0,
     "dca_accumulation":         2.5,
+    # Phase 2 on-chain — macro signals, hold longer
+    "nupl_signal":              4.0,
+    "mvrv_zscore":              5.0,
+    "sopr_reversal":            3.0,
+    "exchange_netflow":         3.0,
+    "stablecoin_ratio":         3.5,
 }
 
 
@@ -277,6 +289,79 @@ def _narrative_confirm(symbol: str, df: pd.DataFrame) -> bool:
     return current > ma20 and 30 <= rsi_val <= 80
 
 
+# ── Phase 2 on-chain triggers (5) ─────────────────────────────────────────────
+
+def _nupl_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """NUPL below 0.5 (fear/hope zone) and price above 50-day MA."""
+    from app.services.onchain import get_btc_onchain_metrics
+    try:
+        m = get_btc_onchain_metrics()
+        if not m.get("ok"):
+            return False
+        nupl = m.get("nupl", 0.5)
+        if nupl >= 0.5:
+            return False
+        if len(df) >= 51:
+            return float(df["close"].iloc[-1]) > float(df["close"].rolling(50).mean().iloc[-1])
+        return True
+    except Exception:
+        return False
+
+
+def _mvrv_zscore_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """MVRV Z-score below 2 and beginning to rise (not in bubble territory)."""
+    from app.services.onchain import get_btc_onchain_metrics
+    try:
+        m = get_btc_onchain_metrics()
+        if not m.get("ok"):
+            return False
+        return m.get("mvrv_zscore", 0.0) < 2.0
+    except Exception:
+        return False
+
+
+def _sopr_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """SOPR proxy near/below 1.0 — coins moving at or below cost basis (capitulation)."""
+    from app.services.onchain import get_btc_onchain_metrics
+    try:
+        m = get_btc_onchain_metrics()
+        if not m.get("ok"):
+            return False
+        sopr = m.get("sopr_proxy", 1.0)
+        # 0.85–1.02: at or near the "refusal to sell at a loss" support level
+        return 0.85 <= sopr <= 1.02
+    except Exception:
+        return False
+
+
+def _netflow_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """Open interest declining — positions unwinding / spot accumulation signal."""
+    from app.services.onchain import get_exchange_netflow_proxy
+    try:
+        d = get_exchange_netflow_proxy()
+        if not d.get("ok"):
+            return False
+        return d.get("signal") == "outflow"
+    except Exception:
+        return False
+
+
+def _ssr_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """SSR in low zone (dry-powder pool) and price above 20-day MA."""
+    from app.services.onchain import get_stablecoin_supply_ratio
+    try:
+        d = get_stablecoin_supply_ratio()
+        if not d.get("ok"):
+            return False
+        if d.get("signal") != "low":
+            return False
+        if len(df) >= 21:
+            return float(df["close"].iloc[-1]) > float(df["close"].rolling(20).mean().iloc[-1])
+        return True
+    except Exception:
+        return False
+
+
 # ── Trigger map ────────────────────────────────────────────────────────────────
 
 TriggerFn = Callable[[str, pd.DataFrame], bool]
@@ -303,4 +388,10 @@ CRYPTO_TRIGGER_MAP: dict[str, TriggerFn] = {
     "altseason_index":          _altseason_confirm,
     "eth_btc_ratio":            _eth_btc_confirm,
     "narrative_basket":         _narrative_confirm,
+    # Phase 2 on-chain
+    "nupl_signal":              _nupl_confirm,
+    "mvrv_zscore":              _mvrv_zscore_confirm,
+    "sopr_reversal":            _sopr_confirm,
+    "exchange_netflow":         _netflow_confirm,
+    "stablecoin_ratio":         _ssr_confirm,
 }

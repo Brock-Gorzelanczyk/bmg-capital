@@ -265,6 +265,59 @@ def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict]) -> bool:
                 if not active:
                     return False
 
+            # ── Phase 2 on-chain filter types ─────────────────────────────────
+
+            elif ftype == "OnChainNUPL":
+                from app.services.onchain import get_btc_onchain_metrics
+                metrics = get_btc_onchain_metrics()
+                if not metrics.get("ok"):
+                    return False
+                nupl = metrics.get("nupl", 0.5)
+                if op == "lt"  and not nupl < val:  return False
+                if op == "gt"  and not nupl > val:  return False
+                if op == "lte" and not nupl <= val: return False
+                if op == "gte" and not nupl >= val: return False
+
+            elif ftype == "OnChainMVRV":
+                from app.services.onchain import get_btc_onchain_metrics
+                metrics = get_btc_onchain_metrics()
+                if not metrics.get("ok"):
+                    return False
+                z     = metrics.get("mvrv_zscore", 0.0)
+                z_op  = spec.get("zscore_operator", "lt")
+                z_val = float(spec.get("zscore_value", 2.0))
+                if z_op == "lt"  and not z < z_val:  return False
+                if z_op == "gt"  and not z > z_val:  return False
+                if z_op == "lte" and not z <= z_val: return False
+                if z_op == "gte" and not z >= z_val: return False
+
+            elif ftype == "OnChainSOPR":
+                from app.services.onchain import get_btc_onchain_metrics
+                metrics  = get_btc_onchain_metrics()
+                if not metrics.get("ok"):
+                    return False
+                sopr  = metrics.get("sopr_proxy", 1.0)
+                min_v = float(spec.get("min_value", 0.0))
+                max_v = float(spec.get("max_value", 2.0))
+                if not (min_v <= sopr <= max_v):
+                    return False
+
+            elif ftype == "OnChainNetflow":
+                from app.services.onchain import get_exchange_netflow_proxy
+                data = get_exchange_netflow_proxy()
+                if not data.get("ok"):
+                    return False
+                if data.get("signal") != spec.get("signal", "outflow"):
+                    return False
+
+            elif ftype == "OnChainSSR":
+                from app.services.onchain import get_stablecoin_supply_ratio
+                data = get_stablecoin_supply_ratio()
+                if not data.get("ok"):
+                    return False
+                if data.get("signal") != spec.get("signal", "low"):
+                    return False
+
         except Exception as e:
             logger.debug(f"Filter error ({ftype}): {e}")
             return False
@@ -660,10 +713,19 @@ def _snapshot_crypto_equity(
 # Main entry point
 # ---------------------------------------------------------------------------
 
+def _prefetch_onchain() -> None:
+    """Warm on-chain caches before the screening loop to avoid per-symbol API calls."""
+    from app.services.onchain import prefetch_all
+    prefetch_all()
+
+
 async def run_crypto_automation(user_id: int) -> Dict[str, Any]:
     logger.info(f"[crypto] Starting automation for user {user_id}")
     loop = asyncio.get_running_loop()
     today = date.today()
+
+    # Pre-warm on-chain caches (1-hour TTL; no-ops if cache is fresh)
+    await loop.run_in_executor(None, _prefetch_onchain)
 
     # Fetch bars for all coins in universe
     bars = await loop.run_in_executor(None, lambda: _fetch_crypto_bars(CRYPTO_UNIVERSE))

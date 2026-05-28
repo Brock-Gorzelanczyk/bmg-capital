@@ -74,6 +74,28 @@ CRYPTO_PRESET_SCREENS: dict[str, list[dict[str, Any]]] = {
         # Active only during pre-halving (≤6 months out) or post-halving bull (≤18 months in)
         {"type": "HalvingPhase", "phases": ["pre_halving", "post_halving_bull"]},
     ],
+
+    # ── Phase 2 on-chain strategies (5) ───────────────────────────────────────
+    "nupl_signal": [
+        # NUPL below 0.5 = fear/capitulation/early-hope zone (not euphoria)
+        {"type": "OnChainNUPL", "operator": "lt", "value": 0.5},
+    ],
+    "mvrv_zscore": [
+        # MVRV Z-score below 2.0 = not yet in bubble territory
+        {"type": "OnChainMVRV", "zscore_operator": "lt", "zscore_value": 2.0},
+    ],
+    "sopr_reversal": [
+        # SOPR proxy 0.85–1.02 = coins moving near/below cost basis (capitulation support)
+        {"type": "OnChainSOPR", "min_value": 0.85, "max_value": 1.02},
+    ],
+    "exchange_netflow": [
+        # Declining open interest = position unwinding / spot accumulation signal
+        {"type": "OnChainNetflow", "signal": "outflow"},
+    ],
+    "stablecoin_ratio": [
+        # SSR < 5 = large stablecoin dry-powder pool relative to BTC market cap
+        {"type": "OnChainSSR", "signal": "low"},
+    ],
 }
 
 # Strategies that require comparing all coins at once (handled separately in the runner)
@@ -86,10 +108,16 @@ CRYPTO_CROSS_SECTIONAL_KEYS: list[str] = [
 
 # Per-strategy universe override — only screen these symbols for BTC-only / restricted strategies
 CRYPTO_RESTRICTED_UNIVERSES: dict[str, list[str]] = {
-    "btc_ma_crossover": ["BTC/USDT"],
-    "pi_cycle_top":     ["BTC/USDT"],
-    "ma_200w":          ["BTC/USDT"],
-    "halving_phase":    ["BTC/USDT", "ETH/USDT"],
+    "btc_ma_crossover":  ["BTC/USDT"],
+    "pi_cycle_top":      ["BTC/USDT"],
+    "ma_200w":           ["BTC/USDT"],
+    "halving_phase":     ["BTC/USDT", "ETH/USDT"],
+    # On-chain: all BTC-focused (MVRV/NUPL/SOPR are BTC metrics)
+    "nupl_signal":       ["BTC/USDT"],
+    "mvrv_zscore":       ["BTC/USDT"],
+    "sopr_reversal":     ["BTC/USDT"],
+    "exchange_netflow":  ["BTC/USDT", "ETH/USDT"],
+    "stablecoin_ratio":  ["BTC/USDT"],
 }
 
 CRYPTO_PRESET_LABELS: dict[str, str] = {
@@ -114,6 +142,12 @@ CRYPTO_PRESET_LABELS: dict[str, str] = {
     "altseason_index":           "Altseason Index",
     "eth_btc_ratio":             "ETH/BTC Rotation",
     "narrative_basket":          "Narrative Basket",
+    # Phase 2 on-chain (5)
+    "nupl_signal":               "NUPL Accumulation",
+    "mvrv_zscore":               "MVRV Z-Score",
+    "sopr_reversal":             "SOPR Reversal",
+    "exchange_netflow":          "Exchange Net Flow",
+    "stablecoin_ratio":          "Stablecoin Supply Ratio",
 }
 
 # Full universe — top coins + narrative/DeFi/AI tokens for basket strategies

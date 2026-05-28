@@ -427,28 +427,31 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
     },
 
     # ── Phase 2: On-Chain Strategies (5) ─────────────────────────────────────
+    # Data sources: CoinMetrics Community API (free), CoinGecko stablecoins, Binance futures OI
     {
         "strategy_key": "nupl_signal",
         "name": "NUPL Accumulation",
         "category": "On-Chain",
         "description": (
-            "Net Unrealized Profit/Loss measures market-wide paper profits and losses. "
-            "When NUPL drops below 0.25 (capitulation zone) and begins recovering, long-term holders "
-            "are accumulating. Above 0.75 (euphoria) is the exit. Glassnode data required."
+            "Net Unrealized Profit/Loss proxied from CoinMetrics Community API (free). "
+            "NUPL = (market cap − realized cap) / market cap. Below 0.5 (fear/hope zone) "
+            "means most holders are NOT in euphoria — historically the safe accumulation window. "
+            "Enter when NUPL < 0.5 and price is above the 50-day MA."
         ),
-        "source_originator": "Glassnode",
-        "version": 1,
-        "tier_required": "pro",
+        "source_originator": "CoinMetrics Community API",
+        "version": 2,
+        "tier_required": "plus",
         "comprehension_quiz_required": False,
-        "required_data_sources": ["glassnode"],
+        "required_data_sources": ["coinmetrics"],
         "default_universe": ["BTC/USDT"],
-        "parameters": {"entry_nupl": 0.25, "exit_nupl": 0.75},
+        "parameters": {"entry_nupl": 0.5, "exit_nupl": 0.75},
         "entry_conditions": [
-            {"type": "on_chain_metric", "metric": "nupl", "condition": "below", "threshold": 0.25},
-            {"type": "on_chain_metric", "metric": "nupl", "condition": "recovering"},
+            {"type": "on_chain_metric", "metric": "nupl", "condition": "below", "threshold": 0.5},
+            {"type": "price_vs_ma", "period": 50, "condition": "above"},
         ],
         "exit_conditions": [
             {"type": "on_chain_metric", "metric": "nupl", "condition": "above", "threshold": 0.75},
+            {"type": "stop_loss", "atr_multiplier": 2.5},
         ],
         "context_conditions": None,
         "structure_type": "simple",
@@ -456,7 +459,7 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "signal_duration_required": None,
         "category_accent_from": "#6366f1",
         "category_accent_to": "#8b5cf6",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 13,
     },
     {
@@ -464,19 +467,20 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "name": "MVRV Z-Score",
         "category": "On-Chain",
         "description": (
-            "Market Value to Realized Value Z-Score compares market cap to the price at which "
-            "every coin last moved on-chain. Z-Score below 0 historically marks major cycle bottoms; "
-            "above 7 marks cycle tops. Glassnode data required."
+            "Market Value to Realized Value Z-Score computed from CoinMetrics Community API (free). "
+            "Z-Score below 0 marks major cycle bottoms; above 7 marks cycle tops. "
+            "Enter when Z-score is below 2 (historically: 0–2 = good entry, <0 = generational bottom). "
+            "One of the most reliable on-chain BTC macro signals."
         ),
-        "source_originator": "Glassnode / Murad Mahmudov",
-        "version": 1,
-        "tier_required": "pro",
+        "source_originator": "CoinMetrics / Murad Mahmudov",
+        "version": 2,
+        "tier_required": "plus",
         "comprehension_quiz_required": False,
-        "required_data_sources": ["glassnode"],
+        "required_data_sources": ["coinmetrics"],
         "default_universe": ["BTC/USDT"],
-        "parameters": {"entry_zscore": 0.0, "exit_zscore": 7.0},
+        "parameters": {"entry_zscore": 2.0, "exit_zscore": 7.0},
         "entry_conditions": [
-            {"type": "on_chain_metric", "metric": "mvrv_zscore", "condition": "below", "threshold": 0.0}
+            {"type": "on_chain_metric", "metric": "mvrv_zscore", "condition": "below", "threshold": 2.0}
         ],
         "exit_conditions": [
             {"type": "on_chain_metric", "metric": "mvrv_zscore", "condition": "above", "threshold": 7.0},
@@ -488,7 +492,7 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "signal_duration_required": None,
         "category_accent_from": "#6366f1",
         "category_accent_to": "#8b5cf6",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 14,
     },
     {
@@ -496,22 +500,23 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "name": "SOPR Reversal",
         "category": "On-Chain",
         "description": (
-            "Spent Output Profit Ratio tracks whether coins moving on-chain are in profit or loss. "
-            "SOPR bouncing off 1.0 support (long-term holder refusal to sell at a loss) signals "
-            "accumulation. Drop below 1.0 followed by recovery is the entry trigger. Glassnode required."
+            "Spent Output Profit Ratio proxy = current price / realized price (from CoinMetrics free). "
+            "When SOPR is near or below 1.0, on-chain coins are moving at a loss — holders refuse to "
+            "sell, forming a cost-basis support floor. Enter when SOPR is in the 0.85–1.02 zone, "
+            "which captures the capitulation-to-recovery window. Exit when SOPR > 1.05."
         ),
-        "source_originator": "Glassnode / Renato Shirakashi",
-        "version": 1,
-        "tier_required": "pro",
+        "source_originator": "CoinMetrics / Renato Shirakashi",
+        "version": 2,
+        "tier_required": "plus",
         "comprehension_quiz_required": False,
-        "required_data_sources": ["glassnode"],
+        "required_data_sources": ["coinmetrics"],
         "default_universe": ["BTC/USDT"],
-        "parameters": {"support_level": 1.0, "recovery_threshold": 0.005},
+        "parameters": {"entry_min": 0.85, "entry_max": 1.02, "exit_above": 1.05},
         "entry_conditions": [
-            {"type": "on_chain_metric", "metric": "sopr", "condition": "bounce_from_support", "support": 1.0}
+            {"type": "on_chain_metric", "metric": "sopr_proxy", "condition": "in_range", "min": 0.85, "max": 1.02}
         ],
         "exit_conditions": [
-            {"type": "on_chain_metric", "metric": "sopr", "condition": "above", "threshold": 1.05},
+            {"type": "on_chain_metric", "metric": "sopr_proxy", "condition": "above", "threshold": 1.05},
             {"type": "stop_loss", "atr_multiplier": 2.5},
         ],
         "context_conditions": None,
@@ -520,7 +525,7 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "signal_duration_required": None,
         "category_accent_from": "#6366f1",
         "category_accent_to": "#8b5cf6",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 15,
     },
     {
@@ -528,26 +533,23 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "name": "Exchange Net Flow",
         "category": "On-Chain",
         "description": (
-            "Track BTC and ETH net flows to/from exchanges. Sustained outflows (coins moving to "
-            "cold storage) signal whale accumulation and reduced sell pressure. Inflows signal "
-            "distribution. CryptoQuant data required. Best on 7-day rolling net flow."
+            "Uses Binance perpetual futures open interest history as a free netflow proxy. "
+            "Declining open interest (−5% over 7 days) signals longs/shorts unwinding and coins "
+            "potentially moving to cold storage — a reduction in sell pressure. "
+            "No CryptoQuant API key required: Binance /futures/data/openInterestHist is public."
         ),
-        "source_originator": "CryptoQuant",
-        "version": 1,
-        "tier_required": "pro",
+        "source_originator": "Binance Futures OI (free)",
+        "version": 2,
+        "tier_required": "plus",
         "comprehension_quiz_required": False,
-        "required_data_sources": ["cryptoquant"],
+        "required_data_sources": ["binance_futures"],
         "default_universe": ["BTC/USDT", "ETH/USDT"],
-        "parameters": {
-            "lookback_days": 7,
-            "outflow_threshold_btc": -5000,
-            "outflow_threshold_eth": -50000,
-        },
+        "parameters": {"oi_change_threshold_pct": -5, "lookback_days": 7},
         "entry_conditions": [
-            {"type": "on_chain_metric", "metric": "exchange_netflow_7d", "condition": "below", "threshold": -5000}
+            {"type": "oi_change_7d", "condition": "below_pct", "threshold": -5}
         ],
         "exit_conditions": [
-            {"type": "on_chain_metric", "metric": "exchange_netflow_7d", "condition": "above", "threshold": 0},
+            {"type": "oi_change_7d", "condition": "above_pct", "threshold": 5},
             {"type": "stop_loss", "atr_multiplier": 2.5},
         ],
         "context_conditions": None,
@@ -556,7 +558,7 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "signal_duration_required": None,
         "category_accent_from": "#6366f1",
         "category_accent_to": "#8b5cf6",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 16,
     },
     {
@@ -564,22 +566,24 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "name": "Stablecoin Supply Ratio",
         "category": "On-Chain",
         "description": (
-            "SSR = Bitcoin market cap / stablecoin supply. Low SSR means there is a large pool "
-            "of stablecoins relative to BTC market cap — a lot of dry powder available to buy. "
-            "When SSR drops below the 30-day average, buying pressure is building. CryptoQuant required."
+            "SSR = Bitcoin market cap / total stablecoin market cap (CoinGecko free tier). "
+            "SSR < 5 means a large pool of stablecoins exists relative to BTC market cap — "
+            "potential buying pressure waiting to enter. Enter when SSR is in the 'low' zone "
+            "and BTC is above its 20-day MA. No API key required."
         ),
-        "source_originator": "CryptoQuant",
-        "version": 1,
-        "tier_required": "pro",
+        "source_originator": "CoinGecko (free)",
+        "version": 2,
+        "tier_required": "plus",
         "comprehension_quiz_required": False,
-        "required_data_sources": ["cryptoquant"],
+        "required_data_sources": ["coingecko"],
         "default_universe": ["BTC/USDT"],
-        "parameters": {"lookback_days": 30, "entry_pct_below_avg": 10},
+        "parameters": {"entry_ssr_max": 5.0, "exit_ssr_min": 15.0},
         "entry_conditions": [
-            {"type": "on_chain_metric", "metric": "ssr", "condition": "pct_below_avg", "period": 30, "pct": 10}
+            {"type": "ssr", "condition": "below", "threshold": 5.0},
+            {"type": "price_vs_ma", "period": 20, "condition": "above"},
         ],
         "exit_conditions": [
-            {"type": "on_chain_metric", "metric": "ssr", "condition": "above_avg", "period": 30},
+            {"type": "ssr", "condition": "above", "threshold": 15.0},
             {"type": "stop_loss", "atr_multiplier": 2.0},
         ],
         "context_conditions": None,
@@ -588,7 +592,7 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "signal_duration_required": None,
         "category_accent_from": "#6366f1",
         "category_accent_to": "#8b5cf6",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 17,
     },
 
