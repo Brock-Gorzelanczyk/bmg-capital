@@ -1177,6 +1177,7 @@ const EXIT_BADGE: Record<string, { label: string; cls: string }> = {
 function CryptoStrategyPanel() {
   const qc = useQueryClient();
   const [running, setRunning] = useState(false);
+  const [runCountdown, setRunCountdown] = useState<number | null>(null);
   const [stratTab, setStratTab] = useState<"open" | "watch" | "closed">("open");
 
   const { data: tradesData } = useQuery({
@@ -1204,16 +1205,32 @@ function CryptoStrategyPanel() {
     setRunning(true);
     try {
       await runCryptoStrategyNow();
+      // Count down while the background task runs (~20s for 28 coins × all strategies)
+      let secs = 20;
+      setRunCountdown(secs);
+      await new Promise<void>((resolve) => {
+        const iv = setInterval(() => {
+          secs -= 1;
+          if (secs <= 0) {
+            clearInterval(iv);
+            setRunCountdown(null);
+            resolve();
+          } else {
+            setRunCountdown(secs);
+          }
+        }, 1000);
+      });
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] }),
         qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] }),
         qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] }),
       ]);
-      toast.success("Crypto automation run queued");
+      toast.success("Screening complete — check Watching tab for candidates");
     } catch {
       toast.error("Run failed");
     } finally {
       setRunning(false);
+      setRunCountdown(null);
     }
   };
 
@@ -1250,7 +1267,7 @@ function CryptoStrategyPanel() {
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--accent-positive)] text-black font-semibold hover:opacity-90 disabled:opacity-50 transition-all cursor-pointer"
         >
           <RotateCw size={11} className={running ? "animate-spin" : ""} />
-          Run Now
+          {runCountdown !== null ? `Screening… ${runCountdown}s` : running ? "Starting…" : "Run Now"}
         </button>
       </div>
 

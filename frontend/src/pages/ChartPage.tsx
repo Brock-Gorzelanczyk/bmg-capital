@@ -109,7 +109,7 @@ const PRESET_INDICATOR_MAP: Record<string, string[]> = {
   oversold_bounce:          ["RSI_14"],
   golden_zone_retrace:      ["SMA_50", "SMA_200", "RSI_14"],
   pi_cycle_top:             ["SMA_50", "SMA_200"],
-  donchian_breakout:        ["DONCHIAN_upper", "DONCHIAN_mid", "DONCHIAN_lower"],
+  donchian_breakout:        ["DONCHIAN"],
   tsmom:                    ["SMA_50", "SMA_200"],
   ma_200w:                  ["SMA_200"],
   zscore_reversal:          ["BB_20", "RSI_14"],
@@ -163,7 +163,15 @@ export default function ChartPage() {
   const [symbol, setSymbol] = useState(() => searchParams.get("symbol") ?? getStoredSymbol());
   const [period, setPeriod] = useState<Period>("1Y");
   const [chartType, setChartType] = useState<ChartType>("candle");
-  const [activeIndicators, setActiveIndicators] = useState<Set<string>>(new Set(["SMA_20", "SMA_50"]));
+  // Initialize with preset indicators immediately so the first useBars call includes them
+  const [activeIndicators, setActiveIndicators] = useState<Set<string>>(() => {
+    const base = new Set<string>(["SMA_20", "SMA_50"]);
+    const preset = searchParams.get("preset");
+    if (preset) {
+      for (const ind of PRESET_INDICATOR_MAP[preset] ?? []) base.add(ind);
+    }
+    return base;
+  });
   const [activeTool, setActiveTool] = useState<DrawingTool>("cursor");
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [pendingTrendStart, setPendingTrendStart] = useState<{ time: number; price: number } | null>(null);
