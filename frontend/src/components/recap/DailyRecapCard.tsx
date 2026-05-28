@@ -46,11 +46,15 @@ function formatRecapDate(dateStr: string | undefined | null): string {
 export default function DailyRecapCard({ recap, defaultExpanded = false }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
-  const mkt: { spy?: number | null; qqq?: number | null; iwm?: number | null; vix?: number | null; breadth?: string | null } = recap.market_summary ?? {};
-  const strat = recap.strategy_summary ?? { day_pnl: 0, day_pnl_pct: 0, new_entries: 0, exits: 0, open_positions: 0 };
+  const spy    = recap.market_summary?.spy    ?? null;
+  const qqq    = recap.market_summary?.qqq    ?? null;
+  const iwm    = recap.market_summary?.iwm    ?? null;
+  const vix    = recap.market_summary?.vix    ?? null;
+  const breadth = recap.market_summary?.breadth ?? null;
+  const strat  = recap.strategy_summary ?? { day_pnl: 0, day_pnl_pct: 0, new_entries: 0, exits: 0, open_positions: 0 };
   const top_setups = recap.top_setups ?? [];
-  const narrative = recap.narrative ?? null;
-  const dayPnlPos = strat.day_pnl >= 0;
+  const narrative  = recap.narrative   ?? null;
+  const dayPnlPos  = strat.day_pnl >= 0;
 
   return (
     <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
@@ -68,19 +72,19 @@ export default function DailyRecapCard({ recap, defaultExpanded = false }: Props
         {/* Market tickers */}
         <div className="hidden sm:flex items-center gap-3 text-xs font-mono flex-1">
           <span className="text-[#475569]">|</span>
-          {mkt.spy != null && (
-            <span className={cn("font-semibold", pctColor(mkt.spy))}>
-              SPY {fmtPct(mkt.spy)}
+          {spy != null && (
+            <span className={cn("font-semibold", pctColor(spy))}>
+              SPY {fmtPct(spy)}
             </span>
           )}
-          {mkt.qqq != null && (
-            <span className={cn("font-semibold", pctColor(mkt.qqq))}>
-              QQQ {fmtPct(mkt.qqq)}
+          {qqq != null && (
+            <span className={cn("font-semibold", pctColor(qqq))}>
+              QQQ {fmtPct(qqq)}
             </span>
           )}
-          {mkt.iwm != null && (
-            <span className={cn("font-semibold hidden md:inline", pctColor(mkt.iwm))}>
-              IWM {fmtPct(mkt.iwm)}
+          {iwm != null && (
+            <span className={cn("font-semibold hidden md:inline", pctColor(iwm))}>
+              IWM {fmtPct(iwm)}
             </span>
           )}
           <span className="text-[#475569]">|</span>
@@ -107,29 +111,29 @@ export default function DailyRecapCard({ recap, defaultExpanded = false }: Props
             <div className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest mb-2">Market</div>
             <div className="flex flex-wrap gap-2">
               {([
-                { label: "SPY", val: mkt.spy },
-                { label: "QQQ", val: mkt.qqq },
-                { label: "IWM", val: mkt.iwm },
+                { label: "SPY", val: spy },
+                { label: "QQQ", val: qqq },
+                { label: "IWM", val: iwm },
               ] as { label: string; val: number | null }[]).map(({ label, val }) => (
                 <div key={label} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-semibold", pctBadgeCls(val))}>
                   <span className="text-[#94A3B8] font-medium">{label}</span>
                   <span>{fmtPct(val)}</span>
                 </div>
               ))}
-              {mkt.vix != null && (
+              {vix != null && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-[#1E293B] text-[#94A3B8]">
                   <span className="text-[#475569]">VIX</span>
-                  <span>{mkt.vix.toFixed(1)}</span>
+                  <span>{vix.toFixed(1)}</span>
                 </div>
               )}
-              {mkt.breadth && (
+              {breadth && (
                 <div className={cn(
                   "flex items-center px-2.5 py-1 rounded-lg text-xs font-medium",
-                  mkt.breadth === "advancing" ? "bg-[#22C55E]/10 text-[#22C55E]"
-                    : mkt.breadth === "declining" ? "bg-[#EF4444]/10 text-[#EF4444]"
+                  breadth === "advancing" ? "bg-[#22C55E]/10 text-[#22C55E]"
+                    : breadth === "declining" ? "bg-[#EF4444]/10 text-[#EF4444]"
                     : "bg-[#F59E0B]/10 text-[#F59E0B]"
                 )}>
-                  {mkt.breadth.charAt(0).toUpperCase() + mkt.breadth.slice(1)}
+                  {breadth.charAt(0).toUpperCase() + breadth.slice(1)}
                 </div>
               )}
             </div>
