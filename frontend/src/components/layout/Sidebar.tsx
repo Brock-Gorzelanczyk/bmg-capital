@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, LineChart, Filter, BookMarked, Briefcase, Bell,
   FlaskConical, LogOut, Newspaper, Calendar, Microscope, PlayCircle, Search,
-  GraduationCap, Layers, Inbox, Compass, BookOpen, Users, Crown, Settings,
+  GraduationCap, Layers, Inbox, Compass, BookOpen, Users, Crown, Settings, Bitcoin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -17,6 +17,7 @@ const NAV_PRIMARY = [
   { to: "/screener", label: "Screener", Icon: Filter },
   { to: "/strategy", label: "Strategy Lab", Icon: FlaskConical },
   { to: "/options", label: "Options Lab", Icon: Layers },
+  { to: "/crypto", label: "Crypto Lab", Icon: Bitcoin },
 ];
 
 const NAV_MARKETS = [

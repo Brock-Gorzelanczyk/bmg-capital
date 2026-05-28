@@ -4,12 +4,12 @@ export interface DailyRecap {
   id: number;
   recap_date: string; // "YYYY-MM-DD"
   market_summary: {
-    spy: number | null; // % change
+    spy: number | null;
     qqq: number | null;
     iwm: number | null;
     vix: number | null;
     breadth: "advancing" | "declining" | "mixed" | null;
-  };
+  } | null;
   strategy_summary: {
     new_entries: number;
     exits: number;
@@ -17,9 +17,9 @@ export interface DailyRecap {
     portfolio_value: number;
     day_pnl: number;
     day_pnl_pct: number;
-  };
-  top_setups: Array<{ symbol: string; preset: string }>;
-  narrative: string;
+  } | null;
+  top_setups: Array<{ symbol: string; preset: string }> | null;
+  narrative: string | null;
   created_at: string;
 }
 

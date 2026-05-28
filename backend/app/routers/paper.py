@@ -270,7 +270,9 @@ class OrderRequest(BaseModel):
     @classmethod
     def validate_symbol(cls, v):
         v = v.upper().strip()
-        if not re.match(r'^[A-Z]{1,5}$', v) and not re.match(r'^[A-Z]{1,4}\.[A-Z]$', v):
+        equity = re.match(r'^[A-Z]{1,5}$', v) or re.match(r'^[A-Z]{1,4}\.[A-Z]$', v)
+        crypto = re.match(r'^[A-Z]{2,10}-USD$', v)
+        if not equity and not crypto:
             raise ValueError("Invalid symbol format")
         return v
 

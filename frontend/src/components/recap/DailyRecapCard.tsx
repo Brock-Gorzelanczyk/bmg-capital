@@ -34,8 +34,8 @@ function pctBadgeCls(n: number | null): string {
     : "bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/20";
 }
 
-function formatRecapDate(dateStr: string): string {
-  // dateStr is "YYYY-MM-DD"
+function formatRecapDate(dateStr: string | undefined | null): string {
+  if (!dateStr) return "—";
   const [year, month, day] = dateStr.split("-").map(Number);
   const d = new Date(year, month - 1, day);
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -46,7 +46,10 @@ function formatRecapDate(dateStr: string): string {
 export default function DailyRecapCard({ recap, defaultExpanded = false }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
-  const { market_summary: mkt, strategy_summary: strat, top_setups, narrative } = recap;
+  const mkt = recap.market_summary ?? {};
+  const strat = recap.strategy_summary ?? { day_pnl: 0, day_pnl_pct: 0, new_entries: 0, exits: 0, open_positions: 0 };
+  const top_setups = recap.top_setups ?? [];
+  const narrative = recap.narrative ?? null;
   const dayPnlPos = strat.day_pnl >= 0;
 
   return (

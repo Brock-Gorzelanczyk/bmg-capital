@@ -20,6 +20,7 @@ import LearnHome from "@/pages/LearnHome";
 import LearnCourse from "@/pages/LearnCourse";
 import LearnLesson from "@/pages/LearnLesson";
 import OptionsLab from "@/pages/OptionsLab";
+import CryptoLab from "@/pages/CryptoLab";
 import NotificationsPage from "@/pages/NotificationsPage";
 import Discovery from "@/pages/Discovery";
 import Onboarding from "@/pages/Onboarding";
@@ -90,6 +91,7 @@ function AppInner() {
         <Route path="/research" element={<Research />} />
         <Route path="/paper" element={<PaperTrading />} />
         <Route path="/options" element={<OptionsLab />} />
+        <Route path="/crypto" element={<CryptoLab />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/discovery" element={<Discovery />} />
         <Route path="/learn" element={<LearnHome />} />

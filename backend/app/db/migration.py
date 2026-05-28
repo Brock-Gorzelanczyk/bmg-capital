@@ -21,7 +21,14 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("updated_at",             "DATETIME"),
     ],
     "paper_transactions": [
-        ("notes", "VARCHAR"),
+        ("notes",       "VARCHAR"),
+        ("asset_class", "VARCHAR"),
+    ],
+    "paper_orders": [
+        ("asset_class", "VARCHAR"),
+    ],
+    "paper_positions": [
+        ("asset_class", "VARCHAR"),
     ],
     "strategy_trades": [
         ("candidate_since",    "DATETIME"),

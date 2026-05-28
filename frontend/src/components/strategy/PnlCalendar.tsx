@@ -194,9 +194,14 @@ export default function PnlCalendar() {
             >
               <span>{day}</span>
               {pnlDay && (
-                <span className="text-[9px] font-mono leading-none mt-0.5 opacity-80">
-                  {pnlDay.day_pnl >= 0 ? "+" : ""}{pnlDay.day_pnl_pct.toFixed(1)}%
-                </span>
+                <>
+                  <span className="text-[9px] font-mono leading-none mt-0.5 opacity-90">
+                    {pnlDay.day_pnl >= 0 ? "+" : "-"}${Math.abs(pnlDay.day_pnl) >= 1000 ? (Math.abs(pnlDay.day_pnl) / 1000).toFixed(1) + "k" : Math.abs(pnlDay.day_pnl).toFixed(0)}
+                  </span>
+                  <span className="text-[8px] font-mono leading-none opacity-70">
+                    {pnlDay.day_pnl_pct >= 0 ? "+" : ""}{pnlDay.day_pnl_pct.toFixed(1)}%
+                  </span>
+                </>
               )}
             </button>
           );
