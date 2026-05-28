@@ -762,19 +762,19 @@ export default function CryptoLab() {
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: market, isLoading: marketLoading } = useQuery({
-    queryKey: ["crypto-market"],
+    queryKey: ["crypto-market-v2"],
     queryFn: getCryptoMarket,
     staleTime: Infinity,
   });
 
   const { data: overview } = useQuery({
-    queryKey: ["crypto-overview"],
+    queryKey: ["crypto-overview-v1"],
     queryFn: getCryptoOverview,
     staleTime: Infinity,
   });
 
   const { data: trending, isLoading: trendingLoading } = useQuery({
-    queryKey: ["crypto-trending"],
+    queryKey: ["crypto-trending-v1"],
     queryFn: getCryptoTrending,
     staleTime: Infinity,
   });
@@ -803,9 +803,9 @@ export default function CryptoLab() {
     setRefreshing(true);
     try {
       await refreshCryptoMarket();
-      await qc.invalidateQueries({ queryKey: ["crypto-market"] });
-      await qc.invalidateQueries({ queryKey: ["crypto-overview"] });
-      await qc.invalidateQueries({ queryKey: ["crypto-trending"] });
+      await qc.invalidateQueries({ queryKey: ["crypto-market-v2"] });
+      await qc.invalidateQueries({ queryKey: ["crypto-overview-v1"] });
+      await qc.invalidateQueries({ queryKey: ["crypto-trending-v1"] });
       setLastRefreshed(Date.now());
     } catch {
       toast.error("Refresh failed");
