@@ -25,6 +25,8 @@ import OptionsLab from "@/pages/OptionsLab";
 import CryptoLab from "@/pages/CryptoLab";
 import NotificationsPage from "@/pages/NotificationsPage";
 import Discovery from "@/pages/Discovery";
+import DeFi from "@/pages/DeFi";
+import Security from "@/pages/Security";
 import Onboarding from "@/pages/Onboarding";
 import JournalPage from "@/pages/JournalPage";
 import Social from "@/pages/Social";
@@ -109,6 +111,8 @@ function AppInner() {
         <Route path="/crypto" element={<CryptoLab />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/discovery" element={<Discovery />} />
+        <Route path="/defi" element={<DeFi />} />
+        <Route path="/security" element={<Security />} />
         <Route path="/learn" element={<LearnHome />} />
         <Route path="/learn/lesson/:lessonId" element={<LearnLesson />} />
         <Route path="/learn/:trackId" element={<LearnCourse />} />

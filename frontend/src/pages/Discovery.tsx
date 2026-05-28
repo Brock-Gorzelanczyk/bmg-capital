@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, TrendingDown, ExternalLink, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, ExternalLink, RefreshCw, AlertTriangle, Vote, Zap, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getThemes, getIPOs, getInsiders, getSectorPerformance } from "@/api/discovery";
-import type { Theme, IPO, InsiderTrade } from "@/api/discovery";
+import { getThemes, getIPOs, getInsiders, getSectorPerformance, getCryptoLaunches, getNarratives, getIdoCalendar, getMemecoins } from "@/api/discovery";
+import { getGovernanceProposals } from "@/api/governance";
+import type { Theme, IPO, InsiderTrade, CryptoLaunch, Narrative, IdoEvent } from "@/api/discovery";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -381,13 +382,231 @@ function InsidersTab() {
   );
 }
 
+// ── Crypto Launches Tab ─────────────────────────────────────────────────────
+
+function fmtLiquidity(n: number) {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
+function CryptoLaunchCard({ token }: { token: CryptoLaunch }) {
+  const pos = token.price_change_24h >= 0;
+  const riskColor = !token.risk_score ? "" : token.risk_score >= 7 ? "border-red-800" : token.risk_score >= 4 ? "border-amber-800" : "border-emerald-800";
+  return (
+    <div className={cn("bg-[var(--bg-elevated-2)] border rounded-xl p-3 flex items-center gap-3", riskColor || "border-[var(--border)]")}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-[var(--text-primary)] font-mono text-sm">{token.symbol}</span>
+          <span className="text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded">{token.chain}</span>
+          <span className="text-[10px] text-[var(--text-tertiary)] hidden sm:inline">{token.dex}</span>
+          {token.risk_score !== undefined && token.risk_score >= 7 && (
+            <span className="text-[10px] font-semibold text-red-400 flex items-center gap-0.5"><AlertTriangle size={9} /> High risk</span>
+          )}
+        </div>
+        <div className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">{token.name}</div>
+        <div className="text-[10px] text-[var(--text-tertiary)] mt-1">
+          Vol {fmtLiquidity(token.volume_24h)} · Liq {fmtLiquidity(token.liquidity_usd)} · {token.age_hours < 24 ? `${token.age_hours.toFixed(0)}h old` : `${(token.age_hours/24).toFixed(0)}d old`}
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="font-mono text-sm text-[var(--text-primary)]">${token.price_usd < 0.001 ? token.price_usd.toExponential(2) : token.price_usd < 1 ? token.price_usd.toFixed(6) : token.price_usd.toFixed(3)}</div>
+        <div className={cn("text-xs font-mono font-semibold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+          {pos ? "+" : ""}{token.price_change_24h.toFixed(1)}%
+        </div>
+      </div>
+      <a href={token.url} target="_blank" rel="noopener noreferrer" className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors ml-1">
+        <ExternalLink size={13} />
+      </a>
+    </div>
+  );
+}
+
+function CryptoLaunchesTab() {
+  const [subTab, setSubTab] = useState<"new" | "trending" | "meme">("new");
+  const { data: newData, isLoading: loadingNew } = useQuery({ queryKey: ["crypto-launches"], queryFn: () => getCryptoLaunches(), staleTime: 5 * 60_000 });
+  const { data: memeData, isLoading: loadingMeme } = useQuery({ queryKey: ["crypto-memecoins"], queryFn: () => getMemecoins(), staleTime: 5 * 60_000 });
+
+  const tokens = subTab === "new" ? (newData?.launches ?? []) : subTab === "meme" ? (memeData?.tokens ?? []) : [];
+  const isLoading = subTab === "new" ? loadingNew : subTab === "meme" ? loadingMeme : false;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 justify-between flex-wrap">
+        <div className="flex gap-1 bg-[var(--bg-elevated-2)] p-1 rounded-xl">
+          {([["new","⚡ New Launches"],["meme","🔥 Memecoins"]] as const).map(([id,label]) => (
+            <button key={id} onClick={() => setSubTab(id)} className={cn("px-3 py-1 rounded-lg text-xs font-semibold transition-colors", subTab===id?"bg-[var(--bg-elevated)] text-[var(--text-primary)]":"text-[var(--text-tertiary)]")}>{label}</button>
+          ))}
+        </div>
+        {subTab === "meme" && (
+          <div className="text-xs text-amber-400 flex items-center gap-1"><AlertTriangle size={11} />High risk — most memecoins fail</div>
+        )}
+      </div>
+      {isLoading ? (
+        <div className="space-y-2">{[...Array(8)].map((_,i)=><div key={i} className="h-16 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse"/>)}</div>
+      ) : tokens.length === 0 ? (
+        <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">No tokens found — data refreshes every 5 minutes</div>
+      ) : (
+        <div className="space-y-2">{tokens.map((t,i)=><CryptoLaunchCard key={t.address || i} token={t}/>)}</div>
+      )}
+    </div>
+  );
+}
+
+// ── Narratives Tab ───────────────────────────────────────────────────────────
+
+function NarrativesTab() {
+  const { data, isLoading } = useQuery({ queryKey: ["crypto-narratives"], queryFn: getNarratives, staleTime: 10 * 60_000 });
+  const narratives = data?.narratives ?? [];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[var(--text-tertiary)] text-sm">Thematic crypto baskets — performance reflects current 24h change of constituent tokens</p>
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{[...Array(6)].map((_,i)=><div key={i} className="h-36 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse"/>)}</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {narratives.map((n: Narrative) => {
+            const pos = n.avg_pct_24h >= 0;
+            return (
+              <div key={n.id} className="bg-[var(--bg-elevated-2)] border border-[var(--border)] rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{n.emoji}</span>
+                    <span className="font-semibold text-[var(--text-primary)] text-sm">{n.name}</span>
+                  </div>
+                  <span className={cn("text-sm font-bold font-mono", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                    {pos ? "+" : ""}{n.avg_pct_24h.toFixed(2)}%
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {n.coins_data.slice(0, 6).map((c) => (
+                    <span key={c.id} className={cn(
+                      "text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border",
+                      (c.pct_24h ?? 0) >= 0 ? "bg-emerald-950/50 border-emerald-800 text-[var(--accent-positive)]" : "bg-rose-950/50 border-rose-800 text-[var(--accent-negative)]"
+                    )}>
+                      {c.symbol || c.id} {c.pct_24h !== 0 && <span className="opacity-70">{(c.pct_24h >= 0 ? "+" : "")}{c.pct_24h.toFixed(1)}%</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── IDO Calendar Tab ─────────────────────────────────────────────────────────
+
+function IdoCalendarTab() {
+  const { data, isLoading } = useQuery({ queryKey: ["ido-calendar"], queryFn: getIdoCalendar, staleTime: 30 * 60_000 });
+  const events = data?.events ?? [];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[var(--text-tertiary)] text-sm">Upcoming token sales, IDOs, and launchpad events</p>
+      {isLoading ? (
+        <div className="space-y-2">{[...Array(4)].map((_,i)=><div key={i} className="h-24 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse"/>)}</div>
+      ) : events.length === 0 ? (
+        <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">No upcoming events</div>
+      ) : (
+        <div className="space-y-2">
+          {events.map((e: IdoEvent) => (
+            <div key={e.project + e.date} className={cn("bg-[var(--bg-elevated-2)] border rounded-xl p-4", e.status === "upcoming" ? "border-violet-800/50" : "border-[var(--border)]")}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-bold text-[var(--text-primary)] text-sm">{e.project}</span>
+                    <span className="font-mono text-xs text-violet-400">{e.token}</span>
+                    <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded", e.status==="upcoming"?"bg-violet-950/60 text-violet-400":"bg-[var(--bg-elevated)] text-[var(--text-tertiary)]")}>
+                      {e.status === "upcoming" ? "Upcoming" : "Priced"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[var(--text-tertiary)] mb-1">{e.description}</div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {e.tags.map(t=><span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] text-[var(--text-tertiary)]">{t}</span>)}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs text-[var(--text-secondary)] font-mono">{e.date}</div>
+                  <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{e.type}</div>
+                  <div className="text-[10px] text-[var(--text-tertiary)]">{e.platform}</div>
+                  {e.est_raise_usd && <div className="text-[10px] text-violet-400 mt-1">${(e.est_raise_usd/1_000_000).toFixed(0)}M raise</div>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Governance Tab ───────────────────────────────────────────────────────────
+
+function GovernanceTab() {
+  const { data, isLoading } = useQuery({ queryKey: ["governance-proposals"], queryFn: () => getGovernanceProposals("active"), staleTime: 5 * 60_000 });
+  const proposals = data?.proposals ?? [];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[var(--text-tertiary)] text-sm">Active DAO governance proposals — Uniswap, Aave, Compound, and more</p>
+      {isLoading ? (
+        <div className="space-y-2">{[...Array(5)].map((_,i)=><div key={i} className="h-28 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse"/>)}</div>
+      ) : proposals.length === 0 ? (
+        <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">No active proposals right now</div>
+      ) : (
+        <div className="space-y-2">
+          {proposals.map((p) => {
+            const daysLeft = Math.max(0, Math.ceil((p.end * 1000 - Date.now()) / 86_400_000));
+            const topPct = p.scores_total > 0 ? Math.round((Math.max(...p.scores) / p.scores_total) * 100) : 0;
+            const winIdx = p.scores.indexOf(Math.max(...p.scores));
+            return (
+              <div key={p.id} className="bg-[var(--bg-elevated-2)] border border-[var(--border)] rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-semibold text-blue-400 bg-blue-950/40 px-1.5 py-0.5 rounded">{p.space_name}</span>
+                      <span className="text-[10px] text-[var(--text-tertiary)]">{daysLeft}d left</span>
+                      <span className="text-[10px] text-[var(--text-tertiary)]">{p.votes.toLocaleString()} votes</span>
+                    </div>
+                    <div className="font-medium text-sm text-[var(--text-primary)] line-clamp-2 mb-1">{p.title}</div>
+                    <div className="text-xs text-[var(--text-tertiary)] line-clamp-2">{p.summary}</div>
+                    {p.choices.length > 0 && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                          <div className="h-full bg-[var(--accent-positive)] rounded-full" style={{width:`${topPct}%`}}/>
+                        </div>
+                        <span className="text-[10px] font-mono text-[var(--accent-positive)]">{p.choices[winIdx]} {topPct}%</span>
+                      </div>
+                    )}
+                  </div>
+                  <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] mt-0.5">
+                    <ExternalLink size={13} />
+                  </a>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "themes", label: "🎯 Themes" },
-  { id: "sectors", label: "🗺️ Sector Map" },
-  { id: "ipos", label: "🚀 IPO Calendar" },
-  { id: "insiders", label: "👤 Insiders" },
+  { id: "themes",    label: "🎯 Themes" },
+  { id: "sectors",   label: "🗺️ Sector Map" },
+  { id: "ipos",      label: "🚀 IPO Calendar" },
+  { id: "insiders",  label: "👤 Insiders" },
+  { id: "launches",  label: "⚡ Crypto Launches" },
+  { id: "narratives",label: "🌐 Narratives" },
+  { id: "ido",       label: "🪙 IDO Calendar" },
+  { id: "governance",label: "🗳️ Governance" },
 ] as const;
 
 type Tab = typeof TABS[number]["id"];
@@ -399,7 +618,7 @@ export default function Discovery() {
     <div className="space-y-5 pb-8">
       <div>
         <h1 className="text-xl font-bold text-[var(--text-primary)]">Discovery</h1>
-        <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Explore themes, sector trends, IPOs, and insider activity</p>
+        <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Explore themes, sectors, IPOs, crypto launches, narratives, and governance</p>
       </div>
 
       <div className="flex gap-1 bg-[var(--bg-elevated-2)] p-1 rounded-xl w-fit flex-wrap">
@@ -408,7 +627,7 @@ export default function Discovery() {
             key={id}
             onClick={() => setTab(id)}
             className={cn(
-              "px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap",
+              "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap",
               tab === id ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
           >
@@ -418,10 +637,14 @@ export default function Discovery() {
       </div>
 
       <div>
-        {tab === "themes" && <ThemesTab />}
-        {tab === "sectors" && <SectorHeatmap />}
-        {tab === "ipos" && <IPOsTab />}
-        {tab === "insiders" && <InsidersTab />}
+        {tab === "themes"     && <ThemesTab />}
+        {tab === "sectors"    && <SectorHeatmap />}
+        {tab === "ipos"       && <IPOsTab />}
+        {tab === "insiders"   && <InsidersTab />}
+        {tab === "launches"   && <CryptoLaunchesTab />}
+        {tab === "narratives" && <NarrativesTab />}
+        {tab === "ido"        && <IdoCalendarTab />}
+        {tab === "governance" && <GovernanceTab />}
       </div>
     </div>
   );

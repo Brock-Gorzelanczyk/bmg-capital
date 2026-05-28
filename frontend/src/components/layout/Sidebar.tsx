@@ -3,6 +3,7 @@ import {
   LayoutDashboard, LineChart, Filter, BookMarked, Briefcase, Bell,
   FlaskConical, LogOut, Newspaper, Calendar, Microscope, PlayCircle, Search,
   GraduationCap, Layers, Inbox, Compass, BookOpen, Users, Crown, Settings, Bitcoin,
+  Droplets, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -18,6 +19,8 @@ const NAV_PRIMARY = [
   { to: "/strategy", label: "Strategy Lab", Icon: FlaskConical },
   { to: "/options", label: "Options Lab", Icon: Layers },
   { to: "/crypto", label: "Crypto Lab", Icon: Bitcoin },
+  { to: "/defi", label: "DeFi", Icon: Droplets },
+  { to: "/security", label: "Security", Icon: ShieldCheck },
 ];
 
 const NAV_MARKETS = [
