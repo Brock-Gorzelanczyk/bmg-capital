@@ -46,7 +46,7 @@ function formatRecapDate(dateStr: string | undefined | null): string {
 export default function DailyRecapCard({ recap, defaultExpanded = false }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
-  const mkt = recap.market_summary ?? {};
+  const mkt: { spy?: number | null; qqq?: number | null; iwm?: number | null; vix?: number | null; breadth?: string | null } = recap.market_summary ?? {};
   const strat = recap.strategy_summary ?? { day_pnl: 0, day_pnl_pct: 0, new_entries: 0, exits: 0, open_positions: 0 };
   const top_setups = recap.top_setups ?? [];
   const narrative = recap.narrative ?? null;
