@@ -50,7 +50,7 @@ function NavSection({ label, items }: { label: string; items: typeof NAV_PRIMARY
   return (
     <div>
       <div className="px-3 mb-1.5 hidden lg:block">
-        <span className="text-[10px] font-semibold text-[#334155] uppercase tracking-[0.12em]">{label}</span>
+        <span className="text-[10px] font-semibold text-[var(--border-emphasis)] uppercase tracking-[0.12em]">{label}</span>
       </div>
       {items.map(({ to, label, Icon }) => (
         <NavLink
@@ -61,8 +61,8 @@ function NavSection({ label, items }: { label: string; items: typeof NAV_PRIMARY
             cn(
               "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
               isActive
-                ? "bg-[#1E293B] text-[#F8FAFC] px-3"
-                : "text-[#64748B] hover:text-[#94A3B8] hover:bg-[#0F172A] px-3"
+                ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)] px-3"
+                : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] px-3"
             )
           }
         >
@@ -94,10 +94,10 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
   const initials = user?.username?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <aside className="w-14 lg:w-56 h-screen bg-[#0B1120] border-r border-[#1E293B] flex flex-col py-4 shrink-0">
+    <aside className="w-14 lg:w-56 h-screen bg-[var(--bg-base)] border-r border-[var(--border-subtle)] flex flex-col py-4 shrink-0">
       {/* Logo area */}
       <div className="px-3 mb-5 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-lg shadow-blue-900/30">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center text-xs font-bold text-[var(--text-primary)] shrink-0 shadow-lg shadow-blue-900/30">
           B
         </div>
         <span className="text-[#F1F5F9] font-bold tracking-tight hidden lg:block text-sm">BMG Capital</span>
@@ -107,11 +107,11 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
       <div className="px-2 mb-4">
         <button
           onClick={onOpenPalette}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0F172A]/80 border border-[#1E293B] text-[#475569] hover:text-[#94A3B8] hover:border-[#334155] transition-colors duration-150 text-xs cursor-pointer backdrop-blur-sm"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-elevated)]/80 border border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] transition-colors duration-150 text-xs cursor-pointer backdrop-blur-sm"
         >
           <Search size={13} />
           <span className="hidden lg:block flex-1 text-left">Search…</span>
-          <kbd className="hidden lg:block text-[10px] bg-[#1E293B] border border-[#334155] px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
+          <kbd className="hidden lg:block text-[10px] bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
         </button>
       </div>
 
@@ -123,7 +123,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
         {/* ACCOUNT section with unread badge on Notifications */}
         <div>
           <div className="px-3 mb-1.5 hidden lg:block">
-            <span className="text-[10px] font-semibold text-[#334155] uppercase tracking-[0.12em]">Account</span>
+            <span className="text-[10px] font-semibold text-[var(--border-emphasis)] uppercase tracking-[0.12em]">Account</span>
           </div>
           {NAV_ACCOUNT.map(({ to, label, Icon }) => (
             <NavLink
@@ -133,15 +133,15 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
                 cn(
                   "flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
                   isActive
-                    ? "bg-[#1E293B] text-[#F8FAFC] px-3"
-                    : "text-[#64748B] hover:text-[#94A3B8] hover:bg-[#0F172A] px-3"
+                    ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)] px-3"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] px-3"
                 )
               }
             >
               <Icon size={17} />
               <span className="hidden lg:block flex-1">{label}</span>
               {to === "/notifications" && notifUnread > 0 && (
-                <span className="hidden lg:flex bg-[#EF4444] text-white text-[9px] font-bold rounded-full w-4 h-4 items-center justify-center">
+                <span className="hidden lg:flex bg-[var(--accent-negative)] text-[var(--text-primary)] text-[9px] font-bold rounded-full w-4 h-4 items-center justify-center">
                   {notifUnread > 9 ? "9+" : notifUnread}
                 </span>
               )}
@@ -150,7 +150,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
           {/* Sign out — directly below Settings */}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 py-2 px-3 w-full rounded-lg text-sm font-medium text-[#475569] hover:text-[#EF4444] hover:bg-[#EF4444]/8 transition-colors duration-150 cursor-pointer"
+            className="flex items-center gap-3 py-2 px-3 w-full rounded-lg text-sm font-medium text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] hover:bg-[var(--accent-negative)]/8 transition-colors duration-150 cursor-pointer"
           >
             <LogOut size={17} />
             <span className="hidden lg:block">Sign out</span>
@@ -163,7 +163,7 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
         {/* LEARN section with streak badge */}
         <div>
           <div className="px-3 mb-1.5 hidden lg:flex items-center justify-between">
-            <span className="text-[10px] font-semibold text-[#334155] uppercase tracking-[0.12em]">Learn</span>
+            <span className="text-[10px] font-semibold text-[var(--border-emphasis)] uppercase tracking-[0.12em]">Learn</span>
             {streak > 0 && <StreakBadge streak={streak} size="sm" />}
           </div>
           {NAV_LEARN.map(({ to, label, Icon }) => (
@@ -176,10 +176,10 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
                   to === "/upgrade"
                     ? isActive
                       ? "bg-[#F59E0B]/10 text-[#F59E0B] px-3"
-                      : "text-[#F59E0B]/60 hover:text-[#F59E0B] hover:bg-[#0F172A] px-3"
+                      : "text-[#F59E0B]/60 hover:text-[#F59E0B] hover:bg-[var(--bg-elevated)] px-3"
                     : isActive
-                    ? "bg-[#1E293B] text-[#F8FAFC] px-3"
-                    : "text-[#64748B] hover:text-[#94A3B8] hover:bg-[#0F172A] px-3"
+                    ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)] px-3"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] px-3"
                 )
               }
             >
@@ -192,17 +192,17 @@ export default function Sidebar({ onOpenPalette, onClose }: Props) {
       </nav>
 
       {/* Bottom: user row */}
-      <div className="px-2 mt-2 pt-3 border-t border-[#1E293B]">
+      <div className="px-2 mt-2 pt-3 border-t border-[var(--border-subtle)]">
         <div className="flex items-center gap-2.5 px-3 py-2">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs text-white font-bold shrink-0">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[var(--accent-positive)] to-[#A78BFA] flex items-center justify-center text-xs text-[var(--text-primary)] font-bold shrink-0">
             {initials}
           </div>
           <div className="hidden lg:flex flex-col flex-1 min-w-0">
-            <span className="text-[#94A3B8] text-xs font-medium truncate">{user?.username ?? ""}</span>
+            <span className="text-[var(--text-secondary)] text-xs font-medium truncate">{user?.username ?? ""}</span>
             {tier !== "free" && (
               <span className={cn(
                 "text-[9px] font-bold uppercase tracking-wider",
-                tier === "premium" ? "text-[#F59E0B]" : "text-[#3B82F6]"
+                tier === "premium" ? "text-[#F59E0B]" : "text-[var(--accent-positive)]"
               )}>
                 {tier === "premium" ? "Premium" : "Plus"}
               </span>

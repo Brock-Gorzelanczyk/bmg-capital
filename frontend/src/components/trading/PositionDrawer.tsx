@@ -60,40 +60,40 @@ export default function PositionDrawer({ position, onClose, onTrade }: PositionD
       style={{ backgroundColor: "rgba(2,6,23,0.6)" }}
     >
       {/* Drawer panel */}
-      <div className="w-full max-w-sm bg-[#0F172A] border-l border-[#1E293B] flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
+      <div className="w-full max-w-sm bg-[var(--bg-elevated)] border-l border-[var(--border-subtle)] flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[#1E293B]">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[var(--border-subtle)]">
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-mono font-bold text-xl text-[#F8FAFC]">{position.symbol}</span>
+              <span className="font-mono font-bold text-xl text-[var(--text-primary)]">{position.symbol}</span>
               {info && (
-                <span className="text-xs text-[#475569] bg-[#1E293B] px-2 py-0.5 rounded-full">
+                <span className="text-xs text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] px-2 py-0.5 rounded-full">
                   {info.sector}
                 </span>
               )}
             </div>
             {info && (
-              <p className="text-[#475569] text-sm mt-0.5">{info.name}</p>
+              <p className="text-[var(--text-tertiary)] text-sm mt-0.5">{info.name}</p>
             )}
           </div>
-          <button onClick={onClose} className="text-[#475569] hover:text-[#F8FAFC] transition-colors p-1">
+          <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-1">
             <X size={18} />
           </button>
         </div>
 
         {/* Current Price */}
-        <div className="px-5 pt-4 pb-3 border-b border-[#1E293B]">
-          <div className={cn("text-3xl font-mono font-bold", isDayUp ? "text-[#22C55E]" : "text-[#EF4444]")}>
+        <div className="px-5 pt-4 pb-3 border-b border-[var(--border-subtle)]">
+          <div className={cn("text-3xl font-mono font-bold", isDayUp ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
             {currentPrice > 0 ? formatCurrency(currentPrice) : "—"}
           </div>
-          <div className={cn("flex items-center gap-1.5 mt-1 text-sm font-mono", isDayUp ? "text-[#22C55E]" : "text-[#EF4444]")}>
+          <div className={cn("flex items-center gap-1.5 mt-1 text-sm font-mono", isDayUp ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
             {isDayUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
             <span>{isDayUp ? "+" : ""}{formatCurrency(dayPnl)} ({formatPercent(dayPnlPct)}) today</span>
           </div>
         </div>
 
         {/* Position stats */}
-        <div className="px-5 py-4 space-y-3 border-b border-[#1E293B]">
+        <div className="px-5 py-4 space-y-3 border-b border-[var(--border-subtle)]">
           {[
             { label: "Shares", value: position.qty.toLocaleString(undefined, { maximumFractionDigits: 4 }) },
             { label: "Avg Cost", value: formatCurrency(position.avg_cost) },
@@ -101,34 +101,34 @@ export default function PositionDrawer({ position, onClose, onTrade }: PositionD
             { label: "Cost Basis", value: formatCurrency(position.cost_basis) },
           ].map(({ label, value }) => (
             <div key={label} className="flex items-center justify-between">
-              <span className="text-sm text-[#475569]">{label}</span>
-              <span className="text-sm font-mono text-[#F8FAFC]">{value}</span>
+              <span className="text-sm text-[var(--text-tertiary)]">{label}</span>
+              <span className="text-sm font-mono text-[var(--text-primary)]">{value}</span>
             </div>
           ))}
         </div>
 
         {/* Unrealized P&L — large */}
-        <div className="px-5 py-4 border-b border-[#1E293B]">
-          <p className="text-xs text-[#475569] uppercase tracking-widest mb-2">Unrealized P&L</p>
-          <div className={cn("text-2xl font-mono font-bold", isProfit ? "text-[#22C55E]" : "text-[#EF4444]")}>
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
+          <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-widest mb-2">Unrealized P&L</p>
+          <div className={cn("text-2xl font-mono font-bold", isProfit ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
             {isProfit ? "+" : ""}{formatCurrency(unrealizedPnl)}
           </div>
-          <div className={cn("text-sm font-mono mt-0.5", isProfit ? "text-[#22C55E]" : "text-[#EF4444]")}>
+          <div className={cn("text-sm font-mono mt-0.5", isProfit ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
             {formatPercent(unrealizedPnlPct)}
           </div>
         </div>
 
         {/* Cost basis vs market value bar */}
-        <div className="px-5 py-4 border-b border-[#1E293B]">
-          <p className="text-xs text-[#475569] uppercase tracking-widest mb-3">Value vs. Cost Basis</p>
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
+          <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Value vs. Cost Basis</p>
           <div className="space-y-2">
             {/* Market value bar */}
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-[#475569]">Market Value</span>
-                <span className="font-mono text-[#94A3B8]">{formatCurrency(marketValue)}</span>
+                <span className="text-[var(--text-tertiary)]">Market Value</span>
+                <span className="font-mono text-[var(--text-secondary)]">{formatCurrency(marketValue)}</span>
               </div>
-              <div className="h-2 bg-[#1E293B] rounded-full overflow-hidden">
+              <div className="h-2 bg-[var(--bg-elevated-2)] rounded-full overflow-hidden">
                 <div
                   className={cn("h-full rounded-full transition-all duration-500", isProfit ? "bg-[#22C55E]" : "bg-[#EF4444]")}
                   style={{ width: `${mvPct}%` }}
@@ -138,10 +138,10 @@ export default function PositionDrawer({ position, onClose, onTrade }: PositionD
             {/* Cost basis bar */}
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-[#475569]">Cost Basis</span>
-                <span className="font-mono text-[#94A3B8]">{formatCurrency(position.cost_basis)}</span>
+                <span className="text-[var(--text-tertiary)]">Cost Basis</span>
+                <span className="font-mono text-[var(--text-secondary)]">{formatCurrency(position.cost_basis)}</span>
               </div>
-              <div className="h-2 bg-[#1E293B] rounded-full overflow-hidden">
+              <div className="h-2 bg-[var(--bg-elevated-2)] rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full bg-[#334155] transition-all duration-500"
                   style={{ width: `${cbPct}%` }}
@@ -162,14 +162,14 @@ export default function PositionDrawer({ position, onClose, onTrade }: PositionD
             </button>
             <button
               onClick={() => { onTrade(position.symbol, "sell"); }}
-              className="py-3 rounded-xl text-sm font-semibold bg-[#EF4444] text-white hover:bg-red-400 transition-colors"
+              className="py-3 rounded-xl text-sm font-semibold bg-[#EF4444] text-[var(--text-primary)] hover:bg-red-400 transition-colors"
             >
               Sell
             </button>
           </div>
           <button
             onClick={() => { onTrade(position.symbol, "sell"); onClose(); }}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold bg-[#1E293B] text-[#EF4444] border border-red-900/40 hover:bg-red-950/30 transition-colors"
+            className="w-full py-2.5 rounded-xl text-sm font-semibold bg-[var(--bg-elevated-2)] text-[var(--accent-negative)] border border-red-900/40 hover:bg-red-950/30 transition-colors"
           >
             Close Position ({position.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares)
           </button>

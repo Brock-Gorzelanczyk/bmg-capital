@@ -44,14 +44,14 @@ export default function QuizBlock({ questions, lessonId, onComplete }: Props) {
   if (done) {
     const pct = Math.round((correct / shuffled.length) * 100);
     return (
-      <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-6 text-center space-y-3">
-        <div className={cn("text-4xl font-black", pct === 100 ? "text-[#22C55E]" : pct >= 67 ? "text-amber-400" : "text-[#EF4444]")}>
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl p-6 text-center space-y-3">
+        <div className={cn("text-4xl font-black", pct === 100 ? "text-[var(--accent-positive)]" : pct >= 67 ? "text-amber-400" : "text-[var(--accent-negative)]")}>
           {pct}%
         </div>
-        <p className="text-[#94A3B8] text-sm">
+        <p className="text-[var(--text-secondary)] text-sm">
           {correct} / {shuffled.length} correct
         </p>
-        <p className="text-[#475569] text-xs">
+        <p className="text-[var(--text-tertiary)] text-xs">
           {pct === 100 ? "Perfect! 💯" : pct >= 67 ? "Well done — review any you missed above." : "Quiz saved. Review the lesson and try again to improve your score."}
         </p>
       </div>
@@ -59,9 +59,9 @@ export default function QuizBlock({ questions, lessonId, onComplete }: Props) {
   }
 
   return (
-    <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5 space-y-4">
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest">
+        <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">
           Question {idx + 1} of {shuffled.length}
         </span>
         <div className="flex gap-1">
@@ -70,22 +70,22 @@ export default function QuizBlock({ questions, lessonId, onComplete }: Props) {
               key={i}
               className={cn(
                 "w-1.5 h-1.5 rounded-full",
-                i < idx ? "bg-[#22C55E]" : i === idx ? "bg-white" : "bg-[#1E293B]"
+                i < idx ? "bg-[#22C55E]" : i === idx ? "bg-white" : "bg-[var(--bg-elevated-2)]"
               )}
             />
           ))}
         </div>
       </div>
 
-      <p className="text-white font-medium leading-snug">{q.question}</p>
+      <p className="text-[var(--text-primary)] font-medium leading-snug">{q.question}</p>
 
       <div className="space-y-2">
         {q.options.map((opt, i) => {
           const isSelected = selected === i;
           const isCorrect = i === q.answer;
-          let variant = "border-[#334155] text-[#94A3B8] hover:border-[#334155] hover:text-[#F8FAFC]";
-          if (revealed && isCorrect) variant = "border-emerald-500 bg-[#22C55E]/10 text-emerald-300";
-          else if (revealed && isSelected && !isCorrect) variant = "border-red-500 bg-[#EF4444]/10 text-red-300";
+          let variant = "border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:text-[var(--text-primary)]";
+          if (revealed && isCorrect) variant = "border-emerald-500 bg-[var(--accent-positive-bg)] text-emerald-300";
+          else if (revealed && isSelected && !isCorrect) variant = "border-red-500 bg-[var(--accent-negative-bg)] text-red-300";
 
           return (
             <button
@@ -99,8 +99,8 @@ export default function QuizBlock({ questions, lessonId, onComplete }: Props) {
               )}
             >
               <span>{opt}</span>
-              {revealed && isCorrect && <CheckCircle2 size={16} className="text-[#22C55E] shrink-0" />}
-              {revealed && isSelected && !isCorrect && <XCircle size={16} className="text-[#EF4444] shrink-0" />}
+              {revealed && isCorrect && <CheckCircle2 size={16} className="text-[var(--accent-positive)] shrink-0" />}
+              {revealed && isSelected && !isCorrect && <XCircle size={16} className="text-[var(--accent-negative)] shrink-0" />}
             </button>
           );
         })}
@@ -109,13 +109,13 @@ export default function QuizBlock({ questions, lessonId, onComplete }: Props) {
       {revealed && (
         <div className="space-y-3">
           {q.explanation && (
-            <p className="text-[#475569] text-xs leading-relaxed border-l-2 border-[#334155] pl-3">
+            <p className="text-[var(--text-tertiary)] text-xs leading-relaxed border-l-2 border-[var(--border-emphasis)] pl-3">
               {q.explanation}
             </p>
           )}
           <button
             onClick={handleNext}
-            className="flex items-center gap-1.5 text-sm font-semibold text-white hover:text-[#22C55E] transition-colors"
+            className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--accent-positive)] transition-colors"
           >
             {idx + 1 >= shuffled.length ? "See results" : "Next question"}
             <ChevronRight size={16} />

@@ -99,17 +99,17 @@ export default function NotificationPanel() {
       {/* Panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 h-full w-[380px] max-w-full bg-[#0F172A] border-l border-[#1E293B] z-50 flex flex-col transition-transform duration-300",
+          "fixed top-0 right-0 h-full w-[380px] max-w-full bg-[var(--bg-elevated)] border-l border-[var(--border-subtle)] z-50 flex flex-col transition-transform duration-300",
           panelOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#1E293B] shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)] shrink-0">
           <div className="flex items-center gap-2">
-            <Bell size={15} className="text-[#94A3B8]" />
-            <span className="text-white font-semibold text-sm">Notifications</span>
+            <Bell size={15} className="text-[var(--text-secondary)]" />
+            <span className="text-[var(--text-primary)] font-semibold text-sm">Notifications</span>
             {unread > 0 && (
-              <span className="bg-[#EF4444] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+              <span className="bg-[#EF4444] text-[var(--text-primary)] text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                 {unread}
               </span>
             )}
@@ -119,7 +119,7 @@ export default function NotificationPanel() {
               <button
                 onClick={() => readAllMut.mutate()}
                 title="Mark all read"
-                className="text-[#475569] hover:text-[#F8FAFC] transition-colors"
+                className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
               >
                 <CheckCheck size={15} />
               </button>
@@ -127,11 +127,11 @@ export default function NotificationPanel() {
             <button
               onClick={() => { closePanel(); navigate("/notifications"); }}
               title="Settings"
-              className="text-[#475569] hover:text-[#F8FAFC] transition-colors"
+              className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
             >
               <Settings size={15} />
             </button>
-            <button onClick={closePanel} className="text-[#475569] hover:text-[#F8FAFC] transition-colors">
+            <button onClick={closePanel} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
               <X size={16} />
             </button>
           </div>
@@ -140,9 +140,9 @@ export default function NotificationPanel() {
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
-            <div className="p-6 text-center text-[#475569] text-sm animate-pulse">Loading…</div>
+            <div className="p-6 text-center text-[var(--text-tertiary)] text-sm animate-pulse">Loading…</div>
           ) : data.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-[#475569]">
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-[var(--text-tertiary)]">
               <Bell size={32} />
               <p className="text-sm">No notifications yet</p>
             </div>
@@ -150,7 +150,7 @@ export default function NotificationPanel() {
             <div className="p-3 space-y-4">
               {groups.map(({ label, items }) => (
                 <div key={label}>
-                  <div className="text-[10px] font-semibold text-[#475569] uppercase tracking-wider px-2 mb-1.5">
+                  <div className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider px-2 mb-1.5">
                     {label}
                   </div>
                   <div className="space-y-1">
@@ -188,24 +188,24 @@ function NotifRow({
       onClick={onRead}
       className={cn(
         "group flex items-start gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
-        notif.is_read ? "hover:bg-[#1E293B]" : "bg-[#1E293B] hover:bg-[#334155]"
+        notif.is_read ? "hover:bg-[var(--bg-elevated-2)]" : "bg-[var(--bg-elevated-2)] hover:bg-[#334155]"
       )}
     >
       <span className="text-base mt-0.5 shrink-0">{icon}</span>
       <div className="flex-1 min-w-0">
-        <div className={cn("text-sm leading-snug", notif.is_read ? "text-[#94A3B8]" : "text-white font-medium")}>
+        <div className={cn("text-sm leading-snug", notif.is_read ? "text-[var(--text-secondary)]" : "text-[var(--text-primary)] font-medium")}>
           {notif.title}
         </div>
         {notif.body && (
-          <div className="text-xs text-[#475569] mt-0.5 line-clamp-2">{notif.body}</div>
+          <div className="text-xs text-[var(--text-tertiary)] mt-0.5 line-clamp-2">{notif.body}</div>
         )}
-        <div className="text-[10px] text-[#475569] mt-1">{timeAgo(notif.created_at)}</div>
+        <div className="text-[10px] text-[var(--text-tertiary)] mt-1">{timeAgo(notif.created_at)}</div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {!notif.is_read && <span className="w-2 h-2 rounded-full bg-blue-500" />}
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="opacity-0 group-hover:opacity-100 text-[#475569] hover:text-[#EF4444] transition-all"
+          className="opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-all"
         >
           <Trash2 size={12} />
         </button>

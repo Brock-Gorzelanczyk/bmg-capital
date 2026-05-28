@@ -81,10 +81,10 @@ export default function PaywallSheet({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Sheet */}
-      <div className="relative z-10 w-full sm:max-w-md mx-auto bg-[#0F172A] border border-[#1E293B] rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl">
+      <div className="relative z-10 w-full sm:max-w-md mx-auto bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-[#475569] hover:text-[#94A3B8] transition-colors"
+          className="absolute top-4 right-4 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
         >
           <X size={18} />
         </button>
@@ -101,11 +101,11 @@ export default function PaywallSheet({
             <meta.Icon size={12} />
             {meta.label} Feature
           </div>
-          <h2 className="text-white font-bold text-lg leading-snug">
+          <h2 className="text-[var(--text-primary)] font-bold text-lg leading-snug">
             Unlock {featureLabel}
           </h2>
           {featureDescription && (
-            <p className="text-[#475569] text-sm mt-1.5 max-w-xs">{featureDescription}</p>
+            <p className="text-[var(--text-tertiary)] text-sm mt-1.5 max-w-xs">{featureDescription}</p>
           )}
         </div>
 
@@ -116,8 +116,8 @@ export default function PaywallSheet({
             className={cn(
               "px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors",
               interval === "monthly"
-                ? "bg-[#1E293B] text-white"
-                : "text-[#475569] hover:text-[#94A3B8]"
+                ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
+                : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
           >
             Monthly
@@ -127,12 +127,12 @@ export default function PaywallSheet({
             className={cn(
               "px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5",
               interval === "annual"
-                ? "bg-[#1E293B] text-white"
-                : "text-[#475569] hover:text-[#94A3B8]"
+                ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
+                : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
           >
             Annual
-            <span className="text-[#22C55E] text-[10px] font-bold">SAVE 18%</span>
+            <span className="text-[var(--accent-positive)] text-[10px] font-bold">SAVE 18%</span>
           </button>
         </div>
 
@@ -144,7 +144,7 @@ export default function PaywallSheet({
               : interval === "annual" ? "$4.92/mo" : "$5.99/mo"}
           </div>
           {interval === "annual" && (
-            <div className="text-[#475569] text-xs mt-0.5">
+            <div className="text-[var(--text-tertiary)] text-xs mt-0.5">
               billed {requiredTier === "premium" ? "$199" : "$59"}/year
             </div>
           )}
@@ -158,8 +158,8 @@ export default function PaywallSheet({
             className={cn(
               "w-full py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50",
               requiredTier === "premium"
-                ? "bg-gradient-to-r from-[#F59E0B] to-[#D97706] hover:from-[#D97706] hover:to-[#B45309] text-white"
-                : "bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                ? "bg-gradient-to-r from-[#F59E0B] to-[#D97706] hover:from-[#D97706] hover:to-[#B45309] text-[var(--text-primary)]"
+                : "bg-[#3B82F6] hover:bg-[#2563EB] text-[var(--text-primary)]"
             )}
           >
             {loading ? "Loading…" : `Subscribe to ${meta.label}`}
@@ -169,7 +169,7 @@ export default function PaywallSheet({
             <button
               onClick={handleTrial}
               disabled={loading}
-              className="w-full py-2.5 rounded-xl text-sm font-semibold text-[#94A3B8] hover:text-white hover:bg-[#1E293B] transition-colors disabled:opacity-50"
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated-2)] transition-colors disabled:opacity-50"
             >
               Start free 7-day trial
             </button>
@@ -177,7 +177,7 @@ export default function PaywallSheet({
 
           <button
             onClick={() => { onClose(); navigate("/upgrade"); }}
-            className="w-full py-2 text-xs text-[#475569] hover:text-[#94A3B8] transition-colors"
+            className="w-full py-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
           >
             View all plans
           </button>

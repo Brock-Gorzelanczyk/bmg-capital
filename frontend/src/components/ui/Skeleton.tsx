@@ -10,7 +10,7 @@ export function Skeleton({ className, rows = 1, height = 20 }: SkeletonProps) {
   if (rows === 1) {
     return (
       <div
-        className={cn("animate-pulse bg-[#1E293B] rounded-lg", className)}
+        className={cn("animate-pulse bg-[var(--bg-elevated-2)] rounded-lg", className)}
         style={{ height }}
       />
     );
@@ -20,7 +20,7 @@ export function Skeleton({ className, rows = 1, height = 20 }: SkeletonProps) {
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className={cn("animate-pulse bg-[#1E293B] rounded-lg", className)}
+          className={cn("animate-pulse bg-[var(--bg-elevated-2)] rounded-lg", className)}
           style={{ height, width: i === rows - 1 ? "75%" : "100%" }}
         />
       ))}
@@ -32,7 +32,7 @@ export function SkeletonCard({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "bg-[#0F172A] border border-[#1E293B] rounded-xl p-4 space-y-3",
+        "bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3",
         className
       )}
     >

@@ -87,35 +87,35 @@ function EntryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#020617]/80 backdrop-blur-sm p-4">
-      <div className="bg-[#0F172A] border border-[#334155] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1E293B]">
-          <span className="text-white font-semibold">{initial ? "Edit Entry" : "New Journal Entry"}</span>
-          <button onClick={onClose} className="text-[#475569] hover:text-[#F8FAFC]">✕</button>
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
+          <span className="text-[var(--text-primary)] font-semibold">{initial ? "Edit Entry" : "New Journal Entry"}</span>
+          <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">✕</button>
         </div>
 
         <div className="p-5 space-y-4">
           {/* Symbol + Date + Side row */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-1">Symbol</label>
+              <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Symbol</label>
               <input
                 value={form.symbol}
                 onChange={(e) => set("symbol", e.target.value.toUpperCase())}
                 placeholder="AAPL"
-                className="w-full bg-[#1E293B] border border-[#334155] text-white text-sm px-3 py-2 rounded-lg font-mono focus:outline-none focus:border-[#3B82F6]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg font-mono focus:outline-none focus:border-[#3B82F6]"
               />
             </div>
             <div>
-              <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-1">Date</label>
+              <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Date</label>
               <input
                 type="date"
                 value={form.trade_date}
                 onChange={(e) => set("trade_date", e.target.value)}
-                className="w-full bg-[#1E293B] border border-[#334155] text-white text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[#3B82F6]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[#3B82F6]"
               />
             </div>
             <div>
-              <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-1">Side</label>
+              <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Side</label>
               <div className="flex gap-1.5 mt-1">
                 {(["buy", "sell"] as const).map((s) => (
                   <button
@@ -124,8 +124,8 @@ function EntryModal({
                     className={cn(
                       "flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors",
                       form.side === s
-                        ? s === "buy" ? "bg-emerald-900 text-[#22C55E]" : "bg-rose-900 text-[#EF4444]"
-                        : "bg-[#1E293B] text-[#475569]"
+                        ? s === "buy" ? "bg-emerald-900 text-[var(--accent-positive)]" : "bg-rose-900 text-[var(--accent-negative)]"
+                        : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)]"
                     )}
                   >
                     {s.toUpperCase()}
@@ -139,7 +139,7 @@ function EntryModal({
           <div className="grid grid-cols-3 gap-3">
             {(["qty", "entry_price", "exit_price"] as const).map((k) => (
               <div key={k}>
-                <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-1">
+                <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">
                   {k === "qty" ? "Qty / Shares" : k === "entry_price" ? "Entry $" : "Exit $"}
                 </label>
                 <input
@@ -148,7 +148,7 @@ function EntryModal({
                   onChange={(e) => set(k, e.target.value ? parseFloat(e.target.value) : null as never)}
                   onBlur={autoCalcPnl}
                   placeholder="0"
-                  className="w-full bg-[#1E293B] border border-[#334155] text-white text-sm px-3 py-2 rounded-lg font-mono focus:outline-none focus:border-[#3B82F6]"
+                  className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg font-mono focus:outline-none focus:border-[#3B82F6]"
                 />
               </div>
             ))}
@@ -156,19 +156,19 @@ function EntryModal({
 
           {/* P&L */}
           <div>
-            <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-1">P&amp;L ($)</label>
+            <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">P&amp;L ($)</label>
             <input
               type="number"
               value={form.pnl ?? ""}
               onChange={(e) => set("pnl", e.target.value ? parseFloat(e.target.value) : null)}
               placeholder="Auto-calculated or override"
-              className="w-full bg-[#1E293B] border border-[#334155] text-white text-sm px-3 py-2 rounded-lg font-mono focus:outline-none focus:border-[#3B82F6]"
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg font-mono focus:outline-none focus:border-[#3B82F6]"
             />
           </div>
 
           {/* Setup */}
           <div>
-            <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-2">Setup</label>
+            <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-2">Setup</label>
             <div className="flex flex-wrap gap-1.5">
               {SETUPS.map((s) => (
                 <button
@@ -177,8 +177,8 @@ function EntryModal({
                   className={cn(
                     "text-xs px-2.5 py-1 rounded-full transition-colors",
                     form.setup === s
-                      ? "bg-[#3B82F6] text-white"
-                      : "bg-[#1E293B] text-[#94A3B8] hover:bg-[#334155]"
+                      ? "bg-[var(--accent-positive)] text-[var(--text-primary)]"
+                      : "bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:bg-[#334155]"
                   )}
                 >
                   {s}
@@ -194,7 +194,7 @@ function EntryModal({
               { key: "confidence", label: "Confidence", emojis: ["1", "2", "3", "4", "5"] },
             ] as const).map(({ key, label, emojis }) => (
               <div key={key}>
-                <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-2">{label}</label>
+                <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-2">{label}</label>
                 <div className="flex gap-1">
                   {emojis.map((e, i) => (
                     <button
@@ -203,8 +203,8 @@ function EntryModal({
                       className={cn(
                         "flex-1 h-8 text-sm rounded-lg transition-colors",
                         form[key] === i + 1
-                          ? "bg-[#3B82F6] text-white"
-                          : "bg-[#1E293B] text-[#475569] hover:bg-[#334155]"
+                          ? "bg-[var(--accent-positive)] text-[var(--text-primary)]"
+                          : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] hover:bg-[#334155]"
                       )}
                     >
                       {e}
@@ -217,37 +217,37 @@ function EntryModal({
 
           {/* Notes */}
           <div>
-            <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-1">Trade Notes</label>
+            <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Trade Notes</label>
             <textarea
               value={form.notes ?? ""}
               onChange={(e) => set("notes", e.target.value || null)}
               rows={3}
               placeholder="What happened? Why did you enter/exit?"
-              className="w-full bg-[#1E293B] border border-[#334155] text-white text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[#3B82F6] resize-none"
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[#3B82F6] resize-none"
             />
           </div>
 
           {/* Lessons */}
           <div>
-            <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-1">Lessons Learned</label>
+            <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Lessons Learned</label>
             <textarea
               value={form.lessons ?? ""}
               onChange={(e) => set("lessons", e.target.value || null)}
               rows={2}
               placeholder="What would you do differently?"
-              className="w-full bg-[#1E293B] border border-[#334155] text-white text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[#3B82F6] resize-none"
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg focus:outline-none focus:border-[#3B82F6] resize-none"
             />
           </div>
 
           {/* Rating */}
           <div>
-            <label className="text-[10px] text-[#475569] uppercase tracking-wider block mb-2">Trade Rating</label>
+            <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider block mb-2">Trade Rating</label>
             <div className="flex gap-1">
               {[1, 2, 3, 4, 5].map((r) => (
                 <button
                   key={r}
                   onClick={() => set("rating", form.rating === r ? null : r)}
-                  className={cn("text-lg transition-colors", form.rating != null && form.rating >= r ? "text-[#F59E0B]" : "text-[#334155]")}
+                  className={cn("text-lg transition-colors", form.rating != null && form.rating >= r ? "text-[#F59E0B]" : "text-[var(--border-emphasis)]")}
                 >
                   ★
                 </button>
@@ -259,13 +259,13 @@ function EntryModal({
         <div className="px-5 pb-5 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl bg-[#1E293B] text-[#94A3B8] text-sm font-medium hover:bg-[#334155] transition-colors"
+            className="flex-1 py-2.5 rounded-xl bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] text-sm font-medium hover:bg-[#334155] transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => { if (form.symbol) onSave(form); }}
-            className="flex-1 py-2.5 rounded-xl bg-[#3B82F6] text-white text-sm font-semibold hover:bg-[#2563EB] transition-colors"
+            className="flex-1 py-2.5 rounded-xl bg-[var(--accent-positive)] text-[var(--text-primary)] text-sm font-semibold hover:brightness-110 transition-colors"
           >
             {initial ? "Save Changes" : "Add Entry"}
           </button>
@@ -325,12 +325,12 @@ export default function JournalPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Trade Journal</h1>
-          <p className="text-[#475569] text-sm mt-0.5">Document and reflect on every trade</p>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Trade Journal</h1>
+          <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Document and reflect on every trade</p>
         </div>
         <button
           onClick={openNew}
-          className="flex items-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+          className="flex items-center gap-2 bg-[var(--accent-positive)] hover:brightness-110 text-[var(--text-primary)] text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
         >
           <Plus size={15} />
           New Entry
@@ -341,16 +341,16 @@ export default function JournalPage() {
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
-            { label: "Total Entries", value: stats.total_entries, icon: BookOpen, color: "text-[#94A3B8]" },
-            { label: "Win Rate", value: `${stats.win_rate}%`, icon: BarChart2, color: "text-[#3B82F6]" },
-            { label: "Total P&L", value: fmt$(stats.total_pnl), icon: stats.total_pnl >= 0 ? TrendingUp : TrendingDown, color: stats.total_pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]" },
+            { label: "Total Entries", value: stats.total_entries, icon: BookOpen, color: "text-[var(--text-secondary)]" },
+            { label: "Win Rate", value: `${stats.win_rate}%`, icon: BarChart2, color: "text-[var(--accent-positive)]" },
+            { label: "Total P&L", value: fmt$(stats.total_pnl), icon: stats.total_pnl >= 0 ? TrendingUp : TrendingDown, color: stats.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]" },
             { label: "Avg Mood", value: moodLabel(Math.round(stats.avg_mood)), icon: Star, color: "text-[#F59E0B]" },
             { label: "With Notes", value: stats.entries_with_notes, icon: BookOpen, color: "text-[#8B5CF6]" },
           ].map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
+            <div key={label} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
               <div className="flex items-center gap-2 mb-1">
                 <Icon size={13} className={color} />
-                <span className="text-[#475569] text-[10px] uppercase tracking-wider">{label}</span>
+                <span className="text-[var(--text-tertiary)] text-[10px] uppercase tracking-wider">{label}</span>
               </div>
               <div className={cn("text-xl font-bold font-mono", color)}>{value}</div>
             </div>
@@ -364,37 +364,37 @@ export default function JournalPage() {
           value={filterSymbol}
           onChange={(e) => setFilterSymbol(e.target.value.toUpperCase())}
           placeholder="Filter by symbol…"
-          className="bg-[#0F172A] border border-[#1E293B] text-white text-sm px-3 py-2 rounded-lg w-40 placeholder-[#475569] focus:outline-none focus:border-[#334155] font-mono"
+          className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg w-40 placeholder-[#475569] focus:outline-none focus:border-[var(--border-emphasis)] font-mono"
         />
         {filterSymbol && (
-          <button onClick={() => setFilterSymbol("")} className="text-[#475569] hover:text-[#F8FAFC] text-xs">
+          <button onClick={() => setFilterSymbol("")} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-xs">
             Clear
           </button>
         )}
-        <span className="text-[#475569] text-xs ml-auto">{entries.length} entries</span>
+        <span className="text-[var(--text-tertiary)] text-xs ml-auto">{entries.length} entries</span>
       </div>
 
       {/* Entries list */}
       {isLoading ? (
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-20 bg-[#0F172A] border border-[#1E293B] rounded-xl animate-pulse" />
+            <div key={i} className="h-20 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl animate-pulse" />
           ))}
         </div>
       ) : entries.length === 0 ? (
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-12 text-center">
-          <BookOpen size={32} className="text-[#334155] mx-auto mb-3" />
-          <p className="text-[#475569] text-sm">No journal entries yet</p>
-          <p className="text-[#334155] text-xs mt-1">Click "New Entry" to log your first trade</p>
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-12 text-center">
+          <BookOpen size={32} className="text-[var(--border-emphasis)] mx-auto mb-3" />
+          <p className="text-[var(--text-tertiary)] text-sm">No journal entries yet</p>
+          <p className="text-[var(--border-emphasis)] text-xs mt-1">Click "New Entry" to log your first trade</p>
         </div>
       ) : (
         <div className="space-y-2">
           {entries.map((e) => (
-            <div key={e.id} className="bg-[#0F172A] border border-[#1E293B] rounded-xl px-4 py-3 flex items-start gap-4 hover:border-[#334155] transition-colors group">
+            <div key={e.id} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 flex items-start gap-4 hover:border-[var(--border-emphasis)] transition-colors group">
               {/* Side badge */}
               <div className={cn(
                 "text-[11px] font-bold px-2 py-1 rounded-lg shrink-0 mt-0.5",
-                e.side === "buy" ? "bg-emerald-900/60 text-[#22C55E]" : "bg-rose-900/60 text-[#EF4444]"
+                e.side === "buy" ? "bg-emerald-900/60 text-[var(--accent-positive)]" : "bg-rose-900/60 text-[var(--accent-negative)]"
               )}>
                 {e.side.toUpperCase()}
               </div>
@@ -402,28 +402,28 @@ export default function JournalPage() {
               {/* Main content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-white font-bold font-mono">{e.symbol}</span>
+                  <span className="text-[var(--text-primary)] font-bold font-mono">{e.symbol}</span>
                   {e.setup && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1E293B] text-[#94A3B8]">{e.setup}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-elevated-2)] text-[var(--text-secondary)]">{e.setup}</span>
                   )}
                   {e.rating && (
                     <span className="text-[#F59E0B] text-xs">{"★".repeat(e.rating)}</span>
                   )}
-                  <span className="text-[#475569] text-xs ml-auto">{timeAgo(e.created_at)} · {e.trade_date}</span>
+                  <span className="text-[var(--text-tertiary)] text-xs ml-auto">{timeAgo(e.created_at)} · {e.trade_date}</span>
                 </div>
 
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                   {e.qty > 0 && (
-                    <span className="text-[#475569] text-xs font-mono">{e.qty} shares</span>
+                    <span className="text-[var(--text-tertiary)] text-xs font-mono">{e.qty} shares</span>
                   )}
                   {e.entry_price > 0 && (
-                    <span className="text-[#94A3B8] text-xs font-mono">@ ${e.entry_price.toFixed(2)}</span>
+                    <span className="text-[var(--text-secondary)] text-xs font-mono">@ ${e.entry_price.toFixed(2)}</span>
                   )}
                   {e.exit_price != null && (
-                    <span className="text-[#94A3B8] text-xs font-mono">→ ${e.exit_price.toFixed(2)}</span>
+                    <span className="text-[var(--text-secondary)] text-xs font-mono">→ ${e.exit_price.toFixed(2)}</span>
                   )}
                   {e.pnl != null && (
-                    <span className={cn("text-sm font-bold font-mono", e.pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                    <span className={cn("text-sm font-bold font-mono", e.pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                       {fmt$(e.pnl)}
                     </span>
                   )}
@@ -433,7 +433,7 @@ export default function JournalPage() {
                 </div>
 
                 {e.notes && (
-                  <p className="text-[#475569] text-xs mt-1.5 line-clamp-2">{e.notes}</p>
+                  <p className="text-[var(--text-tertiary)] text-xs mt-1.5 line-clamp-2">{e.notes}</p>
                 )}
               </div>
 
@@ -441,13 +441,13 @@ export default function JournalPage() {
               <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                 <button
                   onClick={() => openEdit(e)}
-                  className="text-[#475569] hover:text-[#94A3B8] transition-colors"
+                  className="text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
                 >
                   <Edit2 size={13} />
                 </button>
                 <button
                   onClick={() => deleteMut.mutate(e.id)}
-                  className="text-[#475569] hover:text-[#EF4444] transition-colors"
+                  className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors"
                 >
                   <Trash2 size={13} />
                 </button>

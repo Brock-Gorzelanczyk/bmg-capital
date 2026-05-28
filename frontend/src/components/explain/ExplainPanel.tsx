@@ -57,24 +57,24 @@ export default function ExplainPanel() {
       {/* Panel */}
       <div
         className={cn(
-          "fixed right-0 top-0 h-full w-full max-w-sm bg-[#0F172A] border-l border-[#334155] z-50",
+          "fixed right-0 top-0 h-full w-full max-w-sm bg-[var(--bg-elevated)] border-l border-[var(--border-emphasis)] z-50",
           "flex flex-col shadow-2xl transition-transform duration-200",
           open ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1E293B] shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)] shrink-0">
           <div className="flex items-center gap-2">
-            <Sparkles size={15} className="text-[#22C55E]" />
-            <span className="text-sm font-semibold text-white">Explain This</span>
+            <Sparkles size={15} className="text-[var(--accent-positive)]" />
+            <span className="text-sm font-semibold text-[var(--text-primary)]">Explain This</span>
           </div>
           <div className="flex items-center gap-2">
             {data && (
-              <button onClick={handleCopy} className="text-[#475569] hover:text-[#F8FAFC] transition-colors">
-                {copied ? <Check size={14} className="text-[#22C55E]" /> : <Copy size={14} />}
+              <button onClick={handleCopy} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
+                {copied ? <Check size={14} className="text-[var(--accent-positive)]" /> : <Copy size={14} />}
               </button>
             )}
-            <button onClick={close} className="text-[#475569] hover:text-[#F8FAFC] transition-colors">
+            <button onClick={close} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
               <X size={16} />
             </button>
           </div>
@@ -82,9 +82,9 @@ export default function ExplainPanel() {
 
         {/* Term + mode toggle */}
         {request && (
-          <div className="px-5 pt-4 pb-3 border-b border-[#1E293B] shrink-0">
-            <h2 className="text-lg font-bold text-white capitalize mb-3">{request.term}</h2>
-            <div className="flex items-center gap-1 p-0.5 bg-[#1E293B] rounded-lg w-fit">
+          <div className="px-5 pt-4 pb-3 border-b border-[var(--border-subtle)] shrink-0">
+            <h2 className="text-lg font-bold text-[var(--text-primary)] capitalize mb-3">{request.term}</h2>
+            <div className="flex items-center gap-1 p-0.5 bg-[var(--bg-elevated-2)] rounded-lg w-fit">
               {(["simple", "detailed"] as const).map((m) => (
                 <button
                   key={m}
@@ -93,7 +93,7 @@ export default function ExplainPanel() {
                     "px-3 py-1 rounded-md text-xs font-semibold transition-all capitalize",
                     mode === m
                       ? "bg-white text-black"
-                      : "text-[#475569] hover:text-[#F8FAFC]"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                   )}
                 >
                   {m}
@@ -108,31 +108,31 @@ export default function ExplainPanel() {
           {isFetching && (
             <div className="space-y-2">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className={cn("h-4 bg-[#1E293B] rounded animate-pulse", i === 3 && "w-2/3")} />
+                <div key={i} className={cn("h-4 bg-[var(--bg-elevated-2)] rounded animate-pulse", i === 3 && "w-2/3")} />
               ))}
             </div>
           )}
 
           {!isFetching && data && (
             <>
-              <div className="text-[#94A3B8] text-sm leading-relaxed whitespace-pre-line">
+              <div className="text-[var(--text-secondary)] text-sm leading-relaxed whitespace-pre-line">
                 {/* Render **bold** markdown */}
                 {data.explanation.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
                   part.startsWith("**") && part.endsWith("**")
-                    ? <strong key={i} className="text-white font-semibold">{part.slice(2, -2)}</strong>
+                    ? <strong key={i} className="text-[var(--text-primary)] font-semibold">{part.slice(2, -2)}</strong>
                     : <span key={i}>{part}</span>
                 )}
               </div>
 
               {data.source === "glossary" && (
-                <div className="flex items-center gap-1.5 text-[10px] text-[#475569]">
+                <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
                   <BookOpen size={10} />
                   <span>From BMG Capital glossary</span>
                 </div>
               )}
               {data.source === "ai" && (
-                <div className="flex items-center gap-1.5 text-[10px] text-[#475569]">
-                  <Sparkles size={10} className="text-[#22C55E]" />
+                <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
+                  <Sparkles size={10} className="text-[var(--accent-positive)]" />
                   <span>AI-generated explanation</span>
                 </div>
               )}
@@ -140,13 +140,13 @@ export default function ExplainPanel() {
               {/* Related terms */}
               {data.related.length > 0 && (
                 <div>
-                  <p className="text-[10px] text-[#475569] uppercase tracking-wider mb-2">Related</p>
+                  <p className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-2">Related</p>
                   <div className="flex flex-wrap gap-2">
                     {data.related.map((t) => (
                       <button
                         key={t}
                         onClick={() => explain(t)}
-                        className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#F8FAFC] bg-[#1E293B] border border-[#334155] hover:border-[#334155] px-2.5 py-1 rounded-lg transition-all capitalize"
+                        className="flex items-center gap-1 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] hover:border-[var(--border-emphasis)] px-2.5 py-1 rounded-lg transition-all capitalize"
                       >
                         {t} <ChevronRight size={10} />
                       </button>
@@ -158,7 +158,7 @@ export default function ExplainPanel() {
           )}
 
           {!isFetching && !data && request && (
-            <p className="text-[#475569] text-sm">Loading explanation…</p>
+            <p className="text-[var(--text-tertiary)] text-sm">Loading explanation…</p>
           )}
         </div>
       </div>

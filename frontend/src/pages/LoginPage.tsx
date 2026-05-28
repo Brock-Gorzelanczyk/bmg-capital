@@ -58,22 +58,22 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-8 text-center">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] mx-auto mb-4 flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-blue-500/20">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] mx-auto mb-4 flex items-center justify-center font-bold text-[var(--text-primary)] text-xl shadow-lg shadow-blue-500/20">
             B
           </div>
-          <h1 className="text-[#F8FAFC] text-2xl font-bold tracking-tight">BMG Capital</h1>
-          <p className="text-[#475569] text-sm mt-1">Algorithmic paper trading platform</p>
+          <h1 className="text-[var(--text-primary)] text-2xl font-bold tracking-tight">BMG Capital</h1>
+          <p className="text-[var(--text-tertiary)] text-sm mt-1">Algorithmic paper trading platform</p>
         </div>
 
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-2xl p-6">
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-6">
           {/* Tabs */}
           <div className="flex gap-1 mb-6 bg-[#020617] rounded-lg p-1">
             <button
               onClick={() => { setMode("login"); setError(""); }}
               className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 mode === "login"
-                  ? "bg-[#1E293B] text-[#F8FAFC]"
-                  : "text-[#475569] hover:text-[#94A3B8]"
+                  ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
+                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
               }`}
             >
               Sign in
@@ -82,8 +82,8 @@ export default function LoginPage() {
               onClick={() => { setMode("register"); setError(""); }}
               className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 mode === "register"
-                  ? "bg-[#1E293B] text-[#F8FAFC]"
-                  : "text-[#475569] hover:text-[#94A3B8]"
+                  ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
+                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
               }`}
             >
               Create account
@@ -92,7 +92,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs text-[#475569] mb-1.5 font-medium">
+              <label className="block text-xs text-[var(--text-tertiary)] mb-1.5 font-medium">
                 {mode === "login" ? "Username or email" : "Email"}
               </label>
               <input
@@ -102,13 +102,13 @@ export default function LoginPage() {
                 required
                 autoComplete="username"
                 placeholder={mode === "login" ? "username or email" : "you@example.com"}
-                className="w-full bg-[#020617] border border-[#1E293B] text-[#F8FAFC] text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-[#334155] transition-colors"
+                className="w-full bg-[#020617] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-[#334155] transition-colors"
               />
             </div>
 
             {mode === "register" && (
               <div>
-                <label className="block text-xs text-[#475569] mb-1.5 font-medium">Username</label>
+                <label className="block text-xs text-[var(--text-tertiary)] mb-1.5 font-medium">Username</label>
                 <input
                   type="text"
                   value={username}
@@ -116,13 +116,13 @@ export default function LoginPage() {
                   required
                   autoComplete="username"
                   placeholder="your_username"
-                  className="w-full bg-[#020617] border border-[#1E293B] text-[#F8FAFC] text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-[#334155] transition-colors"
+                  className="w-full bg-[#020617] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-[#334155] transition-colors"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-xs text-[#475569] mb-1.5 font-medium">Password</label>
+              <label className="block text-xs text-[var(--text-tertiary)] mb-1.5 font-medium">Password</label>
               <input
                 type="password"
                 value={password}
@@ -130,13 +130,13 @@ export default function LoginPage() {
                 required
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 placeholder="••••••••"
-                className="w-full bg-[#020617] border border-[#1E293B] text-[#F8FAFC] text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-[#334155] transition-colors"
+                className="w-full bg-[#020617] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-[#334155] transition-colors"
               />
             </div>
 
             {mode === "register" && (
               <div>
-                <label className="block text-xs text-[#475569] mb-1.5 font-medium">Confirm password</label>
+                <label className="block text-xs text-[var(--text-tertiary)] mb-1.5 font-medium">Confirm password</label>
                 <input
                   type="password"
                   value={confirm}
@@ -144,13 +144,13 @@ export default function LoginPage() {
                   required
                   autoComplete="new-password"
                   placeholder="••••••••"
-                  className="w-full bg-[#020617] border border-[#1E293B] text-[#F8FAFC] text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-[#334155] transition-colors"
+                  className="w-full bg-[#020617] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-[#334155] transition-colors"
                 />
               </div>
             )}
 
             {error && (
-              <p className="text-[#EF4444] text-xs bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-lg px-3 py-2">
+              <p className="text-[var(--accent-negative)] text-xs bg-[var(--accent-negative-bg)] border border-[var(--accent-negative)]/20 rounded-lg px-3 py-2">
                 {error}
               </p>
             )}
@@ -158,7 +158,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-sm font-semibold rounded-lg py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+              className="w-full bg-[var(--accent-positive)] hover:brightness-110 text-[var(--text-primary)] text-sm font-semibold rounded-lg py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
             </button>
@@ -168,29 +168,29 @@ export default function LoginPage() {
           {mode === "login" && (
             <>
               <div className="flex items-center gap-3 my-4">
-                <div className="flex-1 h-px bg-[#1E293B]" />
-                <span className="text-[10px] text-[#334155] uppercase tracking-widest">or</span>
-                <div className="flex-1 h-px bg-[#1E293B]" />
+                <div className="flex-1 h-px bg-[var(--bg-elevated-2)]" />
+                <span className="text-[10px] text-[var(--border-emphasis)] uppercase tracking-widest">or</span>
+                <div className="flex-1 h-px bg-[var(--bg-elevated-2)]" />
               </div>
 
               {/* Try Demo button */}
               <button
                 onClick={handleTryDemo}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-2 border border-[#334155] bg-transparent hover:bg-[#1E293B] text-[#94A3B8] hover:text-[#F8FAFC] text-sm font-medium rounded-lg py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 border border-[var(--border-emphasis)] bg-transparent hover:bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-sm font-medium rounded-lg py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
                 Try live demo
               </button>
 
-              <p className="text-center text-[10px] text-[#334155] mt-3">
+              <p className="text-center text-[10px] text-[var(--border-emphasis)] mt-3">
                 No account needed · pre-loaded with 7 positions
               </p>
             </>
           )}
         </div>
 
-        <p className="text-center text-[#334155] text-xs mt-6">
+        <p className="text-center text-[var(--border-emphasis)] text-xs mt-6">
           Paper trading only · not financial advice
         </p>
       </div>

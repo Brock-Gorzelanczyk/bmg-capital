@@ -34,21 +34,21 @@ export default function CertificateGenerator({ courseName, onClose }: Props) {
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-        <div className="relative bg-[#0F172A] border border-[#1E293B] rounded-2xl shadow-2xl w-full max-w-2xl">
+        <div className="relative bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl w-full max-w-2xl">
           {/* Modal toolbar */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[#1E293B]">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
             <div className="flex items-center gap-2">
               <Award size={18} className="text-amber-400" />
-              <span className="text-[#F8FAFC] font-semibold text-sm">Course Certificate</span>
+              <span className="text-[var(--text-primary)] font-semibold text-sm">Course Certificate</span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#1E293B] hover:bg-[#334155] text-[#94A3B8] hover:text-[#F8FAFC] rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[var(--bg-elevated-2)] hover:bg-[#334155] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg transition-colors"
               >
                 <Download size={13} /> Save / Print
               </button>
-              <button onClick={onClose} className="text-[#475569] hover:text-[#F8FAFC] transition-colors p-1">
+              <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-1">
                 <X size={18} />
               </button>
             </div>
@@ -71,7 +71,7 @@ export default function CertificateGenerator({ courseName, onClose }: Props) {
                 {/* Issuer */}
                 <div className="flex items-center justify-center gap-2 mb-6">
                   <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0"
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--text-primary)] font-bold text-lg shrink-0"
                     style={{ background: "linear-gradient(135deg, #3B82F6, #8B5CF6)" }}
                   >
                     B

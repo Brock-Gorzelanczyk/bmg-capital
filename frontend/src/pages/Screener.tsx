@@ -235,8 +235,8 @@ export default function Screener() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">Stock Screener</h2>
-        <span className="text-xs text-[#475569]">Universe: 500+ stocks</span>
+        <h2 className="text-xl font-bold text-[var(--text-primary)]">Stock Screener</h2>
+        <span className="text-xs text-[var(--text-tertiary)]">Universe: 500+ stocks</span>
       </div>
 
       {/* Strategy category cards */}
@@ -244,7 +244,7 @@ export default function Screener() {
         {PRESET_CATEGORIES.map((cat) => {
           const Icon = cat.icon;
           return (
-            <div key={cat.label} className="bg-[#0F172A] border border-[#334155] rounded-xl p-4 space-y-3">
+            <div key={cat.label} className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Icon size={14} style={{ color: cat.color }} />
                 <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: cat.color }}>
@@ -262,18 +262,18 @@ export default function Screener() {
                         className={cn(
                           "w-full text-left px-3 py-2 pr-8 rounded-lg border transition-all text-sm",
                           isActive
-                            ? "border-zinc-600 bg-[#334155] text-white"
-                            : "border-transparent hover:border-[#334155] hover:bg-[#1E293B] text-[#94A3B8]"
+                            ? "border-zinc-600 bg-[#334155] text-[var(--text-primary)]"
+                            : "border-transparent hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-elevated-2)] text-[var(--text-secondary)]"
                         )}
                       >
                         <div className="font-medium">{p.label}</div>
-                        <div className="text-[11px] text-[#475569] mt-0.5 leading-tight">{p.desc}</div>
+                        <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5 leading-tight">{p.desc}</div>
                       </button>
 
                       {/* Info button — visible on hover */}
                       <button
                         onClick={(e) => { e.stopPropagation(); setInfoOpen(infoOpen === p.key ? null : p.key); }}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[#475569] hover:text-[#94A3B8] transition-opacity"
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-opacity"
                         title="What does this screen do?"
                       >
                         <Info size={13} />
@@ -283,7 +283,7 @@ export default function Screener() {
                       {infoOpen === p.key && (
                         <div
                           ref={infoRef}
-                          className="absolute z-50 left-0 right-0 top-full mt-1 bg-[#1E293B] border border-[#334155] rounded-lg p-3 shadow-2xl text-xs text-[#94A3B8] leading-relaxed"
+                          className="absolute z-50 left-0 right-0 top-full mt-1 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-lg p-3 shadow-2xl text-xs text-[var(--text-secondary)] leading-relaxed"
                         >
                           {p.info}
                         </div>
@@ -298,21 +298,21 @@ export default function Screener() {
       </div>
 
       {/* Custom filter builder */}
-      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4 space-y-3">
-        <p className="text-[#475569] text-xs uppercase tracking-widest">Custom Filter Builder</p>
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+        <p className="text-[var(--text-tertiary)] text-xs uppercase tracking-widest">Custom Filter Builder</p>
         {filters.map((f, i) => (
           <div key={i} className="flex gap-2 items-center flex-wrap">
             <select
               value={f.field}
               onChange={(e) => updateFilter(i, { field: e.target.value })}
-              className="bg-[#020617] text-white text-base md:text-sm px-2 py-1.5 rounded border border-[#334155] focus:outline-none focus:border-zinc-600"
+              className="bg-[#020617] text-[var(--text-primary)] text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] focus:outline-none focus:border-zinc-600"
             >
               {FIELDS.map((ff) => <option key={ff.value} value={ff.value}>{ff.label}</option>)}
             </select>
             <select
               value={f.operator}
               onChange={(e) => updateFilter(i, { operator: e.target.value })}
-              className="bg-[#020617] text-white text-base md:text-sm px-2 py-1.5 rounded border border-[#334155] w-16 focus:outline-none focus:border-zinc-600"
+              className="bg-[#020617] text-[var(--text-primary)] text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-16 focus:outline-none focus:border-zinc-600"
             >
               {OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -320,21 +320,21 @@ export default function Screener() {
               type="number"
               value={f.value as number}
               onChange={(e) => updateFilter(i, { value: parseFloat(e.target.value) })}
-              className="bg-[#020617] text-white text-base md:text-sm px-2 py-1.5 rounded border border-[#334155] w-24 focus:outline-none focus:border-zinc-600"
+              className="bg-[#020617] text-[var(--text-primary)] text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-24 focus:outline-none focus:border-zinc-600"
             />
-            <button onClick={() => removeFilter(i)} className="text-[#475569] hover:text-[#EF4444]">
+            <button onClick={() => removeFilter(i)} className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)]">
               <Trash2 size={15} />
             </button>
           </div>
         ))}
         <div className="flex gap-2 pt-1 flex-wrap">
-          <button onClick={addFilter} className="flex items-center gap-1 text-sm text-[#94A3B8] hover:text-[#F8FAFC]">
+          <button onClick={addFilter} className="flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
             <Plus size={13} /> Add Filter
           </button>
           {filters.length > 0 && (
             <button
               onClick={() => setShowSaveForm((s) => !s)}
-              className="flex items-center gap-1 text-sm text-[#475569] hover:text-[#F8FAFC]"
+              className="flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
             >
               <Bookmark size={13} /> Save Screen
             </button>
@@ -342,7 +342,7 @@ export default function Screener() {
           <button
             onClick={() => run()}
             disabled={loading || !filters.length}
-            className="flex items-center gap-1 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 text-[#F8FAFC] font-semibold text-sm px-3 py-1.5 rounded ml-auto"
+            className="flex items-center gap-1 bg-[var(--accent-positive)] hover:brightness-110 disabled:opacity-40 text-[var(--text-primary)] font-semibold text-sm px-3 py-1.5 rounded ml-auto"
           >
             <Play size={13} /> {loading ? "Scanning..." : "Run Screen"}
           </button>
@@ -354,16 +354,16 @@ export default function Screener() {
               value={saveNameInput}
               onChange={(e) => setSaveNameInput(e.target.value)}
               placeholder="Screen name…"
-              className="bg-[#020617] text-white text-sm px-2 py-1.5 rounded border border-[#334155] w-40 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+              className="bg-[#020617] text-[var(--text-primary)] text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-40 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
             />
             <button
               onClick={() => { if (saveNameInput.trim()) saveMut.mutate(); }}
               disabled={!saveNameInput.trim() || saveMut.isPending}
-              className="bg-[#3B82F6] text-[#F8FAFC] font-semibold text-xs px-3 py-1.5 rounded hover:bg-[#2563EB] disabled:opacity-50"
+              className="bg-[var(--accent-positive)] text-[var(--text-primary)] font-semibold text-xs px-3 py-1.5 rounded hover:brightness-110 disabled:opacity-50"
             >
               Save
             </button>
-            <button onClick={() => setShowSaveForm(false)} className="text-[#475569] hover:text-[#F8FAFC]">
+            <button onClick={() => setShowSaveForm(false)} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
               <X size={13} />
             </button>
           </div>
@@ -373,19 +373,19 @@ export default function Screener() {
       {/* Saved screens */}
       {savedScreens.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-[#475569] uppercase tracking-wider">Saved:</span>
+          <span className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Saved:</span>
           {savedScreens.map((s) => (
-            <div key={s.id} className="group flex items-center gap-1 bg-[#1E293B] border border-[#334155] rounded-full px-3 py-1">
+            <div key={s.id} className="group flex items-center gap-1 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-full px-3 py-1">
               <button
                 onClick={() => { setFilters(s.filters); run(s.filters); setActivePreset(null); }}
-                className="text-xs text-[#94A3B8] hover:text-[#F8FAFC] flex items-center gap-1.5"
+                className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5"
               >
-                <BookmarkCheck size={11} className="text-[#475569]" />
+                <BookmarkCheck size={11} className="text-[var(--text-tertiary)]" />
                 {s.name}
               </button>
               <button
                 onClick={() => deleteMut.mutate(s.id)}
-                className="opacity-0 group-hover:opacity-100 text-[#475569] hover:text-[#EF4444] ml-1 transition-opacity"
+                className="opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] ml-1 transition-opacity"
               >
                 <X size={10} />
               </button>
@@ -396,32 +396,32 @@ export default function Screener() {
 
       {/* Loading state */}
       {loading && (
-        <div className="text-center py-8 text-[#94A3B8] text-sm animate-pulse">
+        <div className="text-center py-8 text-[var(--text-secondary)] text-sm animate-pulse">
           Scanning 500+ stocks...
         </div>
       )}
 
       {/* Results */}
       {!loading && ran && (
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#1E293B] flex items-center justify-between">
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
             <div>
-              <span className="text-sm font-semibold text-white">{results.length} results</span>
+              <span className="text-sm font-semibold text-[var(--text-primary)]">{results.length} results</span>
               {activePresetMeta && (
-                <span className="ml-2 text-xs text-[#475569]">· {activePresetMeta.label}</span>
+                <span className="ml-2 text-xs text-[var(--text-tertiary)]">· {activePresetMeta.label}</span>
               )}
             </div>
             {activePreset && (
-              <span className="text-[11px] text-[#475569]">Click a ticker to open chart with this screen's indicators</span>
+              <span className="text-[11px] text-[var(--text-tertiary)]">Click a ticker to open chart with this screen's indicators</span>
             )}
           </div>
           {results.length === 0 ? (
-            <div className="py-12 text-center text-[#475569]">No stocks matched the criteria.</div>
+            <div className="py-12 text-center text-[var(--text-tertiary)]">No stocks matched the criteria.</div>
           ) : (
             <div className="overflow-x-auto -mx-3 md:mx-0">
               <table className="w-full text-sm min-w-[480px]">
                 <thead>
-                  <tr className="border-b border-[#1E293B] text-[11px] text-[#475569] uppercase tracking-wide whitespace-nowrap">
+                  <tr className="border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-tertiary)] uppercase tracking-wide whitespace-nowrap">
                     <th className="text-left px-4 py-2">Symbol</th>
                     <th className="text-right px-4 py-2">Price</th>
                     <th className="text-right px-4 py-2">1D Chg</th>
@@ -435,24 +435,24 @@ export default function Screener() {
                     <tr
                       key={r.symbol}
                       onClick={() => navigate(`/chart?symbol=${r.symbol}${activePreset ? `&preset=${activePreset}` : ""}`)}
-                      className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/50 cursor-pointer transition-colors"
+                      className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/50 cursor-pointer transition-colors"
                     >
                       <td className="px-4 py-3">
-                        <div className="font-mono font-semibold text-white">{r.symbol}</div>
+                        <div className="font-mono font-semibold text-[var(--text-primary)]">{r.symbol}</div>
                         {TICKER_NAMES[r.symbol] && (
-                          <div className="text-[11px] text-[#475569] truncate max-w-[160px]">{TICKER_NAMES[r.symbol]}</div>
+                          <div className="text-[11px] text-[var(--text-tertiary)] truncate max-w-[160px]">{TICKER_NAMES[r.symbol]}</div>
                         )}
                         <SectorPill symbol={r.symbol} className="mt-0.5" />
                       </td>
-                      <td className="px-4 py-3 text-right text-white">{formatCurrency(r.price)}</td>
+                      <td className="px-4 py-3 text-right text-[var(--text-primary)]">{formatCurrency(r.price)}</td>
                       <td className={cn("px-4 py-3 text-right font-medium", r.change_pct >= 0 ? "text-[#26a69a]" : "text-[#ef5350]")}>
                         {r.change_pct >= 0 ? "+" : ""}{formatPercent(r.change_pct)}
                       </td>
                       <td className={cn("px-4 py-3 text-right font-medium hidden sm:table-cell", (r.change_5d ?? 0) >= 0 ? "text-[#26a69a]" : "text-[#ef5350]")}>
                         {(r.change_5d ?? 0) >= 0 ? "+" : ""}{formatPercent(r.change_5d ?? 0)}
                       </td>
-                      <td className="px-4 py-3 text-right text-[#94A3B8] hidden sm:table-cell">{formatVolume(r.volume)}</td>
-                      <td className={cn("px-4 py-3 text-right font-medium", (r.rel_volume ?? 1) >= 1.5 ? "text-[#26a69a]" : "text-[#94A3B8]")}>
+                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] hidden sm:table-cell">{formatVolume(r.volume)}</td>
+                      <td className={cn("px-4 py-3 text-right font-medium", (r.rel_volume ?? 1) >= 1.5 ? "text-[#26a69a]" : "text-[var(--text-secondary)]")}>
                         {(r.rel_volume ?? 1).toFixed(2)}×
                       </td>
                     </tr>

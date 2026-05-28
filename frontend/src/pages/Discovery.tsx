@@ -24,7 +24,7 @@ function ChangePill({ value, className }: { value: number; className?: string })
   return (
     <span className={cn(
       "text-xs font-mono font-semibold",
-      pos ? "text-[#22C55E]" : "text-[#EF4444]",
+      pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]",
       className
     )}>
       {fmtPct(value)}
@@ -57,10 +57,10 @@ function SectorHeatmap() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[#475569] text-sm">Daily performance of SPDR sector ETFs</p>
+        <p className="text-[var(--text-tertiary)] text-sm">Daily performance of SPDR sector ETFs</p>
         <button
           onClick={() => refetch()}
-          className="text-[#475569] hover:text-[#F8FAFC] transition-colors"
+          className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
         >
           <RefreshCw size={13} className={isFetching ? "animate-spin" : ""} />
         </button>
@@ -68,11 +68,11 @@ function SectorHeatmap() {
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
           {[...Array(11)].map((_, i) => (
-            <div key={i} className="h-20 bg-[#1E293B] rounded-xl animate-pulse" />
+            <div key={i} className="h-20 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse" />
           ))}
         </div>
       ) : sectors.length === 0 ? (
-        <div className="text-center py-12 text-[#475569] text-sm">
+        <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">
           Sector data unavailable — add Alpaca API keys to enable live data
         </div>
       ) : (
@@ -86,11 +86,11 @@ function SectorHeatmap() {
                 className="rounded-xl p-3 flex flex-col gap-1 transition-transform hover:scale-[1.02] cursor-default"
                 style={{ backgroundColor: heatColor(s.change_pct) }}
               >
-                <div className="text-white font-semibold text-sm leading-tight">{s.sector}</div>
-                <div className="text-white/70 text-[11px] font-mono">{s.symbol}</div>
+                <div className="text-[var(--text-primary)] font-semibold text-sm leading-tight">{s.sector}</div>
+                <div className="text-[var(--text-primary)]/70 text-[11px] font-mono">{s.symbol}</div>
                 <div className="flex items-center justify-between mt-auto">
-                  <span className="text-white/80 text-xs font-mono">${s.price.toFixed(2)}</span>
-                  <span className="text-white font-bold text-sm">{fmtPct(s.change_pct)}</span>
+                  <span className="text-[var(--text-primary)]/80 text-xs font-mono">${s.price.toFixed(2)}</span>
+                  <span className="text-[var(--text-primary)] font-bold text-sm">{fmtPct(s.change_pct)}</span>
                 </div>
               </div>
             ))}
@@ -119,11 +119,11 @@ const TEXT_MAP: Record<string, string> = {
   violet: "text-violet-400",
   blue: "text-blue-400",
   sky: "text-sky-400",
-  emerald: "text-[#22C55E]",
+  emerald: "text-[var(--accent-positive)]",
   amber: "text-amber-400",
   orange: "text-orange-400",
   green: "text-green-400",
-  rose: "text-[#EF4444]",
+  rose: "text-[var(--accent-negative)]",
   slate: "text-slate-300",
   pink: "text-pink-400",
 };
@@ -145,14 +145,14 @@ function ThemeCard({ theme, onTickerClick }: { theme: Theme; onTickerClick: (s: 
           <span className="text-2xl">{theme.emoji}</span>
           <div>
             <div className={cn("font-semibold text-sm", textClass)}>{theme.name}</div>
-            <div className="text-[#475569] text-xs mt-0.5 line-clamp-1">{theme.description}</div>
+            <div className="text-[var(--text-tertiary)] text-xs mt-0.5 line-clamp-1">{theme.description}</div>
           </div>
         </div>
         <div className="text-right shrink-0">
-          <div className={cn("font-bold text-sm font-mono", pos ? "text-[#22C55E]" : "text-[#EF4444]")}>
+          <div className={cn("font-bold text-sm font-mono", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
             {fmtPct(theme.avg_change_pct)}
           </div>
-          <div className="text-[#475569] text-[10px]">avg today</div>
+          <div className="text-[var(--text-tertiary)] text-[10px]">avg today</div>
         </div>
       </div>
 
@@ -165,15 +165,15 @@ function ThemeCard({ theme, onTickerClick }: { theme: Theme; onTickerClick: (s: 
             className={cn(
               "text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors",
               c.change_pct >= 0
-                ? "bg-emerald-950/50 border-emerald-800 text-[#22C55E] hover:bg-emerald-900/50"
-                : "bg-rose-950/50 border-rose-800 text-[#EF4444] hover:bg-rose-900/50"
+                ? "bg-emerald-950/50 border-emerald-800 text-[var(--accent-positive)] hover:bg-emerald-900/50"
+                : "bg-rose-950/50 border-rose-800 text-[var(--accent-negative)] hover:bg-rose-900/50"
             )}
           >
             {c.symbol} {c.change_pct !== 0 && <span className="opacity-70">{fmtPct(c.change_pct)}</span>}
           </button>
         ))}
         {!expanded && theme.constituents.length > 5 && (
-          <span className="text-[10px] text-[#475569] self-center">+{theme.constituents.length - 5} more</span>
+          <span className="text-[10px] text-[var(--text-tertiary)] self-center">+{theme.constituents.length - 5} more</span>
         )}
       </div>
     </div>
@@ -193,11 +193,11 @@ function ThemesTab() {
 
   return (
     <div className="space-y-3">
-      <p className="text-[#475569] text-sm">Curated baskets of stocks around major investment themes. Click a ticker to view its chart.</p>
+      <p className="text-[var(--text-tertiary)] text-sm">Curated baskets of stocks around major investment themes. Click a ticker to view its chart.</p>
       {isLoading ? (
         <div className="grid sm:grid-cols-2 gap-3">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-28 bg-[#1E293B] rounded-xl animate-pulse" />
+            <div key={i} className="h-28 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse" />
           ))}
         </div>
       ) : (
@@ -226,28 +226,28 @@ function IPOsTab() {
   const ipos: IPO[] = data?.ipos ?? [];
 
   const statusColor = (s: string) =>
-    s === "upcoming" ? "text-[#22C55E] bg-emerald-950/50 border-emerald-800"
+    s === "upcoming" ? "text-[var(--accent-positive)] bg-emerald-950/50 border-emerald-800"
     : s === "priced" ? "text-blue-400 bg-blue-950/50 border-blue-800"
     : "text-amber-400 bg-amber-950/50 border-amber-800";
 
   return (
     <div className="space-y-3">
-      <p className="text-[#475569] text-sm">
+      <p className="text-[var(--text-tertiary)] text-sm">
         Upcoming and recent IPOs.{" "}
-        {!ipos.length ? "" : <span className="text-[#475569]">Showing demo data — add FMP API key for live listings.</span>}
+        {!ipos.length ? "" : <span className="text-[var(--text-tertiary)]">Showing demo data — add FMP API key for live listings.</span>}
       </p>
       {isLoading ? (
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-16 bg-[#1E293B] rounded-xl animate-pulse" />
+            <div key={i} className="h-16 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
           <div className="overflow-x-auto -mx-0">
           <table className="w-full text-sm min-w-[480px]">
             <thead>
-              <tr className="border-b border-[#334155] text-[#475569] text-xs whitespace-nowrap">
+              <tr className="border-b border-[var(--border-emphasis)] text-[var(--text-tertiary)] text-xs whitespace-nowrap">
                 <th className="text-left px-4 py-3 font-medium">Company</th>
                 <th className="text-left px-3 py-3 font-medium">Ticker</th>
                 <th className="text-left px-3 py-3 font-medium hidden sm:table-cell">Exchange</th>
@@ -258,12 +258,12 @@ function IPOsTab() {
             </thead>
             <tbody>
               {ipos.map((ipo, i) => (
-                <tr key={i} className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/30 transition-colors">
-                  <td className="px-4 py-3 text-white font-medium">{ipo.company}</td>
-                  <td className="px-3 py-3 font-mono text-[#94A3B8]">{ipo.symbol}</td>
-                  <td className="px-3 py-3 text-[#475569] hidden sm:table-cell">{ipo.exchange}</td>
-                  <td className="px-3 py-3 text-[#94A3B8] hidden md:table-cell">{ipo.price_range}</td>
-                  <td className="px-3 py-3 text-[#94A3B8]">{ipo.date}</td>
+                <tr key={i} className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors">
+                  <td className="px-4 py-3 text-[var(--text-primary)] font-medium">{ipo.company}</td>
+                  <td className="px-3 py-3 font-mono text-[var(--text-secondary)]">{ipo.symbol}</td>
+                  <td className="px-3 py-3 text-[var(--text-tertiary)] hidden sm:table-cell">{ipo.exchange}</td>
+                  <td className="px-3 py-3 text-[var(--text-secondary)] hidden md:table-cell">{ipo.price_range}</td>
+                  <td className="px-3 py-3 text-[var(--text-secondary)]">{ipo.date}</td>
                   <td className="px-3 py-3">
                     <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border capitalize", statusColor(ipo.status))}>
                       {ipo.status}
@@ -274,7 +274,7 @@ function IPOsTab() {
             </tbody>
           </table>
           {ipos.length === 0 && (
-            <div className="text-center py-12 text-[#475569] text-sm">No upcoming IPOs found</div>
+            <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">No upcoming IPOs found</div>
           )}
           </div>
         </div>
@@ -301,18 +301,18 @@ function InsidersTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[#475569] text-sm">
+        <p className="text-[var(--text-tertiary)] text-sm">
           Recent Form 4 filings.{" "}
-          <span className="text-[#475569]">Showing demo data — add FMP API key for live filings.</span>
+          <span className="text-[var(--text-tertiary)]">Showing demo data — add FMP API key for live filings.</span>
         </p>
-        <div className="flex items-center gap-1 bg-[#1E293B] p-0.5 rounded-lg">
+        <div className="flex items-center gap-1 bg-[var(--bg-elevated-2)] p-0.5 rounded-lg">
           {(["all", "buy", "sell"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
               className={cn(
                 "text-xs px-2.5 py-1 rounded-md font-medium capitalize transition-colors",
-                filter === f ? "bg-[#1E293B] text-white" : "text-[#475569] hover:text-[#94A3B8]"
+                filter === f ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
               )}
             >
               {f === "all" ? "All" : f === "buy" ? "🟢 Buys" : "🔴 Sells"}
@@ -324,15 +324,15 @@ function InsidersTab() {
       {isLoading ? (
         <div className="space-y-2">
           {[...Array(8)].map((_, i) => (
-            <div key={i} className="h-14 bg-[#1E293B] rounded-xl animate-pulse" />
+            <div key={i} className="h-14 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
           <div className="overflow-x-auto -mx-0">
           <table className="w-full text-sm min-w-[420px]">
             <thead>
-              <tr className="border-b border-[#334155] text-[#475569] text-xs whitespace-nowrap">
+              <tr className="border-b border-[var(--border-emphasis)] text-[var(--text-tertiary)] text-xs whitespace-nowrap">
                 <th className="text-left px-4 py-3 font-medium">Symbol</th>
                 <th className="text-left px-3 py-3 font-medium hidden sm:table-cell">Insider</th>
                 <th className="text-left px-3 py-3 font-medium hidden md:table-cell">Title</th>
@@ -344,41 +344,41 @@ function InsidersTab() {
             </thead>
             <tbody>
               {filtered.map((t, i) => (
-                <tr key={i} className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/30 transition-colors">
+                <tr key={i} className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors">
                   <td className="px-4 py-3">
                     <button
                       onClick={() => navigate(`/chart?symbol=${t.symbol}`)}
-                      className="font-mono font-bold text-white hover:text-[#94A3B8] transition-colors"
+                      className="font-mono font-bold text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
                     >
                       {t.symbol}
                     </button>
                   </td>
-                  <td className="px-3 py-3 text-[#94A3B8] hidden sm:table-cell max-w-[140px] truncate">{t.name}</td>
-                  <td className="px-3 py-3 text-[#475569] text-xs hidden md:table-cell">{t.title}</td>
+                  <td className="px-3 py-3 text-[var(--text-secondary)] hidden sm:table-cell max-w-[140px] truncate">{t.name}</td>
+                  <td className="px-3 py-3 text-[var(--text-tertiary)] text-xs hidden md:table-cell">{t.title}</td>
                   <td className="px-3 py-3 text-center">
                     {t.transaction === "buy" ? (
-                      <span className="inline-flex items-center gap-1 text-[#22C55E] text-xs font-semibold">
+                      <span className="inline-flex items-center gap-1 text-[var(--accent-positive)] text-xs font-semibold">
                         <TrendingUp size={11} /> Buy
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[#EF4444] text-xs font-semibold">
+                      <span className="inline-flex items-center gap-1 text-[var(--accent-negative)] text-xs font-semibold">
                         <TrendingDown size={11} /> Sell
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-[#94A3B8] text-right font-mono text-xs hidden sm:table-cell">
+                  <td className="px-3 py-3 text-[var(--text-secondary)] text-right font-mono text-xs hidden sm:table-cell">
                     {t.shares.toLocaleString()}
                   </td>
-                  <td className="px-3 py-3 text-right font-mono text-[#94A3B8] text-xs">
+                  <td className="px-3 py-3 text-right font-mono text-[var(--text-secondary)] text-xs">
                     {fmtValue(t.value)}
                   </td>
-                  <td className="px-3 py-3 text-[#475569] text-right text-xs">{t.date}</td>
+                  <td className="px-3 py-3 text-[var(--text-tertiary)] text-right text-xs">{t.date}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {filtered.length === 0 && (
-            <div className="text-center py-12 text-[#475569] text-sm">No transactions found</div>
+            <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">No transactions found</div>
           )}
           </div>
         </div>
@@ -404,18 +404,18 @@ export default function Discovery() {
   return (
     <div className="space-y-5 pb-8">
       <div>
-        <h1 className="text-xl font-bold text-white">Discovery</h1>
-        <p className="text-[#475569] text-sm mt-0.5">Explore themes, sector trends, IPOs, and insider activity</p>
+        <h1 className="text-xl font-bold text-[var(--text-primary)]">Discovery</h1>
+        <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Explore themes, sector trends, IPOs, and insider activity</p>
       </div>
 
-      <div className="flex gap-1 bg-[#1E293B] p-1 rounded-xl w-fit flex-wrap">
+      <div className="flex gap-1 bg-[var(--bg-elevated-2)] p-1 rounded-xl w-fit flex-wrap">
         {TABS.map(({ id, label }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
             className={cn(
               "px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap",
-              tab === id ? "bg-[#1E293B] text-white" : "text-[#475569] hover:text-[#94A3B8]"
+              tab === id ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
           >
             {label}

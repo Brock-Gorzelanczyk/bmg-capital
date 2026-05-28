@@ -130,7 +130,7 @@ export default function SymbolSearch({
                 i === active ? "bg-[#1a1a1a]" : "hover:bg-[#1a1a1a]"
               )}
             >
-              <span className="font-bold text-white w-16 shrink-0">{sym}</span>
+              <span className="font-bold text-[var(--text-primary)] w-16 shrink-0">{sym}</span>
               <span className="text-[#555] text-xs truncate">{TICKER_NAMES[sym]}</span>
             </button>
           ))}
@@ -140,7 +140,7 @@ export default function SymbolSearch({
               className="w-full text-left px-3 py-2 flex items-center gap-2 text-sm border-t border-[#1f1f1f] text-[#555] hover:bg-[#1a1a1a]"
             >
               <Search size={11} />
-              <span>Go to <strong className="text-white">{query.toUpperCase()}</strong></span>
+              <span>Go to <strong className="text-[var(--text-primary)]">{query.toUpperCase()}</strong></span>
             </button>
           )}
         </div>

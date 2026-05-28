@@ -29,13 +29,13 @@ function DayModal({ day, onClose }: DayModalProps) {
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-[#0F172A] border border-[#1E293B] rounded-2xl shadow-2xl p-5">
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl p-5">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <div className="text-xs text-[#475569] uppercase tracking-widest mb-1">Daily Recap</div>
-            <div className="text-sm font-semibold text-white">{label}</div>
+            <div className="text-xs text-[var(--text-tertiary)] uppercase tracking-widest mb-1">Daily Recap</div>
+            <div className="text-sm font-semibold text-[var(--text-primary)]">{label}</div>
           </div>
-          <button onClick={onClose} className="text-[#475569] hover:text-white transition-colors cursor-pointer mt-0.5">
+          <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer mt-0.5">
             <X size={16} />
           </button>
         </div>
@@ -43,7 +43,7 @@ function DayModal({ day, onClose }: DayModalProps) {
         {/* P&L summary */}
         <div className={cn("rounded-xl p-4 mb-4 flex items-center justify-between", isUp ? "bg-emerald-900/20 border border-emerald-500/20" : "bg-red-900/20 border border-red-500/20")}>
           <div>
-            <div className="text-xs text-[#475569] mb-1">Day P&L</div>
+            <div className="text-xs text-[var(--text-tertiary)] mb-1">Day P&L</div>
             <div className={cn("text-2xl font-bold font-mono", isUp ? "text-emerald-400" : "text-red-400")}>
               {fmt$(day.day_pnl)}
             </div>
@@ -52,8 +52,8 @@ function DayModal({ day, onClose }: DayModalProps) {
             </div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-[#475569] mb-1">Portfolio Value</div>
-            <div className="text-sm font-mono text-[#94A3B8]">${day.portfolio_value.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+            <div className="text-xs text-[var(--text-tertiary)] mb-1">Portfolio Value</div>
+            <div className="text-sm font-mono text-[var(--text-secondary)]">${day.portfolio_value.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
           </div>
         </div>
 
@@ -64,9 +64,9 @@ function DayModal({ day, onClose }: DayModalProps) {
             { label: "Exits", value: day.exits_today },
             { label: "Open Positions", value: day.open_positions },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-[#1E293B] rounded-lg px-3 py-2 text-center">
-              <div className="text-[10px] text-[#475569] uppercase tracking-wider">{label}</div>
-              <div className="text-lg font-bold text-white font-mono mt-0.5">{value}</div>
+            <div key={label} className="bg-[var(--bg-elevated-2)] rounded-lg px-3 py-2 text-center">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">{label}</div>
+              <div className="text-lg font-bold text-[var(--text-primary)] font-mono mt-0.5">{value}</div>
             </div>
           ))}
         </div>
@@ -74,18 +74,18 @@ function DayModal({ day, onClose }: DayModalProps) {
         {/* Trade events */}
         {day.trades.length > 0 ? (
           <div>
-            <div className="text-xs text-[#475569] uppercase tracking-widest mb-2">Trades</div>
+            <div className="text-xs text-[var(--text-tertiary)] uppercase tracking-widest mb-2">Trades</div>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {day.trades.map((t, i) => {
                 const isEntry = t.event_type.includes("entry");
                 return (
-                  <div key={i} className="flex items-center gap-2.5 bg-[#1E293B] rounded-lg px-3 py-2">
+                  <div key={i} className="flex items-center gap-2.5 bg-[var(--bg-elevated-2)] rounded-lg px-3 py-2">
                     <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded uppercase", isEntry ? "bg-emerald-900/40 text-emerald-400" : "bg-red-900/40 text-red-400")}>
                       {isEntry ? "BUY" : "SELL"}
                     </span>
-                    <span className="font-mono font-bold text-white text-sm">{t.symbol}</span>
-                    {t.price != null && <span className="text-xs text-[#475569] font-mono">${t.price.toFixed(2)}</span>}
-                    <span className="text-xs text-[#334155] flex-1 truncate">{t.preset_label}</span>
+                    <span className="font-mono font-bold text-[var(--text-primary)] text-sm">{t.symbol}</span>
+                    {t.price != null && <span className="text-xs text-[var(--text-tertiary)] font-mono">${t.price.toFixed(2)}</span>}
+                    <span className="text-xs text-[var(--border-emphasis)] flex-1 truncate">{t.preset_label}</span>
                     {t.pnl_pct != null && (
                       <span className={cn("text-xs font-mono", t.pnl_pct >= 0 ? "text-emerald-400" : "text-red-400")}>
                         {t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(1)}%
@@ -97,7 +97,7 @@ function DayModal({ day, onClose }: DayModalProps) {
             </div>
           </div>
         ) : (
-          <p className="text-xs text-[#334155] text-center py-2">No trade events recorded for this day</p>
+          <p className="text-xs text-[var(--border-emphasis)] text-center py-2">No trade events recorded for this day</p>
         )}
       </div>
     </>
@@ -141,16 +141,16 @@ export default function PnlCalendar() {
   const todayStr = today.toISOString().slice(0, 10);
 
   return (
-    <div className="bg-[#0F172A] border border-[#1E293B] rounded-2xl p-4">
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs font-semibold text-[#64748B] uppercase tracking-widest">P&L Calendar</span>
+        <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">P&L Calendar</span>
         <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="text-[#475569] hover:text-white transition-colors cursor-pointer p-1">
+          <button onClick={prevMonth} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer p-1">
             <ChevronLeft size={14} />
           </button>
-          <span className="text-sm font-semibold text-white w-28 text-center">{MONTHS[month]} {year}</span>
-          <button onClick={nextMonth} className="text-[#475569] hover:text-white transition-colors cursor-pointer p-1">
+          <span className="text-sm font-semibold text-[var(--text-primary)] w-28 text-center">{MONTHS[month]} {year}</span>
+          <button onClick={nextMonth} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer p-1">
             <ChevronRight size={14} />
           </button>
         </div>
@@ -159,7 +159,7 @@ export default function PnlCalendar() {
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 mb-1">
         {DAYS.map(d => (
-          <div key={d} className="text-center text-[10px] text-[#334155] uppercase tracking-widest py-1">{d}</div>
+          <div key={d} className="text-center text-[10px] text-[var(--border-emphasis)] uppercase tracking-widest py-1">{d}</div>
         ))}
       </div>
 
@@ -184,12 +184,12 @@ export default function PnlCalendar() {
                 "relative aspect-square rounded-lg flex flex-col items-center justify-center transition-all text-[11px] font-medium",
                 pnlDay ? "cursor-pointer" : "cursor-default",
                 isToday && "ring-1 ring-[#3B82F6]",
-                !pnlDay && "text-[#334155]",
+                !pnlDay && "text-[var(--border-emphasis)]",
                 pnlDay && isUp && !isBigUp && "bg-emerald-900/25 text-emerald-400 hover:bg-emerald-900/40",
                 pnlDay && isBigUp && "bg-emerald-900/50 text-emerald-300 hover:bg-emerald-900/60",
                 pnlDay && !isUp && !isBigDown && "bg-red-900/25 text-red-400 hover:bg-red-900/40",
                 pnlDay && isBigDown && "bg-red-900/50 text-red-300 hover:bg-red-900/60",
-                !pnlDay && "text-[#334155] hover:bg-[#1E293B]/40",
+                !pnlDay && "text-[var(--border-emphasis)] hover:bg-[var(--bg-elevated-2)]/40",
               )}
             >
               <span>{day}</span>
@@ -216,8 +216,8 @@ export default function PnlCalendar() {
         const upDays = monthDays.filter(d => d.day_pnl > 0).length;
         const downDays = monthDays.filter(d => d.day_pnl < 0).length;
         return (
-          <div className="mt-3 pt-3 border-t border-[#1E293B] flex items-center justify-between text-xs">
-            <span className="text-[#475569]">{upDays}W · {downDays}L</span>
+          <div className="mt-3 pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs">
+            <span className="text-[var(--text-tertiary)]">{upDays}W · {downDays}L</span>
             <span className={cn("font-mono font-semibold", monthPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
               {fmt$(monthPnl)} this month
             </span>

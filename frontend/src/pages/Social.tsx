@@ -47,19 +47,19 @@ function CommentThread({ postId }: { postId: number }) {
   });
 
   return (
-    <div className="mt-3 pl-4 border-l border-[#1E293B] space-y-2">
+    <div className="mt-3 pl-4 border-l border-[var(--border-subtle)] space-y-2">
       {isLoading ? (
-        <div className="text-[#475569] text-xs animate-pulse">Loading…</div>
+        <div className="text-[var(--text-tertiary)] text-xs animate-pulse">Loading…</div>
       ) : (
         comments.map((c) => (
           <div key={c.id} className="flex gap-2 items-start">
-            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#475569] to-[#334155] flex items-center justify-center text-[9px] text-white shrink-0">
+            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#475569] to-[#334155] flex items-center justify-center text-[9px] text-[var(--text-primary)] shrink-0">
               {avatar(c.username)}
             </div>
             <div>
-              <span className="text-[#94A3B8] text-xs font-semibold">{c.username} </span>
-              <span className="text-[#475569] text-[10px]">{timeAgo(c.created_at)}</span>
-              <p className="text-[#94A3B8] text-xs mt-0.5">{c.content}</p>
+              <span className="text-[var(--text-secondary)] text-xs font-semibold">{c.username} </span>
+              <span className="text-[var(--text-tertiary)] text-[10px]">{timeAgo(c.created_at)}</span>
+              <p className="text-[var(--text-secondary)] text-xs mt-0.5">{c.content}</p>
             </div>
           </div>
         ))
@@ -70,12 +70,12 @@ function CommentThread({ postId }: { postId: number }) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && text.trim()) addMut.mutate(text.trim()); }}
           placeholder="Add a comment…"
-          className="flex-1 bg-[#1E293B] border border-[#334155] text-white text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:border-[#3B82F6]"
+          className="flex-1 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-xs px-3 py-1.5 rounded-lg focus:outline-none focus:border-[#3B82F6]"
         />
         <button
           onClick={() => text.trim() && addMut.mutate(text.trim())}
           disabled={!text.trim()}
-          className="text-[#3B82F6] disabled:text-[#334155] transition-colors"
+          className="text-[var(--accent-positive)] disabled:text-[var(--border-emphasis)] transition-colors"
         >
           <Send size={13} />
         </button>
@@ -109,19 +109,19 @@ function PostCard({ post, currentUserId }: { post: SocialPost; currentUserId: nu
 
   return (
     <div className={cn(
-      "bg-[#0F172A] border rounded-xl p-4 space-y-3",
-      post.is_memo ? "border-[#F59E0B]/30" : "border-[#1E293B]"
+      "bg-[var(--bg-elevated)] border rounded-xl p-4 space-y-3",
+      post.is_memo ? "border-[#F59E0B]/30" : "border-[var(--border-subtle)]"
     )}>
       {/* Header */}
       <div className="flex items-start gap-3">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs text-white font-bold shrink-0">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center text-xs text-[var(--text-primary)] font-bold shrink-0">
           {avatar(post.username)}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-white text-sm font-semibold">{post.username}</span>
+            <span className="text-[var(--text-primary)] text-sm font-semibold">{post.username}</span>
             {post.symbol && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1E293B] text-[#3B82F6] font-mono font-semibold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-elevated-2)] text-[var(--accent-positive)] font-mono font-semibold">
                 ${post.symbol}
               </span>
             )}
@@ -130,13 +130,13 @@ function PostCard({ post, currentUserId }: { post: SocialPost; currentUserId: nu
                 Trade Memo
               </span>
             )}
-            <span className="text-[#475569] text-[10px] ml-auto">{timeAgo(post.created_at)}</span>
+            <span className="text-[var(--text-tertiary)] text-[10px] ml-auto">{timeAgo(post.created_at)}</span>
           </div>
         </div>
         {post.user_id === currentUserId && (
           <button
             onClick={() => deleteMut.mutate()}
-            className="text-[#475569] hover:text-[#EF4444] transition-colors shrink-0"
+            className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors shrink-0"
           >
             <Trash2 size={13} />
           </button>
@@ -144,15 +144,15 @@ function PostCard({ post, currentUserId }: { post: SocialPost; currentUserId: nu
       </div>
 
       {/* Content */}
-      <p className="text-[#94A3B8] text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
+      <p className="text-[var(--text-secondary)] text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
 
       {/* Actions */}
-      <div className="flex items-center gap-4 pt-1 border-t border-[#1E293B]">
+      <div className="flex items-center gap-4 pt-1 border-t border-[var(--border-subtle)]">
         <button
           onClick={() => likeMut.mutate()}
           className={cn(
             "flex items-center gap-1.5 text-xs transition-colors",
-            post.liked_by_me ? "text-[#EF4444]" : "text-[#475569] hover:text-[#EF4444]"
+            post.liked_by_me ? "text-[var(--accent-negative)]" : "text-[var(--text-tertiary)] hover:text-[var(--accent-negative)]"
           )}
         >
           <Heart size={13} fill={post.liked_by_me ? "currentColor" : "none"} />
@@ -160,7 +160,7 @@ function PostCard({ post, currentUserId }: { post: SocialPost; currentUserId: nu
         </button>
         <button
           onClick={() => setShowComments((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-[#475569] hover:text-[#94A3B8] transition-colors"
+          className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
         >
           <MessageCircle size={13} />
           <span>{post.comments_count}</span>
@@ -189,21 +189,21 @@ function ComposeBox({ onPost }: { onPost: (body: { content: string; symbol?: str
   };
 
   return (
-    <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4 space-y-3">
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && e.metaKey) submit(); }}
         placeholder="Share a trade idea or market thought… (⌘+Enter to post)"
         rows={3}
-        className="w-full bg-[#1E293B] border border-[#334155] text-white text-sm px-3 py-2.5 rounded-xl focus:outline-none focus:border-[#3B82F6] resize-none placeholder-[#475569]"
+        className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2.5 rounded-xl focus:outline-none focus:border-[#3B82F6] resize-none placeholder-[#475569]"
       />
       <div className="flex items-center gap-3">
         <input
           value={symbol}
           onChange={(e) => setSymbol(e.target.value.toUpperCase())}
           placeholder="$AAPL (optional)"
-          className="bg-[#1E293B] border border-[#334155] text-white text-xs px-3 py-1.5 rounded-lg w-28 font-mono placeholder-[#475569] focus:outline-none focus:border-[#3B82F6]"
+          className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-xs px-3 py-1.5 rounded-lg w-28 font-mono placeholder-[#475569] focus:outline-none focus:border-[#3B82F6]"
         />
         <button
           onClick={() => setIsMemo((v) => !v)}
@@ -211,7 +211,7 @@ function ComposeBox({ onPost }: { onPost: (body: { content: string; symbol?: str
             "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors",
             isMemo
               ? "border-[#F59E0B]/50 bg-amber-900/20 text-[#F59E0B]"
-              : "border-[#334155] text-[#475569] hover:text-[#94A3B8]"
+              : "border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
           )}
         >
           <BookMarked size={12} />
@@ -220,7 +220,7 @@ function ComposeBox({ onPost }: { onPost: (body: { content: string; symbol?: str
         <button
           onClick={submit}
           disabled={!content.trim()}
-          className="ml-auto flex items-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-1.5 rounded-xl transition-colors"
+          className="ml-auto flex items-center gap-2 bg-[var(--accent-positive)] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-[var(--text-primary)] text-sm font-semibold px-4 py-1.5 rounded-xl transition-colors"
         >
           <Send size={13} />
           Post
@@ -265,10 +265,10 @@ export default function Social() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Community Feed</h1>
-          <p className="text-[#475569] text-sm mt-0.5">Share trade ideas and market insights</p>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Community Feed</h1>
+          <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Share trade ideas and market insights</p>
         </div>
-        <div className="flex items-center gap-1.5 text-[#475569]">
+        <div className="flex items-center gap-1.5 text-[var(--text-tertiary)]">
           <Users size={14} />
           <span className="text-xs">{posts.length} posts</span>
         </div>
@@ -290,8 +290,8 @@ export default function Social() {
             className={cn(
               "text-xs px-3 py-1.5 rounded-full transition-colors",
               filter === id
-                ? "bg-[#3B82F6] text-white"
-                : "bg-[#1E293B] text-[#475569] hover:text-[#94A3B8]"
+                ? "bg-[var(--accent-positive)] text-[var(--text-primary)]"
+                : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
           >
             {label}
@@ -302,7 +302,7 @@ export default function Social() {
             value={symbolFilter}
             onChange={(e) => setSymbolFilter(e.target.value.toUpperCase())}
             placeholder="AAPL"
-            className="bg-[#1E293B] border border-[#334155] text-white text-xs px-3 py-1.5 rounded-lg w-20 font-mono placeholder-[#475569] focus:outline-none focus:border-[#3B82F6]"
+            className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-xs px-3 py-1.5 rounded-lg w-20 font-mono placeholder-[#475569] focus:outline-none focus:border-[#3B82F6]"
           />
         )}
       </div>
@@ -311,14 +311,14 @@ export default function Social() {
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-28 bg-[#0F172A] border border-[#1E293B] rounded-xl animate-pulse" />
+            <div key={i} className="h-28 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl animate-pulse" />
           ))}
         </div>
       ) : posts.length === 0 ? (
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-12 text-center">
-          <TrendingUp size={32} className="text-[#334155] mx-auto mb-3" />
-          <p className="text-[#475569] text-sm">No posts yet</p>
-          <p className="text-[#334155] text-xs mt-1">Be the first to share a trade idea</p>
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-12 text-center">
+          <TrendingUp size={32} className="text-[var(--border-emphasis)] mx-auto mb-3" />
+          <p className="text-[var(--text-tertiary)] text-sm">No posts yet</p>
+          <p className="text-[var(--border-emphasis)] text-xs mt-1">Be the first to share a trade idea</p>
         </div>
       ) : (
         <div className="space-y-3">

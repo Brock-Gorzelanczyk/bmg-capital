@@ -91,7 +91,7 @@ export default function GlossaryTooltip({ children, className }: Props) {
                   className="z-50 max-w-xs bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-300 shadow-xl"
                   sideOffset={5}
                 >
-                  <p className="font-semibold text-white capitalize mb-1">{chunk.term}</p>
+                  <p className="font-semibold text-[var(--text-primary)] capitalize mb-1">{chunk.term}</p>
                   <p>{QUICK_DEFS[chunk.term]}</p>
                   <p className="text-zinc-600 mt-1">Click for full explanation →</p>
                   <Tooltip.Arrow className="fill-zinc-700" />

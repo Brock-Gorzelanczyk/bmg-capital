@@ -28,7 +28,7 @@ export default function DrawingToolbar({ activeTool, onChange, onClearAll }: Pro
           className={cn(
             "w-8 h-8 flex items-center justify-center rounded transition-colors",
             activeTool === tool
-              ? "bg-white/10 text-white"
+              ? "bg-white/10 text-[var(--text-primary)]"
               : functional
                 ? "text-[#555] hover:text-[#d4d4d4] hover:bg-white/5"
                 : "text-[#2a2a2a] cursor-not-allowed"

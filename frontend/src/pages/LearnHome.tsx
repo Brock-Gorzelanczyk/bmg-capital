@@ -27,8 +27,8 @@ const TRACK_GRADIENT: Record<string, string> = {
 };
 
 const TRACK_TEXT: Record<string, string> = {
-  emerald: "text-[#22C55E]", blue: "text-blue-400", violet: "text-violet-400",
-  amber: "text-amber-400", rose: "text-[#EF4444]", purple: "text-purple-400",
+  emerald: "text-[var(--accent-positive)]", blue: "text-blue-400", violet: "text-violet-400",
+  amber: "text-amber-400", rose: "text-[var(--accent-negative)]", purple: "text-purple-400",
   teal: "text-teal-400", orange: "text-orange-400", cyan: "text-cyan-400",
 };
 
@@ -81,7 +81,7 @@ export default function LearnHome() {
     return (
       <div className="max-w-5xl mx-auto space-y-6">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-24 bg-[#1E293B]/50 rounded-xl animate-pulse" />
+          <div key={i} className="h-24 bg-[var(--bg-elevated-2)]/50 rounded-xl animate-pulse" />
         ))}
       </div>
     );
@@ -92,8 +92,8 @@ export default function LearnHome() {
       <div className="max-w-2xl mx-auto py-12 px-4">
         <div className="text-center mb-10">
           <div className="text-5xl mb-4">🎓</div>
-          <h1 className="text-2xl font-bold text-white">Welcome to BMG Capital Learn</h1>
-          <p className="text-[#94A3B8] mt-2">Answer 5 quick questions to get a personalized learning path.</p>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Welcome to BMG Capital Learn</h1>
+          <p className="text-[var(--text-secondary)] mt-2">Answer 5 quick questions to get a personalized learning path.</p>
         </div>
         <PlacementQuiz
           onComplete={(trackId) => {
@@ -116,7 +116,7 @@ export default function LearnHome() {
       <div className="flex items-start gap-6">
         <div className="flex-1 space-y-3">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-white">Learning Center</h1>
+            <h1 className="text-xl font-bold text-[var(--text-primary)]">Learning Center</h1>
             {p && <StreakBadge streak={p.streak} />}
           </div>
           {p && <LevelBar xp={p.xp} className="max-w-sm" />}
@@ -142,7 +142,7 @@ export default function LearnHome() {
                 <CalendarCheck size={20} className="text-indigo-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold text-sm">Daily Challenge</p>
+                <p className="text-[var(--text-primary)] font-semibold text-sm">Daily Challenge</p>
                 <p className="text-indigo-300/70 text-xs">Complete today's challenge lesson to earn bonus XP</p>
               </div>
               <button
@@ -165,11 +165,11 @@ export default function LearnHome() {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-[#94A3B8] uppercase tracking-widest mb-1">
+                  <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-widest mb-1">
                     Continue · {selectedTrack.title}
                   </p>
-                  <h2 className="text-lg font-bold text-white">{resumeLesson.title}</h2>
-                  <p className="text-sm text-[#94A3B8] mt-1">{resumeLesson.durationMin} min · +{resumeLesson.xp} XP</p>
+                  <h2 className="text-lg font-bold text-[var(--text-primary)]">{resumeLesson.title}</h2>
+                  <p className="text-sm text-[var(--text-secondary)] mt-1">{resumeLesson.durationMin} min · +{resumeLesson.xp} XP</p>
                 </div>
                 <div className={cn("text-3xl", TRACK_TEXT[selectedTrack.colorClass])}>
                   {selectedTrack.icon}
@@ -182,7 +182,7 @@ export default function LearnHome() {
                     style={{ width: `${trackProgress(selectedTrackId, completedIds) * 100}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-[#475569] mt-1">
+                <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
                   {Math.round(trackProgress(selectedTrackId, completedIds) * 100)}% complete
                 </p>
               </div>
@@ -191,7 +191,7 @@ export default function LearnHome() {
 
           {/* All tracks */}
           <div>
-            <h2 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-3">All Learning Tracks</h2>
+            <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">All Learning Tracks</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {TRACKS.map((track) => {
                 const pct = trackProgress(track.id, completedIds);
@@ -204,24 +204,24 @@ export default function LearnHome() {
                     key={track.id}
                     onClick={() => navigate(`/learn/${track.id}`)}
                     className={cn(
-                      "bg-[#0F172A] border rounded-xl p-4 cursor-pointer hover:bg-[#1E293B] transition-all group",
-                      isSelected ? "border-zinc-600" : "border-[#1E293B]"
+                      "bg-[var(--bg-elevated)] border rounded-xl p-4 cursor-pointer hover:bg-[var(--bg-elevated-2)] transition-all group",
+                      isSelected ? "border-zinc-600" : "border-[var(--border-subtle)]"
                     )}
                   >
                     <div className="flex items-start gap-3">
                       <span className="text-2xl">{track.icon}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="font-semibold text-white text-sm truncate">{track.title}</p>
+                          <p className="font-semibold text-[var(--text-primary)] text-sm truncate">{track.title}</p>
                           {isSelected && (
-                            <span className="text-[9px] font-bold text-[#22C55E] bg-[#22C55E]/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                            <span className="text-[9px] font-bold text-[var(--accent-positive)] bg-[var(--accent-positive-bg)] border border-emerald-500/20 px-1.5 py-0.5 rounded">
                               ACTIVE
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-[#475569] mt-0.5 capitalize">{track.difficulty} · {courses.length} courses · {totalXP} XP</p>
+                        <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5 capitalize">{track.difficulty} · {courses.length} courses · {totalXP} XP</p>
                       </div>
-                      <ChevronRight size={14} className="text-[#475569] group-hover:text-[#94A3B8] transition-colors shrink-0 mt-1" />
+                      <ChevronRight size={14} className="text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors shrink-0 mt-1" />
                     </div>
                     {pct > 0 && (
                       <div className="mt-3">
@@ -242,16 +242,16 @@ export default function LearnHome() {
           {/* Badges */}
           {p && p.badges.length > 0 && (
             <div>
-              <h2 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-3">Your Badges</h2>
+              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Your Badges</h2>
               <div className="flex flex-wrap gap-2">
                 {p.badges.map((b) => {
                   const meta = BADGE_META[b];
                   if (!meta) return null;
                   return (
                     <div key={b} title={`${meta.label}: ${meta.description}`}
-                      className="flex items-center gap-2 bg-[#1E293B] border border-[#334155] rounded-xl px-3 py-2">
+                      className="flex items-center gap-2 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-xl px-3 py-2">
                       <span className="text-base">{meta.icon}</span>
-                      <span className="text-xs font-medium text-[#94A3B8]">{meta.label}</span>
+                      <span className="text-xs font-medium text-[var(--text-secondary)]">{meta.label}</span>
                     </div>
                   );
                 })}
@@ -263,22 +263,22 @@ export default function LearnHome() {
         {/* Sidebar — leaderboard */}
         <div className="space-y-4">
           {leaderboard && leaderboard.length > 0 && (
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Users size={13} className="text-[#475569]" />
-                <h3 className="text-xs font-semibold text-[#475569] uppercase tracking-widest">XP Leaderboard</h3>
+                <Users size={13} className="text-[var(--text-tertiary)]" />
+                <h3 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">XP Leaderboard</h3>
               </div>
               <div className="space-y-2">
                 {leaderboard.slice(0, 8).map((entry) => (
                   <div key={entry.userId} className="flex items-center gap-2">
-                    <span className="text-[10px] text-[#475569] w-4 text-right shrink-0">{entry.rank}</span>
-                    <div className="w-6 h-6 rounded-full bg-[#334155] flex items-center justify-center text-[10px] font-bold text-[#94A3B8] shrink-0">
+                    <span className="text-[10px] text-[var(--text-tertiary)] w-4 text-right shrink-0">{entry.rank}</span>
+                    <div className="w-6 h-6 rounded-full bg-[#334155] flex items-center justify-center text-[10px] font-bold text-[var(--text-secondary)] shrink-0">
                       {entry.username[0]?.toUpperCase()}
                     </div>
-                    <span className="text-xs text-[#94A3B8] flex-1 truncate">{entry.username}</span>
+                    <span className="text-xs text-[var(--text-secondary)] flex-1 truncate">{entry.username}</span>
                     <div className="flex items-center gap-0.5 shrink-0">
                       <Zap size={10} className="text-amber-400" />
-                      <span className="text-[10px] text-[#94A3B8]">{entry.xp.toLocaleString()}</span>
+                      <span className="text-[10px] text-[var(--text-secondary)]">{entry.xp.toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
@@ -287,8 +287,8 @@ export default function LearnHome() {
           )}
 
           {/* Quick nav */}
-          <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4 space-y-2">
-            <h3 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-3">Quick Access</h3>
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-2">
+            <h3 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Quick Access</h3>
             {[
               { label: "Investing Fundamentals", id: "investing-fundamentals", icon: "📚" },
               { label: "Technical Analysis", id: "technical-analysis", icon: "📈" },
@@ -300,8 +300,8 @@ export default function LearnHome() {
                 className="w-full flex items-center gap-2.5 py-1.5 text-left group"
               >
                 <span className="text-base">{t.icon}</span>
-                <span className="text-xs text-[#94A3B8] group-hover:text-[#F8FAFC] transition-colors flex-1 truncate">{t.label}</span>
-                <ChevronRight size={12} className="text-[#475569] group-hover:text-[#94A3B8]" />
+                <span className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors flex-1 truncate">{t.label}</span>
+                <ChevronRight size={12} className="text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]" />
               </button>
             ))}
           </div>
@@ -314,8 +314,8 @@ export default function LearnHome() {
 function Stat({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
   return (
     <div className="text-center">
-      <div className="flex items-center justify-center gap-1 text-[#475569] mb-0.5">{icon}<span className="text-[10px] uppercase tracking-wider">{label}</span></div>
-      <p className="text-lg font-bold text-white">{value}</p>
+      <div className="flex items-center justify-center gap-1 text-[var(--text-tertiary)] mb-0.5">{icon}<span className="text-[10px] uppercase tracking-wider">{label}</span></div>
+      <p className="text-lg font-bold text-[var(--text-primary)]">{value}</p>
     </div>
   );
 }

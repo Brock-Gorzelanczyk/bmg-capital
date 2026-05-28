@@ -38,7 +38,7 @@ function IndicatorButton({ indicatorKey, label, color, active, onClick }: {
       className={cn(
         "px-2 py-1 text-xs rounded border transition-colors",
         active
-          ? "border-transparent text-white"
+          ? "border-transparent text-[var(--text-primary)]"
           : "bg-zinc-950 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600"
       )}
       style={active ? { backgroundColor: color + "33", borderColor: color, color } : {}}

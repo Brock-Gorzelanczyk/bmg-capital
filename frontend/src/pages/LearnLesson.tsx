@@ -104,9 +104,9 @@ export default function LearnLesson() {
 
   if (!lesson || !course || !track) {
     return (
-      <div className="flex items-center justify-center h-64 text-[#475569]">
+      <div className="flex items-center justify-center h-64 text-[var(--text-tertiary)]">
         Lesson not found.{" "}
-        <button className="ml-2 text-white underline" onClick={() => navigate("/learn")}>
+        <button className="ml-2 text-[var(--text-primary)] underline" onClick={() => navigate("/learn")}>
           Back to Learn
         </button>
       </div>
@@ -118,35 +118,35 @@ export default function LearnLesson() {
   return (
     <div className="max-w-2xl mx-auto pb-20 md:pb-8">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-[#475569] mb-6">
-        <button onClick={() => navigate("/learn")} className="hover:text-[#F8FAFC] transition-colors">Learn</button>
+      <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)] mb-6">
+        <button onClick={() => navigate("/learn")} className="hover:text-[var(--text-primary)] transition-colors">Learn</button>
         <ChevronRight size={12} />
-        <button onClick={() => navigate(`/learn/${track.id}`)} className="hover:text-[#F8FAFC] transition-colors">{track.title}</button>
+        <button onClick={() => navigate(`/learn/${track.id}`)} className="hover:text-[var(--text-primary)] transition-colors">{track.title}</button>
         <ChevronRight size={12} />
-        <span className="text-[#475569]">{course.title}</span>
+        <span className="text-[var(--text-tertiary)]">{course.title}</span>
       </div>
 
       {/* Lesson header */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-2">
-          <span className="flex items-center gap-1 text-[10px] text-[#475569] uppercase tracking-wider">
+          <span className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">
             {TYPE_ICON[lesson.type]} {lesson.type}
           </span>
-          <span className="text-[#475569]">·</span>
-          <span className="flex items-center gap-1 text-[10px] text-[#475569]">
+          <span className="text-[var(--text-tertiary)]">·</span>
+          <span className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)]">
             <Clock size={10} /> {lesson.durationMin} min
           </span>
-          <span className="text-[#475569]">·</span>
+          <span className="text-[var(--text-tertiary)]">·</span>
           <span className="flex items-center gap-1 text-[10px] text-amber-400">
             <Zap size={10} /> +{lesson.xp} XP
           </span>
           {alreadyComplete && (
-            <span className="flex items-center gap-1 text-[10px] text-[#22C55E] ml-auto">
+            <span className="flex items-center gap-1 text-[10px] text-[var(--accent-positive)] ml-auto">
               <CheckCircle2 size={10} /> Completed
             </span>
           )}
         </div>
-        <h1 className="text-2xl font-bold text-white">{lesson.title}</h1>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">{lesson.title}</h1>
       </div>
 
       {/* Body */}
@@ -159,7 +159,7 @@ export default function LearnLesson() {
       {/* Quiz */}
       {lesson.quiz.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-sm font-semibold text-white uppercase tracking-widest mb-4">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-widest mb-4">
             Knowledge Check
           </h2>
           {!quizDone ? (
@@ -169,12 +169,12 @@ export default function LearnLesson() {
               onComplete={handleQuizComplete}
             />
           ) : (
-            <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-4 flex items-center gap-3">
-              <CheckCircle2 size={18} className="text-[#22C55E] shrink-0" />
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl p-4 flex items-center gap-3">
+              <CheckCircle2 size={18} className="text-[var(--accent-positive)] shrink-0" />
               <div>
-                <p className="text-white font-semibold text-sm">Quiz complete</p>
+                <p className="text-[var(--text-primary)] font-semibold text-sm">Quiz complete</p>
                 {quizScore !== null && (
-                  <p className="text-[#475569] text-xs">Score: {Math.round(quizScore * 100)}%</p>
+                  <p className="text-[var(--text-tertiary)] text-xs">Score: {Math.round(quizScore * 100)}%</p>
                 )}
               </div>
             </div>
@@ -187,12 +187,12 @@ export default function LearnLesson() {
         <div className="mt-6 bg-amber-500/5 border border-amber-500/20 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <FlaskConical size={16} className="text-amber-400" />
-            <p className="font-semibold text-white text-sm">Paper Trading Challenge</p>
+            <p className="font-semibold text-[var(--text-primary)] text-sm">Paper Trading Challenge</p>
           </div>
-          <p className="text-[#94A3B8] text-sm leading-relaxed">{lesson.challenge.description}</p>
-          <p className="text-[#94A3B8] text-sm">{lesson.challenge.task}</p>
+          <p className="text-[var(--text-secondary)] text-sm leading-relaxed">{lesson.challenge.description}</p>
+          <p className="text-[var(--text-secondary)] text-sm">{lesson.challenge.task}</p>
           {lesson.challenge.successCriteria && (
-            <p className="text-[#475569] text-xs border-l-2 border-amber-500/30 pl-3">
+            <p className="text-[var(--text-tertiary)] text-xs border-l-2 border-amber-500/30 pl-3">
               ✓ {lesson.challenge.successCriteria}
             </p>
           )}
@@ -207,7 +207,7 @@ export default function LearnLesson() {
 
       {/* Complete CTA */}
       {!lessonComplete && (
-        <div className="mt-8 pt-6 border-t border-[#1E293B]">
+        <div className="mt-8 pt-6 border-t border-[var(--border-subtle)]">
           <button
             onClick={handleMarkComplete}
             disabled={!canComplete || completeMut.isPending}
@@ -215,7 +215,7 @@ export default function LearnLesson() {
               "w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all",
               canComplete
                 ? "bg-[#22C55E] hover:bg-[#22C55E] text-black"
-                : "bg-[#1E293B] text-[#475569] cursor-not-allowed"
+                : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] cursor-not-allowed"
             )}
           >
             {completeMut.isPending ? (
@@ -230,15 +230,15 @@ export default function LearnLesson() {
       )}
 
       {lessonComplete && (
-        <div className="mt-8 pt-6 border-t border-[#1E293B]">
-          <div className="flex items-center gap-2 text-[#22C55E] mb-4">
+        <div className="mt-8 pt-6 border-t border-[var(--border-subtle)]">
+          <div className="flex items-center gap-2 text-[var(--accent-positive)] mb-4">
             <CheckCircle2 size={18} />
             <p className="font-semibold text-sm">Lesson complete!</p>
           </div>
           {nextLessonItem ? (
             <button
               onClick={() => navigate(`/learn/lesson/${nextLessonItem.id}`)}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-[#3B82F6] text-[#F8FAFC] rounded-xl font-semibold text-sm hover:bg-[#2563EB] active:scale-[0.98] transition-all shadow-lg shadow-blue-900/30"
+              className="w-full flex items-center justify-center gap-2 py-3 bg-[var(--accent-positive)] text-[var(--text-primary)] rounded-xl font-semibold text-sm hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-blue-900/30"
             >
               Next: {nextLessonItem.title} <ChevronRight size={16} />
             </button>
@@ -247,8 +247,8 @@ export default function LearnLesson() {
               <div className="w-16 h-16 rounded-full bg-amber-400/10 flex items-center justify-center mx-auto">
                 <Trophy size={32} className="text-amber-400" />
               </div>
-              <p className="text-white font-bold text-lg">Course complete!</p>
-              <p className="text-[#475569] text-sm">You've finished every lesson in this course.</p>
+              <p className="text-[var(--text-primary)] font-bold text-lg">Course complete!</p>
+              <p className="text-[var(--text-tertiary)] text-sm">You've finished every lesson in this course.</p>
               <button
                 onClick={() => setShowCert(true)}
                 className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-amber-500 to-amber-400 text-black font-semibold rounded-xl text-sm hover:brightness-110 transition-all"
@@ -257,7 +257,7 @@ export default function LearnLesson() {
               </button>
               <button
                 onClick={() => navigate(`/learn/${track.id}`)}
-                className="text-[#475569] hover:text-[#94A3B8] text-sm transition-colors"
+                className="text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] text-sm transition-colors"
               >
                 Back to {track.title}
               </button>
@@ -267,11 +267,11 @@ export default function LearnLesson() {
       )}
 
       {/* Lesson nav */}
-      <div className="flex items-center justify-between mt-8 pt-4 border-t border-[#1E293B]">
+      <div className="flex items-center justify-between mt-8 pt-4 border-t border-[var(--border-subtle)]">
         {prevLesson ? (
           <button
             onClick={() => navigate(`/learn/lesson/${prevLesson.id}`)}
-            className="flex items-center gap-1.5 text-[#475569] hover:text-[#F8FAFC] text-xs transition-colors"
+            className="flex items-center gap-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-xs transition-colors"
           >
             <ChevronLeft size={14} /> {prevLesson.title}
           </button>
@@ -279,7 +279,7 @@ export default function LearnLesson() {
         {nextLessonItem && !lessonComplete && (
           <button
             onClick={() => navigate(`/learn/lesson/${nextLessonItem.id}`)}
-            className="flex items-center gap-1.5 text-[#475569] hover:text-[#F8FAFC] text-xs transition-colors"
+            className="flex items-center gap-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-xs transition-colors"
           >
             {nextLessonItem.title} <ChevronRight size={14} />
           </button>

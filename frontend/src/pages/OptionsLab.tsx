@@ -71,8 +71,8 @@ export default function OptionsLab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Options Lab</h1>
-          <p className="text-[#475569] text-sm mt-0.5">Build and analyze options strategies</p>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Options Lab</h1>
+          <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Build and analyze options strategies</p>
         </div>
         {chain?.source === "synthetic" && (
           <span className="text-[10px] px-2 py-1 rounded-full bg-amber-950 text-amber-400 border border-amber-900 font-medium">
@@ -88,11 +88,11 @@ export default function OptionsLab() {
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value.toUpperCase())}
             placeholder="Symbol"
-            className="bg-[#0F172A] border border-[#334155] text-white text-sm px-3 py-2 rounded-lg w-28 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 uppercase font-mono"
+            className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg w-28 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 uppercase font-mono"
           />
           <button
             type="submit"
-            className="bg-[#3B82F6] text-[#F8FAFC] font-semibold text-sm px-4 py-2 rounded-lg hover:bg-[#2563EB] transition-colors"
+            className="bg-[var(--accent-positive)] text-[var(--text-primary)] font-semibold text-sm px-4 py-2 rounded-lg hover:brightness-110 transition-colors"
           >
             Load
           </button>
@@ -107,7 +107,7 @@ export default function OptionsLab() {
               className={`text-xs font-mono px-2 py-1 rounded-md transition-colors ${
                 symbol === s
                   ? "bg-white text-black font-bold"
-                  : "bg-[#1E293B] text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#334155]"
+                  : "bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[#334155]"
               }`}
             >
               {s}
@@ -121,21 +121,21 @@ export default function OptionsLab() {
             <select
               value={expiration ?? ""}
               onChange={(e) => setExpiration(e.target.value || undefined)}
-              className="appearance-none bg-[#0F172A] border border-[#334155] text-[#94A3B8] text-sm px-3 py-2 pr-8 rounded-lg focus:outline-none focus:border-zinc-600 cursor-pointer"
+              className="appearance-none bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] text-[var(--text-secondary)] text-sm px-3 py-2 pr-8 rounded-lg focus:outline-none focus:border-zinc-600 cursor-pointer"
             >
               <option value="">Next expiry</option>
               {expirations.map((e) => (
                 <option key={e} value={e}>{e}</option>
               ))}
             </select>
-            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#475569] pointer-events-none" />
+            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none" />
           </div>
         )}
 
         <button
           onClick={() => refetch()}
           disabled={isFetching}
-          className="text-[#475569] hover:text-[#F8FAFC] transition-colors"
+          className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
           title="Refresh chain"
         >
           <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
@@ -145,24 +145,24 @@ export default function OptionsLab() {
       {/* Main layout: chain + builder side-by-side */}
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
         {/* Chain panel */}
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
           {/* Chain header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#1E293B]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
             <div className="flex items-center gap-3">
-              <span className="text-white font-bold text-sm font-mono">{symbol}</span>
+              <span className="text-[var(--text-primary)] font-bold text-sm font-mono">{symbol}</span>
               {chain && (
-                <span className="text-[#475569] text-xs">
-                  Underlying: <span className="text-white font-mono">${chain.underlyingPrice.toFixed(2)}</span>
+                <span className="text-[var(--text-tertiary)] text-xs">
+                  Underlying: <span className="text-[var(--text-primary)] font-mono">${chain.underlyingPrice.toFixed(2)}</span>
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1 bg-[#1E293B] rounded-lg p-0.5">
+            <div className="flex items-center gap-1 bg-[var(--bg-elevated-2)] rounded-lg p-0.5">
               {(["all", "calls", "puts"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`text-xs px-2.5 py-1 rounded-md font-medium capitalize transition-colors ${
-                    activeTab === tab ? "bg-[#1E293B] text-white" : "text-[#475569] hover:text-[#94A3B8]"
+                    activeTab === tab ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                   }`}
                 >
                   {tab}
@@ -172,11 +172,11 @@ export default function OptionsLab() {
           </div>
 
           {isLoading ? (
-            <div className="p-8 text-center text-[#475569] text-sm animate-pulse">
+            <div className="p-8 text-center text-[var(--text-tertiary)] text-sm animate-pulse">
               Loading chain…
             </div>
           ) : !chain ? (
-            <div className="p-8 text-center text-[#475569] text-sm">
+            <div className="p-8 text-center text-[var(--text-tertiary)] text-sm">
               Enter a symbol to load the options chain
             </div>
           ) : (
@@ -192,7 +192,7 @@ export default function OptionsLab() {
 
         {/* Builder + chart panel */}
         <div className="space-y-4">
-          <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
             <SpreadBuilder
               legs={legs}
               onRemoveLeg={removeLeg}
@@ -202,15 +202,15 @@ export default function OptionsLab() {
             {legs.length > 0 && (
               <button
                 onClick={() => setLegs([])}
-                className="mt-3 flex items-center gap-1 text-[#475569] hover:text-[#F8FAFC] text-xs transition-colors"
+                className="mt-3 flex items-center gap-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-xs transition-colors"
               >
                 <X size={12} /> Clear all legs
               </button>
             )}
           </div>
 
-          <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-            <div className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider mb-3">
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+            <div className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">
               P&amp;L at Expiration
             </div>
             <PLChart
@@ -229,8 +229,8 @@ export default function OptionsLab() {
 
           {/* Greeks summary */}
           {legs.length > 0 && (
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <div className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider mb-3">
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <div className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">
                 Position Greeks
               </div>
               <div className="grid grid-cols-4 gap-2">
@@ -242,9 +242,9 @@ export default function OptionsLab() {
                   }, 0);
                   return (
                     <div key={greek} className="text-center">
-                      <div className="text-[10px] text-[#475569] capitalize mb-0.5">{greek}</div>
+                      <div className="text-[10px] text-[var(--text-tertiary)] capitalize mb-0.5">{greek}</div>
                       <div className={`text-sm font-bold font-mono ${
-                        total > 0 ? "text-[#22C55E]" : total < 0 ? "text-[#EF4444]" : "text-[#94A3B8]"
+                        total > 0 ? "text-[var(--accent-positive)]" : total < 0 ? "text-[var(--accent-negative)]" : "text-[var(--text-secondary)]"
                       }`}>
                         {total > 0 ? "+" : ""}{total.toFixed(2)}
                       </div>

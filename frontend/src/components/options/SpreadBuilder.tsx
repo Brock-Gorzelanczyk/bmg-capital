@@ -73,9 +73,9 @@ export default function SpreadBuilder({ legs, onRemoveLeg, onToggleSide, onSetQt
     <div className="space-y-3">
       {/* Strategy label */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">Spread Builder</span>
+        <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Spread Builder</span>
         {strategy !== "—" && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-[#334155] text-[#94A3B8] font-medium">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[#334155] text-[var(--text-secondary)] font-medium">
             {strategy}
           </span>
         )}
@@ -83,7 +83,7 @@ export default function SpreadBuilder({ legs, onRemoveLeg, onToggleSide, onSetQt
 
       {/* Legs */}
       {legs.length === 0 ? (
-        <p className="text-[#475569] text-xs text-center py-4">
+        <p className="text-[var(--text-tertiary)] text-xs text-center py-4">
           Click B/S in the chain to add legs
         </p>
       ) : (
@@ -94,7 +94,7 @@ export default function SpreadBuilder({ legs, onRemoveLeg, onToggleSide, onSetQt
             return (
               <div
                 key={`${contract.symbol}-${side}-${idx}`}
-                className="flex items-center gap-2 bg-[#1E293B] rounded-lg px-3 py-2"
+                className="flex items-center gap-2 bg-[var(--bg-elevated-2)] rounded-lg px-3 py-2"
               >
                 {/* Side toggle */}
                 <button
@@ -102,8 +102,8 @@ export default function SpreadBuilder({ legs, onRemoveLeg, onToggleSide, onSetQt
                   className={cn(
                     "text-[10px] font-bold px-1.5 py-0.5 rounded w-8 text-center transition-colors",
                     side === "buy"
-                      ? "bg-emerald-900 text-[#22C55E] hover:bg-emerald-800"
-                      : "bg-rose-900 text-[#EF4444] hover:bg-rose-800"
+                      ? "bg-emerald-900 text-[var(--accent-positive)] hover:bg-emerald-800"
+                      : "bg-rose-900 text-[var(--accent-negative)] hover:bg-rose-800"
                   )}
                 >
                   {side === "buy" ? "BUY" : "SELL"}
@@ -118,10 +118,10 @@ export default function SpreadBuilder({ legs, onRemoveLeg, onToggleSide, onSetQt
                     )}>
                       {contract.optionType}
                     </span>
-                    <span className="text-[#94A3B8] text-xs font-mono">${contract.strike}</span>
-                    <span className="text-[#475569] text-[10px]">{contract.expiration}</span>
+                    <span className="text-[var(--text-secondary)] text-xs font-mono">${contract.strike}</span>
+                    <span className="text-[var(--text-tertiary)] text-[10px]">{contract.expiration}</span>
                   </div>
-                  <div className="text-[#475569] text-[10px]">
+                  <div className="text-[var(--text-tertiary)] text-[10px]">
                     ${fmt(contract.bid)} / ${fmt(contract.ask)} · mid ${fmt(mid)}
                   </div>
                 </div>
@@ -130,14 +130,14 @@ export default function SpreadBuilder({ legs, onRemoveLeg, onToggleSide, onSetQt
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => onSetQty(idx, Math.max(1, qty - 1))}
-                    className="text-[#475569] hover:text-[#F8FAFC] w-5 h-5 flex items-center justify-center"
+                    className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] w-5 h-5 flex items-center justify-center"
                   >
                     <ArrowDown size={11} />
                   </button>
-                  <span className="text-[#94A3B8] text-xs w-4 text-center">{qty}</span>
+                  <span className="text-[var(--text-secondary)] text-xs w-4 text-center">{qty}</span>
                   <button
                     onClick={() => onSetQty(idx, qty + 1)}
-                    className="text-[#475569] hover:text-[#F8FAFC] w-5 h-5 flex items-center justify-center"
+                    className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] w-5 h-5 flex items-center justify-center"
                   >
                     <ArrowUp size={11} />
                   </button>
@@ -146,7 +146,7 @@ export default function SpreadBuilder({ legs, onRemoveLeg, onToggleSide, onSetQt
                 {/* Remove */}
                 <button
                   onClick={() => onRemoveLeg(idx)}
-                  className="text-[#475569] hover:text-[#EF4444] transition-colors"
+                  className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -158,26 +158,26 @@ export default function SpreadBuilder({ legs, onRemoveLeg, onToggleSide, onSetQt
 
       {/* Summary */}
       {legs.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#334155]">
+        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[var(--border-emphasis)]">
           <div className="text-center">
-            <div className="text-[10px] text-[#475569] mb-0.5">Net Premium</div>
+            <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Net Premium</div>
             <div className={cn(
               "text-sm font-bold font-mono",
-              netPremium > 0 ? "text-[#22C55E]" : netPremium < 0 ? "text-[#EF4444]" : "text-[#94A3B8]"
+              netPremium > 0 ? "text-[var(--accent-positive)]" : netPremium < 0 ? "text-[var(--accent-negative)]" : "text-[var(--text-secondary)]"
             )}>
               {netPremium > 0 ? "+" : ""}{netPremium < 0 ? "-" : ""}${Math.abs(netPremium).toFixed(2)}
             </div>
-            <div className="text-[9px] text-[#475569]">{netPremium > 0 ? "credit" : "debit"}</div>
+            <div className="text-[9px] text-[var(--text-tertiary)]">{netPremium > 0 ? "credit" : "debit"}</div>
           </div>
           <div className="text-center">
-            <div className="text-[10px] text-[#475569] mb-0.5">Max Gain</div>
-            <div className="text-sm font-bold font-mono text-[#22C55E]">
+            <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Max Gain</div>
+            <div className="text-sm font-bold font-mono text-[var(--accent-positive)]">
               {maxGain === null ? "∞" : `$${maxGain.toFixed(0)}`}
             </div>
           </div>
           <div className="text-center">
-            <div className="text-[10px] text-[#475569] mb-0.5">Max Loss</div>
-            <div className="text-sm font-bold font-mono text-[#EF4444]">
+            <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Max Loss</div>
+            <div className="text-sm font-bold font-mono text-[var(--accent-negative)]">
               {maxLoss === null ? "∞" : `$${maxLoss.toFixed(0)}`}
             </div>
           </div>

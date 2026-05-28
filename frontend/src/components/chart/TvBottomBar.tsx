@@ -54,7 +54,7 @@ export default function TvBottomBar({
             className={cn(
               "h-5 px-1.5 rounded text-[11px] font-medium transition-colors whitespace-nowrap shrink-0",
               period === p
-                ? "bg-[#2962ff] text-white"
+                ? "bg-[#2962ff] text-[var(--text-primary)]"
                 : "text-[#787b86] hover:text-[#d1d4dc] hover:bg-[#1e222d]"
             )}
           >

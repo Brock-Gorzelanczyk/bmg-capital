@@ -194,7 +194,7 @@ export default function TradeDetailDrawer({ trade, onClose }: Props) {
           <div className="flex items-start gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xl font-bold text-white font-mono">{trade.symbol}</span>
+                <span className="text-xl font-bold text-[var(--text-primary)] font-mono">{trade.symbol}</span>
                 {TICKER_NAMES[trade.symbol] && (
                   <span className="text-sm text-zinc-500">{TICKER_NAMES[trade.symbol]}</span>
                 )}
@@ -222,7 +222,7 @@ export default function TradeDetailDrawer({ trade, onClose }: Props) {
                 </div>
               </div>
             )}
-            <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5">
+            <button onClick={onClose} className="text-zinc-500 hover:text-[var(--text-primary)] transition-colors p-1 rounded-lg hover:bg-white/5">
               <X size={20} />
             </button>
           </div>
@@ -367,7 +367,7 @@ function Metric({ label, value, sub, subColor }: { label: string; value: string;
   return (
     <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5">
       <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-0.5">{label}</div>
-      <div className="text-sm font-bold font-mono text-white">{value}</div>
+      <div className="text-sm font-bold font-mono text-[var(--text-primary)]">{value}</div>
       {sub && <div className={cn("text-[10px] font-mono mt-0.5", subColor ?? "text-zinc-500")}>{sub}</div>}
     </div>
   );

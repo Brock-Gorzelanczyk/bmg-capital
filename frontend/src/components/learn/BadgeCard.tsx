@@ -18,7 +18,7 @@ export default function BadgeCard({ badgeId, earned = true, earnedAt, size = "md
         title={`${meta.label}: ${meta.description}${earnedAt ? ` · Earned ${new Date(earnedAt).toLocaleDateString()}` : ""}`}
         className={cn(
           "w-10 h-10 rounded-xl flex items-center justify-center text-xl border transition-opacity",
-          earned ? "bg-[#1E293B] border-[#334155]" : "bg-[#0F172A] border-[#1E293B] opacity-40"
+          earned ? "bg-[var(--bg-elevated-2)] border-[var(--border-emphasis)]" : "bg-[var(--bg-elevated)] border-[var(--border-subtle)] opacity-40"
         )}
       >
         {meta.icon}
@@ -30,19 +30,19 @@ export default function BadgeCard({ badgeId, earned = true, earnedAt, size = "md
     <div
       className={cn(
         "flex items-center gap-3 p-3 rounded-xl border",
-        earned ? "bg-[#1E293B] border-[#334155]" : "bg-[#0F172A] border-[#1E293B] opacity-50"
+        earned ? "bg-[var(--bg-elevated-2)] border-[var(--border-emphasis)]" : "bg-[var(--bg-elevated)] border-[var(--border-subtle)] opacity-50"
       )}
     >
       <div className="w-10 h-10 rounded-xl bg-[#020617] flex items-center justify-center text-xl shrink-0">
         {meta.icon}
       </div>
       <div className="min-w-0">
-        <p className={cn("text-sm font-semibold truncate", earned ? "text-white" : "text-[#475569]")}>
+        <p className={cn("text-sm font-semibold truncate", earned ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]")}>
           {meta.label}
         </p>
-        <p className="text-xs text-[#475569] truncate">{meta.description}</p>
+        <p className="text-xs text-[var(--text-tertiary)] truncate">{meta.description}</p>
         {earned && earnedAt && (
-          <p className="text-[10px] text-[#475569] mt-0.5">
+          <p className="text-[10px] text-[var(--text-tertiary)] mt-0.5">
             {new Date(earnedAt).toLocaleDateString()}
           </p>
         )}

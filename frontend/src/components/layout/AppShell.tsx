@@ -97,7 +97,7 @@ export default function AppShell() {
 
       {/* Bottom navigation — mobile only */}
       <div
-        className="fixed bottom-0 left-0 right-0 md:hidden bg-[#0B1120]/95 backdrop-blur-md border-t border-[#1E293B] flex z-30"
+        className="fixed bottom-0 left-0 right-0 md:hidden bg-[var(--bg-base)]/95 backdrop-blur-md border-t border-[var(--border-subtle)] flex z-30"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {BOTTOM_NAV.map(({ to, label, Icon }) => (
@@ -108,7 +108,7 @@ export default function AppShell() {
             className={({ isActive }) =>
               cn(
                 "flex-1 flex flex-col items-center gap-1 py-3 text-[10px] transition-colors relative min-h-[52px] justify-center",
-                isActive ? "text-[#3B82F6]" : "text-[#475569]"
+                isActive ? "text-[#3B82F6]" : "text-[var(--text-tertiary)]"
               )
             }
           >

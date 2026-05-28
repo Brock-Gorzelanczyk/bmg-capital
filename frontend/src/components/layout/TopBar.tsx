@@ -49,11 +49,11 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   useEffect(() => { if (data) setNotifications(data); }, [data, setNotifications]);
 
   return (
-    <header className="h-14 backdrop-blur-md bg-[#0B1120]/95 border-b border-[#1E293B] flex items-center px-3 md:px-4 gap-2 md:gap-4 shrink-0">
+    <header className="h-14 backdrop-blur-md bg-[var(--bg-base)]/95 border-b border-[var(--border-subtle)] flex items-center px-3 md:px-4 gap-2 md:gap-4 shrink-0">
       {/* Hamburger — mobile only */}
       <button
         onClick={onMenuToggle}
-        className="md:hidden p-2 text-[#475569] hover:text-[#F8FAFC] transition-colors"
+        className="md:hidden p-2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
         aria-label="Open menu"
       >
         <Menu size={20} />
@@ -63,13 +63,13 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
         onSelect={(s) => navigate(`/chart?symbol=${s}`)}
         placeholder="Search ticker… AAPL"
         className="flex-1 max-w-xs"
-        inputClassName="w-full h-9 bg-[#0D1526] text-[#F8FAFC] text-sm px-3 rounded-l border border-[#1A2744] focus:outline-none focus:border-[#3B82F6] focus:bg-[#0F172A] placeholder-[#475569] uppercase transition-colors duration-150"
+        inputClassName="w-full h-9 bg-[var(--bg-elevated)] text-[var(--text-primary)] text-sm px-3 rounded-l border border-[var(--border-subtle)] focus:outline-none focus:border-[#3B82F6] focus:bg-[var(--bg-elevated)] placeholder-[#475569] uppercase transition-colors duration-150"
       />
 
       <div className="flex items-center gap-2 md:gap-3 ml-auto">
         {/* Demo mode pill */}
         {DEMO_MODE && (
-          <div className="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[#22C55E]/30 bg-[#22C55E]/8 text-[#22C55E] font-medium">
+          <div className="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[#22C55E]/30 bg-[#22C55E]/8 text-[var(--accent-positive)] font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
             Demo
           </div>
@@ -79,12 +79,12 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
           <span className="text-[9px] text-[#F59E0B] px-1.5 py-0.5 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/20">Data delayed</span>
         )}
         {/* Market status pill */}
-        <div className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[#1E293B] bg-[#0F172A]">
+        <div className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
           {wsStatus === "connected" && marketStatus === "open" ? (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
-              <Wifi size={12} className="text-[#22C55E]" />
-              <span className="text-[#22C55E] hidden sm:block font-medium">Live</span>
+              <Wifi size={12} className="text-[var(--accent-positive)]" />
+              <span className="text-[var(--accent-positive)] hidden sm:block font-medium">Live</span>
             </>
           ) : wsStatus === "connected" ? (
             <>
@@ -95,8 +95,8 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
           ) : (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
-              <WifiOff size={12} className="text-[#EF4444]" />
-              <span className="text-[#EF4444] hidden sm:block font-medium">Offline</span>
+              <WifiOff size={12} className="text-[var(--accent-negative)]" />
+              <span className="text-[var(--accent-negative)] hidden sm:block font-medium">Offline</span>
             </>
           )}
         </div>
@@ -107,18 +107,18 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
           title={mode === "simple" ? "Switch to Pro Mode" : "Switch to Simple Mode"}
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors duration-150 border cursor-pointer ${
             mode === "pro"
-              ? "bg-[rgba(59,130,246,0.12)] border-[#3B82F6]/30 text-[#F8FAFC]"
-              : "bg-transparent border-[#1E293B] text-[#475569] hover:text-[#94A3B8] hover:border-[#334155]"
+              ? "bg-[rgba(59,130,246,0.12)] border-[#3B82F6]/30 text-[var(--text-primary)]"
+              : "bg-transparent border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:border-[var(--border-emphasis)]"
           }`}
         >
           {mode === "pro" ? <Zap size={12} className="text-[#F59E0B]" /> : <LayoutGrid size={12} />}
           <span className="hidden sm:block">{mode === "pro" ? "Pro" : "Simple"}</span>
         </button>
 
-        <button onClick={openPanel} className="relative text-[#94A3B8] hover:text-[#F8FAFC] transition-colors duration-150 cursor-pointer p-1">
+        <button onClick={openPanel} className="relative text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer p-1">
           <Bell size={18} />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 bg-[#EF4444] text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="absolute -top-0.5 -right-0.5 bg-[#EF4444] text-[var(--text-primary)] text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}

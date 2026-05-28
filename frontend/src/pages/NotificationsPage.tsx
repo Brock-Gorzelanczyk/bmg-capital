@@ -46,7 +46,7 @@ function SettingsGrid() {
   });
 
   if (isLoading || !data) {
-    return <div className="text-[#475569] text-sm animate-pulse">Loading settings…</div>;
+    return <div className="text-[var(--text-tertiary)] text-sm animate-pulse">Loading settings…</div>;
   }
 
   const { prefs, event_types, channels } = data;
@@ -61,13 +61,13 @@ function SettingsGrid() {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[#334155]">
-            <th className="text-left py-2 px-3 text-[#475569] font-medium w-48">Event</th>
+          <tr className="border-b border-[var(--border-emphasis)]">
+            <th className="text-left py-2 px-3 text-[var(--text-tertiary)] font-medium w-48">Event</th>
             {channels.map((ch) => (
-              <th key={ch} className="text-center py-2 px-4 text-[#475569] font-medium">
+              <th key={ch} className="text-center py-2 px-4 text-[var(--text-tertiary)] font-medium">
                 <div>{CHANNEL_LABELS[ch]}</div>
                 {ch !== "in_app" && (
-                  <div className="text-[9px] text-[#475569] font-normal">coming soon</div>
+                  <div className="text-[9px] text-[var(--text-tertiary)] font-normal">coming soon</div>
                 )}
               </th>
             ))}
@@ -75,10 +75,10 @@ function SettingsGrid() {
         </thead>
         <tbody>
           {event_types.map((event) => (
-            <tr key={event} className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/30 transition-colors">
+            <tr key={event} className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors">
               <td className="py-2.5 px-3">
                 <span className="mr-2">{EVENT_ICONS[event]}</span>
-                <span className="text-[#94A3B8]">{EVENT_LABELS[event]}</span>
+                <span className="text-[var(--text-secondary)]">{EVENT_LABELS[event]}</span>
               </td>
               {channels.map((ch) => (
                 <td key={ch} className="text-center py-2.5 px-4">
@@ -134,7 +134,7 @@ function InboxTab({ notifications }: { notifications: AppNotification[] }) {
 
   if (notifications.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-3 text-[#475569]">
+      <div className="flex flex-col items-center justify-center py-24 gap-3 text-[var(--text-tertiary)]">
         <Bell size={40} />
         <p className="text-sm">No notifications</p>
       </div>
@@ -144,19 +144,19 @@ function InboxTab({ notifications }: { notifications: AppNotification[] }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between pb-3">
-        <span className="text-[#475569] text-sm">{unread} unread</span>
+        <span className="text-[var(--text-tertiary)] text-sm">{unread} unread</span>
         <div className="flex items-center gap-3">
           {unread > 0 && (
             <button
               onClick={() => readAllMut.mutate()}
-              className="flex items-center gap-1.5 text-xs text-[#475569] hover:text-[#F8FAFC] transition-colors"
+              className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
             >
               <CheckCheck size={13} /> Mark all read
             </button>
           )}
           <button
             onClick={() => clearMut.mutate()}
-            className="flex items-center gap-1.5 text-xs text-[#475569] hover:text-[#EF4444] transition-colors"
+            className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors"
           >
             <Trash2 size={13} /> Clear all
           </button>
@@ -169,23 +169,23 @@ function InboxTab({ notifications }: { notifications: AppNotification[] }) {
           className={cn(
             "group flex items-start gap-3 px-4 py-3 rounded-xl cursor-pointer transition-colors",
             n.is_read
-              ? "bg-[#0F172A] border border-[#1E293B] hover:border-[#334155]"
-              : "bg-[#1E293B] border border-[#334155] hover:border-[#334155]"
+              ? "bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-emphasis)]"
+              : "bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] hover:border-[var(--border-emphasis)]"
           )}
         >
           <span className="text-lg mt-0.5 shrink-0">{EVENT_ICONS[n.event_type] ?? "🔔"}</span>
           <div className="flex-1 min-w-0">
-            <div className={cn("text-sm leading-snug", n.is_read ? "text-[#94A3B8]" : "text-white font-medium")}>
+            <div className={cn("text-sm leading-snug", n.is_read ? "text-[var(--text-secondary)]" : "text-[var(--text-primary)] font-medium")}>
               {n.title}
             </div>
-            {n.body && <div className="text-xs text-[#475569] mt-0.5">{n.body}</div>}
-            <div className="text-[10px] text-[#475569] mt-1">{timeAgo(n.created_at)}</div>
+            {n.body && <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{n.body}</div>}
+            <div className="text-[10px] text-[var(--text-tertiary)] mt-1">{timeAgo(n.created_at)}</div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {!n.is_read && <span className="w-2 h-2 rounded-full bg-blue-500" />}
             <button
               onClick={(e) => { e.stopPropagation(); deleteMut.mutate(n.id); }}
-              className="opacity-0 group-hover:opacity-100 text-[#475569] hover:text-[#EF4444] transition-all"
+              className="opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-all"
             >
               <Trash2 size={13} />
             </button>
@@ -211,19 +211,19 @@ export default function NotificationsPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-white">Notifications</h1>
-        <p className="text-[#475569] text-sm mt-0.5">Manage your alerts and notification preferences</p>
+        <h1 className="text-xl font-bold text-[var(--text-primary)]">Notifications</h1>
+        <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Manage your alerts and notification preferences</p>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-[#1E293B] p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-[var(--bg-elevated-2)] p-1 rounded-lg w-fit">
         {(["inbox", "settings"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
               "px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors",
-              tab === t ? "bg-[#1E293B] text-white" : "text-[#475569] hover:text-[#94A3B8]"
+              tab === t ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
           >
             {t === "inbox" ? `Inbox${notifications.filter((n) => !n.is_read).length > 0 ? ` (${notifications.filter((n) => !n.is_read).length})` : ""}` : "Settings"}
@@ -233,13 +233,13 @@ export default function NotificationsPage() {
 
       {tab === "inbox" ? (
         isLoading ? (
-          <div className="text-[#475569] text-sm animate-pulse">Loading…</div>
+          <div className="text-[var(--text-tertiary)] text-sm animate-pulse">Loading…</div>
         ) : (
           <InboxTab notifications={notifications} />
         )
       ) : (
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-          <p className="text-xs text-[#475569] mb-4">
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+          <p className="text-xs text-[var(--text-tertiary)] mb-4">
             Choose which events notify you and via which channels. Email and push are coming soon.
           </p>
           <SettingsGrid />

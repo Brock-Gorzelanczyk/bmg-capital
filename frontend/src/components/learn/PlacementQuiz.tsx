@@ -104,7 +104,7 @@ export default function PlacementQuiz({ onComplete }: Props) {
         <div className="text-5xl">{track.icon}</div>
         <div>
           <p className="text-zinc-500 text-sm mb-2">We recommend starting with</p>
-          <h2 className="text-2xl font-bold text-white">{track.title}</h2>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)]">{track.title}</h2>
           <p className="text-zinc-400 text-sm mt-2 leading-relaxed">{track.description}</p>
         </div>
         <div className="flex gap-3 justify-center">
@@ -116,7 +116,7 @@ export default function PlacementQuiz({ onComplete }: Props) {
           </button>
           <button
             onClick={() => setShowResult(false)}
-            className="text-zinc-500 hover:text-white text-sm transition-colors"
+            className="text-zinc-500 hover:text-[var(--text-primary)] text-sm transition-colors"
           >
             Browse all tracks
           </button>
@@ -130,7 +130,7 @@ export default function PlacementQuiz({ onComplete }: Props) {
       <div className="flex items-center gap-3">
         <GraduationCap size={20} className="text-emerald-400" />
         <div>
-          <h2 className="text-white font-semibold">Quick Placement</h2>
+          <h2 className="text-[var(--text-primary)] font-semibold">Quick Placement</h2>
           <p className="text-zinc-500 text-xs">Question {step + 1} of {QUESTIONS.length}</p>
         </div>
         <div className="ml-auto flex gap-1">
@@ -140,14 +140,14 @@ export default function PlacementQuiz({ onComplete }: Props) {
         </div>
       </div>
 
-      <p className="text-lg font-medium text-white leading-snug">{q.question}</p>
+      <p className="text-lg font-medium text-[var(--text-primary)] leading-snug">{q.question}</p>
 
       <div className="space-y-2">
         {q.options.map((opt, i) => (
           <button
             key={i}
             onClick={() => handleSelect(opt.score)}
-            className="w-full text-left px-4 py-3.5 rounded-xl border border-zinc-800 text-zinc-300 text-sm hover:border-emerald-500/50 hover:text-white hover:bg-emerald-500/5 transition-all"
+            className="w-full text-left px-4 py-3.5 rounded-xl border border-zinc-800 text-zinc-300 text-sm hover:border-emerald-500/50 hover:text-[var(--text-primary)] hover:bg-emerald-500/5 transition-all"
           >
             {opt.label}
           </button>

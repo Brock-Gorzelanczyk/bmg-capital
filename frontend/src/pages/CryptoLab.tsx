@@ -77,19 +77,19 @@ function OrderModal({ coin, cash, onClose, onFilled }: OrderModalProps) {
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#0F172A] border border-[#1E293B] rounded-2xl shadow-2xl p-5">
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <div className="text-xs text-[#475569] uppercase tracking-widest mb-0.5">Trade Crypto</div>
-            <div className="text-base font-bold text-white">{coin.name} <span className="text-[#475569]">{coin.slug}</span></div>
+            <div className="text-xs text-[var(--text-tertiary)] uppercase tracking-widest mb-0.5">Trade Crypto</div>
+            <div className="text-base font-bold text-[var(--text-primary)]">{coin.name} <span className="text-[var(--text-tertiary)]">{coin.slug}</span></div>
           </div>
-          <button onClick={onClose} className="text-[#475569] hover:text-white cursor-pointer">
+          <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer">
             <X size={16} />
           </button>
         </div>
 
         {/* Price */}
-        <div className="text-2xl font-bold font-mono text-white mb-4">
+        <div className="text-2xl font-bold font-mono text-[var(--text-primary)] mb-4">
           {fmtPrice(coin.last, coin.symbol)}
           {coin.change_pct != null && (
             <span className={cn("text-sm ml-2 font-normal", coin.change_pct >= 0 ? "text-emerald-400" : "text-red-400")}>
@@ -99,7 +99,7 @@ function OrderModal({ coin, cash, onClose, onFilled }: OrderModalProps) {
         </div>
 
         {/* Buy/Sell toggle */}
-        <div className="flex gap-1 mb-4 bg-[#1E293B] p-1 rounded-lg">
+        <div className="flex gap-1 mb-4 bg-[var(--bg-elevated-2)] p-1 rounded-lg">
           {(["buy", "sell"] as const).map((s) => (
             <button
               key={s}
@@ -107,8 +107,8 @@ function OrderModal({ coin, cash, onClose, onFilled }: OrderModalProps) {
               className={cn(
                 "flex-1 py-1.5 rounded-md text-sm font-semibold transition-all capitalize",
                 side === s
-                  ? s === "buy" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
-                  : "text-[#475569] hover:text-white"
+                  ? s === "buy" ? "bg-emerald-600 text-[var(--text-primary)]" : "bg-red-600 text-[var(--text-primary)]"
+                  : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
               )}
             >
               {s}
@@ -124,7 +124,7 @@ function OrderModal({ coin, cash, onClose, onFilled }: OrderModalProps) {
               onClick={() => setMode(m)}
               className={cn(
                 "px-3 py-1 rounded-full border transition-colors",
-                mode === m ? "border-[#3B82F6] text-[#3B82F6] bg-[#3B82F6]/10" : "border-[#1E293B] text-[#475569]"
+                mode === m ? "border-[#3B82F6] text-[var(--accent-positive)] bg-[var(--accent-positive)]/10" : "border-[var(--border-subtle)] text-[var(--text-tertiary)]"
               )}
             >
               {m === "notional" ? "$ Amount" : "Coin Qty"}
@@ -136,17 +136,17 @@ function OrderModal({ coin, cash, onClose, onFilled }: OrderModalProps) {
         {mode === "notional" ? (
           <div className="mb-1">
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569] text-sm">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm">$</span>
               <input
                 type="number"
                 value={notional}
                 onChange={(e) => setNotional(e.target.value)}
-                className="w-full bg-[#1E293B] border border-[#334155] rounded-lg pl-7 pr-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-[#3B82F6]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-lg pl-7 pr-4 py-2.5 text-[var(--text-primary)] text-sm font-mono focus:outline-none focus:border-[#3B82F6]"
                 placeholder="100"
                 min="1"
               />
             </div>
-            {qtyPreview && <p className="text-xs text-[#475569] mt-1 font-mono">≈ {qtyPreview} {coin.slug}</p>}
+            {qtyPreview && <p className="text-xs text-[var(--text-tertiary)] mt-1 font-mono">≈ {qtyPreview} {coin.slug}</p>}
           </div>
         ) : (
           <div className="mb-1">
@@ -155,18 +155,18 @@ function OrderModal({ coin, cash, onClose, onFilled }: OrderModalProps) {
                 type="number"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                className="w-full bg-[#1E293B] border border-[#334155] rounded-lg pl-4 pr-16 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-[#3B82F6]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-lg pl-4 pr-16 py-2.5 text-[var(--text-primary)] text-sm font-mono focus:outline-none focus:border-[#3B82F6]"
                 placeholder="0.001"
                 step="0.0001"
                 min="0"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#475569] text-xs">{coin.slug}</span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-xs">{coin.slug}</span>
             </div>
-            {notionalPreview && <p className="text-xs text-[#475569] mt-1 font-mono">≈ ${notionalPreview}</p>}
+            {notionalPreview && <p className="text-xs text-[var(--text-tertiary)] mt-1 font-mono">≈ ${notionalPreview}</p>}
           </div>
         )}
 
-        <p className="text-xs text-[#334155] mb-4">Cash available: ${cash.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        <p className="text-xs text-[var(--border-emphasis)] mb-4">Cash available: ${cash.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
 
         <button
           onClick={() => mutation.mutate()}
@@ -174,8 +174,8 @@ function OrderModal({ coin, cash, onClose, onFilled }: OrderModalProps) {
           className={cn(
             "w-full py-2.5 rounded-xl text-sm font-bold transition-all",
             side === "buy"
-              ? "bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40"
-              : "bg-red-600 hover:bg-red-500 text-white disabled:opacity-40",
+              ? "bg-emerald-600 hover:bg-emerald-500 text-[var(--text-primary)] disabled:opacity-40"
+              : "bg-red-600 hover:bg-red-500 text-[var(--text-primary)] disabled:opacity-40",
             mutation.isPending && "opacity-60 cursor-wait"
           )}
         >
@@ -191,11 +191,11 @@ function OrderModal({ coin, cash, onClose, onFilled }: OrderModalProps) {
 function CoinCard({ coin, onTrade }: { coin: CoinData; onTrade: (coin: CoinData) => void }) {
   const up = (coin.change_pct ?? 0) >= 0;
   return (
-    <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4 flex flex-col gap-3 hover:border-[#334155] transition-colors">
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 flex flex-col gap-3 hover:border-[var(--border-emphasis)] transition-colors">
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-bold text-white text-sm">{coin.slug}</div>
-          <div className="text-xs text-[#475569]">{coin.name}</div>
+          <div className="font-bold text-[var(--text-primary)] text-sm">{coin.slug}</div>
+          <div className="text-xs text-[var(--text-tertiary)]">{coin.name}</div>
         </div>
         <div className={cn(
           "flex items-center gap-1 text-xs font-mono font-semibold px-2 py-1 rounded-lg",
@@ -207,14 +207,14 @@ function CoinCard({ coin, onTrade }: { coin: CoinData; onTrade: (coin: CoinData)
       </div>
 
       <div>
-        <div className="text-lg font-bold font-mono text-white">{fmtPrice(coin.last, coin.symbol)}</div>
-        <div className="text-[11px] text-[#475569] mt-0.5">Mkt Cap {fmtMarketCap(coin.market_cap)}</div>
+        <div className="text-lg font-bold font-mono text-[var(--text-primary)]">{fmtPrice(coin.last, coin.symbol)}</div>
+        <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">Mkt Cap {fmtMarketCap(coin.market_cap)}</div>
       </div>
 
       <button
         onClick={() => onTrade(coin)}
         disabled={coin.last == null}
-        className="w-full py-1.5 rounded-lg bg-[#1E293B] hover:bg-[#334155] text-[#94A3B8] hover:text-white text-xs font-semibold transition-colors disabled:opacity-30 cursor-pointer"
+        className="w-full py-1.5 rounded-lg bg-[var(--bg-elevated-2)] hover:bg-[#334155] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-semibold transition-colors disabled:opacity-30 cursor-pointer"
       >
         Trade
       </button>
@@ -254,17 +254,17 @@ export default function CryptoLab() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center shadow-lg shadow-orange-900/30">
-            <Bitcoin size={18} className="text-white" />
+            <Bitcoin size={18} className="text-[var(--text-primary)]" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Crypto Lab</h1>
-            <p className="text-[#475569] text-sm mt-0.5">Paper trade crypto 24/7</p>
+            <h1 className="text-xl font-bold text-[var(--text-primary)]">Crypto Lab</h1>
+            <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Paper trade crypto 24/7</p>
           </div>
         </div>
         <button
           onClick={() => refetch()}
           disabled={isFetching}
-          className="flex items-center gap-1.5 text-xs text-[#475569] hover:text-white transition-colors cursor-pointer px-3 py-1.5 rounded-lg bg-[#1E293B] hover:bg-[#334155]"
+          className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer px-3 py-1.5 rounded-lg bg-[var(--bg-elevated-2)] hover:bg-[#334155]"
         >
           <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
           Refresh
@@ -273,11 +273,11 @@ export default function CryptoLab() {
 
       {/* Crypto holdings strip */}
       {cryptoPositions.length > 0 && (
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-2xl p-4">
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-[#64748B] uppercase tracking-widest">My Crypto Holdings</span>
+            <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">My Crypto Holdings</span>
             <div className="flex items-center gap-3 text-xs font-mono">
-              <span className="text-[#475569]">Value: <span className="text-white font-semibold">${totalCryptoValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+              <span className="text-[var(--text-tertiary)]">Value: <span className="text-[var(--text-primary)] font-semibold">${totalCryptoValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
               <span className={cn("font-semibold", totalCryptoPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
                 {totalCryptoPnl >= 0 ? "+" : ""}{totalCryptoPnl.toFixed(2)} unrealized
               </span>
@@ -285,12 +285,12 @@ export default function CryptoLab() {
           </div>
           <div className="space-y-2">
             {cryptoPositions.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 bg-[#1E293B] rounded-lg px-3 py-2.5">
-                <span className="font-bold text-white text-sm font-mono w-20">{p.symbol.replace("-USD", "")}</span>
-                <span className="text-xs text-[#475569] flex-1">
+              <div key={p.id} className="flex items-center gap-3 bg-[var(--bg-elevated-2)] rounded-lg px-3 py-2.5">
+                <span className="font-bold text-[var(--text-primary)] text-sm font-mono w-20">{p.symbol.replace("-USD", "")}</span>
+                <span className="text-xs text-[var(--text-tertiary)] flex-1">
                   {p.qty.toFixed(6)} coins · avg ${p.avg_cost.toFixed(p.avg_cost < 1 ? 6 : 2)}
                 </span>
-                <span className="text-sm font-mono text-white">${p.market_value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-sm font-mono text-[var(--text-primary)]">${p.market_value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 <span className={cn("text-xs font-mono font-semibold", p.unrealized_pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
                   {p.unrealized_pnl >= 0 ? "+" : ""}{p.unrealized_pnl_pct.toFixed(2)}%
                 </span>
@@ -312,13 +312,13 @@ export default function CryptoLab() {
       {/* Coin grid */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-widest">Top Coins</span>
-          {market?.cached && <span className="text-[10px] text-[#334155]">cached</span>}
+          <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Top Coins</span>
+          {market?.cached && <span className="text-[10px] text-[var(--border-emphasis)]">cached</span>}
         </div>
         {isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {Array.from({ length: 15 }).map((_, i) => (
-              <div key={i} className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4 h-32 animate-pulse" />
+              <div key={i} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 h-32 animate-pulse" />
             ))}
           </div>
         ) : (
@@ -331,7 +331,7 @@ export default function CryptoLab() {
       </div>
 
       {/* 24/7 note */}
-      <p className="text-xs text-[#334155] text-center">Crypto markets trade 24/7 · Paper trading only · Prices via Yahoo Finance</p>
+      <p className="text-xs text-[var(--border-emphasis)] text-center">Crypto markets trade 24/7 · Paper trading only · Prices via Yahoo Finance</p>
 
       {/* Order modal */}
       {tradingCoin && (

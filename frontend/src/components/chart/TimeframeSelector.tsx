@@ -18,7 +18,7 @@ export default function TimeframeSelector({ value, onChange }: Props) {
             "px-2 py-1 text-xs rounded font-medium transition-colors",
             value === tf
               ? "bg-white text-black font-semibold"
-              : "bg-transparent border border-zinc-800 text-zinc-500 hover:border-zinc-500 hover:text-white"
+              : "bg-transparent border border-zinc-800 text-zinc-500 hover:border-zinc-500 hover:text-[var(--text-primary)]"
           )}
         >
           {tf}

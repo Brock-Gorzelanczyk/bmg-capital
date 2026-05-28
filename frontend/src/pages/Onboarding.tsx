@@ -46,7 +46,7 @@ function OptionCard({ label, description, emoji, selected, onClick }: OptionCard
       className={cn(
         "w-full text-left px-5 py-4 rounded-2xl border transition-all duration-150 group",
         selected
-          ? "border-white bg-white/10 text-white"
+          ? "border-white bg-white/10 text-[var(--text-primary)]"
           : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
       )}
     >
@@ -54,11 +54,11 @@ function OptionCard({ label, description, emoji, selected, onClick }: OptionCard
         <div className="flex items-center gap-3">
           {emoji && <span className="text-2xl">{emoji}</span>}
           <div>
-            <div className={cn("font-semibold text-sm", selected ? "text-white" : "text-zinc-300")}>{label}</div>
+            <div className={cn("font-semibold text-sm", selected ? "text-[var(--text-primary)]" : "text-zinc-300")}>{label}</div>
             {description && <div className="text-xs text-zinc-600 mt-0.5">{description}</div>}
           </div>
         </div>
-        {selected && <CheckCircle2 size={18} className="text-white shrink-0" />}
+        {selected && <CheckCircle2 size={18} className="text-[var(--text-primary)] shrink-0" />}
       </div>
     </button>
   );
@@ -107,14 +107,14 @@ export default function Onboarding() {
         {/* Step 0 — Welcome */}
         {step === 0 && (
           <div className="text-center space-y-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center mx-auto text-2xl font-bold text-white shadow-lg shadow-blue-500/20">B</div>
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center mx-auto text-2xl font-bold text-[var(--text-primary)] shadow-lg shadow-blue-500/20">B</div>
             <div>
-              <h1 className="text-3xl font-bold text-[#F8FAFC] mb-2">Welcome to BMG Capital</h1>
-              <p className="text-[#475569] text-base">Let's personalize your experience. It takes 60 seconds.</p>
+              <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">Welcome to BMG Capital</h1>
+              <p className="text-[var(--text-tertiary)] text-base">Let's personalize your experience. It takes 60 seconds.</p>
             </div>
             <button
               onClick={() => setStep(1)}
-              className="w-full bg-[#3B82F6] hover:bg-[#2563EB] active:scale-[0.98] text-white font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2"
+              className="w-full bg-[var(--accent-positive)] hover:brightness-110 active:scale-[0.98] text-[var(--text-primary)] font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2"
             >
               Get started <ChevronRight size={18} />
             </button>
@@ -129,7 +129,7 @@ export default function Onboarding() {
                 localStorage.setItem("bmg_onboarded", "1");
                 navigate("/");
               }}
-              className="flex items-center justify-center gap-2 text-[#94A3B8] hover:text-[#F8FAFC] text-sm transition-colors"
+              className="flex items-center justify-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-sm transition-colors"
             >
               <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
               Skip — load demo data
@@ -142,7 +142,7 @@ export default function Onboarding() {
           <div className="space-y-5">
             <div>
               <p className="text-zinc-500 text-sm mb-1">Step 1 of 4</p>
-              <h2 className="text-2xl font-bold text-white">What brings you here?</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">What brings you here?</h2>
             </div>
             <div className="space-y-2">
               {[
@@ -169,7 +169,7 @@ export default function Onboarding() {
           <div className="space-y-5">
             <div>
               <p className="text-zinc-500 text-sm mb-1">Step 2 of 4</p>
-              <h2 className="text-2xl font-bold text-white">How much experience do you have?</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">How much experience do you have?</h2>
             </div>
             <div className="space-y-2">
               {[
@@ -195,7 +195,7 @@ export default function Onboarding() {
           <div className="space-y-5">
             <div>
               <p className="text-zinc-500 text-sm mb-1">Step 3 of 4</p>
-              <h2 className="text-2xl font-bold text-white">What's your risk tolerance?</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">What's your risk tolerance?</h2>
               <p className="text-zinc-600 text-sm mt-1">How comfortable are you with potential losses?</p>
             </div>
             <div className="space-y-2">
@@ -222,7 +222,7 @@ export default function Onboarding() {
           <div className="space-y-5">
             <div>
               <p className="text-zinc-500 text-sm mb-1">Step 4 of 4</p>
-              <h2 className="text-2xl font-bold text-white">What's your time horizon?</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">What's your time horizon?</h2>
               <p className="text-zinc-600 text-sm mt-1">How long do you plan to keep money invested?</p>
             </div>
             <div className="space-y-2">
@@ -249,10 +249,10 @@ export default function Onboarding() {
         {step === 5 && (
           <div className="text-center space-y-6">
             <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto">
-              <CheckCircle2 size={32} className="text-white" />
+              <CheckCircle2 size={32} className="text-[var(--text-primary)]" />
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-white mb-2">You're all set!</h2>
+              <h2 className="text-3xl font-bold text-[var(--text-primary)] mb-2">You're all set!</h2>
               <p className="text-zinc-500">Your profile has been saved. We've personalized your experience based on your answers.</p>
             </div>
             <div className="bg-amber-950/40 border border-amber-800 rounded-2xl p-4 flex items-center gap-3">

@@ -44,19 +44,19 @@ export default function SupportChatWidget() {
     <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-3 md:bottom-4 md:right-4 z-50 flex flex-col items-end gap-2">
       {/* Chat panel */}
       {open && (
-        <div className="w-[calc(100vw-1.5rem)] md:w-80 bg-[#0F172A] border border-[#1E293B] rounded-2xl shadow-2xl shadow-black/60 flex flex-col overflow-hidden">
+        <div className="w-[calc(100vw-1.5rem)] md:w-80 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl shadow-black/60 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#1E293B]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-full bg-[#3B82F6]/20 flex items-center justify-center">
                 <Bot size={13} className="text-[#3B82F6]" />
               </div>
-              <span className="text-xs font-semibold text-[#F8FAFC]">Support Agent</span>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22C55E]/15 text-[#22C55E] font-semibold">24/7</span>
+              <span className="text-xs font-semibold text-[var(--text-primary)]">Support Agent</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22C55E]/15 text-[var(--accent-positive)] font-semibold">24/7</span>
             </div>
             <button
               onClick={() => setOpen(false)}
-              className="text-[#475569] hover:text-[#94A3B8] transition-colors"
+              className="text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
             >
               <X size={14} />
             </button>
@@ -74,8 +74,8 @@ export default function SupportChatWidget() {
                 <div className={cn(
                   "max-w-[80%] text-xs rounded-2xl px-3 py-2 leading-relaxed",
                   m.role === "user"
-                    ? "bg-[#3B82F6] text-white rounded-tr-sm"
-                    : "bg-[#1E293B] text-[#94A3B8] rounded-tl-sm"
+                    ? "bg-[#3B82F6] text-[var(--text-primary)] rounded-tr-sm"
+                    : "bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] rounded-tl-sm"
                 )}>
                   {m.content}
                 </div>
@@ -86,7 +86,7 @@ export default function SupportChatWidget() {
                 <div className="w-6 h-6 rounded-full bg-[#3B82F6]/20 flex items-center justify-center shrink-0">
                   <Bot size={12} className="text-[#3B82F6]" />
                 </div>
-                <div className="bg-[#1E293B] text-[#475569] text-xs rounded-2xl rounded-tl-sm px-3 py-2">
+                <div className="bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] text-xs rounded-2xl rounded-tl-sm px-3 py-2">
                   <span className="animate-pulse">Thinking…</span>
                 </div>
               </div>
@@ -95,7 +95,7 @@ export default function SupportChatWidget() {
           </div>
 
           {/* Input */}
-          <div className="flex items-center gap-2 px-3 pb-3 pt-2 border-t border-[#1E293B]">
+          <div className="flex items-center gap-2 px-3 pb-3 pt-2 border-t border-[var(--border-subtle)]">
             <input
               ref={inputRef}
               value={input}
@@ -103,12 +103,12 @@ export default function SupportChatWidget() {
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
               placeholder="Ask anything about the app…"
               disabled={loading}
-              className="flex-1 bg-[#1E293B] border border-[#334155] text-white text-xs px-3 py-2 rounded-lg placeholder-[#475569] focus:outline-none focus:border-[#3B82F6] disabled:opacity-50"
+              className="flex-1 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-xs px-3 py-2 rounded-lg placeholder-[#475569] focus:outline-none focus:border-[#3B82F6] disabled:opacity-50"
             />
             <button
               onClick={send}
               disabled={!input.trim() || loading}
-              className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#3B82F6] hover:bg-[#2563EB] text-white disabled:opacity-40 transition-colors shrink-0"
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#3B82F6] hover:bg-[#2563EB] text-[var(--text-primary)] disabled:opacity-40 transition-colors shrink-0"
             >
               <Send size={13} />
             </button>
@@ -119,11 +119,11 @@ export default function SupportChatWidget() {
       {/* Trigger pill */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2.5 bg-[#0F172A] border border-[#1E293B] hover:border-[#334155] hover:bg-[#1E293B]/60 rounded-xl px-4 py-2.5 transition-colors shadow-xl shadow-black/40"
+        className="flex items-center gap-2.5 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-elevated-2)]/60 rounded-xl px-4 py-2.5 transition-colors shadow-xl shadow-black/40"
       >
         <Bot size={15} className="text-[#3B82F6]" />
-        <span className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest">Support Agent</span>
-        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22C55E]/15 text-[#22C55E] font-semibold border border-[#22C55E]/20">24/7</span>
+        <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Support Agent</span>
+        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22C55E]/15 text-[var(--accent-positive)] font-semibold border border-[var(--accent-positive)]/20">24/7</span>
       </button>
     </div>
   );

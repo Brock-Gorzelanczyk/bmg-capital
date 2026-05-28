@@ -78,7 +78,7 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
                 <button
                   key={wl.id}
                   onClick={() => { setActiveWlId(wl.id); setWlMenuOpen(false); }}
-                  className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-[#1f1f1f]", activeWl?.id === wl.id ? "text-white" : "text-[#d4d4d4]")}
+                  className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-[#1f1f1f]", activeWl?.id === wl.id ? "text-[var(--text-primary)]" : "text-[#d4d4d4]")}
                 >
                   {wl.name}
                 </button>
@@ -150,7 +150,7 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
         {symbols.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <p className="text-[#555] text-xs text-center">No symbols</p>
-            <button onClick={() => setShowAdd(true)} className="text-xs text-white hover:underline">Add a symbol</button>
+            <button onClick={() => setShowAdd(true)} className="text-xs text-[var(--text-primary)] hover:underline">Add a symbol</button>
           </div>
         ) : (
           symbols.map((sym: string) => {

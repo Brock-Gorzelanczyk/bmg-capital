@@ -105,21 +105,21 @@ export default function CommandPalette({ open, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-24">
       <div className="absolute inset-0 bg-[#020617]/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg mx-4 bg-[#111] border border-[#334155] rounded-xl shadow-2xl overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#334155]">
-          <Search size={16} className="text-[#475569] shrink-0" />
+      <div className="relative w-full max-w-lg mx-4 bg-[#111] border border-[var(--border-emphasis)] rounded-xl shadow-2xl overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border-emphasis)]">
+          <Search size={16} className="text-[var(--text-tertiary)] shrink-0" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search pages or symbols…"
-            className="flex-1 bg-transparent text-white text-sm outline-none placeholder-zinc-600"
+            className="flex-1 bg-transparent text-[var(--text-primary)] text-sm outline-none placeholder-zinc-600"
           />
-          <kbd className="text-[10px] text-[#475569] bg-[#1E293B] border border-[#334155] px-1.5 py-0.5 rounded">esc</kbd>
+          <kbd className="text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] px-1.5 py-0.5 rounded">esc</kbd>
         </div>
         <div className="py-1">
           {items.length === 0 ? (
-            <div className="px-4 py-8 text-center text-[#475569] text-sm">No results</div>
+            <div className="px-4 py-8 text-center text-[var(--text-tertiary)] text-sm">No results</div>
           ) : (
             items.map((item, i) => (
               <button
@@ -128,26 +128,26 @@ export default function CommandPalette({ open, onClose }: Props) {
                 onMouseEnter={() => setSelected(i)}
                 className={cn(
                   "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
-                  i === selected ? "bg-[#334155]" : "hover:bg-[#1E293B]"
+                  i === selected ? "bg-[#334155]" : "hover:bg-[var(--bg-elevated-2)]"
                 )}
               >
                 {item.type === "page" ? (
-                  <span className="text-[#475569] shrink-0">{item.icon}</span>
+                  <span className="text-[var(--text-tertiary)] shrink-0">{item.icon}</span>
                 ) : (
-                  <span className="w-4 h-4 rounded-sm bg-[#1E293B] text-[#94A3B8] text-[8px] font-bold flex items-center justify-center shrink-0">$</span>
+                  <span className="w-4 h-4 rounded-sm bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] text-[8px] font-bold flex items-center justify-center shrink-0">$</span>
                 )}
-                <span className="text-sm font-medium text-white truncate">{item.label}</span>
+                <span className="text-sm font-medium text-[var(--text-primary)] truncate">{item.label}</span>
                 {item.subtitle && (
-                  <span className="text-xs text-[#475569] truncate ml-auto shrink-0 max-w-[160px]">{item.subtitle}</span>
+                  <span className="text-xs text-[var(--text-tertiary)] truncate ml-auto shrink-0 max-w-[160px]">{item.subtitle}</span>
                 )}
                 {item.type === "page" && (
-                  <span className="ml-auto text-[10px] text-[#475569] uppercase tracking-wider shrink-0">page</span>
+                  <span className="ml-auto text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider shrink-0">page</span>
                 )}
               </button>
             ))
           )}
         </div>
-        <div className="px-4 py-2 border-t border-[#1E293B] flex items-center gap-4 text-[11px] text-[#475569]">
+        <div className="px-4 py-2 border-t border-[var(--border-subtle)] flex items-center gap-4 text-[11px] text-[var(--text-tertiary)]">
           <span>↑↓ navigate</span>
           <span>↵ select</span>
           <span>esc close</span>

@@ -229,11 +229,11 @@ const STRATEGY_DETAIL: Record<string, StrategyDetail> = {
 };
 
 const EXIT_BADGE: Record<string, { label: string; cls: string }> = {
-  stop:    { label: "Stop Hit",   cls: "text-[#EF4444] border-red-400/40 bg-red-400/10" },
+  stop:    { label: "Stop Hit",   cls: "text-[var(--accent-negative)] border-red-400/40 bg-red-400/10" },
   target:  { label: "Target Hit", cls: "text-green-400 border-green-400/40 bg-green-400/10" },
   time:    { label: "Time Stop",  cls: "text-amber-400 border-amber-400/40 bg-amber-400/10" },
-  manual:  { label: "Manual",     cls: "text-[#94A3B8] border-zinc-400/30 bg-zinc-400/10" },
-  expired: { label: "Expired",    cls: "text-[#475569] border-[#334155] bg-[#334155]" },
+  manual:  { label: "Manual",     cls: "text-[var(--text-secondary)] border-zinc-400/30 bg-zinc-400/10" },
+  expired: { label: "Expired",    cls: "text-[var(--text-tertiary)] border-[var(--border-emphasis)] bg-[#334155]" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -247,15 +247,15 @@ function fmtPct(n: number | null | undefined): string {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 function pnlColor(n: number | null | undefined): string {
-  if (n == null) return "text-[#94A3B8]";
-  return n >= 0 ? "text-[#22C55E]" : "text-[#EF4444]";
+  if (n == null) return "text-[var(--text-secondary)]";
+  return n >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]";
 }
 
 // ─── Equity Curve ─────────────────────────────────────────────────────────────
 
 function EquityCurve({ data, baseline }: { data: any[]; baseline: number }) {
   if (data.length < 2) return (
-    <div className="h-28 flex items-center justify-center text-xs text-[#475569]">
+    <div className="h-28 flex items-center justify-center text-xs text-[var(--text-tertiary)]">
       Equity curve builds after first daily run
     </div>
   );
@@ -309,25 +309,25 @@ function StrategyCard({
           "w-full rounded-xl border p-3 text-left transition-all duration-150",
           selected
             ? "border-white/20 bg-white/5 ring-1 ring-white/10"
-            : "border-[#334155] bg-[#1E293B]/60 hover:border-[#334155] hover:bg-[#1E293B]"
+            : "border-[var(--border-emphasis)] bg-[var(--bg-elevated-2)]/60 hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-elevated-2)]"
         )}
       >
         <div className="h-0.5 rounded-full mb-3" style={{ backgroundColor: strategy.color }} />
         <div className="pr-4">
-          <div className="text-xs font-semibold text-[#F8FAFC] leading-snug mb-2">{strategy.label}</div>
+          <div className="text-xs font-semibold text-[var(--text-primary)] leading-snug mb-2">{strategy.label}</div>
           {hasTrades ? (
             <>
               <div className={cn("text-sm font-bold font-mono", pnlColor(pnl))}>
                 {pnl >= 0 ? "+" : ""}{fmt$(pnl, 0)}
               </div>
-              <div className="text-[10px] text-[#475569] mt-0.5">{stats.trades} trades · {wr}% win</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{stats.trades} trades · {wr}% win</div>
             </>
           ) : (
-            <div className="text-[10px] text-[#475569]">No closed trades yet</div>
+            <div className="text-[10px] text-[var(--text-tertiary)]">No closed trades yet</div>
           )}
           <div className="flex gap-2 mt-2">
             {openCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#22C55E]/10 text-[#22C55E] border border-emerald-400/20">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent-positive-bg)] text-[var(--accent-positive)] border border-emerald-400/20">
                 {openCount} open
               </span>
             )}
@@ -337,7 +337,7 @@ function StrategyCard({
               </span>
             )}
             {openCount === 0 && watchCount === 0 && (
-              <span className="text-[10px] text-[#475569]">idle</span>
+              <span className="text-[10px] text-[var(--text-tertiary)]">idle</span>
             )}
           </div>
         </div>
@@ -349,7 +349,7 @@ function StrategyCard({
         tabIndex={0}
         onClick={onInfo}
         onKeyDown={(e) => e.key === "Enter" && onInfo()}
-        className="absolute top-2.5 right-2.5 p-1 rounded text-[#475569] hover:text-[#94A3B8] transition-colors cursor-pointer z-10"
+        className="absolute top-2.5 right-2.5 p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer z-10"
         title="How this strategy works"
       >
         <Info size={12} />
@@ -370,7 +370,7 @@ function StrategyInfoModal({ strategyKey, onClose }: { strategyKey: string; onCl
     >
       <div className="absolute inset-0 bg-[#020617]/70 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-xl rounded-2xl border border-[#334155] bg-[#1E293B] shadow-2xl overflow-hidden"
+        className="relative w-full max-w-xl rounded-2xl border border-[var(--border-emphasis)] bg-[var(--bg-elevated-2)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Color bar */}
@@ -380,10 +380,10 @@ function StrategyInfoModal({ strategyKey, onClose }: { strategyKey: string; onCl
         <div className="max-h-[80vh] overflow-y-auto p-6">
           <div className="flex items-start justify-between gap-3 mb-5">
             <div>
-              <div className="text-[10px] text-[#475569] uppercase tracking-widest mb-1">{strategy.category} Strategy</div>
-              <h2 className="text-xl font-bold text-white">{strategy.label}</h2>
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest mb-1">{strategy.category} Strategy</div>
+              <h2 className="text-xl font-bold text-[var(--text-primary)]">{strategy.label}</h2>
             </div>
-            <button onClick={onClose} className="text-[#475569] hover:text-[#F8FAFC] transition-colors shrink-0 mt-1">
+            <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors shrink-0 mt-1">
               <X size={16} />
             </button>
           </div>
@@ -391,20 +391,20 @@ function StrategyInfoModal({ strategyKey, onClose }: { strategyKey: string; onCl
           {detail ? (
             <div className="space-y-5">
               {/* Summary */}
-              <p className="text-sm text-[#F8FAFC] leading-relaxed font-medium">{detail.summary}</p>
+              <p className="text-sm text-[var(--text-primary)] leading-relaxed font-medium">{detail.summary}</p>
 
               {/* How it works */}
               <div>
-                <div className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-2">How it works</div>
-                <p className="text-sm text-[#94A3B8] leading-relaxed">{detail.howItWorks}</p>
+                <div className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">How it works</div>
+                <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{detail.howItWorks}</p>
               </div>
 
               {/* What it looks for */}
               <div>
-                <div className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-2">What it looks for</div>
+                <div className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">What it looks for</div>
                 <ul className="space-y-1.5">
                   {detail.signals.map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-[#94A3B8]">
+                    <li key={i} className="flex items-start gap-2 text-sm text-[var(--text-secondary)]">
                       <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: strategy.color }} />
                       {s}
                     </li>
@@ -414,24 +414,24 @@ function StrategyInfoModal({ strategyKey, onClose }: { strategyKey: string; onCl
 
               {/* Best in / Risk — side by side */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-[#334155]/60 border border-[#334155]/50 p-3">
-                  <div className="text-[10px] font-semibold text-[#22C55E] uppercase tracking-wider mb-1.5">Best market for this</div>
-                  <p className="text-xs text-[#94A3B8] leading-relaxed">{detail.bestIn}</p>
+                <div className="rounded-xl bg-[#334155]/60 border border-[var(--border-emphasis)]/50 p-3">
+                  <div className="text-[10px] font-semibold text-[var(--accent-positive)] uppercase tracking-wider mb-1.5">Best market for this</div>
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{detail.bestIn}</p>
                 </div>
-                <div className="rounded-xl bg-[#334155]/60 border border-[#334155]/50 p-3">
-                  <div className="text-[10px] font-semibold text-[#EF4444] uppercase tracking-wider mb-1.5">Main risk</div>
-                  <p className="text-xs text-[#94A3B8] leading-relaxed">{detail.risk}</p>
+                <div className="rounded-xl bg-[#334155]/60 border border-[var(--border-emphasis)]/50 p-3">
+                  <div className="text-[10px] font-semibold text-[var(--accent-negative)] uppercase tracking-wider mb-1.5">Main risk</div>
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{detail.risk}</p>
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-[#94A3B8]">No description available.</p>
+            <p className="text-sm text-[var(--text-secondary)]">No description available.</p>
           )}
 
-          <div className="mt-6 pt-4 border-t border-[#334155] flex justify-end">
+          <div className="mt-6 pt-4 border-t border-[var(--border-emphasis)] flex justify-end">
             <button
               onClick={onClose}
-              className="text-xs px-4 py-2 rounded-lg bg-[#334155] text-[#94A3B8] hover:bg-[#1E293B] transition-colors"
+              className="text-xs px-4 py-2 rounded-lg bg-[#334155] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] transition-colors"
             >
               Got it
             </button>
@@ -451,15 +451,15 @@ function SymCell({ symbol, preset, onClick }: { symbol: string; preset: string; 
       className="flex items-center gap-1.5 group text-left"
     >
       <div>
-        <div className="font-mono font-bold text-white group-hover:text-[#22C55E] transition-colors">
+        <div className="font-mono font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-positive)] transition-colors">
           {symbol}
         </div>
         {TICKER_NAMES[symbol] && (
-          <div className="text-[11px] text-[#475569] truncate max-w-[140px]">{TICKER_NAMES[symbol]}</div>
+          <div className="text-[11px] text-[var(--text-tertiary)] truncate max-w-[140px]">{TICKER_NAMES[symbol]}</div>
         )}
         <SectorPill symbol={symbol} className="mt-0.5" />
       </div>
-      <ExternalLink size={10} className="text-[#475569] group-hover:text-[#22C55E] transition-colors shrink-0" />
+      <ExternalLink size={10} className="text-[var(--text-tertiary)] group-hover:text-[var(--accent-positive)] transition-colors shrink-0" />
     </button>
   );
 }
@@ -493,7 +493,7 @@ function MonitorBadge() {
   const dotCls = isOpen
     ? "bg-[#22C55E] animate-pulse"
     : isPreOrAfter
-    ? "bg-[#3B82F6]"
+    ? "bg-[var(--accent-positive)]"
     : "bg-[#475569]";
 
   const label = isOpen
@@ -505,12 +505,12 @@ function MonitorBadge() {
     : "CLOSED";
 
   return (
-    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#1E293B] border border-[#334155]">
+    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)]">
       <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dotCls)} />
       <div className="flex flex-col leading-none">
-        <span className="text-[10px] font-semibold text-[#F8FAFC] font-mono tracking-wide">{label}</span>
+        <span className="text-[10px] font-semibold text-[var(--text-primary)] font-mono tracking-wide">{label}</span>
         {status.last_scan_at && (
-          <span className="text-[9px] text-[#475569] font-mono mt-0.5">
+          <span className="text-[9px] text-[var(--text-tertiary)] font-mono mt-0.5">
             Last scan: {relativeTime(status.last_scan_at)}
           </span>
         )}
@@ -551,13 +551,13 @@ function DailyRecapSection() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Calendar size={14} className="text-[#94A3B8]" />
-          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-widest">Daily Recaps</span>
+          <Calendar size={14} className="text-[var(--text-secondary)]" />
+          <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Daily Recaps</span>
         </div>
         <button
           onClick={handleGenerate}
           disabled={generating}
-          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[#334155] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-zinc-500 transition-colors disabled:opacity-40"
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-500 transition-colors disabled:opacity-40"
         >
           <RefreshCw size={11} className={generating ? "animate-spin" : ""} />
           {generating ? "Generating…" : "Generate Recap"}
@@ -565,10 +565,10 @@ function DailyRecapSection() {
       </div>
 
       {latest5.length === 0 ? (
-        <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl px-4 py-6 text-center">
-          <Calendar size={24} className="text-[#334155] mx-auto mb-2" />
-          <p className="text-sm text-[#475569]">No recaps yet</p>
-          <p className="text-xs text-[#334155] mt-1">Recaps generate automatically at 4:15 PM ET or click Generate above</p>
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-4 py-6 text-center">
+          <Calendar size={24} className="text-[var(--border-emphasis)] mx-auto mb-2" />
+          <p className="text-sm text-[var(--text-tertiary)]">No recaps yet</p>
+          <p className="text-xs text-[var(--border-emphasis)] mt-1">Recaps generate automatically at 4:15 PM ET or click Generate above</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -691,9 +691,9 @@ export default function StrategyLab() {
       {/* ── Top bar ────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <FlaskConical size={18} className="text-[#94A3B8]" />
-          <span className="text-base font-bold text-white">Strategy Lab</span>
-          <span className="text-[11px] text-[#475569] hidden md:block">· 19 strategies · $100k paper · auto-runs 4:05 PM ET</span>
+          <FlaskConical size={18} className="text-[var(--text-secondary)]" />
+          <span className="text-base font-bold text-[var(--text-primary)]">Strategy Lab</span>
+          <span className="text-[11px] text-[var(--text-tertiary)] hidden md:block">· 19 strategies · $100k paper · auto-runs 4:05 PM ET</span>
         </div>
         <div className="flex items-center gap-2">
           <MonitorBadge />
@@ -701,7 +701,7 @@ export default function StrategyLab() {
           <button
             onClick={handleRunNow}
             disabled={runningNow}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[#334155] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-zinc-500 transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-500 transition-colors disabled:opacity-40"
           >
             <Play size={11} className={runningNow ? "animate-pulse" : ""} />
             {runningNow ? "Running…" : "Run Now"}
@@ -710,17 +710,17 @@ export default function StrategyLab() {
       </div>
 
       {/* ── Portfolio hero ─────────────────────────────────────────── */}
-      <div className="bg-[#1E293B]/60 border border-[#334155] rounded-2xl p-5">
+      <div className="bg-[var(--bg-elevated-2)]/60 border border-[var(--border-emphasis)] rounded-2xl p-5">
         <div className="flex flex-col md:flex-row md:items-end gap-4 mb-4">
           <div>
-            <div className="text-xs text-[#475569] mb-1">Paper Portfolio Value</div>
-            <div className="text-4xl font-bold text-white tracking-tight font-mono">
+            <div className="text-xs text-[var(--text-tertiary)] mb-1">Paper Portfolio Value</div>
+            <div className="text-4xl font-bold text-[var(--text-primary)] tracking-tight font-mono">
               ${portfolioValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className={cn("flex items-center gap-1.5 text-sm font-semibold mt-1 font-mono", pnlColor(totalReturn))}>
               {totalReturn >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
               {totalReturn >= 0 ? "+" : ""}{fmt$(totalReturn)} ({totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(2)}%)
-              <span className="text-[#475569] font-normal text-xs">total return</span>
+              <span className="text-[var(--text-tertiary)] font-normal text-xs">total return</span>
             </div>
           </div>
           <div className="flex-1 min-h-0">
@@ -731,10 +731,10 @@ export default function StrategyLab() {
         {/* Stat pills */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
           <StatPill label="Open P&L"    value={overall.open_pnl !== 0 ? `${overall.open_pnl >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(overall.open_pnl))}` : "—"} color={pnlColor(overall.open_pnl)} />
-          <StatPill label="Day's P&L"   value={dayPnl !== 0 ? `${dayPnl >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(dayPnl))}` : "—"} color={dayPnl !== 0 ? pnlColor(dayPnl) : "text-[#475569]"} sub="vs prev close" />
+          <StatPill label="Day's P&L"   value={dayPnl !== 0 ? `${dayPnl >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(dayPnl))}` : "—"} color={dayPnl !== 0 ? pnlColor(dayPnl) : "text-[var(--text-tertiary)]"} sub="vs prev close" />
           <StatPill label="Win Rate"    value={overall.total_closed > 0 ? `${overall.win_rate}%` : "—"} sub={overall.total_closed > 0 ? `${overall.wins}W · ${overall.losses}L` : "no closed trades"} />
           <StatPill label="Expectancy"  value={overall.total_closed > 0 ? fmtPct(overall.expectancy) : "—"} color={pnlColor(overall.expectancy)} sub="avg per trade" />
-          <StatPill label="Max Drawdown" value={overall.max_drawdown_pct > 0 ? `-${overall.max_drawdown_pct?.toFixed(1)}%` : "—"} color={overall.max_drawdown_pct > 15 ? "text-[#EF4444]" : "text-[#94A3B8]"} />
+          <StatPill label="Max Drawdown" value={overall.max_drawdown_pct > 0 ? `-${overall.max_drawdown_pct?.toFixed(1)}%` : "—"} color={overall.max_drawdown_pct > 15 ? "text-[var(--accent-negative)]" : "text-[var(--text-secondary)]"} />
           <StatPill label="Positions"   value={`${overall.open_positions ?? openTrades.length} open · ${overall.candidates ?? candidates.length} watching`} />
         </div>
       </div>
@@ -748,10 +748,10 @@ export default function StrategyLab() {
       {/* ── Strategy cards ─────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] text-[#475569] uppercase tracking-widest">Strategies</span>
+          <span className="text-[11px] text-[var(--text-tertiary)] uppercase tracking-widest">Strategies</span>
           <div className="flex items-center gap-3">
             {selectedStrategy && (
-              <button onClick={() => setSelectedStrategy(null)} className="text-xs text-[#475569] hover:text-[#F8FAFC] flex items-center gap-1">
+              <button onClick={() => setSelectedStrategy(null)} className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex items-center gap-1">
                 <X size={11} /> Clear filter
               </button>
             )}
@@ -786,11 +786,11 @@ export default function StrategyLab() {
               </div>
               <button
                 onClick={() => setShowAllStrategies((v) => !v)}
-                className="mt-3 text-xs text-[#475569] hover:text-[#F8FAFC] transition-colors flex items-center gap-1.5"
+                className="mt-3 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1.5"
               >
                 {showAllStrategies
                   ? <><X size={11} /> Show less</>
-                  : <><span className="text-[#475569]">+{STRATEGIES.length - 5} more</span> · View all {STRATEGIES.length} strategies</>
+                  : <><span className="text-[var(--text-tertiary)]">+{STRATEGIES.length - 5} more</span> · View all {STRATEGIES.length} strategies</>
                 }
               </button>
             </>
@@ -799,9 +799,9 @@ export default function StrategyLab() {
       </div>
 
       {/* ── Tabs + tables ──────────────────────────────────────────── */}
-      <div className="bg-[#1E293B]/40 border border-[#334155] rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-elevated-2)]/40 border border-[var(--border-emphasis)] rounded-2xl overflow-hidden">
         {/* Tab bar */}
-        <div className="flex border-b border-[#334155] bg-[#1E293B]/60">
+        <div className="flex border-b border-[var(--border-emphasis)] bg-[var(--bg-elevated-2)]/60">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -809,15 +809,15 @@ export default function StrategyLab() {
               className={cn(
                 "px-5 py-3 text-sm font-medium transition-colors border-b-2 -mb-px",
                 activeTab === tab.key
-                  ? "border-white text-white bg-white/3"
-                  : "border-transparent text-[#475569] hover:text-[#94A3B8]"
+                  ? "border-white text-[var(--text-primary)] bg-white/3"
+                  : "border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
               )}
             >
               {tab.label}
               {tab.count > 0 && (
                 <span className={cn(
                   "ml-2 text-[10px] px-1.5 py-0.5 rounded-full",
-                  activeTab === tab.key ? "bg-white/10 text-[#94A3B8]" : "bg-[#334155] text-[#475569]"
+                  activeTab === tab.key ? "bg-white/10 text-[var(--text-secondary)]" : "bg-[#334155] text-[var(--text-tertiary)]"
                 )}>
                   {tab.count}
                 </span>
@@ -991,23 +991,23 @@ function BacktestSection() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <BarChart2 size={16} className="text-[#94A3B8]" />
-            <span className="text-base font-bold text-white">Historical Backtests</span>
+            <BarChart2 size={16} className="text-[var(--text-secondary)]" />
+            <span className="text-base font-bold text-[var(--text-primary)]">Historical Backtests</span>
           </div>
-          <p className="text-[11px] text-[#475569] mt-0.5">
+          <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
             How each strategy performed on {BACKTEST_UNIVERSE_SIZE} liquid stocks over the selected period
           </p>
         </div>
         <div className="flex items-center gap-2">
           {/* Period picker */}
-          <div className="flex items-center gap-1 bg-[#1E293B] border border-[#334155] rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-lg p-0.5">
             {[1, 3, 5].map((y) => (
               <button
                 key={y}
                 onClick={() => setPeriodYears(y)}
                 className={cn(
                   "text-xs px-2.5 py-1 rounded-md transition-colors",
-                  periodYears === y ? "bg-[#1E293B] text-white" : "text-[#475569] hover:text-[#94A3B8]"
+                  periodYears === y ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                 )}
               >{y}Y</button>
             ))}
@@ -1015,7 +1015,7 @@ function BacktestSection() {
           <button
             onClick={handleRun}
             disabled={launching || status?.running}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[#334155] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-zinc-500 transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-500 transition-colors disabled:opacity-40"
           >
             <RefreshCw size={11} className={status?.running || launching ? "animate-spin" : ""} />
             {status?.running ? "Running…" : "Run Backtest"}
@@ -1025,10 +1025,10 @@ function BacktestSection() {
 
       {/* Empty / running state */}
       {!status?.available && (
-        <div className="bg-[#1E293B]/40 border border-[#334155] rounded-2xl p-12 flex flex-col items-center gap-3 text-center">
-          <BarChart2 size={36} className="text-[#475569]" />
-          <p className="text-[#94A3B8] font-medium text-sm">No backtest results yet</p>
-          <p className="text-[#475569] text-xs max-w-sm">
+        <div className="bg-[var(--bg-elevated-2)]/40 border border-[var(--border-emphasis)] rounded-2xl p-12 flex flex-col items-center gap-3 text-center">
+          <BarChart2 size={36} className="text-[var(--text-tertiary)]" />
+          <p className="text-[var(--text-secondary)] font-medium text-sm">No backtest results yet</p>
+          <p className="text-[var(--text-tertiary)] text-xs max-w-sm">
             Click "Run Backtest" to simulate all 19 strategies against 3 years of historical data.
             Takes 1–3 minutes. Results are cached so you only need to rerun when you want fresh data.
           </p>
@@ -1045,51 +1045,51 @@ function BacktestSection() {
           {/* Summary pills */}
           {best && worst && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <div className="bg-[#1E293B] border border-[#334155] rounded-xl px-3 py-2.5">
-                <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">Best Strategy</div>
-                <div className="text-sm font-bold text-[#22C55E]">{best.strategy_label}</div>
-                <div className="text-[10px] text-[#475569]">{best.total_return_pct > 0 ? "+" : ""}{best.total_return_pct}% over {results.period_years}Y</div>
+              <div className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-xl px-3 py-2.5">
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-0.5">Best Strategy</div>
+                <div className="text-sm font-bold text-[var(--accent-positive)]">{best.strategy_label}</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">{best.total_return_pct > 0 ? "+" : ""}{best.total_return_pct}% over {results.period_years}Y</div>
               </div>
-              <div className="bg-[#1E293B] border border-[#334155] rounded-xl px-3 py-2.5">
-                <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">Worst Strategy</div>
-                <div className="text-sm font-bold text-[#EF4444]">{worst.strategy_label}</div>
-                <div className="text-[10px] text-[#475569]">{worst.total_return_pct > 0 ? "+" : ""}{worst.total_return_pct}% over {results.period_years}Y</div>
+              <div className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-xl px-3 py-2.5">
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-0.5">Worst Strategy</div>
+                <div className="text-sm font-bold text-[var(--accent-negative)]">{worst.strategy_label}</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">{worst.total_return_pct > 0 ? "+" : ""}{worst.total_return_pct}% over {results.period_years}Y</div>
               </div>
-              <div className="bg-[#1E293B] border border-[#334155] rounded-xl px-3 py-2.5">
-                <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">Avg Win Rate</div>
-                <div className="text-sm font-bold text-white font-mono">
+              <div className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-xl px-3 py-2.5">
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-0.5">Avg Win Rate</div>
+                <div className="text-sm font-bold text-[var(--text-primary)] font-mono">
                   {(strategies.reduce((a: number, s: any) => a + s.win_rate, 0) / strategies.length).toFixed(1)}%
                 </div>
-                <div className="text-[10px] text-[#475569]">across all strategies</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">across all strategies</div>
               </div>
-              <div className="bg-[#1E293B] border border-[#334155] rounded-xl px-3 py-2.5">
-                <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">Last Run</div>
-                <div className="text-sm font-bold text-white">
+              <div className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-xl px-3 py-2.5">
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-0.5">Last Run</div>
+                <div className="text-sm font-bold text-[var(--text-primary)]">
                   {results.run_date ? new Date(results.run_date).toLocaleDateString() : "—"}
                 </div>
-                <div className="text-[10px] text-[#475569]">{results.period_years}Y period · {BACKTEST_UNIVERSE_SIZE} stocks</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">{results.period_years}Y period · {BACKTEST_UNIVERSE_SIZE} stocks</div>
               </div>
             </div>
           )}
 
           {/* Comparison table */}
-          <div className="bg-[#1E293B]/40 border border-[#334155] rounded-2xl overflow-hidden">
-            <div className="px-5 py-3 border-b border-[#334155] text-[11px] text-[#475569] uppercase tracking-widest">
+          <div className="bg-[var(--bg-elevated-2)]/40 border border-[var(--border-emphasis)] rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-[var(--border-emphasis)] text-[11px] text-[var(--text-tertiary)] uppercase tracking-widest">
               Strategy Comparison — {results.period_years}-Year Backtest
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-[#334155]/60">
-                    <th className="px-4 py-2.5 text-left text-[11px] text-[#475569] font-medium uppercase tracking-wider">Strategy</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] text-[#475569] font-medium uppercase tracking-wider">Total Return</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] text-[#475569] font-medium uppercase tracking-wider">CAGR</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] text-[#475569] font-medium uppercase tracking-wider">Win Rate</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] text-[#475569] font-medium uppercase tracking-wider">Avg Win</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] text-[#475569] font-medium uppercase tracking-wider">Avg Loss</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] text-[#475569] font-medium uppercase tracking-wider">Max DD</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] text-[#475569] font-medium uppercase tracking-wider">Sharpe</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] text-[#475569] font-medium uppercase tracking-wider">Trades</th>
+                  <tr className="border-b border-[var(--border-emphasis)]/60">
+                    <th className="px-4 py-2.5 text-left text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Strategy</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Total Return</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">CAGR</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Win Rate</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Avg Win</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Avg Loss</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Max DD</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Sharpe</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Trades</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1102,23 +1102,23 @@ function BacktestSection() {
                         key={s.strategy_key}
                         onClick={() => { setSelectedKey(isSelected ? null : s.strategy_key); setSelectedCompany(null); }}
                         className={cn(
-                          "border-b border-[#334155]/40 cursor-pointer transition-colors",
+                          "border-b border-[var(--border-emphasis)]/40 cursor-pointer transition-colors",
                           isSelected ? "bg-white/4" : "hover:bg-white/2"
                         )}
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-[#475569] font-mono w-4">#{i + 1}</span>
+                            <span className="text-[10px] text-[var(--text-tertiary)] font-mono w-4">#{i + 1}</span>
                             <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: strat?.color ?? "#666" }} />
-                            <span className="text-xs font-medium text-[#F8FAFC]">{s.strategy_label}</span>
+                            <span className="text-xs font-medium text-[var(--text-primary)]">{s.strategy_label}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-sm font-bold">
-                          <span className={ret >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"}>
+                          <span className={ret >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
                             {ret >= 0 ? "+" : ""}{ret}%
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-[#94A3B8]">
+                        <td className="px-4 py-3 text-right font-mono text-xs text-[var(--text-secondary)]">
                           {(s.cagr ?? 0) >= 0 ? "+" : ""}{s.cagr ?? 0}%
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -1126,24 +1126,24 @@ function BacktestSection() {
                             <div className="w-12 h-1 rounded-full bg-[#334155] overflow-hidden">
                               <div className="h-full rounded-full bg-[#22C55E]" style={{ width: `${s.win_rate ?? 0}%` }} />
                             </div>
-                            <span className={cn("text-xs font-mono", (s.win_rate ?? 0) >= 50 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                            <span className={cn("text-xs font-mono", (s.win_rate ?? 0) >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                               {s.win_rate ?? 0}%
                             </span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-[#22C55E]">
+                        <td className="px-4 py-3 text-right font-mono text-xs text-[var(--accent-positive)]">
                           +{s.avg_win_pct ?? 0}%
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-[#EF4444]">
+                        <td className="px-4 py-3 text-right font-mono text-xs text-[var(--accent-negative)]">
                           {s.avg_loss_pct ?? 0}%
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-[#94A3B8]">
+                        <td className="px-4 py-3 text-right font-mono text-xs text-[var(--text-secondary)]">
                           -{s.max_drawdown_pct ?? 0}%
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-[#94A3B8]">
+                        <td className="px-4 py-3 text-right font-mono text-xs text-[var(--text-secondary)]">
                           {s.sharpe_ratio ?? 0}
                         </td>
-                        <td className="px-4 py-3 text-right text-xs text-[#475569]">
+                        <td className="px-4 py-3 text-right text-xs text-[var(--text-tertiary)]">
                           {s.total_trades ?? 0}
                         </td>
                       </tr>
@@ -1156,36 +1156,36 @@ function BacktestSection() {
 
           {/* Detail panel */}
           {selectedKey && detail && (
-            <div className="bg-[#1E293B]/40 border border-[#334155] rounded-2xl p-5">
+            <div className="bg-[var(--bg-elevated-2)]/40 border border-[var(--border-emphasis)] rounded-2xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <div className="text-[10px] text-[#475569] uppercase tracking-widest mb-1">Backtest Detail</div>
-                  <div className="text-base font-bold text-white">{detail.strategy_label}</div>
+                  <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest mb-1">Backtest Detail</div>
+                  <div className="text-base font-bold text-[var(--text-primary)]">{detail.strategy_label}</div>
                 </div>
-                <button onClick={() => { setSelectedKey(null); setSelectedCompany(null); }} className="text-[#475569] hover:text-[#F8FAFC] transition-colors">
+                <button onClick={() => { setSelectedKey(null); setSelectedCompany(null); }} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
                   <X size={14} />
                 </button>
               </div>
 
               {/* Equity curve */}
               <div className="mb-4">
-                <div className="text-[10px] text-[#475569] mb-1">Equity Curve — $100k starting capital</div>
+                <div className="text-[10px] text-[var(--text-tertiary)] mb-1">Equity Curve — $100k starting capital</div>
                 <BacktestEquityCurve data={detail.equity_curve ?? []} baseline={100_000} />
               </div>
 
               {/* Metric pills */}
               <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
                 {[
-                  { label: "Total Return", value: `${(detail.metrics?.total_return_pct ?? 0) >= 0 ? "+" : ""}${detail.metrics?.total_return_pct ?? 0}%`, color: (detail.metrics?.total_return_pct ?? 0) >= 0 ? "text-[#22C55E]" : "text-[#EF4444]" },
+                  { label: "Total Return", value: `${(detail.metrics?.total_return_pct ?? 0) >= 0 ? "+" : ""}${detail.metrics?.total_return_pct ?? 0}%`, color: (detail.metrics?.total_return_pct ?? 0) >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]" },
                   { label: "CAGR",         value: `${(detail.metrics?.cagr ?? 0) >= 0 ? "+" : ""}${detail.metrics?.cagr ?? 0}%` },
-                  { label: "Win Rate",     value: `${detail.metrics?.win_rate ?? 0}%`, color: (detail.metrics?.win_rate ?? 0) >= 50 ? "text-[#22C55E]" : "text-[#EF4444]" },
+                  { label: "Win Rate",     value: `${detail.metrics?.win_rate ?? 0}%`, color: (detail.metrics?.win_rate ?? 0) >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]" },
                   { label: "Profit Factor", value: `${detail.metrics?.profit_factor ?? 0}x` },
-                  { label: "Max Drawdown", value: `-${detail.metrics?.max_drawdown_pct ?? 0}%`, color: "text-[#EF4444]" },
+                  { label: "Max Drawdown", value: `-${detail.metrics?.max_drawdown_pct ?? 0}%`, color: "text-[var(--accent-negative)]" },
                   { label: "Sharpe Ratio", value: `${detail.metrics?.sharpe_ratio ?? 0}` },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-[#1E293B] border border-[#334155] rounded-xl px-3 py-2.5">
-                    <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">{label}</div>
-                    <div className={cn("text-sm font-bold font-mono", color ?? "text-white")}>{value}</div>
+                  <div key={label} className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-xl px-3 py-2.5">
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-0.5">{label}</div>
+                    <div className={cn("text-sm font-bold font-mono", color ?? "text-[var(--text-primary)]")}>{value}</div>
                   </div>
                 ))}
               </div>
@@ -1196,19 +1196,19 @@ function BacktestSection() {
                   {!selectedCompany ? (
                     /* ── Company list ── */
                     <>
-                      <div className="text-[10px] text-[#475569] uppercase tracking-widest mb-2">
+                      <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest mb-2">
                         Companies Traded — {companies.length} stocks · click to view trade log
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="border-b border-[#334155]/60">
-                              <th className="px-3 py-2 text-left text-[10px] text-[#475569] font-medium uppercase tracking-wider">Symbol</th>
-                              <th className="px-3 py-2 text-left text-[10px] text-[#475569] font-medium uppercase tracking-wider">Company</th>
-                              <th className="px-3 py-2 text-left text-[10px] text-[#475569] font-medium uppercase tracking-wider">Sector</th>
-                              <th className="px-3 py-2 text-right text-[10px] text-[#475569] font-medium uppercase tracking-wider">Trades</th>
-                              <th className="px-3 py-2 text-right text-[10px] text-[#475569] font-medium uppercase tracking-wider">Win Rate</th>
-                              <th className="px-3 py-2 text-right text-[10px] text-[#475569] font-medium uppercase tracking-wider">Avg Return</th>
+                            <tr className="border-b border-[var(--border-emphasis)]/60">
+                              <th className="px-3 py-2 text-left text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Symbol</th>
+                              <th className="px-3 py-2 text-left text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Company</th>
+                              <th className="px-3 py-2 text-left text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Sector</th>
+                              <th className="px-3 py-2 text-right text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Trades</th>
+                              <th className="px-3 py-2 text-right text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Win Rate</th>
+                              <th className="px-3 py-2 text-right text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Avg Return</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1216,10 +1216,10 @@ function BacktestSection() {
                               <tr
                                 key={c.symbol}
                                 onClick={() => setSelectedCompany(c.symbol)}
-                                className="border-b border-[#334155]/30 hover:bg-white/4 transition-colors cursor-pointer group"
+                                className="border-b border-[var(--border-emphasis)]/30 hover:bg-white/4 transition-colors cursor-pointer group"
                               >
-                                <td className="px-3 py-2 font-mono font-bold text-white group-hover:text-blue-300 transition-colors">{c.symbol}</td>
-                                <td className="px-3 py-2 text-[#94A3B8] text-[11px]">{c.name}</td>
+                                <td className="px-3 py-2 font-mono font-bold text-[var(--text-primary)] group-hover:text-blue-300 transition-colors">{c.symbol}</td>
+                                <td className="px-3 py-2 text-[var(--text-secondary)] text-[11px]">{c.name}</td>
                                 <td className="px-3 py-2">
                                   <span
                                     className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
@@ -1229,18 +1229,18 @@ function BacktestSection() {
                                     }}
                                   >{c.sector}</span>
                                 </td>
-                                <td className="px-3 py-2 text-right text-[#94A3B8] font-mono">{c.tradeCount}</td>
+                                <td className="px-3 py-2 text-right text-[var(--text-secondary)] font-mono">{c.tradeCount}</td>
                                 <td className="px-3 py-2 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
                                     <div className="w-10 h-1 rounded-full bg-[#334155] overflow-hidden">
                                       <div className="h-full rounded-full bg-[#22C55E]" style={{ width: `${c.winRate}%` }} />
                                     </div>
-                                    <span className={cn("font-mono text-[11px]", c.winRate >= 50 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                                    <span className={cn("font-mono text-[11px]", c.winRate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                                       {c.winRate}%
                                     </span>
                                   </div>
                                 </td>
-                                <td className={cn("px-3 py-2 text-right font-mono font-bold text-[11px]", c.avgPnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                                <td className={cn("px-3 py-2 text-right font-mono font-bold text-[11px]", c.avgPnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                                   {c.avgPnl >= 0 ? "+" : ""}{c.avgPnl}%
                                 </td>
                               </tr>
@@ -1259,13 +1259,13 @@ function BacktestSection() {
                           <div className="flex items-center gap-3 mb-3">
                             <button
                               onClick={() => setSelectedCompany(null)}
-                              className="text-[11px] text-[#475569] hover:text-[#F8FAFC] transition-colors flex items-center gap-1"
+                              className="text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1"
                             >
                               ← Companies
                             </button>
-                            <span className="text-[#475569]">·</span>
-                            <span className="font-mono font-bold text-white text-sm">{co.symbol}</span>
-                            <span className="text-[#94A3B8] text-[11px]">{co.name}</span>
+                            <span className="text-[var(--text-tertiary)]">·</span>
+                            <span className="font-mono font-bold text-[var(--text-primary)] text-sm">{co.symbol}</span>
+                            <span className="text-[var(--text-secondary)] text-[11px]">{co.name}</span>
                             <span
                               className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
                               style={{
@@ -1273,18 +1273,18 @@ function BacktestSection() {
                                 color: SECTOR_COLOR[co.sector] ?? "#9ca3af",
                               }}
                             >{co.sector}</span>
-                            <span className="ml-auto text-[10px] text-[#475569]">{co.tradeCount} trades · {co.winRate}% win rate</span>
+                            <span className="ml-auto text-[10px] text-[var(--text-tertiary)]">{co.tradeCount} trades · {co.winRate}% win rate</span>
                           </div>
                           <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                               <thead>
-                                <tr className="border-b border-[#334155]/60">
-                                  <th className="px-3 py-2 text-left text-[10px] text-[#475569] font-medium uppercase tracking-wider">Entry Date</th>
-                                  <th className="px-3 py-2 text-left text-[10px] text-[#475569] font-medium uppercase tracking-wider">Exit Date</th>
-                                  <th className="px-3 py-2 text-right text-[10px] text-[#475569] font-medium uppercase tracking-wider">Entry $</th>
-                                  <th className="px-3 py-2 text-right text-[10px] text-[#475569] font-medium uppercase tracking-wider">Exit $</th>
-                                  <th className="px-3 py-2 text-right text-[10px] text-[#475569] font-medium uppercase tracking-wider">Return</th>
-                                  <th className="px-3 py-2 text-left text-[10px] text-[#475569] font-medium uppercase tracking-wider">Outcome</th>
+                                <tr className="border-b border-[var(--border-emphasis)]/60">
+                                  <th className="px-3 py-2 text-left text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Entry Date</th>
+                                  <th className="px-3 py-2 text-left text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Exit Date</th>
+                                  <th className="px-3 py-2 text-right text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Entry $</th>
+                                  <th className="px-3 py-2 text-right text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Exit $</th>
+                                  <th className="px-3 py-2 text-right text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Return</th>
+                                  <th className="px-3 py-2 text-left text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">Outcome</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1296,18 +1296,18 @@ function BacktestSection() {
                                   if (t.exit_date)   params.set("exitDate", t.exit_date);
                                   if (t.exit_reason) params.set("exitReason", t.exit_reason);
                                   const reasonLabel = t.exit_reason === "target" ? "Take Profit" : t.exit_reason === "stop" ? "Stop Loss" : "Time Exit";
-                                  const reasonColor = t.exit_reason === "target" ? "text-[#22C55E]" : t.exit_reason === "stop" ? "text-[#EF4444]" : "text-amber-400";
+                                  const reasonColor = t.exit_reason === "target" ? "text-[var(--accent-positive)]" : t.exit_reason === "stop" ? "text-[var(--accent-negative)]" : "text-amber-400";
                                   return (
                                     <tr
                                       key={i}
                                       onClick={() => navigate(`/chart?${params}`)}
-                                      className="border-b border-[#334155]/30 hover:bg-white/4 transition-colors cursor-pointer group"
+                                      className="border-b border-[var(--border-emphasis)]/30 hover:bg-white/4 transition-colors cursor-pointer group"
                                     >
-                                      <td className="px-3 py-2 text-[#94A3B8]">{t.entry_date}</td>
-                                      <td className="px-3 py-2 text-[#94A3B8]">{t.exit_date ?? "—"}</td>
-                                      <td className="px-3 py-2 text-right font-mono text-[#94A3B8]">${t.entry_price}</td>
-                                      <td className="px-3 py-2 text-right font-mono text-[#94A3B8]">{t.exit_price ? `$${t.exit_price}` : "—"}</td>
-                                      <td className={cn("px-3 py-2 text-right font-mono font-bold", (t.pnl_pct ?? 0) >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                                      <td className="px-3 py-2 text-[var(--text-secondary)]">{t.entry_date}</td>
+                                      <td className="px-3 py-2 text-[var(--text-secondary)]">{t.exit_date ?? "—"}</td>
+                                      <td className="px-3 py-2 text-right font-mono text-[var(--text-secondary)]">${t.entry_price}</td>
+                                      <td className="px-3 py-2 text-right font-mono text-[var(--text-secondary)]">{t.exit_price ? `$${t.exit_price}` : "—"}</td>
+                                      <td className={cn("px-3 py-2 text-right font-mono font-bold", (t.pnl_pct ?? 0) >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                                         {(t.pnl_pct ?? 0) >= 0 ? "+" : ""}{t.pnl_pct ?? 0}%
                                       </td>
                                       <td className={cn("px-3 py-2 font-medium", reasonColor)}>{reasonLabel}</td>
@@ -1335,9 +1335,9 @@ const BACKTEST_UNIVERSE_SIZE = 150;
 
 function RegimePill({ regime }: { regime: string }) {
   const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-    bull:     { label: "Bull Market",   cls: "text-[#22C55E] border-emerald-400/30 bg-[#22C55E]/8",  icon: <TrendingUp size={10} /> },
-    risk_off: { label: "Risk Off",      cls: "text-[#EF4444] border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={10} /> },
-    unknown:  { label: "Checking…",    cls: "text-[#475569] border-[#334155] bg-[#334155]",                 icon: <AlertTriangle size={10} /> },
+    bull:     { label: "Bull Market",   cls: "text-[var(--accent-positive)] border-emerald-400/30 bg-[#22C55E]/8",  icon: <TrendingUp size={10} /> },
+    risk_off: { label: "Risk Off",      cls: "text-[var(--accent-negative)] border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={10} /> },
+    unknown:  { label: "Checking…",    cls: "text-[var(--text-tertiary)] border-[var(--border-emphasis)] bg-[#334155]",                 icon: <AlertTriangle size={10} /> },
   };
   const { label, cls, icon } = map[regime] ?? map.unknown;
   return (
@@ -1351,31 +1351,31 @@ const STRATEGY_EXPLAINABLE = new Set(["Sharpe Ratio", "Max Drawdown", "Win Rate"
 
 function StatPill({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="bg-[#1E293B] border border-[#334155] rounded-xl px-3 py-2.5">
-      <div className="flex items-center gap-1 text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">
+    <div className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-xl px-3 py-2.5">
+      <div className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-0.5">
         <span>{label}</span>
         {STRATEGY_EXPLAINABLE.has(label) && <ExplainButton term={label} size={10} />}
       </div>
-      <div className={cn("text-sm font-bold font-mono leading-tight", color ?? "text-white")}>{value}</div>
-      {sub && <div className="text-[10px] text-[#475569] mt-0.5">{sub}</div>}
+      <div className={cn("text-sm font-bold font-mono leading-tight", color ?? "text-[var(--text-primary)]")}>{value}</div>
+      {sub && <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{sub}</div>}
     </div>
   );
 }
 
 function Empty({ icon, text, sub }: { icon: React.ReactNode; text: string; sub: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-[#475569] gap-3">
+    <div className="flex flex-col items-center justify-center py-16 text-[var(--text-tertiary)] gap-3">
       {icon}
       <div className="text-center">
-        <p className="text-[#94A3B8] font-medium text-sm">{text}</p>
-        <p className="text-[#475569] text-xs mt-1">{sub}</p>
+        <p className="text-[var(--text-secondary)] font-medium text-sm">{text}</p>
+        <p className="text-[var(--text-tertiary)] text-xs mt-1">{sub}</p>
       </div>
     </div>
   );
 }
 
 function TH({ children }: { children?: React.ReactNode }) {
-  return <th className="px-4 py-2.5 text-left text-[11px] text-[#475569] font-medium uppercase tracking-wider">{children}</th>;
+  return <th className="px-4 py-2.5 text-left text-[11px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider">{children}</th>;
 }
 function TD({ children, className }: { children: React.ReactNode; className?: string }) {
   return <td className={cn("px-4 py-3", className)}>{children}</td>;
@@ -1393,7 +1393,7 @@ function OpenTable({ trades, onClose, onChart, onRowClick }: { trades: any[]; on
   return (
     <div className="overflow-x-auto -mx-4">
       <table className="w-full text-sm">
-        <thead><tr className="border-b border-[#334155]/60">
+        <thead><tr className="border-b border-[var(--border-emphasis)]/60">
           <TH>Symbol</TH><TH>Strategy</TH><TH>Entry</TH><TH>Current</TH>
           <TH>P&L</TH><TH>Stop / Target</TH><TH>Risk</TH><TH>Days</TH><TH></TH>
         </tr></thead>
@@ -1404,7 +1404,7 @@ function OpenTable({ trades, onClose, onChart, onRowClick }: { trades: any[]; on
             const stopPct = t.entry_price && t.stop_price ? ((t.stop_price - t.entry_price) / t.entry_price * 100) : null;
             const tgtPct  = t.entry_price && t.target_price ? ((t.target_price - t.entry_price) / t.entry_price * 100) : null;
             return (
-              <tr key={t.id} onClick={() => onRowClick(t)} className="border-b border-[#334155]/40 hover:bg-white/3 transition-colors cursor-pointer">
+              <tr key={t.id} onClick={() => onRowClick(t)} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/3 transition-colors cursor-pointer">
                 <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { entry: t.entry_price, stop: t.stop_price, target: t.target_price, entryDate: t.entry_date })} /></TD>
                 <TD>
                   <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: strat?.color, backgroundColor: `${strat?.color}15` }}>
@@ -1412,30 +1412,30 @@ function OpenTable({ trades, onClose, onChart, onRowClick }: { trades: any[]; on
                   </span>
                 </TD>
                 <TD>
-                  <div className="font-mono text-xs text-[#94A3B8]">{t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"}</div>
-                  {t.entry_date && <div className="text-[10px] text-[#475569]">{new Date(t.entry_date).toLocaleDateString()}</div>}
+                  <div className="font-mono text-xs text-[var(--text-secondary)]">{t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"}</div>
+                  {t.entry_date && <div className="text-[10px] text-[var(--text-tertiary)]">{new Date(t.entry_date).toLocaleDateString()}</div>}
                 </TD>
-                <TD className="font-mono text-xs text-[#94A3B8]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</TD>
+                <TD className="font-mono text-xs text-[var(--text-secondary)]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</TD>
                 <TD>
                   <div
-                    className={cn("font-mono text-sm font-bold", pos ? "text-[#22C55E]" : "text-[#EF4444]")}
+                    className={cn("font-mono text-sm font-bold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
                     aria-label={t.pnl != null ? `${pos ? "Gain" : "Loss"}: ${fmt$(Math.abs(t.pnl), 0)}` : undefined}
                   >
                     {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
                   </div>
-                  {t.pnl != null && <div className={cn("text-[10px] font-mono", pos ? "text-[#22C55E]/60" : "text-[#EF4444]/60")}>{pos ? "▲" : "▼"} {fmt$(Math.abs(t.pnl), 0)}</div>}
+                  {t.pnl != null && <div className={cn("text-[10px] font-mono", pos ? "text-[var(--accent-positive)]/60" : "text-[var(--accent-negative)]/60")}>{pos ? "▲" : "▼"} {fmt$(Math.abs(t.pnl), 0)}</div>}
                 </TD>
                 <TD className="text-xs font-mono">
-                  <span className="text-[#EF4444]/70">{t.stop_price ? `$${t.stop_price.toFixed(2)}` : "—"}</span>
-                  {stopPct != null && <span className="text-[#475569] text-[10px]"> ({stopPct.toFixed(1)}%)</span>}
-                  <span className="text-[#475569] mx-1.5">/</span>
-                  <span className="text-[#22C55E]/70">{t.target_price ? `$${t.target_price.toFixed(2)}` : "—"}</span>
-                  {tgtPct != null && <span className="text-[#475569] text-[10px]"> (+{tgtPct.toFixed(1)}%)</span>}
+                  <span className="text-[var(--accent-negative)]/70">{t.stop_price ? `$${t.stop_price.toFixed(2)}` : "—"}</span>
+                  {stopPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> ({stopPct.toFixed(1)}%)</span>}
+                  <span className="text-[var(--text-tertiary)] mx-1.5">/</span>
+                  <span className="text-[var(--accent-positive)]/70">{t.target_price ? `$${t.target_price.toFixed(2)}` : "—"}</span>
+                  {tgtPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> (+{tgtPct.toFixed(1)}%)</span>}
                 </TD>
-                <TD className="text-xs text-[#475569]">${t.risk_dollars?.toFixed(0) ?? "—"}</TD>
-                <TD className="text-xs text-[#475569]">{t.days_held}d</TD>
+                <TD className="text-xs text-[var(--text-tertiary)]">${t.risk_dollars?.toFixed(0) ?? "—"}</TD>
+                <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
                 <TD>
-                  <button onClick={(e) => { e.stopPropagation(); onClose(t.id); }} className="text-[#475569] hover:text-[#EF4444] transition-colors p-1 rounded hover:bg-red-400/10">
+                  <button onClick={(e) => { e.stopPropagation(); onClose(t.id); }} className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors p-1 rounded hover:bg-red-400/10">
                     <X size={13} />
                   </button>
                 </TD>
@@ -1458,7 +1458,7 @@ function WatchTable({ candidates, onChart }: { candidates: any[]; onChart: OnCha
   return (
     <div className="overflow-x-auto -mx-4">
       <table className="w-full text-sm">
-        <thead><tr className="border-b border-[#334155]/60">
+        <thead><tr className="border-b border-[var(--border-emphasis)]/60">
           <TH>Symbol</TH><TH>Strategy</TH><TH>Current Price</TH><TH>Waiting For</TH><TH>Days Watching</TH>
         </tr></thead>
         <tbody>
@@ -1466,21 +1466,21 @@ function WatchTable({ candidates, onChart }: { candidates: any[]; onChart: OnCha
             const strat = stratMap[t.preset_key];
             const triggerLabel = TRIGGER_LABELS[t.entry_trigger ?? ""] ?? t.entry_trigger ?? "auto trigger";
             return (
-              <tr key={t.id} className="border-b border-[#334155]/40 hover:bg-white/2 transition-colors">
+              <tr key={t.id} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/2 transition-colors">
                 <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { stop: t.stop_price, target: t.target_price })} /></TD>
                 <TD>
                   <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: strat?.color, backgroundColor: `${strat?.color}15` }}>
                     {t.preset_label}
                   </span>
                 </TD>
-                <TD className="font-mono text-xs text-[#94A3B8]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</TD>
+                <TD className="font-mono text-xs text-[var(--text-secondary)]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</TD>
                 <TD>
-                  <div className="flex items-center gap-1.5 text-xs text-[#94A3B8]">
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
                     <Clock size={11} className="text-blue-400 shrink-0" />
                     {triggerLabel}
                   </div>
                 </TD>
-                <TD className="text-xs text-[#475569]">{t.days_held}d</TD>
+                <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
               </tr>
             );
           })}
@@ -1500,7 +1500,7 @@ function ClosedTable({ trades, onChart }: { trades: any[]; onChart: OnChart }) {
   return (
     <div className="overflow-x-auto -mx-4">
       <table className="w-full text-sm">
-        <thead><tr className="border-b border-[#334155]/60">
+        <thead><tr className="border-b border-[var(--border-emphasis)]/60">
           <TH>Closed</TH><TH>Symbol</TH><TH>Strategy</TH><TH>Entry → Exit</TH>
           <TH>P&L</TH><TH>Days</TH><TH>Outcome</TH>
         </tr></thead>
@@ -1510,26 +1510,26 @@ function ClosedTable({ trades, onChart }: { trades: any[]; onChart: OnChart }) {
             const pos = (t.pnl_pct ?? 0) >= 0;
             const strat = stratMap[t.preset_key];
             return (
-              <tr key={t.id} className="border-b border-[#334155]/40 hover:bg-white/2 transition-colors">
-                <TD className="text-xs text-[#475569]">{t.exit_date ? new Date(t.exit_date).toLocaleDateString() : "—"}</TD>
+              <tr key={t.id} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/2 transition-colors">
+                <TD className="text-xs text-[var(--text-tertiary)]">{t.exit_date ? new Date(t.exit_date).toLocaleDateString() : "—"}</TD>
                 <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { entry: t.entry_price, stop: t.stop_price, target: t.target_price, entryDate: t.entry_date })} /></TD>
                 <TD>
                   <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: strat?.color, backgroundColor: `${strat?.color}15` }}>
                     {t.preset_label}
                   </span>
                 </TD>
-                <TD className="font-mono text-xs text-[#94A3B8]">
+                <TD className="font-mono text-xs text-[var(--text-secondary)]">
                   {t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"} → {t.exit_price ? `$${t.exit_price.toFixed(2)}` : "—"}
                 </TD>
                 <TD>
                   <div
-                    className={cn("font-mono text-sm font-bold", pos ? "text-[#22C55E]" : "text-[#EF4444]")}
+                    className={cn("font-mono text-sm font-bold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
                     aria-label={t.pnl_pct != null ? `${pos ? "Gain" : "Loss"}: ${Math.abs(t.pnl_pct).toFixed(2)}%` : undefined}
                   >
                     {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
                   </div>
                 </TD>
-                <TD className="text-xs text-[#475569]">{t.days_held}d</TD>
+                <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
                 <TD>
                   <span className={cn("text-[11px] px-2 py-0.5 rounded-full border", badge.cls)}>{badge.label}</span>
                 </TD>
@@ -1545,35 +1545,35 @@ function ClosedTable({ trades, onChart }: { trades: any[]; onChart: OnChart }) {
 function PerformanceTable({ byPreset }: { byPreset: any[] }) {
   return (
     <div className="mt-6 -mx-4">
-      <div className="px-4 mb-3 text-[11px] text-[#475569] uppercase tracking-widest">Performance by Strategy</div>
+      <div className="px-4 mb-3 text-[11px] text-[var(--text-tertiary)] uppercase tracking-widest">Performance by Strategy</div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-[#334155]/60">
+          <thead><tr className="border-b border-[var(--border-emphasis)]/60">
             <TH>Strategy</TH><TH>Trades</TH><TH>Win Rate</TH><TH>Avg Win</TH><TH>Avg Loss</TH><TH>Total P&L</TH>
           </tr></thead>
           <tbody>
             {byPreset.map((s) => {
               const strat = STRATEGIES.find((x) => x.key === s.preset_key);
               return (
-                <tr key={s.preset_key} className="border-b border-[#334155]/40 hover:bg-white/2">
+                <tr key={s.preset_key} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/2">
                   <TD>
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: strat?.color ?? "#fff", backgroundColor: `${strat?.color ?? "#fff"}15` }}>
                       {s.preset_label}
                     </span>
                   </TD>
-                  <TD className="text-xs text-[#94A3B8]">{s.trades}</TD>
+                  <TD className="text-xs text-[var(--text-secondary)]">{s.trades}</TD>
                   <TD>
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-16 rounded-full bg-[#334155] overflow-hidden">
                         <div className="h-full rounded-full bg-[#22C55E]" style={{ width: `${s.win_rate}%` }} />
                       </div>
-                      <span className={cn("text-xs font-bold", s.win_rate >= 50 ? "text-[#22C55E]" : "text-[#EF4444]")}>{s.win_rate}%</span>
+                      <span className={cn("text-xs font-bold", s.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>{s.win_rate}%</span>
                     </div>
                   </TD>
-                  <TD className="text-xs font-mono text-[#22C55E]">{s.avg_win_pct > 0 ? `+${s.avg_win_pct.toFixed(1)}%` : "—"}</TD>
-                  <TD className="text-xs font-mono text-[#EF4444]">{s.avg_loss_pct < 0 ? `${s.avg_loss_pct.toFixed(1)}%` : "—"}</TD>
+                  <TD className="text-xs font-mono text-[var(--accent-positive)]">{s.avg_win_pct > 0 ? `+${s.avg_win_pct.toFixed(1)}%` : "—"}</TD>
+                  <TD className="text-xs font-mono text-[var(--accent-negative)]">{s.avg_loss_pct < 0 ? `${s.avg_loss_pct.toFixed(1)}%` : "—"}</TD>
                   <TD
-                    className={cn("text-sm font-bold font-mono", s.total_pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}
+                    className={cn("text-sm font-bold font-mono", s.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
                     aria-label={`${s.total_pnl >= 0 ? "Gain" : "Loss"}: ${fmt$(Math.abs(s.total_pnl), 0)}`}
                   >
                     {s.total_pnl >= 0 ? "▲" : "▼"} {fmt$(Math.abs(s.total_pnl), 0)}
@@ -1590,11 +1590,11 @@ function PerformanceTable({ byPreset }: { byPreset: any[] }) {
 
 function LogRow({ entry }: { entry: any }) {
   const icons: Record<string, React.ReactNode> = {
-    entry:             <CheckCircle2 size={11} className="text-[#22C55E] shrink-0 mt-0.5" />,
-    exit:              <X size={11} className="text-[#EF4444] shrink-0 mt-0.5" />,
+    entry:             <CheckCircle2 size={11} className="text-[var(--accent-positive)] shrink-0 mt-0.5" />,
+    exit:              <X size={11} className="text-[var(--accent-negative)] shrink-0 mt-0.5" />,
     candidate_added:   <Eye size={11} className="text-blue-400 shrink-0 mt-0.5" />,
-    candidate_expired: <Clock size={11} className="text-[#475569] shrink-0 mt-0.5" />,
-    daily_summary:     <RefreshCw size={11} className="text-[#475569] shrink-0 mt-0.5" />,
+    candidate_expired: <Clock size={11} className="text-[var(--text-tertiary)] shrink-0 mt-0.5" />,
+    daily_summary:     <RefreshCw size={11} className="text-[var(--text-tertiary)] shrink-0 mt-0.5" />,
   };
   const icon = icons[entry.event_type] ?? icons.daily_summary;
   const isDaily = entry.event_type === "daily_summary";
@@ -1607,21 +1607,21 @@ function LogRow({ entry }: { entry: any }) {
       {icon}
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-1.5">
-          {entry.symbol && <span className="font-mono font-bold text-white">{entry.symbol}</span>}
+          {entry.symbol && <span className="font-mono font-bold text-[var(--text-primary)]">{entry.symbol}</span>}
           {entry.symbol && TICKER_NAMES[entry.symbol] && (
-            <span className="text-[#475569] text-[11px]">{TICKER_NAMES[entry.symbol]}</span>
+            <span className="text-[var(--text-tertiary)] text-[11px]">{TICKER_NAMES[entry.symbol]}</span>
           )}
-          {entry.preset_label && <span className="text-[#475569] text-[11px]">· {entry.preset_label}</span>}
-          {entry.price != null && <span className="font-mono text-[#94A3B8]">${entry.price.toFixed(2)}</span>}
+          {entry.preset_label && <span className="text-[var(--text-tertiary)] text-[11px]">· {entry.preset_label}</span>}
+          {entry.price != null && <span className="font-mono text-[var(--text-secondary)]">${entry.price.toFixed(2)}</span>}
           {entry.pnl_pct != null && (
-            <span className={cn("font-mono font-bold text-[11px]", entry.pnl_pct >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+            <span className={cn("font-mono font-bold text-[11px]", entry.pnl_pct >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
               {fmtPct(entry.pnl_pct)}
             </span>
           )}
         </div>
-        <div className="text-[#475569] mt-0.5 leading-relaxed">{entry.notes}</div>
+        <div className="text-[var(--text-tertiary)] mt-0.5 leading-relaxed">{entry.notes}</div>
       </div>
-      <div className="text-[#475569] shrink-0 font-mono">{entry.log_date}</div>
+      <div className="text-[var(--text-tertiary)] shrink-0 font-mono">{entry.log_date}</div>
     </div>
   );
 }

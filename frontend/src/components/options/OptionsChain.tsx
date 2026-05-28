@@ -34,15 +34,15 @@ function ContractCell({
       title={`${side === "buy" ? "Buy" : "Sell"} ${contract.optionType} @ $${contract.strike}`}
       className={cn(
         "w-full text-left px-2 py-1 rounded transition-colors text-xs",
-        highlight ? "bg-[#334155]" : "hover:bg-[#1E293B]"
+        highlight ? "bg-[#334155]" : "hover:bg-[var(--bg-elevated-2)]"
       )}
     >
-      <span className={cn("font-mono", side === "buy" ? "text-[#22C55E]" : "text-[#EF4444]")}>
+      <span className={cn("font-mono", side === "buy" ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
         {side === "buy" ? "B" : "S"}
       </span>{" "}
-      <span className="text-[#94A3B8]">${fmt(contract.bid)}</span>
-      <span className="text-[#475569]"> / </span>
-      <span className="text-[#94A3B8]">${fmt(contract.ask)}</span>
+      <span className="text-[var(--text-secondary)]">${fmt(contract.bid)}</span>
+      <span className="text-[var(--text-tertiary)]"> / </span>
+      <span className="text-[var(--text-secondary)]">${fmt(contract.ask)}</span>
     </button>
   );
 }
@@ -62,14 +62,14 @@ export default function OptionsChain({ calls, puts, underlyingPrice, legs, onAdd
     <div className="overflow-x-auto">
       <table className="w-full text-xs border-collapse">
         <thead>
-          <tr className="border-b border-[#334155]">
-            <th className="text-left px-2 py-2 text-[#475569] font-medium w-[120px]">Call Bid/Ask</th>
-            <th className="text-center px-2 py-2 text-[#475569] font-medium w-14">Δ</th>
-            <th className="text-center px-2 py-2 text-[#475569] font-medium w-14">IV</th>
-            <th className="text-center px-2 py-2 text-[#475569] font-bold w-20 bg-[#0F172A]">Strike</th>
-            <th className="text-center px-2 py-2 text-[#475569] font-medium w-14">IV</th>
-            <th className="text-center px-2 py-2 text-[#475569] font-medium w-14">Δ</th>
-            <th className="text-right px-2 py-2 text-[#475569] font-medium w-[120px]">Put Bid/Ask</th>
+          <tr className="border-b border-[var(--border-emphasis)]">
+            <th className="text-left px-2 py-2 text-[var(--text-tertiary)] font-medium w-[120px]">Call Bid/Ask</th>
+            <th className="text-center px-2 py-2 text-[var(--text-tertiary)] font-medium w-14">Δ</th>
+            <th className="text-center px-2 py-2 text-[var(--text-tertiary)] font-medium w-14">IV</th>
+            <th className="text-center px-2 py-2 text-[var(--text-tertiary)] font-bold w-20 bg-[var(--bg-elevated)]">Strike</th>
+            <th className="text-center px-2 py-2 text-[var(--text-tertiary)] font-medium w-14">IV</th>
+            <th className="text-center px-2 py-2 text-[var(--text-tertiary)] font-medium w-14">Δ</th>
+            <th className="text-right px-2 py-2 text-[var(--text-tertiary)] font-medium w-[120px]">Put Bid/Ask</th>
           </tr>
         </thead>
         <tbody>
@@ -82,8 +82,8 @@ export default function OptionsChain({ calls, puts, underlyingPrice, legs, onAdd
               <tr
                 key={strike}
                 className={cn(
-                  "border-b border-[#1E293B]/50 transition-colors",
-                  atm && "bg-[#1E293B]/30"
+                  "border-b border-[var(--border-subtle)]/50 transition-colors",
+                  atm && "bg-[var(--bg-elevated-2)]/30"
                 )}
               >
                 {/* Call columns */}
@@ -105,10 +105,10 @@ export default function OptionsChain({ calls, puts, underlyingPrice, legs, onAdd
                         />
                       </div>
                     </td>
-                    <td className="text-center px-2 py-0.5 font-mono text-[#94A3B8]">
+                    <td className="text-center px-2 py-0.5 font-mono text-[var(--text-secondary)]">
                       {fmt(call.delta, 2)}
                     </td>
-                    <td className="text-center px-2 py-0.5 font-mono text-[#475569]">
+                    <td className="text-center px-2 py-0.5 font-mono text-[var(--text-tertiary)]">
                       {pct(call.impliedVolatility)}
                     </td>
                   </>
@@ -119,8 +119,8 @@ export default function OptionsChain({ calls, puts, underlyingPrice, legs, onAdd
                 {/* Strike column */}
                 <td
                   className={cn(
-                    "text-center px-2 py-0.5 font-mono font-bold bg-[#0F172A]",
-                    atm ? "text-amber-400" : "text-[#94A3B8]"
+                    "text-center px-2 py-0.5 font-mono font-bold bg-[var(--bg-elevated)]",
+                    atm ? "text-amber-400" : "text-[var(--text-secondary)]"
                   )}
                 >
                   ${strike % 1 === 0 ? strike : fmt(strike)}
@@ -130,10 +130,10 @@ export default function OptionsChain({ calls, puts, underlyingPrice, legs, onAdd
                 {/* Put columns */}
                 {put ? (
                   <>
-                    <td className="text-center px-2 py-0.5 font-mono text-[#475569]">
+                    <td className="text-center px-2 py-0.5 font-mono text-[var(--text-tertiary)]">
                       {pct(put.impliedVolatility)}
                     </td>
-                    <td className="text-center px-2 py-0.5 font-mono text-[#94A3B8]">
+                    <td className="text-center px-2 py-0.5 font-mono text-[var(--text-secondary)]">
                       {fmt(put.delta, 2)}
                     </td>
                     <td className="px-1 py-0.5">

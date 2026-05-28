@@ -19,15 +19,15 @@ const EXPLAINABLE = new Set([
 function StatCard({ label, value, sub }: { label: string; value: string | null; sub?: string }) {
   if (value == null) return null;
   return (
-    <div className="bg-[#1E293B]/50 rounded-lg p-3">
-      <div className="flex items-center gap-1 text-[10px] text-[#475569] uppercase tracking-wider mb-1">
+    <div className="bg-[var(--bg-elevated-2)]/50 rounded-lg p-3">
+      <div className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
         <span>{label}</span>
         {EXPLAINABLE.has(label) && (
           <ExplainButton term={label} context="Research fundamentals panel" />
         )}
       </div>
-      <div className="text-white font-semibold text-sm">{value}</div>
-      {sub && <div className="text-[10px] text-[#475569] mt-0.5">{sub}</div>}
+      <div className="text-[var(--text-primary)] font-semibold text-sm">{value}</div>
+      {sub && <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -64,10 +64,10 @@ function timeAgo(dateStr: string) {
 }
 
 const RECOMMENDATION_COLOR: Record<string, string> = {
-  "strong_buy": "text-[#22C55E]",
+  "strong_buy": "text-[var(--accent-positive)]",
   "buy": "text-green-400",
   "hold": "text-yellow-400",
-  "sell": "text-[#EF4444]",
+  "sell": "text-[var(--accent-negative)]",
   "strong_sell": "text-red-600",
 };
 
@@ -112,29 +112,29 @@ export default function Research() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Company Research</h1>
+        <h1 className="text-xl font-bold text-[var(--text-primary)]">Company Research</h1>
       </div>
 
       <form onSubmit={handleSearch} className="flex items-center gap-2">
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569]" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
             placeholder="Enter symbol (e.g. AAPL)"
-            className="bg-[#0F172A] border border-[#334155] text-white text-base md:text-sm pl-9 pr-4 py-2 rounded-lg placeholder-zinc-600 focus:outline-none focus:border-zinc-600 uppercase w-52"
+            className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-base md:text-sm pl-9 pr-4 py-2 rounded-lg placeholder-zinc-600 focus:outline-none focus:border-zinc-600 uppercase w-52"
           />
         </div>
         <button
           type="submit"
-          className="bg-[#3B82F6] text-[#F8FAFC] font-semibold text-sm px-4 py-2 rounded-lg hover:bg-[#2563EB]"
+          className="bg-[var(--accent-positive)] text-[var(--text-primary)] font-semibold text-sm px-4 py-2 rounded-lg hover:brightness-110"
         >
           Research
         </button>
       </form>
 
       {!activeSymbol && (
-        <div className="text-center py-20 text-[#475569]">
+        <div className="text-center py-20 text-[var(--text-tertiary)]">
           <Building2 size={40} className="mx-auto mb-4 text-zinc-800" />
           <p>Enter a stock symbol to view fundamentals, financials, and news</p>
         </div>
@@ -142,15 +142,15 @@ export default function Research() {
 
       {isLoading && (
         <div className="space-y-4">
-          <div className="h-28 bg-[#0F172A] border border-[#1E293B] rounded-xl animate-pulse" />
+          <div className="h-28 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl animate-pulse" />
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {[...Array(8)].map((_, i) => <div key={i} className="h-16 bg-[#0F172A] border border-[#1E293B] rounded-lg animate-pulse" />)}
+            {[...Array(8)].map((_, i) => <div key={i} className="h-16 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg animate-pulse" />)}
           </div>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 text-[#EF4444] text-sm">
+        <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 text-[var(--accent-negative)] text-sm">
           Could not load data for <strong>{activeSymbol}</strong>. Check the symbol and try again.
         </div>
       )}
@@ -158,29 +158,29 @@ export default function Research() {
       {fund && !error && (
         <div className="space-y-5">
           {/* Header */}
-          <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-5">
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-5">
             <div className="flex items-start justify-between gap-4 flex-wrap sm:flex-nowrap">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-3xl font-bold text-white font-mono">{fund.symbol}</span>
+                  <span className="text-3xl font-bold text-[var(--text-primary)] font-mono">{fund.symbol}</span>
                   <SectorPill symbol={fund.symbol} className="text-xs" />
                 </div>
-                <div className="text-[#94A3B8] text-sm">{fund.name}</div>
-                {fund.industry && <div className="text-[#475569] text-xs mt-0.5">{fund.industry}</div>}
+                <div className="text-[var(--text-secondary)] text-sm">{fund.name}</div>
+                {fund.industry && <div className="text-[var(--text-tertiary)] text-xs mt-0.5">{fund.industry}</div>}
                 <div className="flex items-center gap-3 mt-2 flex-wrap">
                   {fund.country && (
-                    <span className="flex items-center gap-1 text-xs text-[#475569]">
+                    <span className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
                       <Globe size={11} /> {fund.country}
                     </span>
                   )}
                   {fund.employees && (
-                    <span className="flex items-center gap-1 text-xs text-[#475569]">
+                    <span className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
                       <Users size={11} /> {fund.employees.toLocaleString()} employees
                     </span>
                   )}
                   {fund.website && (
                     <a href={fund.website} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-[#475569] hover:text-[#F8FAFC] transition-colors">
+                      className="flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
                       <ExternalLink size={11} /> Website
                     </a>
                   )}
@@ -188,10 +188,10 @@ export default function Research() {
               </div>
               <div className="text-right">
                 {price && (
-                  <div className="text-3xl font-bold text-white">{formatCurrency(price)}</div>
+                  <div className="text-3xl font-bold text-[var(--text-primary)]">{formatCurrency(price)}</div>
                 )}
                 {changePct != null && (
-                  <div className={cn("text-sm font-medium mt-1", isPos ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                  <div className={cn("text-sm font-medium mt-1", isPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                     {isPos ? "+" : ""}{formatPercent(changePct)}
                     {change != null && <span className="ml-1 text-xs opacity-75">({isPos ? "+" : ""}{change.toFixed(2)})</span>}
                   </div>
@@ -199,7 +199,7 @@ export default function Research() {
                 <div className="mt-2 flex items-center gap-2 justify-end">
                   <button
                     onClick={() => navigate(`/chart?symbol=${fund.symbol}`)}
-                    className="flex items-center gap-1.5 bg-[#3B82F6] text-[#F8FAFC] text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-[#2563EB] transition-colors"
+                    className="flex items-center gap-1.5 bg-[var(--accent-positive)] text-[var(--text-primary)] text-xs font-semibold px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors"
                   >
                     <LineChart size={12} /> View Chart
                   </button>
@@ -210,7 +210,7 @@ export default function Research() {
 
           {/* Key stats */}
           <div>
-            <h2 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-3">Key Statistics</h2>
+            <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Key Statistics</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               <StatCard label="Market Cap" value={fmtLarge(fund.market_cap)} />
               <StatCard label="P/E Ratio" value={fmtNum(fund.pe_ratio)} sub={`Forward: ${fmtNum(fund.forward_pe) ?? "—"}`} />
@@ -233,24 +233,24 @@ export default function Research() {
 
           {/* Analyst ratings */}
           {(fund.recommendation || fund.analyst_target) && (
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <h2 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-3">Analyst Consensus</h2>
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Analyst Consensus</h2>
               <div className="flex items-center gap-6 flex-wrap">
                 {fund.recommendation && (
                   <div>
-                    <div className="text-[10px] text-[#475569] uppercase tracking-wide mb-1">Rating</div>
-                    <div className={cn("text-lg font-bold uppercase", RECOMMENDATION_COLOR[fund.recommendation] ?? "text-[#94A3B8]")}>
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Rating</div>
+                    <div className={cn("text-lg font-bold uppercase", RECOMMENDATION_COLOR[fund.recommendation] ?? "text-[var(--text-secondary)]")}>
                       {fund.recommendation.replace(/_/g, " ")}
                     </div>
-                    {fund.num_analysts && <div className="text-xs text-[#475569] mt-0.5">{fund.num_analysts} analysts</div>}
+                    {fund.num_analysts && <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{fund.num_analysts} analysts</div>}
                   </div>
                 )}
                 {fund.analyst_target && (
                   <div>
-                    <div className="text-[10px] text-[#475569] uppercase tracking-wide mb-1">Price Target</div>
-                    <div className="text-lg font-bold text-white">{formatCurrency(fund.analyst_target)}</div>
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Price Target</div>
+                    <div className="text-lg font-bold text-[var(--text-primary)]">{formatCurrency(fund.analyst_target)}</div>
                     {fund.analyst_low && fund.analyst_high && (
-                      <div className="text-xs text-[#475569] mt-0.5">
+                      <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
                         {formatCurrency(fund.analyst_low)} – {formatCurrency(fund.analyst_high)}
                       </div>
                     )}
@@ -258,8 +258,8 @@ export default function Research() {
                 )}
                 {price && fund.analyst_target && (
                   <div>
-                    <div className="text-[10px] text-[#475569] uppercase tracking-wide mb-1">Upside</div>
-                    <div className={cn("text-lg font-bold", ((fund.analyst_target - price) / price) >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Upside</div>
+                    <div className={cn("text-lg font-bold", ((fund.analyst_target - price) / price) >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                       {formatPercent(((fund.analyst_target - price) / price) * 100)}
                     </div>
                   </div>
@@ -270,8 +270,8 @@ export default function Research() {
 
           {/* Short interest */}
           {(fund.short_ratio || fund.short_percent) && (
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <h2 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-3">Short Interest</h2>
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Short Interest</h2>
               <div className="flex items-center gap-6">
                 {fund.short_percent && (
                   <StatCard label="Short % of Float" value={fmtPct(fund.short_percent)} />
@@ -285,16 +285,16 @@ export default function Research() {
 
           {/* Description */}
           {fund.description && (
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <h2 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-3">About</h2>
-              <p className="text-[#94A3B8] text-sm leading-relaxed line-clamp-6">{fund.description}</p>
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">About</h2>
+              <p className="text-[var(--text-secondary)] text-sm leading-relaxed line-clamp-6">{fund.description}</p>
             </div>
           )}
 
           {/* News */}
           {news.length > 0 && (
             <div>
-              <h2 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-3">Recent News</h2>
+              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Recent News</h2>
               <div className="space-y-2">
                 {news.slice(0, 5).map((a: any) => (
                   <a
@@ -302,17 +302,17 @@ export default function Research() {
                     href={a.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-start gap-3 p-3 bg-[#0F172A] border border-[#1E293B] rounded-lg hover:border-[#334155] transition-colors group"
+                    className="flex items-start gap-3 p-3 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-emphasis)] transition-colors group"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-white font-medium line-clamp-2 group-hover:text-[#F8FAFC]">{a.headline}</div>
-                      <div className="flex items-center gap-2 mt-1 text-[11px] text-[#475569]">
+                      <div className="text-sm text-[var(--text-primary)] font-medium line-clamp-2 group-hover:text-[var(--text-primary)]">{a.headline}</div>
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-[var(--text-tertiary)]">
                         <span>{a.source}</span>
                         <span>·</span>
                         <span>{timeAgo(a.published_at)}</span>
                       </div>
                     </div>
-                    <ExternalLink size={13} className="text-[#475569] group-hover:text-[#475569] shrink-0 mt-0.5" />
+                    <ExternalLink size={13} className="text-[var(--text-tertiary)] group-hover:text-[var(--text-tertiary)] shrink-0 mt-0.5" />
                   </a>
                 ))}
               </div>

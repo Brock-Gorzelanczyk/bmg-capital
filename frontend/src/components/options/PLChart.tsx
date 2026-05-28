@@ -40,7 +40,7 @@ export default function PLChart({ legs, underlyingPrice }: Props) {
 
   if (legs.length === 0) {
     return (
-      <div className="h-[200px] flex items-center justify-center text-[#475569] text-sm">
+      <div className="h-[200px] flex items-center justify-center text-[var(--text-tertiary)] text-sm">
         Add legs to see P&amp;L chart
       </div>
     );

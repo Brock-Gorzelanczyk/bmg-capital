@@ -159,7 +159,7 @@ function IndicatorRow({ ind, active, onToggle }: { ind: IndicatorDef; active: bo
         className={cn(
           "text-xs font-medium px-2 py-0.5 rounded border transition-colors",
           active
-            ? "border-white/20 text-white"
+            ? "border-white/20 text-[var(--text-primary)]"
             : "border-[#1f1f1f] text-[#555]"
         )}
       >

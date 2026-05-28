@@ -57,10 +57,10 @@ type OrderFilter = "working" | "filled" | "all";
 
 const STATUS_ICONS: Record<PaperOrder["status"], React.ReactNode> = {
   working: <Clock size={12} className="text-[#F59E0B]" />,
-  filled: <CheckCircle2 size={12} className="text-[#22C55E]" />,
-  cancelled: <Ban size={12} className="text-[#475569]" />,
-  rejected: <XCircle size={12} className="text-[#EF4444]" />,
-  expired: <Ban size={12} className="text-[#475569]" />,
+  filled: <CheckCircle2 size={12} className="text-[var(--accent-positive)]" />,
+  cancelled: <Ban size={12} className="text-[var(--text-tertiary)]" />,
+  rejected: <XCircle size={12} className="text-[var(--accent-negative)]" />,
+  expired: <Ban size={12} className="text-[var(--text-tertiary)]" />,
 };
 
 const STATUS_LABEL: Record<PaperOrder["status"], string> = {
@@ -78,7 +78,7 @@ function SkeletonRow({ cols = 5 }: { cols?: number }) {
     <tr>
       {Array.from({ length: cols }).map((_, i) => (
         <td key={i} className="px-4 py-3">
-          <div className="h-4 bg-[#1E293B] animate-pulse rounded" style={{ width: i === 0 ? "80px" : "60px" }} />
+          <div className="h-4 bg-[var(--bg-elevated-2)] animate-pulse rounded" style={{ width: i === 0 ? "80px" : "60px" }} />
         </td>
       ))}
     </tr>
@@ -87,9 +87,9 @@ function SkeletonRow({ cols = 5 }: { cols?: number }) {
 
 function SkeletonCard() {
   return (
-    <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-      <div className="h-3 w-20 bg-[#1E293B] animate-pulse rounded mb-3" />
-      <div className="h-7 w-32 bg-[#1E293B] animate-pulse rounded" />
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+      <div className="h-3 w-20 bg-[var(--bg-elevated-2)] animate-pulse rounded mb-3" />
+      <div className="h-7 w-32 bg-[var(--bg-elevated-2)] animate-pulse rounded" />
     </div>
   );
 }
@@ -141,15 +141,15 @@ function PositionsTab({ positions, isLoading, isError, onSelectPosition, onTrade
 
   if (isError) {
     return (
-      <div className="text-[#EF4444] text-sm text-center py-8">Failed to load positions. Please refresh.</div>
+      <div className="text-[var(--accent-negative)] text-sm text-center py-8">Failed to load positions. Please refresh.</div>
     );
   }
 
   if (positions.length === 0) {
     return (
-      <div className="py-16 text-center text-[#475569]">
+      <div className="py-16 text-center text-[var(--text-tertiary)]">
         <Plus size={32} className="mx-auto mb-3 text-[#1E293B]" />
-        <p className="text-sm font-medium text-[#94A3B8]">No open positions.</p>
+        <p className="text-sm font-medium text-[var(--text-secondary)]">No open positions.</p>
         <p className="text-xs mt-1">Use the order ticket to place your first trade.</p>
       </div>
     );
@@ -175,40 +175,40 @@ function PositionsTab({ positions, isLoading, isError, onSelectPosition, onTrade
           <div
             key={pos.id}
             onClick={() => onSelectPosition(pos)}
-            className="p-4 cursor-pointer active:bg-[#1E293B]/40 transition-colors"
+            className="p-4 cursor-pointer active:bg-[var(--bg-elevated-2)]/40 transition-colors"
           >
             <div className="flex items-start justify-between mb-3">
               <div>
-                <span className="font-mono font-bold text-[#F8FAFC] text-base">{pos.symbol}</span>
-                {info && <div className="text-[11px] text-[#475569] mt-0.5">{info.name}</div>}
+                <span className="font-mono font-bold text-[var(--text-primary)] text-base">{pos.symbol}</span>
+                {info && <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">{info.name}</div>}
               </div>
               <div className="text-right">
-                <div className="text-sm font-mono font-semibold text-[#F8FAFC]">{livePrice > 0 ? formatCurrency(mv) : "—"}</div>
-                <div className="text-[11px] text-[#475569]">
+                <div className="text-sm font-mono font-semibold text-[var(--text-primary)]">{livePrice > 0 ? formatCurrency(mv) : "—"}</div>
+                <div className="text-[11px] text-[var(--text-tertiary)]">
                   {pos.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} sh @ {formatCurrency(pos.avg_cost)}
                 </div>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="bg-[#0B1120] rounded-lg px-3 py-2">
-                <div className="text-[9px] text-[#475569] uppercase tracking-wide mb-1">Current</div>
-                <div className="text-xs font-mono text-[#F8FAFC]">{livePrice > 0 ? formatCurrency(livePrice) : "—"}</div>
+              <div className="bg-[var(--bg-base)] rounded-lg px-3 py-2">
+                <div className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Current</div>
+                <div className="text-xs font-mono text-[var(--text-primary)]">{livePrice > 0 ? formatCurrency(livePrice) : "—"}</div>
               </div>
-              <div className="bg-[#0B1120] rounded-lg px-3 py-2">
-                <div className="text-[9px] text-[#475569] uppercase tracking-wide mb-1">Total P&L</div>
-                <div className={cn("text-xs font-mono font-semibold", pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+              <div className="bg-[var(--bg-base)] rounded-lg px-3 py-2">
+                <div className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Total P&L</div>
+                <div className={cn("text-xs font-mono font-semibold", pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                   {pnl >= 0 ? "▲" : "▼"} {formatCurrency(Math.abs(pnl))}
                 </div>
-                <div className={cn("text-[9px]", pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                <div className={cn("text-[9px]", pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                   {Math.abs(pnlPct).toFixed(2)}%
                 </div>
               </div>
-              <div className="bg-[#0B1120] rounded-lg px-3 py-2">
-                <div className="text-[9px] text-[#475569] uppercase tracking-wide mb-1">Day P&L</div>
-                <div className={cn("text-xs font-mono", dayPnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+              <div className="bg-[var(--bg-base)] rounded-lg px-3 py-2">
+                <div className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Day P&L</div>
+                <div className={cn("text-xs font-mono", dayPnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                   {dayPnl >= 0 ? "▲" : "▼"} {formatCurrency(Math.abs(dayPnl))}
                 </div>
-                <div className={cn("text-[9px]", dayPnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                <div className={cn("text-[9px]", dayPnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                   {Math.abs(dayPnlPct).toFixed(2)}%
                 </div>
               </div>
@@ -221,7 +221,7 @@ function PositionsTab({ positions, isLoading, isError, onSelectPosition, onTrade
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
+            <tr className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider border-b border-[var(--border-subtle)]">
               <th className="text-left px-4 py-2.5">Symbol</th>
               <th className="text-right px-4 py-2.5">Qty</th>
               <th className="text-right px-4 py-2.5">Avg Cost</th>
@@ -236,34 +236,34 @@ function PositionsTab({ positions, isLoading, isError, onSelectPosition, onTrade
             {rows.map(({ pos, livePrice, mv, pnl, pnlPct, dayPnl, dayPnlPct, info }) => (
               <tr
                 key={pos.id}
-                className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/40 cursor-pointer transition-colors group"
+                className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/40 cursor-pointer transition-colors group"
                 onClick={() => onSelectPosition(pos)}
               >
                 <td className="px-4 py-3">
-                  <div className="font-mono font-bold text-[#F8FAFC]">{pos.symbol}</div>
-                  {info && <div className="text-xs text-[#475569]">{info.name}</div>}
+                  <div className="font-mono font-bold text-[var(--text-primary)]">{pos.symbol}</div>
+                  {info && <div className="text-xs text-[var(--text-tertiary)]">{info.name}</div>}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-[#94A3B8]">
+                <td className="px-4 py-3 text-right font-mono text-[var(--text-secondary)]">
                   {pos.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-[#94A3B8]">
+                <td className="px-4 py-3 text-right font-mono text-[var(--text-secondary)]">
                   {formatCurrency(pos.avg_cost)}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-[#F8FAFC]">
+                <td className="px-4 py-3 text-right font-mono text-[var(--text-primary)]">
                   {livePrice > 0 ? formatCurrency(livePrice) : "—"}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-[#F8FAFC]">
+                <td className="px-4 py-3 text-right font-mono text-[var(--text-primary)]">
                   {formatCurrency(mv)}
                 </td>
                 <td
-                  className={cn("px-4 py-3 text-right font-mono font-semibold", pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}
+                  className={cn("px-4 py-3 text-right font-mono font-semibold", pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
                   aria-label={`${pnl >= 0 ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(pnl))}`}
                 >
                   <div>{pnl >= 0 ? "▲" : "▼"} {formatCurrency(Math.abs(pnl))}</div>
                   <div className="text-xs opacity-75">{pnlPct >= 0 ? "▲" : "▼"} {Math.abs(pnlPct).toFixed(2)}%</div>
                 </td>
                 <td
-                  className={cn("px-4 py-3 text-right font-mono", dayPnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]")}
+                  className={cn("px-4 py-3 text-right font-mono", dayPnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
                   aria-label={`${dayPnl >= 0 ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(dayPnl))}`}
                 >
                   <div>{dayPnl >= 0 ? "▲" : "▼"} {formatCurrency(Math.abs(dayPnl))}</div>
@@ -272,11 +272,11 @@ function PositionsTab({ positions, isLoading, isError, onSelectPosition, onTrade
                 <td className="px-4 py-3 text-right">
                   <button
                     onClick={(e) => { e.stopPropagation(); onTrade(pos.symbol, "buy"); }}
-                    className="text-xs text-[#3B82F6] hover:text-blue-300 font-semibold opacity-0 group-hover:opacity-100 transition-all mr-2"
+                    className="text-xs text-[var(--accent-positive)] hover:text-blue-300 font-semibold opacity-0 group-hover:opacity-100 transition-all mr-2"
                   >
                     Trade
                   </button>
-                  <ChevronRight size={14} className="text-[#334155] group-hover:text-[#475569] transition-colors inline" />
+                  <ChevronRight size={14} className="text-[var(--border-emphasis)] group-hover:text-[var(--text-tertiary)] transition-colors inline" />
                 </td>
               </tr>
             ))}
@@ -324,7 +324,7 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
   return (
     <div>
       {/* Sub-filter */}
-      <div className="px-4 py-2.5 border-b border-[#1E293B] flex gap-1.5">
+      <div className="px-4 py-2.5 border-b border-[var(--border-subtle)] flex gap-1.5">
         {(["all", "working", "filled"] as OrderFilter[]).map((f) => (
           <button
             key={f}
@@ -332,8 +332,8 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
             className={cn(
               "px-3 py-1 rounded-full text-xs font-semibold capitalize transition-colors",
               filter === f
-                ? "bg-[#334155] text-[#F8FAFC]"
-                : "text-[#475569] hover:text-[#94A3B8]"
+                ? "bg-[#334155] text-[var(--text-primary)]"
+                : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
           >
             {f}
@@ -346,15 +346,15 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="p-4 flex justify-between">
               <div className="space-y-2">
-                <div className="h-4 w-16 bg-[#1E293B] animate-pulse rounded" />
-                <div className="h-3 w-24 bg-[#1E293B] animate-pulse rounded" />
+                <div className="h-4 w-16 bg-[var(--bg-elevated-2)] animate-pulse rounded" />
+                <div className="h-3 w-24 bg-[var(--bg-elevated-2)] animate-pulse rounded" />
               </div>
-              <div className="h-4 w-20 bg-[#1E293B] animate-pulse rounded" />
+              <div className="h-4 w-20 bg-[var(--bg-elevated-2)] animate-pulse rounded" />
             </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="py-14 text-center text-[#475569]">
+        <div className="py-14 text-center text-[var(--text-tertiary)]">
           <p className="text-sm">No orders</p>
         </div>
       ) : (
@@ -365,7 +365,7 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
               <div key={o.id} className="p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-[#F8FAFC]">{o.symbol}</span>
+                    <span className="font-mono font-bold text-[var(--text-primary)]">{o.symbol}</span>
                     <span className={cn(
                       "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
                       o.side === "buy" ? "bg-emerald-900/40 text-emerald-400" : "bg-rose-900/40 text-red-400"
@@ -373,21 +373,21 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
                       {o.side.toUpperCase()}
                     </span>
                   </div>
-                  <span className="flex items-center gap-1 text-xs text-[#94A3B8]">
+                  <span className="flex items-center gap-1 text-xs text-[var(--text-secondary)]">
                     {STATUS_ICONS[o.status]}
                     {STATUS_LABEL[o.status]}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-xs text-[#475569]">
+                <div className="flex items-center justify-between text-xs text-[var(--text-tertiary)]">
                   <span className="capitalize">{o.order_type.replace("_", " ")} · {(o.fill_qty ?? o.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })} sh</span>
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-[#94A3B8]">{o.fill_price ? formatCurrency(o.fill_price) : "—"}</span>
+                    <span className="font-mono text-[var(--text-secondary)]">{o.fill_price ? formatCurrency(o.fill_price) : "—"}</span>
                     <span>{o.filled_at ? timeAgo(o.filled_at) : timeAgo(o.created_at)}</span>
                     {o.status === "working" && (
                       <button
                         onClick={() => cancelMut.mutate(o.id)}
                         disabled={cancelMut.isPending}
-                        className="text-[#475569] hover:text-red-400 transition-colors disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        className="text-[var(--text-tertiary)] hover:text-red-400 transition-colors disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
                       >
                         <X size={14} />
                       </button>
@@ -402,7 +402,7 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
+                <tr className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider border-b border-[var(--border-subtle)]">
                   <th className="text-left px-4 py-2.5">Symbol</th>
                   <th className="text-left px-4 py-2.5">Side</th>
                   <th className="text-left px-4 py-2.5">Type</th>
@@ -415,8 +415,8 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
               </thead>
               <tbody>
                 {filtered.map((o) => (
-                  <tr key={o.id} className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/30 transition-colors">
-                    <td className="px-4 py-3 font-mono font-bold text-[#F8FAFC]">{o.symbol}</td>
+                  <tr key={o.id} className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors">
+                    <td className="px-4 py-3 font-mono font-bold text-[var(--text-primary)]">{o.symbol}</td>
                     <td className="px-4 py-3">
                       <span className={cn(
                         "text-xs font-bold px-2 py-0.5 rounded-full",
@@ -427,22 +427,22 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
                         {o.side.toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[#94A3B8] capitalize">
+                    <td className="px-4 py-3 text-[var(--text-secondary)] capitalize">
                       {o.order_type.replace("_", " ")}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-[#94A3B8]">
+                    <td className="px-4 py-3 text-right font-mono text-[var(--text-secondary)]">
                       {(o.fill_qty ?? o.qty).toLocaleString(undefined, { maximumFractionDigits: 4 })}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-[#F8FAFC]">
+                    <td className="px-4 py-3 text-right font-mono text-[var(--text-primary)]">
                       {o.fill_price ? formatCurrency(o.fill_price) : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="flex items-center gap-1.5 text-xs text-[#94A3B8]">
+                      <span className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
                         {STATUS_ICONS[o.status]}
                         {STATUS_LABEL[o.status]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-[#475569] text-xs">
+                    <td className="px-4 py-3 text-right text-[var(--text-tertiary)] text-xs">
                       {o.filled_at ? timeAgo(o.filled_at) : timeAgo(o.created_at)}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -450,7 +450,7 @@ function OrdersTab({ isLoading }: OrdersTabProps) {
                         <button
                           onClick={() => cancelMut.mutate(o.id)}
                           disabled={cancelMut.isPending}
-                          className="flex items-center gap-1 text-xs text-[#475569] hover:text-red-400 transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-red-400 transition-colors disabled:opacity-50"
                         >
                           <X size={12} /> Cancel
                         </button>
@@ -486,7 +486,7 @@ function ActivityTab() {
 
   if (txns.length === 0) {
     return (
-      <div className="py-14 text-center text-[#475569]">
+      <div className="py-14 text-center text-[var(--text-tertiary)]">
         <p className="text-sm">No transactions yet</p>
         <p className="text-xs mt-1">Realized P&L will appear here after you close positions.</p>
       </div>
@@ -503,7 +503,7 @@ function ActivityTab() {
             <div key={t.id} className="p-4">
               <div className="flex items-start justify-between mb-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-[#F8FAFC]">{t.symbol}</span>
+                  <span className="font-mono font-bold text-[var(--text-primary)]">{t.symbol}</span>
                   <span className={cn(
                     "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
                     t.side === "buy" ? "bg-emerald-900/40 text-emerald-400" : "bg-rose-900/40 text-red-400"
@@ -511,12 +511,12 @@ function ActivityTab() {
                     {t.side.toUpperCase()}
                   </span>
                 </div>
-                <span className={cn("text-sm font-mono font-semibold", pnlPositive ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                <span className={cn("text-sm font-mono font-semibold", pnlPositive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                   {pnlPositive ? "▲" : "▼"} {formatCurrency(Math.abs(t.realized_pnl))}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs text-[#475569]">
-                <span>{t.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} sh @ <span className="font-mono text-[#94A3B8]">{formatCurrency(t.fill_price)}</span></span>
+              <div className="flex items-center justify-between text-xs text-[var(--text-tertiary)]">
+                <span>{t.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} sh @ <span className="font-mono text-[var(--text-secondary)]">{formatCurrency(t.fill_price)}</span></span>
                 <span>{fmtDate(t.created_at)}</span>
               </div>
             </div>
@@ -528,7 +528,7 @@ function ActivityTab() {
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-[10px] text-[#475569] uppercase tracking-wider border-b border-[#1E293B]">
+            <tr className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider border-b border-[var(--border-subtle)]">
               <th className="text-left px-4 py-2.5">Symbol</th>
               <th className="text-left px-4 py-2.5">Side</th>
               <th className="text-right px-4 py-2.5">Qty</th>
@@ -541,8 +541,8 @@ function ActivityTab() {
           {txns.map((t: PaperTransaction) => {
             const pnlPositive = t.realized_pnl >= 0;
             return (
-              <tr key={t.id} className="border-b border-[#1E293B]/50 hover:bg-[#1E293B]/30 transition-colors">
-                <td className="px-4 py-3 font-mono font-bold text-[#F8FAFC]">{t.symbol}</td>
+              <tr key={t.id} className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors">
+                <td className="px-4 py-3 font-mono font-bold text-[var(--text-primary)]">{t.symbol}</td>
                 <td className="px-4 py-3">
                   <span className={cn(
                     "text-xs font-bold px-2 py-0.5 rounded-full",
@@ -553,16 +553,16 @@ function ActivityTab() {
                     {t.side.toUpperCase()}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-[#94A3B8]">
+                <td className="px-4 py-3 text-right font-mono text-[var(--text-secondary)]">
                   {t.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-[#F8FAFC]">
+                <td className="px-4 py-3 text-right font-mono text-[var(--text-primary)]">
                   {formatCurrency(t.fill_price)}
                 </td>
-                <td className={cn("px-4 py-3 text-right font-mono font-semibold", pnlPositive ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                <td className={cn("px-4 py-3 text-right font-mono font-semibold", pnlPositive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                   {pnlPositive ? "+" : ""}{formatCurrency(t.realized_pnl)}
                 </td>
-                <td className="px-4 py-3 text-right text-[#475569] text-xs">
+                <td className="px-4 py-3 text-right text-[var(--text-tertiary)] text-xs">
                   {fmtDate(t.created_at)}
                 </td>
               </tr>
@@ -652,7 +652,7 @@ export default function PaperTrading() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-[#F8FAFC]">Paper Trading</h1>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Paper Trading</h1>
           <span className="text-xs font-semibold text-[#F59E0B] bg-yellow-900/30 border border-yellow-800/40 px-2 py-0.5 rounded-full">
             Demo Account
           </span>
@@ -680,7 +680,7 @@ export default function PaperTrading() {
               if (!confirmed) return;
               setShowReset(true);
             }}
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#475569] hover:text-[#EF4444] transition-colors px-3 py-1.5 rounded-lg hover:bg-red-950/20"
+            className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors px-3 py-1.5 rounded-lg hover:bg-red-950/20"
           >
             <RotateCcw size={13} />
             Reset
@@ -699,13 +699,13 @@ export default function PaperTrading() {
             <button
               onClick={() => resetMut.mutate()}
               disabled={resetMut.isPending}
-              className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+              className="bg-red-600 hover:bg-red-700 text-[var(--text-primary)] text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
             >
               {resetMut.isPending ? "Resetting…" : "Yes, reset"}
             </button>
             <button
               onClick={() => setShowReset(false)}
-              className="text-[#475569] hover:text-[#F8FAFC] text-xs px-2 py-1.5"
+              className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-xs px-2 py-1.5"
             >
               Cancel
             </button>
@@ -722,48 +722,48 @@ export default function PaperTrading() {
           </>
         ) : (
           <>
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4 xl:col-span-1">
-              <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1">Total Equity</div>
-              <div className="text-2xl font-mono font-bold text-[#F8FAFC]">{formatCurrency(equity)}</div>
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 xl:col-span-1">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">Total Equity</div>
+              <div className="text-2xl font-mono font-bold text-[var(--text-primary)]">{formatCurrency(equity)}</div>
             </div>
 
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1">
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
                 Day's P&L <span className="normal-case font-normal opacity-60">vs prev close</span>
               </div>
               <div
-                className={cn("text-xl font-mono font-bold", isDayUp ? "text-[#22C55E]" : "text-[#EF4444]")}
+                className={cn("text-xl font-mono font-bold", isDayUp ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
                 aria-label={`${isDayUp ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(dayPnl))}`}
               >
                 {isDayUp ? "▲" : "▼"} {formatCurrency(Math.abs(dayPnl))}
               </div>
-              <div className={cn("text-xs font-mono mt-0.5", isDayUp ? "text-[#22C55E]" : "text-[#EF4444]")}>
+              <div className={cn("text-xs font-mono mt-0.5", isDayUp ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                 {isDayUp ? "▲" : "▼"} {Math.abs(dayPnlPct).toFixed(2)}%
               </div>
             </div>
 
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1">Total P&L</div>
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">Total P&L</div>
               <div
-                className={cn("text-lg font-mono font-semibold", isTotalUp ? "text-[#22C55E]" : "text-[#EF4444]")}
+                className={cn("text-lg font-mono font-semibold", isTotalUp ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
                 aria-label={`${isTotalUp ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(totalPnl))}`}
               >
                 {isTotalUp ? "▲" : "▼"} {formatCurrency(Math.abs(totalPnl))}
               </div>
-              <div className={cn("text-xs font-mono mt-0.5", isTotalUp ? "text-[#22C55E]" : "text-[#EF4444]")}>
+              <div className={cn("text-xs font-mono mt-0.5", isTotalUp ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                 {isTotalUp ? "▲" : "▼"} {Math.abs(totalPnlPct).toFixed(2)}%
               </div>
             </div>
 
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1">Cash Available</div>
-              <div className="text-lg font-mono font-semibold text-[#F8FAFC]">{formatCurrency(cash)}</div>
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">Cash Available</div>
+              <div className="text-lg font-mono font-semibold text-[var(--text-primary)]">{formatCurrency(cash)}</div>
             </div>
 
-            <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl p-4">
-              <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1">Buying Power</div>
-              <div className="text-lg font-mono font-semibold text-[#F8FAFC]">{formatCurrency(cash)}</div>
-              <div className="text-xs text-[#475569] mt-0.5">
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">Buying Power</div>
+              <div className="text-lg font-mono font-semibold text-[var(--text-primary)]">{formatCurrency(cash)}</div>
+              <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
                 {positions.length} position{positions.length !== 1 ? "s" : ""}
               </div>
             </div>
@@ -772,9 +772,9 @@ export default function PaperTrading() {
       </div>
 
       {/* ── Tabs ────────────────────────────────────────────────────────────── */}
-      <div className="bg-[#0F172A] border border-[#1E293B] rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         {/* Tab bar */}
-        <div className="flex border-b border-[#1E293B]">
+        <div className="flex border-b border-[var(--border-subtle)]">
           {(["positions", "orders", "activity"] as PageTab[]).map((tab) => (
             <button
               key={tab}
@@ -782,13 +782,13 @@ export default function PaperTrading() {
               className={cn(
                 "px-5 py-3.5 text-sm font-semibold capitalize transition-colors border-b-2 -mb-px",
                 activeTab === tab
-                  ? "text-[#F8FAFC] border-[#3B82F6]"
-                  : "text-[#475569] border-transparent hover:text-[#94A3B8]"
+                  ? "text-[var(--text-primary)] border-[#3B82F6]"
+                  : "text-[var(--text-tertiary)] border-transparent hover:text-[var(--text-secondary)]"
               )}
             >
               {tab}
               {tab === "positions" && positions.length > 0 && (
-                <span className="ml-2 text-xs bg-[#1E293B] text-[#94A3B8] rounded-full px-1.5 py-0.5">
+                <span className="ml-2 text-xs bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] rounded-full px-1.5 py-0.5">
                   {positions.length}
                 </span>
               )}
@@ -816,7 +816,7 @@ export default function PaperTrading() {
       {/* ── Floating New Order Button ────────────────────────────────────────── */}
       <button
         onClick={() => setTicketModal({ symbol: fabSymbol, side: "buy" })}
-        className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 w-14 h-14 rounded-full bg-[#3B82F6] hover:bg-blue-400 text-white shadow-lg shadow-blue-900/40 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+        className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-40 w-14 h-14 rounded-full bg-[var(--accent-positive)] hover:bg-blue-400 text-[var(--text-primary)] shadow-lg shadow-blue-900/40 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
         title="New Order"
       >
         <Plus size={22} />

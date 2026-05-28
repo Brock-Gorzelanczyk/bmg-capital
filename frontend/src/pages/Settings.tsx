@@ -9,8 +9,8 @@ import { useTierStore } from "@/store/tierStore";
 import type { TierName } from "@/api/tiers";
 
 const TIER_META: Record<TierName, { label: string; Icon: typeof Star; color: string; bg: string }> = {
-  free:    { label: "Free",    Icon: Star,  color: "text-[#94A3B8]", bg: "bg-[#1E293B]" },
-  plus:    { label: "Plus",    Icon: Zap,   color: "text-[#3B82F6]", bg: "bg-[#3B82F6]/10" },
+  free:    { label: "Free",    Icon: Star,  color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-elevated-2)]" },
+  plus:    { label: "Plus",    Icon: Zap,   color: "text-[var(--accent-positive)]", bg: "bg-[var(--accent-positive)]/10" },
   premium: { label: "Premium", Icon: Crown, color: "text-[#F59E0B]", bg: "bg-[#F59E0B]/10" },
 };
 
@@ -63,32 +63,32 @@ export default function Settings() {
 
   return (
     <div className="max-w-2xl mx-auto pb-20 md:pb-6 space-y-4">
-      <h1 className="text-xl font-bold text-[#F8FAFC] mb-2">Settings</h1>
+      <h1 className="text-xl font-bold text-[var(--text-primary)] mb-2">Settings</h1>
 
       {/* Account info */}
-      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#1E293B]">
-          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em]">Account</span>
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+          <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Account</span>
         </div>
         <div className="divide-y divide-[#1E293B]">
           <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-2 text-[#94A3B8]">
+            <div className="flex items-center gap-2 text-[var(--text-secondary)]">
               <User size={14} />
               <span className="text-sm">Username</span>
             </div>
-            <span className="text-sm text-[#F8FAFC] font-medium">{user?.username ?? "—"}</span>
+            <span className="text-sm text-[var(--text-primary)] font-medium">{user?.username ?? "—"}</span>
           </div>
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-sm text-[#94A3B8]">Email</span>
-            <span className="text-sm text-[#F8FAFC] font-medium">{user?.email ?? "—"}</span>
+            <span className="text-sm text-[var(--text-secondary)]">Email</span>
+            <span className="text-sm text-[var(--text-primary)] font-medium">{user?.email ?? "—"}</span>
           </div>
         </div>
       </div>
 
       {/* Subscription */}
-      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#1E293B]">
-          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em]">Subscription</span>
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+          <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Subscription</span>
         </div>
         <div className="p-4 space-y-3">
           {/* Current tier badge */}
@@ -98,8 +98,8 @@ export default function Settings() {
                 <TierIcon size={16} className={meta.color} />
               </div>
               <div>
-                <div className="text-white text-sm font-semibold">{meta.label}</div>
-                <div className={cn("text-xs", status === "past_due" ? "text-[#EF4444]" : "text-[#475569]")}>
+                <div className="text-[var(--text-primary)] text-sm font-semibold">{meta.label}</div>
+                <div className={cn("text-xs", status === "past_due" ? "text-[var(--accent-negative)]" : "text-[var(--text-tertiary)]")}>
                   {statusLabel}
                 </div>
               </div>
@@ -107,7 +107,7 @@ export default function Settings() {
             {tier !== "premium" && (
               <button
                 onClick={() => navigate("/upgrade")}
-                className="text-xs font-semibold text-[#3B82F6] hover:text-[#60A5FA] transition-colors"
+                className="text-xs font-semibold text-[var(--accent-positive)] hover:text-[#60A5FA] transition-colors"
               >
                 Upgrade →
               </button>
@@ -116,9 +116,9 @@ export default function Settings() {
 
           {/* Past due warning */}
           {status === "past_due" && (
-            <div className="flex items-start gap-2 bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-lg px-3 py-2.5">
-              <AlertCircle size={14} className="text-[#EF4444] shrink-0 mt-0.5" />
-              <p className="text-xs text-[#EF4444]">
+            <div className="flex items-start gap-2 bg-[var(--accent-negative-bg)] border border-[var(--accent-negative)]/20 rounded-lg px-3 py-2.5">
+              <AlertCircle size={14} className="text-[var(--accent-negative)] shrink-0 mt-0.5" />
+              <p className="text-xs text-[var(--accent-negative)]">
                 Your payment failed. Update your payment method to keep access.
               </p>
             </div>
@@ -136,9 +136,9 @@ export default function Settings() {
 
           {/* AUM override notice */}
           {tierData?.aum_override && (
-            <div className="flex items-start gap-2 bg-[#22C55E]/10 border border-[#22C55E]/20 rounded-lg px-3 py-2.5">
-              <TrendingUp size={14} className="text-[#22C55E] shrink-0 mt-0.5" />
-              <p className="text-xs text-[#22C55E]">
+            <div className="flex items-start gap-2 bg-[var(--accent-positive-bg)] border border-[var(--accent-positive)]/20 rounded-lg px-3 py-2.5">
+              <TrendingUp size={14} className="text-[var(--accent-positive)] shrink-0 mt-0.5" />
+              <p className="text-xs text-[var(--accent-positive)]">
                 {meta.label} included free based on your portfolio balance.
               </p>
             </div>
@@ -149,7 +149,7 @@ export default function Settings() {
             <button
               onClick={handleManageBilling}
               disabled={portalLoading}
-              className="flex items-center gap-2 w-full bg-[#1E293B] hover:bg-[#334155] border border-[#334155] text-[#94A3B8] hover:text-white text-sm font-medium rounded-lg px-4 py-2.5 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 w-full bg-[var(--bg-elevated-2)] hover:bg-[#334155] border border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-sm font-medium rounded-lg px-4 py-2.5 transition-colors disabled:opacity-50"
             >
               <ExternalLink size={14} />
               {portalLoading ? "Opening portal…" : "Manage billing & invoices"}
@@ -159,14 +159,14 @@ export default function Settings() {
       </div>
 
       {/* Sign out */}
-      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#1E293B]">
-          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em]">Session</span>
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+          <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Session</span>
         </div>
         <div className="p-4">
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-2.5 w-full bg-[#EF4444]/10 hover:bg-[#EF4444]/20 border border-[#EF4444]/20 hover:border-[#EF4444]/40 text-[#EF4444] text-sm font-semibold rounded-lg px-4 py-3 transition-colors cursor-pointer"
+            className="flex items-center gap-2.5 w-full bg-[var(--accent-negative-bg)] hover:bg-[#EF4444]/20 border border-[var(--accent-negative)]/20 hover:border-[#EF4444]/40 text-[var(--accent-negative)] text-sm font-semibold rounded-lg px-4 py-3 transition-colors cursor-pointer"
           >
             <LogOut size={16} />
             Sign out

@@ -196,7 +196,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
   const sellClasses = {
     tab: "text-red-400 border-red-400",
     surface: "bg-rose-900/20 border-rose-800/50",
-    btn: "bg-[#EF4444] hover:bg-red-400 text-white font-bold",
+    btn: "bg-[#EF4444] hover:bg-red-400 text-[var(--text-primary)] font-bold",
     ring: "focus:border-red-600",
   };
   const theme = isBuy ? buyClasses : sellClasses;
@@ -209,12 +209,12 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
         ? parseFloat(dollarAmount || "0")
         : (parseFloat(sharesAmount || "0") * currentPrice);
     return (
-      <div className={cn("bg-[#0F172A] rounded-2xl flex flex-col", compact ? "p-4" : "p-5")}>
+      <div className={cn("bg-[var(--bg-elevated)] rounded-2xl flex flex-col", compact ? "p-4" : "p-5")}>
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <span className="text-xs font-semibold text-[#94A3B8] uppercase tracking-widest">Review Order</span>
+          <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-widest">Review Order</span>
           {onClose && (
-            <button onClick={onClose} className="text-[#475569] hover:text-[#F8FAFC] transition-colors">
+            <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
               <X size={16} />
             </button>
           )}
@@ -234,11 +234,11 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
             { label: "TIF", value: proMode ? TIF_LABELS[tif] : "Day" },
           ].map(({ label, value, colored }) => (
             <div key={label} className="flex items-center justify-between text-sm">
-              <span className="text-[#475569]">{label}</span>
+              <span className="text-[var(--text-tertiary)]">{label}</span>
               <span className={cn("font-mono font-semibold",
                 colored
                   ? isBuy ? "text-emerald-400" : "text-red-400"
-                  : "text-[#F8FAFC]"
+                  : "text-[var(--text-primary)]"
               )}>{value}</span>
             </div>
           ))}
@@ -251,14 +251,14 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           </div>
         )}
 
-        <div className="text-xs text-[#475569] text-center mb-4">
+        <div className="text-xs text-[var(--text-tertiary)] text-center mb-4">
           Market orders fill immediately at the live price. Estimated total may vary slightly.
         </div>
 
         <div className="flex gap-2">
           <button
             onClick={() => setTicketState("idle")}
-            className="flex-1 py-2.5 rounded-xl text-sm bg-[#1E293B] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors"
+            className="flex-1 py-2.5 rounded-xl text-sm bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
           >
             Back
           </button>
@@ -277,9 +277,9 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
   // ── Placing / loading ─────────────────────────────────────────────────────────
   if (ticketState === "placing") {
     return (
-      <div className={cn("bg-[#0F172A] rounded-2xl flex flex-col items-center justify-center", compact ? "p-8" : "p-12")}>
-        <div className="w-10 h-10 rounded-full border-2 border-[#334155] border-t-[#3B82F6] animate-spin mb-4" />
-        <p className="text-[#94A3B8] text-sm">Placing order…</p>
+      <div className={cn("bg-[var(--bg-elevated)] rounded-2xl flex flex-col items-center justify-center", compact ? "p-8" : "p-12")}>
+        <div className="w-10 h-10 rounded-full border-2 border-[var(--border-emphasis)] border-t-[#3B82F6] animate-spin mb-4" />
+        <p className="text-[var(--text-secondary)] text-sm">Placing order…</p>
       </div>
     );
   }
@@ -287,30 +287,30 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
   // ── Filled / success ──────────────────────────────────────────────────────────
   if (ticketState === "filled") {
     return (
-      <div className={cn("bg-[#0F172A] rounded-2xl flex flex-col items-center justify-center text-center", compact ? "p-6" : "p-10")}>
+      <div className={cn("bg-[var(--bg-elevated)] rounded-2xl flex flex-col items-center justify-center text-center", compact ? "p-6" : "p-10")}>
         <div className="w-14 h-14 rounded-full bg-emerald-900/40 border border-emerald-700 flex items-center justify-center mb-4 animate-in zoom-in-50 duration-300">
           <Check size={28} className="text-emerald-400" />
         </div>
-        <p className="text-[#F8FAFC] font-semibold text-lg mb-1">Order Filled</p>
+        <p className="text-[var(--text-primary)] font-semibold text-lg mb-1">Order Filled</p>
         {fillPrice && (
-          <p className="text-[#94A3B8] text-sm mb-1">
-            {fillQty} {symbol} @ <span className="font-mono text-[#F8FAFC]">{formatCurrency(fillPrice)}</span>
+          <p className="text-[var(--text-secondary)] text-sm mb-1">
+            {fillQty} {symbol} @ <span className="font-mono text-[var(--text-primary)]">{formatCurrency(fillPrice)}</span>
           </p>
         )}
-        <p className="text-[#475569] text-xs mb-6">
+        <p className="text-[var(--text-tertiary)] text-xs mb-6">
           Total: {fillPrice && fillQty ? formatCurrency(fillPrice * fillQty) : "—"}
         </p>
         <div className="flex gap-2 w-full">
           <button
             onClick={handleReset}
-            className="flex-1 py-2.5 rounded-xl text-sm bg-[#1E293B] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors"
+            className="flex-1 py-2.5 rounded-xl text-sm bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
           >
             New Order
           </button>
           {onClose && (
             <button
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl text-sm bg-[#1E293B] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors"
+              className="flex-1 py-2.5 rounded-xl text-sm bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
             >
               Close
             </button>
@@ -323,15 +323,15 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
   // ── Error ────────────────────────────────────────────────────────────────────
   if (ticketState === "error") {
     return (
-      <div className={cn("bg-[#0F172A] rounded-2xl flex flex-col items-center justify-center text-center", compact ? "p-6" : "p-10")}>
+      <div className={cn("bg-[var(--bg-elevated)] rounded-2xl flex flex-col items-center justify-center text-center", compact ? "p-6" : "p-10")}>
         <div className="w-14 h-14 rounded-full bg-red-950/40 border border-red-800 flex items-center justify-center mb-4">
           <AlertCircle size={28} className="text-red-400" />
         </div>
-        <p className="text-[#F8FAFC] font-semibold text-lg mb-2">Order Failed</p>
-        <p className="text-[#94A3B8] text-sm mb-6 max-w-[240px]">{errorMsg}</p>
+        <p className="text-[var(--text-primary)] font-semibold text-lg mb-2">Order Failed</p>
+        <p className="text-[var(--text-secondary)] text-sm mb-6 max-w-[240px]">{errorMsg}</p>
         <button
           onClick={handleReset}
-          className="flex items-center gap-2 py-2.5 px-5 rounded-xl text-sm bg-[#1E293B] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors"
+          className="flex items-center gap-2 py-2.5 px-5 rounded-xl text-sm bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
         >
           <RefreshCw size={14} /> Try Again
         </button>
@@ -341,13 +341,13 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
 
   // ── Idle / input ─────────────────────────────────────────────────────────────
   return (
-    <div id="order-panel" className={cn("bg-[#0F172A] rounded-2xl flex flex-col", compact ? "p-4" : "p-5")}>
+    <div id="order-panel" className={cn("bg-[var(--bg-elevated)] rounded-2xl flex flex-col", compact ? "p-4" : "p-5")}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="font-mono font-bold text-[#F8FAFC]">{symbol}</span>
+          <span className="font-mono font-bold text-[var(--text-primary)]">{symbol}</span>
           {currentPrice > 0 && (
-            <span className="text-[#475569] text-sm font-mono">{formatCurrency(currentPrice)}</span>
+            <span className="text-[var(--text-tertiary)] text-sm font-mono">{formatCurrency(currentPrice)}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -355,7 +355,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
             onClick={() => setProMode((p) => !p)}
             className={cn(
               "flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors",
-              proMode ? "bg-[#3B82F6]/20 text-[#3B82F6] border border-[#3B82F6]/30" : "text-[#475569] hover:text-[#94A3B8]"
+              proMode ? "bg-[#3B82F6]/20 text-[#3B82F6] border border-[#3B82F6]/30" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
             title="Toggle Pro Mode"
           >
@@ -363,7 +363,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
             Pro
           </button>
           {onClose && (
-            <button onClick={onClose} className="text-[#475569] hover:text-[#F8FAFC] transition-colors">
+            <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
               <X size={16} />
             </button>
           )}
@@ -371,7 +371,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
       </div>
 
       {/* Buy / Sell tabs */}
-      <div role="tablist" aria-label="Order side" className="flex mb-4 border-b border-[#1E293B]">
+      <div role="tablist" aria-label="Order side" className="flex mb-4 border-b border-[var(--border-subtle)]">
         {(["buy", "sell"] as const).map((s) => (
           <button
             key={s}
@@ -385,7 +385,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                 ? s === "buy"
                   ? "text-emerald-400 border-emerald-400"
                   : "text-red-400 border-red-400"
-                : "text-[#475569] border-transparent hover:text-[#94A3B8]"
+                : "text-[var(--text-tertiary)] border-transparent hover:text-[var(--text-secondary)]"
             )}
           >
             {s === "buy" ? "Buy" : "Sell"}
@@ -397,7 +397,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
         {/* Amount input */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs text-[#475569]">
+            <label className="text-xs text-[var(--text-tertiary)]">
               {inputMode === "dollars" ? "Dollar Amount" : "Shares"}
             </label>
             <button
@@ -409,7 +409,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           </div>
           <div className="relative">
             {inputMode === "dollars" && (
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569] text-sm font-mono">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm font-mono">$</span>
             )}
             <input
               ref={inputRef}
@@ -423,7 +423,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
               }}
               placeholder="0.00"
               className={cn(
-                "w-full bg-[#1E293B] border border-[#334155] text-[#F8FAFC] font-mono text-sm rounded-xl py-2.5 pr-3 placeholder-[#334155] outline-none transition-colors duration-150",
+                "w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] font-mono text-sm rounded-xl py-2.5 pr-3 placeholder-[#334155] outline-none transition-colors duration-150",
                 inputMode === "dollars" ? "pl-7" : "pl-3",
                 theme.ring
               )}
@@ -431,12 +431,12 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           </div>
           {/* Estimate hint */}
           {inputMode === "dollars" && estimatedShares !== null && estimatedShares > 0 && (
-            <p className="text-xs text-[#475569] mt-1 font-mono">
+            <p className="text-xs text-[var(--text-tertiary)] mt-1 font-mono">
               ≈ {estimatedShares.toFixed(4)} shares
             </p>
           )}
           {inputMode === "shares" && estimatedDollars !== null && estimatedDollars > 0 && (
-            <p className="text-xs text-[#475569] mt-1 font-mono">
+            <p className="text-xs text-[var(--text-tertiary)] mt-1 font-mono">
               ≈ {formatCurrency(estimatedDollars)}
             </p>
           )}
@@ -447,27 +447,27 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           <>
             {/* Order type */}
             <div>
-              <label className="text-xs text-[#475569] mb-1.5 block">Order Type</label>
+              <label className="text-xs text-[var(--text-tertiary)] mb-1.5 block">Order Type</label>
               <div className="relative">
                 <select
                   value={orderType}
                   onChange={(e) => setOrderType(e.target.value as OrderType)}
-                  className="w-full appearance-none bg-[#1E293B] border border-[#334155] text-[#F8FAFC] text-sm rounded-xl py-2.5 pl-3 pr-8 outline-none focus:border-[#475569] transition-colors cursor-pointer"
+                  className="w-full appearance-none bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm rounded-xl py-2.5 pl-3 pr-8 outline-none focus:border-[#475569] transition-colors cursor-pointer"
                 >
                   {(Object.entries(ORDER_TYPE_LABELS) as [OrderType, string][]).map(([v, l]) => (
                     <option key={v} value={v}>{l}</option>
                   ))}
                 </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#475569] pointer-events-none" />
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none" />
               </div>
             </div>
 
             {/* Conditional price inputs */}
             {(orderType === "limit" || orderType === "stop_limit") && (
               <div>
-                <label className="text-xs text-[#475569] mb-1.5 block">Limit Price</label>
+                <label className="text-xs text-[var(--text-tertiary)] mb-1.5 block">Limit Price</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569] text-sm font-mono">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm font-mono">$</span>
                   <input
                     type="number"
                     min="0"
@@ -475,7 +475,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                     value={limitPrice}
                     onChange={(e) => setLimitPrice(e.target.value)}
                     placeholder={currentPrice > 0 ? currentPrice.toFixed(2) : "0.00"}
-                    className="w-full bg-[#1E293B] border border-[#334155] text-[#F8FAFC] font-mono text-sm rounded-xl py-2.5 pl-7 pr-3 placeholder-[#334155] outline-none focus:border-[#475569] transition-colors"
+                    className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] font-mono text-sm rounded-xl py-2.5 pl-7 pr-3 placeholder-[#334155] outline-none focus:border-[#475569] transition-colors"
                   />
                 </div>
               </div>
@@ -483,9 +483,9 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
 
             {(orderType === "stop" || orderType === "stop_limit") && (
               <div>
-                <label className="text-xs text-[#475569] mb-1.5 block">Stop Price</label>
+                <label className="text-xs text-[var(--text-tertiary)] mb-1.5 block">Stop Price</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569] text-sm font-mono">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm font-mono">$</span>
                   <input
                     type="number"
                     min="0"
@@ -493,7 +493,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                     value={stopPrice}
                     onChange={(e) => setStopPrice(e.target.value)}
                     placeholder={currentPrice > 0 ? currentPrice.toFixed(2) : "0.00"}
-                    className="w-full bg-[#1E293B] border border-[#334155] text-[#F8FAFC] font-mono text-sm rounded-xl py-2.5 pl-7 pr-3 placeholder-[#334155] outline-none focus:border-[#475569] transition-colors"
+                    className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] font-mono text-sm rounded-xl py-2.5 pl-7 pr-3 placeholder-[#334155] outline-none focus:border-[#475569] transition-colors"
                   />
                 </div>
               </div>
@@ -504,7 +504,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                 <div>
                   <label className="text-xs text-emerald-500 mb-1.5 block">Take Profit Price</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569] text-sm font-mono">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm font-mono">$</span>
                     <input
                       type="number"
                       min="0"
@@ -512,14 +512,14 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                       value={takeProfitPrice}
                       onChange={(e) => setTakeProfitPrice(e.target.value)}
                       placeholder="0.00"
-                      className="w-full bg-emerald-900/10 border border-emerald-900/50 text-[#F8FAFC] font-mono text-sm rounded-xl py-2.5 pl-7 pr-3 placeholder-[#334155] outline-none focus:border-emerald-700 transition-colors"
+                      className="w-full bg-emerald-900/10 border border-emerald-900/50 text-[var(--text-primary)] font-mono text-sm rounded-xl py-2.5 pl-7 pr-3 placeholder-[#334155] outline-none focus:border-emerald-700 transition-colors"
                     />
                   </div>
                 </div>
                 <div>
                   <label className="text-xs text-red-400 mb-1.5 block">Stop Loss Price</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569] text-sm font-mono">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm font-mono">$</span>
                     <input
                       type="number"
                       min="0"
@@ -527,7 +527,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                       value={stopLossPrice}
                       onChange={(e) => setStopLossPrice(e.target.value)}
                       placeholder="0.00"
-                      className="w-full bg-rose-900/10 border border-rose-900/50 text-[#F8FAFC] font-mono text-sm rounded-xl py-2.5 pl-7 pr-3 placeholder-[#334155] outline-none focus:border-red-700 transition-colors"
+                      className="w-full bg-rose-900/10 border border-rose-900/50 text-[var(--text-primary)] font-mono text-sm rounded-xl py-2.5 pl-7 pr-3 placeholder-[#334155] outline-none focus:border-red-700 transition-colors"
                     />
                   </div>
                 </div>
@@ -536,11 +536,11 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
 
             {orderType === "trailing_stop" && (
               <div>
-                <label className="text-xs text-[#475569] mb-1.5 block">Trailing Amount</label>
+                <label className="text-xs text-[var(--text-tertiary)] mb-1.5 block">Trailing Amount</label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     {trailingType === "amount" && (
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#475569] text-sm font-mono">$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm font-mono">$</span>
                     )}
                     <input
                       type="number"
@@ -550,12 +550,12 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                       onChange={(e) => setTrailingAmount(e.target.value)}
                       placeholder="0.00"
                       className={cn(
-                        "w-full bg-[#1E293B] border border-[#334155] text-[#F8FAFC] font-mono text-sm rounded-xl py-2.5 pr-3 placeholder-[#334155] outline-none focus:border-[#475569] transition-colors",
+                        "w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] font-mono text-sm rounded-xl py-2.5 pr-3 placeholder-[#334155] outline-none focus:border-[#475569] transition-colors",
                         trailingType === "amount" ? "pl-7" : "pl-3"
                       )}
                     />
                   </div>
-                  <div className="flex rounded-xl overflow-hidden border border-[#334155]">
+                  <div className="flex rounded-xl overflow-hidden border border-[var(--border-emphasis)]">
                     {(["percent", "amount"] as const).map((t) => (
                       <button
                         key={t}
@@ -563,8 +563,8 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                         className={cn(
                           "px-3 py-2 text-xs font-semibold transition-colors",
                           trailingType === t
-                            ? "bg-[#334155] text-[#F8FAFC]"
-                            : "bg-[#1E293B] text-[#475569] hover:text-[#94A3B8]"
+                            ? "bg-[#334155] text-[var(--text-primary)]"
+                            : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                         )}
                       >
                         {t === "percent" ? "%" : "$"}
@@ -577,7 +577,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
 
             {/* TIF pills */}
             <div>
-              <label className="text-xs text-[#475569] mb-1.5 block">Time in Force</label>
+              <label className="text-xs text-[var(--text-tertiary)] mb-1.5 block">Time in Force</label>
               <div className="flex gap-1.5">
                 {(Object.entries(TIF_LABELS) as [TIF, string][]).map(([v, l]) => (
                   <button
@@ -586,8 +586,8 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                     className={cn(
                       "flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors",
                       tif === v
-                        ? "bg-[#334155] text-[#F8FAFC]"
-                        : "bg-[#1E293B] text-[#475569] hover:text-[#94A3B8]"
+                        ? "bg-[#334155] text-[var(--text-primary)]"
+                        : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                     )}
                   >
                     {l}
@@ -610,17 +610,17 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
                   extendedHours ? "translate-x-4" : "translate-x-0.5"
                 )} />
               </div>
-              <span className="text-xs text-[#475569] group-hover:text-[#94A3B8] transition-colors">Extended hours</span>
+              <span className="text-xs text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors">Extended hours</span>
             </label>
           </>
         )}
 
         {/* Buying power */}
         <div className={cn("rounded-xl border px-3 py-2.5 flex items-center justify-between", theme.surface)}>
-          <span className="text-xs text-[#475569]">
+          <span className="text-xs text-[var(--text-tertiary)]">
             {isBuy ? "Buying Power" : "Shares Available"}
           </span>
-          <span className="text-xs font-mono text-[#94A3B8]">
+          <span className="text-xs font-mono text-[var(--text-secondary)]">
             {isBuy ? formatCurrency(buyingPower) : "—"}
           </span>
         </div>
@@ -637,7 +637,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           {isBuy ? `Buy ${symbol}` : `Sell ${symbol}`}
         </button>
 
-        <p className="text-[10px] text-[#475569] text-center">
+        <p className="text-[10px] text-[var(--text-tertiary)] text-center">
           Orders execute at live market price. Simulated only.
         </p>
       </div>

@@ -34,7 +34,7 @@ export default function XPToast({ xp, newBadges = [], onDone }: Props) {
         phase === "out" && "opacity-0 -translate-y-2"
       )}
     >
-      <div className="flex items-center gap-2 bg-[#22C55E]/15 border border-emerald-500/30 text-[#22C55E] rounded-xl px-4 py-2.5 shadow-lg backdrop-blur-sm">
+      <div className="flex items-center gap-2 bg-[#22C55E]/15 border border-emerald-500/30 text-[var(--accent-positive)] rounded-xl px-4 py-2.5 shadow-lg backdrop-blur-sm">
         <Zap size={16} className="fill-emerald-400" />
         <span className="font-bold text-sm">+{xp} XP</span>
       </div>
