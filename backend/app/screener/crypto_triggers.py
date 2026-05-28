@@ -51,6 +51,10 @@ CRYPTO_CONVICTION: dict[str, float] = {
     "sopr_reversal":            1.2,   # SOPR cost-basis bounce
     "exchange_netflow":         1.1,   # OI-proxy signal
     "stablecoin_ratio":         1.0,   # SSR dry-powder signal
+    # Phase 3 derivatives
+    "funding_rate_contrarian":  1.2,   # mean reversion from extreme crowding
+    "oi_divergence":            1.1,   # capitulation bottom
+    "basis_carry":              0.8,   # carry yield — smaller size, delta-neutral intent
 }
 
 # Per-preset R-multiple override (target = entry + atr * 1.5 * R)
@@ -71,6 +75,10 @@ CRYPTO_R_MULTIPLES: dict[str, float] = {
     "sopr_reversal":            3.0,
     "exchange_netflow":         3.0,
     "stablecoin_ratio":         3.5,
+    # Phase 3 derivatives — mean reversion / carry, tighter targets
+    "funding_rate_contrarian":  2.5,
+    "oi_divergence":            2.5,
+    "basis_carry":              1.5,   # yield trade — exit when carry dries up
 }
 
 
@@ -362,6 +370,60 @@ def _ssr_confirm(symbol: str, df: pd.DataFrame) -> bool:
         return False
 
 
+# ── Phase 3 derivatives triggers (3) ──────────────────────────────────────────
+
+def _funding_contrarian_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """Funding recovering from extreme negative — shorts starting to cover."""
+    from app.services.derivatives import get_funding_rate, ccxt_to_futures
+    try:
+        rates = get_funding_rate(ccxt_to_futures(symbol))
+        if not rates.get("ok"):
+            return False
+        recent = rates.get("recent", [])
+        if len(recent) < 2:
+            return rates.get("latest", 0.0) < -0.0001
+        latest = recent[0]
+        prev   = recent[1]
+        # Funding is still negative (shorts paying longs) but moving toward zero = recovery
+        return latest < -0.0001 and latest > prev
+    except Exception:
+        return False
+
+
+def _oi_divergence_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """OI still falling — confirm this is capitulation, not fresh distribution."""
+    from app.services.derivatives import get_oi_history, ccxt_to_futures
+    try:
+        oi = get_oi_history(ccxt_to_futures(symbol))
+        if not oi.get("ok"):
+            return False
+        if oi.get("direction") != "falling":
+            return False
+        # RSI recovering from oversold confirms capitulation bottom
+        if len(df) < 16:
+            return True
+        rsi = _rsi(df)
+        return float(rsi.iloc[-2]) < 35 and float(rsi.iloc[-1]) >= 30
+    except Exception:
+        return False
+
+
+def _basis_carry_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """Funding still persistently positive — carry is still worth taking."""
+    from app.services.derivatives import get_funding_rate, ccxt_to_futures
+    try:
+        rates = get_funding_rate(ccxt_to_futures(symbol))
+        if not rates.get("ok"):
+            return False
+        recent = rates.get("recent", [])
+        # Require 3 consecutive positive bars > 0.02% AND annualized yield > 10%
+        if len(recent) < 3 or not all(r > 0.0002 for r in recent[:3]):
+            return False
+        return rates.get("annualized", 0.0) > 10.0
+    except Exception:
+        return False
+
+
 # ── Trigger map ────────────────────────────────────────────────────────────────
 
 TriggerFn = Callable[[str, pd.DataFrame], bool]
@@ -394,4 +456,8 @@ CRYPTO_TRIGGER_MAP: dict[str, TriggerFn] = {
     "sopr_reversal":            _sopr_confirm,
     "exchange_netflow":         _netflow_confirm,
     "stablecoin_ratio":         _ssr_confirm,
+    # Phase 3 derivatives
+    "funding_rate_contrarian":  _funding_contrarian_confirm,
+    "oi_divergence":            _oi_divergence_confirm,
+    "basis_carry":              _basis_carry_confirm,
 }

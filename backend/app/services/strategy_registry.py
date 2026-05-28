@@ -596,43 +596,44 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "sort_order": 17,
     },
 
-    # ── Phase 3: Derivatives (3, comprehension quiz required) ─────────────────
+    # ── Phase 3: Derivatives (3) ──────────────────────────────────────────────
+    # Data source: Binance /fapi/v1/fundingRate + /futures/data/openInterestHist (free, no key)
     {
         "strategy_key": "funding_rate_contrarian",
         "name": "Funding Rate Contrarian",
         "category": "Derivatives",
         "description": (
-            "Perpetual funding rates above 0.1% per 8h signal extreme long crowding — fade the crowd. "
-            "Rates below -0.05% signal extreme short crowding — buy the squeeze. "
-            "Requires understanding of perpetual mechanics. Comprehension quiz required before activation. "
-            "Coinglass data required."
+            "When 8-hour perpetual funding drops below −0.03% (shorts paying longs), the market is "
+            "extremely crowded short. Mean reversion favors the long side as shorts must pay to hold. "
+            "Enter when funding starts recovering from extreme negative (shorts beginning to cover). "
+            "Uses Binance perpetual funding API — free, no key required."
         ),
-        "source_originator": "Coinglass / Perpetual Market Dynamics",
-        "version": 1,
-        "tier_required": "pro",
+        "source_originator": "Binance Perpetuals (free)",
+        "version": 2,
+        "tier_required": "plus",
         "comprehension_quiz_required": True,
-        "required_data_sources": ["coinglass"],
+        "required_data_sources": ["binance_futures"],
         "default_universe": ["BTC/USDT", "ETH/USDT", "SOL/USDT"],
         "parameters": {
-            "long_crowded_threshold": 0.001,
-            "short_crowded_threshold": -0.0005,
+            "entry_funding_threshold": -0.0003,
+            "exit_funding_threshold": 0.0001,
             "bar_size": "8h",
         },
         "entry_conditions": [
-            {"type": "funding_rate", "condition": "extreme_negative", "threshold": -0.0005, "direction": "long"},
-            {"type": "funding_rate", "condition": "extreme_positive", "threshold": 0.001, "direction": "short"},
+            {"type": "funding_rate", "condition": "extreme_negative", "threshold": -0.0003},
+            {"type": "funding_rate", "condition": "recovering"},
         ],
         "exit_conditions": [
-            {"type": "funding_rate", "condition": "normalized", "threshold": 0.0002},
+            {"type": "funding_rate", "condition": "normalized", "threshold": 0.0001},
             {"type": "stop_loss", "atr_multiplier": 2.0},
         ],
         "context_conditions": None,
         "structure_type": "perpetual",
         "execution_schedule": {"cron": "0 0,8,16 * * *"},
-        "signal_duration_required": {"condition": "funding_rate_extreme", "min_bars": 3, "bar_size": "8h"},
+        "signal_duration_required": None,
         "category_accent_from": "#dc2626",
         "category_accent_to": "#f97316",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 18,
     },
     {
@@ -640,32 +641,33 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "name": "Open Interest Divergence",
         "category": "Derivatives",
         "description": (
-            "Open Interest divergence from price action reveals conviction. "
-            "Price rising on falling OI = weak rally, no new buyers — fade. "
-            "Price falling on rising OI = strong bearish conviction — can reinforce trend. "
-            "Price falling on falling OI = capitulation — potential bottom. Coinglass data required."
+            "Compares open interest direction to price direction over 14 days. "
+            "Price falling AND OI falling = liquidation capitulation (forced sellers, not new shorts) — "
+            "historically a strong bottom signal. Confirmed when RSI recovers from below 35. "
+            "Uses Binance perpetual OI history — free, no key required."
         ),
-        "source_originator": "Coinglass / Options Flow Analysis",
-        "version": 1,
-        "tier_required": "pro",
-        "comprehension_quiz_required": True,
-        "required_data_sources": ["coinglass"],
+        "source_originator": "Binance Perpetuals (free)",
+        "version": 2,
+        "tier_required": "plus",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["binance_futures"],
         "default_universe": ["BTC/USDT", "ETH/USDT"],
-        "parameters": {"oi_lookback_days": 3, "price_lookback_days": 3},
+        "parameters": {"oi_lookback_days": 14, "price_lookback_days": 14, "rsi_period": 14},
         "entry_conditions": [
-            {"type": "oi_price_divergence", "price_direction": "falling", "oi_direction": "falling", "signal": "capitulation_long"},
+            {"type": "oi_price_divergence", "price_direction": "falling", "oi_direction": "falling"},
+            {"type": "rsi", "period": 14, "condition": "recovering_from_below", "threshold": 35},
         ],
         "exit_conditions": [
-            {"type": "oi_price_divergence", "price_direction": "rising", "oi_direction": "falling", "signal": "weak_rally_exit"},
+            {"type": "oi_change", "direction": "rising", "threshold_pct": 5},
             {"type": "stop_loss", "atr_multiplier": 2.0},
         ],
         "context_conditions": None,
-        "structure_type": "perpetual",
+        "structure_type": "simple",
         "execution_schedule": {"cron": "0 */4 * * *"},
         "signal_duration_required": None,
         "category_accent_from": "#dc2626",
         "category_accent_to": "#f97316",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 19,
     },
     {
@@ -673,37 +675,38 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "name": "Cash & Carry Basis",
         "category": "Derivatives",
         "description": (
-            "Simultaneously long the spot asset and short the same-size perpetual contract. "
-            "Earns the funding rate as delta-neutral yield when funding is persistently positive. "
-            "No directional risk — profit comes purely from funding payments. "
-            "Requires hedged position management and understanding of both legs. Quiz required."
+            "Enter long spot BTC/ETH when perpetual funding has been persistently positive for 3+ "
+            "consecutive 8h bars AND annualized yield exceeds 10%. Funding above this level means "
+            "longs are paying — spot buyers collect yield vs. perp shorts. "
+            "For a fully delta-neutral carry trade, manually short the same size on the perpetual. "
+            "Uses Binance perpetual funding API — free, no key required."
         ),
-        "source_originator": "Derivatives Arbitrage",
-        "version": 1,
-        "tier_required": "pro",
+        "source_originator": "Binance Perpetuals (free)",
+        "version": 2,
+        "tier_required": "plus",
         "comprehension_quiz_required": True,
-        "required_data_sources": ["coinglass"],
+        "required_data_sources": ["binance_futures"],
         "default_universe": ["BTC/USDT", "ETH/USDT"],
         "parameters": {
             "min_annual_yield_pct": 10.0,
-            "funding_rate_threshold": 0.0003,
-            "position_pct_of_portfolio": 20,
+            "funding_threshold": 0.0003,
+            "min_consecutive_bars": 3,
         },
         "entry_conditions": [
-            {"type": "funding_rate", "condition": "above", "threshold": 0.0003},
+            {"type": "funding_rate", "condition": "persistently_positive", "threshold": 0.0003, "min_bars": 3},
             {"type": "annualized_yield", "condition": "above_pct", "threshold": 10.0},
         ],
         "exit_conditions": [
             {"type": "funding_rate", "condition": "below", "threshold": 0.0001},
-            {"type": "annualized_yield", "condition": "below_pct", "threshold": 5.0},
+            {"type": "stop_loss", "atr_multiplier": 1.5},
         ],
         "context_conditions": None,
         "structure_type": "hedged",
         "execution_schedule": {"cron": "0 0,8,16 * * *"},
-        "signal_duration_required": {"condition": "funding_rate_positive", "min_bars": 6, "bar_size": "8h"},
+        "signal_duration_required": {"condition": "funding_positive", "min_bars": 3, "bar_size": "8h"},
         "category_accent_from": "#dc2626",
         "category_accent_to": "#f97316",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 20,
     },
 

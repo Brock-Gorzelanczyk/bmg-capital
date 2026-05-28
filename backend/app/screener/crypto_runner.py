@@ -129,7 +129,7 @@ def _check_crypto_regime(bars: Dict[str, pd.DataFrame]) -> str:
 # Screening helpers
 # ---------------------------------------------------------------------------
 
-def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict]) -> bool:
+def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict], symbol: str = "") -> bool:
     """Return True if all filter specs match the given OHLCV DataFrame."""
     for spec in filter_specs:
         ftype = spec.get("type")
@@ -318,6 +318,50 @@ def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict]) -> bool:
                 if data.get("signal") != spec.get("signal", "low"):
                     return False
 
+            # ── Phase 3 derivatives filter types ──────────────────────────────
+
+            elif ftype == "FundingRate":
+                from app.services.derivatives import get_funding_rate, ccxt_to_futures
+                fsym  = ccxt_to_futures(symbol) if symbol else ""
+                if not fsym:
+                    return False
+                rates = get_funding_rate(fsym)
+                if not rates.get("ok"):
+                    return False
+                latest    = rates.get("latest", 0.0)
+                condition = spec.get("condition", "")
+                threshold = float(spec.get("threshold", 0.0))
+                if condition == "extreme_negative":
+                    if not latest < threshold:
+                        return False
+                elif condition == "above":
+                    if not latest > threshold:
+                        return False
+                elif condition == "persistently_positive":
+                    min_bars = int(spec.get("min_bars", 3))
+                    recent   = rates.get("recent", [])
+                    if len(recent) < min_bars or not all(r > threshold for r in recent[:min_bars]):
+                        return False
+
+            elif ftype == "OIDivergence":
+                from app.services.derivatives import get_oi_history, ccxt_to_futures
+                fsym = ccxt_to_futures(symbol) if symbol else ""
+                if not fsym:
+                    return False
+                oi = get_oi_history(fsym, period="1d", limit=14)
+                if not oi.get("ok"):
+                    return False
+                # Price trend over the same 14-day window
+                if len(df) < 15:
+                    return False
+                price_change = float(df["close"].iloc[-1]) / float(df["close"].iloc[-15]) - 1
+                price_falling = price_change < -0.03   # >3% drop
+                oi_falling    = oi.get("direction") == "falling"
+                if spec.get("price_falling", True) and not price_falling:
+                    return False
+                if spec.get("oi_falling", True) and not oi_falling:
+                    return False
+
         except Exception as e:
             logger.debug(f"Filter error ({ftype}): {e}")
             return False
@@ -341,7 +385,7 @@ def _collect_crypto_screen_results(
             if df is None or df.empty:
                 continue
             try:
-                if _apply_crypto_filters(df, filter_specs):
+                if _apply_crypto_filters(df, filter_specs, symbol=sym):
                     hits.add(sym)
             except Exception as e:
                 logger.debug(f"Screen error {preset_key}/{sym}: {e}")
@@ -714,9 +758,14 @@ def _snapshot_crypto_equity(
 # ---------------------------------------------------------------------------
 
 def _prefetch_onchain() -> None:
-    """Warm on-chain caches before the screening loop to avoid per-symbol API calls."""
-    from app.services.onchain import prefetch_all
-    prefetch_all()
+    """Warm on-chain and derivatives caches before the screening loop."""
+    from app.services.onchain import prefetch_all as _oc_prefetch
+    from app.services.derivatives import prefetch_derivatives
+    _oc_prefetch()
+    # Pre-warm funding + OI for the derivative strategy universes
+    prefetch_derivatives([
+        "BTC/USDT", "ETH/USDT", "SOL/USDT",
+    ])
 
 
 async def run_crypto_automation(user_id: int) -> Dict[str, Any]:

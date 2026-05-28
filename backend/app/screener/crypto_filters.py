@@ -96,6 +96,20 @@ CRYPTO_PRESET_SCREENS: dict[str, list[dict[str, Any]]] = {
         # SSR < 5 = large stablecoin dry-powder pool relative to BTC market cap
         {"type": "OnChainSSR", "signal": "low"},
     ],
+
+    # ── Phase 3 derivatives strategies (3) ────────────────────────────────────
+    "funding_rate_contrarian": [
+        # Extreme negative funding (< -0.03%) = shorts paying longs = contrarian long entry
+        {"type": "FundingRate", "condition": "extreme_negative", "threshold": -0.0003},
+    ],
+    "oi_divergence": [
+        # Price falling AND open interest falling = capitulation (liquidations, not fresh shorts)
+        {"type": "OIDivergence", "price_falling": True, "oi_falling": True},
+    ],
+    "basis_carry": [
+        # Funding persistently positive for 3+ 8h bars AND annualized yield > 10%
+        {"type": "FundingRate", "condition": "persistently_positive", "threshold": 0.0003, "min_bars": 3},
+    ],
 }
 
 # Strategies that require comparing all coins at once (handled separately in the runner)
@@ -113,11 +127,15 @@ CRYPTO_RESTRICTED_UNIVERSES: dict[str, list[str]] = {
     "ma_200w":           ["BTC/USDT"],
     "halving_phase":     ["BTC/USDT", "ETH/USDT"],
     # On-chain: all BTC-focused (MVRV/NUPL/SOPR are BTC metrics)
-    "nupl_signal":       ["BTC/USDT"],
-    "mvrv_zscore":       ["BTC/USDT"],
-    "sopr_reversal":     ["BTC/USDT"],
-    "exchange_netflow":  ["BTC/USDT", "ETH/USDT"],
-    "stablecoin_ratio":  ["BTC/USDT"],
+    "nupl_signal":              ["BTC/USDT"],
+    "mvrv_zscore":              ["BTC/USDT"],
+    "sopr_reversal":            ["BTC/USDT"],
+    "exchange_netflow":         ["BTC/USDT", "ETH/USDT"],
+    "stablecoin_ratio":         ["BTC/USDT"],
+    # Derivatives: major perp markets
+    "funding_rate_contrarian":  ["BTC/USDT", "ETH/USDT", "SOL/USDT"],
+    "oi_divergence":            ["BTC/USDT", "ETH/USDT"],
+    "basis_carry":              ["BTC/USDT", "ETH/USDT"],
 }
 
 CRYPTO_PRESET_LABELS: dict[str, str] = {
@@ -148,6 +166,10 @@ CRYPTO_PRESET_LABELS: dict[str, str] = {
     "sopr_reversal":             "SOPR Reversal",
     "exchange_netflow":          "Exchange Net Flow",
     "stablecoin_ratio":          "Stablecoin Supply Ratio",
+    # Phase 3 derivatives (3)
+    "funding_rate_contrarian":   "Funding Rate Contrarian",
+    "oi_divergence":             "Open Interest Divergence",
+    "basis_carry":               "Cash & Carry Basis",
 }
 
 # Full universe — top coins + narrative/DeFi/AI tokens for basket strategies
