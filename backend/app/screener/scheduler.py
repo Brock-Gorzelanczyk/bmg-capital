@@ -205,6 +205,34 @@ async def run_offhours_check() -> None:
         logger.error(f"Off-hours check failed: {e}", exc_info=True)
 
 
+async def run_crypto_automation_job() -> None:
+    """Run crypto strategy automation for all active users (24/7, every 15 min)."""
+    logger.info("Starting scheduled crypto automation...")
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.users import User
+        from app.screener.crypto_runner import run_crypto_automation
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).filter(User.is_active.is_(True)).all()
+            user_ids = [u.id for u in users]
+        finally:
+            db.close()
+
+        if not user_ids:
+            return
+
+        for user_id in user_ids:
+            try:
+                result = await run_crypto_automation(user_id=user_id)
+                logger.info(f"Crypto automation done for user {user_id}: {result}")
+            except Exception as e:
+                logger.error(f"Crypto automation failed for user {user_id}: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Crypto automation job setup failed: {e}", exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
@@ -272,5 +300,13 @@ def setup_scheduler() -> None:
         run_daily_recap_job,
         CronTrigger(day_of_week="mon-fri", hour=16, minute=15, timezone=ET),
         id="daily_recap",
+        replace_existing=True,
+    )
+
+    # Crypto: every 15 min, 24/7 (no market-hours restriction)
+    scheduler.add_job(
+        run_crypto_automation_job,
+        CronTrigger(minute="*/15"),
+        id="crypto_automation",
         replace_existing=True,
     )

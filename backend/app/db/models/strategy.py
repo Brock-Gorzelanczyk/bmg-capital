@@ -36,6 +36,9 @@ class StrategyTrade(Base):
     prev_close: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     paper_order_placed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
     paper_sell_placed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
+    asset_class: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="equity")
+    exchange: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    funding_cost_accrued: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
 
 
 class DailyLog(Base):
@@ -70,3 +73,4 @@ class DailyEquitySnapshot(Base):
     new_entries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     exits_today: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    asset_class: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="equity")
