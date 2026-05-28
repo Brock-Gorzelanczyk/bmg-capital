@@ -279,6 +279,58 @@ async def run_crypto_now(
     return {"queued": True, "message": "Crypto automation run queued"}
 
 
+@router.get("/quiz-status")
+async def get_quiz_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return list of strategy_keys the current user has completed the comprehension quiz for."""
+    from app.db.models.strategy import StrategyQuizCompletion
+    rows = db.execute(
+        select(StrategyQuizCompletion)
+        .where(StrategyQuizCompletion.user_id == current_user.id)
+    ).scalars().all()
+    return {"completed": [r.strategy_key for r in rows]}
+
+
+@router.post("/quiz-complete/{strategy_key}")
+async def complete_quiz(
+    strategy_key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mark a strategy's comprehension quiz as completed for this user."""
+    from app.db.models.strategy import StrategyQuizCompletion
+    existing = db.execute(
+        select(StrategyQuizCompletion)
+        .where(StrategyQuizCompletion.user_id == current_user.id)
+        .where(StrategyQuizCompletion.strategy_key == strategy_key)
+    ).scalar_one_or_none()
+    if not existing:
+        db.add(StrategyQuizCompletion(user_id=current_user.id, strategy_key=strategy_key))
+        db.commit()
+    return {"ok": True, "strategy_key": strategy_key}
+
+
+@router.post("/toggle/{strategy_key}")
+async def toggle_strategy(
+    strategy_key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Flip is_active on a strategy definition (kill switch)."""
+    from app.db.models.strategy_definition import StrategyDefinition
+    defn = db.execute(
+        select(StrategyDefinition).where(StrategyDefinition.strategy_key == strategy_key)
+    ).scalar_one_or_none()
+    if not defn:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Strategy not found")
+    defn.is_active = not defn.is_active
+    db.commit()
+    return {"ok": True, "strategy_key": strategy_key, "is_active": defn.is_active}
+
+
 @router.get("/definitions")
 async def get_strategy_definitions(
     db: Session = Depends(get_db),

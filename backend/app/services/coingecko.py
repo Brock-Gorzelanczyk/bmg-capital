@@ -160,27 +160,76 @@ def get_trending() -> list[dict]:
         logger.warning(f"CoinGecko trending failed: {e}")
         items = []
 
-    result = []
+    base_result = []
+    coin_ids = []
     for item in items:
         coin = item.get("item", {})
         data = coin.get("data", {})
         pct_obj = data.get("price_change_percentage_24h") or {}
         pct_24h = pct_obj.get("usd") if isinstance(pct_obj, dict) else None
-        result.append({
-            "id":              coin.get("id"),
+        cid = coin.get("id")
+        if cid:
+            coin_ids.append(cid)
+        base_result.append({
+            "id":              cid,
             "symbol":          (coin.get("symbol") or "").upper(),
             "name":            coin.get("name"),
             "image":           coin.get("large") or coin.get("small"),
             "market_cap_rank": coin.get("market_cap_rank"),
             "pct_24h":         pct_24h,
-            "sparkline_url":   data.get("sparkline"),  # image URL for trending
+            "sparkline_url":   data.get("sparkline"),
             "current_price":   None,
             "market_cap":      0,
             "total_volume":    0,
             "pct_1h":          None,
             "pct_7d":          None,
             "sparkline":       [],
+            "high_24h":        None,
+            "low_24h":         None,
+            "ath":             None,
+            "ath_change_percentage": None,
         })
+
+    # Enrich with market data for the trending coin IDs
+    market_by_id: dict[str, dict] = {}
+    if coin_ids:
+        try:
+            with httpx.Client(timeout=15) as client:
+                mr = client.get(
+                    f"{COINGECKO_BASE}/coins/markets",
+                    params={
+                        "vs_currency": "usd",
+                        "ids": ",".join(coin_ids),
+                        "sparkline": "true",
+                        "price_change_percentage": "1h,24h,7d",
+                    },
+                    headers=_HEADERS,
+                )
+                mr.raise_for_status()
+                for m in mr.json():
+                    market_by_id[m["id"]] = m
+        except Exception as e:
+            logger.warning(f"CoinGecko trending market enrichment failed: {e}")
+
+    result = []
+    for entry in base_result:
+        m = market_by_id.get(entry["id"] or "")
+        if m:
+            sp = (m.get("sparkline_in_7d") or {}).get("price") or []
+            entry.update({
+                "current_price":          m.get("current_price"),
+                "market_cap":             m.get("market_cap") or 0,
+                "total_volume":           m.get("total_volume") or 0,
+                "pct_1h":                 m.get("price_change_percentage_1h_in_currency"),
+                "pct_24h":                m.get("price_change_percentage_24h") or entry["pct_24h"],
+                "pct_7d":                 m.get("price_change_percentage_7d_in_currency"),
+                "sparkline":              sp[-168:] if sp else [],
+                "high_24h":               m.get("high_24h"),
+                "low_24h":                m.get("low_24h"),
+                "ath":                    m.get("ath"),
+                "ath_change_percentage":  m.get("ath_change_percentage"),
+            })
+        result.append(entry)
 
     _set_cached("trending", result)
     return result

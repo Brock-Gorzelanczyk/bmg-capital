@@ -722,10 +722,10 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
             "Arkham free tier required."
         ),
         "source_originator": "Arkham Intelligence",
-        "version": 1,
-        "tier_required": "pro",
+        "version": 2,
+        "tier_required": "plus",
         "comprehension_quiz_required": False,
-        "required_data_sources": ["arkham"],
+        "required_data_sources": ["coinmetrics"],
         "default_universe": ["BTC/USDT", "ETH/USDT"],
         "parameters": {
             "min_wallet_size_btc": 1000,
@@ -746,7 +746,7 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "signal_duration_required": None,
         "category_accent_from": "#1e40af",
         "category_accent_to": "#7c3aed",
-        "is_active": False,
+        "is_active": True,
         "sort_order": 21,
     },
 ]

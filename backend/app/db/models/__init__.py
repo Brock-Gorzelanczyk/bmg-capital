@@ -6,7 +6,7 @@ from app.db.models.portfolio import Portfolio, Position
 from app.db.models.alert import AlertConfig, AlertTrigger, SignalState
 from app.db.models.screen import SavedScreen
 from app.db.models.bar_cache import BarCache
-from app.db.models.strategy import StrategyTrade, DailyLog, DailyEquitySnapshot
+from app.db.models.strategy import StrategyTrade, DailyLog, DailyEquitySnapshot, StrategyQuizCompletion
 from app.db.models.users import User
 from app.db.models.paper import PaperAccount, PaperPosition, PaperOrder, PaperTransaction, PaperDailySnapshot
 from app.db.models.learn import UserProgress, LessonCompletion, QuizAttempt, UserBadge, DailyChallenge
@@ -22,7 +22,7 @@ from app.db.models.strategy_definition import StrategyDefinition
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
     "AlertConfig", "AlertTrigger", "SignalState", "SavedScreen",
-    "BarCache", "StrategyTrade", "DailyLog", "DailyEquitySnapshot", "User",
+    "BarCache", "StrategyTrade", "DailyLog", "DailyEquitySnapshot", "StrategyQuizCompletion", "User",
     "PaperAccount", "PaperPosition", "PaperOrder", "PaperTransaction", "PaperDailySnapshot",
     "UserProgress", "LessonCompletion", "QuizAttempt", "UserBadge", "DailyChallenge",
     "Notification", "NotificationPrefs",

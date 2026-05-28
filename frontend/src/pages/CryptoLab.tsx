@@ -17,6 +17,9 @@ import {
   getCryptoStrategyDefinitions,
   runCryptoStrategyNow,
   getCryptoOHLCV,
+  getCryptoQuizStatus,
+  completeCryptoQuiz,
+  toggleCryptoStrategy,
   type CoinGeckoData,
   type CryptoOverview,
   type CryptoTrade,
@@ -517,6 +520,213 @@ function CoinTradingPanel({
         )}
       </div>
     </>
+  );
+}
+
+// ── Quiz definitions ──────────────────────────────────────────────────────────
+
+const QUIZ_CONTENT: Record<string, {
+  title: string;
+  subtitle: string;
+  questions: Array<{
+    q: string;
+    options: string[];
+    correct: number;
+  }>;
+}> = {
+  funding_rate_contrarian: {
+    title: "Funding Rate Contrarian — Comprehension Check",
+    subtitle: "This strategy uses perpetual futures funding mechanics. Confirm you understand before enabling.",
+    questions: [
+      {
+        q: "When perpetual funding is deeply negative, who pays who?",
+        options: ["Longs pay shorts", "Shorts pay longs", "No payments — it's synthetic"],
+        correct: 1,
+      },
+      {
+        q: "This strategy takes a position in which direction?",
+        options: ["Short (ride the momentum down)", "Long (contrarian — bet shorts will cover)", "Neutral / market-neutral"],
+        correct: 1,
+      },
+      {
+        q: "What is the primary risk of this strategy?",
+        options: [
+          "The exchange getting hacked",
+          "Funding can stay extreme negative far longer than expected",
+          "Low volatility means no moves",
+        ],
+        correct: 1,
+      },
+    ],
+  },
+  basis_carry: {
+    title: "Cash & Carry Basis — Comprehension Check",
+    subtitle: "This strategy earns funding yield. Confirm you understand the mechanics and risks.",
+    questions: [
+      {
+        q: "Positive perpetual funding rate means:",
+        options: [
+          "Longs pay shorts to hold their long position",
+          "Shorts pay longs — you earn yield by being long spot",
+          "The exchange is charging extra fees",
+        ],
+        correct: 0,
+      },
+      {
+        q: "When should you exit the basis carry trade?",
+        options: [
+          "When spot price drops 10% from entry",
+          "When funding rate falls near zero or turns negative",
+          "After exactly 30 days regardless of conditions",
+        ],
+        correct: 1,
+      },
+      {
+        q: "The main risk of this strategy is:",
+        options: [
+          "Spot price rising faster than expected",
+          "Funding flipping negative — your 'yield' becomes a cost",
+          "Low trading volume on the exchange",
+        ],
+        correct: 1,
+      },
+    ],
+  },
+};
+
+function QuizModal({
+  strategyKey,
+  strategyName,
+  onPass,
+  onClose,
+}: {
+  strategyKey: string;
+  strategyName: string;
+  onPass: () => void;
+  onClose: () => void;
+}) {
+  const content = QUIZ_CONTENT[strategyKey];
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [allCorrect, setAllCorrect] = useState(false);
+
+  if (!content) return null;
+
+  const totalQ = content.questions.length;
+  const answered = Object.keys(answers).length;
+
+  function handleSubmit() {
+    const correct = content.questions.every((q, i) => answers[i] === q.correct);
+    setSubmitted(true);
+    setAllCorrect(correct);
+    if (correct) {
+      setTimeout(onPass, 1200);
+    }
+  }
+
+  function handleRetry() {
+    setAnswers({});
+    setSubmitted(false);
+    setAllCorrect(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between p-6 border-b border-[var(--border-subtle)]">
+          <div>
+            <div className="text-xs font-semibold text-[var(--accent-blue)] uppercase tracking-widest mb-1">
+              Strategy Gate
+            </div>
+            <h2 className="text-base font-bold text-[var(--text-primary)]">{content.title}</h2>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">{content.subtitle}</p>
+          </div>
+          <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] ml-4 mt-0.5">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Questions */}
+        <div className="p-6 space-y-5">
+          {content.questions.map((q, qi) => {
+            const chosen = answers[qi];
+            const isCorrect = q.correct === chosen;
+            return (
+              <div key={qi}>
+                <p className="text-sm font-medium text-[var(--text-primary)] mb-2">
+                  {qi + 1}. {q.q}
+                </p>
+                <div className="space-y-1.5">
+                  {q.options.map((opt, oi) => {
+                    let cls =
+                      "w-full text-left px-3 py-2 rounded-lg border text-xs transition-all ";
+                    if (!submitted) {
+                      cls +=
+                        chosen === oi
+                          ? "border-[var(--accent-blue)] bg-[var(--accent-blue)]/10 text-[var(--text-primary)]"
+                          : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--accent-blue)]/50";
+                    } else {
+                      if (oi === q.correct) {
+                        cls += "border-[var(--accent-positive)] bg-[var(--accent-positive)]/10 text-[var(--accent-positive)]";
+                      } else if (chosen === oi && oi !== q.correct) {
+                        cls += "border-[var(--accent-negative)] bg-[var(--accent-negative)]/10 text-[var(--accent-negative)]";
+                      } else {
+                        cls += "border-[var(--border-subtle)] text-[var(--text-tertiary)] opacity-50";
+                      }
+                    }
+                    return (
+                      <button
+                        key={oi}
+                        className={cls}
+                        disabled={submitted}
+                        onClick={() => !submitted && setAnswers((a) => ({ ...a, [qi]: oi }))}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-6">
+          {submitted ? (
+            allCorrect ? (
+              <div className="flex items-center gap-2 text-[var(--accent-positive)] text-sm font-semibold">
+                <span>✓</span> All correct — enabling strategy…
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--accent-negative)] text-sm">Some answers were incorrect. Review and retry.</span>
+                <button
+                  onClick={handleRetry}
+                  className="px-4 py-1.5 rounded-lg bg-[var(--bg-hover)] text-[var(--text-primary)] text-xs font-medium hover:bg-[var(--border-subtle)] transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            )
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={answered < totalQ}
+              className={cn(
+                "w-full py-2.5 rounded-lg text-sm font-semibold transition-all",
+                answered >= totalQ
+                  ? "bg-[var(--accent-blue)] text-white hover:opacity-90"
+                  : "bg-[var(--bg-hover)] text-[var(--text-tertiary)] cursor-not-allowed"
+              )}
+            >
+              Submit Answers ({answered}/{totalQ})
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1135,11 +1345,13 @@ const SOURCE_BADGE: Record<string, string> = {
 };
 
 function StrategyCard({
-  def, byPreset, onApply,
+  def, byPreset, onApply, onToggle, quizPassed,
 }: {
   def: StrategyDefinition;
   byPreset: Record<string, { wins: number; losses: number; total_pnl: number; trades: number }>;
   onApply: (def: StrategyDefinition) => void;
+  onToggle: (def: StrategyDefinition) => void;
+  quizPassed: boolean;
 }) {
   const tier = TIER_BADGE[def.tier_required] ?? TIER_BADGE.free;
   const stats = byPreset[def.strategy_key];
@@ -1156,6 +1368,24 @@ function StrategyCard({
           : "opacity-60"
       )}
     >
+        {/* Kill switch toggle */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggle(def); }}
+          title={def.is_active ? "Pause strategy" : "Enable strategy"}
+          className={cn(
+            "absolute top-3 right-3 w-9 h-5 rounded-full transition-all flex items-center",
+            def.is_active
+              ? "bg-[var(--accent-positive)]/20 border border-[var(--accent-positive)]/40"
+              : "bg-[var(--bg-hover)] border border-[var(--border-subtle)]"
+          )}
+        >
+          <span
+            className={cn(
+              "w-3.5 h-3.5 rounded-full transition-all mx-0.5",
+              def.is_active ? "bg-[var(--accent-positive)] translate-x-4" : "bg-[var(--text-tertiary)] translate-x-0"
+            )}
+          />
+        </button>
       <div
         className="h-1 w-full flex-shrink-0"
         style={{ background: `linear-gradient(90deg, ${def.category_accent_from}, ${def.category_accent_to})` }}
@@ -1239,7 +1469,15 @@ const CATEGORY_ORDER = [
   "Market Structure", "On-Chain", "Derivatives", "Whale Activity",
 ];
 
-function StrategyCardGrid({ onApply }: { onApply: (def: StrategyDefinition) => void }) {
+function StrategyCardGrid({
+  onApply,
+  onToggle,
+  quizPassedKeys,
+}: {
+  onApply: (def: StrategyDefinition) => void;
+  onToggle: (def: StrategyDefinition) => void;
+  quizPassedKeys: Set<string>;
+}) {
   const { data: defsData, isLoading } = useQuery({
     queryKey: ["crypto-strategy-definitions"],
     queryFn: getCryptoStrategyDefinitions,
@@ -1292,7 +1530,14 @@ function StrategyCardGrid({ onApply }: { onApply: (def: StrategyDefinition) => v
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {defs.map((d) => (
-              <StrategyCard key={d.strategy_key} def={d} byPreset={byPreset} onApply={onApply} />
+              <StrategyCard
+                  key={d.strategy_key}
+                  def={d}
+                  byPreset={byPreset}
+                  onApply={onApply}
+                  onToggle={onToggle}
+                  quizPassed={quizPassedKeys.has(d.strategy_key)}
+                />
             ))}
           </div>
         </div>
@@ -1314,6 +1559,7 @@ export default function CryptoLab() {
   const [tab, setTab] = useState<Tab>("top");
   const [tradingCoin, setTradingCoin] = useState<CoinGeckoData | null>(null);
   const [applyStrategy, setApplyStrategy] = useState<StrategyDefinition | null>(null);
+  const [quizStrategy, setQuizStrategy] = useState<StrategyDefinition | null>(null);
   const [watchlist, setWatchlist] = useState<Set<string>>(loadWatchlist);
   const [lastRefreshed, setLastRefreshed] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1341,6 +1587,35 @@ export default function CryptoLab() {
     queryFn: getAccount,
     staleTime: 30_000,
   });
+
+  const { data: quizStatusData, refetch: refetchQuiz } = useQuery({
+    queryKey: ["crypto-quiz-status"],
+    queryFn: getCryptoQuizStatus,
+    staleTime: Infinity,
+  });
+  const quizPassedKeys = useMemo(
+    () => new Set(quizStatusData?.completed ?? []),
+    [quizStatusData]
+  );
+
+  const quizMutation = useMutation({
+    mutationFn: completeCryptoQuiz,
+    onSuccess: () => refetchQuiz(),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: toggleCryptoStrategy,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crypto-definitions"] }),
+  });
+
+  const handleToggle = useCallback((def: StrategyDefinition) => {
+    if (!def.is_active && def.comprehension_quiz_required && !quizPassedKeys.has(def.strategy_key)) {
+      // Show quiz first
+      setQuizStrategy(def);
+    } else {
+      toggleMutation.mutate(def.strategy_key);
+    }
+  }, [quizPassedKeys, toggleMutation]);
 
   const coins = market?.coins ?? [];
   const trendingCoins = trending?.coins ?? [];
@@ -1451,7 +1726,11 @@ export default function CryptoLab() {
       <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         {tab === "library" ? (
           <div className="p-5">
-            <StrategyCardGrid onApply={setApplyStrategy} />
+            <StrategyCardGrid
+              onApply={setApplyStrategy}
+              onToggle={handleToggle}
+              quizPassedKeys={quizPassedKeys}
+            />
           </div>
         ) : tab === "strategies" ? (
           <div className="p-4">
@@ -1496,6 +1775,23 @@ export default function CryptoLab() {
           def={applyStrategy}
           coins={coins}
           onClose={() => setApplyStrategy(null)}
+        />
+      )}
+
+      {/* Quiz modal */}
+      {quizStrategy && (
+        <QuizModal
+          strategyKey={quizStrategy.strategy_key}
+          strategyName={quizStrategy.name}
+          onPass={() => {
+            quizMutation.mutate(quizStrategy.strategy_key, {
+              onSuccess: () => {
+                toggleMutation.mutate(quizStrategy.strategy_key);
+                setQuizStrategy(null);
+              },
+            });
+          }}
+          onClose={() => setQuizStrategy(null)}
         />
       )}
     </div>

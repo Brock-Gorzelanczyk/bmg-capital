@@ -362,6 +362,12 @@ def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict], symbol: st
                 if spec.get("oi_falling", True) and not oi_falling:
                     return False
 
+            elif ftype == "WhaleAccumulation":
+                from app.services.whale import get_large_holder_signal
+                sig = get_large_holder_signal(symbol)
+                if not sig.get("ok") or sig.get("signal") != spec.get("signal", "accumulating"):
+                    return False
+
         except Exception as e:
             logger.debug(f"Filter error ({ftype}): {e}")
             return False
@@ -766,6 +772,8 @@ def _prefetch_onchain() -> None:
     prefetch_derivatives([
         "BTC/USDT", "ETH/USDT", "SOL/USDT",
     ])
+    from app.services.whale import prefetch_whale
+    prefetch_whale(["BTC/USDT", "ETH/USDT"])
 
 
 async def run_crypto_automation(user_id: int) -> Dict[str, Any]:

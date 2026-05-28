@@ -170,3 +170,12 @@ export async function getCryptoOHLCV(symbol: string, days = 90): Promise<{ symbo
   const res = await api.get(`/crypto/ohlcv/${symbol}`, { params: { days } });
   return res.data;
 }
+
+export const getCryptoQuizStatus = () =>
+  api.get("/crypto-strategy/quiz-status").then((r) => r.data as { completed: string[] });
+
+export const completeCryptoQuiz = (strategyKey: string) =>
+  api.post(`/crypto-strategy/quiz-complete/${strategyKey}`).then((r) => r.data as { ok: boolean; strategy_key: string });
+
+export const toggleCryptoStrategy = (strategyKey: string) =>
+  api.post(`/crypto-strategy/toggle/${strategyKey}`).then((r) => r.data as { ok: boolean; is_active: boolean; strategy_key: string });

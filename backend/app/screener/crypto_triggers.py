@@ -55,6 +55,8 @@ CRYPTO_CONVICTION: dict[str, float] = {
     "funding_rate_contrarian":  1.2,   # mean reversion from extreme crowding
     "oi_divergence":            1.1,   # capitulation bottom
     "basis_carry":              0.8,   # carry yield — smaller size, delta-neutral intent
+    # Phase 4 whale activity
+    "whale_accumulation":           1.3,
 }
 
 # Per-preset R-multiple override (target = entry + atr * 1.5 * R)
@@ -79,6 +81,8 @@ CRYPTO_R_MULTIPLES: dict[str, float] = {
     "funding_rate_contrarian":  2.5,
     "oi_divergence":            2.5,
     "basis_carry":              1.5,   # yield trade — exit when carry dries up
+    # Phase 4 whale activity
+    "whale_accumulation":           4.0,
 }
 
 
@@ -424,6 +428,22 @@ def _basis_carry_confirm(symbol: str, df: pd.DataFrame) -> bool:
         return False
 
 
+# ── Phase 4 whale activity triggers (1) ───────────────────────────────────────
+
+def _whale_confirm(symbol: str, df: pd.DataFrame) -> bool:
+    """Large wallet count rising 7d (accumulating) AND price above 50-day MA."""
+    from app.services.whale import get_large_holder_signal
+    try:
+        sig = get_large_holder_signal(symbol)
+        if not sig.get("ok") or sig.get("signal") != "accumulating":
+            return False
+        if len(df) >= 51:
+            return float(df["close"].iloc[-1]) > float(df["close"].rolling(50).mean().iloc[-1])
+        return True
+    except Exception:
+        return False
+
+
 # ── Trigger map ────────────────────────────────────────────────────────────────
 
 TriggerFn = Callable[[str, pd.DataFrame], bool]
@@ -460,4 +480,6 @@ CRYPTO_TRIGGER_MAP: dict[str, TriggerFn] = {
     "funding_rate_contrarian":  _funding_contrarian_confirm,
     "oi_divergence":            _oi_divergence_confirm,
     "basis_carry":              _basis_carry_confirm,
+    # Phase 4 whale activity
+    "whale_accumulation":           _whale_confirm,
 }

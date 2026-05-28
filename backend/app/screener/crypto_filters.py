@@ -110,6 +110,12 @@ CRYPTO_PRESET_SCREENS: dict[str, list[dict[str, Any]]] = {
         # Funding persistently positive for 3+ 8h bars AND annualized yield > 10%
         {"type": "FundingRate", "condition": "persistently_positive", "threshold": 0.0003, "min_bars": 3},
     ],
+
+    # ── Phase 4 whale activity (1) ────────────────────────────────────────────
+    "whale_accumulation": [
+        # Large wallet count (addresses > $1M) rising 7d = accumulation signal
+        {"type": "WhaleAccumulation", "signal": "accumulating"},
+    ],
 }
 
 # Strategies that require comparing all coins at once (handled separately in the runner)
@@ -136,6 +142,7 @@ CRYPTO_RESTRICTED_UNIVERSES: dict[str, list[str]] = {
     "funding_rate_contrarian":  ["BTC/USDT", "ETH/USDT", "SOL/USDT"],
     "oi_divergence":            ["BTC/USDT", "ETH/USDT"],
     "basis_carry":              ["BTC/USDT", "ETH/USDT"],
+    "whale_accumulation":           ["BTC/USDT", "ETH/USDT"],
 }
 
 CRYPTO_PRESET_LABELS: dict[str, str] = {
@@ -170,6 +177,8 @@ CRYPTO_PRESET_LABELS: dict[str, str] = {
     "funding_rate_contrarian":   "Funding Rate Contrarian",
     "oi_divergence":             "Open Interest Divergence",
     "basis_carry":               "Cash & Carry Basis",
+    # Phase 4 whale activity (1)
+    "whale_accumulation":            "Whale Accumulation",
 }
 
 # Full universe — top coins + narrative/DeFi/AI tokens for basket strategies

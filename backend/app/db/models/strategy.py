@@ -75,3 +75,14 @@ class DailyEquitySnapshot(Base):
     exits_today: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     asset_class: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="equity")
+
+
+class StrategyQuizCompletion(Base):
+    __tablename__ = "strategy_quiz_completions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    strategy_key: Mapped[str] = mapped_column(String, nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, server_default=func.now()
+    )
