@@ -8,6 +8,14 @@ interface Props {
   defaultExpanded?: boolean;
 }
 
+interface MarketData {
+  spy?: number | null;
+  qqq?: number | null;
+  iwm?: number | null;
+  vix?: number | null;
+  breadth?: string | null;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtPct(n: number | null, signed = true): string {
@@ -46,7 +54,7 @@ function formatRecapDate(dateStr: string | undefined | null): string {
 export default function DailyRecapCard({ recap, defaultExpanded = false }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
-  const mkt: { spy?: number | null; qqq?: number | null; iwm?: number | null; vix?: number | null; breadth?: string | null } = recap.market_summary ?? {};
+  const mkt: MarketData = recap.market_summary ?? {};
   const strat = recap.strategy_summary ?? { day_pnl: 0, day_pnl_pct: 0, new_entries: 0, exits: 0, open_positions: 0 };
   const top_setups = recap.top_setups ?? [];
   const narrative = recap.narrative ?? null;
@@ -106,11 +114,13 @@ export default function DailyRecapCard({ recap, defaultExpanded = false }: Props
           <div>
             <div className="text-[10px] font-semibold text-[#475569] uppercase tracking-widest mb-2">Market</div>
             <div className="flex flex-wrap gap-2">
-              {([
-                { label: "SPY", val: mkt.spy },
-                { label: "QQQ", val: mkt.qqq },
-                { label: "IWM", val: mkt.iwm },
-              ] as { label: string; val: number | null }[]).map(({ label, val }) => (
+              {(
+                [
+                  { label: "SPY", val: mkt.spy },
+                  { label: "QQQ", val: mkt.qqq },
+                  { label: "IWM", val: mkt.iwm },
+                ] as { label: string; val: number | null }[]
+              ).map(({ label, val }) => (
                 <div key={label} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-semibold", pctBadgeCls(val))}>
                   <span className="text-[#94A3B8] font-medium">{label}</span>
                   <span>{fmtPct(val)}</span>
@@ -188,3 +198,4 @@ export default function DailyRecapCard({ recap, defaultExpanded = false }: Props
     </div>
   );
 }
+
