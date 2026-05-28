@@ -1,56 +1,91 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 222 47% 2%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 6%;
-    --card-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
-    --radius: 0.75rem;
-    --font-sans: 'Inter', system-ui, sans-serif;
+    /* ── shadcn compatibility (HSL) ────────────────────────────── */
+    --background:   0 0% 9.4%;
+    --foreground:   0 0% 98%;
+    --card:         0 0% 15.3%;
+    --card-foreground: 0 0% 98%;
+    --primary:      77 94% 67%;
+    --primary-foreground: 0 0% 9%;
+    --secondary:    0 0% 24.7%;
+    --secondary-foreground: 0 0% 98%;
+    --muted:        0 0% 24.7%;
+    --muted-foreground: 0 0% 63.1%;
+    --accent:       0 0% 24.7%;
+    --accent-foreground: 0 0% 98%;
+    --destructive:  355 100% 72%;
+    --destructive-foreground: 0 0% 9%;
+    --border:       0 0% 24.7%;
+    --input:        0 0% 24.7%;
+    --ring:         77 94% 67%;
+    --radius:       1rem;
+
+    /* ── BMG design tokens ──────────────────────────────────────── */
+    --bg-base:          #18181B;
+    --bg-elevated:      #27272A;
+    --bg-elevated-2:    #3F3F46;
+    --border-subtle:    rgba(255,255,255,0.06);
+    --border-emphasis:  rgba(255,255,255,0.12);
+    --text-primary:     #FAFAFA;
+    --text-secondary:   #A1A1AA;
+    --text-tertiary:    #71717A;
+    --accent-positive:      #BEF264;
+    --accent-negative:      #FB7185;
+    --accent-positive-bg:   rgba(190,242,100,0.10);
+    --accent-negative-bg:   rgba(251,113,133,0.10);
+
+    /* ── Fonts ──────────────────────────────────────────────────── */
+    --font-sans:    'Geist', system-ui, sans-serif;
+    --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+    --font-mono:    'Geist Mono', ui-monospace, monospace;
   }
 }
 
 @layer base {
   * { @apply border-border; }
+
   body {
-    @apply bg-[#020617] text-[#F8FAFC];
+    background-color: var(--bg-base);
+    color: var(--text-primary);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  /* Thin dark scrollbar */
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: #020617; }
-  ::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  /* Thin scrollbar */
+  ::-webkit-scrollbar         { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track   { background: var(--bg-base); }
+  ::-webkit-scrollbar-thumb   { background: var(--bg-elevated-2); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); }
 
   /* Focus ring */
   :focus-visible {
-    outline: 2px solid #3B82F6;
+    outline: 1.5px solid var(--accent-positive);
     outline-offset: 2px;
   }
 }
 
-/* Reduced motion */
+/* ── Utility: card gradient overlay ──────────────────────────────────────── */
+/* Apply .card-glow to any positioned element to get the "lit from above" effect */
+.card-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Utility: display font ──────────────────────────────────────────────── */
+.font-display { font-family: var(--font-display); }
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -61,7 +96,7 @@
 
 /* ── Lesson body typography ─────────────────────────────────────────────── */
 .lesson-body {
-  color: #d4d4d8; /* zinc-300 */
+  color: #d4d4d8;
   line-height: 1.75;
   font-size: 0.9375rem;
 }
@@ -70,7 +105,6 @@
   font-size: 1.125rem;
   font-weight: 700;
   margin: 1.75rem 0 0.75rem;
-  padding-top: 0.25rem;
 }
 .lesson-body h3 {
   color: #e4e4e7;
@@ -78,18 +112,18 @@
   font-weight: 600;
   margin: 1.25rem 0 0.5rem;
 }
-.lesson-body p { margin: 0.75rem 0; }
+.lesson-body p  { margin: 0.75rem 0; }
 .lesson-body ul, .lesson-body ol { padding-left: 1.5rem; margin: 0.75rem 0; }
 .lesson-body li { margin: 0.35rem 0; }
 .lesson-body strong { color: #fff; font-weight: 600; }
-.lesson-body em { color: #a1a1aa; font-style: italic; }
+.lesson-body em     { color: #a1a1aa; font-style: italic; }
 .lesson-body code {
-  background: #18181b;
-  color: #a3e635;
+  background: var(--bg-elevated);
+  color: var(--accent-positive);
   padding: 0.1em 0.4em;
   border-radius: 4px;
   font-size: 0.85em;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
 }
 
 .lesson-callout {
@@ -100,12 +134,12 @@
   border-style: solid;
   font-size: 0.875rem;
 }
-.lesson-callout.info { background: rgba(59,130,246,0.07); border-color: rgba(59,130,246,0.2); color: #93c5fd; }
-.lesson-callout.info strong { color: #bfdbfe; }
-.lesson-callout.warning { background: rgba(245,158,11,0.07); border-color: rgba(245,158,11,0.2); color: #fcd34d; }
+.lesson-callout.info    { background: rgba(190,242,100,0.07); border-color: rgba(190,242,100,0.20); color: var(--accent-positive); }
+.lesson-callout.info strong { color: #e4e4e7; }
+.lesson-callout.warning { background: rgba(245,158,11,0.07); border-color: rgba(245,158,11,0.20); color: #fcd34d; }
 .lesson-callout.warning strong { color: #fef3c7; }
-.lesson-callout.success { background: rgba(16,185,129,0.07); border-color: rgba(16,185,129,0.2); color: #6ee7b7; }
-.lesson-callout.success strong { color: #d1fae5; }
+.lesson-callout.success { background: var(--accent-positive-bg); border-color: rgba(190,242,100,0.25); color: var(--accent-positive); }
+.lesson-callout.success strong { color: #fff; }
 .lesson-callout ul, .lesson-callout ol { padding-left: 1.25rem; margin: 0.5rem 0; }
 .lesson-callout li { margin: 0.25rem 0; }
 
@@ -117,17 +151,17 @@
 }
 .lesson-table th {
   text-align: left;
-  color: #71717a;
+  color: var(--text-tertiary);
   font-weight: 600;
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #27272a;
+  border-bottom: 1px solid var(--bg-elevated-2);
 }
 .lesson-table td {
   padding: 0.5rem 0.75rem;
   color: #d4d4d8;
-  border-bottom: 1px solid #18181b;
+  border-bottom: 1px solid var(--bg-elevated);
 }
 .lesson-table tr:last-child td { border-bottom: none; }
