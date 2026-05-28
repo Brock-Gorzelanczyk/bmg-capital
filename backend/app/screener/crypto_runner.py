@@ -25,14 +25,18 @@ import ta
 from app.db.models.strategy import DailyEquitySnapshot, DailyLog, StrategyTrade
 from app.db.session import SessionLocal
 from app.screener.crypto_filters import (
+    CRYPTO_CROSS_SECTIONAL_KEYS,
     CRYPTO_PRESET_LABELS,
     CRYPTO_PRESET_SCREENS,
+    CRYPTO_RESTRICTED_UNIVERSES,
     CRYPTO_UNIVERSE,
+    NARRATIVE_UNIVERSE,
 )
 from app.screener.crypto_triggers import (
     CRYPTO_CANDIDATE_MAX_DAYS,
     CRYPTO_CONVICTION,
     CRYPTO_R_MULTIPLE,
+    CRYPTO_R_MULTIPLES,
     CRYPTO_RISK_DOLLARS,
     CRYPTO_TRIGGER_MAP,
 )
@@ -54,7 +58,7 @@ def _now() -> datetime:
 # OHLCV fetch via CCXT (Binance public)
 # ---------------------------------------------------------------------------
 
-def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1d", limit: int = 250) -> Dict[str, pd.DataFrame]:
+def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1d", limit: int = 500) -> Dict[str, pd.DataFrame]:
     """
     Fetch daily OHLCV bars for each symbol from Binance via CCXT.
     Returns {symbol: DataFrame(open, high, low, close, volume)}.
@@ -133,6 +137,7 @@ def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict]) -> bool:
         val   = spec.get("value", 0)
 
         try:
+            # ── Original filter types ─────────────────────────────────────────
             if ftype == "RSI":
                 if len(df) < 16:
                     return False
@@ -177,7 +182,7 @@ def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict]) -> bool:
             elif ftype == "VolumeSurge":
                 if len(df) < 21:
                     return False
-                vol_avg = float(df["volume"].iloc[-21:-1].mean())
+                vol_avg  = float(df["volume"].iloc[-21:-1].mean())
                 last_vol = float(df["volume"].iloc[-1])
                 mult = last_vol / vol_avg if vol_avg > 0 else 0.0
                 if op == "gte" and not mult >= val: return False
@@ -189,6 +194,75 @@ def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict]) -> bool:
                     return False
                 high_n = float(df["close"].iloc[-(period + 1):-1].max())
                 if not float(df["close"].iloc[-1]) > high_n:
+                    return False
+
+            # ── Phase 1 filter types ──────────────────────────────────────────
+
+            elif ftype == "ZScore":
+                period = int(spec.get("period", 20))
+                if len(df) < period + 2:
+                    return False
+                window_data = df["close"].iloc[-period:]
+                mean = float(window_data.mean())
+                std  = float(window_data.std())
+                if std <= 0:
+                    return False
+                zscore = (float(df["close"].iloc[-1]) - mean) / std
+                if op == "lt"  and not zscore < val:  return False
+                if op == "gt"  and not zscore > val:  return False
+                if op == "lte" and not zscore <= val: return False
+                if op == "gte" and not zscore >= val: return False
+
+            elif ftype == "TSMOM":
+                lookback = int(spec.get("lookback_days", 365))
+                skip     = int(spec.get("skip_days", 30))
+                needed   = lookback + skip + 5
+                if len(df) < needed:
+                    return False
+                ret = float(df["close"].iloc[-skip]) / float(df["close"].iloc[-(lookback + skip)]) - 1
+                if op == "gt"  and not ret > val:  return False
+                if op == "lt"  and not ret < val:  return False
+                if op == "gte" and not ret >= val: return False
+
+            elif ftype == "PiCycle":
+                if len(df) < 360:
+                    return False
+                ma111 = df["close"].rolling(111).mean().iloc[-1]
+                ma350 = df["close"].rolling(350).mean().iloc[-1]
+                if pd.isna(ma111) or pd.isna(ma350) or float(ma350) <= 0:
+                    return False
+                ratio = float(ma111) / (2.0 * float(ma350))
+                if op == "lt"  and not ratio < val:  return False
+                if op == "gt"  and not ratio > val:  return False
+                if op == "lte" and not ratio <= val: return False
+                if op == "gte" and not ratio >= val: return False
+
+            elif ftype == "PriceNearMA":
+                period        = int(spec.get("period", 200))
+                max_pct_above = float(spec.get("max_pct_above", 0.10))
+                max_pct_below = float(spec.get("max_pct_below", 0.20))
+                if len(df) < period:
+                    return False
+                ma = df["close"].rolling(period).mean().iloc[-1]
+                if pd.isna(ma) or float(ma) <= 0:
+                    return False
+                pct_diff = (float(df["close"].iloc[-1]) - float(ma)) / float(ma)
+                if pct_diff > max_pct_above or pct_diff < -max_pct_below:
+                    return False
+
+            elif ftype == "HalvingPhase":
+                from datetime import date as _date
+                phases       = spec.get("phases", [])
+                last_halving = _date(2024, 4, 20)
+                next_halving = _date(2028, 4, 1)
+                today        = _date.today()
+                days_since   = (today - last_halving).days
+                days_to      = (next_halving - today).days
+                active = (
+                    ("pre_halving"      in phases and days_to <= 180) or
+                    ("post_halving_bull" in phases and 0 <= days_since <= 540)
+                )
+                if not active:
                     return False
 
         except Exception as e:
@@ -203,8 +277,16 @@ def _collect_crypto_screen_results(
 ) -> Dict[str, Set[str]]:
     results: Dict[str, Set[str]] = {}
     for preset_key, filter_specs in CRYPTO_PRESET_SCREENS.items():
+        # Cross-sectional strategies are handled separately
+        if preset_key in CRYPTO_CROSS_SECTIONAL_KEYS:
+            continue
+        # Use restricted universe if defined, otherwise screen all bars
+        universe = CRYPTO_RESTRICTED_UNIVERSES.get(preset_key, list(bars.keys()))
         hits: Set[str] = set()
-        for sym, df in bars.items():
+        for sym in universe:
+            df = bars.get(sym)
+            if df is None or df.empty:
+                continue
             try:
                 if _apply_crypto_filters(df, filter_specs):
                     hits.add(sym)
@@ -212,6 +294,81 @@ def _collect_crypto_screen_results(
                 logger.debug(f"Screen error {preset_key}/{sym}: {e}")
         results[preset_key] = hits
         logger.debug(f"Crypto screen {preset_key}: {len(hits)} hits")
+    return results
+
+
+def _collect_cross_sectional_results(
+    bars: Dict[str, pd.DataFrame],
+    btc_sym: str = "BTC/USDT",
+) -> Dict[str, Set[str]]:
+    """
+    Compute signals for strategies requiring cross-coin comparisons.
+    Returns {preset_key: {symbols}} for candidate creation.
+    """
+    results: Dict[str, Set[str]] = {}
+
+    # ── Cross-Sectional Momentum (top 25% by 90-day return) ──────────────────
+    returns_90d: List[tuple] = []
+    for sym, df in bars.items():
+        if len(df) >= 91:
+            try:
+                ret = float(df["close"].iloc[-1]) / float(df["close"].iloc[-91]) - 1
+                returns_90d.append((sym, ret))
+            except (IndexError, ZeroDivisionError):
+                pass
+    if len(returns_90d) >= 4:
+        returns_90d.sort(key=lambda x: x[1], reverse=True)
+        top_n = max(1, len(returns_90d) // 4)
+        results["cross_sectional_momentum"] = {sym for sym, _ in returns_90d[:top_n]}
+        logger.debug(f"cross_sectional_momentum: top {top_n} of {len(returns_90d)} coins")
+
+    # ── Altseason Index (≥75% of alts outperforming BTC over 90 days) ────────
+    btc_df = bars.get(btc_sym)
+    if btc_df is not None and len(btc_df) >= 91:
+        try:
+            btc_ret = float(btc_df["close"].iloc[-1]) / float(btc_df["close"].iloc[-91]) - 1
+            alts = {sym: df for sym, df in bars.items() if sym != btc_sym}
+            valid_alts = {sym: df for sym, df in alts.items() if len(df) >= 91}
+            if valid_alts:
+                outperformers = sum(
+                    1 for sym, df in valid_alts.items()
+                    if float(df["close"].iloc[-1]) / float(df["close"].iloc[-91]) - 1 > btc_ret
+                )
+                if outperformers / len(valid_alts) >= 0.75:
+                    results["altseason_index"] = set(valid_alts.keys())
+                    logger.debug(f"altseason_index: ACTIVE ({outperformers}/{len(valid_alts)} outperforming BTC)")
+        except Exception as e:
+            logger.debug(f"altseason_index error: {e}")
+
+    # ── ETH/BTC Ratio above its 50-day MA ────────────────────────────────────
+    eth_df = bars.get("ETH/USDT")
+    if eth_df is not None and btc_df is not None and len(eth_df) >= 51 and len(btc_df) >= 51:
+        try:
+            eth_close = eth_df["close"]
+            btc_close = btc_df["close"].reindex(eth_df.index, method="nearest")
+            ratio = eth_close / btc_close
+            ratio_ma50 = ratio.rolling(50).mean()
+            if float(ratio.iloc[-1]) > float(ratio_ma50.iloc[-1]):
+                results["eth_btc_ratio"] = {"ETH/USDT"}
+                logger.debug("eth_btc_ratio: ACTIVE — ratio above 50MA")
+        except Exception as e:
+            logger.debug(f"eth_btc_ratio error: {e}")
+
+    # ── Narrative Basket (top 3 by 30-day return in narrative universe) ───────
+    try:
+        returns_30d: List[tuple] = []
+        for sym in NARRATIVE_UNIVERSE:
+            df = bars.get(sym)
+            if df is not None and len(df) >= 31:
+                ret = float(df["close"].iloc[-1]) / float(df["close"].iloc[-31]) - 1
+                returns_30d.append((sym, ret))
+        if len(returns_30d) >= 3:
+            returns_30d.sort(key=lambda x: x[1], reverse=True)
+            results["narrative_basket"] = {sym for sym, _ in returns_30d[:3]}
+            logger.debug(f"narrative_basket: top 3 → {[s for s, _ in returns_30d[:3]]}")
+    except Exception as e:
+        logger.debug(f"narrative_basket error: {e}")
+
     return results
 
 
@@ -353,8 +510,9 @@ def _check_entry_triggers(
             atr = price * 0.03
 
         conviction = CRYPTO_CONVICTION.get(cand.preset_key, 1.0)
+        r_mult     = CRYPTO_R_MULTIPLES.get(cand.preset_key, CRYPTO_R_MULTIPLE)
         stop = price - atr * 1.5
-        target = price + atr * 1.5 * CRYPTO_R_MULTIPLE
+        target = price + atr * 1.5 * r_mult
         risk_per_share = price - stop
         if risk_per_share <= 0:
             continue
@@ -518,10 +676,13 @@ async def run_crypto_automation(user_id: int) -> Dict[str, Any]:
     logger.info(f"[crypto] Regime: {regime}, coins with bars: {len(bars)}")
 
     screen_results = _collect_crypto_screen_results(regime, bars)
+    cross_results  = _collect_cross_sectional_results(bars)
+    # Merge: per-coin screens + cross-sectional screens
+    all_results: Dict[str, Set[str]] = {**screen_results, **cross_results}
 
     db = SessionLocal()
     try:
-        new_cands = _add_crypto_candidates(db, screen_results, today, user_id)
+        new_cands = _add_crypto_candidates(db, all_results, today, user_id)
         db.commit()
 
         expired = _expire_stale_candidates(db, today, user_id)
