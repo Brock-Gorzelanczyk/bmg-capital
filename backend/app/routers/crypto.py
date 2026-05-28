@@ -78,3 +78,42 @@ async def get_coin_quote(symbol: str, _user=Depends(get_current_user)):
     if not result:
         return {"symbol": sym, "last": None, "error": "price unavailable"}
     return result
+
+
+@router.get("/ohlcv/{symbol}")
+async def get_ohlcv(symbol: str, days: int = 90, _user=Depends(get_current_user)):
+    """Daily OHLCV bars for price charting. symbol: BTC-USD format."""
+    sym_upper = symbol.upper()
+    ccxt_sym = sym_upper.replace("-USD", "/USDT")
+
+    def _fetch() -> list:
+        try:
+            import ccxt
+            exchange = ccxt.binance({"enableRateLimit": True})
+            ohlcv = exchange.fetch_ohlcv(ccxt_sym, timeframe="1d", limit=days)
+            return [
+                {"t": int(r[0]), "o": float(r[1]), "h": float(r[2]),
+                 "l": float(r[3]), "c": float(r[4]), "v": float(r[5])}
+                for r in ohlcv if r[4] is not None
+            ]
+        except Exception as exc:
+            logger.warning(f"CCXT OHLCV failed for {ccxt_sym}: {exc}")
+            try:
+                import yfinance as yf
+                df = yf.download(sym_upper, period=f"{days}d", interval="1d",
+                                 progress=False, auto_adjust=True)
+                if df.empty:
+                    return []
+                df.columns = [c.lower() for c in df.columns]
+                return [
+                    {"t": int(ts.timestamp() * 1000), "o": float(row["open"]),
+                     "h": float(row["high"]), "l": float(row["low"]),
+                     "c": float(row["close"]), "v": float(row["volume"])}
+                    for ts, row in df.iterrows()
+                ]
+            except Exception as exc2:
+                logger.warning(f"yfinance OHLCV fallback failed for {sym_upper}: {exc2}")
+                return []
+
+    bars = await asyncio.to_thread(_fetch)
+    return {"symbol": symbol, "bars": bars}

@@ -12,6 +12,10 @@ export interface CoinGeckoData {
   pct_1h: number | null;
   pct_24h: number | null;
   pct_7d: number | null;
+  high_24h: number | null;
+  low_24h: number | null;
+  ath: number | null;
+  ath_change_percentage: number | null;
   sparkline: number[];      // ~168 hourly prices for 7d
   sparkline_url?: string;   // image URL (trending only)
 }
@@ -152,3 +156,17 @@ export interface StrategyDefinition {
 
 export const getCryptoStrategyDefinitions = () =>
   api.get("/crypto-strategy/definitions").then((r) => r.data as { definitions: StrategyDefinition[] });
+
+export interface OHLCVBar {
+  t: number;   // unix ms
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+export async function getCryptoOHLCV(symbol: string, days = 90): Promise<{ symbol: string; bars: OHLCVBar[] }> {
+  const res = await api.get(`/crypto/ohlcv/${symbol}`, { params: { days } });
+  return res.data;
+}

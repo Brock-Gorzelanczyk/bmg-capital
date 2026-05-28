@@ -83,6 +83,10 @@ def get_top_coins(limit: int = 100) -> list[dict]:
             "pct_1h":          c.get("price_change_percentage_1h_in_currency"),
             "pct_24h":         c.get("price_change_percentage_24h"),
             "pct_7d":          c.get("price_change_percentage_7d_in_currency"),
+            "high_24h":    c.get("high_24h"),
+            "low_24h":     c.get("low_24h"),
+            "ath":         c.get("ath"),
+            "ath_change_percentage": c.get("ath_change_percentage"),
             "sparkline":       sparkline[-168:] if sparkline else [],
         })
 
