@@ -1,6 +1,8 @@
 import { Component, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -47,7 +49,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             </pre>
             <button
               onClick={() => {
-                ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2"].forEach(k => {
+                ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3"].forEach(k => {
                   try { localStorage.removeItem(k); } catch {}
                 });
                 window.location.reload();
@@ -64,13 +66,26 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
-// Wipe all old persisted caches so stale data can never crash the app
+// Clean up old cache keys from previous versions
 ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
 });
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      gcTime: 1000 * 60 * 60 * 24, // keep cache in memory 24h so persister can save it
+    },
+  },
+});
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: "BMG_QUERY_CACHE_v3",
+  throttleTime: 1000,
 });
 
 function AppInner() {
@@ -109,7 +124,10 @@ function AppInner() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 }}
+      >
         <BrowserRouter>
           <ErrorBoundary>
             <Routes>
@@ -127,7 +145,7 @@ export default function App() {
             <Toaster position="bottom-right" theme="dark" richColors />
           </ErrorBoundary>
         </BrowserRouter>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </ErrorBoundary>
   );
 }

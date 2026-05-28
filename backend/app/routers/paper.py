@@ -197,7 +197,7 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
 
         d_pos_day_pnl = (d_price - d_prev_close) * d_qty
         pos_day_pnl = _money(d_pos_day_pnl)
-        pos_day_pnl_pct = _money(d_pos_day_pnl / d_prev_close * _d(100)) if prev_close else 0.0
+        pos_day_pnl_pct = _money((d_price - d_prev_close) / d_prev_close * _d(100)) if prev_close else 0.0
 
         total_positions_value += market_value
         day_pnl_total += pos_day_pnl
