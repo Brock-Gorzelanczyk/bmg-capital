@@ -13,6 +13,7 @@ import SectorPill from "@/components/ui/SectorPill";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { generateMorningBrief } from "@/lib/demoBrief";
 import DailyRecapCard from "@/components/recap/DailyRecapCard";
+import { Card, CardLabel } from "@/components/ui/Card";
 
 const INDEX_NAMES: Record<string, string> = {
   SPY: "S&P 500", QQQ: "NASDAQ 100", DIA: "Dow Jones", IWM: "Russell 2000",
@@ -57,7 +58,6 @@ function MorningBrief({
     );
   }, [indices, sectors, news]);
 
-  // Rerun typewriter when data arrives or animKey changes
   useEffect(() => {
     if (isLoading || !indices.length) return;
     const text = buildBrief();
@@ -67,7 +67,7 @@ function MorningBrief({
     let i = 0;
     let lastTime = 0;
     let rafId: number;
-    const CHAR_INTERVAL = 18; // ms per character
+    const CHAR_INTERVAL = 18;
 
     const tick = (timestamp: number) => {
       if (timestamp - lastTime >= CHAR_INTERVAL) {
@@ -84,66 +84,54 @@ function MorningBrief({
     return () => cancelAnimationFrame(rafId);
   }, [animKey, isLoading, buildBrief, indices.length]);
 
-  const handleRefresh = () => {
-    setAnimKey((k) => k + 1);
-  };
-
   const now = new Date();
-  const dateLabel = now.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-  const timeLabel = now.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const dateLabel = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const timeLabel = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <div
-      className="rounded-2xl p-5 border-l-4 relative overflow-hidden"
+    <div className="relative rounded-xl overflow-hidden border border-[var(--border-subtle)] card-glow"
       style={{
-        background: "linear-gradient(135deg, #0D1526 0%, #1E293B 100%)",
-        borderLeftColor: "#F59E0B",
-        border: "1px solid #1A2744",
-        borderLeft: "4px solid #F59E0B",
+        background: "linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-elevated-2) 100%)",
+        borderLeft: "3px solid var(--accent-positive)",
       }}
     >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-base shrink-0">🌅</span>
-          <h2 className="text-sm font-semibold text-[#F8FAFC] shrink-0">Morning Brief</h2>
-          <span className="text-xs text-[#475569] font-mono truncate hidden sm:block">
-            {dateLabel} · {timeLabel}
-          </span>
-          <span className="text-xs text-[#475569] font-mono truncate sm:hidden">
-            {timeLabel}
+      <div className="px-5 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base shrink-0">🌅</span>
+            <h2 className="text-sm font-semibold text-[var(--text-primary)] shrink-0">Morning Brief</h2>
+            <span className="text-xs text-[var(--text-tertiary)] font-mono truncate hidden sm:block">
+              {dateLabel} · {timeLabel}
+            </span>
+            <span className="text-xs text-[var(--text-tertiary)] font-mono truncate sm:hidden">
+              {timeLabel}
+            </span>
+          </div>
+          <button
+            onClick={() => setAnimKey((k) => k + 1)}
+            title="Regenerate brief"
+            className="text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors duration-150 p-1 rounded cursor-pointer"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
+
+        {isLoading || !indices.length ? (
+          <Skeleton rows={3} height={14} className="mb-1" />
+        ) : (
+          <p className="text-[var(--text-secondary)] text-sm leading-relaxed min-h-[3.5rem]">
+            {displayText}
+            {displayText.length < briefText.length && (
+              <span className="inline-block w-0.5 h-4 bg-[var(--accent-positive)] ml-0.5 animate-pulse align-middle" />
+            )}
+          </p>
+        )}
+
+        <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
+          <span className="text-[10px] text-[var(--text-tertiary)] font-medium tracking-wide">
+            Powered by BMG Intelligence
           </span>
         </div>
-        <button
-          onClick={handleRefresh}
-          title="Regenerate brief"
-          className="text-[#475569] hover:text-[#94A3B8] transition-colors duration-150 p-1 rounded cursor-pointer"
-        >
-          <RefreshCw size={14} />
-        </button>
-      </div>
-
-      {isLoading || !indices.length ? (
-        <Skeleton rows={3} height={14} className="mb-1" />
-      ) : (
-        <p className="text-[#94A3B8] text-sm leading-relaxed min-h-[3.5rem]">
-          {displayText}
-          {displayText.length < briefText.length && (
-            <span className="inline-block w-0.5 h-4 bg-[#F59E0B] ml-0.5 animate-pulse align-middle" />
-          )}
-        </p>
-      )}
-
-      <div className="mt-3 pt-3 border-t border-[#1E293B]/60">
-        <span className="text-[10px] text-[#475569] font-medium tracking-wide">
-          Powered by BMG Intelligence
-        </span>
       </div>
     </div>
   );
@@ -156,39 +144,46 @@ function IndexCard({ symbol, price, change, change_pct }: {
 }) {
   const navigate = useNavigate();
   const isPos = change_pct >= 0;
+  const accentColor = isPos ? "var(--accent-positive)" : "var(--accent-negative)";
   return (
     <div
       onClick={() => navigate(`/chart?symbol=${symbol}`)}
-      className={cn(
-        "bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5 flex flex-col gap-2 hover:border-[#3B82F6]/50 hover:bg-[#0F172A]/80 transition-colors duration-150 cursor-pointer relative overflow-hidden group",
-      )}
-      style={{ borderTop: `2px solid ${isPos ? "#22C55E" : "#EF4444"}` }}
+      className="relative rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 flex flex-col gap-2 hover:border-[var(--border-emphasis)] transition-colors duration-150 cursor-pointer overflow-hidden group card-glow"
+      style={{ borderTop: `2px solid ${accentColor}` }}
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em]">
+        <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">
           {INDEX_NAMES[symbol] ?? symbol}
         </span>
         <div className="flex items-center gap-1.5">
-          <span className="text-[#475569] text-xs font-mono">{symbol}</span>
-          <LineChart size={11} className="text-[#334155] group-hover:text-[#3B82F6] transition-colors" />
+          <span className="text-[var(--text-tertiary)] text-xs font-mono">{symbol}</span>
+          <LineChart size={11} className="text-[var(--text-tertiary)] group-hover:text-[var(--accent-positive)] transition-colors" />
         </div>
       </div>
-      <div className="text-xl font-semibold text-[#F8FAFC] tracking-tight font-mono">
+      <div className="text-xl font-semibold text-[var(--text-primary)] tracking-tight font-mono">
         {formatCurrency(price)}
       </div>
       <div className="flex items-center gap-2">
         <span className={cn(
           "text-xs font-semibold px-2 py-0.5 rounded-full",
-          isPos ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]"
+          isPos
+            ? "bg-[var(--accent-positive-bg)] text-[var(--accent-positive)]"
+            : "bg-[var(--accent-negative-bg)] text-[var(--accent-negative)]"
         )}>
           {isPos ? "+" : ""}{formatPercent(change_pct)}
         </span>
-        <span className="text-[#475569] text-xs font-mono">({isPos ? "+" : ""}{change.toFixed(2)})</span>
+        <span className="text-[var(--text-tertiary)] text-xs font-mono">
+          ({isPos ? "+" : ""}{change.toFixed(2)})
+        </span>
       </div>
-      <div className="h-0.5 rounded-full mt-1 overflow-hidden bg-[#1E293B]">
+      <div className="h-0.5 rounded-full mt-1 overflow-hidden bg-[var(--bg-elevated-2)]">
         <div
-          className={cn("h-full rounded-full transition-all", isPos ? "bg-[#22C55E]/40" : "bg-[#EF4444]/40")}
-          style={{ width: `${Math.min(Math.abs(change_pct) * 10, 100)}%` }}
+          className="h-full rounded-full transition-all"
+          style={{
+            width: `${Math.min(Math.abs(change_pct) * 10, 100)}%`,
+            background: isPos ? "var(--accent-positive)" : "var(--accent-negative)",
+            opacity: 0.5,
+          }}
         />
       </div>
     </div>
@@ -206,18 +201,25 @@ function SectorRow({ sector, symbol, change_pct, max }: { sector: string; symbol
     <div
       onClick={() => symbol && navigate(`/chart?symbol=${symbol}`)}
       className={cn(
-        "flex items-center gap-3 py-2.5 border-b border-[#1E293B] last:border-0 transition-colors duration-150",
-        symbol && "cursor-pointer hover:bg-[#1E293B]/40 -mx-2 px-2 rounded"
+        "flex items-center gap-3 py-2.5 border-b border-[var(--border-subtle)] last:border-0 transition-colors duration-150",
+        symbol && "cursor-pointer hover:bg-[var(--bg-elevated-2)]/40 -mx-2 px-2 rounded"
       )}
     >
-      <span className="text-xs text-[#94A3B8] w-36 shrink-0 truncate">{label}</span>
-      <div className="flex-1 h-1.5 bg-[#1E293B] rounded-full overflow-hidden">
+      <span className="text-xs text-[var(--text-secondary)] w-36 shrink-0 truncate">{label}</span>
+      <div className="flex-1 h-1 bg-[var(--bg-elevated-2)] rounded-full overflow-hidden">
         <div
-          className={cn("h-full rounded-full transition-all", isPos ? "bg-[#22C55E]" : "bg-[#EF4444]")}
-          style={{ width: `${Math.min(barPct, 100)}%` }}
+          className="h-full rounded-full transition-all"
+          style={{
+            width: `${Math.min(barPct, 100)}%`,
+            background: isPos ? "var(--accent-positive)" : "var(--accent-negative)",
+            opacity: 0.7,
+          }}
         />
       </div>
-      <span className={cn("text-xs font-mono font-medium w-14 text-right shrink-0", isPos ? "text-[#22C55E]" : "text-[#EF4444]")}>
+      <span className={cn(
+        "text-xs font-mono font-medium w-14 text-right shrink-0",
+        isPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"
+      )}>
         {isPos ? "+" : ""}{formatPercent(change_pct)}
       </span>
     </div>
@@ -236,19 +238,23 @@ function NewsCard({ article }: { article: any }) {
     return `${m}m ago`;
   })();
   return (
-    <a href={article.url} target="_blank" rel="noopener noreferrer"
-      className="group flex items-start gap-3 py-3 border-b border-[#1E293B] last:border-0 hover:bg-[#0F172A] -mx-4 px-4 transition-colors duration-150 rounded cursor-pointer">
+    <a
+      href={article.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex items-start gap-3 py-3 border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-elevated-2)]/30 -mx-4 px-4 transition-colors duration-150 rounded cursor-pointer"
+    >
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-[#94A3B8] font-medium line-clamp-2 group-hover:text-[#F8FAFC] transition-colors">
+        <p className="text-sm text-[var(--text-secondary)] font-medium line-clamp-2 group-hover:text-[var(--text-primary)] transition-colors">
           {article.headline}
         </p>
         <div className="flex items-center gap-2 mt-1.5">
-          <span className="text-[11px] text-[#475569] font-medium">{article.source}</span>
-          <span className="text-[#334155]">·</span>
-          <span className="text-[11px] text-[#475569]">{ago}</span>
+          <span className="text-[11px] text-[var(--text-tertiary)] font-medium">{article.source}</span>
+          <span className="text-[var(--border-emphasis)]">·</span>
+          <span className="text-[11px] text-[var(--text-tertiary)]">{ago}</span>
         </div>
       </div>
-      <ExternalLink size={13} className="text-[#475569] group-hover:text-[#94A3B8] mt-0.5 shrink-0" />
+      <ExternalLink size={13} className="text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] mt-0.5 shrink-0" />
     </a>
   );
 }
@@ -264,11 +270,9 @@ function PaperAccountWidget() {
     retry: false,
   });
 
-  if (isLoading) {
-    return <SkeletonCard className="h-28" />;
-  }
+  if (isLoading) return <SkeletonCard className="h-28" />;
   if (isError) return (
-    <div className="text-[#94A3B8] text-sm p-4">Failed to load data. Please refresh.</div>
+    <div className="text-[var(--text-secondary)] text-sm p-4">Failed to load data. Please refresh.</div>
   );
   if (!account) return null;
 
@@ -276,41 +280,36 @@ function PaperAccountWidget() {
   const hasPositions = account.positions.length > 0;
 
   return (
-    <div
-      onClick={() => navigate("/paper")}
-      className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-4 cursor-pointer hover:border-[#3B82F6]/30 transition-colors duration-150"
-    >
-      <div className="flex items-start justify-between gap-2 mb-3">
+    <Card glow onClick={() => navigate("/paper")} className="cursor-pointer hover:border-[var(--border-emphasis)] transition-colors duration-150" variant="default">
+      <div className="flex items-start justify-between gap-2 mb-4">
         <div>
-          <div className="text-[10px] font-semibold text-[#64748B] uppercase tracking-[0.1em] mb-0.5">
-            Paper Portfolio
-          </div>
-          <div className="text-2xl font-semibold text-[#F8FAFC] font-mono leading-none">
+          <CardLabel className="mb-1">Paper Portfolio</CardLabel>
+          <div className="text-2xl font-semibold text-[var(--text-primary)] font-mono leading-none">
             {formatCurrency(account.equity)}
           </div>
         </div>
-        <span className="text-[#475569] text-xs flex items-center gap-1 shrink-0 mt-1">
+        <span className="text-[var(--text-tertiary)] text-xs flex items-center gap-1 shrink-0 mt-1">
           View <ArrowRight size={11} />
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-[#0B1120] rounded-xl px-3 py-2">
-          <div className="text-[10px] text-[#64748B] mb-0.5">Day P&amp;L</div>
-          <span
-            className={cn("text-sm font-semibold font-mono", isPos ? "text-[#22C55E]" : "text-[#EF4444]")}
-            aria-label={`${isPos ? "Gain" : "Loss"}: ${formatCurrency(Math.abs(account.day_pnl))}`}
-          >
+        <div className="bg-[var(--bg-base)] rounded-lg px-3 py-2">
+          <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Day P&amp;L</div>
+          <span className={cn(
+            "text-sm font-semibold font-mono",
+            isPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"
+          )}>
             {isPos ? "▲" : "▼"} {formatCurrency(Math.abs(account.day_pnl))}
           </span>
         </div>
-        <div className="bg-[#0B1120] rounded-xl px-3 py-2">
-          <div className="text-[10px] text-[#64748B] mb-0.5">Positions</div>
-          <div className="text-sm font-semibold text-[#F8FAFC]">
+        <div className="bg-[var(--bg-base)] rounded-lg px-3 py-2">
+          <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Positions</div>
+          <div className="text-sm font-semibold text-[var(--text-primary)]">
             {hasPositions ? account.positions.length : "—"}
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -328,13 +327,13 @@ function PortfolioWidget() {
 
   if (isLoading) {
     return (
-      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5 space-y-4">
-        <Skeleton height={14} className="w-24" />
-        <Skeleton height={32} className="w-36" />
-        <div className="space-y-2.5 pt-2">
+      <Card>
+        <Skeleton height={14} className="w-24 mb-4" />
+        <Skeleton height={32} className="w-36 mb-4" />
+        <div className="space-y-2.5">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} height={36} />)}
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -354,53 +353,72 @@ function PortfolioWidget() {
     .slice(0, 4);
 
   return (
-    <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
+    <Card glow>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] flex items-center gap-1.5">
+        <CardLabel className="mb-0 flex items-center gap-1.5">
           <Briefcase size={12} /> Portfolio
-        </h2>
-        <button onClick={() => navigate("/portfolio")} className="text-[#475569] hover:text-[#F8FAFC] text-xs flex items-center gap-1 transition-colors duration-150 cursor-pointer">
+        </CardLabel>
+        <button
+          onClick={() => navigate("/portfolio")}
+          className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-xs flex items-center gap-1 transition-colors duration-150 cursor-pointer"
+        >
           View all <ArrowRight size={11} />
         </button>
       </div>
       {allPositions.length === 0 ? (
-        <div className="py-4 text-center text-[#475569] text-sm">
+        <div className="py-4 text-center text-[var(--text-tertiary)] text-sm">
           No positions yet.{" "}
-          <button onClick={() => navigate("/portfolio")} className="text-[#F8FAFC] hover:underline cursor-pointer">Add one →</button>
+          <button onClick={() => navigate("/portfolio")} className="text-[var(--text-primary)] hover:underline cursor-pointer">Add one →</button>
         </div>
       ) : (
         <>
-          <div className="mb-4 pb-4 border-b border-[#1E293B]">
-            <div className="text-2xl font-semibold text-[#F8FAFC] font-mono">{formatCurrency(totalValue)}</div>
+          <div className="mb-4 pb-4 border-b border-[var(--border-subtle)]">
+            <div className="text-2xl font-semibold text-[var(--text-primary)] font-mono">{formatCurrency(totalValue)}</div>
             {totalCost > 0 && (
               <div className="flex items-center gap-2 mt-1.5">
                 <span className={cn(
                   "text-xs font-semibold px-2 py-0.5 rounded-full",
-                  isPos ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]"
+                  isPos
+                    ? "bg-[var(--accent-positive-bg)] text-[var(--accent-positive)]"
+                    : "bg-[var(--accent-negative-bg)] text-[var(--accent-negative)]"
                 )}>
                   {isPos ? "+" : ""}{formatPercent(gainPct)}
                 </span>
-                <span className={cn("text-xs font-mono", isPos ? "text-[#22C55E]" : "text-[#EF4444]")}>
+                <span className={cn(
+                  "text-xs font-mono",
+                  isPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"
+                )}>
                   {isPos ? "+" : ""}{formatCurrency(totalGain)}
                 </span>
               </div>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {topHoldings.map((pos) => {
               const price = quotes[pos.symbol]?.price ?? 0;
               const mv = pos.shares * price;
               const pnl = mv - pos.cost_basis;
               const isPosRow = pnl >= 0;
               return (
-                <div key={pos.symbol} className="flex items-center justify-between cursor-pointer hover:bg-[#1E293B]/60 -mx-2 px-2 py-1.5 rounded transition-colors duration-150" onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}>
+                <div
+                  key={pos.symbol}
+                  className="flex items-center justify-between cursor-pointer hover:bg-[var(--bg-elevated-2)]/50 -mx-2 px-2 py-1.5 rounded transition-colors duration-150"
+                  onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
+                >
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-[#F8FAFC] text-sm">{pos.symbol}</span>
+                    <span className="font-mono font-bold text-[var(--text-primary)] text-sm">{pos.symbol}</span>
                     <SectorPill symbol={pos.symbol} />
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-[#F8FAFC] font-mono">{price > 0 ? formatCurrency(mv) : "—"}</div>
-                    {price > 0 && <div className={cn("text-xs font-mono", isPosRow ? "text-[#22C55E]" : "text-[#EF4444]")}>{formatPercent((pnl / pos.cost_basis) * 100)}</div>}
+                    <div className="text-sm text-[var(--text-primary)] font-mono">{price > 0 ? formatCurrency(mv) : "—"}</div>
+                    {price > 0 && (
+                      <div className={cn(
+                        "text-xs font-mono",
+                        isPosRow ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"
+                      )}>
+                        {formatPercent((pnl / pos.cost_basis) * 100)}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -408,7 +426,7 @@ function PortfolioWidget() {
           </div>
         </>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -425,12 +443,12 @@ function StrategyWidget() {
 
   if (isLoading) {
     return (
-      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5 space-y-4">
-        <Skeleton height={14} className="w-32" />
+      <Card>
+        <Skeleton height={14} className="w-32 mb-4" />
         <div className="space-y-2">
           {[1, 2, 3].map((i) => <Skeleton key={i} height={36} />)}
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -438,48 +456,61 @@ function StrategyWidget() {
   const watching = trades.filter((t) => t.status === "candidate").slice(0, 4);
 
   return (
-    <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
+    <Card glow>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] flex items-center gap-1.5">
+        <CardLabel className="mb-0 flex items-center gap-1.5">
           <FlaskConical size={12} /> Strategy Signals
-        </h2>
-        <button onClick={() => navigate("/strategy")} className="text-[#475569] hover:text-[#F8FAFC] text-xs flex items-center gap-1 transition-colors duration-150 cursor-pointer">
+        </CardLabel>
+        <button
+          onClick={() => navigate("/strategy")}
+          className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-xs flex items-center gap-1 transition-colors duration-150 cursor-pointer"
+        >
           View all <ArrowRight size={11} />
         </button>
       </div>
       {open.length + watching.length === 0 ? (
-        <div className="py-4 text-center text-[#475569] text-sm">No active signals</div>
+        <div className="py-4 text-center text-[var(--text-tertiary)] text-sm">No active signals</div>
       ) : (
         <div className="space-y-1">
           {open.length > 0 && (
-            <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-1.5">Open</div>
+            <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1.5">Open</div>
           )}
           {open.map((t: any) => (
-            <div key={t.id} className="flex items-center justify-between cursor-pointer hover:bg-[#1E293B]/60 -mx-2 px-2 py-1.5 rounded transition-colors duration-150" onClick={() => navigate(`/chart?symbol=${t.symbol}`)}>
+            <div
+              key={t.id}
+              className="flex items-center justify-between cursor-pointer hover:bg-[var(--bg-elevated-2)]/50 -mx-2 px-2 py-1.5 rounded transition-colors duration-150"
+              onClick={() => navigate(`/chart?symbol=${t.symbol}`)}
+            >
               <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-[#F8FAFC] text-sm">{t.symbol}</span>
+                <span className="font-mono font-bold text-[var(--text-primary)] text-sm">{t.symbol}</span>
                 <SectorPill symbol={t.symbol} />
               </div>
-              <div className="text-right">
-                <span className="text-xs font-semibold text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/20 px-1.5 py-px rounded">Open</span>
-              </div>
+              <span className="text-xs font-semibold text-[var(--accent-positive)] bg-[var(--accent-positive-bg)] border border-[var(--accent-positive)]/20 px-1.5 py-px rounded">
+                Open
+              </span>
             </div>
           ))}
           {watching.length > 0 && (
-            <div className="text-[10px] text-[#475569] uppercase tracking-wider mt-2 mb-1.5">Watching</div>
+            <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-2 mb-1.5">Watching</div>
           )}
           {watching.map((t: any) => (
-            <div key={t.id} className="flex items-center justify-between cursor-pointer hover:bg-[#1E293B]/60 -mx-2 px-2 py-1.5 rounded transition-colors duration-150" onClick={() => navigate(`/chart?symbol=${t.symbol}`)}>
+            <div
+              key={t.id}
+              className="flex items-center justify-between cursor-pointer hover:bg-[var(--bg-elevated-2)]/50 -mx-2 px-2 py-1.5 rounded transition-colors duration-150"
+              onClick={() => navigate(`/chart?symbol=${t.symbol}`)}
+            >
               <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-[#F8FAFC] text-sm">{t.symbol}</span>
+                <span className="font-mono font-bold text-[var(--text-primary)] text-sm">{t.symbol}</span>
                 <SectorPill symbol={t.symbol} />
               </div>
-              <span className="text-xs text-[#F59E0B] bg-[#F59E0B]/10 border border-[#F59E0B]/20 px-1.5 py-px rounded">Watch</span>
+              <span className="text-xs text-[#F59E0B] bg-[#F59E0B]/10 border border-[#F59E0B]/20 px-1.5 py-px rounded">
+                Watch
+              </span>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -494,31 +525,31 @@ function LatestRecapWidget() {
 
   if (isLoading) {
     return (
-      <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5 space-y-3">
-        <Skeleton height={12} className="w-28" />
-        <Skeleton height={36} />
+      <Card>
+        <Skeleton height={12} className="w-28 mb-3" />
+        <Skeleton height={36} className="mb-2" />
         <Skeleton height={14} className="w-4/5" />
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
+    <Card glow>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] flex items-center gap-1.5">
+        <CardLabel className="mb-0 flex items-center gap-1.5">
           <Calendar size={12} /> Daily Recap
-        </h2>
+        </CardLabel>
       </div>
       {recap ? (
         <DailyRecapCard recap={recap} defaultExpanded={false} />
       ) : (
         <div className="flex flex-col items-center justify-center py-5 text-center gap-2">
-          <Calendar size={24} className="text-[#334155]" />
-          <p className="text-sm text-[#475569]">Daily recap generates at 4:15 PM ET</p>
-          <p className="text-xs text-[#334155]">Check back after market close</p>
+          <Calendar size={24} className="text-[var(--border-emphasis)]" />
+          <p className="text-sm text-[var(--text-tertiary)]">Daily recap generates at 4:15 PM ET</p>
+          <p className="text-xs text-[var(--text-tertiary)] opacity-60">Check back after market close</p>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -555,27 +586,26 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[#F8FAFC] tracking-tight">Market Overview</h1>
-          <p className="text-[#475569] text-sm mt-0.5 truncate">
+          <h1 className="text-xl font-bold text-[var(--text-primary)] tracking-tight font-display">Market Overview</h1>
+          <p className="text-[var(--text-tertiary)] text-sm mt-0.5 truncate">
             {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </p>
         </div>
         {sectors.length > 0 && (
           <div className="flex items-center gap-2 text-xs shrink-0 mt-1">
-            <span className="text-[#22C55E] font-medium">{advancers}<span className="hidden sm:inline"> advancing</span><span className="sm:hidden">↑</span></span>
-            <span className="text-[#334155]">·</span>
-            <span className="text-[#EF4444] font-medium">{decliners}<span className="hidden sm:inline"> declining</span><span className="sm:hidden">↓</span></span>
+            <span className="text-[var(--accent-positive)] font-medium">
+              {advancers}<span className="hidden sm:inline"> advancing</span><span className="sm:hidden">↑</span>
+            </span>
+            <span className="text-[var(--border-emphasis)]">·</span>
+            <span className="text-[var(--accent-negative)] font-medium">
+              {decliners}<span className="hidden sm:inline"> declining</span><span className="sm:hidden">↓</span>
+            </span>
           </div>
         )}
       </div>
 
       {/* AI Morning Brief */}
-      <MorningBrief
-        indices={indices}
-        sectors={sectors}
-        news={news}
-        isLoading={briefLoading}
-      />
+      <MorningBrief indices={indices} sectors={sectors} news={news} isLoading={briefLoading} />
 
       {/* Paper Account Widget */}
       <PaperAccountWidget />
@@ -603,8 +633,8 @@ export default function Dashboard() {
       {/* Sectors + News */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sector Performance */}
-        <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
-          <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] mb-4">Sector Performance</h2>
+        <Card glow>
+          <CardLabel className="flex items-center gap-1.5">Sector Performance</CardLabel>
           {sectorsLoading ? (
             <div className="space-y-3">
               {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -624,15 +654,15 @@ export default function Dashboard() {
                 ))}
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Market News */}
-        <div className="bg-[#0D1526] border border-[#1A2744] rounded-2xl p-5">
-          <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-[0.1em] mb-4">Market News</h2>
+        <Card glow>
+          <CardLabel>Market News</CardLabel>
           {newsLoading ? (
             <div className="space-y-4">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex flex-col gap-1.5 py-2 border-b border-[#1E293B] last:border-0">
+                <div key={i} className="flex flex-col gap-1.5 py-2 border-b border-[var(--border-subtle)] last:border-0">
                   <Skeleton height={14} />
                   <Skeleton height={14} className="w-4/5" />
                   <Skeleton height={11} className="w-28" />
@@ -646,7 +676,7 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );
