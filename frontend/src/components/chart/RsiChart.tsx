@@ -20,8 +20,8 @@ export default function RsiChart({ bars, values, height = 100 }: Props) {
   useEffect(() => {
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
-      layout: { background: { type: ColorType.Solid, color: "#0a0a0a" }, textColor: "#d4d4d4" },
-      grid: { vertLines: { color: "#111111" }, horzLines: { color: "#111111" } },
+      layout: { background: { type: ColorType.Solid, color: "#18181B" }, textColor: "#A1A1AA" },
+      grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
       crosshair: { mode: 1 },
       rightPriceScale: { borderColor: "#1f1f1f", scaleMargins: { top: 0.05, bottom: 0.05 } },
       timeScale: { borderColor: "#1f1f1f", timeVisible: false, visible: false },
@@ -31,9 +31,9 @@ export default function RsiChart({ bars, values, height = 100 }: Props) {
     const series = chart.addSeries(LineSeries, {
       color: "#22c55e", lineWidth: 1, priceLineVisible: false, lastValueVisible: true,
     });
-    series.createPriceLine({ price: 70, color: "#ef5350", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "OB" });
+    series.createPriceLine({ price: 70, color: "#FB7185", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "OB" });
     series.createPriceLine({ price: 50, color: "#1f1f1f", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
-    series.createPriceLine({ price: 30, color: "#26a69a", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "OS" });
+    series.createPriceLine({ price: 30, color: "#BEF264", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "OS" });
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -51,10 +51,10 @@ export default function RsiChart({ bars, values, height = 100 }: Props) {
   }, [bars, values]);
 
   return (
-    <div className="border-t border-[#1f1f1f] shrink-0" style={{ height }}>
+    <div className="border-t border-[var(--border-subtle)] shrink-0" style={{ height }}>
       <div className="px-2 py-0.5 text-[10px] text-[#555] font-medium flex items-center justify-between">
         <span>RSI (14)</span>
-        <ExplainButton term="RSI (Relative Strength Index)" className="text-[#4a4e5b] hover:text-[#d1d4dc]" size={11} />
+        <ExplainButton term="RSI (Relative Strength Index)" className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]" size={11} />
       </div>
       <div ref={containerRef} style={{ height: height - 18, width: "100%" }} />
     </div>

@@ -61,32 +61,35 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
   const symbols: string[] = (activeWl as any)?.symbols?.map((s: any) => s.symbol) ?? [];
 
   return (
-    <div className="w-56 flex flex-col border-l border-[#1f1f1f] bg-[#0a0a0a] shrink-0 overflow-hidden">
+    <div className="w-56 flex flex-col border-l border-[var(--border-subtle)] bg-[var(--bg-elevated)] shrink-0 overflow-hidden">
       {/* Watchlist selector */}
-      <div className="px-2 py-2 border-b border-[#1f1f1f] flex items-center gap-1">
+      <div className="px-2 py-2 border-b border-[var(--border-subtle)] flex items-center gap-1">
         <div className="relative flex-1">
           <button
             onClick={() => setWlMenuOpen((o) => !o)}
-            className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-[#d4d4d4] hover:bg-[#111]"
+            className="w-full flex items-center justify-between px-2 py-1 rounded text-xs text-[var(--text-primary)] hover:bg-[var(--bg-elevated-2)]"
           >
             <span className="truncate font-medium">{activeWl?.name ?? "No watchlist"}</span>
-            <ChevronDown size={11} className="shrink-0 text-[#555]" />
+            <ChevronDown size={11} className="shrink-0 text-[var(--text-tertiary)]" />
           </button>
           {wlMenuOpen && (
-            <div className="absolute top-full left-0 right-0 z-50 bg-[#111] border border-[#1f1f1f] rounded shadow-xl py-1 mt-0.5">
+            <div className="absolute top-full left-0 right-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg shadow-xl py-1 mt-0.5">
               {watchlists.map((wl: any) => (
                 <button
                   key={wl.id}
                   onClick={() => { setActiveWlId(wl.id); setWlMenuOpen(false); }}
-                  className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-[#1f1f1f]", activeWl?.id === wl.id ? "text-[var(--text-primary)]" : "text-[#d4d4d4]")}
+                  className={cn(
+                    "w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--bg-elevated-2)]",
+                    activeWl?.id === wl.id ? "text-[var(--accent-positive)]" : "text-[var(--text-secondary)]"
+                  )}
                 >
                   {wl.name}
                 </button>
               ))}
-              <div className="border-t border-[#1f1f1f] my-1" />
+              <div className="border-t border-[var(--border-subtle)] my-1" />
               <button
                 onClick={() => { setShowNewWl(true); setWlMenuOpen(false); }}
-                className="w-full text-left px-3 py-1.5 text-xs text-[#555] hover:bg-[#1f1f1f] flex items-center gap-1.5"
+                className="w-full text-left px-3 py-1.5 text-xs text-[var(--text-tertiary)] hover:bg-[var(--bg-elevated-2)] flex items-center gap-1.5"
               >
                 <Plus size={11} /> New watchlist
               </button>
@@ -96,14 +99,14 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
         <button
           onClick={() => setShowAdd((s) => !s)}
           title="Add symbol"
-          className="w-6 h-6 flex items-center justify-center text-[#555] hover:text-[#d4d4d4] hover:bg-[#111] rounded"
+          className="w-6 h-6 flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated-2)] rounded"
         >
           <Plus size={14} />
         </button>
         <button
           onClick={onClose}
           title="Minimize watchlist"
-          className="w-6 h-6 flex items-center justify-center text-[#555] hover:text-[#d4d4d4] hover:bg-[#111] rounded"
+          className="w-6 h-6 flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated-2)] rounded"
         >
           <Minus size={14} />
         </button>
@@ -113,17 +116,17 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
       {showNewWl && (
         <form
           onSubmit={(e) => { e.preventDefault(); if (newWlInput.trim()) createWlMutation.mutate(newWlInput.trim()); }}
-          className="px-2 py-1.5 border-b border-[#1f1f1f] flex gap-1"
+          className="px-2 py-1.5 border-b border-[var(--border-subtle)] flex gap-1"
         >
           <input
             autoFocus
             value={newWlInput}
             onChange={(e) => setNewWlInput(e.target.value)}
             placeholder="Watchlist name..."
-            className="flex-1 bg-[#111] border border-[#1f1f1f] rounded px-2 py-1 text-xs text-[#d4d4d4] placeholder-[#555] focus:outline-none focus:border-white/30"
+            className="flex-1 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded px-2 py-1 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-positive)]"
           />
-          <button type="submit" className="px-2 py-1 bg-white text-black text-xs rounded hover:bg-zinc-200">+</button>
-          <button type="button" onClick={() => setShowNewWl(false)} className="px-1 text-[#555] hover:text-[#d4d4d4]"><X size={12} /></button>
+          <button type="submit" className="px-2 py-1 bg-[var(--accent-positive)] text-[#0a0a0a] text-xs rounded font-semibold">+</button>
+          <button type="button" onClick={() => setShowNewWl(false)} className="px-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"><X size={12} /></button>
         </form>
       )}
 
@@ -131,17 +134,17 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
       {showAdd && activeWl && (
         <form
           onSubmit={(e) => { e.preventDefault(); const s = addInput.trim().toUpperCase(); if (s) addSymbolMutation.mutate(s); }}
-          className="px-2 py-1.5 border-b border-[#1f1f1f] flex gap-1"
+          className="px-2 py-1.5 border-b border-[var(--border-subtle)] flex gap-1"
         >
           <input
             autoFocus
             value={addInput}
             onChange={(e) => setAddInput(e.target.value.toUpperCase())}
             placeholder="Symbol (e.g. AAPL)"
-            className="flex-1 bg-[#111] border border-[#1f1f1f] rounded px-2 py-1 text-xs text-[#d4d4d4] placeholder-[#555] focus:outline-none focus:border-white/30 uppercase"
+            className="flex-1 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded px-2 py-1 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-positive)] uppercase"
           />
-          <button type="submit" className="px-2 py-1 bg-white text-black text-xs rounded hover:bg-zinc-200">Add</button>
-          <button type="button" onClick={() => setShowAdd(false)} className="px-1 text-[#555] hover:text-[#d4d4d4]"><X size={12} /></button>
+          <button type="submit" className="px-2 py-1 bg-[var(--accent-positive)] text-[#0a0a0a] text-xs rounded font-semibold">Add</button>
+          <button type="button" onClick={() => setShowAdd(false)} className="px-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"><X size={12} /></button>
         </form>
       )}
 
@@ -149,8 +152,8 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
       <div className="flex-1 overflow-y-auto">
         {symbols.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
-            <p className="text-[#555] text-xs text-center">No symbols</p>
-            <button onClick={() => setShowAdd(true)} className="text-xs text-[var(--text-primary)] hover:underline">Add a symbol</button>
+            <p className="text-[var(--text-tertiary)] text-xs text-center">No symbols</p>
+            <button onClick={() => setShowAdd(true)} className="text-xs text-[var(--accent-positive)] hover:underline">Add a symbol</button>
           </div>
         ) : (
           symbols.map((sym: string) => {
@@ -165,13 +168,16 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
                 key={sym}
                 onClick={() => onSymbolClick(sym)}
                 className={cn(
-                  "flex items-center px-3 py-2 cursor-pointer border-b border-[#1f1f1f]/50 group",
-                  isActive ? "bg-[#1f1f1f]" : "hover:bg-[#111]"
+                  "flex items-center px-3 py-2 cursor-pointer border-b border-[var(--border-subtle)]/50 group",
+                  isActive ? "bg-[var(--bg-elevated-2)]" : "hover:bg-[var(--bg-elevated-2)]/60"
                 )}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
-                    <span className="text-xs font-semibold text-[#d4d4d4] truncate">{sym}</span>
+                    <span className={cn(
+                      "text-xs font-semibold truncate",
+                      isActive ? "text-[var(--accent-positive)]" : "text-[var(--text-primary)]"
+                    )}>{sym}</span>
                     {COMPANY_INFO[sym]?.sector && (
                       <span
                         className="text-[9px] font-medium px-1 py-px rounded-full shrink-0"
@@ -184,16 +190,19 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
                       </span>
                     )}
                   </div>
-                  <div className={cn("text-[10px] font-medium", isPos ? "text-[#26a69a]" : "text-[#ef5350]")}>
+                  <div className={cn(
+                    "text-[10px] font-medium",
+                    isPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"
+                  )}>
                     {isPos ? "+" : ""}{formatPercent(changePct)}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs font-medium text-[#d4d4d4]">{price > 0 ? formatCurrency(price) : "—"}</div>
+                  <div className="text-xs font-medium text-[var(--text-primary)] font-mono">{price > 0 ? formatCurrency(price) : "—"}</div>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); removeSymbolMutation.mutate(sym); }}
-                  className="ml-1 opacity-0 group-hover:opacity-100 text-[#555] hover:text-[#ef5350] transition-opacity"
+                  className="ml-1 opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-opacity"
                 >
                   <X size={11} />
                 </button>
@@ -204,7 +213,7 @@ export default function WatchlistPanel({ activeSymbol, onSymbolClick, onClose }:
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1.5 border-t border-[#1f1f1f] text-[10px] text-[#555]">
+      <div className="px-3 py-1.5 border-t border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)]">
         {symbols.length} symbol{symbols.length !== 1 ? "s" : ""}
       </div>
     </div>

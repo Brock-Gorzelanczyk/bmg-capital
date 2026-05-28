@@ -44,7 +44,7 @@ export default function TvBottomBar({
   const tfLabel = TF_LABEL[PERIOD_CONFIGS[period].timeframe] ?? PERIOD_CONFIGS[period].timeframe;
 
   return (
-    <div className="h-8 border-t border-[#2a2e39] bg-[#131722] flex items-center shrink-0 select-none overflow-hidden">
+    <div className="h-8 border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)] flex items-center shrink-0 select-none overflow-hidden">
       {/* Scrollable period buttons */}
       <div className="flex items-center gap-0.5 px-2 overflow-x-auto scrollbar-none flex-shrink-0" style={{ scrollbarWidth: "none" }}>
         {PERIODS.map((p) => (
@@ -54,27 +54,27 @@ export default function TvBottomBar({
             className={cn(
               "h-5 px-1.5 rounded text-[11px] font-medium transition-colors whitespace-nowrap shrink-0",
               period === p
-                ? "bg-[#2962ff] text-[var(--text-primary)]"
-                : "text-[#787b86] hover:text-[#d1d4dc] hover:bg-[#1e222d]"
+                ? "bg-[var(--accent-positive)] text-[#0a0a0a] font-semibold"
+                : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated-2)]"
             )}
           >
             {p}
           </button>
         ))}
       </div>
-      <div className="w-px h-4 bg-[#2a2e39] mx-1.5 shrink-0" />
-      <span className="text-[10px] text-[#4a4e5b] font-mono shrink-0">{tfLabel}</span>
+      <div className="w-px h-4 bg-[var(--border-subtle)] mx-1.5 shrink-0" />
+      <span className="text-[10px] text-[var(--text-tertiary)] font-mono shrink-0">{tfLabel}</span>
       <div className="flex-1 min-w-0" />
       <div className="flex items-center gap-2 px-2 shrink-0">
-        <span className="text-[10px] text-[#4a4e5b]">{symbol}</span>
+        <span className="text-[10px] text-[var(--text-tertiary)]">{symbol}</span>
         {displayPrice != null && (
-          <span className="text-[10px] text-[#787b86]">{formatCurrency(displayPrice)}</span>
+          <span className="text-[10px] text-[var(--text-secondary)] font-mono">{formatCurrency(displayPrice)}</span>
         )}
         {displayVolume != null && (
-          <span className="text-[10px] text-[#4a4e5b] hidden sm:inline">Vol {formatVolume(displayVolume)}</span>
+          <span className="text-[10px] text-[var(--text-tertiary)] hidden sm:inline">Vol {formatVolume(displayVolume)}</span>
         )}
         {drawingCount != null && drawingCount > 0 && (
-          <span className="text-[10px] text-[#4a4e5b] hidden sm:inline">
+          <span className="text-[10px] text-[var(--text-tertiary)] hidden sm:inline">
             {drawingCount} drawing{drawingCount !== 1 ? "s" : ""}
           </span>
         )}

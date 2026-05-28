@@ -19,7 +19,7 @@ interface Props {
 
 export default function DrawingToolbar({ activeTool, onChange, onClearAll }: Props) {
   return (
-    <div className="w-10 flex flex-col items-center pt-2 gap-0.5 border-r border-[#1f1f1f] bg-[#0a0a0a] shrink-0">
+    <div className="w-10 flex flex-col items-center pt-2 gap-0.5 border-r border-[var(--border-subtle)] bg-[var(--bg-elevated)] shrink-0">
       {TOOLS.map(({ tool, Icon, label, functional }) => (
         <button
           key={tool}
@@ -28,22 +28,22 @@ export default function DrawingToolbar({ activeTool, onChange, onClearAll }: Pro
           className={cn(
             "w-8 h-8 flex items-center justify-center rounded transition-colors",
             activeTool === tool
-              ? "bg-white/10 text-[var(--text-primary)]"
+              ? "bg-[var(--accent-positive-bg)] text-[var(--accent-positive)]"
               : functional
-                ? "text-[#555] hover:text-[#d4d4d4] hover:bg-white/5"
-                : "text-[#2a2a2a] cursor-not-allowed"
+                ? "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated-2)]"
+                : "text-[var(--border-emphasis)] cursor-not-allowed"
           )}
         >
           <Icon size={16} />
         </button>
       ))}
 
-      <div className="w-6 border-t border-[#1f1f1f] my-1" />
+      <div className="w-6 border-t border-[var(--border-subtle)] my-1" />
 
       <button
         title="Clear all drawings"
         onClick={onClearAll}
-        className="w-8 h-8 flex items-center justify-center rounded text-[#555] hover:text-[#ef5350] hover:bg-white/5 transition-colors"
+        className="w-8 h-8 flex items-center justify-center rounded text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] hover:bg-[var(--accent-negative-bg)] transition-colors"
       >
         <Eraser size={16} />
       </button>

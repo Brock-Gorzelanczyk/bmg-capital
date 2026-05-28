@@ -35,7 +35,7 @@ const NAV_ITEMS = [
   { to: "/portfolio", label: "Portfolio", Icon: Briefcase },
 ];
 
-const SEP = <div className="w-px h-5 bg-[#2a2e39] mx-1" />;
+const SEP = <div className="w-px h-5 bg-[var(--border-subtle)] mx-1" />;
 
 interface Props {
   symbol: string;
@@ -84,41 +84,41 @@ export default function TvTopBar({
   const currentType = CHART_TYPES.find((t) => t.value === chartType);
 
   return (
-    <header className="h-10 flex items-center gap-0 border-b border-[#2a2e39] bg-[#131722] shrink-0 select-none px-1">
+    <header className="h-10 flex items-center gap-0 border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)] shrink-0 select-none px-1">
       {/* Logo / Nav */}
       <div ref={navRef} className="relative">
         <button
           onClick={() => setNavOpen((o) => !o)}
-          className="h-10 px-3 flex items-center gap-1.5 text-[var(--text-primary)] hover:bg-[#1e222d] font-bold text-sm tracking-wider"
+          className="h-10 px-3 flex items-center gap-1.5 text-[var(--text-primary)] hover:bg-[var(--bg-elevated-2)] font-bold text-sm tracking-wider"
         >
           BMG
-          <ChevronDown size={12} className="text-[#4a4e5b]" />
+          <ChevronDown size={12} className="text-[var(--text-tertiary)]" />
         </button>
         {navOpen && (
-          <div className="absolute top-10 left-0 z-50 bg-[#1e222d] border border-[#2a2e39] rounded shadow-2xl py-1 min-w-[160px]">
+          <div className="absolute top-10 left-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg shadow-2xl py-1 min-w-[160px]">
             {NAV_ITEMS.map(({ to, label, Icon }) => (
               <button
                 key={to}
                 onClick={() => { navigate(to); setNavOpen(false); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#d1d4dc] hover:bg-[#2a2e39] hover:text-[var(--text-primary)]"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] hover:text-[var(--text-primary)]"
               >
-                <Icon size={15} className="text-[#4a4e5b]" />
+                <Icon size={15} className="text-[var(--text-tertiary)]" />
                 {label}
               </button>
             ))}
-            <div className="border-t border-[#2a2e39] my-1" />
+            <div className="border-t border-[var(--border-subtle)] my-1" />
             <button
               onClick={() => { navigate("/alerts"); setNavOpen(false); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#d1d4dc] hover:bg-[#2a2e39] hover:text-[var(--text-primary)]"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] hover:text-[var(--text-primary)]"
             >
-              <Bell size={15} className="text-[#4a4e5b]" />
+              <Bell size={15} className="text-[var(--text-tertiary)]" />
               Alerts
             </button>
             <button
               onClick={() => setNavOpen(false)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[#d1d4dc] hover:bg-[#2a2e39] hover:text-[var(--text-primary)]"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] hover:text-[var(--text-primary)]"
             >
-              <Settings size={15} className="text-[#4a4e5b]" />
+              <Settings size={15} className="text-[var(--text-tertiary)]" />
               Settings
             </button>
           </div>
@@ -133,12 +133,12 @@ export default function TvTopBar({
           defaultValue={symbol}
           autoFocus
           onSelect={(s) => { onSymbolChange(s); setSearchMode(false); }}
-          inputClassName="h-7 w-28 bg-[#2a2e39] text-[var(--text-primary)] text-sm font-bold px-2 rounded-l border border-white/20 focus:outline-none focus:border-white/50 uppercase tracking-wider"
+          inputClassName="h-7 w-28 bg-[var(--bg-elevated-2)] text-[var(--text-primary)] text-sm font-bold px-2 rounded-l border border-[var(--border-emphasis)] focus:outline-none focus:border-[var(--accent-positive)] uppercase tracking-wider"
         />
       ) : (
         <button
           onClick={() => setSearchMode(true)}
-          className="h-10 px-3 flex items-center gap-2 text-[var(--text-primary)] font-bold text-sm hover:bg-[#1e222d] rounded"
+          className="h-10 px-3 flex items-center gap-2 text-[var(--text-primary)] font-bold text-sm hover:bg-[var(--bg-elevated-2)] rounded"
         >
           <span className="tracking-wider">{symbol}</span>
         </button>
@@ -150,13 +150,13 @@ export default function TvTopBar({
       <div ref={typeRef} className="relative">
         <button
           onClick={() => setTypeOpen((o) => !o)}
-          className="h-10 px-2.5 flex items-center gap-1 text-xs text-[#d1d4dc] hover:bg-[#1e222d] font-medium"
+          className="h-10 px-2.5 flex items-center gap-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] hover:text-[var(--text-primary)] font-medium"
         >
           {currentType?.label}
-          <ChevronDown size={11} className="text-[#4a4e5b]" />
+          <ChevronDown size={11} className="text-[var(--text-tertiary)]" />
         </button>
         {typeOpen && (
-          <div className="absolute top-10 left-0 z-50 bg-[#1e222d] border border-[#2a2e39] rounded shadow-2xl py-1 min-w-[110px]">
+          <div className="absolute top-10 left-0 z-50 bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg shadow-2xl py-1 min-w-[110px]">
             {CHART_TYPES.map((ct) => (
               <button
                 key={ct.value}
@@ -164,8 +164,8 @@ export default function TvTopBar({
                 className={cn(
                   "w-full text-left px-3 py-1.5 text-sm",
                   chartType === ct.value
-                    ? "text-[var(--text-primary)] bg-[#2a2e39]"
-                    : "text-[#d1d4dc] hover:bg-[#2a2e39] hover:text-[var(--text-primary)]"
+                    ? "text-[var(--accent-positive)] bg-[var(--bg-elevated-2)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] hover:text-[var(--text-primary)]"
                 )}
               >
                 {ct.label}
@@ -180,7 +180,7 @@ export default function TvTopBar({
       {/* Indicators */}
       <button
         onClick={onIndicatorsClick}
-        className="h-10 px-3 text-xs font-medium text-[#d1d4dc] hover:bg-[#1e222d] hover:text-[var(--text-primary)]"
+        className="h-10 px-3 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] hover:text-[var(--text-primary)]"
       >
         Indicators
       </button>
@@ -190,10 +190,10 @@ export default function TvTopBar({
       {/* Compare */}
       {compareSymbol ? (
         <div className="flex items-center gap-1 h-10 px-2">
-          <span className="text-[11px] text-[#f59e0b] font-semibold">vs {compareSymbol}</span>
+          <span className="text-[11px] text-[#F59E0B] font-semibold">vs {compareSymbol}</span>
           <button
             onClick={() => { onCompare?.(null); setCompareMode(false); setCompareInput(""); }}
-            className="text-[#4a4e5b] hover:text-[#d1d4dc] ml-0.5"
+            className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] ml-0.5"
           >
             <X size={11} />
           </button>
@@ -212,16 +212,16 @@ export default function TvTopBar({
             value={compareInput}
             onChange={(e) => setCompareInput(e.target.value.toUpperCase())}
             placeholder="Symbol…"
-            className="h-6 w-20 bg-[#2a2e39] text-[var(--text-primary)] text-xs font-mono px-1.5 rounded border border-[#4a4e5b] focus:outline-none focus:border-[#f59e0b] uppercase"
+            className="h-6 w-20 bg-[var(--bg-elevated-2)] text-[var(--text-primary)] text-xs font-mono px-1.5 rounded border border-[var(--border-emphasis)] focus:outline-none focus:border-[var(--accent-positive)] uppercase"
           />
-          <button type="button" onClick={() => { setCompareMode(false); setCompareInput(""); }} className="text-[#4a4e5b] hover:text-[#d1d4dc]">
+          <button type="button" onClick={() => { setCompareMode(false); setCompareInput(""); }} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
             <X size={11} />
           </button>
         </form>
       ) : (
         <button
           onClick={() => setCompareMode(true)}
-          className="h-10 px-2.5 flex items-center gap-1 text-xs text-[#4a4e5b] hover:bg-[#1e222d] hover:text-[#d1d4dc]"
+          className="h-10 px-2.5 flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:bg-[var(--bg-elevated-2)] hover:text-[var(--text-secondary)]"
           title="Compare symbol"
         >
           <GitCompare size={13} />
@@ -235,8 +235,8 @@ export default function TvTopBar({
       <button
         onClick={onWatchlistToggle}
         className={cn(
-          "h-10 px-2.5 text-xs font-medium hover:bg-[#1e222d]",
-          showWatchlist ? "text-[var(--text-primary)]" : "text-[#4a4e5b]"
+          "h-10 px-2.5 text-xs font-medium hover:bg-[var(--bg-elevated-2)]",
+          showWatchlist ? "text-[var(--accent-positive)]" : "text-[var(--text-tertiary)]"
         )}
       >
         <BookMarked size={15} />
@@ -245,19 +245,19 @@ export default function TvTopBar({
       {/* WS status */}
       <div className="h-10 px-2 flex items-center gap-1.5 text-xs">
         {wsStatus === "connected" && marketStatus === "open" ? (
-          <><Wifi size={13} className="text-[#26a69a]" /><span className="text-[#26a69a] hidden sm:block">Live</span></>
+          <><Wifi size={13} className="text-[var(--accent-positive)]" /><span className="text-[var(--accent-positive)] hidden sm:block">Live</span></>
         ) : wsStatus === "connected" ? (
           <><Moon size={13} className="text-amber-500" /><span className="text-amber-500 hidden sm:block">Closed</span></>
         ) : (
-          <><WifiOff size={13} className="text-[#ef5350]" /><span className="text-[#ef5350] hidden sm:block">Off</span></>
+          <><WifiOff size={13} className="text-[var(--accent-negative)]" /><span className="text-[var(--accent-negative)] hidden sm:block">Off</span></>
         )}
       </div>
 
       {/* Alerts bell */}
-      <button onClick={markAllRead} className="relative h-10 px-2 flex items-center text-[#4a4e5b] hover:text-[#d1d4dc]">
+      <button onClick={markAllRead} className="relative h-10 px-2 flex items-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
         <Bell size={15} />
         {unread > 0 && (
-          <span className="absolute top-1.5 right-1 bg-[#ef5350] text-[var(--text-primary)] text-[9px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">
+          <span className="absolute top-1.5 right-1 bg-[var(--accent-negative)] text-[#0a0a0a] text-[9px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold">
             {unread > 9 ? "9+" : unread}
           </span>
         )}

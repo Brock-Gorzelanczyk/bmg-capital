@@ -41,14 +41,14 @@ interface Props {
 }
 
 const TV = {
-  bg: "#131722",
-  grid: "#1e222d",
-  text: "#d1d4dc",
-  border: "#2a2e39",
-  up: "#26a69a",
-  down: "#ef5350",
-  upVol: "#26a69a33",
-  downVol: "#ef535033",
+  bg: "#18181B",
+  grid: "rgba(255,255,255,0.04)",
+  text: "#A1A1AA",
+  border: "rgba(255,255,255,0.08)",
+  up: "#BEF264",
+  down: "#FB7185",
+  upVol: "#BEF26428",
+  downVol: "#FB718528",
 };
 
 const OVERLAY_COLORS: Record<string, string> = {

@@ -24,15 +24,15 @@ export default function MacdChart({ bars, macdLine, macdSignal, macdHist, height
   useEffect(() => {
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
-      layout: { background: { type: ColorType.Solid, color: "#0a0a0a" }, textColor: "#d4d4d4" },
-      grid: { vertLines: { color: "#111111" }, horzLines: { color: "#111111" } },
+      layout: { background: { type: ColorType.Solid, color: "#18181B" }, textColor: "#A1A1AA" },
+      grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
       crosshair: { mode: 1 },
       rightPriceScale: { borderColor: "#1f1f1f", scaleMargins: { top: 0.1, bottom: 0.1 } },
       timeScale: { borderColor: "#1f1f1f", visible: false },
       autoSize: true,
     });
 
-    histRef.current = chart.addSeries(HistogramSeries, { color: "#26a69a44", priceLineVisible: false, lastValueVisible: false });
+    histRef.current = chart.addSeries(HistogramSeries, { color: "#BEF26428", priceLineVisible: false, lastValueVisible: false });
     lineRef.current = chart.addSeries(LineSeries, { color: "#ec4899", lineWidth: 1, priceLineVisible: false, lastValueVisible: true });
     signalRef.current = chart.addSeries(LineSeries, { color: "#3b82f6", lineWidth: 1, priceLineVisible: false, lastValueVisible: true });
     chartRef.current = chart;
@@ -51,7 +51,7 @@ export default function MacdChart({ bars, macdLine, macdSignal, macdHist, height
       bars.slice(0, n)
         .map((b, i) => {
           const v = macdHist[i];
-          return v != null ? { time: toTime(b.t), value: v, color: v >= 0 ? "#26a69a66" : "#ef535066" } : null;
+          return v != null ? { time: toTime(b.t), value: v, color: v >= 0 ? "#BEF26440" : "#FB718566" } : null;
         })
         .filter(Boolean) as { time: ReturnType<typeof toTime>; value: number; color: string }[]
     );
@@ -70,14 +70,14 @@ export default function MacdChart({ bars, macdLine, macdSignal, macdHist, height
   }, [bars, macdLine, macdSignal, macdHist]);
 
   return (
-    <div className="border-t border-[#1f1f1f] shrink-0" style={{ height }}>
+    <div className="border-t border-[var(--border-subtle)] shrink-0" style={{ height }}>
       <div className="px-2 py-0.5 text-[10px] text-[#555] font-medium flex items-center justify-between">
         <div className="flex gap-3 items-center">
           <span>MACD (12,26,9)</span>
           <span className="text-pink-400">— MACD</span>
           <span className="text-blue-400">— Signal</span>
         </div>
-        <ExplainButton term="MACD" className="text-[#4a4e5b] hover:text-[#d1d4dc]" size={11} />
+        <ExplainButton term="MACD" className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]" size={11} />
       </div>
       <div ref={containerRef} style={{ height: height - 18, width: "100%" }} />
     </div>

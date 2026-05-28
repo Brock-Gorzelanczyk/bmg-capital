@@ -340,7 +340,7 @@ export default function ChartPage() {
   const showSubPanes = proMode;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-[#131722] text-[#d1d4dc]">
+    <div className="flex flex-col flex-1 overflow-hidden bg-[var(--bg-base)] text-[var(--text-secondary)]">
       {/* Top bar */}
       <TvTopBar
         symbol={symbol}
@@ -365,15 +365,15 @@ export default function ChartPage() {
 
       {/* Preset context banner */}
       {showPresetBanner && presetKey && PRESET_LABELS[presetKey] && (
-        <div className="h-8 border-b border-[#2a2e39] bg-[#1e222d] flex items-center px-3 gap-3 shrink-0">
-          <span className="text-[11px] text-[#4a4e5b]">Screened by</span>
-          <span className="text-[11px] font-semibold text-[#d1d4dc]">{PRESET_LABELS[presetKey]}</span>
+        <div className="h-8 border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)] flex items-center px-3 gap-3 shrink-0">
+          <span className="text-[11px] text-[var(--text-tertiary)]">Screened by</span>
+          <span className="text-[11px] font-semibold text-[var(--text-secondary)]">{PRESET_LABELS[presetKey]}</span>
           <button
             onClick={handlePresetToggle}
             title={presetActive ? "Hide preset indicators" : "Show preset indicators"}
             className={cn(
               "w-8 h-4 rounded-full relative transition-colors shrink-0 focus:outline-none",
-              presetActive ? "bg-[#2962ff]" : "bg-[#2a2e39]"
+              presetActive ? "bg-[var(--accent-positive)]" : "bg-[#2a2e39]"
             )}
           >
             <span className={cn(
@@ -381,10 +381,10 @@ export default function ChartPage() {
               presetActive ? "left-[18px]" : "left-0.5"
             )} />
           </button>
-          <span className="text-[10px] text-[#4a4e5b]">{presetActive ? "on" : "off"}</span>
+          <span className="text-[10px] text-[var(--text-tertiary)]">{presetActive ? "on" : "off"}</span>
           <button
             onClick={() => setShowPresetBanner(false)}
-            className="ml-auto text-[#4a4e5b] hover:text-[#d1d4dc]"
+            className="ml-auto text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             title="Dismiss"
           >
             <X size={12} />
@@ -407,19 +407,19 @@ export default function ChartPage() {
         <div className="flex-1 flex flex-col overflow-hidden relative">
           {/* OHLCV info overlay */}
           <div className="absolute top-0 left-0 z-10 pointer-events-none flex items-center gap-0 px-2 pt-1.5 flex-wrap">
-            <span className="text-[#d1d4dc] font-semibold text-xs mr-2">{symbol}</span>
+            <span className="text-[var(--text-secondary)] font-semibold text-xs mr-2">{symbol}</span>
             {displayBar && (
               <>
-                <span className="text-[#4a4e5b] text-[11px] mr-1.5">O</span>
+                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">O</span>
                 <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.open.toFixed(2)}</span>
-                <span className="text-[#4a4e5b] text-[11px] mr-1.5">H</span>
+                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">H</span>
                 <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.high.toFixed(2)}</span>
-                <span className="text-[#4a4e5b] text-[11px] mr-1.5">L</span>
+                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">L</span>
                 <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.low.toFixed(2)}</span>
-                <span className="text-[#4a4e5b] text-[11px] mr-1.5">C</span>
+                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">C</span>
                 <span className="text-[11px] font-semibold mr-2" style={{ color: priceColor }}>{displayBar.close.toFixed(2)}</span>
-                <span className="text-[#4a4e5b] text-[11px] mr-1.5">V</span>
-                <span className="text-[#4a4e5b] text-[11px] mr-3">{formatVolume(displayBar.volume)}</span>
+                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">V</span>
+                <span className="text-[var(--text-tertiary)] text-[11px] mr-3">{formatVolume(displayBar.volume)}</span>
               </>
             )}
             {overlayIndicators.map(([key, vals]) => {
@@ -436,22 +436,22 @@ export default function ChartPage() {
               );
             })}
             {pendingTrendStart && (
-              <span className="ml-3 text-[11px] text-[#d1d4dc]">Click second point to complete trend line</span>
+              <span className="ml-3 text-[11px] text-[var(--text-secondary)]">Click second point to complete trend line</span>
             )}
             {pendingRectStart && (
-              <span className="ml-3 text-[11px] text-[#f59e0b]">Click opposite corner to complete rectangle</span>
+              <span className="ml-3 text-[11px] text-[#F59E0B]">Click opposite corner to complete rectangle</span>
             )}
             {pendingFibStart && (
-              <span className="ml-3 text-[11px] text-[#9c27b0]">Click second point to complete Fibonacci</span>
+              <span className="ml-3 text-[11px] text-[#A78BFA]">Click second point to complete Fibonacci</span>
             )}
             {pendingTextPoint && (
-              <span className="ml-3 text-[11px] text-[#d1d4dc]">Type label and press Enter</span>
+              <span className="ml-3 text-[11px] text-[var(--text-secondary)]">Type label and press Enter</span>
             )}
           </div>
 
           {/* Saved drawings indicator */}
           {savedIndicator && (
-            <div className="absolute top-1 right-16 z-20 flex items-center gap-1 bg-[#1e222d] border border-[#2a2e39] rounded px-2 py-0.5 text-[10px] text-[#26a69a] pointer-events-none animate-in fade-in duration-200">
+            <div className="absolute top-1 right-16 z-20 flex items-center gap-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded px-2 py-0.5 text-[10px] text-[var(--accent-positive)] pointer-events-none animate-in fade-in duration-200">
               <Check size={10} />
               saved
             </div>
@@ -460,7 +460,7 @@ export default function ChartPage() {
           {/* Text label input overlay */}
           {pendingTextPoint && (
             <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-              <div className="pointer-events-auto bg-[#1e222d] border border-[#2a2e39] rounded-lg px-3 py-2 flex items-center gap-2 shadow-xl">
+              <div className="pointer-events-auto bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 flex items-center gap-2 shadow-xl">
                 <input
                   autoFocus
                   type="text"
@@ -480,9 +480,9 @@ export default function ChartPage() {
                     }
                   }}
                   placeholder="Label text…"
-                  className="bg-transparent text-[#d1d4dc] text-sm outline-none w-40 placeholder:text-[#4a4e5b]"
+                  className="bg-transparent text-[var(--text-secondary)] text-sm outline-none w-40 placeholder:text-[var(--text-tertiary)]"
                 />
-                <span className="text-[#4a4e5b] text-[10px]">Enter ↵</span>
+                <span className="text-[var(--text-tertiary)] text-[10px]">Enter ↵</span>
               </div>
             </div>
           )}
@@ -490,7 +490,7 @@ export default function ChartPage() {
           {/* Main chart */}
           <div className="flex-1 overflow-hidden relative">
             {isLoading ? (
-              <div className="w-full h-full flex items-center justify-center text-[#4a4e5b] text-sm">
+              <div className="w-full h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
                 Loading {symbol}...
               </div>
             ) : (
@@ -639,7 +639,7 @@ export default function ChartPage() {
           <button
             onClick={() => setShowWatchlist(true)}
             title="Show watchlist"
-            className="w-8 shrink-0 flex flex-col items-center justify-center border-l border-[#2a2e39] bg-[#131722] hover:bg-[#1e222d] text-[#4a4e5b] hover:text-[#d1d4dc] transition-colors gap-1"
+            className="w-8 shrink-0 flex flex-col items-center justify-center border-l border-[var(--border-subtle)] bg-[var(--bg-base)] hover:bg-[var(--bg-elevated)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors gap-1"
           >
             <LayoutList size={14} />
           </button>
@@ -667,7 +667,7 @@ export default function ChartPage() {
 
       {/* Order ticket modal */}
       {showOrderTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#020617]/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-base)]/80 backdrop-blur-sm">
           <div className="w-96">
             <OrderTicket symbol={symbol} onClose={() => setShowOrderTicket(false)} />
           </div>

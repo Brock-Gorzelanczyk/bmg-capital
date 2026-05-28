@@ -37,8 +37,8 @@ export default function OscillatorPane({
   useEffect(() => {
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
-      layout: { background: { type: ColorType.Solid, color: "#0a0a0a" }, textColor: "#d4d4d4" },
-      grid: { vertLines: { color: "#111111" }, horzLines: { color: "#111111" } },
+      layout: { background: { type: ColorType.Solid, color: "#18181B" }, textColor: "#A1A1AA" },
+      grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
       crosshair: { mode: 1 },
       rightPriceScale: { borderColor: "#1f1f1f", scaleMargins: { top: 0.1, bottom: 0.1 } },
       timeScale: { borderColor: "#1f1f1f", visible: false },
@@ -92,7 +92,7 @@ export default function OscillatorPane({
   }, [bars, line1, line2]);
 
   return (
-    <div className="border-t border-[#1f1f1f] shrink-0" style={{ height }}>
+    <div className="border-t border-[var(--border-subtle)] shrink-0" style={{ height }}>
       <div className="px-2 py-0.5 text-[10px] text-[#555] font-medium flex items-center justify-between">
         <div className="flex gap-3 items-center">
           <span>{title}</span>
@@ -100,7 +100,7 @@ export default function OscillatorPane({
           {label2 && color2 && <span style={{ color: color2 }}>— {label2}</span>}
         </div>
         {explainTerm && (
-          <ExplainButton term={explainTerm} className="text-[#4a4e5b] hover:text-[#d1d4dc]" size={11} />
+          <ExplainButton term={explainTerm} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]" size={11} />
         )}
       </div>
       <div ref={containerRef} style={{ height: height - 18, width: "100%" }} />

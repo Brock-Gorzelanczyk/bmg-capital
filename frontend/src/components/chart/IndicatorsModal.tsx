@@ -25,15 +25,15 @@ const ALL_INDICATORS: IndicatorDef[] = [
   { key: "ICHIMOKU", label: "Ichimoku Cloud",              params: "",       color: "#26a69a", category: "Trend" },
   { key: "PSAR",     label: "Parabolic SAR",               params: "",       color: "#9c27b0", category: "Trend" },
   // Oscillators
-  { key: "RSI_14", label: "Relative Strength Index",       params: "14",     color: "#22c55e", category: "Oscillators" },
+  { key: "RSI_14", label: "Relative Strength Index",       params: "14",     color: "#BEF264", category: "Oscillators" },
   { key: "MACD",   label: "MACD",                          params: "12,26,9",color: "#ec4899", category: "Oscillators" },
   { key: "STOCH",  label: "Stochastic",                    params: "14,3,3", color: "#f97316", category: "Oscillators" },
   { key: "WILLR",  label: "Williams %R",                   params: "14",     color: "#14b8a6", category: "Oscillators" },
   { key: "CCI",    label: "CCI",                           params: "20",     color: "#e879f9", category: "Oscillators" },
   { key: "ROC",    label: "Rate of Change",                params: "12",     color: "#fb923c", category: "Oscillators" },
   // Volatility
-  { key: "BB_20",    label: "Bollinger Bands",             params: "20,2",   color: "#94a3b8", category: "Volatility" },
-  { key: "ATR",      label: "Average True Range",          params: "14",     color: "#64748b", category: "Volatility" },
+  { key: "BB_20",    label: "Bollinger Bands",             params: "20,2",   color: "#71717A", category: "Volatility" },
+  { key: "ATR",      label: "Average True Range",          params: "14",     color: "#52525B", category: "Volatility" },
   { key: "DONCHIAN", label: "Donchian Channel",            params: "",       color: "#607d8b", category: "Volatility" },
   { key: "KELTNER",  label: "Keltner Channel",             params: "",       color: "#ff9800", category: "Volatility" },
   // Volume
@@ -76,19 +76,19 @@ export default function IndicatorsModal({ active, onChange, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-[#111] border border-[#1f1f1f] rounded-lg shadow-2xl w-[480px] max-h-[70vh] flex flex-col">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl shadow-2xl w-[480px] max-h-[70vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1f1f1f]">
-          <Search size={15} className="text-[#555] shrink-0" />
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border-subtle)]">
+          <Search size={15} className="text-[var(--text-tertiary)] shrink-0" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search indicators..."
-            className="flex-1 bg-transparent text-[#d4d4d4] text-sm placeholder-[#555] focus:outline-none"
+            className="flex-1 bg-transparent text-[var(--text-primary)] text-sm placeholder:text-[var(--text-tertiary)] focus:outline-none"
           />
-          <button onClick={onClose} className="text-[#555] hover:text-[#d4d4d4]">
+          <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
             <X size={16} />
           </button>
         </div>
@@ -97,7 +97,7 @@ export default function IndicatorsModal({ active, onChange, onClose }: Props) {
         <div className="overflow-y-auto flex-1 px-2 py-2">
           {filtered ? (
             filtered.length === 0 ? (
-              <p className="text-center text-[#555] text-sm py-8">No indicators found</p>
+              <p className="text-center text-[var(--text-tertiary)] text-sm py-8">No indicators found</p>
             ) : (
               <div className="space-y-0.5">
                 {filtered.map((ind) => (
@@ -110,7 +110,7 @@ export default function IndicatorsModal({ active, onChange, onClose }: Props) {
               const items = ALL_INDICATORS.filter((i) => i.category === cat);
               return (
                 <div key={cat} className="mb-3">
-                  <p className="text-[10px] text-[#555] uppercase tracking-widest px-2 mb-1">{cat}</p>
+                  <p className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest px-2 mb-1">{cat}</p>
                   <div className="space-y-0.5">
                     {items.map((ind) => (
                       <IndicatorRow key={ind.key} ind={ind} active={active.has(ind.key)} onToggle={() => toggle(ind.key)} />
@@ -123,10 +123,10 @@ export default function IndicatorsModal({ active, onChange, onClose }: Props) {
         </div>
 
         {/* Active count */}
-        <div className="border-t border-[#1f1f1f] px-4 py-2 flex items-center justify-between">
-          <span className="text-xs text-[#555]">{active.size} active</span>
+        <div className="border-t border-[var(--border-subtle)] px-4 py-2 flex items-center justify-between">
+          <span className="text-xs text-[var(--text-tertiary)]">{active.size} active</span>
           {active.size > 0 && (
-            <button onClick={() => onChange(new Set())} className="text-xs text-[#ef5350] hover:text-red-400">
+            <button onClick={() => onChange(new Set())} className="text-xs text-[var(--accent-negative)] hover:opacity-80">
               Clear all
             </button>
           )}
@@ -141,28 +141,23 @@ function IndicatorRow({ ind, active, onToggle }: { ind: IndicatorDef; active: bo
     <button
       onClick={onToggle}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2 rounded hover:bg-[#1f1f1f] transition-colors text-left",
-        active && "bg-[#1f1f1f]"
+        "w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--bg-elevated-2)] transition-colors text-left",
+        active && "bg-[var(--bg-elevated-2)]"
       )}
     >
-      <span
-        className="w-2.5 h-2.5 rounded-full shrink-0"
-        style={{ backgroundColor: ind.color }}
-      />
+      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ind.color }} />
       <div className="flex-1 min-w-0">
-        <span className="text-sm text-[#d4d4d4]">{ind.label}</span>
+        <span className="text-sm text-[var(--text-primary)]">{ind.label}</span>
         {ind.params && (
-          <span className="text-xs text-[#555] ml-1.5">({ind.params})</span>
+          <span className="text-xs text-[var(--text-tertiary)] ml-1.5">({ind.params})</span>
         )}
       </div>
-      <span
-        className={cn(
-          "text-xs font-medium px-2 py-0.5 rounded border transition-colors",
-          active
-            ? "border-white/20 text-[var(--text-primary)]"
-            : "border-[#1f1f1f] text-[#555]"
-        )}
-      >
+      <span className={cn(
+        "text-xs font-medium px-2 py-0.5 rounded border transition-colors",
+        active
+          ? "border-[var(--accent-positive)]/30 text-[var(--accent-positive)] bg-[var(--accent-positive-bg)]"
+          : "border-[var(--border-subtle)] text-[var(--text-tertiary)]"
+      )}>
         {active ? "On" : "Add"}
       </span>
     </button>
