@@ -44,6 +44,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("asset_class",           "VARCHAR DEFAULT 'equity'"),
         ("exchange",              "VARCHAR"),
         ("funding_cost_accrued",  "FLOAT DEFAULT 0.0"),
+        ("direction",             "VARCHAR DEFAULT 'long'"),
     ],
     "watchlists": [
         ("user_id", "INTEGER"),

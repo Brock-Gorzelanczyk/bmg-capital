@@ -39,6 +39,7 @@ class StrategyTrade(Base):
     asset_class: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="equity")
     exchange: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     funding_cost_accrued: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
+    direction: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="long")
 
 
 class DailyLog(Base):

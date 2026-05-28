@@ -95,55 +95,96 @@ def _apply_fill_to_position(
     fill_price: float,
     prev_close: Optional[float],
     order_id: int,
+    allow_short: bool = False,
 ) -> None:
-    """Update PaperPosition and write PaperTransaction for sells."""
+    """Update PaperPosition and write PaperTransaction.
+
+    Supports negative qty (short) positions:
+      sell with no existing long → creates a short (qty < 0)
+      buy against a short → buy-to-cover, records realized P&L
+    """
+    existing = db.query(PaperPosition).filter_by(user_id=user_id, symbol=symbol).first()
+
     if side == "buy":
-        existing = db.query(PaperPosition).filter_by(user_id=user_id, symbol=symbol).first()
-        if existing:
-            old_cost = Decimal(str(existing.avg_cost))
-            old_qty = Decimal(str(existing.qty))
-            new_price = Decimal(str(fill_price))
-            new_qty = Decimal(str(qty))
-            total = old_qty + new_qty
-            existing.avg_cost = float((old_cost * old_qty + new_price * new_qty) / total)
+        if existing and existing.qty < 0:
+            # ── Buy-to-cover a short position ────────────────────────────────
+            abs_short = abs(existing.qty)
+            cover_qty = min(qty, abs_short)
+            # Short profit = (sold_at - bought_back_at) * qty
+            realized_pnl = _money((_d(existing.avg_cost) - _d(fill_price)) * _d(cover_qty))
+            txn = PaperTransaction(
+                user_id=user_id,
+                order_id=order_id,
+                symbol=symbol,
+                side="buy_to_cover",
+                qty=cover_qty,
+                fill_price=fill_price,
+                cost_basis=existing.avg_cost,
+                realized_pnl=realized_pnl,
+            )
+            db.add(txn)
+            existing.qty = round(existing.qty + cover_qty, 6)
+            if abs(existing.qty) < 0.0001:
+                db.delete(existing)
+                existing = None
+            remaining = qty - cover_qty
+            if remaining > 1e-8:
+                # Any excess qty becomes a new long
+                pos = PaperPosition(
+                    user_id=user_id, symbol=symbol,
+                    qty=remaining, avg_cost=fill_price, prev_close=prev_close,
+                )
+                db.add(pos)
+        elif existing and existing.qty > 0:
+            # ── Add to existing long position (weighted average) ──────────────
+            old_cost = _d(existing.avg_cost)
+            old_qty  = _d(existing.qty)
+            new_qty  = _d(qty)
+            total    = old_qty + new_qty
+            existing.avg_cost = float((old_cost * old_qty + _d(fill_price) * new_qty) / total)
             existing.qty = float(total)
             if prev_close and existing.prev_close is None:
                 existing.prev_close = prev_close
         else:
+            # ── Open new long position ────────────────────────────────────────
             pos = PaperPosition(
-                user_id=user_id,
-                symbol=symbol,
-                qty=qty,
-                avg_cost=fill_price,
-                prev_close=prev_close,
+                user_id=user_id, symbol=symbol,
+                qty=qty, avg_cost=fill_price, prev_close=prev_close,
             )
             db.add(pos)
+
     else:  # sell
-        position = db.query(PaperPosition).filter_by(user_id=user_id, symbol=symbol).first()
-        if not position:
-            raise HTTPException(status_code=400, detail=f"No position found for {symbol}")
-        if position.qty < qty - 1e-6:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient shares. Have {position.qty:.4f}, selling {qty:.4f}",
+        if existing and existing.qty > 0:
+            # ── Reduce / close an existing long position ──────────────────────
+            if existing.qty < qty - 1e-6:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient shares. Have {existing.qty:.4f}, selling {qty:.4f}",
+                )
+            cost_basis = existing.avg_cost
+            realized_pnl = _money((_d(fill_price) - _d(cost_basis)) * _d(qty))
+            txn = PaperTransaction(
+                user_id=user_id, order_id=order_id, symbol=symbol,
+                side="sell", qty=qty, fill_price=fill_price,
+                cost_basis=cost_basis, realized_pnl=realized_pnl,
             )
-        cost_basis = position.avg_cost
-        # H20: use Decimal for realized P&L calculation
-        realized_pnl = _money((_d(fill_price) - _d(cost_basis)) * _d(qty))
-        txn = PaperTransaction(
-            user_id=user_id,
-            order_id=order_id,
-            symbol=symbol,
-            side="sell",
-            qty=qty,
-            fill_price=fill_price,
-            cost_basis=cost_basis,
-            realized_pnl=realized_pnl,
-        )
-        db.add(txn)
-        position.qty = round(position.qty - qty, 6)
-        if position.qty < 0.0001:
-            db.delete(position)
+            db.add(txn)
+            existing.qty = round(existing.qty - qty, 6)
+            if existing.qty < 0.0001:
+                db.delete(existing)
+        elif allow_short:
+            if existing and existing.qty < 0:
+                # ── Add to existing short position ────────────────────────────
+                existing.qty = round(existing.qty - qty, 6)
+            else:
+                # ── Open new short position ───────────────────────────────────
+                pos = PaperPosition(
+                    user_id=user_id, symbol=symbol,
+                    qty=-qty, avg_cost=fill_price, prev_close=prev_close,
+                )
+                db.add(pos)
+        else:
+            raise HTTPException(status_code=400, detail=f"No position found for {symbol}")
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +234,9 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
         cost_basis_total = _money(d_avg_cost * d_qty)
         d_unrealized_pnl = _d(market_value) - _d(cost_basis_total)
         unrealized_pnl = _money(d_unrealized_pnl)
-        unrealized_pnl_pct = _money(d_unrealized_pnl / _d(cost_basis_total) * _d(100)) if cost_basis_total else 0.0
+        # Use abs for pct denominator so shorts show correct sign (+/-)
+        d_cost_abs = abs(_d(cost_basis_total))
+        unrealized_pnl_pct = _money(d_unrealized_pnl / d_cost_abs * _d(100)) if d_cost_abs else 0.0
 
         d_pos_day_pnl = (d_price - d_prev_close) * d_qty
         pos_day_pnl = _money(d_pos_day_pnl)
@@ -206,17 +249,18 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
             "id": p.id,
             "symbol": p.symbol,
             "qty": p.qty,
+            "direction": "short" if p.qty < 0 else "long",
             "avg_cost": p.avg_cost,
             "current_price": current_price,
             "market_value": market_value,
-            "cost_basis": cost_basis_total,
+            "cost_basis": abs(cost_basis_total),
             "unrealized_pnl": unrealized_pnl,
             "unrealized_pnl_pct": unrealized_pnl_pct,
             "day_pnl": pos_day_pnl,
             "day_pnl_pct": pos_day_pnl_pct,
             "prev_close": prev_close,
             "opened_at": p.opened_at.isoformat(),
-            "price_stale": stale,  # H8: frontend warning indicator
+            "price_stale": stale,
         })
 
     d_equity = _d(acct.cash) + _d(total_positions_value)
@@ -258,6 +302,7 @@ class OrderRequest(BaseModel):
     trailing_type: Optional[str] = None        # amount | percent
     tif: str = "day"                           # day | gtc | ioc | fok
     extended_hours: bool = False
+    allow_short: bool = False                  # set True to open short (sell without long position)
 
     @field_validator("side")
     @classmethod
@@ -343,13 +388,14 @@ async def place_order(
             acct.cash = round(acct.cash - total_cost, 2)
             logger.info(f"CASH_CHANGE user={user.id} delta={_delta:.4f} new_balance={acct.cash:.4f} reason='market buy {req.symbol} qty={qty}'")
         else:
-            position = db.query(PaperPosition).filter_by(user_id=user.id, symbol=req.symbol).first()
-            if not position or position.qty < qty - 1e-6:
-                have = position.qty if position else 0
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Insufficient shares. Have {have:.4f}, selling {qty:.4f}",
-                )
+            if not req.allow_short:
+                position = db.query(PaperPosition).filter_by(user_id=user.id, symbol=req.symbol).first()
+                if not position or position.qty < qty - 1e-6:
+                    have = position.qty if position else 0
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient shares. Have {have:.4f}, selling {qty:.4f}",
+                    )
             _delta = total_cost
             acct.cash = round(acct.cash + total_cost, 2)
             logger.info(f"CASH_CHANGE user={user.id} delta={_delta:.4f} new_balance={acct.cash:.4f} reason='market sell {req.symbol} qty={qty}'")
@@ -374,7 +420,8 @@ async def place_order(
 
         try:
             _apply_fill_to_position(
-                db, user.id, req.symbol, req.side, qty, fill_price, quote.get("prev_close"), order.id
+                db, user.id, req.symbol, req.side, qty, fill_price, quote.get("prev_close"), order.id,
+                allow_short=req.allow_short,
             )
 
             # Handle bracket: create TP and SL child working orders
@@ -851,3 +898,124 @@ async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user
     except Exception:
         db.rollback()
         raise
+
+
+# ---------------------------------------------------------------------------
+# POST /api/paper/liquidate-strategy/{strategy_key} — kill switch
+# ---------------------------------------------------------------------------
+
+@router.post("/liquidate-strategy/{strategy_key}")
+async def liquidate_strategy(
+    strategy_key: str,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Kill switch: close all open/candidate StrategyTrade records for a strategy,
+    settle any corresponding PaperPosition, and cancel working paper orders.
+    """
+    from app.db.models.strategy import StrategyTrade
+    from sqlalchemy import select
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    trades = db.execute(
+        select(StrategyTrade).where(
+            StrategyTrade.preset_key == strategy_key,
+            StrategyTrade.user_id == user.id,
+            StrategyTrade.status.in_(["open", "candidate"]),
+        )
+    ).scalars().all()
+
+    if not trades:
+        return {"liquidated": 0, "message": f"No open positions for strategy '{strategy_key}'"}
+
+    acct = _get_or_create_account(db, user.id)
+    liquidated = []
+
+    for trade in trades:
+        if trade.status == "candidate":
+            trade.status = "closed"
+            trade.exit_date = now
+            trade.exit_reason = "kill_switch"
+            liquidated.append({"symbol": trade.symbol, "was": "candidate", "fill_price": None})
+            continue
+
+        if not (trade.symbol and trade.shares and trade.entry_price and trade.entry_price > 0):
+            trade.status = "closed"
+            trade.exit_date = now
+            trade.exit_reason = "kill_switch"
+            continue
+
+        paper_symbol = trade.symbol.replace("/USDT", "-USD") if "/" in trade.symbol else trade.symbol
+        direction = getattr(trade, "direction", None) or "long"
+        close_side = "sell" if direction == "long" else "buy"
+
+        fill_price = trade.last_known_price or trade.entry_price
+        try:
+            quote = await get_quote(paper_symbol)
+            if quote and quote.get("last"):
+                fill_price = quote["last"]
+        except Exception:
+            pass
+
+        total_proceeds = round(fill_price * trade.shares, 2)
+
+        if close_side == "sell":
+            acct.cash = round(acct.cash + total_proceeds, 2)
+            logger.info(
+                f"CASH_CHANGE user={user.id} delta={total_proceeds:.4f} "
+                f"new_balance={acct.cash:.4f} reason='kill_switch sell {paper_symbol}'"
+            )
+        else:
+            acct.cash = round(acct.cash - total_proceeds, 2)
+            logger.info(
+                f"CASH_CHANGE user={user.id} delta={-total_proceeds:.4f} "
+                f"new_balance={acct.cash:.4f} reason='kill_switch cover {paper_symbol}'"
+            )
+
+        try:
+            _apply_fill_to_position(
+                db, user.id, paper_symbol, close_side,
+                trade.shares, fill_price, None, 0,
+                allow_short=(direction == "short"),
+            )
+        except HTTPException:
+            pass  # paper position may not exist for strategy-only trades
+        except Exception as e:
+            logger.warning(f"liquidate_strategy: paper position settle failed for {paper_symbol}: {e}")
+
+        trade.status = "closed"
+        trade.exit_date = now
+        trade.exit_price = round(fill_price, 8)
+        trade.exit_reason = "kill_switch"
+
+        liquidated.append({
+            "symbol": trade.symbol,
+            "direction": direction,
+            "fill_price": fill_price,
+            "was": "open",
+        })
+
+    # Cancel working paper orders for the same symbols
+    paper_symbols = {
+        t.symbol.replace("/USDT", "-USD") if t.symbol and "/" in t.symbol else t.symbol
+        for t in trades if t.symbol
+    }
+    for sym in paper_symbols:
+        working = db.query(PaperOrder).filter(
+            PaperOrder.user_id == user.id,
+            PaperOrder.symbol == sym,
+            PaperOrder.status == "working",
+        ).all()
+        for o in working:
+            o.status = "cancelled"
+            o.cancelled_at = now
+
+    db.commit()
+
+    return {
+        "liquidated": len(liquidated),
+        "positions": liquidated,
+        "message": f"Liquidated {len(liquidated)} position(s) for strategy '{strategy_key}'",
+    }
