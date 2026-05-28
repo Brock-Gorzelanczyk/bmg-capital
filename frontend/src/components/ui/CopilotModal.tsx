@@ -21,7 +21,7 @@ interface ToolCall {
 
 // ── Tool display metadata ─────────────────────────────────────────────────────
 
-const TOOL_META: Record<string, { label: string; icon: React.FC<{ size?: number }> }> = {
+const TOOL_META: Record<string, { label: string; icon: React.FC<{ size?: number; className?: string }> }> = {
   get_quote:              { label: "Looking up quote",         icon: TrendingUp },
   run_screener:           { label: "Running screener",         icon: BarChart2 },
   get_news:               { label: "Fetching news",            icon: Database },

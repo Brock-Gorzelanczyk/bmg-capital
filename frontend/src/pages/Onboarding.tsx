@@ -1,29 +1,31 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle2, ChevronRight, Landmark, Star } from "lucide-react";
+import {
+  ChevronRight, ChevronLeft, CheckCircle2, TrendingUp, Shield, Clock,
+  Target, Zap, BarChart2, Bitcoin, Layers, Building2, Lock, CreditCard,
+  Gift, Sparkles, BookOpen, Star,
+} from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import client from "@/api/client";
-import { seedDemo } from "@/api/paper";
 
-interface OnboardingData {
-  goal: string;
-  experience: string;
-  risk_tolerance: string;
-  time_horizon: string;
-}
+// Set to false to require real KYC/Plaid in production
+const DEMO_MODE = true;
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 16;
 
-function Progress({ step }: { step: number }) {
+// ── Progress bar ──────────────────────────────────────────────────────────────
+
+function ProgressBar({ step }: { step: number }) {
   return (
-    <div className="flex items-center gap-1.5 mb-8">
+    <div className="flex items-center gap-1 mb-8">
       {Array.from({ length: TOTAL_STEPS }, (_, i) => (
         <div
           key={i}
           className={cn(
-            "h-1 rounded-full flex-1 transition-all duration-300",
-            i < step ? "bg-white" : i === step ? "bg-zinc-500" : "bg-zinc-800"
+            "h-0.5 rounded-full flex-1 transition-all duration-500",
+            i < step ? "bg-white" : i === step ? "bg-white/40" : "bg-white/10"
           )}
         />
       ))}
@@ -31,38 +33,793 @@ function Progress({ step }: { step: number }) {
   );
 }
 
-interface OptionCardProps {
+// ── Option card ───────────────────────────────────────────────────────────────
+
+interface OptionProps {
   label: string;
   description?: string;
-  emoji?: string;
+  icon?: React.ReactNode;
   selected: boolean;
   onClick: () => void;
+  multi?: boolean;
 }
 
-function OptionCard({ label, description, emoji, selected, onClick }: OptionCardProps) {
+function OptionCard({ label, description, icon, selected, onClick }: OptionProps) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-5 py-4 rounded-2xl border transition-all duration-150 group",
+        "w-full text-left px-4 py-3.5 rounded-2xl border transition-all duration-150",
         selected
-          ? "border-white bg-white/10 text-[var(--text-primary)]"
-          : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+          ? "border-white/60 bg-white/10 text-white"
+          : "border-white/10 bg-white/5 text-white/60 hover:border-white/30 hover:text-white/80"
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {emoji && <span className="text-2xl">{emoji}</span>}
-          <div>
-            <div className={cn("font-semibold text-sm", selected ? "text-[var(--text-primary)]" : "text-zinc-300")}>{label}</div>
-            {description && <div className="text-xs text-zinc-600 mt-0.5">{description}</div>}
-          </div>
+      <div className="flex items-center gap-3">
+        {icon && <span className="text-xl w-7 flex-shrink-0 flex items-center">{icon}</span>}
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-sm">{label}</div>
+          {description && <div className="text-xs text-white/40 mt-0.5">{description}</div>}
         </div>
-        {selected && <CheckCircle2 size={18} className="text-[var(--text-primary)] shrink-0" />}
+        <div className={cn(
+          "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+          selected ? "border-white bg-white" : "border-white/30"
+        )}>
+          {selected && <CheckCircle2 size={12} className="text-black" />}
+        </div>
       </div>
     </button>
   );
 }
+
+// ── Continue button ───────────────────────────────────────────────────────────
+
+function ContinueBtn({ onClick, disabled, label = "Continue" }: { onClick: () => void; disabled?: boolean; label?: string }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="w-full py-3.5 rounded-2xl bg-white text-black font-semibold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/90 active:scale-[0.98] flex items-center justify-center gap-2"
+    >
+      {label}
+      <ChevronRight size={16} />
+    </button>
+  );
+}
+
+// ── Spinner helper ────────────────────────────────────────────────────────────
+
+function Spin() {
+  return (
+    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+    </svg>
+  );
+}
+
+// ── Data types ────────────────────────────────────────────────────────────────
+
+interface OnboardingData {
+  goal: string;
+  experience: string;
+  risk_tolerance: string;
+  time_horizon: string;
+  asset_classes: string[];
+  interests: string[];
+  full_name: string;
+  dob: string;
+  address: string;
+  ssn_last4: string;
+  kyc_verified: boolean;
+  bank_linked: boolean;
+  bank_name: string;
+  deposit_amount: number;
+}
+
+// ── Step 0: Welcome ───────────────────────────────────────────────────────────
+
+function StepWelcome({ onNext }: { onNext: () => void }) {
+  return (
+    <div className="flex flex-col items-center text-center gap-8">
+      <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-blue-500/30">
+        <TrendingUp size={36} className="text-white" />
+      </div>
+      <div>
+        <h1 className="text-3xl font-bold text-white mb-3">Welcome to BMG Capital</h1>
+        <p className="text-white/60 text-sm leading-relaxed max-w-xs mx-auto">
+          Your professional trading platform. Let's personalize your experience in under 5 minutes.
+        </p>
+      </div>
+      <div className="grid grid-cols-3 gap-4 w-full">
+        {[
+          { icon: <BarChart2 size={18} />, label: "Smart Screener" },
+          { icon: <Zap size={18} />, label: "AI Co-Pilot" },
+          { icon: <Shield size={18} />, label: "Paper Trading" },
+        ].map(({ icon, label }) => (
+          <div key={label} className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-white/5 border border-white/10">
+            <span className="text-blue-400">{icon}</span>
+            <span className="text-xs text-white/60 font-medium">{label}</span>
+          </div>
+        ))}
+      </div>
+      <ContinueBtn onClick={onNext} label="Get Started" />
+      <p className="text-xs text-white/30">No credit card required</p>
+    </div>
+  );
+}
+
+// ── Step 1: Asset classes ─────────────────────────────────────────────────────
+
+function StepAssetClasses({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const toggle = (v: string) =>
+    setData((d) => ({
+      ...d,
+      asset_classes: d.asset_classes.includes(v)
+        ? d.asset_classes.filter((x) => x !== v)
+        : [...d.asset_classes, v],
+    }));
+
+  const opts = [
+    { value: "stocks", label: "Stocks & ETFs", desc: "Individual companies and index funds", icon: <TrendingUp size={18} className="text-green-400" /> },
+    { value: "options", label: "Options", desc: "Calls, puts, and advanced strategies", icon: <Layers size={18} className="text-yellow-400" /> },
+    { value: "crypto", label: "Crypto", desc: "Bitcoin, Ethereum, altcoins, DeFi", icon: <Bitcoin size={18} className="text-orange-400" /> },
+    { value: "all", label: "Everything", desc: "I want access to all markets", icon: <Star size={18} className="text-blue-400" /> },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">What do you want to trade?</h2>
+        <p className="text-white/50 text-sm">Select all that apply</p>
+      </div>
+      <div className="flex flex-col gap-3">
+        {opts.map((o) => (
+          <OptionCard key={o.value} label={o.label} description={o.desc} icon={o.icon} selected={data.asset_classes.includes(o.value)} onClick={() => toggle(o.value)} multi />
+        ))}
+      </div>
+      <ContinueBtn onClick={onNext} disabled={data.asset_classes.length === 0} />
+    </div>
+  );
+}
+
+// ── Step 2: Goal ──────────────────────────────────────────────────────────────
+
+function StepGoal({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const opts = [
+    { value: "wealth", label: "Grow my wealth", desc: "Long-term capital appreciation", icon: <TrendingUp size={18} className="text-green-400" /> },
+    { value: "income", label: "Generate income", desc: "Dividends and yield strategies", icon: <CreditCard size={18} className="text-blue-400" /> },
+    { value: "retirement", label: "Retire early", desc: "Build a retirement nest egg", icon: <Target size={18} className="text-purple-400" /> },
+    { value: "speculation", label: "Active trading", desc: "Short-term trades and momentum", icon: <Zap size={18} className="text-yellow-400" /> },
+    { value: "learn", label: "Learn to invest", desc: "I'm still getting started", icon: <BookOpen size={18} className="text-cyan-400" /> },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">What's your main goal?</h2>
+        <p className="text-white/50 text-sm">We'll personalize your dashboard around this</p>
+      </div>
+      <div className="flex flex-col gap-3">
+        {opts.map((o) => (
+          <OptionCard key={o.value} label={o.label} description={o.desc} icon={o.icon} selected={data.goal === o.value} onClick={() => setData((d) => ({ ...d, goal: o.value }))} />
+        ))}
+      </div>
+      <ContinueBtn onClick={onNext} disabled={!data.goal} />
+    </div>
+  );
+}
+
+// ── Step 3: Experience ────────────────────────────────────────────────────────
+
+function StepExperience({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const opts = [
+    { value: "beginner", label: "Beginner", desc: "New to investing — less than 1 year", icon: "🌱" },
+    { value: "intermediate", label: "Intermediate", desc: "1-5 years of experience", icon: "📈" },
+    { value: "advanced", label: "Advanced", desc: "5+ years, active trader", icon: "⚡" },
+    { value: "professional", label: "Professional", desc: "Licensed or institutional background", icon: "🏆" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">How experienced are you?</h2>
+        <p className="text-white/50 text-sm">This helps us set the right default view</p>
+      </div>
+      <div className="flex flex-col gap-3">
+        {opts.map((o) => (
+          <OptionCard key={o.value} label={o.label} description={o.desc} icon={o.icon} selected={data.experience === o.value} onClick={() => setData((d) => ({ ...d, experience: o.value }))} />
+        ))}
+      </div>
+      <ContinueBtn onClick={onNext} disabled={!data.experience} />
+    </div>
+  );
+}
+
+// ── Step 4: Risk ──────────────────────────────────────────────────────────────
+
+function StepRisk({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const opts = [
+    { value: "conservative", label: "Conservative", desc: "Capital preservation first. I avoid large swings.", icon: <Shield size={18} className="text-blue-400" /> },
+    { value: "moderate", label: "Moderate", desc: "Balanced risk. I can handle occasional 10-20% dips.", icon: <BarChart2 size={18} className="text-green-400" /> },
+    { value: "aggressive", label: "Aggressive", desc: "High risk, high reward. I can stomach 30%+ drawdowns.", icon: <Zap size={18} className="text-orange-400" /> },
+    { value: "speculative", label: "Speculative", desc: "Full risk appetite — options, leverage, small caps.", icon: <TrendingUp size={18} className="text-red-400" /> },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">What's your risk tolerance?</h2>
+        <p className="text-white/50 text-sm">How do you react when your portfolio drops 20%?</p>
+      </div>
+      <div className="flex flex-col gap-3">
+        {opts.map((o) => (
+          <OptionCard key={o.value} label={o.label} description={o.desc} icon={o.icon} selected={data.risk_tolerance === o.value} onClick={() => setData((d) => ({ ...d, risk_tolerance: o.value }))} />
+        ))}
+      </div>
+      <ContinueBtn onClick={onNext} disabled={!data.risk_tolerance} />
+    </div>
+  );
+}
+
+// ── Step 5: Time horizon ──────────────────────────────────────────────────────
+
+function StepTimeHorizon({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const opts = [
+    { value: "short", label: "Short term", desc: "Days to weeks — active trading", icon: <Clock size={18} className="text-yellow-400" /> },
+    { value: "medium", label: "1-3 years", desc: "Swing trading and position trades", icon: <Clock size={18} className="text-green-400" /> },
+    { value: "long", label: "5-10 years", desc: "Buy and hold with occasional rebalancing", icon: <Clock size={18} className="text-blue-400" /> },
+    { value: "very_long", label: "10+ years", desc: "Long-term wealth building and retirement", icon: <Clock size={18} className="text-purple-400" /> },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">Investment time horizon</h2>
+        <p className="text-white/50 text-sm">How long are you planning to hold your investments?</p>
+      </div>
+      <div className="flex flex-col gap-3">
+        {opts.map((o) => (
+          <OptionCard key={o.value} label={o.label} description={o.desc} icon={o.icon} selected={data.time_horizon === o.value} onClick={() => setData((d) => ({ ...d, time_horizon: o.value }))} />
+        ))}
+      </div>
+      <ContinueBtn onClick={onNext} disabled={!data.time_horizon} />
+    </div>
+  );
+}
+
+// ── Step 6: Interests ─────────────────────────────────────────────────────────
+
+function StepInterests({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const topics = ["AI & Tech", "Semiconductors", "Clean Energy", "Healthcare", "Biotech", "Defense", "Consumer", "Financials", "Real Estate", "Crypto Narratives", "DeFi", "NFTs & Web3"];
+  const toggle = (v: string) =>
+    setData((d) => ({
+      ...d,
+      interests: d.interests.includes(v) ? d.interests.filter((x) => x !== v) : [...d.interests, v],
+    }));
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">What sectors interest you?</h2>
+        <p className="text-white/50 text-sm">Pick at least 2 — we'll surface relevant opportunities</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {topics.map((t) => (
+          <button
+            key={t}
+            onClick={() => toggle(t)}
+            className={cn(
+              "px-4 py-2 rounded-full text-sm border transition-all",
+              data.interests.includes(t)
+                ? "border-white/60 bg-white/15 text-white font-medium"
+                : "border-white/15 bg-white/5 text-white/50 hover:border-white/30 hover:text-white/70"
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <ContinueBtn onClick={onNext} disabled={data.interests.length < 2} />
+      <button onClick={onNext} className="text-xs text-white/30 hover:text-white/50 transition-colors text-center">
+        Skip for now
+      </button>
+    </div>
+  );
+}
+
+// ── Step 7: Personal info (KYC step 1) ───────────────────────────────────────
+
+function StepPersonalInfo({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Lock size={14} className="text-white/40" />
+          <span className="text-xs text-white/40 uppercase tracking-wide font-medium">Secure · Encrypted</span>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Personal information</h2>
+        <p className="text-white/50 text-sm">Required by financial regulations (FINRA/SEC)</p>
+      </div>
+      {DEMO_MODE && (
+        <div className="px-4 py-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
+          <span className="font-semibold">Demo Mode:</span> KYC is simulated. Fields auto-filled.
+        </div>
+      )}
+      <div className="flex flex-col gap-4">
+        <div>
+          <label className="text-xs text-white/40 uppercase tracking-wide font-medium mb-1.5 block">Full legal name</label>
+          <input
+            value={DEMO_MODE ? "Demo User" : data.full_name}
+            onChange={(e) => setData((d) => ({ ...d, full_name: e.target.value }))}
+            placeholder="First and last name"
+            readOnly={DEMO_MODE}
+            className="w-full bg-white/5 border border-white/15 rounded-2xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-white/40"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-white/40 uppercase tracking-wide font-medium mb-1.5 block">Date of birth</label>
+          <input
+            value={DEMO_MODE ? "01/01/1990" : data.dob}
+            onChange={(e) => setData((d) => ({ ...d, dob: e.target.value }))}
+            readOnly={DEMO_MODE}
+            className="w-full bg-white/5 border border-white/15 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-white/40"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-white/40 uppercase tracking-wide font-medium mb-1.5 block">Home address</label>
+          <input
+            value={DEMO_MODE ? "123 Main St, New York, NY 10001" : data.address}
+            onChange={(e) => setData((d) => ({ ...d, address: e.target.value }))}
+            placeholder="Street, City, State, ZIP"
+            readOnly={DEMO_MODE}
+            className="w-full bg-white/5 border border-white/15 rounded-2xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-white/40"
+          />
+        </div>
+      </div>
+      <ContinueBtn onClick={onNext} />
+    </div>
+  );
+}
+
+// ── Step 8: Identity verify ───────────────────────────────────────────────────
+
+function StepIdentityVerify({ setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const [verifying, setVerifying] = useState(false);
+  const [verified, setVerified] = useState(false);
+
+  const verify = () => {
+    setVerifying(true);
+    setTimeout(() => {
+      setVerified(true);
+      setVerifying(false);
+      setData((d) => ({ ...d, kyc_verified: true, ssn_last4: "1234" }));
+    }, 2000);
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Lock size={14} className="text-white/40" />
+          <span className="text-xs text-white/40 uppercase tracking-wide font-medium">256-bit encryption</span>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Verify your identity</h2>
+        <p className="text-white/50 text-sm">We need to confirm you are who you say you are</p>
+      </div>
+      {!verified ? (
+        <>
+          {DEMO_MODE && (
+            <div className="px-4 py-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
+              <span className="font-semibold">Demo Mode:</span> SSN verification is simulated.
+            </div>
+          )}
+          <div>
+            <label className="text-xs text-white/40 uppercase tracking-wide font-medium mb-1.5 block">Last 4 digits of SSN</label>
+            <input
+              type="password"
+              maxLength={4}
+              defaultValue={DEMO_MODE ? "1234" : ""}
+              readOnly={DEMO_MODE}
+              placeholder="••••"
+              className="w-full bg-white/5 border border-white/15 rounded-2xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-white/40 tracking-widest text-center text-xl"
+            />
+          </div>
+          <button
+            onClick={verify}
+            disabled={verifying}
+            className="w-full py-3.5 rounded-2xl bg-white text-black font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {verifying ? <><Spin /> Verifying…</> : <><Lock size={15} /> Verify Identity</>}
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-col items-center gap-4 py-4">
+          <div className="w-16 h-16 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
+            <CheckCircle2 size={32} className="text-green-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-white font-semibold">Identity verified</p>
+            <p className="text-white/50 text-sm mt-1">Your account is approved for trading</p>
+          </div>
+          <ContinueBtn onClick={onNext} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Step 9: Bank link ─────────────────────────────────────────────────────────
+
+function StepBankLink({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const [linking, setLinking] = useState(false);
+  const [linked, setLinked] = useState(false);
+
+  const linkBank = () => {
+    setLinking(true);
+    setTimeout(() => {
+      setLinked(true);
+      setLinking(false);
+      setData((d) => ({ ...d, bank_linked: true, bank_name: "Chase Checking ••4521" }));
+    }, 2500);
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">Link your bank</h2>
+        <p className="text-white/50 text-sm">Securely connect your bank to fund your account via ACH</p>
+      </div>
+      {!linked ? (
+        <>
+          {DEMO_MODE && (
+            <div className="px-4 py-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
+              <span className="font-semibold">Demo Mode:</span> Plaid is simulated — Chase Checking will be connected.
+            </div>
+          )}
+          <div className="flex flex-col gap-3">
+            <div className="px-4 py-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-4">
+              <Building2 size={24} className="text-blue-400 flex-shrink-0" />
+              <div>
+                <p className="text-white text-sm font-medium">10,000+ banks supported</p>
+                <p className="text-white/40 text-xs">Chase, BofA, Wells Fargo, Fidelity, and more</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-2">
+              <Lock size={12} className="text-white/30 flex-shrink-0" />
+              <p className="text-xs text-white/40">Bank-level 256-bit TLS. We never store your credentials.</p>
+            </div>
+          </div>
+          <button
+            onClick={linkBank}
+            disabled={linking}
+            className="w-full py-3.5 rounded-2xl bg-white text-black font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {linking ? <><Spin /> Connecting…</> : <><Building2 size={15} /> Connect Bank Account</>}
+          </button>
+          <button onClick={onNext} className="text-xs text-white/30 hover:text-white/50 transition-colors text-center">
+            Skip — I'll fund my account later
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-col items-center gap-4 py-4">
+          <div className="w-16 h-16 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
+            <CheckCircle2 size={32} className="text-green-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-white font-semibold">{data.bank_name} connected</p>
+            <p className="text-white/50 text-sm mt-1">Ready to fund your account</p>
+          </div>
+          <ContinueBtn onClick={onNext} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Step 10: Deposit amount ───────────────────────────────────────────────────
+
+function StepDeposit({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+  const [custom, setCustom] = useState("");
+  const presets = [100, 500, 1000, 5000];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">Initial deposit</h2>
+        <p className="text-white/50 text-sm">
+          {data.bank_linked ? `From ${data.bank_name}` : "How much to start with"}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {presets.map((amt) => (
+          <button
+            key={amt}
+            onClick={() => setData((d) => ({ ...d, deposit_amount: amt }))}
+            className={cn(
+              "py-4 rounded-2xl border text-sm font-semibold transition-all",
+              data.deposit_amount === amt
+                ? "border-white/60 bg-white/10 text-white"
+                : "border-white/10 bg-white/5 text-white/60 hover:border-white/30"
+            )}
+          >
+            ${amt.toLocaleString()}
+          </button>
+        ))}
+      </div>
+      <div>
+        <label className="text-xs text-white/40 uppercase tracking-wide font-medium mb-1.5 block">Custom amount</label>
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 text-sm">$</span>
+          <input
+            type="number"
+            value={custom}
+            onChange={(e) => {
+              setCustom(e.target.value);
+              setData((d) => ({ ...d, deposit_amount: parseFloat(e.target.value) || 0 }));
+            }}
+            placeholder="0.00"
+            className="w-full bg-white/5 border border-white/15 rounded-2xl pl-8 pr-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-white/40"
+          />
+        </div>
+      </div>
+      <ContinueBtn onClick={onNext} disabled={!data.deposit_amount || data.deposit_amount < 1} label="Deposit" />
+      <button onClick={onNext} className="text-xs text-white/30 hover:text-white/50 transition-colors text-center">
+        Skip — start with paper trading only
+      </button>
+    </div>
+  );
+}
+
+// ── Step 11: Deposit confirm ──────────────────────────────────────────────────
+
+function StepDepositConfirm({ data, onNext }: { data: OnboardingData; onNext: () => void }) {
+  const [processing, setProcessing] = useState(false);
+  const [done, setDone] = useState(false);
+  const amt = data.deposit_amount || 0;
+
+  const confirm = () => {
+    setProcessing(true);
+    setTimeout(() => { setDone(true); setProcessing(false); }, 2000);
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">Confirm deposit</h2>
+        <p className="text-white/50 text-sm">Review before we process</p>
+      </div>
+      {!done ? (
+        <>
+          <div className="flex flex-col gap-3 p-5 rounded-2xl bg-white/5 border border-white/10">
+            <div className="flex justify-between text-sm">
+              <span className="text-white/50">Amount</span>
+              <span className="text-white font-semibold">${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-white/50">From</span>
+              <span className="text-white">{data.bank_name || "Bank account"}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-white/50">Settlement</span>
+              <span className="text-white">2-3 business days (ACH)</span>
+            </div>
+            <div className="h-px bg-white/10 my-1" />
+            <div className="flex justify-between text-sm">
+              <span className="text-white/50">Trade access</span>
+              <span className="text-green-400 font-medium">✓ Instant</span>
+            </div>
+            {DEMO_MODE && <div className="text-xs text-blue-300 text-center mt-1">Demo: This deposit is simulated</div>}
+          </div>
+          <button
+            onClick={confirm}
+            disabled={processing}
+            className="w-full py-3.5 rounded-2xl bg-white text-black font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {processing ? <><Spin /> Processing…</> : `Confirm $${amt.toLocaleString()} Deposit`}
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-col items-center gap-4 py-4">
+          <div className="w-16 h-16 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
+            <CheckCircle2 size={32} className="text-green-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-white font-semibold">Deposit initiated!</p>
+            <p className="text-white/50 text-sm mt-1">${amt.toLocaleString()} arriving in 2-3 business days</p>
+          </div>
+          <ContinueBtn onClick={onNext} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Step 12: Welcome reward ───────────────────────────────────────────────────
+
+function StepWelcomeReward({ onNext }: { onNext: () => void }) {
+  const [claimed, setClaimed] = useState(false);
+  const [rewardValue, setRewardValue] = useState(22);
+
+  const claimMut = useMutation({
+    mutationFn: () => client.post("/api/onboarding/claim-reward").then((r) => r.data),
+    onSuccess: (d) => { setRewardValue(d.value ?? 22); setClaimed(true); },
+    onError: () => setClaimed(true),
+  });
+
+  return (
+    <div className="flex flex-col items-center text-center gap-6">
+      <div className="relative">
+        <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-yellow-400/20 to-orange-500/20 border border-yellow-400/30 flex items-center justify-center">
+          <Gift size={40} className="text-yellow-400" />
+        </div>
+        {claimed && (
+          <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+            <CheckCircle2 size={16} className="text-white" />
+          </div>
+        )}
+      </div>
+      {!claimed ? (
+        <>
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-2">🎉 A gift for you!</h2>
+            <p className="text-white/60 text-sm leading-relaxed">
+              Welcome to BMG Capital! We're giving you a free fractional share of Apple (AAPL) to get you started.
+            </p>
+          </div>
+          <div className="w-full p-5 rounded-2xl bg-gradient-to-br from-yellow-400/10 to-orange-500/10 border border-yellow-400/20">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-left">
+                <p className="text-white font-semibold">Apple Inc.</p>
+                <p className="text-white/50 text-xs">AAPL · NASDAQ</p>
+              </div>
+              <div className="text-right">
+                <p className="text-yellow-400 font-bold text-lg">0.1 share</p>
+                <p className="text-white/50 text-xs">~$22 value</p>
+              </div>
+            </div>
+            <p className="text-xs text-white/40 text-center">Added to your paper portfolio</p>
+          </div>
+          <button
+            onClick={() => claimMut.mutate()}
+            disabled={claimMut.isPending}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 text-black font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {claimMut.isPending ? <><Spin /> Claiming…</> : <><Gift size={16} /> Claim My Free Share</>}
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-col items-center gap-4">
+          <h2 className="text-2xl font-bold text-white">You got it! 🎊</h2>
+          <p className="text-white/60 text-sm">0.1 AAPL share (~${rewardValue.toFixed(2)}) added to your portfolio</p>
+          <ContinueBtn onClick={onNext} label="Awesome!" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Step 13: AI calibration ───────────────────────────────────────────────────
+
+function StepAICalibrate({ onNext }: { onNext: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [stepIdx, setStepIdx] = useState(0);
+  const steps = [
+    "Analyzing your investment profile…",
+    "Configuring Strategy Lab…",
+    "Calibrating risk parameters…",
+    "Personalizing Discovery feed…",
+    "Activating BMG Intelligence…",
+    "Your platform is ready!",
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProgress((p) => {
+        const next = Math.min(p + 2, 100);
+        if (next % 17 === 0) setStepIdx((s) => Math.min(s + 1, steps.length - 1));
+        if (next >= 100) { clearInterval(interval); setTimeout(onNext, 800); }
+        return next;
+      });
+    }, 60);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center text-center gap-8">
+      <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-center">
+        <Sparkles size={36} className="text-blue-400 animate-pulse" />
+      </div>
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">Personalizing your experience</h2>
+        <p className="text-white/60 text-sm">{steps[stepIdx]}</p>
+      </div>
+      <div className="w-full bg-white/10 rounded-full h-2">
+        <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-200" style={{ width: `${progress}%` }} />
+      </div>
+      <p className="text-xs text-white/30">{progress}%</p>
+    </div>
+  );
+}
+
+// ── Step 14: Feature tour ─────────────────────────────────────────────────────
+
+function StepFeatureTour({ onNext }: { onNext: () => void }) {
+  const [idx, setIdx] = useState(0);
+  const features = [
+    { icon: <BarChart2 size={32} className="text-blue-400" />, title: "Strategy Lab", desc: "19 automated strategies scan nightly. AI-powered entry/exit, equity tracking, and backtests.", color: "from-blue-500/20 to-blue-600/10" },
+    { icon: <Zap size={32} className="text-purple-400" />, title: "BMG Intelligence", desc: "Press ⌘K anywhere. Ask for live quotes, run screeners, or analyze your portfolio in plain English.", color: "from-purple-500/20 to-purple-600/10" },
+    { icon: <Bitcoin size={32} className="text-orange-400" />, title: "Crypto Lab", desc: "Full market table, automated crypto strategies, DeFi yields, token security, and DAO governance.", color: "from-orange-500/20 to-orange-600/10" },
+    { icon: <Shield size={32} className="text-green-400" />, title: "Paper Trading", desc: "Practice with $100K virtual cash. Full order types, real-time P&L, risk-free learning.", color: "from-green-500/20 to-green-600/10" },
+  ];
+  const f = features[idx];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">What's inside</h2>
+        <p className="text-white/50 text-sm">{idx + 1} of {features.length}</p>
+      </div>
+      <div className={cn("p-6 rounded-2xl bg-gradient-to-br border border-white/10 flex flex-col items-center text-center gap-4", f.color)}>
+        <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center">{f.icon}</div>
+        <div>
+          <h3 className="text-white font-bold text-lg mb-2">{f.title}</h3>
+          <p className="text-white/60 text-sm leading-relaxed">{f.desc}</p>
+        </div>
+      </div>
+      <div className="flex gap-2 justify-center">
+        {features.map((_, i) => (
+          <button key={i} onClick={() => setIdx(i)} className={cn("h-1.5 rounded-full transition-all", i === idx ? "bg-white w-6" : "bg-white/20 w-1.5")} />
+        ))}
+      </div>
+      {idx < features.length - 1 ? (
+        <button onClick={() => setIdx((i) => i + 1)} className="w-full py-3.5 rounded-2xl border border-white/20 text-white font-medium text-sm flex items-center justify-center gap-2 hover:bg-white/5 transition-colors">
+          Next <ChevronRight size={16} />
+        </button>
+      ) : (
+        <ContinueBtn onClick={onNext} label="I'm ready!" />
+      )}
+    </div>
+  );
+}
+
+// ── Step 15: All set ──────────────────────────────────────────────────────────
+
+function StepAllSet({ onFinish, loading }: { onFinish: () => void; loading: boolean }) {
+  return (
+    <div className="flex flex-col items-center text-center gap-8">
+      <div className="relative">
+        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-green-400/20 to-emerald-600/20 border-2 border-green-400/40 flex items-center justify-center">
+          <CheckCircle2 size={44} className="text-green-400" />
+        </div>
+        <div className="absolute inset-0 rounded-full border-2 border-green-400/20 animate-ping" />
+      </div>
+      <div>
+        <h2 className="text-3xl font-bold text-white mb-3">You're all set! 🚀</h2>
+        <p className="text-white/60 text-sm leading-relaxed max-w-xs mx-auto">
+          Your BMG Capital account is personalized and ready. Start with paper trading to practice risk-free.
+        </p>
+      </div>
+      <div className="w-full flex flex-col gap-3">
+        {["Profile personalized", "Strategy Lab activated", "Free AAPL share added to portfolio", "BMG Intelligence (⌘K) ready"].map((item) => (
+          <div key={item} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-left">
+            <CheckCircle2 size={16} className="text-green-400 flex-shrink-0" />
+            <span className="text-sm text-white/70">{item}</span>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={onFinish}
+        disabled={loading}
+        className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 hover:from-blue-400 hover:to-purple-500 transition-all shadow-lg shadow-blue-500/20"
+      >
+        {loading ? <><Spin /> Saving…</> : <>Start Trading <ChevronRight size={16} /></>}
+      </button>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -72,236 +829,73 @@ export default function Onboarding() {
     experience: "",
     risk_tolerance: "",
     time_horizon: "",
+    asset_classes: [],
+    interests: [],
+    full_name: "",
+    dob: "",
+    address: "",
+    ssn_last4: "",
+    kyc_verified: DEMO_MODE,
+    bank_linked: false,
+    bank_name: "",
+    deposit_amount: 0,
   });
 
   const completeMut = useMutation({
-    mutationFn: (body: OnboardingData) =>
-      client.post("/api/onboarding/complete", body).then((r) => r.data),
-    onSuccess: () => {
-      localStorage.setItem("bmg_onboarded", "1");
-      setStep(5); // welcome screen
-    },
+    mutationFn: () =>
+      client.post("/api/onboarding/complete", {
+        goal: data.goal || "wealth",
+        experience: data.experience || "beginner",
+        risk_tolerance: data.risk_tolerance || "moderate",
+        time_horizon: data.time_horizon || "long",
+        asset_classes: data.asset_classes,
+        interests: data.interests,
+        deposit_amount: data.deposit_amount,
+      }).then((r) => r.data),
+    onSuccess: () => navigate("/"),
+    onError: () => { toast.error("Failed to save profile"); navigate("/"); },
   });
 
-  const canAdvance = () => {
-    if (step === 1) return !!data.goal;
-    if (step === 2) return !!data.experience;
-    if (step === 3) return !!data.risk_tolerance;
-    if (step === 4) return !!data.time_horizon;
-    return true;
-  };
+  const next = () => setStep((s) => s + 1);
+  const back = () => setStep((s) => Math.max(s - 1, 0));
 
-  const advance = () => {
-    if (step === 4) {
-      completeMut.mutate(data);
-      return;
-    }
-    setStep((s) => s + 1);
-  };
+  const allSteps = [
+    <StepWelcome onNext={next} />,
+    <StepAssetClasses data={data} setData={setData} onNext={next} />,
+    <StepGoal data={data} setData={setData} onNext={next} />,
+    <StepExperience data={data} setData={setData} onNext={next} />,
+    <StepRisk data={data} setData={setData} onNext={next} />,
+    <StepTimeHorizon data={data} setData={setData} onNext={next} />,
+    <StepInterests data={data} setData={setData} onNext={next} />,
+    <StepPersonalInfo data={data} setData={setData} onNext={next} />,
+    <StepIdentityVerify data={data} setData={setData} onNext={next} />,
+    <StepBankLink data={data} setData={setData} onNext={next} />,
+    <StepDeposit data={data} setData={setData} onNext={next} />,
+    data.deposit_amount > 0 ? <StepDepositConfirm data={data} onNext={next} /> : null,
+    <StepWelcomeReward onNext={next} />,
+    <StepAICalibrate onNext={next} />,
+    <StepFeatureTour onNext={next} />,
+    <StepAllSet onFinish={() => completeMut.mutate()} loading={completeMut.isPending} />,
+  ].filter(Boolean) as React.ReactElement[];
+
+  const currentStep = allSteps[Math.min(step, allSteps.length - 1)];
+  const isLast = step >= allSteps.length - 1;
 
   return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
-        {step > 0 && step < 5 && <Progress step={step} />}
-
-        {/* Step 0 — Welcome */}
-        {step === 0 && (
-          <div className="text-center space-y-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center mx-auto text-2xl font-bold text-[var(--text-primary)] shadow-lg shadow-blue-500/20">B</div>
-            <div>
-              <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">Welcome to BMG Capital</h1>
-              <p className="text-[var(--text-tertiary)] text-base">Let's personalize your experience. It takes 60 seconds.</p>
-            </div>
-            <button
-              onClick={() => setStep(1)}
-              className="w-full bg-[var(--accent-positive)] hover:brightness-110 active:scale-[0.98] text-[var(--text-primary)] font-bold py-3.5 rounded-2xl transition-all shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2"
-            >
-              Get started <ChevronRight size={18} />
+        <div className="flex items-center justify-between mb-6">
+          {step > 0 && !isLast ? (
+            <button onClick={back} className="flex items-center gap-1.5 text-white/40 hover:text-white/70 transition-colors text-sm">
+              <ChevronLeft size={16} /> Back
             </button>
-            <button
-              onClick={async () => {
-                try {
-                  await seedDemo();
-                } catch (err) {
-                  console.error("Demo seed failed:", err);
-                  // Don't block onboarding for this
-                }
-                localStorage.setItem("bmg_onboarded", "1");
-                navigate("/");
-              }}
-              className="flex items-center justify-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-sm transition-colors"
-            >
-              <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
-              Skip — load demo data
-            </button>
-          </div>
-        )}
-
-        {/* Step 1 — Goal */}
-        {step === 1 && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-zinc-500 text-sm mb-1">Step 1 of 4</p>
-              <h2 className="text-2xl font-bold text-[var(--text-primary)]">What brings you here?</h2>
-            </div>
-            <div className="space-y-2">
-              {[
-                { value: "invest", label: "Long-term investing", description: "Build wealth over years with a buy-and-hold mindset", emoji: "🌱" },
-                { value: "trade", label: "Active trading", description: "Capitalize on short-term price moves and signals", emoji: "⚡" },
-                { value: "learn", label: "Learning the markets", description: "Build financial knowledge from the ground up", emoji: "📚" },
-                { value: "all", label: "All of the above", description: "A little bit of everything", emoji: "🎯" },
-              ].map((opt) => (
-                <OptionCard
-                  key={opt.value}
-                  label={opt.label}
-                  description={opt.description}
-                  emoji={opt.emoji}
-                  selected={data.goal === opt.value}
-                  onClick={() => setData((d) => ({ ...d, goal: opt.value }))}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2 — Experience */}
-        {step === 2 && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-zinc-500 text-sm mb-1">Step 2 of 4</p>
-              <h2 className="text-2xl font-bold text-[var(--text-primary)]">How much experience do you have?</h2>
-            </div>
-            <div className="space-y-2">
-              {[
-                { value: "beginner", label: "Beginner", description: "Just starting out, learning the basics", emoji: "🌱" },
-                { value: "intermediate", label: "Intermediate", description: "Familiar with stocks, options, and basic analysis", emoji: "📈" },
-                { value: "advanced", label: "Advanced", description: "Experienced with complex strategies and derivatives", emoji: "🏆" },
-              ].map((opt) => (
-                <OptionCard
-                  key={opt.value}
-                  label={opt.label}
-                  description={opt.description}
-                  emoji={opt.emoji}
-                  selected={data.experience === opt.value}
-                  onClick={() => setData((d) => ({ ...d, experience: opt.value }))}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 3 — Risk */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-zinc-500 text-sm mb-1">Step 3 of 4</p>
-              <h2 className="text-2xl font-bold text-[var(--text-primary)]">What's your risk tolerance?</h2>
-              <p className="text-zinc-600 text-sm mt-1">How comfortable are you with potential losses?</p>
-            </div>
-            <div className="space-y-2">
-              {[
-                { value: "conservative", label: "Conservative", description: "Prioritize capital preservation, minimal volatility", emoji: "🛡️" },
-                { value: "moderate", label: "Moderate", description: "Balance growth and safety, accept some fluctuation", emoji: "⚖️" },
-                { value: "aggressive", label: "Aggressive", description: "Maximize returns, comfortable with significant swings", emoji: "🚀" },
-              ].map((opt) => (
-                <OptionCard
-                  key={opt.value}
-                  label={opt.label}
-                  description={opt.description}
-                  emoji={opt.emoji}
-                  selected={data.risk_tolerance === opt.value}
-                  onClick={() => setData((d) => ({ ...d, risk_tolerance: opt.value }))}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 4 — Time horizon */}
-        {step === 4 && (
-          <div className="space-y-5">
-            <div>
-              <p className="text-zinc-500 text-sm mb-1">Step 4 of 4</p>
-              <h2 className="text-2xl font-bold text-[var(--text-primary)]">What's your time horizon?</h2>
-              <p className="text-zinc-600 text-sm mt-1">How long do you plan to keep money invested?</p>
-            </div>
-            <div className="space-y-2">
-              {[
-                { value: "short", label: "Less than 1 year", description: "Short-term opportunities and quick gains", emoji: "⏱️" },
-                { value: "medium", label: "1–5 years", description: "Medium-term growth with some flexibility", emoji: "📅" },
-                { value: "long", label: "5–10 years", description: "Patient investing through market cycles", emoji: "🗓️" },
-                { value: "very_long", label: "10+ years", description: "Long-term wealth building for retirement or goals", emoji: "🌅" },
-              ].map((opt) => (
-                <OptionCard
-                  key={opt.value}
-                  label={opt.label}
-                  description={opt.description}
-                  emoji={opt.emoji}
-                  selected={data.time_horizon === opt.value}
-                  onClick={() => setData((d) => ({ ...d, time_horizon: opt.value }))}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 5 — Done */}
-        {step === 5 && (
-          <div className="text-center space-y-6">
-            <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto">
-              <CheckCircle2 size={32} className="text-[var(--text-primary)]" />
-            </div>
-            <div>
-              <h2 className="text-3xl font-bold text-[var(--text-primary)] mb-2">You're all set!</h2>
-              <p className="text-zinc-500">Your profile has been saved. We've personalized your experience based on your answers.</p>
-            </div>
-            <div className="bg-amber-950/40 border border-amber-800 rounded-2xl p-4 flex items-center gap-3">
-              <Star size={20} className="text-amber-400 shrink-0" />
-              <div className="text-left">
-                <div className="text-amber-400 font-semibold text-sm">+100 XP Welcome Bonus</div>
-                <div className="text-zinc-500 text-xs">Added to your learning progress</div>
-              </div>
-            </div>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center gap-3 opacity-60">
-              <Landmark size={20} className="text-zinc-400 shrink-0" />
-              <div className="text-left">
-                <div className="text-zinc-300 font-semibold text-sm">Bank Link</div>
-                <div className="text-zinc-600 text-xs">Coming soon — you'll be notified when ACH deposits are available</div>
-              </div>
-            </div>
-            <button
-              onClick={() => navigate("/")}
-              className="w-full bg-white text-black font-bold py-3.5 rounded-2xl hover:bg-zinc-200 transition-colors"
-            >
-              Go to Dashboard
-            </button>
-          </div>
-        )}
-
-        {/* Navigation */}
-        {step > 0 && step < 5 && (
-          <div className="flex items-center justify-between mt-6">
-            <button
-              onClick={() => setStep((s) => s - 1)}
-              className="text-zinc-600 text-sm hover:text-zinc-400 transition-colors"
-            >
-              ← Back
-            </button>
-            <button
-              onClick={advance}
-              disabled={!canAdvance() || completeMut.isPending}
-              className={cn(
-                "flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm transition-all",
-                canAdvance() && !completeMut.isPending
-                  ? "bg-white text-black hover:bg-zinc-200"
-                  : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
-              )}
-            >
-              {step === 4 ? (completeMut.isPending ? "Saving…" : "Finish") : "Continue"}
-              {step < 4 && <ChevronRight size={16} />}
-            </button>
-          </div>
-        )}
+          ) : (
+            <div />
+          )}
+          <span className="text-xs text-white/30 font-mono">{Math.min(step + 1, allSteps.length)}/{allSteps.length}</span>
+        </div>
+        <ProgressBar step={Math.min(step, TOTAL_STEPS - 1)} />
+        <div key={step}>{currentStep}</div>
       </div>
     </div>
   );
