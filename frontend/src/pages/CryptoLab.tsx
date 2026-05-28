@@ -11,10 +11,12 @@ import {
   getCryptoStrategyTrades,
   getCryptoStrategyCandidates,
   getCryptoStrategySummary,
+  getCryptoStrategyDefinitions,
   runCryptoStrategyNow,
   type CoinGeckoData,
   type CryptoOverview,
   type CryptoTrade,
+  type StrategyDefinition,
 } from "@/api/crypto";
 import { getAccount, placeOrder } from "@/api/paper";
 import { cn } from "@/lib/utils";
@@ -755,9 +757,197 @@ function CryptoStrategyPanel() {
   );
 }
 
+// ── Strategy Library Card Grid ─────────────────────────────────────────────────
+
+const TIER_BADGE: Record<string, { label: string; cls: string }> = {
+  free: { label: "Free",  cls: "bg-emerald-900/40 text-emerald-400 border-emerald-800/60" },
+  plus: { label: "Plus",  cls: "bg-violet-900/40 text-violet-300 border-violet-700/60" },
+  pro:  { label: "Pro",   cls: "bg-amber-900/40 text-amber-300 border-amber-700/60" },
+};
+
+const SOURCE_BADGE: Record<string, string> = {
+  coingecko:   "CoinGecko",
+  glassnode:   "Glassnode",
+  cryptoquant: "CryptoQuant",
+  coinglass:   "Coinglass",
+  arkham:      "Arkham",
+};
+
+function StrategyCard({
+  def,
+  byPreset,
+}: {
+  def: StrategyDefinition;
+  byPreset: Record<string, { wins: number; losses: number; total_pnl: number; trades: number }>;
+}) {
+  const tier = TIER_BADGE[def.tier_required] ?? TIER_BADGE.free;
+  const stats = byPreset[def.strategy_key];
+  const winRate = stats && stats.trades > 0
+    ? Math.round(stats.wins / stats.trades * 100) : null;
+
+  return (
+    <div className={cn(
+      "relative flex flex-col bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden transition-all duration-200",
+      def.is_active ? "hover:border-[var(--border-emphasis)] hover:shadow-lg" : "opacity-60"
+    )}>
+      {/* Gradient bar */}
+      <div
+        className="h-1 w-full flex-shrink-0"
+        style={{ background: `linear-gradient(90deg, ${def.category_accent_from}, ${def.category_accent_to})` }}
+      />
+
+      <div className="flex flex-col gap-3 p-4 flex-1">
+        {/* Header row */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-[var(--text-primary)] text-sm leading-tight">{def.name}</div>
+            <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5 font-medium">{def.category}</div>
+          </div>
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider", tier.cls)}>
+              {tier.label}
+            </span>
+            {def.comprehension_quiz_required && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded border border-orange-700/60 bg-orange-900/30 text-orange-400 uppercase tracking-wider whitespace-nowrap">
+                Quiz
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Description */}
+        <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed line-clamp-3 flex-1">
+          {def.description}
+        </p>
+
+        {/* Data sources */}
+        <div className="flex flex-wrap gap-1">
+          {def.required_data_sources.map((src) => (
+            <span
+              key={src}
+              className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] font-mono border border-[var(--border-subtle)]"
+            >
+              {SOURCE_BADGE[src] ?? src}
+            </span>
+          ))}
+          {def.structure_type !== "simple" && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated-2)] text-amber-400 font-mono border border-amber-800/50 capitalize">
+              {def.structure_type}
+            </span>
+          )}
+        </div>
+
+        {/* Stats strip */}
+        <div className="border-t border-[var(--border-subtle)] pt-2.5 mt-auto">
+          {def.is_active && stats ? (
+            <div className="flex gap-4 text-[10px] font-mono">
+              <span>
+                <span className="text-[var(--text-tertiary)]">Trades </span>
+                <span className="text-[var(--text-primary)] font-semibold">{stats.trades}</span>
+              </span>
+              {winRate !== null && (
+                <span>
+                  <span className="text-[var(--text-tertiary)]">Win </span>
+                  <span className="font-semibold" style={{ color: winRate >= 50 ? "var(--accent-positive)" : "var(--accent-negative)" }}>
+                    {winRate}%
+                  </span>
+                </span>
+              )}
+              <span className={cn("font-semibold", stats.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                {stats.total_pnl >= 0 ? "+" : ""}{fmt$(stats.total_pnl)}
+              </span>
+            </div>
+          ) : def.is_active ? (
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] text-emerald-400 font-semibold">Active · No trades yet</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)]" />
+              <span className="text-[10px] text-[var(--text-tertiary)]">Coming Soon</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const CATEGORY_ORDER = [
+  "Trend Following", "Mean Reversion", "Momentum", "Cycle",
+  "Market Structure", "On-Chain", "Derivatives", "Whale Activity",
+];
+
+function StrategyCardGrid() {
+  const { data: defsData, isLoading } = useQuery({
+    queryKey: ["crypto-strategy-definitions"],
+    queryFn: getCryptoStrategyDefinitions,
+    staleTime: Infinity,
+  });
+  const { data: summaryData } = useQuery({
+    queryKey: ["crypto-strategy-summary"],
+    queryFn: getCryptoStrategySummary,
+    staleTime: Infinity,
+  });
+
+  const byPreset = useMemo(() => {
+    const map: Record<string, { wins: number; losses: number; total_pnl: number; trades: number }> = {};
+    for (const s of summaryData?.by_preset ?? []) {
+      map[s.preset_key] = { wins: s.wins, losses: s.losses, total_pnl: s.total_pnl, trades: s.trades };
+    }
+    return map;
+  }, [summaryData]);
+
+  const grouped = useMemo(() => {
+    const defs = defsData?.definitions ?? [];
+    const groups: Record<string, StrategyDefinition[]> = {};
+    for (const d of defs) {
+      (groups[d.category] ??= []).push(d);
+    }
+    return CATEGORY_ORDER
+      .filter((cat) => groups[cat]?.length)
+      .map((cat) => ({ category: cat, defs: groups[cat] }));
+  }, [defsData]);
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="h-52 bg-[var(--bg-elevated-2)] rounded-2xl animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {grouped.map(({ category, defs }) => (
+        <div key={category}>
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">{category}</h3>
+            <div className="flex-1 h-px bg-[var(--border-subtle)]" />
+            <span className="text-[10px] text-[var(--text-tertiary)] font-mono">{defs.length}</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {defs.map((d) => (
+              <StrategyCard key={d.strategy_key} def={d} byPreset={byPreset} />
+            ))}
+          </div>
+        </div>
+      ))}
+      {grouped.length === 0 && (
+        <p className="text-center text-[var(--text-tertiary)] text-sm py-12">
+          Strategy library loading…
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
-type Tab = "top" | "trending" | "watchlist" | "holdings" | "strategies";
+type Tab = "top" | "trending" | "watchlist" | "holdings" | "library" | "strategies";
 
 export default function CryptoLab() {
   const qc = useQueryClient();
@@ -837,6 +1027,7 @@ export default function CryptoLab() {
     { id: "trending",   label: "Trending",  count: trendingCoins.length },
     { id: "watchlist",  label: "Watchlist", count: watchlist.size },
     { id: "holdings",   label: "My Holdings" },
+    { id: "library",    label: "Library" },
     { id: "strategies", label: "Strategies" },
   ];
 
@@ -891,7 +1082,11 @@ export default function CryptoLab() {
 
       {/* Content */}
       <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
-        {tab === "strategies" ? (
+        {tab === "library" ? (
+          <div className="p-5">
+            <StrategyCardGrid />
+          </div>
+        ) : tab === "strategies" ? (
           <div className="p-4">
             <CryptoStrategyPanel />
           </div>

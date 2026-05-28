@@ -73,6 +73,14 @@ async def lifespan(app: FastAPI):
     # Add any missing columns to existing tables
     run_migrations(engine)
 
+    # Seed strategy definitions (upserts — safe to run every boot)
+    from app.services.strategy_registry import seed_strategy_definitions
+    _seed_db = SessionLocal()
+    try:
+        seed_strategy_definitions(_seed_db)
+    finally:
+        _seed_db.close()
+
     # Wire Alpaca stream events to connected WebSocket clients
     stream_manager.on_quote(connection_manager.send_to_symbol_subscribers)
     stream_manager.on_bar(connection_manager.send_to_symbol_subscribers)

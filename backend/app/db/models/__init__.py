@@ -17,6 +17,7 @@ from app.db.models.social import Post, PostLike, Comment, UserFollow
 from app.db.models.tier import UserTier
 from app.db.models.chart_drawings import ChartDrawing
 from app.db.models.recap import DailyRecap
+from app.db.models.strategy_definition import StrategyDefinition
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -30,4 +31,5 @@ __all__ = [
     "UserTier",
     "ChartDrawing",
     "DailyRecap",
+    "StrategyDefinition",
 ]

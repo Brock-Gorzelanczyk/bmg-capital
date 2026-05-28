@@ -122,3 +122,33 @@ export const getCryptoStrategyEquity = () =>
 
 export const runCryptoStrategyNow = () =>
   api.post("/crypto-strategy/run-now").then((r) => r.data);
+
+export interface StrategyDefinition {
+  id: number;
+  strategy_key: string;
+  name: string;
+  category: string;
+  description: string;
+  source_originator: string;
+  version: number;
+  tier_required: "free" | "plus" | "pro";
+  comprehension_quiz_required: boolean;
+  required_data_sources: string[];
+  default_universe: string[];
+  parameters: Record<string, unknown>;
+  entry_conditions: unknown[];
+  exit_conditions: unknown[];
+  context_conditions: unknown | null;
+  structure_type: "simple" | "hedged" | "perpetual";
+  execution_schedule: unknown | null;
+  signal_duration_required: unknown | null;
+  category_accent_from: string;
+  category_accent_to: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export const getCryptoStrategyDefinitions = () =>
+  api.get("/crypto-strategy/definitions").then((r) => r.data as { definitions: StrategyDefinition[] });

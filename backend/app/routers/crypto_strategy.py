@@ -277,3 +277,12 @@ async def run_crypto_now(
     """Trigger an immediate crypto automation run in the background."""
     background_tasks.add_task(run_crypto_automation, user_id=current_user.id)
     return {"queued": True, "message": "Crypto automation run queued"}
+
+
+@router.get("/definitions")
+async def get_strategy_definitions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.strategy_registry import get_all_definitions
+    return {"definitions": get_all_definitions(db)}
