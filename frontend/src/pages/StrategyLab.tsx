@@ -4,12 +4,13 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   FlaskConical, X, Play, TrendingUp, TrendingDown, AlertTriangle,
-  Eye, Clock, CheckCircle2, RefreshCw, ExternalLink, BarChart2, Info,
+  Eye, Clock, CheckCircle2, RefreshCw, RotateCw, ExternalLink, BarChart2, Info,
   Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getTrades, getCandidates, getSummary, getLog, getEquity, getRegime, runNow, closeTrade,
+  refreshPrices,
   getBacktestStatus, runBacktest, getBacktestResults, getBacktestDetail,
 } from "@/api/strategy";
 import {
@@ -50,16 +51,21 @@ const STRATEGIES = [
 
 
 const TRIGGER_LABELS: Record<string, string> = {
-  "_breakout_pivot":    "Waiting for breakout + volume",
-  "_rsi_recovery_35":  "Waiting for RSI to turn up from 35",
-  "_rsi_recovery_32":  "Waiting for RSI to turn up from 32",
-  "_ema_pullback":      "Waiting for EMA21 pullback + bounce",
-  "_squeeze_breakout":  "Waiting for range breakout",
-  "_next_open":         "Entering on next daily run",
-  "_volume_direction":  "Waiting for up-day confirmation",
-  "_turtle_breakout":   "Waiting for 55-day channel break",
-  "_zscore_recovery":   "Waiting for z-score recovery",
-  "_darvas_breakout":   "Waiting for box breakout + volume",
+  "_breakout_pivot":    "Price must break above pivot high with above-avg volume",
+  "_rsi_recovery_35":  "RSI dipped below 35 — waiting for it to turn back up",
+  "_rsi_recovery_32":  "RSI deeply oversold (below 32) — waiting for upturn",
+  "_ema_pullback":      "Stock must pull back to EMA21, then close above it",
+  "_squeeze_breakout":  "Price range coiling tight — waiting for expansion breakout",
+  "_next_open":         "Criteria met — entering on next daily run",
+  "_volume_direction":  "Waiting for an up-day with above-average volume confirmation",
+  "_turtle_breakout":   "Price must break above the 55-day channel high",
+  "_zscore_recovery":   "Price far below average — waiting for reversion signal",
+  "_darvas_breakout":   "Waiting for price to break above Darvas box top on volume",
+  "_macd_cross":        "MACD line must cross above the signal line",
+  "_golden_cross":      "50-day MA must cross above the 200-day MA",
+  "_volume_surge":      "Unusual volume spike must be confirmed on an up-day",
+  "_52w_breakout":      "Price must close at a new 52-week high",
+  "_consecutive_up":    "Stock must close higher for required consecutive days",
 };
 
 const STRATEGY_INFO: Record<string, string> = {
@@ -229,11 +235,14 @@ const STRATEGY_DETAIL: Record<string, StrategyDetail> = {
 };
 
 const EXIT_BADGE: Record<string, { label: string; cls: string }> = {
-  stop:    { label: "Stop Hit",   cls: "text-[var(--accent-negative)] border-red-400/40 bg-red-400/10" },
-  target:  { label: "Target Hit", cls: "text-green-400 border-green-400/40 bg-green-400/10" },
-  time:    { label: "Time Stop",  cls: "text-amber-400 border-amber-400/40 bg-amber-400/10" },
-  manual:  { label: "Manual",     cls: "text-[var(--text-secondary)] border-zinc-400/30 bg-zinc-400/10" },
-  expired: { label: "Expired",    cls: "text-[var(--text-tertiary)] border-[var(--border-emphasis)] bg-[#334155]" },
+  stop:          { label: "Stop Hit",   cls: "text-[var(--accent-negative)] border-red-400/40 bg-red-400/10" },
+  stop_loss:     { label: "Stop Hit",   cls: "text-[var(--accent-negative)] border-red-400/40 bg-red-400/10" },
+  target:        { label: "Target Hit", cls: "text-[var(--accent-positive)] border-emerald-400/40 bg-emerald-400/10" },
+  profit_target: { label: "Target Hit", cls: "text-[var(--accent-positive)] border-emerald-400/40 bg-emerald-400/10" },
+  time:          { label: "Time Stop",  cls: "text-amber-400 border-amber-400/40 bg-amber-400/10" },
+  time_stop:     { label: "Time Stop",  cls: "text-amber-400 border-amber-400/40 bg-amber-400/10" },
+  manual:        { label: "Manual",     cls: "text-[var(--text-secondary)] border-zinc-400/30 bg-zinc-400/10" },
+  expired:       { label: "Expired",    cls: "text-[var(--text-tertiary)] border-[var(--border-emphasis)] bg-[var(--bg-elevated-2)]" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -271,15 +280,21 @@ function EquityCurve({ data, baseline }: { data: any[]; baseline: number }) {
   });
   const last = vals[vals.length - 1];
   const isPos = last >= baseline;
-  const stroke = isPos ? "#10b981" : "#ef4444";
-  const fill = isPos ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)";
   const baseY = H - pad - ((baseline - min) / range) * (H - pad * 2);
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-28" preserveAspectRatio="none">
       <line x1={pad} y1={baseY} x2={W - pad} y2={baseY} stroke="#3f3f46" strokeWidth={0.8} strokeDasharray="6,4" />
-      <path d={`M ${pts[0]} L ${pts.join(" L ")} L ${W - pad},${H - pad} L ${pad},${H - pad} Z`} fill={fill} />
-      <polyline points={pts.join(" ")} fill="none" stroke={stroke} strokeWidth={2} />
+      <path
+        d={`M ${pts[0]} L ${pts.join(" L ")} L ${W - pad},${H - pad} L ${pad},${H - pad} Z`}
+        style={{ fill: isPos ? "rgba(190,242,100,0.07)" : "rgba(251,113,133,0.07)" }}
+      />
+      <polyline
+        points={pts.join(" ")}
+        fill="none"
+        style={{ stroke: isPos ? "var(--accent-positive)" : "var(--accent-negative)" }}
+        strokeWidth={2}
+      />
     </svg>
   );
 }
@@ -368,7 +383,7 @@ function StrategyInfoModal({ strategyKey, onClose }: { strategyKey: string; onCl
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-[#020617]/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         className="relative w-full max-w-xl rounded-2xl border border-[var(--border-emphasis)] bg-[var(--bg-elevated-2)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -414,11 +429,11 @@ function StrategyInfoModal({ strategyKey, onClose }: { strategyKey: string; onCl
 
               {/* Best in / Risk — side by side */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-[#334155]/60 border border-[var(--border-emphasis)]/50 p-3">
+                <div className="rounded-xl bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)]/50 p-3">
                   <div className="text-[10px] font-semibold text-[var(--accent-positive)] uppercase tracking-wider mb-1.5">Best market for this</div>
                   <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{detail.bestIn}</p>
                 </div>
-                <div className="rounded-xl bg-[#334155]/60 border border-[var(--border-emphasis)]/50 p-3">
+                <div className="rounded-xl bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)]/50 p-3">
                   <div className="text-[10px] font-semibold text-[var(--accent-negative)] uppercase tracking-wider mb-1.5">Main risk</div>
                   <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{detail.risk}</p>
                 </div>
@@ -431,7 +446,7 @@ function StrategyInfoModal({ strategyKey, onClose }: { strategyKey: string; onCl
           <div className="mt-6 pt-4 border-t border-[var(--border-emphasis)] flex justify-end">
             <button
               onClick={onClose}
-              className="text-xs px-4 py-2 rounded-lg bg-[#334155] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] transition-colors"
+              className="text-xs px-4 py-2 rounded-lg bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:border hover:border-[var(--border-emphasis)] transition-colors"
             >
               Got it
             </button>
@@ -491,10 +506,10 @@ function MonitorBadge() {
   const isPreOrAfter = status.market_status === "pre-market" || status.market_status === "after-hours";
 
   const dotCls = isOpen
-    ? "bg-[#22C55E] animate-pulse"
+    ? "bg-[var(--accent-positive)] animate-pulse"
     : isPreOrAfter
     ? "bg-[var(--accent-positive)]"
-    : "bg-[#475569]";
+    : "bg-[var(--text-tertiary)]";
 
   const label = isOpen
     ? `LIVE · Scanned ${status.stocks_scanned} stocks`
@@ -592,13 +607,18 @@ export default function StrategyLab() {
   const [selectedTrade, setSelectedTrade] = useState<EnrichedTrade | null>(null);
   const [infoModal, setInfoModal] = useState<string | null>(null);
   const [showAllStrategies, setShowAllStrategies] = useState(false);
+  const [logFilter, setLogFilter] = useState<"all" | "entries" | "exits" | "candidates" | "summary">("all");
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(
+    () => localStorage.getItem("strategy_last_refreshed")
+  );
 
-  const { data: tradesData }     = useQuery({ queryKey: ["strategy-trades"],     queryFn: getTrades,        refetchInterval: 60_000,  staleTime: 55_000 });
-  const { data: candidatesData } = useQuery({ queryKey: ["strategy-candidates"], queryFn: getCandidates,    refetchInterval: 60_000,  staleTime: 55_000 });
-  const { data: summaryData }    = useQuery({ queryKey: ["strategy-summary"],    queryFn: getSummary,       refetchInterval: 60_000,  staleTime: 55_000 });
-  const { data: logData }        = useQuery({ queryKey: ["strategy-log"],        queryFn: () => getLog(80), refetchInterval: 60_000,  staleTime: 55_000 });
-  const { data: equityData }     = useQuery({ queryKey: ["strategy-equity"],     queryFn: getEquity,        refetchInterval: 300_000, staleTime: 290_000 });
-  const { data: regimeData }     = useQuery({ queryKey: ["strategy-regime"],     queryFn: getRegime,        refetchInterval: 300_000, staleTime: 290_000 });
+  const { data: tradesData }     = useQuery({ queryKey: ["strategy-trades"],     queryFn: getTrades,     staleTime: Infinity });
+  const { data: candidatesData } = useQuery({ queryKey: ["strategy-candidates"], queryFn: getCandidates, staleTime: Infinity });
+  const { data: summaryData }    = useQuery({ queryKey: ["strategy-summary"],    queryFn: getSummary,    staleTime: Infinity });
+  const { data: logData }        = useQuery({ queryKey: ["strategy-log"],        queryFn: () => getLog(80), staleTime: Infinity });
+  const { data: equityData }     = useQuery({ queryKey: ["strategy-equity"],     queryFn: getEquity,     staleTime: Infinity });
+  const { data: regimeData }     = useQuery({ queryKey: ["strategy-regime"],     queryFn: getRegime,     staleTime: Infinity });
 
   const closeMut = useMutation({
     mutationFn: (id: number) => closeTrade(id),
@@ -615,11 +635,28 @@ export default function StrategyLab() {
       await runNow();
       toast.success("Daily run started — log updates in ~2 min", { duration: 5000 });
       setTimeout(() => {
+        const now = new Date().toISOString();
         ["strategy-trades", "strategy-candidates", "strategy-summary", "strategy-log", "strategy-equity"]
           .forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        setLastRefreshed(now);
+        localStorage.setItem("strategy_last_refreshed", now);
       }, 120_000);
     } catch { toast.error("Failed to start run"); }
     finally { setRunningNow(false); }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await refreshPrices();
+      ["strategy-trades", "strategy-candidates", "strategy-summary", "strategy-equity"]
+        .forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      const ts = res.refreshed_at ?? new Date().toISOString();
+      setLastRefreshed(ts);
+      localStorage.setItem("strategy_last_refreshed", ts);
+      toast.success(`Prices updated — ${res.updated_count} position${res.updated_count !== 1 ? "s" : ""} refreshed`);
+    } catch { toast.error("Failed to refresh prices"); }
+    finally { setRefreshing(false); }
   };
 
   const goToChart = (
@@ -698,6 +735,23 @@ export default function StrategyLab() {
         <div className="flex items-center gap-2">
           <MonitorBadge />
           <RegimePill regime={regime} />
+
+          {/* Last updated + Refresh */}
+          <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
+            {lastRefreshed && (
+              <span className="hidden sm:inline">Updated {relativeTime(lastRefreshed)}</span>
+            )}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              title="Refresh prices for all open positions"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-500 transition-colors disabled:opacity-40"
+            >
+              <RotateCw size={11} className={refreshing ? "animate-spin" : ""} />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+
           <button
             onClick={handleRunNow}
             disabled={runningNow}
@@ -817,7 +871,7 @@ export default function StrategyLab() {
               {tab.count > 0 && (
                 <span className={cn(
                   "ml-2 text-[10px] px-1.5 py-0.5 rounded-full",
-                  activeTab === tab.key ? "bg-white/10 text-[var(--text-secondary)]" : "bg-[#334155] text-[var(--text-tertiary)]"
+                  activeTab === tab.key ? "bg-white/10 text-[var(--text-secondary)]" : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)]"
                 )}>
                   {tab.count}
                 </span>
@@ -848,20 +902,54 @@ export default function StrategyLab() {
                 ? <Empty icon={<CheckCircle2 size={32} />} text="No closed trades" sub="Positions close via stop, target, or time limit" />
                 : <ClosedTable trades={filteredClosed} onChart={goToChart} />
               }
-              {byPreset.length > 0 && !selectedStrategy && (
+              {byPreset.length > 0 && (
                 <PerformanceTable byPreset={byPreset} />
               )}
             </>
           )}
 
           {/* Daily Log */}
-          {activeTab === "log" && (
-            filteredLog.length === 0
+          {activeTab === "log" && (() => {
+            const logTypeFiltered = logFilter === "all" ? filteredLog
+              : filteredLog.filter((e) => {
+                  if (logFilter === "entries")    return e.event_type === "entry";
+                  if (logFilter === "exits")      return e.event_type === "exit";
+                  if (logFilter === "candidates") return e.event_type === "candidate_added" || e.event_type === "candidate_expired";
+                  if (logFilter === "summary")    return e.event_type === "daily_summary";
+                  return true;
+                });
+            const LOG_FILTERS = [
+              { key: "all",        label: "All" },
+              { key: "entries",    label: "Entries" },
+              { key: "exits",      label: "Exits" },
+              { key: "candidates", label: "Candidates" },
+              { key: "summary",    label: "Daily Summary" },
+            ] as const;
+            return filteredLog.length === 0
               ? <Empty icon={<RefreshCw size={32} />} text="No log entries" sub='Click "Run Now" to kick off the first scan' />
-              : <div className="space-y-0.5 max-h-[600px] overflow-y-auto">
-                  {filteredLog.map((e) => <LogRow key={e.id} entry={e} />)}
+              : (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                    {LOG_FILTERS.map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => setLogFilter(f.key)}
+                        className={cn(
+                          "text-[11px] px-2.5 py-1 rounded-full border transition-colors",
+                          logFilter === f.key
+                            ? "border-[var(--accent-positive)]/40 bg-[var(--accent-positive-bg)] text-[var(--accent-positive)]"
+                            : "border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                        )}
+                      >{f.label}</button>
+                    ))}
+                    <span className="text-[11px] text-[var(--text-tertiary)] ml-1">{logTypeFiltered.length} entries</span>
+                  </div>
+                  <div className="space-y-0.5 max-h-[560px] overflow-y-auto">
+                    {logTypeFiltered.map((e) => <LogRow key={e.id} entry={e} />)}
+                  </div>
                 </div>
-          )}
+              );
+          })()}
         </div>
       </div>
 
@@ -892,14 +980,20 @@ function BacktestEquityCurve({ data, baseline }: { data: { date: string; value: 
   });
   const last = vals[vals.length - 1];
   const isPos = last >= baseline;
-  const stroke = isPos ? "#10b981" : "#ef4444";
-  const fill   = isPos ? "rgba(16,185,129,0.07)" : "rgba(239,68,68,0.07)";
   const baseY  = H - pad - ((baseline - min) / range) * (H - pad * 2);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-20" preserveAspectRatio="none">
       <line x1={pad} y1={baseY} x2={W - pad} y2={baseY} stroke="#3f3f46" strokeWidth={0.8} strokeDasharray="4,3" />
-      <path d={`M ${pts[0]} L ${pts.join(" L ")} L ${W - pad},${H - pad} L ${pad},${H - pad} Z`} fill={fill} />
-      <polyline points={pts.join(" ")} fill="none" stroke={stroke} strokeWidth={1.5} />
+      <path
+        d={`M ${pts[0]} L ${pts.join(" L ")} L ${W - pad},${H - pad} L ${pad},${H - pad} Z`}
+        style={{ fill: isPos ? "rgba(190,242,100,0.07)" : "rgba(251,113,133,0.07)" }}
+      />
+      <polyline
+        points={pts.join(" ")}
+        fill="none"
+        style={{ stroke: isPos ? "var(--accent-positive)" : "var(--accent-negative)" }}
+        strokeWidth={1.5}
+      />
     </svg>
   );
 }
@@ -1123,8 +1217,8 @@ function BacktestSection() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <div className="w-12 h-1 rounded-full bg-[#334155] overflow-hidden">
-                              <div className="h-full rounded-full bg-[#22C55E]" style={{ width: `${s.win_rate ?? 0}%` }} />
+                            <div className="w-12 h-1 rounded-full bg-[var(--bg-elevated-2)] overflow-hidden">
+                              <div className="h-full rounded-full bg-[var(--accent-positive)]" style={{ width: `${s.win_rate ?? 0}%` }} />
                             </div>
                             <span className={cn("text-xs font-mono", (s.win_rate ?? 0) >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                               {s.win_rate ?? 0}%
@@ -1232,8 +1326,8 @@ function BacktestSection() {
                                 <td className="px-3 py-2 text-right text-[var(--text-secondary)] font-mono">{c.tradeCount}</td>
                                 <td className="px-3 py-2 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
-                                    <div className="w-10 h-1 rounded-full bg-[#334155] overflow-hidden">
-                                      <div className="h-full rounded-full bg-[#22C55E]" style={{ width: `${c.winRate}%` }} />
+                                    <div className="w-10 h-1 rounded-full bg-[var(--bg-elevated-2)] overflow-hidden">
+                                      <div className="h-full rounded-full bg-[var(--accent-positive)]" style={{ width: `${c.winRate}%` }} />
                                     </div>
                                     <span className={cn("font-mono text-[11px]", c.winRate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                                       {c.winRate}%
@@ -1335,9 +1429,9 @@ const BACKTEST_UNIVERSE_SIZE = 150;
 
 function RegimePill({ regime }: { regime: string }) {
   const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-    bull:     { label: "Bull Market",   cls: "text-[var(--accent-positive)] border-emerald-400/30 bg-[#22C55E]/8",  icon: <TrendingUp size={10} /> },
-    risk_off: { label: "Risk Off",      cls: "text-[var(--accent-negative)] border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={10} /> },
-    unknown:  { label: "Checking…",    cls: "text-[var(--text-tertiary)] border-[var(--border-emphasis)] bg-[#334155]",                 icon: <AlertTriangle size={10} /> },
+    bull:     { label: "Bull Market",   cls: "text-[var(--accent-positive)] border-emerald-400/30 bg-[var(--accent-positive-bg)]",  icon: <TrendingUp size={10} /> },
+    risk_off: { label: "Risk Off",      cls: "text-[var(--accent-negative)] border-red-400/30 bg-[var(--accent-negative-bg)]",         icon: <TrendingDown size={10} /> },
+    unknown:  { label: "Checking…",    cls: "text-[var(--text-tertiary)] border-[var(--border-emphasis)] bg-[var(--bg-elevated-2)]",   icon: <AlertTriangle size={10} /> },
   };
   const { label, cls, icon } = map[regime] ?? map.unknown;
   return (
@@ -1383,26 +1477,100 @@ function TD({ children, className }: { children: React.ReactNode; className?: st
 
 type OnChart = (sym: string, preset: string, levels?: { entry?: number | null; stop?: number | null; target?: number | null; entryDate?: string | null }) => void;
 
+type SortKey = "pnl_pct" | "day_pnl" | "days_held" | "entry_date";
+
+function PositionBar({ stop, entry, current, target }: { stop: number; entry: number; current: number; target: number }) {
+  const lo = Math.min(stop, current) * 0.999;
+  const hi = Math.max(target, current) * 1.001;
+  const range = hi - lo || 1;
+  const pct = (v: number) => `${(((v - lo) / range) * 100).toFixed(1)}%`;
+  const isProfit = current >= entry;
+  return (
+    <div className="relative h-1.5 w-full rounded-full bg-[var(--bg-elevated-2)] overflow-visible mt-1.5 min-w-[80px]">
+      {/* fill from entry to current */}
+      <div
+        className="absolute top-0 h-full rounded-full"
+        style={{
+          left: isProfit ? pct(entry) : pct(current),
+          width: `${(Math.abs(current - entry) / range) * 100}%`,
+          backgroundColor: isProfit ? "var(--accent-positive)" : "var(--accent-negative)",
+          opacity: 0.7,
+        }}
+      />
+      {/* stop marker */}
+      <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-red-400/70 rounded-full" style={{ left: pct(stop) }} title={`Stop $${stop.toFixed(2)}`} />
+      {/* entry marker */}
+      <div className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-zinc-400 rounded-full" style={{ left: pct(entry) }} title={`Entry $${entry.toFixed(2)}`} />
+      {/* target marker */}
+      <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-emerald-400/70 rounded-full" style={{ left: pct(target) }} title={`Target $${target.toFixed(2)}`} />
+    </div>
+  );
+}
+
+function SortableTH({ label, sortKey, active, dir, onSort }: { label: string; sortKey: SortKey; active: boolean; dir: "asc" | "desc"; onSort: (k: SortKey) => void }) {
+  return (
+    <TH>
+      <button
+        onClick={() => onSort(sortKey)}
+        className={cn("flex items-center gap-0.5 hover:text-[var(--text-primary)] transition-colors", active ? "text-[var(--text-secondary)]" : "")}
+      >
+        {label}
+        <span className="text-[9px] ml-0.5">{active ? (dir === "desc" ? "↓" : "↑") : "↕"}</span>
+      </button>
+    </TH>
+  );
+}
+
 function OpenTable({ trades, onClose, onChart, onRowClick }: { trades: any[]; onClose: (id: number) => void; onChart: OnChart; onRowClick: (t: EnrichedTrade) => void }) {
+  const [sortKey, setSortKey] = useState<SortKey>("entry_date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
   const stratMap = useMemo(() => {
     const m: Record<string, typeof STRATEGIES[0]> = {};
     STRATEGIES.forEach((s) => { m[s.key] = s; });
     return m;
   }, []);
 
+  const sorted = useMemo(() => {
+    return [...trades].sort((a, b) => {
+      let av: number, bv: number;
+      if (sortKey === "entry_date") {
+        av = a.entry_date ? new Date(a.entry_date).getTime() : 0;
+        bv = b.entry_date ? new Date(b.entry_date).getTime() : 0;
+      } else {
+        av = a[sortKey] ?? 0;
+        bv = b[sortKey] ?? 0;
+      }
+      return sortDir === "desc" ? bv - av : av - bv;
+    });
+  }, [trades, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
   return (
     <div className="overflow-x-auto -mx-4">
       <table className="w-full text-sm">
         <thead><tr className="border-b border-[var(--border-emphasis)]/60">
-          <TH>Symbol</TH><TH>Strategy</TH><TH>Entry</TH><TH>Current</TH>
-          <TH>P&L</TH><TH>Stop / Target</TH><TH>Risk</TH><TH>Days</TH><TH></TH>
+          <TH>Symbol</TH><TH>Strategy</TH>
+          <SortableTH label="Entry" sortKey="entry_date" active={sortKey === "entry_date"} dir={sortDir} onSort={handleSort} />
+          <TH>Current</TH>
+          <SortableTH label="P&L" sortKey="pnl_pct" active={sortKey === "pnl_pct"} dir={sortDir} onSort={handleSort} />
+          <SortableTH label="Today" sortKey="day_pnl" active={sortKey === "day_pnl"} dir={sortDir} onSort={handleSort} />
+          <TH>Stop / Target</TH><TH>Risk</TH>
+          <SortableTH label="Days" sortKey="days_held" active={sortKey === "days_held"} dir={sortDir} onSort={handleSort} />
+          <TH></TH>
         </tr></thead>
         <tbody>
-          {trades.map((t) => {
+          {sorted.map((t) => {
             const pos = (t.pnl_pct ?? 0) >= 0;
+            const dayPos = (t.day_pnl ?? 0) >= 0;
             const strat = stratMap[t.preset_key];
             const stopPct = t.entry_price && t.stop_price ? ((t.stop_price - t.entry_price) / t.entry_price * 100) : null;
             const tgtPct  = t.entry_price && t.target_price ? ((t.target_price - t.entry_price) / t.entry_price * 100) : null;
+            const hasBar = t.stop_price && t.entry_price && t.current_price && t.target_price;
             return (
               <tr key={t.id} onClick={() => onRowClick(t)} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/3 transition-colors cursor-pointer">
                 <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { entry: t.entry_price, stop: t.stop_price, target: t.target_price, entryDate: t.entry_date })} /></TD>
@@ -1415,22 +1583,36 @@ function OpenTable({ trades, onClose, onChart, onRowClick }: { trades: any[]; on
                   <div className="font-mono text-xs text-[var(--text-secondary)]">{t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"}</div>
                   {t.entry_date && <div className="text-[10px] text-[var(--text-tertiary)]">{new Date(t.entry_date).toLocaleDateString()}</div>}
                 </TD>
-                <TD className="font-mono text-xs text-[var(--text-secondary)]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</TD>
                 <TD>
-                  <div
-                    className={cn("font-mono text-sm font-bold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
-                    aria-label={t.pnl != null ? `${pos ? "Gain" : "Loss"}: ${fmt$(Math.abs(t.pnl), 0)}` : undefined}
-                  >
+                  <div className="font-mono text-xs text-[var(--text-secondary)]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</div>
+                  {hasBar && (
+                    <PositionBar stop={t.stop_price} entry={t.entry_price} current={t.current_price} target={t.target_price} />
+                  )}
+                </TD>
+                <TD>
+                  <div className={cn("font-mono text-sm font-bold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                     {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
                   </div>
-                  {t.pnl != null && <div className={cn("text-[10px] font-mono", pos ? "text-[var(--accent-positive)]/60" : "text-[var(--accent-negative)]/60")}>{pos ? "▲" : "▼"} {fmt$(Math.abs(t.pnl), 0)}</div>}
+                  {t.pnl != null && <div className={cn("text-[10px] font-mono", pos ? "text-[var(--accent-positive)]/70" : "text-[var(--accent-negative)]/70")}>{pos ? "+" : ""}{fmt$(t.pnl, 0)}</div>}
+                </TD>
+                <TD>
+                  {t.day_pnl != null ? (
+                    <div className={cn("font-mono text-xs font-semibold", dayPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                      {dayPos ? "+" : ""}{fmt$(t.day_pnl, 0)}
+                    </div>
+                  ) : (
+                    <span className="text-[var(--text-tertiary)] text-xs">—</span>
+                  )}
                 </TD>
                 <TD className="text-xs font-mono">
-                  <span className="text-[var(--accent-negative)]/70">{t.stop_price ? `$${t.stop_price.toFixed(2)}` : "—"}</span>
-                  {stopPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> ({stopPct.toFixed(1)}%)</span>}
-                  <span className="text-[var(--text-tertiary)] mx-1.5">/</span>
-                  <span className="text-[var(--accent-positive)]/70">{t.target_price ? `$${t.target_price.toFixed(2)}` : "—"}</span>
-                  {tgtPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> (+{tgtPct.toFixed(1)}%)</span>}
+                  <div>
+                    <span className="text-[var(--accent-negative)]/70">{t.stop_price ? `$${t.stop_price.toFixed(2)}` : "—"}</span>
+                    {stopPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> ({stopPct.toFixed(1)}%)</span>}
+                  </div>
+                  <div>
+                    <span className="text-[var(--accent-positive)]/70">{t.target_price ? `$${t.target_price.toFixed(2)}` : "—"}</span>
+                    {tgtPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> (+{tgtPct.toFixed(1)}%)</span>}
+                  </div>
                 </TD>
                 <TD className="text-xs text-[var(--text-tertiary)]">${t.risk_dollars?.toFixed(0) ?? "—"}</TD>
                 <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
@@ -1459,12 +1641,15 @@ function WatchTable({ candidates, onChart }: { candidates: any[]; onChart: OnCha
     <div className="overflow-x-auto -mx-4">
       <table className="w-full text-sm">
         <thead><tr className="border-b border-[var(--border-emphasis)]/60">
-          <TH>Symbol</TH><TH>Strategy</TH><TH>Current Price</TH><TH>Waiting For</TH><TH>Days Watching</TH>
+          <TH>Symbol</TH><TH>Strategy</TH><TH>Price</TH><TH>Waiting For</TH><TH>Watching</TH>
         </tr></thead>
         <tbody>
           {candidates.map((t) => {
             const strat = stratMap[t.preset_key];
-            const triggerLabel = TRIGGER_LABELS[t.entry_trigger ?? ""] ?? t.entry_trigger ?? "auto trigger";
+            const triggerLabel = TRIGGER_LABELS[t.entry_trigger ?? ""] ?? (t.entry_trigger ? t.entry_trigger.replace(/_/g, " ").trim() : "Waiting for entry trigger");
+            const watchingDays = t.candidate_since
+              ? Math.floor((Date.now() - new Date(t.candidate_since).getTime()) / 86_400_000)
+              : (t.days_held ?? 0);
             return (
               <tr key={t.id} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/2 transition-colors">
                 <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { stop: t.stop_price, target: t.target_price })} /></TD>
@@ -1475,12 +1660,16 @@ function WatchTable({ candidates, onChart }: { candidates: any[]; onChart: OnCha
                 </TD>
                 <TD className="font-mono text-xs text-[var(--text-secondary)]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</TD>
                 <TD>
-                  <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-                    <Clock size={11} className="text-blue-400 shrink-0" />
-                    {triggerLabel}
+                  <div className="flex items-start gap-1.5 text-xs text-[var(--text-secondary)] max-w-[260px]">
+                    <Clock size={11} className="text-blue-400 shrink-0 mt-0.5" />
+                    <span className="leading-snug">{triggerLabel}</span>
                   </div>
                 </TD>
-                <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
+                <TD>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-400/10 text-blue-400 border border-blue-400/20 whitespace-nowrap">
+                    {watchingDays}d
+                  </span>
+                </TD>
               </tr>
             );
           })}
@@ -1490,54 +1679,87 @@ function WatchTable({ candidates, onChart }: { candidates: any[]; onChart: OnCha
   );
 }
 
+const CLOSED_PAGE_SIZE = 25;
+
 function ClosedTable({ trades, onChart }: { trades: any[]; onChart: OnChart }) {
+  const [page, setPage] = useState(0);
+
   const stratMap = useMemo(() => {
     const m: Record<string, typeof STRATEGIES[0]> = {};
     STRATEGIES.forEach((s) => { m[s.key] = s; });
     return m;
   }, []);
 
+  const totalPages = Math.ceil(trades.length / CLOSED_PAGE_SIZE);
+  const paginated = trades.slice(page * CLOSED_PAGE_SIZE, (page + 1) * CLOSED_PAGE_SIZE);
+
   return (
-    <div className="overflow-x-auto -mx-4">
-      <table className="w-full text-sm">
-        <thead><tr className="border-b border-[var(--border-emphasis)]/60">
-          <TH>Closed</TH><TH>Symbol</TH><TH>Strategy</TH><TH>Entry → Exit</TH>
-          <TH>P&L</TH><TH>Days</TH><TH>Outcome</TH>
-        </tr></thead>
-        <tbody>
-          {trades.slice(0, 40).map((t) => {
-            const badge = EXIT_BADGE[t.exit_reason ?? "manual"] ?? EXIT_BADGE.manual;
-            const pos = (t.pnl_pct ?? 0) >= 0;
-            const strat = stratMap[t.preset_key];
-            return (
-              <tr key={t.id} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/2 transition-colors">
-                <TD className="text-xs text-[var(--text-tertiary)]">{t.exit_date ? new Date(t.exit_date).toLocaleDateString() : "—"}</TD>
-                <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { entry: t.entry_price, stop: t.stop_price, target: t.target_price, entryDate: t.entry_date })} /></TD>
-                <TD>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: strat?.color, backgroundColor: `${strat?.color}15` }}>
-                    {t.preset_label}
-                  </span>
-                </TD>
-                <TD className="font-mono text-xs text-[var(--text-secondary)]">
-                  {t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"} → {t.exit_price ? `$${t.exit_price.toFixed(2)}` : "—"}
-                </TD>
-                <TD>
-                  <div
-                    className={cn("font-mono text-sm font-bold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}
-                    aria-label={t.pnl_pct != null ? `${pos ? "Gain" : "Loss"}: ${Math.abs(t.pnl_pct).toFixed(2)}%` : undefined}
-                  >
-                    {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
-                  </div>
-                </TD>
-                <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
-                <TD>
-                  <span className={cn("text-[11px] px-2 py-0.5 rounded-full border", badge.cls)}>{badge.label}</span>
-                </TD>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div>
+      <div className="overflow-x-auto -mx-4">
+        <table className="w-full text-sm">
+          <thead><tr className="border-b border-[var(--border-emphasis)]/60">
+            <TH>Closed</TH><TH>Symbol</TH><TH>Strategy</TH><TH>Entry → Exit</TH>
+            <TH>P&L</TH><TH>Days</TH><TH>Outcome</TH>
+          </tr></thead>
+          <tbody>
+            {paginated.map((t) => {
+              const badge = EXIT_BADGE[t.exit_reason ?? "manual"] ?? EXIT_BADGE.manual;
+              const pos = (t.pnl_pct ?? 0) >= 0;
+              const strat = stratMap[t.preset_key];
+              return (
+                <tr key={t.id} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/2 transition-colors">
+                  <TD className="text-xs text-[var(--text-tertiary)]">{t.exit_date ? new Date(t.exit_date).toLocaleDateString() : "—"}</TD>
+                  <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { entry: t.entry_price, stop: t.stop_price, target: t.target_price, entryDate: t.entry_date })} /></TD>
+                  <TD>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: strat?.color, backgroundColor: `${strat?.color}15` }}>
+                      {t.preset_label}
+                    </span>
+                  </TD>
+                  <TD className="font-mono text-xs text-[var(--text-secondary)]">
+                    {t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"} → {t.exit_price ? `$${t.exit_price.toFixed(2)}` : "—"}
+                  </TD>
+                  <TD>
+                    <div className={cn("font-mono text-sm font-bold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                      {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
+                    </div>
+                    {t.pnl != null && (
+                      <div className={cn("text-[10px] font-mono", pos ? "text-[var(--accent-positive)]/70" : "text-[var(--accent-negative)]/70")}>
+                        {pos ? "+" : ""}{fmt$(t.pnl, 0)}
+                      </div>
+                    )}
+                  </TD>
+                  <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
+                  <TD>
+                    <span className={cn("text-[11px] px-2 py-0.5 rounded-full border", badge.cls)}>{badge.label}</span>
+                  </TD>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3 px-1">
+          <span className="text-[11px] text-[var(--text-tertiary)]">
+            {page * CLOSED_PAGE_SIZE + 1}–{Math.min((page + 1) * CLOSED_PAGE_SIZE, trades.length)} of {trades.length} trades
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              disabled={page === 0}
+              onClick={() => setPage((p) => p - 1)}
+              className="text-xs px-2.5 py-1 rounded border border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >← Prev</button>
+            <span className="text-xs text-[var(--text-tertiary)] px-2">{page + 1} / {totalPages}</span>
+            <button
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage((p) => p + 1)}
+              className="text-xs px-2.5 py-1 rounded border border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >Next →</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1564,8 +1786,8 @@ function PerformanceTable({ byPreset }: { byPreset: any[] }) {
                   <TD className="text-xs text-[var(--text-secondary)]">{s.trades}</TD>
                   <TD>
                     <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-16 rounded-full bg-[#334155] overflow-hidden">
-                        <div className="h-full rounded-full bg-[#22C55E]" style={{ width: `${s.win_rate}%` }} />
+                      <div className="h-1.5 w-16 rounded-full bg-[var(--bg-elevated-2)] overflow-hidden">
+                        <div className="h-full rounded-full bg-[var(--accent-positive)]" style={{ width: `${s.win_rate}%` }} />
                       </div>
                       <span className={cn("text-xs font-bold", s.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>{s.win_rate}%</span>
                     </div>
@@ -1598,11 +1820,16 @@ function LogRow({ entry }: { entry: any }) {
   };
   const icon = icons[entry.event_type] ?? icons.daily_summary;
   const isDaily = entry.event_type === "daily_summary";
+  const isEntry = entry.event_type === "entry";
+  const isExit  = entry.event_type === "exit";
 
   return (
     <div className={cn(
-      "flex items-start gap-2.5 px-2 py-2 rounded-lg text-xs transition-colors",
-      isDaily ? "bg-[#334155]/40 mt-2" : "hover:bg-[#334155]/30"
+      "flex items-start gap-2.5 px-2 py-2 rounded-lg text-xs transition-colors border-l-2",
+      isDaily ? "bg-[var(--bg-elevated-2)]/60 mt-2 border-[var(--border-emphasis)]"
+      : isEntry ? "border-[var(--accent-positive)]/50 hover:bg-[var(--bg-elevated-2)]/40"
+      : isExit  ? "border-[var(--accent-negative)]/50 hover:bg-[var(--bg-elevated-2)]/40"
+      : "border-transparent hover:bg-[var(--bg-elevated-2)]/40"
     )}>
       {icon}
       <div className="flex-1 min-w-0">

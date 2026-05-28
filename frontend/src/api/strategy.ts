@@ -21,6 +21,9 @@ export const getRegime = () =>
 export const runNow = () =>
   client.post("/strategy/run-now").then((r) => r.data);
 
+export const refreshPrices = (): Promise<{ refreshed_at: string; updated_count: number }> =>
+  client.post("/strategy/refresh-prices").then((r) => r.data);
+
 export interface PnlDay {
   date: string;
   day_pnl: number;

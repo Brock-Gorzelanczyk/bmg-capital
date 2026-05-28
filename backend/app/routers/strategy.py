@@ -450,6 +450,44 @@ async def run_now(
     return {"ok": True, "message": "Daily run started — check /log in ~2 minutes for results"}
 
 
+@router.post("/refresh-prices")
+async def refresh_prices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Fetch fresh market prices for all open/candidate positions and persist to last_known_price."""
+    trades = db.scalars(
+        select(StrategyTrade).where(
+            StrategyTrade.user_id == current_user.id,
+            StrategyTrade.status.in_(["open", "candidate"]),
+        )
+    ).all()
+
+    if not trades:
+        return {"refreshed_at": _now().isoformat(), "updated_count": 0}
+
+    symbols = list({t.symbol for t in trades})
+
+    # Force a fresh fetch by evicting the cache for these symbols
+    global _price_cache
+    _price_cache = {k: v for k, v in _price_cache.items() if not frozenset(symbols).intersection(k)}
+
+    loop = asyncio.get_running_loop()
+    prices = await loop.run_in_executor(None, lambda: _get_prices_sync(symbols))
+
+    updated = 0
+    for t in trades:
+        current = prices.get(t.symbol)
+        if current and current > 0 and t.last_known_price != current:
+            t.last_known_price = current
+            updated += 1
+
+    refreshed_at = _now()
+    db.commit()
+
+    return {"refreshed_at": refreshed_at.isoformat(), "updated_count": updated}
+
+
 @router.delete("/trades/{trade_id}")
 async def close_trade(
     trade_id: int,
