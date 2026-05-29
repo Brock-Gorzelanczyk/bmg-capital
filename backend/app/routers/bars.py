@@ -35,16 +35,15 @@ YF_MAX_DAYS: dict[str, int] = {
     "4Hour": 729,
 }
 
-# Timeframes that support extra lookback for indicator warm-up
+# Timeframes that support indicator warm-up (daily and coarser only)
 DAILY_TIMEFRAMES = {"1Day", "1Week", "1Month"}
 
-# Calendar-day multiplier to convert trading-day periods to calendar days
-# 200 trading days * 1.6 = 320 calendar days (safe buffer for weekends + holidays)
+# Calendar-day multiplier: 200 trading days * 1.6 ≈ 320 calendar days (safe buffer)
 _CALENDAR_MULT = 1.6
 
 
 def _max_indicator_lookback(indicators_str: Optional[str]) -> int:
-    """Return the largest period found in indicator keys (e.g. SMA_200 → 200, ICHIMOKU → 52)."""
+    """Return the largest period in indicator keys (e.g. SMA_200 → 200, ICHIMOKU → 52)."""
     if not indicators_str:
         return 0
     max_p = 0
@@ -58,11 +57,37 @@ def _max_indicator_lookback(indicators_str: Optional[str]) -> int:
                 pass
         if key == "MACD":
             max_p = max(max_p, 26)
-        if key in ("ICHIMOKU",):
+        if key == "ICHIMOKU":
             max_p = max(max_p, 52)
         if key in ("DONCHIAN", "KELTNER"):
             max_p = max(max_p, 20)
     return max_p
+
+
+def _fetch_yf_ohlcv(ticker: yf.Ticker, start_str: str, end_str: str, interval: str, timeframe: str) -> list[dict]:
+    """Fetch OHLCV from yfinance and return as a list of dicts with open/high/low/close/volume."""
+    hist = ticker.history(
+        start=start_str,
+        end=end_str,
+        interval=interval,
+        auto_adjust=True,
+    )
+    if hist.empty:
+        return []
+
+    if timeframe == "4Hour":
+        hist = hist.resample("4h", closed="left", label="left").agg({
+            "Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"
+        }).dropna(subset=["Open", "Close"])
+
+    rows = []
+    for idx, row in hist.iterrows():
+        o, h, l, c, v = float(row["Open"]), float(row["High"]), float(row["Low"]), float(row["Close"]), float(row["Volume"])
+        if pd.isna(o) or pd.isna(c):
+            continue
+        rows.append({"open": o, "high": h, "low": l, "close": c, "volume": v,
+                     "_t": idx.isoformat() if hasattr(idx, "isoformat") else str(idx)})
+    return rows
 
 
 @router.get("/{symbol}")
@@ -81,21 +106,20 @@ async def get_bars(
 
     if not start:
         if timeframe == "1Month":
-            days_back = 9125   # ~25 years
+            days_back = 9125
         elif timeframe == "1Week":
-            days_back = 7300   # ~20 years
+            days_back = 7300
         elif timeframe == "1Day":
-            days_back = 5475   # ~15 years
+            days_back = 5475
         elif timeframe in ("4Hour", "1Hour"):
             days_back = 729
         elif timeframe in ("30Min", "15Min", "5Min"):
             days_back = 59
-        else:                  # 1Min
+        else:
             days_back = 7
         max_days = YF_MAX_DAYS.get(timeframe, 20000)
         days_back = min(days_back, max_days)
         start_dt = end_dt - timedelta(days=days_back)
-        display_start_dt = None  # no trimming needed — all data is visible
     else:
         start_dt = datetime.fromisoformat(start)
         max_days = YF_MAX_DAYS.get(timeframe)
@@ -103,108 +127,71 @@ async def get_bars(
             earliest = end_dt - timedelta(days=max_days)
             if start_dt < earliest:
                 start_dt = earliest
-        display_start_dt = start_dt  # remember original for trimming
-
-        # Expand start backwards to warm up indicators (SMA_200 needs 200 bars of prior data)
-        if timeframe in DAILY_TIMEFRAMES:
-            lookback = _max_indicator_lookback(indicators)
-            if lookback > 0:
-                extra_days = math.ceil(lookback * _CALENDAR_MULT)
-                start_dt = start_dt - timedelta(days=extra_days)
 
     start_str = start_dt.date().isoformat()
     end_str = end_dt.date().isoformat()
+    end_exclusive = (end_dt + timedelta(days=1)).date().isoformat()
 
+    # ── Main bars ──────────────────────────────────────────────────────────────
     cached = get_cached(symbol, timeframe, start_str, end_str)
     if cached:
-        indicator_data = {}
-        if indicators:
-            try:
-                ohlcv = [{"open": b["o"], "high": b["h"], "low": b["l"], "close": b["c"], "volume": b["v"]} for b in cached]
-                df_cached = pd.DataFrame(ohlcv)
-                requested = [i.strip() for i in indicators.split(",")]
-                indicator_data = compute_indicators(df_cached, requested)
-            except Exception:
-                pass
-        bars_out, indicator_data = _trim_to_display(cached, indicator_data, display_start_dt)
-        return {"symbol": symbol.upper(), "bars": bars_out, "indicators": indicator_data}
-
-    try:
-        ticker = yf.Ticker(symbol.upper())
-        # end is exclusive in yfinance, add 1 day to include today
-        hist = ticker.history(
-            start=start_str,
-            end=(end_dt + timedelta(days=1)).date().isoformat(),
-            interval=interval,
-            auto_adjust=True,
-        )
-
-        if hist.empty:
-            raise HTTPException(status_code=404, detail=f"No data for {symbol}")
-
-        # Resample 1h bars to 4h for the 4Hour timeframe
-        if timeframe == "4Hour":
-            hist = hist.resample("4h", closed="left", label="left").agg({
-                "Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"
-            }).dropna(subset=["Open", "Close"])
-
-        bars_list = []
-        ohlcv = []
-        for idx, row in hist.iterrows():
-            o = float(row["Open"])
-            h = float(row["High"])
-            l = float(row["Low"])
-            c = float(row["Close"])
-            v = float(row["Volume"])
-            if pd.isna(o) or pd.isna(c):
-                continue
-            ts = idx.isoformat() if hasattr(idx, "isoformat") else str(idx)
-            bars_list.append({"t": ts, "o": o, "h": h, "l": l, "c": c, "v": v})
-            ohlcv.append({"open": o, "high": h, "low": l, "close": c, "volume": v})
-
-        if not bars_list:
-            raise HTTPException(status_code=404, detail=f"No data for {symbol}")
-
-        df = pd.DataFrame(ohlcv)
-
-        ttl = 3600 if timeframe in ("4Hour", "1Hour") else 300 if timeframe in ("30Min", "15Min", "5Min", "1Min") else 86400
-        set_cache(symbol, timeframe, start_str, end_str, bars_list, ttl)
-
-        indicator_data = {}
-        if indicators and len(df) > 0:
-            requested = [i.strip() for i in indicators.split(",")]
-            indicator_data = compute_indicators(df, requested)
-
-        bars_out, indicator_data = _trim_to_display(bars_list, indicator_data, display_start_dt)
-
-        return {"symbol": symbol.upper(), "bars": bars_out, "indicators": indicator_data}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-def _trim_to_display(
-    bars: list[dict],
-    indicators: dict[str, list],
-    display_start_dt: Optional[datetime],
-) -> tuple[list[dict], dict[str, list]]:
-    """Trim bars and indicator arrays to the original display start date."""
-    if not display_start_dt or not bars:
-        return bars, indicators
-
-    display_date = display_start_dt.date()
-    trim_idx = 0
-    for i, bar in enumerate(bars):
+        bars_list = cached
+        main_ohlcv = [{"open": b["o"], "high": b["h"], "low": b["l"], "close": b["c"], "volume": b["v"]} for b in bars_list]
+    else:
         try:
-            bar_date = datetime.fromisoformat(bar["t"][:10]).date()
-            if bar_date >= display_date:
-                trim_idx = i
-                break
-        except Exception:
-            pass
+            ticker = yf.Ticker(symbol.upper())
+            rows = _fetch_yf_ohlcv(ticker, start_str, end_exclusive, interval, timeframe)
+            if not rows:
+                raise HTTPException(status_code=404, detail=f"No data for {symbol}")
 
-    trimmed_bars = bars[trim_idx:]
-    trimmed_indicators = {k: v[trim_idx:] for k, v in indicators.items()}
-    return trimmed_bars, trimmed_indicators
+            bars_list = [{"t": r["_t"], "o": r["open"], "h": r["high"], "l": r["low"], "c": r["close"], "v": r["volume"]} for r in rows]
+            main_ohlcv = [{"open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"]} for r in rows]
+
+            ttl = 3600 if timeframe in ("4Hour", "1Hour") else 300 if timeframe in ("30Min", "15Min", "5Min", "1Min") else 86400
+            set_cache(symbol, timeframe, start_str, end_str, bars_list, ttl)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    if not bars_list:
+        raise HTTPException(status_code=404, detail=f"No data for {symbol}")
+
+    # ── Indicator computation with warm-up ─────────────────────────────────────
+    indicator_data: dict = {}
+    if indicators and main_ohlcv:
+        requested = [i.strip() for i in indicators.split(",")]
+
+        # For daily+ timeframes with long-period indicators, prepend warm-up bars
+        # so the full indicator series is valid for every visible bar.
+        warmup_ohlcv: list[dict] = []
+        if start and timeframe in DAILY_TIMEFRAMES:
+            lookback = _max_indicator_lookback(indicators)
+            if lookback > 0:
+                extra_days = math.ceil(lookback * _CALENDAR_MULT)
+                warmup_start = start_dt - timedelta(days=extra_days)
+                warmup_key = f"__warmup_{symbol}_{timeframe}_{warmup_start.date().isoformat()}_{start_str}"
+                warmup_cached = get_cached(symbol, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str)
+                if warmup_cached:
+                    warmup_ohlcv = warmup_cached
+                else:
+                    try:
+                        wt = yf.Ticker(symbol.upper())
+                        wrows = _fetch_yf_ohlcv(wt, warmup_start.date().isoformat(), start_str, interval, timeframe)
+                        warmup_ohlcv = [{"open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"]} for r in wrows]
+                        set_cache(symbol, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str, warmup_ohlcv, 86400)
+                    except Exception:
+                        warmup_ohlcv = []  # fall back to no warm-up — indicators may start late
+
+        full_ohlcv = warmup_ohlcv + main_ohlcv
+        full_df = pd.DataFrame(full_ohlcv)
+        n_warmup = len(warmup_ohlcv)
+
+        try:
+            all_indicators = compute_indicators(full_df, requested)
+            # Strip the warm-up prefix so indicator arrays align 1:1 with returned bars
+            indicator_data = {k: v[n_warmup:] for k, v in all_indicators.items()}
+        except Exception:
+            indicator_data = {}
+
+    return {"symbol": symbol.upper(), "bars": bars_list, "indicators": indicator_data}
