@@ -48,6 +48,32 @@ export const getPnlCalendar = (): Promise<{ days: PnlDay[] }> =>
 export const closeTrade = (id: number) =>
   client.delete(`/strategy/trades/${id}`).then((r) => r.data);
 
+export type StrategyState = "active" | "forming" | "idle" | "exit_triggered";
+
+export interface TickerScanRow {
+  preset_key: string;
+  preset_label: string;
+  state: StrategyState;
+  distance_pct: number | null;
+  days_to_trigger: number | null;
+  status_message: string;
+  key_value: number | null;
+  key_label: string | null;
+  trade_id: number | null;
+  entry_price: number | null;
+  current_price: number | null;
+  stop_price: number | null;
+  target_price: number | null;
+}
+
+export interface TickerScanResult {
+  symbol: string;
+  results: TickerScanRow[];
+}
+
+export const scanTicker = (symbol: string): Promise<TickerScanResult> =>
+  client.get(`/strategy/ticker-scan?symbol=${encodeURIComponent(symbol)}`).then((r) => r.data);
+
 export const getBacktestStatus = () =>
   client.get("/backtest/status").then((r) => r.data);
 

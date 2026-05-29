@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   FlaskConical, X, Play, TrendingUp, TrendingDown, AlertTriangle,
   Eye, Clock, CheckCircle2, RefreshCw, RotateCw, ExternalLink, BarChart2, Info,
-  Calendar,
+  Calendar, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -21,6 +21,7 @@ import { TICKER_NAMES } from "@/data/tickerNames";
 import { COMPANY_INFO, SECTOR_COLOR } from "@/data/companyInfo";
 import SectorPill from "@/components/ui/SectorPill";
 import TradeDetailDrawer, { type EnrichedTrade } from "@/components/strategy/TradeDetailDrawer";
+import TickerScanPanel from "@/components/strategy/TickerScanPanel";
 import ExplainButton from "@/components/explain/ExplainButton";
 import DailyRecapCard from "@/components/recap/DailyRecapCard";
 import PnlCalendar from "@/components/strategy/PnlCalendar";
@@ -606,6 +607,7 @@ export default function StrategyLab() {
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
   const [selectedTrade, setSelectedTrade] = useState<EnrichedTrade | null>(null);
   const [infoModal, setInfoModal] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
   const [showAllStrategies, setShowAllStrategies] = useState(false);
   const [logFilter, setLogFilter] = useState<"all" | "entries" | "exits" | "candidates" | "summary">("all");
   const [refreshing, setRefreshing] = useState(false);
@@ -735,6 +737,15 @@ export default function StrategyLab() {
         <div className="flex items-center gap-2">
           <MonitorBadge />
           <RegimePill regime={regime} />
+
+          {/* Scan Ticker */}
+          <button
+            onClick={() => setScanOpen(true)}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-500 transition-colors"
+          >
+            <Search size={11} />
+            Scan Ticker
+          </button>
 
           {/* Last updated + Refresh */}
           <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
@@ -958,6 +969,15 @@ export default function StrategyLab() {
 
       <TradeDetailDrawer trade={selectedTrade} onClose={() => setSelectedTrade(null)} />
       {infoModal && <StrategyInfoModal strategyKey={infoModal} onClose={() => setInfoModal(null)} />}
+      {scanOpen && (
+        <TickerScanPanel
+          onClose={() => setScanOpen(false)}
+          onChart={(sym, preset, levels) => {
+            setScanOpen(false);
+            goToChart(sym, preset, levels);
+          }}
+        />
+      )}
     </div>
   );
 }

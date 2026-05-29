@@ -24,6 +24,7 @@ from app.screener.daily_runner import (
     _get_prev_closes_sync,
     run_daily_automation,
 )
+from app.screener.state_evaluator import evaluate_all
 
 logger = logging.getLogger(__name__)
 
@@ -512,3 +513,81 @@ async def close_trade(
     trade.exit_reason = "manual"
     db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Ticker scanner — evaluate all strategies for a single symbol
+# ---------------------------------------------------------------------------
+
+_scan_cache: Dict[str, Tuple[Any, float]] = {}
+_SCAN_TTL = 300.0  # 5-minute cache per symbol
+
+
+@router.get("/ticker-scan")
+async def ticker_scan(
+    symbol: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Evaluate all 19 strategies against a single ticker.
+    Returns per-strategy state: active | forming | idle | exit_triggered.
+    """
+    sym = symbol.upper().strip()
+    if not sym:
+        raise HTTPException(status_code=400, detail="symbol is required")
+
+    # Cache per user+symbol to avoid hammering yfinance on repeated lookups
+    cache_key = f"{current_user.id}:{sym}"
+    cached = _scan_cache.get(cache_key)
+    if cached and time.monotonic() - cached[1] < _SCAN_TTL:
+        return cached[0]
+
+    # Fetch bars async
+    loop = asyncio.get_running_loop()
+    bars_map = await loop.run_in_executor(None, lambda: _fetch_bars_sync([sym], period="1y"))
+    df = bars_map.get(sym)
+    if df is None or len(df) < 10:
+        raise HTTPException(status_code=404, detail=f"No price data found for {sym}")
+
+    # Get current price
+    prices = await loop.run_in_executor(None, lambda: _get_prices_sync([sym]))
+    current_price = prices.get(sym)
+
+    # Load existing open/candidate trades for this user + symbol
+    existing_trades = db.scalars(
+        select(StrategyTrade).where(
+            StrategyTrade.user_id == current_user.id,
+            StrategyTrade.symbol == sym,
+            StrategyTrade.status.in_(["open", "candidate"]),
+        )
+    ).all()
+    trade_map = {t.preset_key: t for t in existing_trades}
+
+    # Run state evaluator for all 19 strategies
+    results = evaluate_all(sym, df, trade_map, current_price=current_price)
+
+    response = {
+        "symbol": sym,
+        "results": [
+            {
+                "preset_key": r.preset_key,
+                "preset_label": r.preset_label,
+                "state": r.state,
+                "distance_pct": r.distance_pct,
+                "days_to_trigger": r.days_to_trigger,
+                "status_message": r.status_message,
+                "key_value": r.key_value,
+                "key_label": r.key_label,
+                "trade_id": r.trade_id,
+                "entry_price": r.entry_price,
+                "current_price": r.current_price,
+                "stop_price": r.stop_price,
+                "target_price": r.target_price,
+            }
+            for r in results
+        ],
+    }
+
+    _scan_cache[cache_key] = (response, time.monotonic())
+    return response
