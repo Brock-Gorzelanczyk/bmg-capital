@@ -197,13 +197,13 @@ export default function Dashboard() {
               breakpoints={{ lg: 1200, md: 768, sm: 480, xs: 0 }}
               cols={{ lg: 12, md: 8, sm: 4, xs: 2 }}
               rowHeight={80}
-              isDraggable={editMode}
-              isResizable={editMode}
-              draggableHandle=".widget-drag-handle"
+              draggableHandle={editMode ? ".widget-drag-handle" : undefined}
               onLayoutChange={handleLayoutChange}
               margin={[16, 16]}
               containerPadding={[0, 0]}
               useCSSTransforms
+              compactType="vertical"
+              preventCollision={false}
             >
               {activeWorkspace.widgets.map((inst) => {
                 const def = WIDGET_REGISTRY[inst.widgetId];
@@ -245,3 +245,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
