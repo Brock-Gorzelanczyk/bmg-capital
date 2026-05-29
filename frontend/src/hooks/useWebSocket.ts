@@ -1,79 +1,114 @@
-import { useEffect, useRef, useCallback } from "react";
+/**
+ * Persistent WebSocket singleton — connection is established once at module-load
+ * time and survives all React route transitions. Status is stored in useWsStore
+ * so any component can read it without owning the connection.
+ *
+ * useWebSocket() may be called from any component; it simply returns helpers to
+ * subscribe/unsubscribe symbols. Calling the hook never tears down the socket.
+ */
+import { useCallback } from "react";
 import { WS_URL } from "@/config";
 import { useMarketStore, useAlertStore, useWsStore } from "@/store";
 import type { Quote, LiveBar } from "@/types/market";
 
-export function useWebSocket() {
-  const wsRef = useRef<WebSocket | null>(null);
-  const retryDelay = useRef(1000);
-  const updateQuote = useMarketStore((s) => s.updateQuote);
-  const updateBar = useMarketStore((s) => s.updateBar);
-  const setLastQuoteTime = useMarketStore((s) => s.setLastQuoteTime);
-  const addNotification = useAlertStore((s) => s.addNotification);
-  const setStatus = useWsStore((s) => s.setStatus);
+// ─── Singleton state ──────────────────────────────────────────────────────────
 
-  const connect = useCallback(() => {
-    setStatus("connecting");
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
+let _ws: WebSocket | null = null;
+let _retryDelay = 1000; // ms; doubles on each failure, capped at 30 s
+let _retryTimer: ReturnType<typeof setTimeout> | null = null;
+let _started = false; // guard against double-init in StrictMode
 
-    ws.onopen = () => {
-      setStatus("connected");
-      retryDelay.current = 1000;
-    };
+function getSetStatus() {
+  return useWsStore.getState().setStatus;
+}
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data as string);
-        if (msg.type === "quote") {
-          updateQuote(msg.symbol, msg as Quote);
-          useMarketStore.getState().setLastQuoteTime(Date.now());
-        } else if (msg.type === "bar") {
-          updateBar(msg.symbol, msg as LiveBar);
-        } else if (msg.type === "alert" || msg.type === "signal") {
-          addNotification({
-            symbol: msg.symbol,
-            signal_type: msg.signal_type || msg.type,
-            message: msg.message || `${msg.signal_type} on ${msg.symbol}`,
-            value: msg.value,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      } catch {
-        // ignore parse errors
+function scheduleReconnect() {
+  if (_retryTimer !== null) return; // already scheduled
+  const delay = Math.min(_retryDelay, 30_000);
+  _retryDelay = Math.min(_retryDelay * 2, 30_000);
+  _retryTimer = setTimeout(() => {
+    _retryTimer = null;
+    openSocket();
+  }, delay);
+}
+
+function openSocket() {
+  // Don't open a second socket if one is already live or connecting.
+  if (
+    _ws !== null &&
+    (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)
+  ) {
+    return;
+  }
+
+  getSetStatus()("connecting");
+  const ws = new WebSocket(WS_URL);
+  _ws = ws;
+
+  ws.onopen = () => {
+    getSetStatus()("connected");
+    _retryDelay = 1000; // reset backoff on successful connect
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data as string);
+      const marketState = useMarketStore.getState();
+      const alertState = useAlertStore.getState();
+
+      if (msg.type === "quote") {
+        marketState.updateQuote(msg.symbol, msg as Quote);
+        marketState.setLastQuoteTime(Date.now());
+      } else if (msg.type === "bar") {
+        marketState.updateBar(msg.symbol, msg as LiveBar);
+      } else if (msg.type === "alert" || msg.type === "signal") {
+        alertState.addNotification({
+          symbol: msg.symbol,
+          signal_type: msg.signal_type || msg.type,
+          message: msg.message || `${msg.signal_type} on ${msg.symbol}`,
+          value: msg.value,
+          timestamp: new Date().toISOString(),
+        });
       }
-    };
+    } catch {
+      // ignore parse errors
+    }
+  };
 
-    ws.onerror = () => setStatus("error");
+  ws.onerror = () => {
+    getSetStatus()("error");
+  };
 
-    ws.onclose = () => {
-      setStatus("disconnected");
-      const delay = Math.min(retryDelay.current, 30000);
-      retryDelay.current = Math.min(retryDelay.current * 2, 30000);
-      setTimeout(connect, delay);
-    };
-  }, [updateQuote, updateBar, addNotification, setStatus, setLastQuoteTime]);
+  ws.onclose = () => {
+    getSetStatus()("disconnected");
+    scheduleReconnect();
+  };
+}
+
+/** Initialise the singleton (idempotent — safe to call multiple times). */
+function ensureStarted() {
+  if (_started) return;
+  _started = true;
+  openSocket();
+}
+
+// ─── React hook ───────────────────────────────────────────────────────────────
+
+export function useWebSocket() {
+  // Start the singleton the first time any component calls this hook.
+  ensureStarted();
 
   const subscribe = useCallback((symbols: string[]) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ action: "subscribe", symbols }));
+    if (_ws?.readyState === WebSocket.OPEN) {
+      _ws.send(JSON.stringify({ action: "subscribe", symbols }));
     }
   }, []);
 
   const unsubscribe = useCallback((symbols: string[]) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ action: "unsubscribe", symbols }));
+    if (_ws?.readyState === WebSocket.OPEN) {
+      _ws.send(JSON.stringify({ action: "unsubscribe", symbols }));
     }
   }, []);
-
-  useEffect(() => {
-    connect();
-    return () => {
-      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-        wsRef.current.close();
-      }
-    };
-  }, [connect]);
 
   return { subscribe, unsubscribe };
 }

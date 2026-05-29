@@ -94,9 +94,9 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
             </>
           ) : (
             <>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
-              <WifiOff size={12} className="text-[var(--accent-negative)]" />
-              <span className="text-[var(--accent-negative)] hidden sm:block font-medium">Offline</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
+              <WifiOff size={12} className="text-[#F59E0B]" />
+              <span className="text-[#F59E0B] hidden sm:block font-medium">Offline</span>
             </>
           )}
         </div>
