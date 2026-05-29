@@ -1,14 +1,12 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, LayoutGrid } from "lucide-react";
-// react-grid-layout uses CommonJS export=; destructure via default import
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { Responsive, WidthProvider } = require("react-grid-layout") as {
-  Responsive: React.ComponentType<any>;
-  WidthProvider: (c: React.ComponentType<any>) => React.ComponentType<any>;
-};
+// react-grid-layout uses CommonJS export=; named imports fail with TS2614
+import ReactGridLayout from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { Responsive, WidthProvider } = ReactGridLayout as any;
 
 import { getWorkspaces, createWorkspace, updateWorkspace } from "@/api/workspace";
 import { useWidgetStore } from "@/store/widgetStore";
