@@ -1,7 +1,12 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, LayoutGrid } from "lucide-react";
-import { Responsive, WidthProvider, type Layout } from "react-grid-layout";
+// react-grid-layout uses CommonJS export=; destructure via default import
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { Responsive, WidthProvider } = require("react-grid-layout") as {
+  Responsive: React.ComponentType<any>;
+  WidthProvider: (c: React.ComponentType<any>) => React.ComponentType<any>;
+};
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -109,9 +114,9 @@ export default function Dashboard() {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [activeWorkspace?.layout, activeWorkspace?.widgets, saveToBackend]);
 
-  function handleLayoutChange(layout: Layout[]) {
+  function handleLayoutChange(layout: { i: string; x: number; y: number; w: number; h: number }[]) {
     if (!activeWorkspace) return;
-    updateLayout(activeWorkspace.id, layout as (typeof activeWorkspace.layout));
+    updateLayout(activeWorkspace.id, layout);
   }
 
   function handleAddWidget(widgetId: string) {
