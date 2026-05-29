@@ -1,4 +1,4 @@
-import { MousePointer2, TrendingUp, Minus, Square, GitBranch, Type, Eraser } from "lucide-react";
+import { MousePointer2, TrendingUp, TrendingDown, Minus, Square, GitBranch, Type, Eraser, AlignJustify, MoveUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DrawingTool } from "@/types/chart";
 
@@ -9,6 +9,11 @@ const TOOLS: { tool: DrawingTool; Icon: React.ElementType; label: string; functi
   { tool: "rect", Icon: Square, label: "Rectangle", functional: true },
   { tool: "fib", Icon: GitBranch, label: "Fibonacci", functional: true },
   { tool: "text", Icon: Type, label: "Text", functional: true },
+  { tool: "vline", Icon: Minus, label: "Vertical Line", functional: true },
+  { tool: "channel", Icon: AlignJustify, label: "Parallel Channel", functional: true },
+  { tool: "longpos", Icon: TrendingUp, label: "Long Position", functional: true },
+  { tool: "shortpos", Icon: TrendingDown, label: "Short Position", functional: true },
+  { tool: "arrow", Icon: MoveUpRight, label: "Arrow", functional: true },
 ];
 
 interface Props {

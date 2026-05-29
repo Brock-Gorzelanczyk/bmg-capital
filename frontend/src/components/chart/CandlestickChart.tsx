@@ -104,6 +104,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
     const trendSeriesRef = useRef<Record<string, ISeriesApi<"Line">>>({});
     const fibLinesRef = useRef<Record<string, IPriceLine[]>>({});
     const textLinesRef = useRef<Record<string, IPriceLine>>({});
+    const channelSeriesRef = useRef<Record<string, ISeriesApi<"Line">[]>>({});
+    const posLinesRef = useRef<Record<string, IPriceLine[]>>({});
     const compareSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
     const [overlayVersion, setOverlayVersion] = useState(0);
 
@@ -201,6 +203,26 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
           if (time !== null) {
             onAddDrawingRef.current({ type: "text", p1: { price, time: time as number }, color: "#d1d4dc" });
           }
+        } else if (tool === "vline") {
+          const time = chart.timeScale().coordinateToTime(param.point.x);
+          if (time !== null) {
+            onAddDrawingRef.current({ type: "vline", p1: { price, time: time as number }, color: "#787b86" });
+          }
+        } else if (tool === "channel") {
+          const time = chart.timeScale().coordinateToTime(param.point.x);
+          if (time !== null) {
+            onAddDrawingRef.current({ type: "channel", p1: { price, time: time as number }, color: "#2196f3" });
+          }
+        } else if (tool === "longpos" || tool === "shortpos") {
+          const time = chart.timeScale().coordinateToTime(param.point.x);
+          if (time !== null) {
+            onAddDrawingRef.current({ type: tool, p1: { price, time: time as number }, color: "#2196f3" });
+          }
+        } else if (tool === "arrow") {
+          const time = chart.timeScale().coordinateToTime(param.point.x);
+          if (time !== null) {
+            onAddDrawingRef.current({ type: "arrow", p1: { price, time: time as number }, color: "#d1d4dc" });
+          }
         }
       });
 
@@ -215,6 +237,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         trendSeriesRef.current = {};
         fibLinesRef.current = {};
         textLinesRef.current = {};
+        channelSeriesRef.current = {};
+        posLinesRef.current = {};
         compareSeriesRef.current = null;
       };
     }, []);
@@ -363,6 +387,24 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         }
       });
 
+      Object.keys(channelSeriesRef.current).forEach((id) => {
+        if (!ids.has(id)) {
+          channelSeriesRef.current[id].forEach((s) => {
+            try { chartRef.current!.removeSeries(s); } catch {}
+          });
+          delete channelSeriesRef.current[id];
+        }
+      });
+
+      Object.keys(posLinesRef.current).forEach((id) => {
+        if (!ids.has(id)) {
+          posLinesRef.current[id].forEach((pl) => {
+            try { (mainSeriesRef.current as ISeriesApi<"Candlestick">).removePriceLine(pl); } catch {}
+          });
+          delete posLinesRef.current[id];
+        }
+      });
+
       drawings.forEach((d) => {
         if (d.type === "hline" && d.price != null && !priceLinesRef.current[d.id]) {
           priceLinesRef.current[d.id] = (mainSeriesRef.current as ISeriesApi<"Candlestick">).createPriceLine({
@@ -401,6 +443,50 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
             lineStyle: LineStyle.Dotted, axisLabelVisible: true,
             title: d.label,
           });
+        }
+        // arrow: rendered as a price line label (same as text but with arrow prefix)
+        if (d.type === "arrow" && d.p1 && !textLinesRef.current[d.id]) {
+          const arrowLabel = d.metadata?.label ?? d.label ?? "";
+          textLinesRef.current[d.id] = (mainSeriesRef.current as ISeriesApi<"Candlestick">).createPriceLine({
+            price: d.p1.price, color: d.color, lineWidth: 1,
+            lineStyle: LineStyle.Dotted, axisLabelVisible: true,
+            title: `→ ${arrowLabel}`,
+          });
+        }
+        if (d.type === "channel" && d.p1 && d.p2 && d.p3 && !channelSeriesRef.current[d.id]) {
+          const offset = d.p3.price - d.p1.price;
+          const s1 = chartRef.current!.addSeries(LineSeries, {
+            color: d.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+          });
+          s1.setData([
+            { time: d.p1.time as UTCTimestamp, value: d.p1.price },
+            { time: d.p2.time as UTCTimestamp, value: d.p2.price },
+          ]);
+          const s2 = chartRef.current!.addSeries(LineSeries, {
+            color: d.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+            lineStyle: LineStyle.Dashed,
+          });
+          s2.setData([
+            { time: d.p1.time as UTCTimestamp, value: d.p1.price + offset },
+            { time: d.p2.time as UTCTimestamp, value: d.p2.price + offset },
+          ]);
+          channelSeriesRef.current[d.id] = [s1, s2];
+        }
+        if ((d.type === "longpos" || d.type === "shortpos") && d.p1 && d.p2 && d.p3 && !posLinesRef.current[d.id]) {
+          const ser = mainSeriesRef.current as ISeriesApi<"Candlestick">;
+          const entryLine = ser.createPriceLine({
+            price: d.p1.price, color: "#2196f3", lineWidth: 2,
+            lineStyle: LineStyle.Solid, axisLabelVisible: true, title: "Entry",
+          });
+          const stopLine = ser.createPriceLine({
+            price: d.p2.price, color: "#ef4444", lineWidth: 1,
+            lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "Stop Loss",
+          });
+          const targetLine = ser.createPriceLine({
+            price: d.p3.price, color: "#22c55e", lineWidth: 1,
+            lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "Target",
+          });
+          posLinesRef.current[d.id] = [entryLine, stopLine, targetLine];
         }
       });
     }, [drawings]);
