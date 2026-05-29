@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, LayoutGrid } from "lucide-react";
-import { Responsive, useContainerWidth, type LayoutItem, type Layout } from "react-grid-layout";
+import { Responsive, useContainerWidth, verticalCompactor, type LayoutItem, type Layout, type ResponsiveLayouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -108,7 +108,7 @@ export default function Dashboard() {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [activeWorkspace?.layout, activeWorkspace?.widgets, saveToBackend]);
 
-  function handleLayoutChange(layout: Layout) {
+  function handleLayoutChange(layout: Layout, _layouts: ResponsiveLayouts) {
     if (!activeWorkspace) return;
     updateLayout(activeWorkspace.id, layout as LayoutItem[]);
   }
@@ -197,13 +197,12 @@ export default function Dashboard() {
               breakpoints={{ lg: 1200, md: 768, sm: 480, xs: 0 }}
               cols={{ lg: 12, md: 8, sm: 4, xs: 2 }}
               rowHeight={80}
-              draggableHandle={editMode ? ".widget-drag-handle" : undefined}
+              dragConfig={{ enabled: editMode, handle: ".widget-drag-handle", bounded: false, threshold: 3 }}
+              resizeConfig={{ enabled: editMode, handles: ["se"] as const }}
               onLayoutChange={handleLayoutChange}
-              margin={[16, 16]}
-              containerPadding={[0, 0]}
-              useCSSTransforms
-              compactType="vertical"
-              preventCollision={false}
+              margin={[16, 16] as const}
+              containerPadding={[0, 0] as const}
+              compactor={verticalCompactor}
             >
               {activeWorkspace.widgets.map((inst) => {
                 const def = WIDGET_REGISTRY[inst.widgetId];
