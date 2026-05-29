@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, LayoutGrid } from "lucide-react";
-import { Responsive, useContainerWidth, type LayoutItem } from "react-grid-layout";
+import { Responsive, useContainerWidth, type LayoutItem, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -108,9 +108,9 @@ export default function Dashboard() {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [activeWorkspace?.layout, activeWorkspace?.widgets, saveToBackend]);
 
-  function handleLayoutChange(layout: LayoutItem[]) {
+  function handleLayoutChange(layout: Layout) {
     if (!activeWorkspace) return;
-    updateLayout(activeWorkspace.id, layout);
+    updateLayout(activeWorkspace.id, layout as LayoutItem[]);
   }
 
   function handleAddWidget(widgetId: string) {
