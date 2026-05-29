@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Plus, Trash2, Sparkles, ChevronDown, Save, BookOpen, X, Check, Loader2, AlertTriangle, TrendingUp, TrendingDown, Minus as MinusIcon } from "lucide-react";
+import { Plus, Trash2, Sparkles, ChevronDown, Save, BookOpen, X, Check, Loader2, AlertTriangle, TrendingUp, TrendingDown, Minus as MinusIcon, Upload, Image as ImageIcon } from "lucide-react";
 import CandlestickChart, { type ChartHandle } from "@/components/chart/CandlestickChart";
 import RsiChart from "@/components/chart/RsiChart";
 import MacdChart from "@/components/chart/MacdChart";
@@ -18,8 +18,11 @@ import {
   deleteAnalysis,
   analyzeAndSave,
   analyzeChart,
+  analyzeImage,
   type ChartAnalysis,
   type AIAnalysis,
+  type ImageAnalysis,
+  type ImageKeyLevel,
 } from "@/api/workshop";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -112,6 +115,14 @@ function WorkshopPanel({
   const [aiResult, setAiResult] = useState<AIAnalysis | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  // Image upload state
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [imageAnalyzing, setImageAnalyzing] = useState(false);
+  const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [showImagePanel, setShowImagePanel] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const symbolUpper = symbol.toUpperCase();
 
@@ -226,7 +237,6 @@ function WorkshopPanel({
     setAnalyzing(true);
     setAiError(null);
     try {
-      const fn = activeId ? analyzeAndSave : analyzeChart;
       const result = await (activeId
         ? analyzeAndSave(activeId, { symbol: symbolUpper, timeframe, current_price: currentPrice, drawings, indicators, thesis })
         : analyzeChart({ symbol: symbolUpper, timeframe, current_price: currentPrice, drawings, indicators, thesis }));
@@ -244,19 +254,73 @@ function WorkshopPanel({
     }
   }
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Show preview
+    const url = URL.createObjectURL(file);
+    setUploadedImage(url);
+    setImageAnalysis(null);
+    setImageError(null);
+    setShowImagePanel(true);
+    setImageAnalyzing(true);
+    try {
+      const result = await analyzeImage(file);
+      setImageAnalysis(result.analysis);
+    } catch (err: unknown) {
+      setImageError(err instanceof Error ? err.message : "Image analysis failed");
+    } finally {
+      setImageAnalyzing(false);
+      // Reset file input so same file can be re-uploaded
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function importKeyLevels(levels: ImageKeyLevel[]) {
+    const newDrawings: Drawing[] = levels
+      .filter((l) => l.price != null)
+      .map((l) => ({
+        id: crypto.randomUUID(),
+        type: "hline" as const,
+        price: l.price,
+        color: "#787b86",
+        label: l.label,
+      }));
+    if (newDrawings.length > 0) onLoadDrawings([...drawings, ...newDrawings]);
+  }
+
   return (
     <div className="w-72 shrink-0 flex flex-col border-l border-[var(--border-subtle)] bg-[var(--bg-elevated)] overflow-hidden">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
+
       {/* Header */}
       <div className="px-3 py-2 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
         <span className="text-[11px] font-semibold text-[var(--text-secondary)] tracking-wider uppercase">TA Workshop</span>
-        <button
-          onClick={() => setShowNewForm((s) => !s)}
-          className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--accent-primary)] transition-colors"
-          title="New analysis"
-        >
-          <Plus size={12} />
-          New
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--accent-primary)] transition-colors"
+            title="Upload TA screenshot for AI reading"
+          >
+            <Upload size={11} />
+            Import
+          </button>
+          <button
+            onClick={() => setShowNewForm((s) => !s)}
+            className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--accent-primary)] transition-colors"
+            title="New analysis"
+          >
+            <Plus size={12} />
+            New
+          </button>
+        </div>
       </div>
 
       {/* New analysis form */}
@@ -508,6 +572,204 @@ function WorkshopPanel({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Image Upload Analysis Panel ──────────────────────────────────────── */}
+      {showImagePanel && (
+        <div className="border-t border-[var(--border-subtle)] flex flex-col shrink-0">
+          {/* Panel header */}
+          <div className="px-3 py-2 flex items-center justify-between bg-[var(--bg-base)]">
+            <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider flex items-center gap-1.5">
+              <ImageIcon size={11} />
+              TA Image Read
+            </span>
+            <button
+              onClick={() => { setShowImagePanel(false); setUploadedImage(null); setImageAnalysis(null); }}
+              className="text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+
+          {/* Preview thumbnail */}
+          {uploadedImage && (
+            <div className="px-3 pb-2">
+              <img
+                src={uploadedImage}
+                alt="Uploaded TA"
+                className="w-full rounded border border-[var(--border-subtle)] object-cover max-h-32"
+              />
+            </div>
+          )}
+
+          {/* Loading */}
+          {imageAnalyzing && (
+            <div className="px-3 pb-3 flex items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
+              <Loader2 size={13} className="animate-spin" />
+              AI is reading your chart…
+            </div>
+          )}
+
+          {/* Error */}
+          {imageError && (
+            <div className="px-3 pb-3 text-[10px] text-[var(--accent-negative)] flex items-center gap-1">
+              <AlertTriangle size={10} /> {imageError}
+            </div>
+          )}
+
+          {/* Results */}
+          {imageAnalysis && (
+            <div className="px-3 pb-4 flex flex-col gap-3 overflow-y-auto max-h-96">
+              {/* Detected asset / timeframe */}
+              {(imageAnalysis.asset || imageAnalysis.timeframe) && (
+                <div className="flex gap-2">
+                  {imageAnalysis.asset && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] font-mono">
+                      {imageAnalysis.asset}
+                    </span>
+                  )}
+                  {imageAnalysis.timeframe && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)]">
+                      {imageAnalysis.timeframe}
+                    </span>
+                  )}
+                  <span
+                    className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ml-auto"
+                    style={{
+                      color: QUALITY_COLORS[imageAnalysis.setup_quality],
+                      background: `${QUALITY_COLORS[imageAnalysis.setup_quality]}18`,
+                    }}
+                  >
+                    {imageAnalysis.setup_quality}
+                  </span>
+                </div>
+              )}
+
+              {/* Thesis */}
+              <div>
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">AI reads your setup as</div>
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{imageAnalysis.thesis_summary}</p>
+              </div>
+
+              {/* Detected drawings */}
+              {imageAnalysis.drawings_detected.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
+                    Drawings detected ({imageAnalysis.drawings_detected.length})
+                  </div>
+                  <ul className="space-y-1">
+                    {imageAnalysis.drawings_detected.map((d, i) => (
+                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
+                        <span className="text-[var(--accent-primary)] shrink-0 mt-0.5">·</span>
+                        <span>
+                          <span className="text-[var(--text-tertiary)] font-mono">{d.type}</span>
+                          {" — "}
+                          {d.description}
+                          {d.price_level != null && (
+                            <span className="text-[var(--text-tertiary)]"> @ ${d.price_level.toLocaleString()}</span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Key levels + import button */}
+              {imageAnalysis.key_levels.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Key levels</div>
+                    <button
+                      onClick={() => importKeyLevels(imageAnalysis.key_levels)}
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/15 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/25 transition-colors"
+                    >
+                      + Add to chart
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {imageAnalysis.key_levels.map((l, i) => (
+                      <div key={i} className="flex items-center justify-between text-[11px]">
+                        <span className="text-[var(--text-tertiary)]">{l.label}</span>
+                        <span className="font-mono text-[var(--text-secondary)]">${l.price.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Supporting */}
+              {imageAnalysis.supporting.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-[#22c55e] uppercase tracking-wider mb-1">Strengths</div>
+                  <ul className="space-y-1">
+                    {imageAnalysis.supporting.map((s, i) => (
+                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
+                        <span className="text-[#22c55e] shrink-0">+</span>{s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Counter */}
+              {imageAnalysis.counterarguments.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-[#f59e0b] uppercase tracking-wider mb-1">Risks</div>
+                  <ul className="space-y-1">
+                    {imageAnalysis.counterarguments.map((c, i) => (
+                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
+                        <span className="text-[#f59e0b] shrink-0">−</span>{c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Invalidation */}
+              <div>
+                <div className="text-[10px] text-[#ef4444] uppercase tracking-wider mb-1">Invalidation</div>
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{imageAnalysis.invalidation}</p>
+              </div>
+
+              {/* Suggested additions */}
+              {imageAnalysis.suggested_additions.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-[#6366f1] uppercase tracking-wider mb-1">Suggested additions</div>
+                  <ul className="space-y-1">
+                    {imageAnalysis.suggested_additions.map((s, i) => (
+                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
+                        <span className="text-[#6366f1] shrink-0">→</span>{s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Upload another */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-1.5 text-[10px] py-1.5 rounded border border-dashed border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] transition-colors"
+              >
+                <Upload size={11} />
+                Upload another image
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Upload drop zone (shown when no image yet and panel is closed) */}
+      {!showImagePanel && (
+        <div className="px-3 py-3 border-t border-[var(--border-subtle)] shrink-0">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded border border-dashed border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] transition-colors text-[11px]"
+          >
+            <Upload size={13} />
+            Upload TA screenshot → AI reads it
+          </button>
         </div>
       )}
     </div>

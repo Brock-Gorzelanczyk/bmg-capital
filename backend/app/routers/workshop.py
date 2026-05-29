@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from datetime import datetime
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -265,3 +266,114 @@ async def analyze_and_save(
         row.ai_analysis_json = json.dumps(result["analysis"])
         db.commit()
     return result
+
+
+# ── Image upload analysis ──────────────────────────────────────────────────────
+
+_IMAGE_PROMPT = """\
+You are an expert technical analyst. The user has uploaded a screenshot of a chart with their own technical analysis drawn on it.
+
+Your job:
+1. Read the chart image carefully.
+2. Identify every drawn element: trend lines, horizontal support/resistance levels, rectangles/zones, Fibonacci retracements, annotations/text, position visualizers, channels, etc.
+3. Note the asset name and timeframe if visible in the image.
+4. Identify any visible price levels (from axis labels or annotations).
+5. Summarize the trader's overall thesis based on what you see.
+6. Suggest any levels or drawings that are missing but would strengthen the analysis.
+
+Return ONLY this JSON — no markdown, no extra text:
+{
+  "asset": "Detected asset symbol or null",
+  "timeframe": "Detected timeframe (e.g. 1D, 1W, 4H) or null",
+  "thesis_summary": "2-3 sentence summary of the trader's overall setup and directional bias",
+  "drawings_detected": [
+    {
+      "type": "hline|trendline|rect|fib|channel|longpos|shortpos|text|vline",
+      "description": "plain English description of this drawing",
+      "price_level": null,
+      "price_range": null,
+      "color_hint": "color observed if any"
+    }
+  ],
+  "key_levels": [
+    { "label": "Support", "price": 42000 },
+    { "label": "Resistance", "price": 48000 }
+  ],
+  "supporting": ["strength of the setup 1", "strength 2"],
+  "counterarguments": ["risk or weakness 1", "risk 2"],
+  "invalidation": "What price action would invalidate this setup",
+  "suggested_additions": ["Level or drawing to add 1", "suggestion 2"],
+  "setup_quality": "strong|moderate|weak",
+  "setup_quality_reason": "One sentence explanation"
+}
+
+If price levels are visible on the axes, include them in key_levels and drawings_detected. If they are not readable, use null for price fields."""
+
+
+@router.post("/analyze-image")
+async def analyze_image(
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    if not settings.anthropic_api_key:
+        raise HTTPException(status_code=503, detail="AI analyst not configured")
+
+    allowed = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    media_type = file.content_type or "image/jpeg"
+    if media_type not in allowed:
+        raise HTTPException(status_code=422, detail=f"Unsupported image type: {media_type}")
+
+    raw = await file.read()
+    if len(raw) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image too large (max 20 MB)")
+
+    b64 = base64.standard_b64encode(raw).decode()
+
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            resp = await client.post(
+                ANTHROPIC_URL,
+                headers={
+                    "x-api-key": settings.anthropic_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": ANTHROPIC_MODEL,
+                    "max_tokens": 2048,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": b64,
+                                    },
+                                },
+                                {"type": "text", "text": _IMAGE_PROMPT},
+                            ],
+                        }
+                    ],
+                },
+            )
+        resp.raise_for_status()
+        data = resp.json()
+        raw_text = data["content"][0]["text"].strip()
+
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("```")[1]
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:]
+        raw_text = raw_text.strip()
+
+        analysis = json.loads(raw_text)
+        return {"analysis": analysis}
+    except json.JSONDecodeError as e:
+        logger.warning(f"Image analysis returned non-JSON: {e}")
+        raise HTTPException(status_code=502, detail="AI returned unexpected format")
+    except Exception as e:
+        logger.error(f"Image analysis error: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="AI image analysis error")

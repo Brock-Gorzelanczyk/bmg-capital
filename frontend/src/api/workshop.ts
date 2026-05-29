@@ -64,3 +64,38 @@ export const analyzeAndSave = (analysisId: number, body: {
   thesis?: string;
 }): Promise<{ analysis: AIAnalysis }> =>
   client.post(`/api/workshop/analyses/${analysisId}/analyze`, body).then((r) => r.data);
+
+export interface ImageDrawingDetected {
+  type: string;
+  description: string;
+  price_level: number | null;
+  price_range: string | null;
+  color_hint: string | null;
+}
+
+export interface ImageKeyLevel {
+  label: string;
+  price: number;
+}
+
+export interface ImageAnalysis {
+  asset: string | null;
+  timeframe: string | null;
+  thesis_summary: string;
+  drawings_detected: ImageDrawingDetected[];
+  key_levels: ImageKeyLevel[];
+  supporting: string[];
+  counterarguments: string[];
+  invalidation: string;
+  suggested_additions: string[];
+  setup_quality: "strong" | "moderate" | "weak";
+  setup_quality_reason: string;
+}
+
+export const analyzeImage = (file: File): Promise<{ analysis: ImageAnalysis }> => {
+  const form = new FormData();
+  form.append("file", file);
+  return client.post("/api/workshop/analyze-image", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  }).then((r) => r.data);
+};
