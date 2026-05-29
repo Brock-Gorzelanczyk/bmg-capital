@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, NavLink } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { House, LineChart, PlayCircle, BookOpen, GraduationCap } from "lucide-react";
+import { House, LineChart, BookMarked, Briefcase, GraduationCap } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import CommandPalette from "@/components/ui/CommandPalette";
@@ -15,11 +15,11 @@ import { useTierStore } from "@/store/tierStore";
 import { cn } from "@/lib/utils";
 
 const BOTTOM_NAV = [
-  { to: "/", label: "Home", Icon: House },
-  { to: "/chart", label: "Chart", Icon: LineChart },
-  { to: "/paper", label: "Paper", Icon: PlayCircle },
-  { to: "/portfolio", label: "Portfolio", Icon: BookOpen },
-  { to: "/learn", label: "Learn", Icon: GraduationCap },
+  { to: "/",          label: "Home",      Icon: House },
+  { to: "/chart",     label: "Chart",     Icon: LineChart },
+  { to: "/watchlist", label: "Watchlist", Icon: BookMarked },
+  { to: "/portfolio", label: "Portfolio", Icon: Briefcase },
+  { to: "/learn",     label: "Learn",     Icon: GraduationCap },
 ];
 
 export default function AppShell() {

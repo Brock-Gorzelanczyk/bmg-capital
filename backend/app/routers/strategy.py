@@ -543,11 +543,27 @@ async def ticker_scan(
     if cached and time.monotonic() - cached[1] < _SCAN_TTL:
         return cached[0]
 
-    # Fetch bars async
+    # Fetch bars — pass symbol as a string (not list) to avoid yfinance MultiIndex issues
+    import pandas as pd
+    import yfinance as yf
+
+    def _fetch_single(s: str):
+        try:
+            raw = yf.download(s, period="1y", interval="1d", auto_adjust=True, progress=False, threads=False)
+            if raw.empty:
+                return None
+            # Flatten MultiIndex if present (yfinance ≥0.2.x with single tickers)
+            if isinstance(raw.columns, pd.MultiIndex):
+                raw = raw.droplevel(level=1, axis=1) if raw.columns.nlevels > 1 else raw
+            raw.columns = [str(c).lower() for c in raw.columns]
+            df = raw[["open", "high", "low", "close", "volume"]].dropna()
+            return df if len(df) >= 10 else None
+        except Exception:
+            return None
+
     loop = asyncio.get_running_loop()
-    bars_map = await loop.run_in_executor(None, lambda: _fetch_bars_sync([sym], period="1y"))
-    df = bars_map.get(sym)
-    if df is None or len(df) < 10:
+    df = await loop.run_in_executor(None, lambda: _fetch_single(sym))
+    if df is None:
         raise HTTPException(status_code=404, detail=f"No price data found for {sym}")
 
     # Get current price
