@@ -592,29 +592,65 @@ export default function DeFi() {
 
   const stakingQuery = useQuery({
     queryKey: ["defi-staking"],
-    queryFn: () => api.get("/defi/staking").then((r) => r.data as StakingProtocol[]),
+    queryFn: () => api.get("/defi/staking").then((r) => {
+      const raw: any[] = r.data?.rates ?? [];
+      return raw.map((p: any, i: number): StakingProtocol => ({
+        id: p.pool_id ?? p.protocol + "-" + i,
+        name: p.protocol ?? p.name ?? "",
+        chain: p.chain,
+        asset: p.asset,
+        apy: p.apy ?? 0,
+        apy_base: p.apy_base ?? 0,
+        apy_reward: p.apy_reward ?? 0,
+        tvl: p.tvl_usd ?? p.tvl ?? 0,
+        staked_token: p.staked_token ?? p.symbol ?? p.asset,
+      }));
+    }),
     staleTime: 30 * 60 * 1000,
     retry: 1,
   });
 
   const lendingQuery = useQuery({
     queryKey: ["defi-lending"],
-    queryFn: () => api.get("/defi/lending").then((r) => r.data as LendingRate[]),
+    queryFn: () => api.get("/defi/lending").then((r) => {
+      const raw: any[] = r.data?.rates ?? [];
+      return raw.map((p: any, i: number): LendingRate => ({
+        id: p.pool_id ?? p.id ?? p.protocol + "-" + p.asset + "-" + i,
+        protocol: p.protocol,
+        asset: p.asset,
+        chain: p.chain,
+        supply_apy: p.supply_apy ?? p.apy_supply ?? 0,
+        borrow_apy: p.borrow_apy ?? p.apy_borrow ?? 0,
+        tvl: p.tvl ?? p.tvl_usd ?? 0,
+      }));
+    }),
     staleTime: 30 * 60 * 1000,
     retry: 1,
   });
 
   const yieldsQuery = useQuery({
     queryKey: ["defi-yields"],
-    queryFn: () => api.get("/defi/yields").then((r) => r.data as YieldOpportunity[]),
+    queryFn: () => api.get("/defi/yields").then((r) => {
+      const raw: any[] = r.data?.yields ?? [];
+      return raw.map((p: any, i: number): YieldOpportunity => ({
+        id: p.id ?? p.protocol + "-" + (p.pool_name ?? p.pool) + "-" + i,
+        protocol: p.protocol,
+        pool: p.pool ?? p.pool_name ?? "",
+        apy: p.apy ?? 0,
+        tvl: p.tvl ?? p.tvl_usd ?? 0,
+        chain: p.chain,
+        il_risk: ((p.il_risk ?? "none") as string).toLowerCase() as YieldOpportunity["il_risk"],
+        category: p.category as YieldOpportunity["category"] ?? "Lending",
+      }));
+    }),
     staleTime: 30 * 60 * 1000,
     retry: 1,
   });
 
-  // Use API data if available, otherwise fall back to demo data
-  const stakingData: StakingProtocol[] = stakingQuery.data ?? STAKING_FALLBACK;
-  const lendingData: LendingRate[]     = lendingQuery.data ?? LENDING_FALLBACK;
-  const yieldsData: YieldOpportunity[] = yieldsQuery.data  ?? YIELDS_FALLBACK;
+  // Fall back to demo data when API returns empty or errors
+  const stakingData: StakingProtocol[] = (stakingQuery.data && stakingQuery.data.length > 0) ? stakingQuery.data : STAKING_FALLBACK;
+  const lendingData: LendingRate[]     = (lendingQuery.data && lendingQuery.data.length > 0) ? lendingQuery.data : LENDING_FALLBACK;
+  const yieldsData: YieldOpportunity[] = (yieldsQuery.data  && yieldsQuery.data.length  > 0) ? yieldsQuery.data  : YIELDS_FALLBACK;
 
   const isLoadingStaking = stakingQuery.isLoading;
   const isLoadingLending = lendingQuery.isLoading;
