@@ -86,6 +86,7 @@ export default function AppShell() {
         <Sidebar
           onOpenPalette={() => { setCopilotOpen(true); setSidebarOpen(false); }}
           onClose={() => setSidebarOpen(false)}
+          expanded={sidebarOpen}
         />
       </div>
 

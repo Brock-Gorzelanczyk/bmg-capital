@@ -95,7 +95,7 @@ async def claim_reward(
     db: Session = Depends(get_db),
 ):
     """Grant the welcome reward: seed a fractional AAPL paper position."""
-    from app.db.models.paper import PaperPosition, PaperTransaction
+    from app.db.models.paper import PaperPosition
 
     # Check if already claimed
     existing = db.query(PaperPosition).filter_by(user_id=current_user.id, symbol=REWARD_SYMBOL).first()
@@ -123,20 +123,6 @@ async def claim_reward(
         avg_cost=float(price),
     )
     db.add(position)
-
-    # Log transaction
-    tx = PaperTransaction(
-        user_id=current_user.id,
-        symbol=REWARD_SYMBOL,
-        side="buy",
-        qty=float(REWARD_SHARES),
-        fill_price=float(price),
-        cost_basis=float(price),
-        realized_pnl=0.0,
-        notes="Welcome reward — fractional share",
-    )
-    db.add(tx)
-
     db.commit()
     return {
         "ok": True,
