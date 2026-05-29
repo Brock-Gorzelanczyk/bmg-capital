@@ -620,8 +620,8 @@ function HoldingsTab({
           </thead>
           <tbody>
             {sorted.map((pos) => {
-              const dayPct = pos.day_pnl_pct * 100;
-              const totalPct = pos.unrealized_pnl_pct * 100;
+              const dayPct = pos.day_pnl_pct;
+              const totalPct = pos.unrealized_pnl_pct;
               return (
                 <tr
                   key={pos.id}
