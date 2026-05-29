@@ -158,7 +158,7 @@ function WorkshopPanel({
     setName(analysis.name);
     setThesis(analysis.thesis);
     onLoadDrawings(Array.isArray(analysis.drawings) ? analysis.drawings : []);
-    setAiResult("thesis_summary" in analysis.ai_analysis ? analysis.ai_analysis as AIAnalysis : null);
+    setAiResult(analysis.ai_analysis && "thesis_summary" in analysis.ai_analysis ? analysis.ai_analysis as AIAnalysis : null);
     setAiError(null);
     setShowDropdown(false);
   }
@@ -521,11 +521,11 @@ function WorkshopPanel({
               </div>
 
               {/* Supporting */}
-              {aiResult.supporting.length > 0 && (
+              {(aiResult.supporting ?? []).length > 0 && (
                 <div>
                   <div className="text-[10px] text-[#22c55e] uppercase tracking-wider mb-1">Supporting</div>
                   <ul className="space-y-1">
-                    {aiResult.supporting.map((s, i) => (
+                    {(aiResult.supporting ?? []).map((s, i) => (
                       <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
                         <span className="text-[#22c55e] shrink-0 mt-0.5">+</span>
                         {s}
@@ -536,11 +536,11 @@ function WorkshopPanel({
               )}
 
               {/* Counterarguments */}
-              {aiResult.counterarguments.length > 0 && (
+              {(aiResult.counterarguments ?? []).length > 0 && (
                 <div>
                   <div className="text-[10px] text-[#f59e0b] uppercase tracking-wider mb-1">Counter</div>
                   <ul className="space-y-1">
-                    {aiResult.counterarguments.map((c, i) => (
+                    {(aiResult.counterarguments ?? []).map((c, i) => (
                       <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
                         <span className="text-[#f59e0b] shrink-0 mt-0.5">−</span>
                         {c}
@@ -557,11 +557,11 @@ function WorkshopPanel({
               </div>
 
               {/* Suggestions */}
-              {aiResult.suggested_additions.length > 0 && (
+              {(aiResult.suggested_additions ?? []).length > 0 && (
                 <div>
                   <div className="text-[10px] text-[#6366f1] uppercase tracking-wider mb-1">Add to chart</div>
                   <ul className="space-y-1">
-                    {aiResult.suggested_additions.map((s, i) => (
+                    {(aiResult.suggested_additions ?? []).map((s, i) => (
                       <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
                         <span className="text-[#6366f1] shrink-0 mt-0.5">→</span>
                         {s}
@@ -700,11 +700,11 @@ function WorkshopPanel({
               )}
 
               {/* Supporting */}
-              {imageAnalysis.supporting.length > 0 && (
+              {(imageAnalysis.supporting ?? []).length > 0 && (
                 <div>
                   <div className="text-[10px] text-[#22c55e] uppercase tracking-wider mb-1">Strengths</div>
                   <ul className="space-y-1">
-                    {imageAnalysis.supporting.map((s, i) => (
+                    {(imageAnalysis.supporting ?? []).map((s, i) => (
                       <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
                         <span className="text-[#22c55e] shrink-0">+</span>{s}
                       </li>
@@ -714,11 +714,11 @@ function WorkshopPanel({
               )}
 
               {/* Counter */}
-              {imageAnalysis.counterarguments.length > 0 && (
+              {(imageAnalysis.counterarguments ?? []).length > 0 && (
                 <div>
                   <div className="text-[10px] text-[#f59e0b] uppercase tracking-wider mb-1">Risks</div>
                   <ul className="space-y-1">
-                    {imageAnalysis.counterarguments.map((c, i) => (
+                    {(imageAnalysis.counterarguments ?? []).map((c, i) => (
                       <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
                         <span className="text-[#f59e0b] shrink-0">−</span>{c}
                       </li>
@@ -734,11 +734,11 @@ function WorkshopPanel({
               </div>
 
               {/* Suggested additions */}
-              {imageAnalysis.suggested_additions.length > 0 && (
+              {(imageAnalysis.suggested_additions ?? []).length > 0 && (
                 <div>
                   <div className="text-[10px] text-[#6366f1] uppercase tracking-wider mb-1">Suggested additions</div>
                   <ul className="space-y-1">
-                    {imageAnalysis.suggested_additions.map((s, i) => (
+                    {(imageAnalysis.suggested_additions ?? []).map((s, i) => (
                       <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
                         <span className="text-[#6366f1] shrink-0">→</span>{s}
                       </li>
