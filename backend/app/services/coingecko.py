@@ -178,7 +178,7 @@ def get_trending() -> list[dict]:
             "market_cap_rank": coin.get("market_cap_rank"),
             "pct_24h":         pct_24h,
             "sparkline_url":   data.get("sparkline"),
-            "current_price":   None,
+            "current_price":   data.get("price"),
             "market_cap":      0,
             "total_volume":    0,
             "pct_1h":          None,

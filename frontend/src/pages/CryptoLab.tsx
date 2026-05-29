@@ -1177,6 +1177,7 @@ const EXIT_BADGE: Record<string, { label: string; cls: string }> = {
 function CryptoStrategyPanel() {
   const qc = useQueryClient();
   const [running, setRunning] = useState(false);
+  const [runStatus, setRunStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [stratTab, setStratTab] = useState<"open" | "watch" | "closed">("open");
 
   const { data: tradesData } = useQuery({
@@ -1202,17 +1203,21 @@ function CryptoStrategyPanel() {
 
   const handleRunNow = async () => {
     setRunning(true);
+    setRunStatus(null);
     try {
       await runCryptoStrategyNow();
-      toast.success("Crypto scan started — results update in ~2 minutes", { duration: 5000 });
-      // Refresh data after the background job has had time to complete
+      setRunStatus({ ok: true, msg: "Scan started — data refreshes in ~2 min" });
+      toast.success("Crypto scan started — results update in ~2 minutes", { duration: 8000 });
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] });
         qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] });
         qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] });
+        setRunStatus(null);
       }, 120_000);
-    } catch {
-      toast.error("Failed to start scan — check connection");
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail ?? e?.message ?? "Unknown error";
+      setRunStatus({ ok: false, msg: `Scan failed: ${detail}` });
+      toast.error(`Failed to start scan: ${detail}`);
     } finally {
       setRunning(false);
     }
@@ -1254,6 +1259,17 @@ function CryptoStrategyPanel() {
           {running ? "Screening…" : "Run Now"}
         </button>
       </div>
+
+      {runStatus && (
+        <div className={cn(
+          "text-xs px-4 py-2.5 rounded-xl font-medium",
+          runStatus.ok
+            ? "bg-[var(--accent-positive)]/10 text-[var(--accent-positive)] border border-[var(--accent-positive)]/20"
+            : "bg-[var(--accent-negative)]/10 text-[var(--accent-negative)] border border-[var(--accent-negative)]/20"
+        )}>
+          {runStatus.msg}
+        </div>
+      )}
 
       {stratTab === "open" && (
         <div className="space-y-2">

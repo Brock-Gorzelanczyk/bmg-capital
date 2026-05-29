@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -34,6 +35,35 @@ YF_MAX_DAYS: dict[str, int] = {
     "4Hour": 729,
 }
 
+# Timeframes that support extra lookback for indicator warm-up
+DAILY_TIMEFRAMES = {"1Day", "1Week", "1Month"}
+
+# Calendar-day multiplier to convert trading-day periods to calendar days
+# 200 trading days * 1.6 = 320 calendar days (safe buffer for weekends + holidays)
+_CALENDAR_MULT = 1.6
+
+
+def _max_indicator_lookback(indicators_str: Optional[str]) -> int:
+    """Return the largest period found in indicator keys (e.g. SMA_200 → 200, ICHIMOKU → 52)."""
+    if not indicators_str:
+        return 0
+    max_p = 0
+    for key in indicators_str.split(","):
+        key = key.strip()
+        parts = key.split("_")
+        if len(parts) >= 2:
+            try:
+                max_p = max(max_p, int(parts[-1]))
+            except ValueError:
+                pass
+        if key == "MACD":
+            max_p = max(max_p, 26)
+        if key in ("ICHIMOKU",):
+            max_p = max(max_p, 52)
+        if key in ("DONCHIAN", "KELTNER"):
+            max_p = max(max_p, 20)
+    return max_p
+
 
 @router.get("/{symbol}")
 async def get_bars(
@@ -65,6 +95,7 @@ async def get_bars(
         max_days = YF_MAX_DAYS.get(timeframe, 20000)
         days_back = min(days_back, max_days)
         start_dt = end_dt - timedelta(days=days_back)
+        display_start_dt = None  # no trimming needed — all data is visible
     else:
         start_dt = datetime.fromisoformat(start)
         max_days = YF_MAX_DAYS.get(timeframe)
@@ -72,6 +103,14 @@ async def get_bars(
             earliest = end_dt - timedelta(days=max_days)
             if start_dt < earliest:
                 start_dt = earliest
+        display_start_dt = start_dt  # remember original for trimming
+
+        # Expand start backwards to warm up indicators (SMA_200 needs 200 bars of prior data)
+        if timeframe in DAILY_TIMEFRAMES:
+            lookback = _max_indicator_lookback(indicators)
+            if lookback > 0:
+                extra_days = math.ceil(lookback * _CALENDAR_MULT)
+                start_dt = start_dt - timedelta(days=extra_days)
 
     start_str = start_dt.date().isoformat()
     end_str = end_dt.date().isoformat()
@@ -87,7 +126,8 @@ async def get_bars(
                 indicator_data = compute_indicators(df_cached, requested)
             except Exception:
                 pass
-        return {"symbol": symbol.upper(), "bars": cached, "indicators": indicator_data}
+        bars_out, indicator_data = _trim_to_display(cached, indicator_data, display_start_dt)
+        return {"symbol": symbol.upper(), "bars": bars_out, "indicators": indicator_data}
 
     try:
         ticker = yf.Ticker(symbol.upper())
@@ -135,9 +175,36 @@ async def get_bars(
             requested = [i.strip() for i in indicators.split(",")]
             indicator_data = compute_indicators(df, requested)
 
-        return {"symbol": symbol.upper(), "bars": bars_list, "indicators": indicator_data}
+        bars_out, indicator_data = _trim_to_display(bars_list, indicator_data, display_start_dt)
+
+        return {"symbol": symbol.upper(), "bars": bars_out, "indicators": indicator_data}
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _trim_to_display(
+    bars: list[dict],
+    indicators: dict[str, list],
+    display_start_dt: Optional[datetime],
+) -> tuple[list[dict], dict[str, list]]:
+    """Trim bars and indicator arrays to the original display start date."""
+    if not display_start_dt or not bars:
+        return bars, indicators
+
+    display_date = display_start_dt.date()
+    trim_idx = 0
+    for i, bar in enumerate(bars):
+        try:
+            bar_date = datetime.fromisoformat(bar["t"][:10]).date()
+            if bar_date >= display_date:
+                trim_idx = i
+                break
+        except Exception:
+            pass
+
+    trimmed_bars = bars[trim_idx:]
+    trimmed_indicators = {k: v[trim_idx:] for k, v in indicators.items()}
+    return trimmed_bars, trimmed_indicators
