@@ -284,17 +284,17 @@ def journal_analytics(
 
     # ---- assemble response ---------------------------------------------------
     return {
-        # Headline stats
-        "total_trades": total_trades,
-        "win_rate": win_rate,
-        "profit_factor": profit_factor,
-        "avg_r_multiple": avg_r_multiple,
-        "total_pnl": total_pnl,
-        "max_drawdown": max_drawdown,
-        "avg_hold_days": avg_hold_days,
-        "best_trade": best_trade,
-        "worst_trade": worst_trade,
-        # Breakdowns
+        "headline": {
+            "total_trades": total_trades,
+            "win_rate": win_rate,
+            "profit_factor": profit_factor,
+            "avg_r_multiple": avg_r_multiple,
+            "total_pnl": total_pnl,
+            "max_drawdown": max_drawdown,
+            "avg_hold_days": avg_hold_days,
+            "best_trade": best_trade,
+            "worst_trade": worst_trade,
+        },
         "equity_curve": equity_curve,
         "by_setup": by_setup,
         "by_symbol": by_symbol,
@@ -302,7 +302,6 @@ def journal_analytics(
         "r_distribution": r_distribution,
         "streaks": streaks,
         "by_mood": by_mood,
-        # Meta
         "filters": {
             "days": days,
             "account_type": account_type,
@@ -314,15 +313,17 @@ def journal_analytics(
 def _empty_response() -> dict:
     """Return a zero-value response shape when no matching trades exist."""
     return {
-        "total_trades": 0,
-        "win_rate": 0.0,
-        "profit_factor": 0.0,
-        "avg_r_multiple": 0.0,
-        "total_pnl": 0.0,
-        "max_drawdown": 0.0,
-        "avg_hold_days": 0.0,
-        "best_trade": None,
-        "worst_trade": None,
+        "headline": {
+            "total_trades": 0,
+            "win_rate": 0.0,
+            "profit_factor": 0.0,
+            "avg_r_multiple": 0.0,
+            "total_pnl": 0.0,
+            "max_drawdown": 0.0,
+            "avg_hold_days": 0.0,
+            "best_trade": None,
+            "worst_trade": None,
+        },
         "equity_curve": [],
         "by_setup": [],
         "by_symbol": [],
