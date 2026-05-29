@@ -4,7 +4,7 @@ import {
   LayoutDashboard, LineChart, BookMarked, Briefcase, BookOpen, BarChart2,
   FlaskConical, Layers, Bitcoin, PenTool,
   Filter, Newspaper, Calendar, Microscope, Compass,
-  Droplets, ShieldCheck,
+  Droplets, ShieldCheck, Activity,
   GraduationCap, Users,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
 } from "lucide-react";
@@ -52,6 +52,10 @@ const NAV_LEARN = [
 
 const NAV_COMMUNITY = [
   { to: "/social", label: "Community Feed", Icon: Users },
+];
+
+const NAV_ADMIN = [
+  { to: "/admin/monitoring", label: "Monitoring", Icon: Activity },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -371,6 +375,8 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
         />
 
         <NavSection label="Community" items={NAV_COMMUNITY} expanded={expanded} />
+
+        <NavSection label="Admin" items={NAV_ADMIN} expanded={expanded} />
       </nav>
 
       {/* Bottom: Upgrade + Avatar */}

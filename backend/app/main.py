@@ -20,7 +20,7 @@ from app.alpaca.stream import stream_manager
 from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
-from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop
+from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,8 @@ async def lifespan(app: FastAPI):
     # Start the live data stream and background scheduler
     await stream_manager.start()
     setup_scheduler()
+    from app.routers.monitoring import setup_monitoring_scheduler
+    setup_monitoring_scheduler(scheduler)
     scheduler.start()
 
     # Kick off strategy scan in background — won't block server startup
@@ -153,6 +155,7 @@ app.include_router(db_restore.router)
 app.include_router(copilot.router)
 app.include_router(workspace.router)
 app.include_router(workshop.router)
+app.include_router(monitoring.router)
 
 
 @app.get("/health", tags=["health"])

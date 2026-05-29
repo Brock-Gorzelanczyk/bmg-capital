@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     log_level: str = "INFO"
 
+    # ── Monitoring / Alerting ─────────────────────────────────────────────────
+    alert_webhook_url: str = ""   # Slack/Discord webhook URL
+    alert_email: str = ""          # email to send alerts to
+
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),
         case_sensitive=False,

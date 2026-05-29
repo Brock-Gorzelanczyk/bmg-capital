@@ -36,6 +36,16 @@ const OVERLAY_COLORS: Record<string, string> = {
   KELTNER_upper: "#ff9800",
   KELTNER_mid: "#ffb74d",
   KELTNER_lower: "#ff9800",
+  // New overlay indicators
+  WMA_10: "#34d399", WMA_20: "#10b981", WMA_50: "#059669",
+  KAMA_10: "#f87171",
+  TEMA_20: "#fb923c",
+  HMA_20: "#facc15",
+  LINREG: "#e2e8f0",
+  NVI: "#d946ef",
+  PVI: "#22c55e",
+  VWAP_UPPER: "#67e8f9",
+  VWAP_LOWER: "#67e8f9",
 };
 
 function indicatorLabel(key: string): string {
@@ -45,7 +55,11 @@ function indicatorLabel(key: string): string {
 
 function isOverlayKey(key: string): boolean {
   return key.startsWith("SMA_") || key.startsWith("EMA_") || key.startsWith("DEMA_")
-    || key === "VWAP" || key === "PSAR"
+    || key.startsWith("WMA_") || key.startsWith("KAMA_") || key.startsWith("TEMA_")
+    || key.startsWith("HMA_")
+    || key === "VWAP" || key === "PSAR" || key === "LINREG"
+    || key === "NVI" || key === "PVI"
+    || key === "VWAP_UPPER" || key === "VWAP_LOWER"
     || key.startsWith("ICHI_") || key.startsWith("DONCHIAN_") || key.startsWith("KELTNER_")
     || key.endsWith("_upper") || key.endsWith("_middle") || key.endsWith("_lower");
 }
@@ -428,7 +442,7 @@ export default function ChartPage() {
   const hasObv   = "OBV"       in indicators;
   const hasAtr   = "ATR"       in indicators;
 
-  // New indicator checks
+  // Existing derived indicator checks
   const hasAdx      = "ADX"          in indicators;
   const hasIchimoku = "ICHI_tenkan"  in indicators;
   const hasPsar     = "PSAR"         in indicators;
@@ -437,6 +451,34 @@ export default function ChartPage() {
   const hasCmf      = "CMF"          in indicators;
   const hasMfi      = "MFI"          in indicators;
   const hasRoc      = "ROC"          in indicators;
+
+  // New sub-pane indicator checks
+  const hasAo         = "AO"           in indicators;
+  const hasUo         = "UO"           in indicators;
+  const hasTrix       = "TRIX_15"      in indicators;
+  const hasAroon      = "AROON_up"     in indicators;
+  const hasDpo        = "DPO"          in indicators;
+  const hasMass       = "MASS"         in indicators;
+  const hasKst        = "KST_line"     in indicators;
+  const hasVortex     = "VORTEX_pos"   in indicators;
+  const hasStc        = "STC"          in indicators;
+  const hasPpo        = "PPO_line"     in indicators;
+  const hasTsi        = "TSI"          in indicators;
+  const hasCmo        = "CMO"          in indicators;
+  const hasFisher     = "FISHER_line"  in indicators;
+  const hasCoppock    = "COPPOCK"      in indicators;
+  const hasUi         = "UI"           in indicators;
+  const hasBbwidth    = "BBWIDTH"      in indicators;
+  const hasBbp        = "BBP"          in indicators;
+  const hasNatr       = "NATR"         in indicators;
+  const hasHv         = "HV"           in indicators;
+  const hasRviVol     = "RVI_VOL"      in indicators;
+  const hasAdi        = "ADI"          in indicators;
+  const hasEom        = "EOM"          in indicators;
+  const hasFi         = "FI"           in indicators;
+  const hasZscore     = "ZSCORE"       in indicators;
+  const hasLinregSlope = "LINREG_SLOPE" in indicators;
+  const hasMomentum   = "MOMENTUM_10"  in indicators;
 
   // Sub-pane indicators are only visible in pro mode
   const showSubPanes = proMode;
