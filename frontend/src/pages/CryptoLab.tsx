@@ -1203,26 +1203,16 @@ function CryptoStrategyPanel() {
   const handleRunNow = async () => {
     setRunning(true);
     try {
-      const result = await runCryptoStrategyNow();
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] }),
-        qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] }),
-        qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] }),
-      ]);
-      const entries   = result?.entries       ?? 0;
-      const newCands  = result?.new_candidates ?? 0;
-      const scanned   = result?.coins_scanned  ?? 0;
-      if (entries > 0) {
-        setStratTab("open");
-        toast.success(`Screening done — ${entries} new position${entries !== 1 ? "s" : ""} opened (${scanned} coins scanned)`);
-      } else if (newCands > 0) {
-        setStratTab("watch");
-        toast.success(`Screening done — ${newCands} candidate${newCands !== 1 ? "s" : ""} added to Watching`);
-      } else {
-        toast.success(`Screening done — no new signals (${scanned} coins scanned)`);
-      }
+      await runCryptoStrategyNow();
+      toast.success("Crypto scan started — results update in ~2 minutes", { duration: 5000 });
+      // Refresh data after the background job has had time to complete
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] });
+        qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] });
+        qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] });
+      }, 120_000);
     } catch {
-      toast.error("Screening failed — check connection");
+      toast.error("Failed to start scan — check connection");
     } finally {
       setRunning(false);
     }
