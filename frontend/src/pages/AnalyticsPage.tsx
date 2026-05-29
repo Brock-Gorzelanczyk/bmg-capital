@@ -251,12 +251,14 @@ export default function AnalyticsPage() {
               value={fmtPct(data.headline.max_drawdown)}
               positive={false}
             />
-            <HeadlineCard
-              label="Best Trade"
-              value={fmtDollar(data.headline.best_trade.pnl)}
-              sub={data.headline.best_trade.symbol}
-              positive
-            />
+            {data.headline.best_trade && (
+              <HeadlineCard
+                label="Best Trade"
+                value={fmtDollar(data.headline.best_trade.pnl)}
+                sub={data.headline.best_trade.symbol}
+                positive
+              />
+            )}
           </div>
 
           {/* ── Equity Curve ────────────────────────────────────────────── */}
@@ -515,10 +517,10 @@ export default function AnalyticsPage() {
                 </h2>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "Current Win", value: data.streaks.current_win_streak, positive: true },
-                    { label: "Current Loss", value: data.streaks.current_loss_streak, positive: false },
-                    { label: "Longest Win", value: data.streaks.longest_win_streak, positive: true },
-                    { label: "Longest Loss", value: data.streaks.longest_loss_streak, positive: false },
+                    { label: "Current Win", value: data.streaks?.current_win_streak ?? 0, positive: true },
+                    { label: "Current Loss", value: data.streaks?.current_loss_streak ?? 0, positive: false },
+                    { label: "Longest Win", value: data.streaks?.longest_win_streak ?? 0, positive: true },
+                    { label: "Longest Loss", value: data.streaks?.longest_loss_streak ?? 0, positive: false },
                   ].map(({ label, value, positive }) => (
                     <div key={label} className="bg-[var(--bg-elevated-2)] rounded-xl p-3 text-center">
                       <p className={cn("text-2xl font-bold font-mono", positive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
@@ -619,13 +621,15 @@ export default function AnalyticsPage() {
 
           {/* ── Worst trade footnote ─────────────────────────────────────── */}
           <div className="flex items-center gap-4 text-xs text-[var(--text-tertiary)] px-1">
-            <span className="flex items-center gap-1.5">
-              <TrendingDown size={12} className="text-[var(--accent-negative)]" />
-              Worst trade: <span className="font-mono text-[var(--accent-negative)] font-semibold">{data.headline.worst_trade.symbol}</span>
-              {" "}{fmtDollarFull(data.headline.worst_trade.pnl)} on {data.headline.worst_trade.date}
-            </span>
+            {data.headline.worst_trade && (
+              <span className="flex items-center gap-1.5">
+                <TrendingDown size={12} className="text-[var(--accent-negative)]" />
+                Worst trade: <span className="font-mono text-[var(--accent-negative)] font-semibold">{data.headline.worst_trade.symbol}</span>
+                {" "}{fmtDollarFull(data.headline.worst_trade.pnl)} on {data.headline.worst_trade.date}
+              </span>
+            )}
             <span className="ml-auto">
-              Avg hold: <span className="font-mono text-[var(--text-secondary)]">{data.headline.avg_hold_days.toFixed(1)}d</span>
+              Avg hold: <span className="font-mono text-[var(--text-secondary)]">{data.headline.avg_hold_days?.toFixed(1) ?? "0.0"}d</span>
             </span>
           </div>
 

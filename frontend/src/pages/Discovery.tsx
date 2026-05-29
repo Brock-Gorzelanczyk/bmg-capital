@@ -480,7 +480,7 @@ function NarrativesTab() {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {n.coins_data.slice(0, 6).map((c) => (
+                  {(n.coins_data ?? []).slice(0, 6).map((c) => (
                     <span key={c.id} className={cn(
                       "text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border",
                       (c.pct_24h ?? 0) >= 0 ? "bg-emerald-950/50 border-emerald-800 text-[var(--accent-positive)]" : "bg-rose-950/50 border-rose-800 text-[var(--accent-negative)]"

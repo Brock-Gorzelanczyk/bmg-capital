@@ -95,5 +95,18 @@ export async function getJournalAnalytics(
   const { data } = await client.get("/journal/analytics", {
     params: { days, account_type: accountType },
   });
+  // Normalize: old backend returned fields flat; new backend nests them under "headline"
+  if (data && !data.headline) {
+    const {
+      total_trades, win_rate, profit_factor, avg_r_multiple,
+      total_pnl, max_drawdown, avg_hold_days, best_trade, worst_trade,
+      ...rest
+    } = data;
+    return {
+      ...rest,
+      headline: { total_trades, win_rate, profit_factor, avg_r_multiple,
+                  total_pnl, max_drawdown, avg_hold_days, best_trade, worst_trade },
+    };
+  }
   return data;
 }

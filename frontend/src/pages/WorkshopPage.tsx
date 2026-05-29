@@ -136,7 +136,7 @@ function WorkshopPanel({
           setActiveId(first.id);
           setName(first.name);
           setThesis(first.thesis);
-          onLoadDrawings(first.drawings);
+          onLoadDrawings(Array.isArray(first.drawings) ? first.drawings : []);
           if (first.ai_analysis && "thesis_summary" in first.ai_analysis) {
             setAiResult(first.ai_analysis as AIAnalysis);
           } else {
@@ -157,7 +157,7 @@ function WorkshopPanel({
     setActiveId(analysis.id);
     setName(analysis.name);
     setThesis(analysis.thesis);
-    onLoadDrawings(analysis.drawings);
+    onLoadDrawings(Array.isArray(analysis.drawings) ? analysis.drawings : []);
     setAiResult("thesis_summary" in analysis.ai_analysis ? analysis.ai_analysis as AIAnalysis : null);
     setAiError(null);
     setShowDropdown(false);
@@ -653,13 +653,13 @@ function WorkshopPanel({
               </div>
 
               {/* Detected drawings */}
-              {imageAnalysis.drawings_detected.length > 0 && (
+              {(imageAnalysis.drawings_detected ?? []).length > 0 && (
                 <div>
                   <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
-                    Drawings detected ({imageAnalysis.drawings_detected.length})
+                    Drawings detected ({(imageAnalysis.drawings_detected ?? []).length})
                   </div>
                   <ul className="space-y-1">
-                    {imageAnalysis.drawings_detected.map((d, i) => (
+                    {(imageAnalysis.drawings_detected ?? []).map((d, i) => (
                       <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
                         <span className="text-[var(--accent-primary)] shrink-0 mt-0.5">·</span>
                         <span>
@@ -677,12 +677,12 @@ function WorkshopPanel({
               )}
 
               {/* Key levels + import button */}
-              {imageAnalysis.key_levels.length > 0 && (
+              {(imageAnalysis.key_levels ?? []).length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Key levels</div>
                     <button
-                      onClick={() => importKeyLevels(imageAnalysis.key_levels)}
+                      onClick={() => importKeyLevels(imageAnalysis.key_levels ?? [])}
                       className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/15 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/25 transition-colors"
                     >
                       + Add to chart

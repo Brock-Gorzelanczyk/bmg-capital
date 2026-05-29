@@ -248,7 +248,7 @@ function OverviewBar({ data }: { data: CryptoOverview | undefined }) {
         <div className="flex flex-col gap-0.5">
           <span className="text-[9px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)]">Fear & Greed</span>
         </div>
-        <FearGauge value={data.fear_greed.value} label={data.fear_greed.label} />
+        <FearGauge value={data.fear_greed?.value ?? 50} label={data.fear_greed?.label ?? "Neutral"} />
       </div>
     </div>
   );

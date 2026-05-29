@@ -71,7 +71,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 // Clean up old cache keys from previous versions
-["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2"].forEach(k => {
+["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
 });
 
@@ -88,7 +88,7 @@ const queryClient = new QueryClient({
 
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
-  key: "BMG_QUERY_CACHE_v3",
+  key: "BMG_QUERY_CACHE_v4",
   throttleTime: 1000,
 });
 
