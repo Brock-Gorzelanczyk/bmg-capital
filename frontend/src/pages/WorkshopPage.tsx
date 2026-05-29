@@ -147,7 +147,8 @@ function WorkshopPanel({
       .catch(console.error);
   }, [symbolUpper]); // eslint-disable-line
 
-  const activeAnalysis = analyses.find((a) => a.id === activeId);
+  const safeAnalyses = Array.isArray(analyses) ? analyses : [];
+  const activeAnalysis = safeAnalyses.find((a) => a.id === activeId);
 
   function switchTo(analysis: ChartAnalysis) {
     // Auto-save current before switching
@@ -356,7 +357,7 @@ function WorkshopPanel({
       )}
 
       {/* Analysis selector */}
-      {analyses.length > 0 && (
+      {safeAnalyses.length > 0 && (
         <div className="px-3 py-2 border-b border-[var(--border-subtle)] shrink-0 relative">
           <button
             onClick={() => setShowDropdown((s) => !s)}
@@ -367,7 +368,7 @@ function WorkshopPanel({
           </button>
           {showDropdown && (
             <div className="absolute left-0 right-0 top-full z-50 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-b shadow-xl overflow-hidden">
-              {analyses.map((a) => (
+              {safeAnalyses.map((a) => (
                 <div
                   key={a.id}
                   className={cn(
@@ -390,7 +391,7 @@ function WorkshopPanel({
       )}
 
       {/* Empty state */}
-      {analyses.length === 0 && !showNewForm && (
+      {safeAnalyses.length === 0 && !showNewForm && (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center">
           <BookOpen size={28} className="text-[var(--text-tertiary)] opacity-40" />
           <p className="text-[11px] text-[var(--text-tertiary)]">

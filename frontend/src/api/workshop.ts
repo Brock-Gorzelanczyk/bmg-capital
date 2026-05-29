@@ -24,7 +24,9 @@ export interface AIAnalysis {
 }
 
 export const listAnalyses = (symbol?: string): Promise<ChartAnalysis[]> =>
-  client.get("/api/workshop/analyses", { params: symbol ? { symbol } : {} }).then((r) => r.data);
+  client.get("/api/workshop/analyses", { params: symbol ? { symbol } : {} })
+    .then((r) => (Array.isArray(r.data) ? r.data : []))
+    .catch(() => []);
 
 export const createAnalysis = (body: {
   symbol: string;
