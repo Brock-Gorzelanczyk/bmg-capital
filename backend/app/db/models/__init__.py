@@ -18,6 +18,7 @@ from app.db.models.tier import UserTier
 from app.db.models.chart_drawings import ChartDrawing
 from app.db.models.recap import DailyRecap
 from app.db.models.strategy_definition import StrategyDefinition
+from app.db.models.workspace import UserWorkspace
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -32,4 +33,5 @@ __all__ = [
     "ChartDrawing",
     "DailyRecap",
     "StrategyDefinition",
+    "UserWorkspace",
 ]
