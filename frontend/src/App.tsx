@@ -30,6 +30,7 @@ import Security from "@/pages/Security";
 import Onboarding from "@/pages/Onboarding";
 import JournalPage from "@/pages/JournalPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
+import WorkshopPage from "@/pages/WorkshopPage";
 import Social from "@/pages/Social";
 import UpgradePage from "@/pages/UpgradePage";
 import SettingsPage from "@/pages/Settings";
@@ -119,6 +120,7 @@ function AppInner() {
         <Route path="/learn/:trackId" element={<LearnCourse />} />
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/workshop" element={<WorkshopPage />} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />

@@ -16,6 +16,7 @@ from app.db.models.journal import JournalEntry
 from app.db.models.social import Post, PostLike, Comment, UserFollow
 from app.db.models.tier import UserTier
 from app.db.models.chart_drawings import ChartDrawing
+from app.db.models.chart_analysis import ChartAnalysis
 from app.db.models.recap import DailyRecap
 from app.db.models.strategy_definition import StrategyDefinition
 from app.db.models.workspace import UserWorkspace
@@ -31,6 +32,7 @@ __all__ = [
     "Post", "PostLike", "Comment", "UserFollow",
     "UserTier",
     "ChartDrawing",
+    "ChartAnalysis",
     "DailyRecap",
     "StrategyDefinition",
     "UserWorkspace",
