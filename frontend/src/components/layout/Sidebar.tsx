@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, LineChart, BookMarked, Briefcase, BookOpen,
+  LayoutDashboard, LineChart, BookMarked, Briefcase, BookOpen, BarChart2,
   FlaskConical, Layers, Bitcoin,
   Filter, Newspaper, Calendar, Microscope, Compass,
   Droplets, ShieldCheck,
@@ -23,6 +23,7 @@ const NAV_TRADE = [
   { to: "/portfolio", label: "Portfolio",    Icon: Briefcase },
   { to: "/watchlist", label: "Watchlist",    Icon: BookMarked },
   { to: "/journal",   label: "Trade Journal", Icon: BookOpen },
+  { to: "/analytics", label: "Analytics",     Icon: BarChart2 },
 ];
 
 const NAV_LABS = [

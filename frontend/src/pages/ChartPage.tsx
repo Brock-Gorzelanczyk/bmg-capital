@@ -180,6 +180,10 @@ export default function ChartPage() {
   const [pendingFibStart, setPendingFibStart] = useState<{ time: number; price: number } | null>(null);
   const [pendingTextPoint, setPendingTextPoint] = useState<{ time: number; price: number } | null>(null);
   const [textInputValue, setTextInputValue] = useState("");
+  const [pendingChannelPoints, setPendingChannelPoints] = useState<{ time: number; price: number }[]>([]);
+  const [pendingPosPoints, setPendingPosPoints] = useState<{ time: number; price: number }[]>([]);
+  const [pendingArrowPoint, setPendingArrowPoint] = useState<{ time: number; price: number } | null>(null);
+  const [arrowInputValue, setArrowInputValue] = useState("");
   const [hoveredBar, setHoveredBar] = useState<HoveredBar | null>(null);
   const [showIndicatorsModal, setShowIndicatorsModal] = useState(false);
   const [showWatchlist, setShowWatchlist] = useState(true);
@@ -307,6 +311,9 @@ export default function ChartPage() {
     // Clear local drawings; new ones load via useEffect
     setDrawings([]);
     setPendingTrendStart(null);
+    setPendingChannelPoints([]);
+    setPendingPosPoints([]);
+    setPendingArrowPoint(null);
     isInitialMount.current = true;
   };
 
@@ -344,6 +351,32 @@ export default function ChartPage() {
     } else if (partial.type === "text") {
       setPendingTextPoint(partial.p1!);
       setTextInputValue("");
+    } else if (partial.type === "channel") {
+      setPendingChannelPoints((prev) => {
+        const pts = [...prev, partial.p1!];
+        if (pts.length === 1) return pts;
+        if (pts.length === 2) return pts;
+        // 3rd click: complete channel
+        setDrawings((d) => [
+          ...d,
+          { id: crypto.randomUUID(), type: "channel", p1: pts[0], p2: pts[1], p3: pts[2], color: "#2196f3" },
+        ]);
+        return [];
+      });
+    } else if (partial.type === "longpos" || partial.type === "shortpos") {
+      const posType = partial.type;
+      setPendingPosPoints((prev) => {
+        const pts = [...prev, partial.p1!];
+        if (pts.length < 3) return pts;
+        setDrawings((d) => [
+          ...d,
+          { id: crypto.randomUUID(), type: posType, p1: pts[0], p2: pts[1], p3: pts[2], color: "#2196f3" },
+        ]);
+        return [];
+      });
+    } else if (partial.type === "arrow") {
+      setPendingArrowPoint(partial.p1!);
+      setArrowInputValue("");
     } else {
       setDrawings((prev) => [...prev, { id: crypto.randomUUID(), ...partial }]);
     }
@@ -355,6 +388,9 @@ export default function ChartPage() {
     setPendingRectStart(null);
     setPendingFibStart(null);
     setPendingTextPoint(null);
+    setPendingChannelPoints([]);
+    setPendingPosPoints([]);
+    setPendingArrowPoint(null);
     setActiveTool("cursor");
   };
 
@@ -513,6 +549,21 @@ export default function ChartPage() {
             {pendingTextPoint && (
               <span className="ml-3 text-[11px] text-[var(--text-secondary)]">Type label and press Enter</span>
             )}
+            {pendingChannelPoints.length === 1 && (
+              <span className="ml-3 text-[11px] text-[#2196f3]">Click second point to set channel direction</span>
+            )}
+            {pendingChannelPoints.length === 2 && (
+              <span className="ml-3 text-[11px] text-[#2196f3]">Click to set second channel line offset</span>
+            )}
+            {pendingPosPoints.length === 1 && (
+              <span className="ml-3 text-[11px] text-[#ef4444]">Click to set stop loss level</span>
+            )}
+            {pendingPosPoints.length === 2 && (
+              <span className="ml-3 text-[11px] text-[#22c55e]">Click to set target level</span>
+            )}
+            {pendingArrowPoint && (
+              <span className="ml-3 text-[11px] text-[var(--text-secondary)]">Type arrow label and press Enter</span>
+            )}
           </div>
 
           {/* Saved drawings indicator */}
@@ -546,6 +597,36 @@ export default function ChartPage() {
                     }
                   }}
                   placeholder="Label text…"
+                  className="bg-transparent text-[var(--text-secondary)] text-sm outline-none w-40 placeholder:text-[var(--text-tertiary)]"
+                />
+                <span className="text-[var(--text-tertiary)] text-[10px]">Enter ↵</span>
+              </div>
+            </div>
+          )}
+
+          {/* Arrow label input overlay */}
+          {pendingArrowPoint && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+              <div className="pointer-events-auto bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 flex items-center gap-2 shadow-xl">
+                <input
+                  autoFocus
+                  type="text"
+                  value={arrowInputValue}
+                  onChange={(e) => setArrowInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && arrowInputValue.trim()) {
+                      setDrawings((prev) => [
+                        ...prev,
+                        { id: crypto.randomUUID(), type: "arrow", p1: pendingArrowPoint, color: "#d1d4dc", metadata: { label: arrowInputValue.trim() } },
+                      ]);
+                      setPendingArrowPoint(null);
+                      setArrowInputValue("");
+                    } else if (e.key === "Escape") {
+                      setPendingArrowPoint(null);
+                      setArrowInputValue("");
+                    }
+                  }}
+                  placeholder="Arrow label…"
                   className="bg-transparent text-[var(--text-secondary)] text-sm outline-none w-40 placeholder:text-[var(--text-tertiary)]"
                 />
                 <span className="text-[var(--text-tertiary)] text-[10px]">Enter ↵</span>

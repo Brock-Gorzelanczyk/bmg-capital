@@ -599,12 +599,54 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [overlayVersion, drawings]);
 
+    const vlineOverlays = useMemo(() => {
+      if (!chartRef.current || !mainSeriesRef.current) return [];
+      const tc = chartRef.current.timeScale();
+      const container = containerRef.current;
+      if (!container) return [];
+      const height = container.clientHeight;
+      return drawings
+        .filter((d) => d.type === "vline" && d.p1)
+        .flatMap((d) => {
+          const x = tc.timeToCoordinate(d.p1!.time as UTCTimestamp);
+          if (x === null) return [];
+          return [{ id: d.id, x, height, color: d.color }];
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [overlayVersion, drawings]);
+
+    const posOverlays = useMemo(() => {
+      if (!chartRef.current || !mainSeriesRef.current) return [];
+      const tc = chartRef.current.timeScale();
+      const ser = mainSeriesRef.current as ISeriesApi<"Candlestick">;
+      const container = containerRef.current;
+      if (!container) return [];
+      const width = container.clientWidth;
+      return drawings
+        .filter((d) => (d.type === "longpos" || d.type === "shortpos") && d.p1 && d.p2 && d.p3)
+        .flatMap((d) => {
+          const entryY = ser.priceToCoordinate(d.p1!.price);
+          const stopY = ser.priceToCoordinate(d.p2!.price);
+          const targetY = ser.priceToCoordinate(d.p3!.price);
+          const startX = tc.timeToCoordinate(d.p1!.time as UTCTimestamp) ?? 0;
+          if (entryY === null || stopY === null || targetY === null) return [];
+          return [{
+            id: d.id,
+            entryY, stopY, targetY,
+            x: startX, width: width - startX,
+          }];
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [overlayVersion, drawings]);
+
     const cursor = activeTool === "cursor" ? "default" : activeTool === "eraser" ? "not-allowed" : "crosshair";
+
+    const hasSvgOverlays = rectOverlays.length > 0 || vlineOverlays.length > 0 || posOverlays.length > 0;
 
     return (
       <div className="w-full h-full relative">
         <div ref={containerRef} className="absolute inset-0" style={{ cursor }} />
-        {rectOverlays.length > 0 && (
+        {hasSvgOverlays && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
             {rectOverlays.map((r) => (
               <rect
@@ -612,6 +654,29 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
                 x={r.x} y={r.y} width={r.w} height={r.h}
                 fill={r.color + "22"} stroke={r.color} strokeWidth={1}
               />
+            ))}
+            {vlineOverlays.map((v) => (
+              <line
+                key={v.id}
+                x1={v.x} y1={0} x2={v.x} y2={v.height}
+                stroke={v.color} strokeWidth={1} strokeDasharray="4 2"
+              />
+            ))}
+            {posOverlays.map((p) => (
+              <g key={p.id}>
+                {/* stop loss fill (red) */}
+                <rect
+                  x={p.x} y={Math.min(p.entryY, p.stopY)}
+                  width={p.width} height={Math.abs(p.stopY - p.entryY)}
+                  fill="rgba(239,68,68,0.20)"
+                />
+                {/* target fill (green) */}
+                <rect
+                  x={p.x} y={Math.min(p.entryY, p.targetY)}
+                  width={p.width} height={Math.abs(p.targetY - p.entryY)}
+                  fill="rgba(34,197,94,0.15)"
+                />
+              </g>
             ))}
           </svg>
         )}
