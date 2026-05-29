@@ -6,12 +6,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
 from app.db.models.users import User
 from app.db.models.profile import UserProfile
 from app.db.models.learn import UserProgress
+from app.db.models.watchlist import Watchlist, WatchlistItem
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
@@ -84,6 +86,23 @@ def complete_onboarding(
             progress = UserProgress(user_id=current_user.id, xp=WELCOME_XP, level=1)
             db.add(progress)
         xp_granted = WELCOME_XP
+
+    # Seed default watchlists if user has none
+    existing = db.execute(select(Watchlist).where(Watchlist.user_id == current_user.id)).scalars().all()
+    if not existing:
+        defaults = [
+            ("Top Tech", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AMD", "AVGO", "ORCL"]),
+            ("Dividend Aristocrats", ["JNJ", "KO", "PG", "MCD", "WMT", "CL", "T", "VZ", "XOM", "PEP"]),
+            ("Crypto Majors", ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD", "AVAX-USD", "DOT-USD"]),
+            ("S&P 500 Giants", ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO", "ARKK", "XLF", "XLE", "XLK"]),
+            ("My Watchlist", []),  # empty personal list
+        ]
+        for list_name, symbols in defaults:
+            wl = Watchlist(name=list_name, user_id=current_user.id)
+            db.add(wl)
+            db.flush()
+            for sym in symbols:
+                db.add(WatchlistItem(watchlist_id=wl.id, symbol=sym))
 
     db.commit()
     return {"ok": True, "xp_granted": xp_granted}
