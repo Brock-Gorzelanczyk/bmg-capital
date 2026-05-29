@@ -1,12 +1,9 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, LayoutGrid } from "lucide-react";
-// react-grid-layout uses CommonJS export=; named imports fail with TS2614
-import ReactGridLayout from "react-grid-layout";
+import { Responsive, useContainerWidth, type LayoutItem } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { Responsive, WidthProvider } = ReactGridLayout as any;
 
 import { getWorkspaces, createWorkspace, updateWorkspace } from "@/api/workspace";
 import { useWidgetStore } from "@/store/widgetStore";
@@ -24,8 +21,6 @@ import DailyRecapWidget from "@/components/widgets/impl/DailyRecapWidget";
 import SectorPerformanceWidget from "@/components/widgets/impl/SectorPerformanceWidget";
 import MarketNewsWidget from "@/components/widgets/impl/MarketNewsWidget";
 import { useState } from "react";
-
-const ResponsiveGridLayout = WidthProvider(Responsive);
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
   "morning-brief": MorningBriefWidget,
@@ -58,6 +53,7 @@ export default function Dashboard() {
 
   const [libraryOpen, setLibraryOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { containerRef, width, mounted } = useContainerWidth();
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0];
 
@@ -112,7 +108,7 @@ export default function Dashboard() {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [activeWorkspace?.layout, activeWorkspace?.widgets, saveToBackend]);
 
-  function handleLayoutChange(layout: { i: string; x: number; y: number; w: number; h: number }[]) {
+  function handleLayoutChange(layout: LayoutItem[]) {
     if (!activeWorkspace) return;
     updateLayout(activeWorkspace.id, layout);
   }
@@ -192,44 +188,49 @@ export default function Dashboard() {
           </button>
         </div>
       ) : (
-        <ResponsiveGridLayout
-          className="layout"
-          layouts={layouts}
-          breakpoints={{ lg: 1200, md: 768, sm: 480, xs: 0 }}
-          cols={{ lg: 12, md: 8, sm: 4, xs: 2 }}
-          rowHeight={80}
-          isDraggable={editMode}
-          isResizable={editMode}
-          draggableHandle=".widget-drag-handle"
-          onLayoutChange={handleLayoutChange}
-          margin={[16, 16]}
-          containerPadding={[0, 0]}
-          useCSSTransforms
-        >
-          {activeWorkspace.widgets.map((inst) => {
-            const def = WIDGET_REGISTRY[inst.widgetId];
-            const WidgetComp = WIDGET_COMPONENTS[inst.widgetId];
-            const title = def?.name ?? inst.widgetId;
+        <div ref={containerRef}>
+          {mounted && (
+            <Responsive
+              width={width}
+              className="layout"
+              layouts={layouts}
+              breakpoints={{ lg: 1200, md: 768, sm: 480, xs: 0 }}
+              cols={{ lg: 12, md: 8, sm: 4, xs: 2 }}
+              rowHeight={80}
+              isDraggable={editMode}
+              isResizable={editMode}
+              draggableHandle=".widget-drag-handle"
+              onLayoutChange={handleLayoutChange}
+              margin={[16, 16]}
+              containerPadding={[0, 0]}
+              useCSSTransforms
+            >
+              {activeWorkspace.widgets.map((inst) => {
+                const def = WIDGET_REGISTRY[inst.widgetId];
+                const WidgetComp = WIDGET_COMPONENTS[inst.widgetId];
+                const title = def?.name ?? inst.widgetId;
 
-            return (
-              <div key={inst.id}>
-                <WidgetFrame
-                  title={title}
-                  instanceId={inst.id}
-                  editMode={editMode}
-                  onRemove={() => handleRemoveWidget(inst.id)}
-                  className="h-full"
-                >
-                  {WidgetComp ? (
-                    <WidgetComp />
-                  ) : (
-                    <ComingSoonWidget name={title} />
-                  )}
-                </WidgetFrame>
-              </div>
-            );
-          })}
-        </ResponsiveGridLayout>
+                return (
+                  <div key={inst.id}>
+                    <WidgetFrame
+                      title={title}
+                      instanceId={inst.id}
+                      editMode={editMode}
+                      onRemove={() => handleRemoveWidget(inst.id)}
+                      className="h-full"
+                    >
+                      {WidgetComp ? (
+                        <WidgetComp />
+                      ) : (
+                        <ComingSoonWidget name={title} />
+                      )}
+                    </WidgetFrame>
+                  </div>
+                );
+              })}
+            </Responsive>
+          )}
+        </div>
       )}
 
       {/* Widget library modal */}
