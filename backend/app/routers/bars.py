@@ -38,8 +38,12 @@ YF_MAX_DAYS: dict[str, int] = {
 # Timeframes that support indicator warm-up (daily and coarser only)
 DAILY_TIMEFRAMES = {"1Day", "1Week", "1Month"}
 
-# Calendar-day multiplier: 200 trading days * 1.6 ≈ 320 calendar days (safe buffer)
-_CALENDAR_MULT = 1.6
+# Calendar days per bar for each timeframe (with a ~10% buffer baked in)
+_DAYS_PER_BAR: dict[str, float] = {
+    "1Day":   1.5,   # ~1 trading day = 1.4 calendar days; +buffer
+    "1Week":  7.5,   # 1 week = 7 calendar days; +buffer
+    "1Month": 33.0,  # ~1 month = 30-31 calendar days; +buffer
+}
 
 
 def _max_indicator_lookback(indicators_str: Optional[str]) -> int:
@@ -168,7 +172,8 @@ async def get_bars(
         if start and timeframe in DAILY_TIMEFRAMES:
             lookback = _max_indicator_lookback(indicators)
             if lookback > 0:
-                extra_days = math.ceil(lookback * _CALENDAR_MULT)
+                days_per_bar = _DAYS_PER_BAR.get(timeframe, 1.5)
+                extra_days = math.ceil(lookback * days_per_bar)
                 warmup_start = start_dt - timedelta(days=extra_days)
                 warmup_key = f"__warmup_{symbol}_{timeframe}_{warmup_start.date().isoformat()}_{start_str}"
                 warmup_cached = get_cached(symbol, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str)

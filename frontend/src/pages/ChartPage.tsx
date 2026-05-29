@@ -162,6 +162,7 @@ export default function ChartPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [symbol, setSymbol] = useState(() => searchParams.get("symbol") ?? getStoredSymbol());
   const [period, setPeriod] = useState<Period>("1Y");
+  const [userPickedPeriod, setUserPickedPeriod] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("candle");
   // Initialize with preset indicators immediately so the first useBars call includes them
   const [activeIndicators, setActiveIndicators] = useState<Set<string>>(() => {
@@ -213,16 +214,17 @@ export default function ChartPage() {
     return undefined;
   }, [searchParams]);
 
-  // Derive timeframe + start date from period, or from trade levels when viewing a historical trade
+  // Derive timeframe + start date from period, or from trade levels on initial load.
+  // Once the user explicitly picks a period button, always honour their selection.
   const { timeframe, start } = useMemo(() => {
-    if (tradeLevels?.entryDate) {
+    if (tradeLevels?.entryDate && !userPickedPeriod) {
       const d = new Date(tradeLevels.entryDate);
       d.setDate(d.getDate() - 30);
       return { timeframe: "1Day", start: d.toISOString().slice(0, 10) };
     }
     const cfg = PERIOD_CONFIGS[period];
     return { timeframe: cfg.timeframe, start: cfg.getStart() };
-  }, [period, tradeLevels]);
+  }, [period, tradeLevels, userPickedPeriod]);
   const presetIndsRef = useRef<string[]>([]);
   const [presetActive, setPresetActive] = useState(true);
   const [showPresetBanner, setShowPresetBanner] = useState(!!presetKey);
@@ -713,7 +715,7 @@ export default function ChartPage() {
       {/* Bottom bar — period selector + status */}
       <TvBottomBar
         period={period}
-        onPeriodChange={setPeriod}
+        onPeriodChange={(p) => { setPeriod(p); setUserPickedPeriod(true); }}
         symbol={symbol}
         displayPrice={displayBar?.close}
         displayVolume={displayBar?.volume}
