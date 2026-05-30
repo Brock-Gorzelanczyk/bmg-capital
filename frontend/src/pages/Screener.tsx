@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen, parseNaturalLanguage } from "@/api/screener";
+import { getSectorPerformance } from "@/api/discovery";
 import type { FilterConfig, ScreenResult } from "@/types/screener";
 import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
-import { Play, Plus, Trash2, TrendingUp, BarChart2, ArrowDownUp, Zap, Info, Bookmark, BookmarkCheck, X, Sparkles, Loader2 } from "lucide-react";
+import { Play, Plus, Trash2, TrendingUp, BarChart2, ArrowDownUp, Zap, Info, Bookmark, BookmarkCheck, X, Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { TICKER_NAMES } from "@/data/tickerNames";
 import SectorPill from "@/components/ui/SectorPill";
 
@@ -192,6 +193,12 @@ export default function Screener() {
   const { data: savedScreens = [] } = useQuery({
     queryKey: ["saved-screens"],
     queryFn: getSavedScreens,
+  });
+
+  const { data: sectorData, isLoading: sectorsLoading, refetch: refetchSectors, isFetching: sectorsFetching } = useQuery({
+    queryKey: ["sectors"],
+    queryFn: getSectorPerformance,
+    staleTime: 60_000,
   });
 
   const saveMut = useMutation({
@@ -448,6 +455,70 @@ export default function Screener() {
           Scanning 500+ stocks...
         </div>
       )}
+
+      {/* Sector heatmap — shown when no screen has been run yet */}
+      {!loading && !ran && (() => {
+        const sectors = sectorData?.sectors ?? [];
+        const max = Math.max(...sectors.map((s) => Math.abs(s.change_pct)), 0.01);
+        function heatColor(pct: number, maxVal: number): string {
+          const intensity = Math.min(Math.abs(pct) / maxVal, 1);
+          if (pct > 0) {
+            const g = Math.round(100 + intensity * 100);
+            return `rgb(0, ${g}, 60)`;
+          }
+          const r = Math.round(100 + intensity * 120);
+          return `rgb(${r}, 0, 30)`;
+        }
+        return (
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Sector Performance</h3>
+                <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Run a screen above or explore sector performance</p>
+              </div>
+              <button
+                onClick={() => refetchSectors()}
+                className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                <RefreshCw size={13} className={sectorsFetching ? "animate-spin" : ""} />
+              </button>
+            </div>
+            {sectorsLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {[...Array(11)].map((_, i) => (
+                  <div key={i} className="h-20 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : sectors.length === 0 ? (
+              <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">
+                Sector data unavailable — add Alpaca API keys to enable live data
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {sectors
+                  .slice()
+                  .sort((a, b) => b.change_pct - a.change_pct)
+                  .map((s) => (
+                    <div
+                      key={s.sector}
+                      className="rounded-xl p-3 flex flex-col gap-1 transition-transform hover:scale-[1.02] cursor-default"
+                      style={{ backgroundColor: heatColor(s.change_pct, max) }}
+                    >
+                      <div className="text-[var(--text-primary)] font-semibold text-sm leading-tight">{s.sector}</div>
+                      <div className="text-[var(--text-primary)]/70 text-[11px] font-mono">{s.symbol}</div>
+                      <div className="flex items-center justify-between mt-auto">
+                        <span className="text-[var(--text-primary)]/80 text-xs font-mono">${s.price.toFixed(2)}</span>
+                        <span className="text-[var(--text-primary)] font-bold text-sm">
+                          {(s.change_pct >= 0 ? "+" : "") + s.change_pct.toFixed(2) + "%"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Results */}
       {!loading && ran && (
