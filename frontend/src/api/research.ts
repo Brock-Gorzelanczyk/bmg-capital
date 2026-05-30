@@ -51,6 +51,16 @@ export interface Fundamentals {
   analyst_high?: number;
   recommendation?: string;
   num_analysts?: number;
+  financials?: {
+    quarterly: Array<{
+      period: string;
+      revenue: number | null;
+      gross_profit: number | null;
+      operating_income: number | null;
+      net_income: number | null;
+      eps: number | null;
+    }>;
+  } | null;
 }
 
 export async function getFundamentals(symbol: string): Promise<Fundamentals> {

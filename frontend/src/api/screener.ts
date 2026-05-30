@@ -1,5 +1,5 @@
 import client from "./client";
-import type { FilterConfig, ScreenResult } from "@/types/screener";
+import type { FilterConfig, FilterChip, ScreenResult } from "@/types/screener";
 
 export async function runScreen(filters: FilterConfig[]): Promise<ScreenResult[]> {
   const { data } = await client.post<{ results: ScreenResult[]; count: number }>("/screener/run", { filters });
@@ -35,4 +35,14 @@ export async function saveScreen(name: string, filters: FilterConfig[]): Promise
 
 export async function deleteSavedScreen(id: number): Promise<void> {
   await client.delete(`/screens/${id}`);
+}
+
+export interface NLParseResult {
+  filters: FilterChip[];
+  explanation: string;
+}
+
+export async function parseNaturalLanguage(query: string): Promise<NLParseResult> {
+  const { data } = await client.post<NLParseResult>("/screener/parse-natural-language", { query });
+  return data;
 }

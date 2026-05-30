@@ -4,6 +4,13 @@ export interface FilterConfig {
   value: string | number | boolean;
 }
 
+export interface FilterChip {
+  field: string;
+  operator: string;
+  value: string | number;
+  label: string;
+}
+
 export interface ScreenResult {
   symbol: string;
   price: number;

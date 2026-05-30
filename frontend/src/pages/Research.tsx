@@ -66,6 +66,108 @@ function timeAgo(dateStr: string) {
   return `${m}m ago`;
 }
 
+// ── Financials tab ────────────────────────────────────────────────────────────
+
+interface QuarterRow {
+  period: string;
+  revenue: number | null;
+  gross_profit: number | null;
+  operating_income: number | null;
+  net_income: number | null;
+  eps: number | null;
+}
+
+interface FinancialsTabProps {
+  financials: { quarterly: QuarterRow[] } | null;
+}
+
+function fmtFinVal(v: number | null): string {
+  if (v == null) return "—";
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
+  return `${sign}$${abs.toLocaleString()}`;
+}
+
+function fmtEps(v: number | null): string {
+  if (v == null) return "—";
+  return `$${v.toFixed(2)}`;
+}
+
+function pctChange(current: number | null, prior: number | null): number | null {
+  if (current == null || prior == null || prior === 0) return null;
+  return ((current - prior) / Math.abs(prior)) * 100;
+}
+
+function FinancialsTab({ financials }: FinancialsTabProps) {
+  if (!financials || !financials.quarterly || financials.quarterly.length === 0) {
+    return (
+      <div className="py-12 text-center text-[var(--text-tertiary)]">Financial data unavailable.</div>
+    );
+  }
+
+  const quarters = financials.quarterly; // newest first
+
+  const rows: { key: keyof QuarterRow; label: string; fmt: (v: number | null) => string }[] = [
+    { key: "revenue", label: "Revenue", fmt: fmtFinVal },
+    { key: "gross_profit", label: "Gross Profit", fmt: fmtFinVal },
+    { key: "operating_income", label: "Operating Income", fmt: fmtFinVal },
+    { key: "net_income", label: "Net Income", fmt: fmtFinVal },
+    { key: "eps", label: "EPS", fmt: fmtEps },
+  ];
+
+  return (
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+        <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Income Statement — Last {quarters.length} Quarters</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-tertiary)] uppercase tracking-wide">
+              <th className="text-left px-4 py-2 whitespace-nowrap">Metric</th>
+              {quarters.map((q) => (
+                <th key={q.period} className="text-right px-4 py-2 whitespace-nowrap">{q.period}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ key, label, fmt }) => (
+              <tr key={key} className="border-b border-[var(--border-subtle)]/50">
+                <td className="px-4 py-3 text-[var(--text-tertiary)] text-xs font-medium whitespace-nowrap">{label}</td>
+                {quarters.map((q, qi) => {
+                  const val = q[key] as number | null;
+                  const prior = quarters[qi + 1]?.[key] as number | null | undefined;
+                  const chg = pctChange(val, prior ?? null);
+                  const isUp = chg != null && chg > 0;
+                  const isDown = chg != null && chg < 0;
+                  return (
+                    <td key={q.period} className="px-4 py-3 text-right">
+                      <div className={cn(
+                        "font-semibold text-sm",
+                        isUp ? "text-[#26a69a]" : isDown ? "text-[#ef5350]" : "text-[var(--text-primary)]"
+                      )}>
+                        {fmt(val)}
+                      </div>
+                      {chg != null && (
+                        <div className={cn("text-[10px] mt-0.5", isUp ? "text-[#26a69a]" : "text-[#ef5350]")}>
+                          {isUp ? "+" : ""}{chg.toFixed(1)}% YoY
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 const RECOMMENDATION_COLOR: Record<string, string> = {
   "strong_buy": "text-[var(--accent-positive)]",
   "buy": "text-green-400",
@@ -83,6 +185,8 @@ async function rewriteContent(content: string, level: ReadingLevel, context: str
   return res.data.rewritten as string;
 }
 
+type ResearchTab = "overview" | "financials" | "news";
+
 export default function Research() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -93,6 +197,7 @@ export default function Research() {
   const [descCache, setDescCache] = useState<Map<string, string>>(new Map());
   const [rewritingDesc, setRewritingDesc] = useState(false);
   const activeRewriteKey = useRef<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ResearchTab>("overview");
 
   const quotes = useMarketStore((s) => s.quotes);
   const liveQuote = activeSymbol ? quotes[activeSymbol] : null;
@@ -209,6 +314,26 @@ export default function Research() {
 
       {fund && !error && (
         <div className="space-y-5">
+          {/* Tab row */}
+          <div className="flex items-center gap-1 border-b border-[var(--border-subtle)] pb-0">
+            {(["overview", "financials", "news"] as ResearchTab[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors",
+                  activeTab === tab
+                    ? "border-[var(--accent-positive)] text-[var(--text-primary)]"
+                    : "border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* ── OVERVIEW TAB ── */}
+          {activeTab === "overview" && <>
           {/* Header */}
           <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-5">
             <div className="flex items-start justify-between gap-4 flex-wrap sm:flex-nowrap">
@@ -353,13 +478,20 @@ export default function Research() {
               </p>
             </div>
           )}
+          </> /* end overview tab */}
 
-          {/* News */}
-          {news.length > 0 && (
-            <div>
-              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Recent News</h2>
-              <div className="space-y-2">
-                {news.slice(0, 5).map((a: any) => (
+          {/* ── FINANCIALS TAB ── */}
+          {activeTab === "financials" && (
+            <FinancialsTab financials={fund.financials ?? null} />
+          )}
+
+          {/* ── NEWS TAB ── */}
+          {activeTab === "news" && (
+            <div className="space-y-2">
+              {news.length === 0 ? (
+                <div className="py-12 text-center text-[var(--text-tertiary)]">No recent news found.</div>
+              ) : (
+                news.map((a: any) => (
                   <a
                     key={a.id}
                     href={a.url}
@@ -368,17 +500,17 @@ export default function Research() {
                     className="flex items-start gap-3 p-3 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-emphasis)] transition-colors group"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-[var(--text-primary)] font-medium line-clamp-2 group-hover:text-[var(--text-primary)]">{a.headline}</div>
+                      <div className="text-sm text-[var(--text-primary)] font-medium line-clamp-2">{a.headline}</div>
                       <div className="flex items-center gap-2 mt-1 text-[11px] text-[var(--text-tertiary)]">
                         <span>{a.source}</span>
                         <span>·</span>
                         <span>{timeAgo(a.published_at)}</span>
                       </div>
                     </div>
-                    <ExternalLink size={13} className="text-[var(--text-tertiary)] group-hover:text-[var(--text-tertiary)] shrink-0 mt-0.5" />
+                    <ExternalLink size={13} className="text-[var(--text-tertiary)] shrink-0 mt-0.5" />
                   </a>
-                ))}
-              </div>
+                ))
+              )}
             </div>
           )}
         </div>

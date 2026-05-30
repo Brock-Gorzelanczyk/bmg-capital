@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen } from "@/api/screener";
+import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen, parseNaturalLanguage } from "@/api/screener";
 import type { FilterConfig, ScreenResult } from "@/types/screener";
 import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
-import { Play, Plus, Trash2, TrendingUp, BarChart2, ArrowDownUp, Zap, Info, Bookmark, BookmarkCheck, X } from "lucide-react";
+import { Play, Plus, Trash2, TrendingUp, BarChart2, ArrowDownUp, Zap, Info, Bookmark, BookmarkCheck, X, Sparkles, Loader2 } from "lucide-react";
 import { TICKER_NAMES } from "@/data/tickerNames";
 import SectorPill from "@/components/ui/SectorPill";
 
@@ -168,6 +168,27 @@ export default function Screener() {
   const [saveNameInput, setSaveNameInput] = useState("");
   const [showSaveForm, setShowSaveForm] = useState(false);
 
+  const [nlQuery, setNlQuery] = useState("");
+  const [nlParsing, setNlParsing] = useState(false);
+  const [nlExplanation, setNlExplanation] = useState<string | null>(null);
+
+  const handleNLSearch = async () => {
+    if (!nlQuery.trim() || nlParsing) return;
+    setNlParsing(true);
+    setNlExplanation(null);
+    try {
+      const result = await parseNaturalLanguage(nlQuery.trim());
+      if (result.filters.length > 0) {
+        setFilters(result.filters.map((f) => ({ field: f.field, operator: f.operator, value: f.value })));
+        setNlExplanation(result.explanation);
+      }
+    } catch {
+      // silently ignore — user can retry
+    } finally {
+      setNlParsing(false);
+    }
+  };
+
   const { data: savedScreens = [] } = useQuery({
     queryKey: ["saved-screens"],
     queryFn: getSavedScreens,
@@ -237,6 +258,33 @@ export default function Screener() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-[var(--text-primary)]">Stock Screener</h2>
         <span className="text-xs text-[var(--text-tertiary)]">Universe: 500+ stocks</span>
+      </div>
+
+      {/* Natural language input */}
+      <div className="space-y-2">
+        <div className="relative">
+          <input
+            value={nlQuery}
+            onChange={e => setNlQuery(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleNLSearch()}
+            placeholder='Try: "show me tech stocks with RSI under 30 and rising volume"'
+            className="w-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-sm text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-positive)] pr-24"
+          />
+          <button
+            onClick={handleNLSearch}
+            disabled={nlParsing || !nlQuery.trim()}
+            className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-positive)] text-black text-xs font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+          >
+            {nlParsing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            {nlParsing ? "Parsing…" : "Search"}
+          </button>
+        </div>
+        {nlExplanation && (
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
+            <Sparkles size={11} className="text-[var(--accent-positive)] shrink-0" />
+            <span><span className="text-[var(--text-secondary)] font-medium">Interpreted as:</span> {nlExplanation}</span>
+          </div>
+        )}
       </div>
 
       {/* Strategy category cards */}

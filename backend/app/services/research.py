@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yfinance as yf
 
@@ -16,11 +16,50 @@ def _safe_get(info: dict, key: str, default=None):
     return val
 
 
+def _extract_quarterly_financials(ticker: yf.Ticker) -> Optional[List[Dict[str, Any]]]:
+    """Extract last 4 quarters of income-statement data from yfinance."""
+    try:
+        df = ticker.quarterly_financials
+        if df is None or df.empty:
+            return None
+
+        # Rows we care about — yfinance uses these exact index labels
+        row_map = {
+            "Total Revenue": "revenue",
+            "Gross Profit": "gross_profit",
+            "Operating Income": "operating_income",
+            "Net Income": "net_income",
+            "Basic EPS": "eps",
+        }
+
+        # Take the four most-recent columns (columns are sorted newest-first)
+        cols = list(df.columns[:4])
+        quarters: List[Dict[str, Any]] = []
+        for col in cols:
+            period_label = col.strftime("%b %Y") if hasattr(col, "strftime") else str(col)
+            entry: Dict[str, Any] = {"period": period_label}
+            for yf_label, our_key in row_map.items():
+                if yf_label in df.index:
+                    raw = df.loc[yf_label, col]
+                    try:
+                        entry[our_key] = float(raw) if raw is not None else None
+                    except (TypeError, ValueError):
+                        entry[our_key] = None
+                else:
+                    entry[our_key] = None
+            quarters.append(entry)
+        return quarters if quarters else None
+    except Exception as e:
+        logger.warning(f"Could not fetch quarterly financials: {e}")
+        return None
+
+
 async def get_fundamentals(symbol: str) -> Dict[str, Any]:
     """Fetch company fundamentals from yfinance."""
     def _fetch() -> dict:
         ticker = yf.Ticker(symbol)
         info = ticker.info
+        quarterly = _extract_quarterly_financials(ticker)
         return {
             "symbol": symbol.upper(),
             "name": _safe_get(info, "longName") or _safe_get(info, "shortName") or symbol,
@@ -77,6 +116,7 @@ async def get_fundamentals(symbol: str) -> Dict[str, Any]:
             "analyst_high": _safe_get(info, "targetHighPrice"),
             "recommendation": _safe_get(info, "recommendationKey"),
             "num_analysts": _safe_get(info, "numberOfAnalystOpinions"),
+            "financials": {"quarterly": quarterly} if quarterly else None,
         }
 
     try:
