@@ -89,7 +89,7 @@ def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1d", limit: int = 5
         for sym in missing:
             yf_sym = sym.replace("/", "-").replace("USDT", "USD")
             try:
-                df = yf.download(yf_sym, period="1y", interval="1d", progress=False, auto_adjust=True)
+                df = yf.download(yf_sym, period="2y", interval="1d", progress=False, auto_adjust=True)
                 if df.empty:
                     continue
                 df.columns = [c.lower() for c in df.columns]
@@ -259,8 +259,8 @@ def _apply_crypto_filters(df: pd.DataFrame, filter_specs: list[dict], symbol: st
                 days_since   = (today - last_halving).days
                 days_to      = (next_halving - today).days
                 active = (
-                    ("pre_halving"      in phases and days_to <= 180) or
-                    ("post_halving_bull" in phases and 0 <= days_since <= 540)
+                    ("pre_halving"       in phases and days_to <= 365) or
+                    ("post_halving_bull" in phases and 0 <= days_since <= 730)
                 )
                 if not active:
                     return False

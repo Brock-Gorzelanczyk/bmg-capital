@@ -1183,17 +1183,20 @@ function CryptoStrategyPanel() {
   const { data: tradesData } = useQuery({
     queryKey: ["crypto-strategy-trades"],
     queryFn: getCryptoStrategyTrades,
-    staleTime: Infinity,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
   });
   const { data: candidatesData } = useQuery({
     queryKey: ["crypto-strategy-candidates"],
     queryFn: getCryptoStrategyCandidates,
-    staleTime: Infinity,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
   });
   const { data: summaryData } = useQuery({
     queryKey: ["crypto-strategy-summary"],
     queryFn: getCryptoStrategySummary,
-    staleTime: Infinity,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
   });
 
   const open      = (tradesData?.trades ?? []).filter((t) => t.status === "open");
@@ -1206,14 +1209,17 @@ function CryptoStrategyPanel() {
     setRunStatus(null);
     try {
       await runCryptoStrategyNow();
-      setRunStatus({ ok: true, msg: "Scan started — data refreshes in ~2 min" });
-      toast.success("Crypto scan started — results update in ~2 minutes", { duration: 8000 });
-      setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] });
-        qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] });
-        qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] });
-        setRunStatus(null);
-      }, 120_000);
+      setRunStatus({ ok: true, msg: "Scanning… results update in ~30 seconds" });
+      toast.success("Crypto scan started — results update shortly", { duration: 5000 });
+      // Invalidate at 30s, 60s, and 90s to catch scan completion quickly
+      [30_000, 60_000, 90_000].forEach((delay, i) => {
+        setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] });
+          qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] });
+          qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] });
+          if (i === 2) setRunStatus(null);
+        }, delay);
+      });
     } catch (e: any) {
       const detail = e?.response?.data?.detail ?? e?.message ?? "Unknown error";
       setRunStatus({ ok: false, msg: `Scan failed: ${detail}` });
@@ -1498,12 +1504,12 @@ function StrategyCardGrid({
   const { data: defsData, isLoading } = useQuery({
     queryKey: ["crypto-strategy-definitions"],
     queryFn: getCryptoStrategyDefinitions,
-    staleTime: Infinity,
+    staleTime: 300_000,
   });
   const { data: summaryData } = useQuery({
     queryKey: ["crypto-strategy-summary"],
     queryFn: getCryptoStrategySummary,
-    staleTime: Infinity,
+    staleTime: 60_000,
   });
 
   const byPreset = useMemo(() => {
