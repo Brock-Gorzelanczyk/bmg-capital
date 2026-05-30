@@ -9,7 +9,9 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Info,
+  Bot,
 } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { cn } from "@/lib/utils";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import api from "@/api/client";
@@ -589,6 +591,7 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
 
 export default function DeFi() {
   const [activeTab, setActiveTab] = useState<Tab>("staking");
+  const [aiOpen, setAiOpen] = useState(false);
 
   const stakingQuery = useQuery({
     queryKey: ["defi-staking"],
@@ -659,11 +662,19 @@ export default function DeFi() {
   return (
     <div className="max-w-6xl mx-auto space-y-5 pb-10">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)] font-[var(--font-display)]">DeFi Dashboard</h1>
-        <p className="text-[var(--text-tertiary)] text-sm mt-1">
-          Live staking rates, lending markets, and top yield opportunities
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] font-[var(--font-display)]">DeFi Dashboard</h1>
+          <p className="text-[var(--text-tertiary)] text-sm mt-1">
+            Live staking rates, lending markets, and top yield opportunities
+          </p>
+        </div>
+        <button
+          onClick={() => setAiOpen(true)}
+          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
+        >
+          <Bot size={12} /> Ask AI
+        </button>
       </div>
 
       {/* Disclaimer banner */}
@@ -703,6 +714,20 @@ export default function DeFi() {
       {activeTab === "yields" && (
         <YieldsTab yields={yieldsData} isLoading={isLoadingYields} />
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about DeFi"
+        context="DeFi Dashboard — staking, lending, and yield opportunities"
+        suggestedQuestions={[
+          "What's the risk difference between staking and lending?",
+          "How do I compare APY vs APR in DeFi?",
+          "Which DeFi protocols are considered safest for staking?",
+          "What is impermanent loss and how does it affect yields?",
+          "How do I evaluate smart contract risk before depositing?",
+        ]}
+      />
     </div>
   );
 }

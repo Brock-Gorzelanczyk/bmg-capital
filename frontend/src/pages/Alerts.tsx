@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAlerts, createAlert, deleteAlert, getTriggers, testAlert } from "@/api/alerts";
-import { Trash2, Plus, Zap, Bell, BellOff, Clock } from "lucide-react";
+import { Trash2, Plus, Zap, Bell, BellOff, Clock, Bot } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { COMPANY_INFO } from "@/data/companyInfo";
 import SectorPill from "@/components/ui/SectorPill";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ export default function Alerts() {
   const { data: triggers = [] } = useQuery({ queryKey: ["triggers"], queryFn: getTriggers, refetchInterval: 30_000 });
   const [form, setForm] = useState({ symbol: "", signal_type: "rsi_oversold", threshold: "" });
   const [showCreate, setShowCreate] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const createMut = useMutation({
     mutationFn: () => createAlert(
@@ -67,12 +69,20 @@ export default function Alerts() {
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Alerts</h1>
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Get notified when technical signals fire</p>
         </div>
-        <button
-          onClick={() => setShowCreate((s) => !s)}
-          className="flex items-center gap-1.5 bg-[var(--accent-positive)] hover:brightness-110 text-[var(--text-primary)] font-semibold text-sm px-3 py-1.5 rounded-lg"
-        >
-          <Plus size={14} /> New Alert
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Bot size={12} /> Ask AI
+          </button>
+          <button
+            onClick={() => setShowCreate((s) => !s)}
+            className="flex items-center gap-1.5 bg-[var(--accent-positive)] hover:brightness-110 text-[var(--text-primary)] font-semibold text-sm px-3 py-1.5 rounded-lg"
+          >
+            <Plus size={14} /> New Alert
+          </button>
+        </div>
       </div>
 
       {/* Create form */}
@@ -227,6 +237,20 @@ export default function Alerts() {
           })
         )}
       </div>
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Alerts"
+        context="Technical Alerts — RSI, MACD, moving averages, volume signals"
+        suggestedQuestions={[
+          "What does RSI oversold actually mean for a trade?",
+          "How reliable is the Golden Cross signal historically?",
+          "When should I act on a MACD bearish crossover?",
+          "What's a good alert setup for momentum breakouts?",
+          "How do I avoid false signals from volume breakouts?",
+        ]}
+      />
     </div>
   );
 }
