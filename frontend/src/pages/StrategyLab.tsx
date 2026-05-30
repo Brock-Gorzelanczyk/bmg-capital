@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   FlaskConical, X, Play, TrendingUp, TrendingDown, AlertTriangle,
   Eye, Clock, CheckCircle2, RefreshCw, RotateCw, ExternalLink, BarChart2, Info,
-  Calendar, Search,
+  Calendar, Search, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -25,6 +25,7 @@ import TickerScanPanel from "@/components/strategy/TickerScanPanel";
 import ExplainButton from "@/components/explain/ExplainButton";
 import DailyRecapCard from "@/components/recap/DailyRecapCard";
 import PnlCalendar from "@/components/strategy/PnlCalendar";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
 // ─── Strategy metadata ────────────────────────────────────────────────────────
 
@@ -614,6 +615,7 @@ export default function StrategyLab() {
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(
     () => localStorage.getItem("strategy_last_refreshed")
   );
+  const [aiOpen, setAiOpen] = useState(false);
 
   const { data: tradesData }     = useQuery({ queryKey: ["strategy-trades"],     queryFn: getTrades,     staleTime: Infinity });
   const { data: candidatesData } = useQuery({ queryKey: ["strategy-candidates"], queryFn: getCandidates, staleTime: Infinity });
@@ -737,6 +739,15 @@ export default function StrategyLab() {
         <div className="flex items-center gap-2">
           <MonitorBadge />
           <RegimePill regime={regime} />
+
+          {/* Ask AI */}
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-blue-500/40 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/60 transition-colors"
+          >
+            <Bot size={11} />
+            Ask AI
+          </button>
 
           {/* Scan Ticker */}
           <button
@@ -978,6 +989,19 @@ export default function StrategyLab() {
           }}
         />
       )}
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Strategy Lab AI"
+        context="StrategyLab"
+        suggestedQuestions={[
+          "Explain what this strategy's backtest results mean",
+          "How can I improve the Sharpe ratio of this strategy?",
+          "What are the risks in a mean-reversion strategy?",
+          "How does this strategy perform in bear markets?",
+          "What's a good entry/exit rule for momentum strategies?",
+        ]}
+      />
     </div>
   );
 }

@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Heart, MessageCircle, Trash2, Send, TrendingUp, BookMarked, Users } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { getFeed, createPost, deletePost, toggleLike, getComments, addComment } from "@/api/social";
 import type { SocialPost, SocialComment } from "@/api/social";
+import { COMPANY_INFO } from "@/data/companyInfo";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,85 @@ function timeAgo(iso: string | null) {
 
 function avatar(username: string) {
   return username?.[0]?.toUpperCase() ?? "?";
+}
+
+const TICKER_REGEX = /\$([A-Z]{1,5})/g;
+const MAX_CONTENT = 500;
+
+// ── Render post content with $SYMBOL chips ────────────────────────────────────
+
+function PostContent({ content }: { content: string }) {
+  const navigate = useNavigate();
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(TICKER_REGEX.source, "g");
+
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(<span key={lastIndex}>{content.slice(lastIndex, match.index)}</span>);
+    }
+    const symbol = match[1];
+    parts.push(
+      <button
+        key={match.index}
+        onClick={() => navigate(`/research?symbol=${symbol}`)}
+        className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-teal-500/15 text-teal-400 border border-teal-500/30 font-mono text-xs font-semibold hover:bg-teal-500/25 hover:border-teal-500/50 transition-colors mx-0.5"
+      >
+        ${symbol}
+      </button>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < content.length) {
+    parts.push(<span key={lastIndex}>{content.slice(lastIndex)}</span>);
+  }
+  return <p className="text-[var(--text-secondary)] text-sm leading-relaxed whitespace-pre-wrap">{parts}</p>;
+}
+
+// ── Trending tickers from feed ────────────────────────────────────────────────
+
+function TrendingTickers({ posts }: { posts: SocialPost[] }) {
+  const navigate = useNavigate();
+  const counts = new Map<string, number>();
+
+  for (const post of posts) {
+    const regex = new RegExp(TICKER_REGEX.source, "g");
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(post.content)) !== null) {
+      const sym = m[1];
+      counts.set(sym, (counts.get(sym) ?? 0) + 1);
+    }
+    if (post.symbol) {
+      counts.set(post.symbol, (counts.get(post.symbol) ?? 0) + 1);
+    }
+  }
+
+  const top = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  if (top.length === 0) return null;
+
+  return (
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+      <p className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-3">
+        Trending in Community
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {top.map(([sym, count]) => (
+          <button
+            key={sym}
+            onClick={() => navigate(`/research?symbol=${sym}`)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400 hover:bg-teal-500/20 hover:border-teal-500/40 transition-colors"
+          >
+            <span className="font-mono text-xs font-semibold">${sym}</span>
+            <span className="text-[10px] text-teal-500/70">{count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Comment thread ────────────────────────────────────────────────────────────
@@ -144,7 +225,7 @@ function PostCard({ post, currentUserId }: { post: SocialPost; currentUserId: nu
       </div>
 
       {/* Content */}
-      <p className="text-[var(--text-secondary)] text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
+      <PostContent content={post.content} />
 
       {/* Actions */}
       <div className="flex items-center gap-4 pt-1 border-t border-[var(--border-subtle)]">
@@ -175,29 +256,98 @@ function PostCard({ post, currentUserId }: { post: SocialPost; currentUserId: nu
 
 // ── Compose box ───────────────────────────────────────────────────────────────
 
+const ALL_SYMBOLS = Object.keys(COMPANY_INFO);
+
 function ComposeBox({ onPost }: { onPost: (body: { content: string; symbol?: string; is_memo?: boolean }) => void }) {
   const [content, setContent] = useState("");
   const [symbol, setSymbol] = useState("");
   const [isMemo, setIsMemo] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [tickerQuery, setTickerQuery] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const atRef = useRef<number>(-1);
 
   const submit = () => {
-    if (!content.trim()) return;
+    if (!content.trim() || content.length > MAX_CONTENT) return;
     onPost({ content: content.trim(), symbol: symbol.trim().toUpperCase() || undefined, is_memo: isMemo });
     setContent("");
     setSymbol("");
     setIsMemo(false);
+    setSuggestions([]);
   };
+
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    if (val.length > MAX_CONTENT) return;
+    setContent(val);
+
+    // Detect $TICKER autocomplete trigger
+    const cursor = e.target.selectionStart ?? val.length;
+    const textBeforeCursor = val.slice(0, cursor);
+    const dollarMatch = textBeforeCursor.match(/\$([A-Za-z]*)$/);
+    if (dollarMatch) {
+      const query = dollarMatch[1].toUpperCase();
+      atRef.current = cursor - dollarMatch[0].length;
+      setTickerQuery(query);
+      const matched = ALL_SYMBOLS.filter((s) => s.startsWith(query)).slice(0, 5);
+      setSuggestions(matched);
+    } else {
+      setSuggestions([]);
+      atRef.current = -1;
+    }
+  };
+
+  const insertSuggestion = (sym: string) => {
+    if (atRef.current === -1) return;
+    const before = content.slice(0, atRef.current);
+    const after = content.slice(atRef.current + 1 + tickerQuery.length);
+    const newVal = before + `$${sym}` + after;
+    if (newVal.length <= MAX_CONTENT) setContent(newVal);
+    setSuggestions([]);
+    atRef.current = -1;
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  const remaining = MAX_CONTENT - content.length;
 
   return (
     <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
-      <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && e.metaKey) submit(); }}
-        placeholder="Share a trade idea or market thought… (⌘+Enter to post)"
-        rows={3}
-        className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2.5 rounded-xl focus:outline-none focus:border-[#3B82F6] resize-none placeholder-[#475569]"
-      />
+      <div className="relative">
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={handleContentChange}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setSuggestions([]);
+            if (e.key === "Enter" && e.metaKey) submit();
+          }}
+          placeholder="Share a trade idea or market thought… (⌘+Enter to post)"
+          rows={3}
+          className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2.5 rounded-xl focus:outline-none focus:border-[#3B82F6] resize-none placeholder-[#475569]"
+        />
+        {/* Character counter */}
+        <span className={cn(
+          "absolute bottom-3 right-3 text-[10px] font-mono pointer-events-none",
+          remaining <= 50 ? (remaining <= 20 ? "text-[var(--accent-negative)]" : "text-[#F59E0B]") : "text-[var(--text-tertiary)]"
+        )}>
+          {remaining}
+        </span>
+        {/* Autocomplete dropdown */}
+        {suggestions.length > 0 && (
+          <div className="absolute left-2 top-full mt-1 z-20 bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl shadow-xl overflow-hidden min-w-[180px]">
+            {suggestions.map((sym) => (
+              <button
+                key={sym}
+                onMouseDown={(e) => { e.preventDefault(); insertSuggestion(sym); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-[var(--bg-elevated-2)] transition-colors"
+              >
+                <span className="font-mono text-xs font-semibold text-teal-400">${sym}</span>
+                <span className="text-[11px] text-[var(--text-tertiary)] truncate">{COMPANY_INFO[sym]?.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="flex items-center gap-3">
         <input
           value={symbol}
@@ -219,7 +369,7 @@ function ComposeBox({ onPost }: { onPost: (body: { content: string; symbol?: str
         </button>
         <button
           onClick={submit}
-          disabled={!content.trim()}
+          disabled={!content.trim() || content.length > MAX_CONTENT}
           className="ml-auto flex items-center gap-2 bg-[var(--accent-positive)] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-[var(--text-primary)] text-sm font-semibold px-4 py-1.5 rounded-xl transition-colors"
         >
           <Send size={13} />
@@ -273,6 +423,9 @@ export default function Social() {
           <span className="text-xs">{posts.length} posts</span>
         </div>
       </div>
+
+      {/* Trending tickers */}
+      {posts.length > 0 && <TrendingTickers posts={posts} />}
 
       {/* Compose */}
       <ComposeBox onPost={postMut.mutate} />
