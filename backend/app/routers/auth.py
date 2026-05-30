@@ -4,7 +4,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import bcrypt as _bcrypt
 from jose import JWTError, jwt
@@ -110,19 +110,41 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
+    from app.db.models.monitoring import LoginAttempt
+
     _check_rate_limit(body.email.lower().strip())
     identifier = body.email.strip()
+    ip = request.client.host if request.client else "unknown"
+
     user = db.query(User).filter(User.email == identifier.lower()).first()
     if not user:
         user = db.query(User).filter(User.username == identifier).first()
     if not user or not _verify_password(body.password, user.hashed_password):
+        # Record failed attempt
+        try:
+            db.add(LoginAttempt(ip_address=ip, email=body.email.lower().strip(), success=False))
+            db.commit()
+        except Exception:
+            db.rollback()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
     if not user.is_active:
+        try:
+            db.add(LoginAttempt(ip_address=ip, email=body.email.lower().strip(), success=False))
+            db.commit()
+        except Exception:
+            db.rollback()
         raise HTTPException(status_code=403, detail="Account disabled")
+
+    # Record successful attempt
+    try:
+        db.add(LoginAttempt(ip_address=ip, email=user.email, success=True))
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return TokenResponse(access_token=_create_token(user), user=_user_dict(user))
 

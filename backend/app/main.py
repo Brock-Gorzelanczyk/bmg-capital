@@ -15,12 +15,13 @@ from app.config import settings
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
 from app.db.models import *  # noqa: F401,F403 — registers all models with Base.metadata
+from app.db.models.monitoring import MonitoringResult, AuditLog, LoginAttempt  # noqa: F401 — ensure monitoring tables are registered
 from app.db.migration import run_migrations
 from app.alpaca.stream import stream_manager
 from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
-from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring
+from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +157,7 @@ app.include_router(copilot.router)
 app.include_router(workspace.router)
 app.include_router(workshop.router)
 app.include_router(monitoring.router)
+app.include_router(gdpr.router)
 
 
 @app.get("/health", tags=["health"])

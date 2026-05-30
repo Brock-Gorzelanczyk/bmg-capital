@@ -11,140 +11,39 @@ import {
   AlertTriangle,
   Clock,
   Zap,
+  Server,
+  Lock,
+  Package,
+  BarChart2,
+  ChevronDown,
+  ChevronUp,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
-// ── API helpers ───────────────────────────────────────────────────────────────
-
-const API_BASE = "/api/monitoring";
-
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem("bmg_token");
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-  const res = await fetch(`${API_BASE}${path}`, { headers, ...options });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
-}
-
-interface HealthResult {
-  db: "ok" | "error";
-  api: "ok" | "error";
-  latency_ms: number;
-  timestamp: string;
-  error?: string;
-}
-
-interface IntegrityCheck {
-  name: string;
-  passed: boolean;
-  detail: string;
-}
-
-interface IntegrityResult {
-  passed: boolean;
-  checks: IntegrityCheck[];
-  timestamp: string;
-}
-
-interface SentinelFinding {
-  priority: "P1" | "P2" | "P3";
-  title: string;
-  description: string;
-  action: string;
-}
-
-interface SentinelResult {
-  findings: SentinelFinding[];
-  generated_at: string | null;
-  message?: string;
-}
-
-interface HistoryResult {
-  history: HealthResult[];
-}
-
-// ── Utility components ────────────────────────────────────────────────────────
-
-function StatusBadge({ ok, label }: { ok: boolean | null; label: string }) {
-  if (ok === null) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)]">
-        <Clock size={10} />
-        {label}
-      </span>
-    );
-  }
-  return ok ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400">
-      <CheckCircle2 size={10} />
-      {label}
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-950 text-red-400">
-      <XCircle size={10} />
-      {label}
-    </span>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: "P1" | "P2" | "P3" }) {
-  const colors = {
-    P1: "bg-red-950 text-red-400 border-red-800",
-    P2: "bg-yellow-950 text-yellow-400 border-yellow-800",
-    P3: "bg-blue-950 text-blue-400 border-blue-800",
-  };
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border",
-        colors[priority]
-      )}
-    >
-      {priority}
-    </span>
-  );
-}
-
-function SectionCard({
-  title,
-  icon: Icon,
-  children,
-  className,
-}: {
-  title: string;
-  icon: React.ElementType;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5",
-        className
-      )}
-    >
-      <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-        <Icon size={15} className="text-[var(--accent-positive)]" />
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Skeleton({ className }: { className?: string }) {
-  return (
-    <div className={cn("animate-pulse rounded-xl bg-[var(--bg-elevated)]", className)} />
-  );
-}
+import {
+  getHealth,
+  getHistory,
+  getIntegrity,
+  triggerSentinel,
+  getSentinelLatest,
+  getChecks,
+  getResults,
+  getStatus,
+  type HealthResult,
+  type HistoryResult,
+  type IntegrityResult,
+  type SentinelResult,
+  type CheckRegistryResult,
+  type MonitoringResultsResponse,
+  type StatusResponse,
+  type CategoryStatus,
+  type MonitoringResultRow,
+} from "@/api/monitoring";
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 
-function fmtTimestamp(iso: string | null): string {
+function fmtTimestamp(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
     return new Date(iso).toLocaleString("en-US", {
@@ -159,240 +58,403 @@ function fmtTimestamp(iso: string | null): string {
   }
 }
 
-// ── Section: System Status Cards ──────────────────────────────────────────────
+function fmtTimeAgo(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  } catch {
+    return iso ?? "—";
+  }
+}
 
-function SystemStatusSection({
-  health,
-  integrity,
-  sentinel,
-  healthLoading,
-}: {
-  health: HealthResult | undefined;
-  integrity: IntegrityResult | undefined;
-  sentinel: SentinelResult | undefined;
-  healthLoading: boolean;
-}) {
-  const p1Count =
-    sentinel?.findings.filter((f) => f.priority === "P1").length ?? 0;
+// ── Shared Components ─────────────────────────────────────────────────────────
 
-  const cards = [
-    {
-      label: "API Health",
-      icon: Activity,
-      ok: health ? health.api === "ok" : null,
-      sub: health ? `${health.latency_ms}ms` : "—",
-      loading: healthLoading,
-    },
-    {
-      label: "Database",
-      icon: Database,
-      ok: health ? health.db === "ok" : null,
-      sub: health ? fmtTimestamp(health.timestamp) : "—",
-      loading: healthLoading,
-    },
-    {
-      label: "Financial Integrity",
-      icon: ShieldCheck,
-      ok: integrity ? integrity.passed : null,
-      sub: integrity ? fmtTimestamp(integrity.timestamp) : "Not yet run",
-      loading: false,
-    },
-    {
-      label: "AI Sentinel",
-      icon: Brain,
-      ok: sentinel ? p1Count === 0 : null,
-      sub: sentinel
-        ? sentinel.findings.length === 0
-          ? "No findings"
-          : `${p1Count} P1 · ${sentinel.findings.length} total`
-        : "Not yet run",
-      loading: false,
-    },
-  ];
-
+function Skeleton({ className }: { className?: string }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {cards.map(({ label, icon: Icon, ok, sub, loading }) => (
-        <div
-          key={label}
-          className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4"
-        >
-          {loading ? (
-            <Skeleton className="h-16" />
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-2">
-                <Icon size={16} className="text-[var(--text-tertiary)]" />
-                <StatusBadge
-                  ok={ok}
-                  label={ok === null ? "Unknown" : ok ? "OK" : "Error"}
-                />
-              </div>
-              <p className="text-sm font-semibold text-[var(--text-primary)]">{label}</p>
-              <p className="text-[10px] text-[var(--text-tertiary)] mt-0.5 truncate">{sub}</p>
-            </>
-          )}
-        </div>
-      ))}
+    <div className={cn("animate-pulse rounded-xl bg-[var(--bg-elevated)]", className)} />
+  );
+}
+
+function SectionCard({
+  title,
+  icon: Icon,
+  children,
+  className,
+  actions,
+}: {
+  title: string;
+  icon: React.ElementType;
+  children: React.ReactNode;
+  className?: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5",
+        className
+      )}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <Icon size={15} className="text-[var(--accent-positive)]" />
+          {title}
+        </h2>
+        {actions}
+      </div>
+      {children}
     </div>
   );
 }
 
-// ── Section: Health Timeline ──────────────────────────────────────────────────
-
-function HealthTimelineSection({ data }: { data: HistoryResult | undefined }) {
-  const rows = [...(data?.history ?? [])].reverse().slice(0, 48);
-
-  if (!data) {
+function SeverityPill({ severity }: { severity: string }) {
+  if (severity === "ok" || severity === "OK") {
     return (
-      <SectionCard title="Health Timeline" icon={Clock}>
-        <Skeleton className="h-48" />
-      </SectionCard>
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+        OK
+      </span>
+    );
+  }
+  const colors: Record<string, string> = {
+    P1: "bg-red-950 text-red-400 border-red-800",
+    P2: "bg-amber-950 text-amber-400 border-amber-800",
+    P3: "bg-blue-950 text-blue-400 border-blue-800",
+  };
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border",
+        colors[severity] ?? "bg-slate-900 text-slate-400 border-slate-700"
+      )}
+    >
+      {severity}
+    </span>
+  );
+}
+
+// ── Section 1: Status Grid ────────────────────────────────────────────────────
+
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  infrastructure: Server,
+  financial: BarChart2,
+  security: Lock,
+  vendors: Package,
+  ai: Brain,
+  compliance: ShieldCheck,
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  infrastructure: "Infrastructure",
+  financial: "Financial",
+  security: "Security",
+  vendors: "Vendors",
+  ai: "AI",
+  compliance: "Compliance",
+};
+
+function StatusColorClasses(status: string) {
+  switch (status) {
+    case "green":
+      return {
+        bg: "bg-green-500/10",
+        border: "border-green-500/20",
+        text: "text-green-400",
+        badge: "bg-green-500/20 text-green-400",
+        dot: "bg-green-400",
+      };
+    case "red":
+      return {
+        bg: "bg-red-500/10",
+        border: "border-red-500/20",
+        text: "text-red-400",
+        badge: "bg-red-500/20 text-red-400",
+        dot: "bg-red-400",
+      };
+    case "yellow":
+      return {
+        bg: "bg-amber-500/10",
+        border: "border-amber-500/20",
+        text: "text-amber-400",
+        badge: "bg-amber-500/20 text-amber-400",
+        dot: "bg-amber-400",
+      };
+    default:
+      return {
+        bg: "bg-slate-500/10",
+        border: "border-slate-500/20",
+        text: "text-slate-400",
+        badge: "bg-slate-500/20 text-slate-400",
+        dot: "bg-slate-400",
+      };
+  }
+}
+
+function StatusGrid({ data, loading }: { data: StatusResponse | undefined; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-28" />
+        ))}
+      </div>
     );
   }
 
+  if (!data) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {["infrastructure", "financial", "security", "vendors", "ai", "compliance"].map((cat) => {
+          const Icon = CATEGORY_ICONS[cat] ?? Activity;
+          const colors = StatusColorClasses("gray");
+          return (
+            <div
+              key={cat}
+              className={cn(
+                "rounded-xl border p-4 flex flex-col gap-2",
+                colors.bg,
+                colors.border
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <Icon size={16} className={colors.text} />
+                <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", colors.badge)}>
+                  —
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-[var(--text-primary)] capitalize">{cat}</p>
+              <p className="text-[10px] text-[var(--text-tertiary)]">No data yet</p>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const orderedCats = ["infrastructure", "financial", "security", "vendors", "ai", "compliance"];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {orderedCats.map((cat) => {
+        const info: CategoryStatus = data.categories[cat] ?? {
+          status: "gray",
+          total_checks: 0,
+          checks_with_data: 0,
+          failures_p1_p2: 0,
+          failures_p3: 0,
+          last_run: null,
+        };
+        const Icon = CATEGORY_ICONS[cat] ?? Activity;
+        const colors = StatusColorClasses(info.status);
+        const label = CATEGORY_LABELS[cat] ?? cat;
+
+        return (
+          <div
+            key={cat}
+            className={cn(
+              "rounded-xl border p-4 flex flex-col gap-2",
+              colors.bg,
+              colors.border
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <Icon size={16} className={colors.text} />
+              <span
+                className={cn(
+                  "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase",
+                  colors.badge
+                )}
+              >
+                {info.status}
+              </span>
+            </div>
+            <p className="text-xs font-semibold text-[var(--text-primary)]">{label}</p>
+            <div className="text-[10px] text-[var(--text-tertiary)] space-y-0.5">
+              {info.failures_p1_p2 > 0 && (
+                <p className="text-red-400">{info.failures_p1_p2} P1/P2 fail{info.failures_p1_p2 !== 1 ? "s" : ""}</p>
+              )}
+              {info.failures_p3 > 0 && (
+                <p className="text-amber-400">{info.failures_p3} P3 fail{info.failures_p3 !== 1 ? "s" : ""}</p>
+              )}
+              {info.failures_p1_p2 === 0 && info.failures_p3 === 0 && info.checks_with_data > 0 && (
+                <p className="text-green-400">All clear</p>
+              )}
+              <p>Last: {fmtTimeAgo(info.last_run)}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Section 2: Recent Failures ────────────────────────────────────────────────
+
+function RecentFailuresTable({ data, loading }: { data: MonitoringResultsResponse | undefined; loading: boolean }) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  if (loading) return <Skeleton className="h-40" />;
+
+  const rows = data?.results ?? [];
+
   if (rows.length === 0) {
     return (
-      <SectionCard title="Health Timeline" icon={Clock}>
-        <p className="text-[var(--text-tertiary)] text-sm">
-          No health snapshots yet — checks run every 60 seconds.
-        </p>
-      </SectionCard>
+      <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-950/30 border border-emerald-900/50">
+        <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+        <p className="text-sm text-emerald-300">No failures in last 24 hours.</p>
+      </div>
     );
   }
 
   return (
-    <SectionCard title="Health Timeline (last 48 checks)" icon={Clock}>
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
+            <th className="text-left pb-2 font-medium pr-3">Time</th>
+            <th className="text-left pb-2 font-medium pr-3">Check</th>
+            <th className="text-left pb-2 font-medium pr-3">Severity</th>
+            <th className="text-left pb-2 font-medium">Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <>
+              <tr
+                key={row.id}
+                className="hover:bg-[var(--bg-elevated-2)]/40 cursor-pointer transition-colors"
+                onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
+              >
+                <td className="py-2 pr-3 text-[var(--text-tertiary)] font-mono whitespace-nowrap">
+                  {fmtTimeAgo(row.timestamp)}
+                </td>
+                <td className="py-2 pr-3 font-mono text-[var(--text-secondary)]">
+                  {row.check_id}
+                </td>
+                <td className="py-2 pr-3">
+                  <SeverityPill severity={row.severity} />
+                </td>
+                <td className="py-2 text-[var(--text-secondary)] max-w-xs truncate">
+                  <div className="flex items-center gap-1">
+                    <span className="truncate">{row.detail}</span>
+                    {row.runbook && (
+                      expandedId === row.id
+                        ? <ChevronUp size={12} className="text-[var(--text-tertiary)] shrink-0" />
+                        : <ChevronDown size={12} className="text-[var(--text-tertiary)] shrink-0" />
+                    )}
+                  </div>
+                </td>
+              </tr>
+              {expandedId === row.id && row.runbook && (
+                <tr key={`${row.id}-expand`} className="bg-[var(--bg-elevated-2)]/30">
+                  <td colSpan={4} className="pb-3 pt-1 px-2">
+                    <div className="bg-[var(--bg-elevated-2)] rounded-lg p-3 border border-[var(--border-subtle)]">
+                      <p className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
+                        Runbook
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                        {row.runbook}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Section 3: Check Registry ─────────────────────────────────────────────────
+
+const FREQUENCY_ORDER = ["minute", "5min", "15min", "hourly", "daily"];
+
+function CheckRegistryTable({ data, loading }: { data: CheckRegistryResult | undefined; loading: boolean }) {
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+
+  if (loading) return <Skeleton className="h-64" />;
+
+  const checks = data?.checks ?? [];
+  const categories = ["all", ...Array.from(new Set(checks.map((c) => c.category))).sort()];
+  const filtered = categoryFilter === "all" ? checks : checks.filter((c) => c.category === categoryFilter);
+
+  return (
+    <div>
+      {/* Category filter */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <Filter size={12} className="text-[var(--text-tertiary)]" />
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setCategoryFilter(cat)}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-[10px] font-semibold capitalize transition-colors",
+              categoryFilter === cat
+                ? "bg-[var(--accent-positive)] text-white"
+                : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+            )}
+          >
+            {cat === "all" ? `All (${checks.length})` : cat}
+          </button>
+        ))}
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
-              <th className="text-left pb-2 font-medium">Timestamp</th>
-              <th className="text-center pb-2 font-medium">API</th>
-              <th className="text-center pb-2 font-medium">DB</th>
-              <th className="text-right pb-2 font-medium">Latency</th>
+              <th className="text-left pb-2 font-medium pr-3">Check ID</th>
+              <th className="text-left pb-2 font-medium pr-3">Category</th>
+              <th className="text-left pb-2 font-medium pr-3">Frequency</th>
+              <th className="text-left pb-2 font-medium pr-3">Severity</th>
+              <th className="text-center pb-2 font-medium">Enabled</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => (
+            {filtered.map((check) => (
               <tr
-                key={idx}
-                className={cn(
-                  "transition-colors hover:bg-[var(--bg-elevated-2)]/40",
-                  idx % 2 === 0 ? "" : "bg-[var(--bg-elevated-2)]/20"
-                )}
+                key={check.id}
+                className="hover:bg-[var(--bg-elevated-2)]/40 transition-colors border-b border-[var(--border-subtle)]/30"
+                title={check.runbook}
               >
-                <td className="py-1.5 text-[var(--text-secondary)] font-mono pr-4">
-                  {fmtTimestamp(row.timestamp)}
+                <td className="py-2 pr-3 font-mono text-[var(--text-secondary)]">
+                  {check.id}
                 </td>
-                <td className="py-1.5 text-center">
-                  {row.api === "ok" ? (
-                    <CheckCircle2 size={12} className="text-emerald-400 mx-auto" />
+                <td className="py-2 pr-3 capitalize text-[var(--text-tertiary)]">
+                  {check.category}
+                </td>
+                <td className="py-2 pr-3 text-[var(--text-tertiary)]">
+                  {check.frequency}
+                </td>
+                <td className="py-2 pr-3">
+                  <SeverityPill severity={check.severity_on_fail} />
+                </td>
+                <td className="py-2 text-center">
+                  {check.enabled ? (
+                    <CheckCircle2 size={13} className="text-emerald-400 mx-auto" />
                   ) : (
-                    <XCircle size={12} className="text-red-400 mx-auto" />
+                    <XCircle size={13} className="text-[var(--text-tertiary)] mx-auto" />
                   )}
-                </td>
-                <td className="py-1.5 text-center">
-                  {row.db === "ok" ? (
-                    <CheckCircle2 size={12} className="text-emerald-400 mx-auto" />
-                  ) : (
-                    <XCircle size={12} className="text-red-400 mx-auto" />
-                  )}
-                </td>
-                <td className="py-1.5 text-right font-mono text-[var(--text-tertiary)]">
-                  {row.latency_ms}ms
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </SectionCard>
+    </div>
   );
 }
 
-// ── Section: Financial Integrity ──────────────────────────────────────────────
+// ── Section 4: Sentinel Panel ─────────────────────────────────────────────────
 
-function FinancialIntegritySection({
-  data,
-  onRefresh,
-  isRefreshing,
-}: {
-  data: IntegrityResult | undefined;
-  onRefresh: () => void;
-  isRefreshing: boolean;
-}) {
-  return (
-    <SectionCard title="Financial Integrity" icon={ShieldCheck}>
-      <div className="flex items-center justify-between mb-3">
-        {data && (
-          <div className="flex items-center gap-2">
-            <StatusBadge ok={data.passed} label={data.passed ? "All Checks Pass" : "Issues Found"} />
-            <span className="text-[10px] text-[var(--text-tertiary)]">
-              Last run: {fmtTimestamp(data.timestamp)}
-            </span>
-          </div>
-        )}
-        {!data && <span className="text-[var(--text-tertiary)] text-sm">Not yet run</span>}
-        <button
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw size={11} className={isRefreshing ? "animate-spin" : ""} />
-          Run Now
-        </button>
-      </div>
-
-      {!data && <Skeleton className="h-24" />}
-
-      {data && data.checks.length === 0 && (
-        <p className="text-[var(--text-tertiary)] text-sm">No checks ran.</p>
-      )}
-
-      {data && data.checks.length > 0 && (
-        <div className="space-y-2">
-          {data.checks.map((check, idx) => (
-            <div
-              key={idx}
-              className={cn(
-                "flex items-start gap-3 p-3 rounded-lg border",
-                check.passed
-                  ? "bg-emerald-950/30 border-emerald-900/50"
-                  : "bg-red-950/30 border-red-900/50"
-              )}
-            >
-              <div className="mt-0.5 shrink-0">
-                {check.passed ? (
-                  <CheckCircle2 size={14} className="text-emerald-400" />
-                ) : (
-                  <XCircle size={14} className="text-red-400" />
-                )}
-              </div>
-              <div className="min-w-0">
-                <p
-                  className={cn(
-                    "text-xs font-semibold",
-                    check.passed ? "text-emerald-300" : "text-red-300"
-                  )}
-                >
-                  {check.name}
-                </p>
-                <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5 break-words">
-                  {check.detail}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </SectionCard>
-  );
-}
-
-// ── Section: AI Sentinel ──────────────────────────────────────────────────────
-
-function AISentinelSection({
+function SentinelPanel({
   data,
   onRun,
   isRunning,
@@ -401,14 +463,14 @@ function AISentinelSection({
   onRun: () => void;
   isRunning: boolean;
 }) {
-  const priorityColors = {
+  const priorityColors: Record<string, string> = {
     P1: "bg-red-950/40 border-red-900/60",
-    P2: "bg-yellow-950/40 border-yellow-900/60",
+    P2: "bg-amber-950/40 border-amber-900/60",
     P3: "bg-blue-950/40 border-blue-900/60",
   };
 
   return (
-    <SectionCard title="AI Sentinel Digest" icon={Brain}>
+    <div>
       <div className="flex items-center justify-between mb-3">
         {data?.generated_at ? (
           <span className="text-[10px] text-[var(--text-tertiary)]">
@@ -453,7 +515,7 @@ function AISentinelSection({
               )}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <PriorityBadge priority={finding.priority} />
+                <SeverityPill severity={finding.priority} />
                 <p className="text-sm font-semibold text-[var(--text-primary)]">
                   {finding.title}
                 </p>
@@ -475,51 +537,126 @@ function AISentinelSection({
           ))}
         </div>
       )}
-    </SectionCard>
+    </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Legacy Health Timeline ────────────────────────────────────────────────────
+
+function HealthTimeline({ data }: { data: HistoryResult | undefined }) {
+  const rows = [...(data?.history ?? [])].reverse().slice(0, 20);
+
+  if (!data) return <Skeleton className="h-32" />;
+  if (rows.length === 0) {
+    return (
+      <p className="text-[var(--text-tertiary)] text-sm">
+        No snapshots yet — checks run every 60 s.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
+            <th className="text-left pb-2 font-medium">Timestamp</th>
+            <th className="text-center pb-2 font-medium">API</th>
+            <th className="text-center pb-2 font-medium">DB</th>
+            <th className="text-right pb-2 font-medium">Latency</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => (
+            <tr
+              key={idx}
+              className={cn(
+                "transition-colors hover:bg-[var(--bg-elevated-2)]/40",
+                idx % 2 === 0 ? "" : "bg-[var(--bg-elevated-2)]/20"
+              )}
+            >
+              <td className="py-1.5 text-[var(--text-secondary)] font-mono pr-4">
+                {fmtTimestamp(row.timestamp)}
+              </td>
+              <td className="py-1.5 text-center">
+                {row.api === "ok" ? (
+                  <CheckCircle2 size={12} className="text-emerald-400 mx-auto" />
+                ) : (
+                  <XCircle size={12} className="text-red-400 mx-auto" />
+                )}
+              </td>
+              <td className="py-1.5 text-center">
+                {row.db === "ok" ? (
+                  <CheckCircle2 size={12} className="text-emerald-400 mx-auto" />
+                ) : (
+                  <XCircle size={12} className="text-red-400 mx-auto" />
+                )}
+              </td>
+              <td className="py-1.5 text-right font-mono text-[var(--text-tertiary)]">
+                {row.latency_ms}ms
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function MonitoringPage() {
   const queryClient = useQueryClient();
-  const [integrityRefreshing, setIntegrityRefreshing] = useState(false);
 
-  // Current health — auto-refresh every 30 s
+  // Health (auto-refresh 30s)
   const { data: health, isLoading: healthLoading } = useQuery<HealthResult>({
     queryKey: ["monitoring-health"],
-    queryFn: () => apiFetch<HealthResult>("/health"),
+    queryFn: getHealth,
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
 
-  // Health history
+  // History (auto-refresh 60s)
   const { data: history } = useQuery<HistoryResult>({
     queryKey: ["monitoring-history"],
-    queryFn: () => apiFetch<HistoryResult>("/history"),
+    queryFn: getHistory,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
 
-  // Latest integrity result (on-demand only — populated after a run)
-  const { data: integrity, refetch: refetchIntegrity } = useQuery<IntegrityResult>({
-    queryKey: ["monitoring-integrity"],
-    queryFn: () => apiFetch<IntegrityResult>("/integrity"),
-    enabled: false,   // only fetch when explicitly triggered
-    staleTime: Infinity,
+  // Category status (auto-refresh 60s)
+  const { data: statusData, isLoading: statusLoading } = useQuery<StatusResponse>({
+    queryKey: ["monitoring-status"],
+    queryFn: getStatus,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
-  // Latest sentinel result
+  // Recent failures (last 24h)
+  const { data: failures, isLoading: failuresLoading } = useQuery<MonitoringResultsResponse>({
+    queryKey: ["monitoring-failures"],
+    queryFn: () => getResults({ passed: false, hours: 24 }),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  // Check registry
+  const { data: registry, isLoading: registryLoading } = useQuery<CheckRegistryResult>({
+    queryKey: ["monitoring-checks"],
+    queryFn: getChecks,
+    staleTime: 300_000,  // rarely changes
+  });
+
+  // Sentinel latest
   const { data: sentinel } = useQuery<SentinelResult>({
     queryKey: ["monitoring-sentinel-latest"],
-    queryFn: () => apiFetch<SentinelResult>("/sentinel/latest"),
+    queryFn: getSentinelLatest,
     staleTime: 60_000,
   });
 
-  // Trigger sentinel mutation
+  // Sentinel mutation
   const sentinelMutation = useMutation({
-    mutationFn: () =>
-      apiFetch<SentinelResult>("/sentinel", { method: "POST" }),
+    mutationFn: triggerSentinel,
     onSuccess: (data) => {
       queryClient.setQueryData(["monitoring-sentinel-latest"], data);
       toast.success("AI Sentinel run complete");
@@ -529,21 +666,21 @@ export default function MonitoringPage() {
     },
   });
 
-  async function handleIntegrityRefresh() {
-    setIntegrityRefreshing(true);
-    try {
-      await refetchIntegrity();
-      toast.success("Integrity check complete");
-    } catch {
-      toast.error("Integrity check failed");
-    } finally {
-      setIntegrityRefreshing(false);
-    }
+  // Last updated timestamp
+  const lastUpdated = health?.timestamp ?? statusData?.as_of;
+
+  function refreshAll() {
+    queryClient.invalidateQueries({ queryKey: ["monitoring-health"] });
+    queryClient.invalidateQueries({ queryKey: ["monitoring-history"] });
+    queryClient.invalidateQueries({ queryKey: ["monitoring-status"] });
+    queryClient.invalidateQueries({ queryKey: ["monitoring-failures"] });
+    queryClient.invalidateQueries({ queryKey: ["monitoring-sentinel-latest"] });
+    toast.success("Refreshing all checks…");
   }
 
   return (
     <div className="space-y-5 pb-10">
-      {/* Page header */}
+      {/* ── Header ── */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
@@ -552,46 +689,55 @@ export default function MonitoringPage() {
           </h1>
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">
             Health checks, financial integrity, and AI sentinel for BMG Capital
+            {lastUpdated && (
+              <span className="ml-2 text-[var(--text-tertiary)]/70">
+                · Updated {fmtTimeAgo(lastUpdated)}
+              </span>
+            )}
           </p>
         </div>
         <button
-          onClick={() => {
-            queryClient.invalidateQueries({ queryKey: ["monitoring-health"] });
-            queryClient.invalidateQueries({ queryKey: ["monitoring-history"] });
-            queryClient.invalidateQueries({ queryKey: ["monitoring-sentinel-latest"] });
-          }}
+          onClick={refreshAll}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
         >
           <RefreshCw size={12} />
-          Refresh all
+          Refresh All
         </button>
       </div>
 
-      {/* System status cards */}
-      <SystemStatusSection
-        health={health}
-        integrity={integrity}
-        sentinel={sentinel}
-        healthLoading={healthLoading}
-      />
+      {/* ── Status Grid ── */}
+      <StatusGrid data={statusData} loading={statusLoading && !statusData} />
 
-      {/* Health timeline */}
-      <HealthTimelineSection data={history} />
+      {/* ── Recent Failures ── */}
+      <SectionCard
+        title={`Recent Failures (last 24h)${failures && failures.count > 0 ? ` — ${failures.count}` : ""}`}
+        icon={AlertTriangle}
+      >
+        <RecentFailuresTable data={failures} loading={failuresLoading && !failures} />
+      </SectionCard>
 
-      {/* Bottom two sections */}
+      {/* ── Check Registry + Sentinel in 2-col grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <FinancialIntegritySection
-          data={integrity}
-          onRefresh={handleIntegrityRefresh}
-          isRefreshing={integrityRefreshing}
-        />
+        <SectionCard
+          title={`Check Registry${registry ? ` (${registry.total})` : ""}`}
+          icon={ShieldCheck}
+        >
+          <CheckRegistryTable data={registry} loading={registryLoading && !registry} />
+        </SectionCard>
 
-        <AISentinelSection
-          data={sentinel}
-          onRun={() => sentinelMutation.mutate()}
-          isRunning={sentinelMutation.isPending}
-        />
+        <SectionCard title="AI Sentinel Digest" icon={Brain}>
+          <SentinelPanel
+            data={sentinel}
+            onRun={() => sentinelMutation.mutate()}
+            isRunning={sentinelMutation.isPending}
+          />
+        </SectionCard>
       </div>
+
+      {/* ── Legacy Health Timeline ── */}
+      <SectionCard title="Health Timeline (last 20 checks)" icon={Clock}>
+        <HealthTimeline data={history} />
+      </SectionCard>
     </div>
   );
 }

@@ -20,6 +20,7 @@ from app.db.models.chart_analysis import ChartAnalysis
 from app.db.models.recap import DailyRecap
 from app.db.models.strategy_definition import StrategyDefinition
 from app.db.models.workspace import UserWorkspace
+from app.db.models.monitoring import MonitoringResult, AuditLog, LoginAttempt
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -36,4 +37,5 @@ __all__ = [
     "DailyRecap",
     "StrategyDefinition",
     "UserWorkspace",
+    "MonitoringResult", "AuditLog", "LoginAttempt",
 ]

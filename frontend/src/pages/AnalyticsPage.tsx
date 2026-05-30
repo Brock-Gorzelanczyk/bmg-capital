@@ -12,9 +12,9 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { BarChart2, TrendingUp, TrendingDown, Zap, Activity, FlaskConical } from "lucide-react";
+import { BarChart2, TrendingUp, TrendingDown, Zap, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getJournalAnalytics, getDemoAnalytics } from "@/api/journalAnalytics";
+import { getJournalAnalytics, getDemoAnalytics, type AnalyticsResult } from "@/api/journalAnalytics";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -190,7 +190,7 @@ function HeadlineCard({
 
 // ── Full dashboard content (shared for real + demo) ───────────────────────────
 
-function AnalyticsDashboard({ data }: { data: ReturnType<typeof placeholder> }) {
+function AnalyticsDashboard({ data }: { data: AnalyticsResult }) {
   return (
     <div className="space-y-5">
 
@@ -607,10 +607,6 @@ function AnalyticsDashboard({ data }: { data: ReturnType<typeof placeholder> }) 
     </div>
   );
 }
-
-// Dummy type helper — the real type comes from AnalyticsResult
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function placeholder(): any { return null; }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
