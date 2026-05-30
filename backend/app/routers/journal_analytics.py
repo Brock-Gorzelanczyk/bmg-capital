@@ -310,6 +310,101 @@ def journal_analytics(
     }
 
 
+@router.get("/analytics/demo")
+async def get_demo_analytics():
+    """
+    Returns a pre-generated synthetic AnalyticsResult for investor demos.
+    Hard-coded fixed numbers — stable across requests, no auth required.
+    """
+    return {
+        "headline": {
+            "total_trades": 94,
+            "win_rate": 61.7,
+            "profit_factor": 2.31,
+            "avg_r_multiple": 1.84,
+            "total_pnl": 12847.50,
+            "max_drawdown": 25.20,
+            "avg_hold_days": 4.2,
+            "best_trade": {"symbol": "NVDA", "pnl": 4812.00, "pnl_pct": 3.84, "date": "2025-04-25"},
+            "worst_trade": {"symbol": "TSLA", "pnl": -1240.00, "pnl_pct": -1.98, "date": "2025-04-04"},
+        },
+        "equity_curve": [
+            {"date": "2025-03-01", "cumulative_pnl": 0},
+            {"date": "2025-03-03", "cumulative_pnl": 240},
+            {"date": "2025-03-05", "cumulative_pnl": 890},
+            {"date": "2025-03-07", "cumulative_pnl": 1240},
+            {"date": "2025-03-10", "cumulative_pnl": 2100},
+            {"date": "2025-03-12", "cumulative_pnl": 1840},
+            {"date": "2025-03-14", "cumulative_pnl": 1320},
+            {"date": "2025-03-17", "cumulative_pnl": 2480},
+            {"date": "2025-03-19", "cumulative_pnl": 3100},
+            {"date": "2025-03-21", "cumulative_pnl": 3890},
+            {"date": "2025-03-24", "cumulative_pnl": 4200},
+            {"date": "2025-03-26", "cumulative_pnl": 3740},
+            {"date": "2025-03-28", "cumulative_pnl": 5120},
+            {"date": "2025-03-31", "cumulative_pnl": 5890},
+            {"date": "2025-04-02", "cumulative_pnl": 6340},
+            {"date": "2025-04-04", "cumulative_pnl": 5100},
+            {"date": "2025-04-07", "cumulative_pnl": 4860},
+            {"date": "2025-04-09", "cumulative_pnl": 5920},
+            {"date": "2025-04-11", "cumulative_pnl": 7200},
+            {"date": "2025-04-14", "cumulative_pnl": 7840},
+            {"date": "2025-04-16", "cumulative_pnl": 8490},
+            {"date": "2025-04-18", "cumulative_pnl": 9120},
+            {"date": "2025-04-21", "cumulative_pnl": 9780},
+            {"date": "2025-04-23", "cumulative_pnl": 10340},
+            {"date": "2025-04-25", "cumulative_pnl": 11200},
+            {"date": "2025-04-28", "cumulative_pnl": 11840},
+            {"date": "2025-04-30", "cumulative_pnl": 12100},
+            {"date": "2025-05-02", "cumulative_pnl": 12847},
+        ],
+        "by_setup": [
+            {"setup": "Breakout", "trade_count": 28, "wins": 19, "losses": 9, "win_rate": 67.9, "avg_pnl": 284.50, "total_pnl": 7966.00, "avg_r_multiple": 2.1},
+            {"setup": "Pullback", "trade_count": 22, "wins": 14, "losses": 8, "win_rate": 63.6, "avg_pnl": 198.20, "total_pnl": 4360.40, "avg_r_multiple": 1.8},
+            {"setup": "Trend Follow", "trade_count": 18, "wins": 12, "losses": 6, "win_rate": 66.7, "avg_pnl": 156.80, "total_pnl": 2822.40, "avg_r_multiple": 1.6},
+            {"setup": "Reversal", "trade_count": 14, "wins": 7, "losses": 7, "win_rate": 50.0, "avg_pnl": -12.40, "total_pnl": -173.60, "avg_r_multiple": 0.9},
+            {"setup": "Earnings Play", "trade_count": 12, "wins": 6, "losses": 6, "win_rate": 50.0, "avg_pnl": -87.70, "total_pnl": -1052.40, "avg_r_multiple": 0.7},
+        ],
+        "by_symbol": [
+            {"symbol": "NVDA", "trade_count": 18, "wins": 13, "losses": 5, "win_rate": 72.2, "total_pnl": 4812.00},
+            {"symbol": "AAPL", "trade_count": 15, "wins": 10, "losses": 5, "win_rate": 66.7, "total_pnl": 2340.00},
+            {"symbol": "MSFT", "trade_count": 12, "wins": 8, "losses": 4, "win_rate": 66.7, "total_pnl": 1890.00},
+            {"symbol": "AMD", "trade_count": 10, "wins": 6, "losses": 4, "win_rate": 60.0, "total_pnl": 1240.00},
+            {"symbol": "SPY", "trade_count": 8, "wins": 5, "losses": 3, "win_rate": 62.5, "total_pnl": 980.00},
+            {"symbol": "TSLA", "trade_count": 14, "wins": 7, "losses": 7, "win_rate": 50.0, "total_pnl": 840.00},
+            {"symbol": "QQQ", "trade_count": 6, "wins": 4, "losses": 2, "win_rate": 66.7, "total_pnl": 620.00},
+            {"symbol": "META", "trade_count": 11, "wins": 5, "losses": 6, "win_rate": 45.5, "total_pnl": 125.50},
+        ],
+        "by_month": [
+            {"month": "2025-03", "trade_count": 34, "total_pnl": 5890.00, "win_rate": 64.7},
+            {"month": "2025-04", "trade_count": 38, "total_pnl": 5210.00, "win_rate": 60.5},
+            {"month": "2025-05", "trade_count": 22, "total_pnl": 1747.50, "win_rate": 59.1},
+        ],
+        "r_distribution": [
+            {"bucket": "<-2R", "count": 4},
+            {"bucket": "-2R to -1R", "count": 12},
+            {"bucket": "-1R to 0", "count": 20},
+            {"bucket": "0 to 1R", "count": 18},
+            {"bucket": "1R to 2R", "count": 24},
+            {"bucket": ">2R", "count": 16},
+        ],
+        "streaks": {
+            "current_win_streak": 3,
+            "current_loss_streak": 0,
+            "longest_win_streak": 8,
+            "longest_loss_streak": 4,
+        },
+        "by_mood": [
+            {"mood": 5, "count": 28, "avg_pnl": 312.40, "win_rate": 71.4},
+            {"mood": 4, "count": 32, "avg_pnl": 184.20, "win_rate": 62.5},
+            {"mood": 3, "count": 24, "avg_pnl": 48.90, "win_rate": 54.2},
+            {"mood": 2, "count": 6, "avg_pnl": -124.00, "win_rate": 33.3},
+            {"mood": 1, "count": 4, "avg_pnl": -287.00, "win_rate": 25.0},
+        ],
+        "filters": {"days": 90, "account_type": "all", "cutoff_date": "2025-03-01"},
+    }
+
+
 def _empty_response() -> dict:
     """Return a zero-value response shape when no matching trades exist."""
     return {

@@ -12,9 +12,9 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { BarChart2, TrendingUp, TrendingDown, Zap, Activity } from "lucide-react";
+import { BarChart2, TrendingUp, TrendingDown, Zap, Activity, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getJournalAnalytics } from "@/api/journalAnalytics";
+import { getJournalAnalytics, getDemoAnalytics } from "@/api/journalAnalytics";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -63,6 +63,51 @@ const ACCOUNT_OPTIONS = [
   { label: "Paper", value: "paper" },
   { label: "Live", value: "live" },
 ];
+
+// ── Milestone tracker ─────────────────────────────────────────────────────────
+
+const MILESTONES = [
+  { trades: 1, label: "1", desc: "First trade" },
+  { trades: 5, label: "5", desc: "Win Rate unlocked" },
+  { trades: 20, label: "20", desc: "Win Rate by Setup" },
+  { trades: 50, label: "50", desc: "Time Heatmap" },
+  { trades: 100, label: "100", desc: "AI Insights" },
+];
+
+function MilestoneTracker({ totalTrades }: { totalTrades: number }) {
+  return (
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap mb-1">
+      <span className="text-[var(--text-tertiary)] text-xs font-medium shrink-0">Milestones</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        {MILESTONES.map((m, i) => {
+          const done = totalTrades >= m.trades;
+          const isNext = !done && (i === 0 || totalTrades >= MILESTONES[i - 1].trades);
+          return (
+            <div
+              key={m.trades}
+              title={m.desc}
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all",
+                done
+                  ? "bg-[var(--accent-positive)]/15 text-[var(--accent-positive)] border-[var(--accent-positive)]/30"
+                  : isNext
+                  ? "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30"
+                  : "bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] border-[var(--border-subtle)]"
+              )}
+            >
+              {done && <span className="text-[10px]">✓</span>}
+              {m.label} trades
+              {isNext && <span className="opacity-60 ml-0.5">→</span>}
+            </div>
+          );
+        })}
+      </div>
+      <span className="ml-auto text-[var(--text-tertiary)] text-[11px] font-mono shrink-0">
+        {totalTrades} / 100
+      </span>
+    </div>
+  );
+}
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
@@ -143,17 +188,456 @@ function HeadlineCard({
   );
 }
 
+// ── Full dashboard content (shared for real + demo) ───────────────────────────
+
+function AnalyticsDashboard({ data }: { data: ReturnType<typeof placeholder> }) {
+  return (
+    <div className="space-y-5">
+
+      {/* ── Headline stats ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <HeadlineCard
+          label="Total P&L"
+          value={fmtDollarFull(data.headline.total_pnl)}
+          positive={data.headline.total_pnl >= 0}
+        />
+        <HeadlineCard
+          label="Win Rate"
+          value={fmtPct(data.headline.win_rate)}
+          sub={`${data.headline.total_trades} trades`}
+          positive={data.headline.win_rate >= 50}
+        />
+        <HeadlineCard
+          label="Profit Factor"
+          value={data.headline.profit_factor.toFixed(2)}
+          positive={data.headline.profit_factor >= 1}
+        />
+        <HeadlineCard
+          label="Avg R-Multiple"
+          value={data.headline.avg_r_multiple.toFixed(2) + "R"}
+          positive={data.headline.avg_r_multiple > 0}
+        />
+        <HeadlineCard
+          label="Max Drawdown"
+          value={fmtPct(data.headline.max_drawdown)}
+          positive={false}
+        />
+        {data.headline.best_trade && (
+          <HeadlineCard
+            label="Best Trade"
+            value={fmtDollar(data.headline.best_trade.pnl)}
+            sub={data.headline.best_trade.symbol}
+            positive
+          />
+        )}
+      </div>
+
+      {/* ── Equity Curve ────────────────────────────────────────────── */}
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+        <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Equity Curve</h2>
+        {data.equity_curve.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-[var(--text-tertiary)] text-sm">
+            No trades yet
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={data.equity_curve} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--accent-positive)" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="var(--accent-positive)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                interval="preserveStartEnd"
+                tickFormatter={(v: string) => {
+                  const d = new Date(v);
+                  return `${d.toLocaleString("default", { month: "short" })} '${String(d.getFullYear()).slice(2)}`;
+                }}
+              />
+              <YAxis
+                tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v: number) => fmtDollar(v)}
+                width={58}
+              />
+              <Tooltip content={<ChartTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="cumulative_pnl"
+                stroke="var(--accent-positive)"
+                strokeWidth={2}
+                fill="url(#equityGrad)"
+                dot={false}
+                activeDot={{ r: 4, fill: "var(--accent-positive)" }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* ── By Setup + R Distribution ───────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* By Setup table */}
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Edge by Setup</h2>
+          {data.by_setup.length === 0 ? (
+            <p className="text-[var(--text-tertiary)] text-sm">No setup data</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
+                    <th className="text-left pb-2 font-medium">Setup</th>
+                    <th className="text-right pb-2 font-medium">Trades</th>
+                    <th className="text-right pb-2 font-medium">Win %</th>
+                    <th className="text-right pb-2 font-medium">Avg P&L</th>
+                    <th className="text-right pb-2 font-medium">Total P&L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)]">
+                  {data.by_setup.map((row) => (
+                    <tr key={row.setup} className="hover:bg-[var(--bg-elevated-2)]/40 transition-colors">
+                      <td className="py-2 text-[var(--text-secondary)] font-medium pr-3">
+                        {row.setup === "(none)" ? (
+                          <span className="text-[var(--text-tertiary)] italic">No tag</span>
+                        ) : row.setup}
+                      </td>
+                      <td className="py-2 text-right text-[var(--text-tertiary)] font-mono">{row.trade_count}</td>
+                      <td className="py-2 text-right font-mono">
+                        <span className={row.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
+                          {fmtPct(row.win_rate)}
+                        </span>
+                      </td>
+                      <td className={cn("py-2 text-right font-mono", row.avg_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                        {fmtDollarFull(row.avg_pnl)}
+                      </td>
+                      <td className={cn("py-2 text-right font-bold font-mono", row.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                        {fmtDollarFull(row.total_pnl)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* R Distribution bar chart */}
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4">R-Multiple Distribution</h2>
+          {data.r_distribution.every((b) => b.count === 0) ? (
+            <p className="text-[var(--text-tertiary)] text-sm">No R data</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={data.r_distribution} margin={{ top: 0, right: 4, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+                <XAxis
+                  dataKey="bucket"
+                  tick={{ fill: "var(--text-tertiary)", fontSize: 9 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                  width={28}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    return (
+                      <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg px-3 py-2 text-xs shadow-xl">
+                        <p className="text-[var(--text-tertiary)] mb-0.5">{label}</p>
+                        <p className="font-bold text-[var(--text-primary)] font-mono">{payload[0].value} trades</p>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                  {data.r_distribution.map((entry, idx) => {
+                    const isNeg = entry.bucket.startsWith("<") || entry.bucket.startsWith("-");
+                    return (
+                      <Cell
+                        key={idx}
+                        fill={isNeg ? "var(--accent-negative)" : "var(--accent-positive)"}
+                        fillOpacity={0.8}
+                      />
+                    );
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* ── Monthly Performance ─────────────────────────────────────── */}
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+        <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Monthly Performance</h2>
+        {data.by_month.length === 0 ? (
+          <p className="text-[var(--text-tertiary)] text-sm">No monthly data</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={data.by_month} margin={{ top: 0, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+              <XAxis
+                dataKey="month"
+                tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={fmtMonth}
+              />
+              <YAxis
+                tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v: number) => fmtDollar(v)}
+                width={58}
+              />
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null;
+                  const val = payload[0].value as number;
+                  return (
+                    <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg px-3 py-2 text-xs shadow-xl">
+                      <p className="text-[var(--text-tertiary)] mb-0.5">{fmtMonth(label as string)}</p>
+                      <p className={cn("font-bold font-mono", val >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                        {fmtDollarFull(val)}
+                      </p>
+                    </div>
+                  );
+                }}
+              />
+              <Bar dataKey="total_pnl" radius={[3, 3, 0, 0]}>
+                {data.by_month.map((entry, idx) => (
+                  <Cell
+                    key={idx}
+                    fill={entry.total_pnl >= 0 ? "var(--accent-positive)" : "var(--accent-negative)"}
+                    fillOpacity={0.8}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* ── By Symbol (top 10) + Streaks & Mood ────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* By Symbol table */}
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Top Symbols</h2>
+          {data.by_symbol.length === 0 ? (
+            <p className="text-[var(--text-tertiary)] text-sm">No symbol data</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
+                    <th className="text-left pb-2 font-medium">Symbol</th>
+                    <th className="text-right pb-2 font-medium">Trades</th>
+                    <th className="text-right pb-2 font-medium">Win %</th>
+                    <th className="text-right pb-2 font-medium">Total P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_symbol.slice(0, 10).map((row, idx) => (
+                    <tr
+                      key={row.symbol}
+                      className={cn(
+                        "transition-colors",
+                        idx % 2 === 0 ? "bg-transparent" : "bg-[var(--bg-elevated-2)]/30"
+                      )}
+                    >
+                      <td className="py-2 text-[var(--text-primary)] font-bold font-mono pr-3">{row.symbol}</td>
+                      <td className="py-2 text-right text-[var(--text-tertiary)] font-mono">{row.trade_count}</td>
+                      <td className="py-2 text-right font-mono">
+                        <span className={row.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
+                          {fmtPct(row.win_rate)}
+                        </span>
+                      </td>
+                      <td className={cn("py-2 text-right font-bold font-mono", row.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                        {fmtDollarFull(row.total_pnl)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Streaks + Mood */}
+        <div className="space-y-4">
+          {/* Streaks */}
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+              <Zap size={14} className="text-[#F59E0B]" />
+              Streaks
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Current Win", value: data.streaks?.current_win_streak ?? 0, positive: true },
+                { label: "Current Loss", value: data.streaks?.current_loss_streak ?? 0, positive: false },
+                { label: "Longest Win", value: data.streaks?.longest_win_streak ?? 0, positive: true },
+                { label: "Longest Loss", value: data.streaks?.longest_loss_streak ?? 0, positive: false },
+              ].map(({ label, value, positive }) => (
+                <div key={label} className="bg-[var(--bg-elevated-2)] rounded-xl p-3 text-center">
+                  <p className={cn("text-2xl font-bold font-mono", positive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                    {value}
+                  </p>
+                  <p className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Mood breakdown */}
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Performance by Mood</h2>
+            {data.by_mood.length === 0 ? (
+              <p className="text-[var(--text-tertiary)] text-sm">No mood data</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
+                    <th className="text-left pb-2 font-medium">Mood</th>
+                    <th className="text-right pb-2 font-medium">Trades</th>
+                    <th className="text-right pb-2 font-medium">Win %</th>
+                    <th className="text-right pb-2 font-medium">Avg P&L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)]">
+                  {[...data.by_mood].sort((a, b) => a.mood - b.mood).map((row) => (
+                    <tr key={row.mood} className="hover:bg-[var(--bg-elevated-2)]/40">
+                      <td className="py-2 text-lg">{moodEmoji(row.mood)}</td>
+                      <td className="py-2 text-right text-[var(--text-tertiary)] font-mono">{row.count}</td>
+                      <td className="py-2 text-right font-mono">
+                        <span className={row.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
+                          {fmtPct(row.win_rate)}
+                        </span>
+                      </td>
+                      <td className={cn("py-2 text-right font-bold font-mono", row.avg_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                        {fmtDollarFull(row.avg_pnl)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── By Symbol Detail (top 20) ───────────────────────────────── */}
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+        <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
+          <TrendingUp size={14} className="text-[var(--accent-positive)]" />
+          Symbol Breakdown (Top 20)
+        </h2>
+        {data.by_symbol.length === 0 ? (
+          <p className="text-[var(--text-tertiary)] text-sm">No trades recorded</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
+                  <th className="text-left pb-2 font-medium">Symbol</th>
+                  <th className="text-right pb-2 font-medium">Trades</th>
+                  <th className="text-right pb-2 font-medium">Wins</th>
+                  <th className="text-right pb-2 font-medium">Losses</th>
+                  <th className="text-right pb-2 font-medium">Win Rate</th>
+                  <th className="text-right pb-2 font-medium">Total P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.by_symbol.slice(0, 20).map((row, idx) => (
+                  <tr
+                    key={row.symbol}
+                    className={cn(
+                      "transition-colors hover:bg-[var(--bg-elevated-2)]/40",
+                      idx % 2 === 0 ? "" : "bg-[var(--bg-elevated-2)]/20"
+                    )}
+                  >
+                    <td className="py-2 text-[var(--text-primary)] font-bold font-mono pr-4">{row.symbol}</td>
+                    <td className="py-2 text-right text-[var(--text-tertiary)] font-mono">{row.trade_count}</td>
+                    <td className="py-2 text-right text-[var(--accent-positive)] font-mono">{row.wins}</td>
+                    <td className="py-2 text-right text-[var(--accent-negative)] font-mono">{row.losses}</td>
+                    <td className="py-2 text-right font-mono">
+                      <span className={row.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
+                        {fmtPct(row.win_rate)}
+                      </span>
+                    </td>
+                    <td className={cn("py-2 text-right font-bold font-mono", row.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                      {fmtDollarFull(row.total_pnl)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Worst trade footnote ─────────────────────────────────────── */}
+      <div className="flex items-center gap-4 text-xs text-[var(--text-tertiary)] px-1">
+        {data.headline.worst_trade && (
+          <span className="flex items-center gap-1.5">
+            <TrendingDown size={12} className="text-[var(--accent-negative)]" />
+            Worst trade: <span className="font-mono text-[var(--accent-negative)] font-semibold">{data.headline.worst_trade.symbol}</span>
+            {" "}{fmtDollarFull(data.headline.worst_trade.pnl)} on {data.headline.worst_trade.date}
+          </span>
+        )}
+        <span className="ml-auto">
+          Avg hold: <span className="font-mono text-[var(--text-secondary)]">{data.headline.avg_hold_days?.toFixed(1) ?? "0.0"}d</span>
+        </span>
+      </div>
+
+    </div>
+  );
+}
+
+// Dummy type helper — the real type comes from AnalyticsResult
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function placeholder(): any { return null; }
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState(365);
   const [accountType, setAccountType] = useState("all");
+  const [demoMode, setDemoMode] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const realQuery = useQuery({
     queryKey: ["journal-analytics", days, accountType],
     queryFn: () => getJournalAnalytics(days, accountType),
     staleTime: 30_000,
   });
+
+  const demoQuery = useQuery({
+    queryKey: ["journal-analytics-demo"],
+    queryFn: getDemoAnalytics,
+    staleTime: Infinity,
+    enabled: demoMode,
+  });
+
+  const activeQuery = demoMode ? demoQuery : realQuery;
+  const { data, isLoading } = activeQuery;
+
+  const isEmpty = !isLoading && data && data.headline.total_trades === 0 && !demoMode;
+  const hasData = !isLoading && data && data.headline.total_trades > 0;
+  const showMilestones = hasData && data.headline.total_trades < 100 && !demoMode;
 
   return (
     <div className="space-y-5 pb-10">
@@ -167,473 +651,118 @@ export default function AnalyticsPage() {
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Performance insights across all your trades</p>
         </div>
 
-        {/* Filters */}
+        {/* Filters + demo toggle */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Days filter */}
-          <div className="flex items-center bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg p-0.5 gap-0.5">
-            {DAY_OPTIONS.map(({ label, value }) => (
-              <button
-                key={value}
-                onClick={() => setDays(value)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
-                  days === value
-                    ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* Demo toggle */}
+          <button
+            onClick={() => setDemoMode(v => !v)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
+              demoMode
+                ? "bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/30"
+                : "bg-[var(--bg-elevated)] text-[var(--text-tertiary)] border-[var(--border-subtle)] hover:text-[var(--text-secondary)]"
+            )}
+          >
+            <FlaskConical size={13} />
+            {demoMode ? "Demo data — toggle off" : "Try demo data"}
+          </button>
 
-          {/* Account type filter */}
-          <div className="flex items-center bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg p-0.5 gap-0.5">
-            {ACCOUNT_OPTIONS.map(({ label, value }) => (
-              <button
-                key={value}
-                onClick={() => setAccountType(value)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
-                  accountType === value
-                    ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* Days filter — hide in demo mode */}
+          {!demoMode && (
+            <div className="flex items-center bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg p-0.5 gap-0.5">
+              {DAY_OPTIONS.map(({ label, value }) => (
+                <button
+                  key={value}
+                  onClick={() => setDays(value)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
+                    days === value
+                      ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Account type filter — hide in demo mode */}
+          {!demoMode && (
+            <div className="flex items-center bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg p-0.5 gap-0.5">
+              {ACCOUNT_OPTIONS.map(({ label, value }) => (
+                <button
+                  key={value}
+                  onClick={() => setAccountType(value)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
+                    accountType === value
+                      ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Demo mode banner */}
+      {demoMode && (
+        <div className="bg-[#F59E0B]/10 border border-[#F59E0B]/20 rounded-xl px-4 py-3 flex items-center gap-3">
+          <FlaskConical size={15} className="text-[#F59E0B] shrink-0" />
+          <p className="text-[#F59E0B] text-sm">
+            Showing demo data — your real analytics will appear here once you start trading.{" "}
+            <button onClick={() => setDemoMode(false)} className="underline hover:no-underline">Switch to real data</button>
+          </p>
+        </div>
+      )}
+
+      {/* Milestone tracker */}
+      {showMilestones && (
+        <MilestoneTracker totalTrades={data!.headline.total_trades} />
+      )}
 
       {/* Loading skeleton */}
       {isLoading && <SkeletonDashboard />}
 
-      {/* No data empty state */}
-      {!isLoading && data && data.headline.total_trades === 0 && (
-        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
-          <Activity size={40} className="text-[var(--border-emphasis)] mx-auto mb-4" />
-          <p className="text-[var(--text-primary)] font-semibold text-lg">No trades yet</p>
-          <p className="text-[var(--text-tertiary)] text-sm mt-1">Start trading to see your analytics</p>
-        </div>
+      {/* Empty state — blueprint preview */}
+      {isEmpty && (
+        <>
+          {/* Floating banner */}
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-[var(--text-primary)] font-semibold text-sm">This is what your analytics will look like</p>
+              <p className="text-[var(--text-tertiary)] text-xs mt-0.5">Start trading to fill it in, or preview with sample data.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {/* navigate to paper trading */}}
+                className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                Place first trade →
+              </button>
+              <button
+                onClick={() => setDemoMode(true)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-[var(--accent-positive)] text-black font-semibold hover:opacity-90 transition-opacity"
+              >
+                See demo data
+              </button>
+            </div>
+          </div>
+
+          {/* Faded blueprint of the full dashboard */}
+          <div className="opacity-25 pointer-events-none select-none blur-[1px]">
+            <AnalyticsDashboard data={data} />
+          </div>
+        </>
       )}
 
-      {/* Dashboard content */}
-      {!isLoading && data && data.headline.total_trades > 0 && (
-        <div className="space-y-5">
-
-          {/* ── Headline stats ──────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <HeadlineCard
-              label="Total P&L"
-              value={fmtDollarFull(data.headline.total_pnl)}
-              positive={data.headline.total_pnl >= 0}
-            />
-            <HeadlineCard
-              label="Win Rate"
-              value={fmtPct(data.headline.win_rate)}
-              sub={`${data.headline.total_trades} trades`}
-              positive={data.headline.win_rate >= 50}
-            />
-            <HeadlineCard
-              label="Profit Factor"
-              value={data.headline.profit_factor.toFixed(2)}
-              positive={data.headline.profit_factor >= 1}
-            />
-            <HeadlineCard
-              label="Avg R-Multiple"
-              value={data.headline.avg_r_multiple.toFixed(2) + "R"}
-              positive={data.headline.avg_r_multiple > 0}
-            />
-            <HeadlineCard
-              label="Max Drawdown"
-              value={fmtPct(data.headline.max_drawdown)}
-              positive={false}
-            />
-            {data.headline.best_trade && (
-              <HeadlineCard
-                label="Best Trade"
-                value={fmtDollar(data.headline.best_trade.pnl)}
-                sub={data.headline.best_trade.symbol}
-                positive
-              />
-            )}
-          </div>
-
-          {/* ── Equity Curve ────────────────────────────────────────────── */}
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Equity Curve</h2>
-            {data.equity_curve.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-                No trades yet
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={data.equity_curve} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--accent-positive)" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="var(--accent-positive)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={false}
-                    interval="preserveStartEnd"
-                    tickFormatter={(v: string) => {
-                      const d = new Date(v);
-                      return `${d.toLocaleString("default", { month: "short" })} '${String(d.getFullYear()).slice(2)}`;
-                    }}
-                  />
-                  <YAxis
-                    tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v: number) => fmtDollar(v)}
-                    width={58}
-                  />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="cumulative_pnl"
-                    stroke="var(--accent-positive)"
-                    strokeWidth={2}
-                    fill="url(#equityGrad)"
-                    dot={false}
-                    activeDot={{ r: 4, fill: "var(--accent-positive)" }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          {/* ── By Setup + R Distribution ───────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-            {/* By Setup table */}
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
-              <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Edge by Setup</h2>
-              {data.by_setup.length === 0 ? (
-                <p className="text-[var(--text-tertiary)] text-sm">No setup data</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
-                        <th className="text-left pb-2 font-medium">Setup</th>
-                        <th className="text-right pb-2 font-medium">Trades</th>
-                        <th className="text-right pb-2 font-medium">Win %</th>
-                        <th className="text-right pb-2 font-medium">Avg P&L</th>
-                        <th className="text-right pb-2 font-medium">Total P&L</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border-subtle)]">
-                      {data.by_setup.map((row) => (
-                        <tr key={row.setup} className="hover:bg-[var(--bg-elevated-2)]/40 transition-colors">
-                          <td className="py-2 text-[var(--text-secondary)] font-medium pr-3">
-                            {row.setup === "(none)" ? (
-                              <span className="text-[var(--text-tertiary)] italic">No tag</span>
-                            ) : row.setup}
-                          </td>
-                          <td className="py-2 text-right text-[var(--text-tertiary)] font-mono">{row.trade_count}</td>
-                          <td className="py-2 text-right font-mono">
-                            <span className={row.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
-                              {fmtPct(row.win_rate)}
-                            </span>
-                          </td>
-                          <td className={cn("py-2 text-right font-mono", row.avg_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                            {fmtDollarFull(row.avg_pnl)}
-                          </td>
-                          <td className={cn("py-2 text-right font-bold font-mono", row.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                            {fmtDollarFull(row.total_pnl)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* R Distribution bar chart */}
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
-              <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4">R-Multiple Distribution</h2>
-              {data.r_distribution.every((b) => b.count === 0) ? (
-                <p className="text-[var(--text-tertiary)] text-sm">No R data</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={data.r_distribution} margin={{ top: 0, right: 4, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
-                    <XAxis
-                      dataKey="bucket"
-                      tick={{ fill: "var(--text-tertiary)", fontSize: 9 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
-                      tickLine={false}
-                      axisLine={false}
-                      allowDecimals={false}
-                      width={28}
-                    />
-                    <Tooltip
-                      content={({ active, payload, label }) => {
-                        if (!active || !payload?.length) return null;
-                        return (
-                          <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg px-3 py-2 text-xs shadow-xl">
-                            <p className="text-[var(--text-tertiary)] mb-0.5">{label}</p>
-                            <p className="font-bold text-[var(--text-primary)] font-mono">{payload[0].value} trades</p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Bar dataKey="count" radius={[3, 3, 0, 0]}>
-                      {data.r_distribution.map((entry, idx) => {
-                        const isNeg = entry.bucket.startsWith("<") || entry.bucket.startsWith("-");
-                        return (
-                          <Cell
-                            key={idx}
-                            fill={isNeg ? "var(--accent-negative)" : "var(--accent-positive)"}
-                            fillOpacity={0.8}
-                          />
-                        );
-                      })}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-
-          {/* ── Monthly Performance ─────────────────────────────────────── */}
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Monthly Performance</h2>
-            {data.by_month.length === 0 ? (
-              <p className="text-[var(--text-tertiary)] text-sm">No monthly data</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={data.by_month} margin={{ top: 0, right: 4, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={fmtMonth}
-                  />
-                  <YAxis
-                    tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v: number) => fmtDollar(v)}
-                    width={58}
-                  />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (!active || !payload?.length) return null;
-                      const val = payload[0].value as number;
-                      return (
-                        <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg px-3 py-2 text-xs shadow-xl">
-                          <p className="text-[var(--text-tertiary)] mb-0.5">{fmtMonth(label as string)}</p>
-                          <p className={cn("font-bold font-mono", val >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                            {fmtDollarFull(val)}
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar dataKey="total_pnl" radius={[3, 3, 0, 0]}>
-                    {data.by_month.map((entry, idx) => (
-                      <Cell
-                        key={idx}
-                        fill={entry.total_pnl >= 0 ? "var(--accent-positive)" : "var(--accent-negative)"}
-                        fillOpacity={0.8}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          {/* ── By Symbol (top 10) + Streaks & Mood ────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-            {/* By Symbol table */}
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
-              <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Top Symbols</h2>
-              {data.by_symbol.length === 0 ? (
-                <p className="text-[var(--text-tertiary)] text-sm">No symbol data</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
-                        <th className="text-left pb-2 font-medium">Symbol</th>
-                        <th className="text-right pb-2 font-medium">Trades</th>
-                        <th className="text-right pb-2 font-medium">Win %</th>
-                        <th className="text-right pb-2 font-medium">Total P&L</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.by_symbol.slice(0, 10).map((row, idx) => (
-                        <tr
-                          key={row.symbol}
-                          className={cn(
-                            "transition-colors",
-                            idx % 2 === 0 ? "bg-transparent" : "bg-[var(--bg-elevated-2)]/30"
-                          )}
-                        >
-                          <td className="py-2 text-[var(--text-primary)] font-bold font-mono pr-3">{row.symbol}</td>
-                          <td className="py-2 text-right text-[var(--text-tertiary)] font-mono">{row.trade_count}</td>
-                          <td className="py-2 text-right font-mono">
-                            <span className={row.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
-                              {fmtPct(row.win_rate)}
-                            </span>
-                          </td>
-                          <td className={cn("py-2 text-right font-bold font-mono", row.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                            {fmtDollarFull(row.total_pnl)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Streaks + Mood */}
-            <div className="space-y-4">
-              {/* Streaks */}
-              <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
-                <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-                  <Zap size={14} className="text-[#F59E0B]" />
-                  Streaks
-                </h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: "Current Win", value: data.streaks?.current_win_streak ?? 0, positive: true },
-                    { label: "Current Loss", value: data.streaks?.current_loss_streak ?? 0, positive: false },
-                    { label: "Longest Win", value: data.streaks?.longest_win_streak ?? 0, positive: true },
-                    { label: "Longest Loss", value: data.streaks?.longest_loss_streak ?? 0, positive: false },
-                  ].map(({ label, value, positive }) => (
-                    <div key={label} className="bg-[var(--bg-elevated-2)] rounded-xl p-3 text-center">
-                      <p className={cn("text-2xl font-bold font-mono", positive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                        {value}
-                      </p>
-                      <p className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{label}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Mood breakdown */}
-              <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
-                <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Performance by Mood</h2>
-                {data.by_mood.length === 0 ? (
-                  <p className="text-[var(--text-tertiary)] text-sm">No mood data</p>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px]">
-                        <th className="text-left pb-2 font-medium">Mood</th>
-                        <th className="text-right pb-2 font-medium">Trades</th>
-                        <th className="text-right pb-2 font-medium">Win %</th>
-                        <th className="text-right pb-2 font-medium">Avg P&L</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border-subtle)]">
-                      {[...data.by_mood].sort((a, b) => a.mood - b.mood).map((row) => (
-                        <tr key={row.mood} className="hover:bg-[var(--bg-elevated-2)]/40">
-                          <td className="py-2 text-lg">{moodEmoji(row.mood)}</td>
-                          <td className="py-2 text-right text-[var(--text-tertiary)] font-mono">{row.count}</td>
-                          <td className="py-2 text-right font-mono">
-                            <span className={row.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
-                              {fmtPct(row.win_rate)}
-                            </span>
-                          </td>
-                          <td className={cn("py-2 text-right font-bold font-mono", row.avg_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                            {fmtDollarFull(row.avg_pnl)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ── By Symbol Detail (top 20) ───────────────────────────────── */}
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-              <TrendingUp size={14} className="text-[var(--accent-positive)]" />
-              Symbol Breakdown (Top 20)
-            </h2>
-            {data.by_symbol.length === 0 ? (
-              <p className="text-[var(--text-tertiary)] text-sm">No trades recorded</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-[var(--text-tertiary)] uppercase tracking-wider text-[10px] border-b border-[var(--border-subtle)]">
-                      <th className="text-left pb-2 font-medium">Symbol</th>
-                      <th className="text-right pb-2 font-medium">Trades</th>
-                      <th className="text-right pb-2 font-medium">Wins</th>
-                      <th className="text-right pb-2 font-medium">Losses</th>
-                      <th className="text-right pb-2 font-medium">Win Rate</th>
-                      <th className="text-right pb-2 font-medium">Total P&L</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.by_symbol.slice(0, 20).map((row, idx) => (
-                      <tr
-                        key={row.symbol}
-                        className={cn(
-                          "transition-colors hover:bg-[var(--bg-elevated-2)]/40",
-                          idx % 2 === 0 ? "" : "bg-[var(--bg-elevated-2)]/20"
-                        )}
-                      >
-                        <td className="py-2 text-[var(--text-primary)] font-bold font-mono pr-4">{row.symbol}</td>
-                        <td className="py-2 text-right text-[var(--text-tertiary)] font-mono">{row.trade_count}</td>
-                        <td className="py-2 text-right text-[var(--accent-positive)] font-mono">{row.wins}</td>
-                        <td className="py-2 text-right text-[var(--accent-negative)] font-mono">{row.losses}</td>
-                        <td className="py-2 text-right font-mono">
-                          <span className={row.win_rate >= 50 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"}>
-                            {fmtPct(row.win_rate)}
-                          </span>
-                        </td>
-                        <td className={cn("py-2 text-right font-bold font-mono", row.total_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                          {fmtDollarFull(row.total_pnl)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* ── Worst trade footnote ─────────────────────────────────────── */}
-          <div className="flex items-center gap-4 text-xs text-[var(--text-tertiary)] px-1">
-            {data.headline.worst_trade && (
-              <span className="flex items-center gap-1.5">
-                <TrendingDown size={12} className="text-[var(--accent-negative)]" />
-                Worst trade: <span className="font-mono text-[var(--accent-negative)] font-semibold">{data.headline.worst_trade.symbol}</span>
-                {" "}{fmtDollarFull(data.headline.worst_trade.pnl)} on {data.headline.worst_trade.date}
-              </span>
-            )}
-            <span className="ml-auto">
-              Avg hold: <span className="font-mono text-[var(--text-secondary)]">{data.headline.avg_hold_days?.toFixed(1) ?? "0.0"}d</span>
-            </span>
-          </div>
-
-        </div>
+      {/* Dashboard content — real or demo */}
+      {(hasData || demoMode) && data && data.headline.total_trades > 0 && (
+        <AnalyticsDashboard data={data} />
       )}
     </div>
   );

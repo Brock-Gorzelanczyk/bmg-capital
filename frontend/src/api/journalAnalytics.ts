@@ -88,6 +88,11 @@ export interface AnalyticsResult {
   filters: AnalyticsFilters;
 }
 
+export async function getDemoAnalytics(): Promise<AnalyticsResult> {
+  const { data } = await client.get("/journal/analytics/demo");
+  return data;
+}
+
 export async function getJournalAnalytics(
   days = 365,
   accountType = "all"
