@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen, GraduationCap, Flame, Trophy, ChevronRight,
-  Zap, CalendarCheck, Users, Lock,
+  Zap, CalendarCheck, Users, Lock, Bot,
 } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { getProgress, completeOnboarding, getDailyChallenge, getLeaderboard } from "@/api/learn";
 import { useLearnStore } from "@/store/learnStore";
 import { TRACKS, COURSES, coursesForTrack, trackProgress, nextLesson, trackTotalXP } from "@/data/curriculum";
@@ -43,6 +44,7 @@ export default function LearnHome() {
   const qc = useQueryClient();
   const { progress, setProgress, hydrated } = useLearnStore();
   const [showPlacement, setShowPlacement] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["learn-progress"],
@@ -118,6 +120,9 @@ export default function LearnHome() {
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-[var(--text-primary)]">Learning Center</h1>
             {p && <StreakBadge streak={p.streak} />}
+            <button onClick={() => setAiOpen(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+              <Bot size={12} /> Ask AI
+            </button>
           </div>
           {p && <LevelBar xp={p.xp} className="max-w-sm" />}
         </div>
@@ -307,6 +312,19 @@ export default function LearnHome() {
           </div>
         </div>
       </div>
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask about BMG Academy"
+        context="BMG Capital learning center with trading courses, tracks, XP progression, and educational content"
+        suggestedQuestions={[
+          "Where should I start if I'm a complete beginner?",
+          "What's the difference between technical and fundamental analysis?",
+          "How long does it take to become a confident trader?",
+          "Which track is best for swing trading?",
+          "How do I know when I'm ready to trade with real money?",
+        ]}
+      />
     </div>
   );
 }

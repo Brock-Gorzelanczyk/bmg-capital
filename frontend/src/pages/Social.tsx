@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Heart, MessageCircle, Trash2, Send, TrendingUp, BookMarked, Users } from "lucide-react";
+import { Heart, MessageCircle, Trash2, Send, TrendingUp, BookMarked, Users, Bot } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -389,6 +390,7 @@ export default function Social() {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<FeedFilter>("all");
   const [symbolFilter, setSymbolFilter] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
 
   const feedParams = {
     symbol: filter === "symbol" && symbolFilter ? symbolFilter : undefined,
@@ -418,9 +420,14 @@ export default function Social() {
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Community Feed</h1>
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Share trade ideas and market insights</p>
         </div>
-        <div className="flex items-center gap-1.5 text-[var(--text-tertiary)]">
-          <Users size={14} />
-          <span className="text-xs">{posts.length} posts</span>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setAiOpen(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+            <Bot size={12} /> Ask AI
+          </button>
+          <div className="flex items-center gap-1.5 text-[var(--text-tertiary)]">
+            <Users size={14} />
+            <span className="text-xs">{posts.length} posts</span>
+          </div>
         </div>
       </div>
 
@@ -480,6 +487,19 @@ export default function Social() {
           ))}
         </div>
       )}
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask about Community & Social Trading"
+        context="Community feed for sharing trade ideas, market insights, and social trading discussions"
+        suggestedQuestions={[
+          "What is copy trading?",
+          "How do I evaluate a trader's track record?",
+          "What's the difference between following a trader and copy trading?",
+          "How do leaderboards work?",
+          "Should I share my trades publicly?",
+        ]}
+      />
     </div>
   );
 }

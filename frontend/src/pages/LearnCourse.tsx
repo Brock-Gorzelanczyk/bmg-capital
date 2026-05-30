@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, ChevronLeft, CheckCircle2, Lock, Clock, Zap, BookOpen, FlaskConical } from "lucide-react";
+import { ChevronRight, ChevronLeft, CheckCircle2, Lock, Clock, Zap, BookOpen, FlaskConical, Bot } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { getProgress } from "@/api/learn";
 import { useLearnStore } from "@/store/learnStore";
 import {
@@ -33,6 +35,7 @@ export default function LearnCourse() {
   const { trackId } = useParams<{ trackId: string }>();
   const navigate = useNavigate();
   const { progress } = useLearnStore();
+  const [aiOpen, setAiOpen] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["learn-progress"],
@@ -77,6 +80,9 @@ export default function LearnCourse() {
               <span className={cn("text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border", accent)}>
                 {track.difficulty}
               </span>
+              <button onClick={() => setAiOpen(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                <Bot size={12} /> Ask AI
+              </button>
             </div>
             <p className="text-[var(--text-secondary)] text-sm leading-relaxed">{track.description}</p>
             <div className="mt-4 space-y-1.5">
@@ -195,6 +201,19 @@ export default function LearnCourse() {
       </div>
 
       {p && <LevelBar xp={p.xp} compact className="max-w-xs" />}
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask about this Course"
+        context={track ? `Learning track: ${track.title} — ${track.description}` : "Trading course content"}
+        suggestedQuestions={[
+          "Can you give me an overview of what I'll learn?",
+          "What prerequisites do I need for this course?",
+          "How long will this course take to complete?",
+          "What real-world skills will I gain?",
+          "What should I study after finishing this course?",
+        ]}
+      />
     </div>
   );
 }
