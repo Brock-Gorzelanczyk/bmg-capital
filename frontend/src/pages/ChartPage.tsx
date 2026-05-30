@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { LayoutList, X, Check } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { useSearchParams } from "react-router-dom";
 import CandlestickChart, { type ChartHandle, type TradeLevels } from "@/components/chart/CandlestickChart";
 import RsiChart from "@/components/chart/RsiChart";
@@ -207,6 +208,7 @@ export default function ChartPage() {
   const [showProPaywall, setShowProPaywall] = useState(false);
   const canProMode = useTierStore((s) => s.can("pro_mode"));
   const [savedIndicator, setSavedIndicator] = useState(false);
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
 
   const presetKey = searchParams.get("preset") ?? null;
 
@@ -505,6 +507,7 @@ export default function ChartPage() {
           }
         }}
         onTradeClick={() => setShowOrderTicket(true)}
+        onAnalyzeClick={() => setAiDrawerOpen(true)}
       />
 
       {/* Preset context banner */}
@@ -869,6 +872,21 @@ export default function ChartPage() {
         requiredTier="plus"
         featureLabel="Pro Mode"
         featureDescription="Sub-pane indicators, drawing tools, and advanced chart analysis require Plus or Premium."
+      />
+
+      {/* AI chart analysis drawer */}
+      <AskAIDrawer
+        open={aiDrawerOpen}
+        onClose={() => setAiDrawerOpen(false)}
+        title={`BMG Analysis — ${symbol}`}
+        context={`Chart analysis for ${symbol}. User is viewing a price chart.`}
+        suggestedQuestions={[
+          `What's the current trend for ${symbol}?`,
+          `What are key support and resistance levels?`,
+          `Is ${symbol} overbought or oversold right now?`,
+          `What does the recent price action suggest?`,
+          `What catalysts could move ${symbol} in the next 30 days?`,
+        ]}
       />
     </div>
   );

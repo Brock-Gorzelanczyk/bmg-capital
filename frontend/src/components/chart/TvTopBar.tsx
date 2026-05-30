@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bell, Wifi, WifiOff, ChevronDown,
-  LayoutDashboard, Filter, BookMarked, Briefcase, Settings, Moon, GitCompare, X,
+  LayoutDashboard, Filter, BookMarked, Briefcase, Settings, Moon, GitCompare, X, Bot,
 } from "lucide-react";
 import { useWsStore, useAlertStore } from "@/store";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,7 @@ interface Props {
   proMode?: boolean;
   onProModeToggle?: () => void;
   onTradeClick?: () => void;
+  onAnalyzeClick?: () => void;
 }
 
 export default function TvTopBar({
@@ -57,6 +58,7 @@ export default function TvTopBar({
   onSymbolChange, onChartTypeChange,
   onIndicatorsClick, onWatchlistToggle, showWatchlist,
   compareSymbol, onCompare,
+  onAnalyzeClick,
 }: Props) {
   const navigate = useNavigate();
   const wsStatus = useWsStore((s) => s.status);
@@ -184,6 +186,20 @@ export default function TvTopBar({
       >
         Indicators
       </button>
+
+      {SEP}
+
+      {/* Analyze */}
+      {onAnalyzeClick && (
+        <button
+          onClick={onAnalyzeClick}
+          className="h-10 px-2.5 flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)] hover:text-[var(--text-primary)] transition-colors"
+          title="AI chart analysis"
+        >
+          <Bot size={13} className="text-blue-400" />
+          <span>Analyze</span>
+        </button>
+      )}
 
       {SEP}
 
