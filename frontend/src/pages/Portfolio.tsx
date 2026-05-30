@@ -28,7 +28,9 @@ import {
   BarChart2,
   Clock,
   Sprout,
+  Bot,
 } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -1010,6 +1012,7 @@ export default function Portfolio() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<ActiveTab>("holdings");
   const [selectedPosition, setSelectedPosition] = useState<PaperPosition | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const { data: account, isLoading: accountLoading } = useQuery({
     queryKey: ["paper-account"],
@@ -1066,6 +1069,16 @@ export default function Portfolio() {
 
   return (
     <div className="space-y-4 pb-20 md:pb-8">
+      {/* Ask AI button — top-right */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => setAiOpen(true)}
+          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <Bot size={12} /> Ask AI
+        </button>
+      </div>
+
       {/* Section 1: Hero P&L Bar */}
       <HeroBar account={account} loading={accountLoading} />
 
@@ -1141,6 +1154,20 @@ export default function Portfolio() {
         position={selectedPosition}
         onClose={() => setSelectedPosition(null)}
         onTrade={(symbol, side) => navigate(`/paper?symbol=${symbol}&side=${side}`)}
+      />
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Your Portfolio"
+        context="Portfolio — paper trading positions, P&L, allocation, risk metrics"
+        suggestedQuestions={[
+          "How should I think about portfolio concentration risk?",
+          "What's a healthy portfolio allocation between sectors?",
+          "How do I calculate my portfolio's beta?",
+          "When should I take profits vs let winners run?",
+          "What does a balanced risk/reward portfolio look like?",
+        ]}
       />
     </div>
   );

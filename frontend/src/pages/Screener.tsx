@@ -5,7 +5,8 @@ import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen, p
 import { getSectorPerformance } from "@/api/discovery";
 import type { FilterConfig, ScreenResult } from "@/types/screener";
 import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
-import { Play, Plus, Trash2, TrendingUp, BarChart2, ArrowDownUp, Zap, Info, Bookmark, BookmarkCheck, X, Sparkles, Loader2, RefreshCw } from "lucide-react";
+import { Play, Plus, Trash2, TrendingUp, BarChart2, ArrowDownUp, Zap, Info, Bookmark, BookmarkCheck, X, Sparkles, Loader2, RefreshCw, Bot } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { TICKER_NAMES } from "@/data/tickerNames";
 import SectorPill from "@/components/ui/SectorPill";
 
@@ -161,6 +162,7 @@ export default function Screener() {
   const qc = useQueryClient();
   const [filters, setFilters] = useState<FilterConfig[]>([]);
   const [results, setResults] = useState<ScreenResult[]>([]);
+  const [aiOpen, setAiOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ran, setRan] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>(null);
@@ -322,7 +324,15 @@ export default function Screener() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-[var(--text-primary)]">Stock Screener</h2>
-        <span className="text-xs text-[var(--text-tertiary)]">Universe: 500+ stocks</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-[var(--text-tertiary)]">Universe: 500+ stocks</span>
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Bot size={12} /> Ask AI
+          </button>
+        </div>
       </div>
 
       {/* Natural language input */}
@@ -664,6 +674,20 @@ export default function Screener() {
           )}
         </div>
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Screening"
+        context="Stock Screener — filtering stocks by fundamental and technical criteria"
+        suggestedQuestions={[
+          "What filters identify stocks with strong momentum?",
+          "How do I screen for undervalued growth stocks?",
+          "What RSI levels make good screener entry signals?",
+          "How should I combine P/E ratio with revenue growth in a screen?",
+          "What's a typical screen setup for swing trading?",
+        ]}
+      />
     </div>
   );
 }

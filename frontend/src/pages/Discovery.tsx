@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { TrendingUp, TrendingDown, ExternalLink, RefreshCw, AlertTriangle, Share2 } from "lucide-react";
+import { TrendingUp, TrendingDown, ExternalLink, RefreshCw, AlertTriangle, Share2, Bot } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { cn } from "@/lib/utils";
 import { getThemes, getIPOs, getInsiders, getSectorPerformance, getCryptoLaunches, getNarratives, getIdoCalendar, getMemecoins, generateTheme } from "@/api/discovery";
 import { getGovernanceProposals } from "@/api/governance";
@@ -1066,12 +1067,21 @@ type Tab = typeof TABS[number]["id"];
 
 export default function Discovery() {
   const [tab, setTab] = useState<Tab>("themes");
+  const [aiOpen, setAiOpen] = useState(false);
 
   return (
     <div className="space-y-5 pb-8">
-      <div>
-        <h1 className="text-xl font-bold text-[var(--text-primary)]">Discovery</h1>
-        <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Explore themes, sectors, IPOs, crypto launches, narratives, and governance</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">Discovery</h1>
+          <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Explore themes, sectors, IPOs, crypto launches, narratives, and governance</p>
+        </div>
+        <button
+          onClick={() => setAiOpen(true)}
+          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
+        >
+          <Bot size={12} /> Ask AI
+        </button>
       </div>
 
       <div className="flex gap-1 bg-[var(--bg-elevated-2)] p-1 rounded-xl w-fit flex-wrap">
@@ -1099,6 +1109,20 @@ export default function Discovery() {
         {tab === "ido"        && <IdoCalendarTab />}
         {tab === "governance" && <GovernanceTab />}
       </div>
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Markets"
+        context="Discovery — themes, sectors, IPOs, insider trades, crypto launches"
+        suggestedQuestions={[
+          "What investment themes are showing momentum right now?",
+          "How do I evaluate an IPO before it starts trading?",
+          "What does heavy insider buying signal about a stock?",
+          "Which sectors typically lead a market recovery?",
+          "How should I think about DeFi tokens vs traditional assets?",
+        ]}
+      />
     </div>
   );
 }

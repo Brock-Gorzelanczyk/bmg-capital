@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Plus, Trash2, Sparkles, ChevronDown, Save, BookOpen, X, Check, Loader2, AlertTriangle, TrendingUp, TrendingDown, Minus as MinusIcon, Upload, Image as ImageIcon } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import CandlestickChart, { type ChartHandle } from "@/components/chart/CandlestickChart";
 import RsiChart from "@/components/chart/RsiChart";
 import MacdChart from "@/components/chart/MacdChart";
@@ -788,6 +789,7 @@ export default function WorkshopPage() {
   );
   const [activeTool, setActiveTool] = useState<DrawingTool>("cursor");
   const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [aiOpen, setAiOpen] = useState(false);
   const [pendingTrendStart, setPendingTrendStart] = useState<{ time: number; price: number } | null>(null);
   const [pendingRectStart, setPendingRectStart] = useState<{ time: number; price: number } | null>(null);
   const [pendingFibStart, setPendingFibStart] = useState<{ time: number; price: number } | null>(null);
@@ -934,6 +936,7 @@ export default function WorkshopPage() {
         proMode={true}
         onProModeToggle={() => {}}
         onTradeClick={() => {}}
+        onAnalyzeClick={() => setAiOpen(true)}
       />
 
       {/* Main area */}
@@ -1091,6 +1094,20 @@ export default function WorkshopPage() {
           onClose={() => setShowIndicatorsModal(false)}
         />
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title={`BMG Analysis — ${symbol}`}
+        context={`TA Workshop — technical analysis for ${symbol}`}
+        suggestedQuestions={[
+          `What's the current trend for ${symbol}?`,
+          "What are the key support and resistance levels here?",
+          "How do I read a descending triangle pattern?",
+          "When is RSI divergence a reliable signal?",
+          "Explain the significance of the 200-day moving average",
+        ]}
+      />
     </div>
   );
 }
