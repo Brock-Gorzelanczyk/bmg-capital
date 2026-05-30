@@ -353,3 +353,68 @@ async def copilot_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── Reading-level rewrite endpoint ───────────────────────────────────────────
+
+_REWRITE_SYSTEM = """You are a financial content editor. Rewrite the given content at the requested reading level:
+- pro: keep all technical language, add detail where helpful
+- investor: clear, confident, focused on what matters for investment decisions
+- beginner: plain language, define jargon inline, no assumptions
+- eli5: extremely simple, one-syllable words where possible, use analogies
+
+Return ONLY the rewritten content, no preamble."""
+
+
+class RewriteRequest(BaseModel):
+    content: str
+    level: str  # "pro" | "investor" | "beginner" | "eli5"
+    context: str = ""
+
+
+class RewriteResponse(BaseModel):
+    rewritten: str
+
+
+@router.post("/rewrite-level", response_model=RewriteResponse)
+async def rewrite_level(
+    body: RewriteRequest,
+    current_user: User = Depends(get_current_user),
+):
+    if not settings.anthropic_api_key:
+        return RewriteResponse(rewritten=body.content)
+
+    # Truncate to 2000 chars
+    content = body.content[:2000]
+
+    user_msg = f"Level: {body.level}\n\nContent:\n{content}"
+    if body.context:
+        user_msg = f"Context: {body.context}\n\n{user_msg}"
+
+    hdrs = {
+        "x-api-key": settings.anthropic_api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=hdrs,
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 1024,
+                    "system": _REWRITE_SYSTEM,
+                    "messages": [{"role": "user", "content": user_msg}],
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            rewritten = "".join(
+                b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
+            )
+            return RewriteResponse(rewritten=rewritten or body.content)
+    except Exception as e:
+        logger.warning(f"rewrite-level failed: {e}")
+        return RewriteResponse(rewritten=body.content)

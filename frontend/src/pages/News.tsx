@@ -1,12 +1,15 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { getNews } from "@/api/market";
-import { ExternalLink, RefreshCw, X } from "lucide-react";
+import { ExternalLink, RefreshCw, X, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { COMPANY_INFO } from "@/data/companyInfo";
 import SectorPill from "@/components/ui/SectorPill";
 import GlossaryTooltip from "@/components/explain/GlossaryTooltip";
+import ReadingLevelSlider, { ReadingLevel } from "@/components/ui/ReadingLevelSlider";
+import client from "@/api/client";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -29,8 +32,63 @@ function SymbolChip({ symbol, onClick }: { symbol: string; onClick: () => void }
   );
 }
 
-function NewsCard({ article, onSymbolClick }: { article: any; onSymbolClick: (s: string) => void }) {
+async function rewriteContent(content: string, level: ReadingLevel): Promise<string> {
+  const res = await client.post("/api/copilot/rewrite-level", {
+    content,
+    level,
+    context: "Financial news article summary",
+  });
+  return res.data.rewritten as string;
+}
+
+function NewsCard({
+  article,
+  level,
+  rewriteCache,
+  onSymbolClick,
+  onCacheUpdate,
+}: {
+  article: any;
+  level: ReadingLevel;
+  rewriteCache: Map<string, string>;
+  onSymbolClick: (s: string) => void;
+  onCacheUpdate: (key: string, value: string) => void;
+}) {
   const ago = timeAgo(article.published_at);
+  const cacheKey = `${article.id}:${level}`;
+  const cached = rewriteCache.get(cacheKey);
+
+  const [rewriting, setRewriting] = useState(false);
+  const activeKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    // "investor" is the default API level — no rewrite needed
+    if (level === "investor" || !article.summary) return;
+    if (rewriteCache.has(cacheKey)) return;
+
+    activeKey.current = cacheKey;
+    setRewriting(true);
+
+    rewriteContent(article.summary, level).then((rewritten) => {
+      // Only update if the key is still current (level didn't change while loading)
+      if (activeKey.current === cacheKey) {
+        onCacheUpdate(cacheKey, rewritten);
+        setRewriting(false);
+      }
+    }).catch(() => {
+      if (activeKey.current === cacheKey) setRewriting(false);
+    });
+
+    return () => {
+      activeKey.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey]);
+
+  const displaySummary = level === "investor"
+    ? article.summary
+    : cached ?? article.summary;
+
   return (
     <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 hover:border-[var(--border-emphasis)] transition-colors duration-150 group">
       <div className="flex gap-4">
@@ -43,9 +101,12 @@ function NewsCard({ article, onSymbolClick }: { article: any; onSymbolClick: (s:
           >
             {article.headline}
           </a>
-          {article.summary && (
-            <p className="mt-1.5 text-[var(--text-tertiary)] text-xs leading-relaxed line-clamp-2">
-              <GlossaryTooltip>{article.summary}</GlossaryTooltip>
+          {displaySummary && (
+            <p className={cn(
+              "mt-1.5 text-[var(--text-tertiary)] text-xs leading-relaxed line-clamp-2",
+              rewriting && "opacity-50 animate-pulse"
+            )}>
+              {rewriting ? "Rewriting…" : <GlossaryTooltip>{displaySummary}</GlossaryTooltip>}
             </p>
           )}
           <div className="mt-2.5 flex items-center gap-3 flex-wrap">
@@ -80,6 +141,9 @@ export default function News() {
   const navigate = useNavigate();
   const [filterSymbol, setFilterSymbol] = useState("");
   const [inputVal, setInputVal] = useState("");
+  const [level, setLevel] = useState<ReadingLevel>("investor");
+  const [rewriteCache, setRewriteCache] = useState<Map<string, string>>(new Map());
+  const [aiOpen, setAiOpen] = useState(false);
 
   const symbols = filterSymbol ? [filterSymbol] : undefined;
 
@@ -99,6 +163,10 @@ export default function News() {
     setInputVal("");
   };
 
+  const handleCacheUpdate = (key: string, value: string) => {
+    setRewriteCache((prev) => new Map(prev).set(key, value));
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -106,14 +174,17 @@ export default function News() {
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Market News</h1>
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Latest financial news and market updates</p>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="flex items-center gap-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors duration-150 text-sm cursor-pointer"
-        >
-          <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <ReadingLevelSlider level={level} onChange={setLevel} />
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors duration-150 text-sm cursor-pointer"
+          >
+            <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSearch} className="flex items-center gap-2 flex-wrap">
@@ -141,7 +212,7 @@ export default function News() {
           Filter
         </button>
         {filterSymbol && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[var(--text-tertiary)] text-sm">Showing news for</span>
             <span className="font-mono font-bold text-[var(--text-primary)]">{filterSymbol}</span>
             {COMPANY_INFO[filterSymbol] && (
@@ -153,6 +224,12 @@ export default function News() {
               className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] underline cursor-pointer transition-colors duration-150"
             >
               View chart →
+            </button>
+            <button
+              onClick={() => setAiOpen(true)}
+              className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-500 text-white font-semibold px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <Bot size={11} /> Ask AI
             </button>
           </div>
         )}
@@ -178,7 +255,10 @@ export default function News() {
             <NewsCard
               key={a.id}
               article={a}
+              level={level}
+              rewriteCache={rewriteCache}
               onSymbolClick={(s) => { setInputVal(s); setFilterSymbol(s); }}
+              onCacheUpdate={handleCacheUpdate}
             />
           ))}
         </div>

@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getFundamentals } from "@/api/research";
 import { getNews } from "@/api/market";
 import { useMarketStore } from "@/store";
 import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
-import { LineChart, ExternalLink, Search, Building2, Globe, Users } from "lucide-react";
+import { LineChart, ExternalLink, Search, Building2, Globe, Users, Bot } from "lucide-react";
 import SectorPill from "@/components/ui/SectorPill";
 import ExplainButton from "@/components/explain/ExplainButton";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
+import ReadingLevelSlider, { ReadingLevel } from "@/components/ui/ReadingLevelSlider";
+import client from "@/api/client";
 
 // Labels that have glossary entries — gets an ExplainButton
 const EXPLAINABLE = new Set([
@@ -71,11 +74,25 @@ const RECOMMENDATION_COLOR: Record<string, string> = {
   "strong_sell": "text-red-600",
 };
 
+async function rewriteContent(content: string, level: ReadingLevel, context: string): Promise<string> {
+  const res = await client.post("/api/copilot/rewrite-level", {
+    content,
+    level,
+    context,
+  });
+  return res.data.rewritten as string;
+}
+
 export default function Research() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState(params.get("symbol") ?? "");
   const [activeSymbol, setActiveSymbol] = useState(params.get("symbol") ?? "");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [level, setLevel] = useState<ReadingLevel>("investor");
+  const [descCache, setDescCache] = useState<Map<string, string>>(new Map());
+  const [rewritingDesc, setRewritingDesc] = useState(false);
+  const activeRewriteKey = useRef<string | null>(null);
 
   const quotes = useMarketStore((s) => s.quotes);
   const liveQuote = activeSymbol ? quotes[activeSymbol] : null;
@@ -94,6 +111,35 @@ export default function Research() {
     staleTime: 120_000,
   });
 
+  // Rewrite description when level changes (except investor = default)
+  useEffect(() => {
+    if (!fund?.description || level === "investor") return;
+
+    const cacheKey = `${activeSymbol}:${level}`;
+    if (descCache.has(cacheKey)) return;
+
+    activeRewriteKey.current = cacheKey;
+    setRewritingDesc(true);
+
+    rewriteContent(
+      fund.description,
+      level,
+      `Company description for ${fund.symbol} (${fund.name})`
+    ).then((rewritten) => {
+      if (activeRewriteKey.current === cacheKey) {
+        setDescCache((prev) => new Map(prev).set(cacheKey, rewritten));
+        setRewritingDesc(false);
+      }
+    }).catch(() => {
+      if (activeRewriteKey.current === cacheKey) setRewritingDesc(false);
+    });
+
+    return () => {
+      activeRewriteKey.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level, activeSymbol, fund?.description]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const sym = searchInput.trim().toUpperCase();
@@ -102,6 +148,11 @@ export default function Research() {
       navigate(`/research?symbol=${sym}`, { replace: true });
     }
   };
+
+  const descCacheKey = `${activeSymbol}:${level}`;
+  const displayDescription = level === "investor"
+    ? fund?.description
+    : (descCache.get(descCacheKey) ?? fund?.description);
 
   const price = liveQuote?.price ?? fund?.current_price;
   const prevClose = fund?.previous_close;
@@ -113,6 +164,7 @@ export default function Research() {
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--text-primary)]">Company Research</h1>
+        <ReadingLevelSlider level={level} onChange={setLevel} />
       </div>
 
       <form onSubmit={handleSearch} className="flex items-center gap-2">
@@ -203,6 +255,12 @@ export default function Research() {
                   >
                     <LineChart size={12} /> View Chart
                   </button>
+                  <button
+                    onClick={() => setAiOpen(true)}
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <Bot size={12} /> Ask AI
+                  </button>
                 </div>
               </div>
             </div>
@@ -287,7 +345,12 @@ export default function Research() {
           {fund.description && (
             <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
               <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">About</h2>
-              <p className="text-[var(--text-secondary)] text-sm leading-relaxed line-clamp-6">{fund.description}</p>
+              <p className={cn(
+                "text-[var(--text-secondary)] text-sm leading-relaxed line-clamp-6",
+                rewritingDesc && "opacity-50 animate-pulse"
+              )}>
+                {rewritingDesc ? "Rewriting…" : displayDescription}
+              </p>
             </div>
           )}
 
@@ -320,6 +383,20 @@ export default function Research() {
           )}
         </div>
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title={activeSymbol ? `Ask BMG about ${activeSymbol}` : "Ask BMG"}
+        context={activeSymbol ? `Research page for ${activeSymbol}` : "Research"}
+        suggestedQuestions={[
+          "What's the bull case?",
+          "Any risks I should know?",
+          "How does valuation compare to peers?",
+          "What do analysts think?",
+          "Explain their business model",
+        ]}
+      />
     </div>
   );
 }
