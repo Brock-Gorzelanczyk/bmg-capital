@@ -185,6 +185,68 @@ async function rewriteContent(content: string, level: ReadingLevel, context: str
   return res.data.rewritten as string;
 }
 
+// ── BMG Score Badge ───────────────────────────────────────────────────────────
+
+const BMG_GRADE_COLOR: Record<string, string> = {
+  A: "#26a69a",
+  B: "#3b82f6",
+  C: "#f59e0b",
+  D: "#ef5350",
+  F: "#ef5350",
+};
+
+const COMPONENT_LABELS: Record<string, string> = {
+  value: "Value",
+  growth: "Growth",
+  profitability: "Profitability",
+  momentum: "Momentum",
+  analyst: "Analyst",
+};
+
+function BmgScoreBadge({
+  score,
+  grade,
+  components,
+}: {
+  score: number;
+  grade: string;
+  components: Record<string, number>;
+}) {
+  const color = BMG_GRADE_COLOR[grade] ?? "#3b82f6";
+  const tooltipLines = Object.entries(components)
+    .map(([k, v]) => `${COMPONENT_LABELS[k] ?? k}: ${v}/2`)
+    .join("\n");
+
+  return (
+    <div className="relative mt-3 flex justify-end group">
+      <div
+        className="flex flex-col items-center justify-center w-16 h-16 rounded-full border-2 cursor-default select-none"
+        style={{ borderColor: color, backgroundColor: `${color}18` }}
+        title={tooltipLines}
+      >
+        <span className="text-lg font-bold leading-none" style={{ color }}>{score.toFixed(1)}</span>
+        <span className="text-[10px] font-semibold leading-none mt-0.5" style={{ color }}>{grade}</span>
+      </div>
+      {/* Hover tooltip */}
+      <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-10 pointer-events-none">
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg p-3 shadow-xl min-w-[160px]">
+          <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider mb-2">BMG Score</div>
+          {Object.entries(components).map(([k, v]) => (
+            <div key={k} className="flex items-center justify-between gap-4 text-xs py-0.5">
+              <span className="text-[var(--text-secondary)]">{COMPONENT_LABELS[k] ?? k}</span>
+              <span className="font-semibold text-[var(--text-primary)]">{v}/2</span>
+            </div>
+          ))}
+          <div className="border-t border-[var(--border-subtle)] mt-2 pt-2 flex items-center justify-between text-xs font-bold">
+            <span className="text-[var(--text-secondary)]">Total</span>
+            <span style={{ color }}>{score.toFixed(1)}/10 &nbsp;{grade}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ResearchTab = "overview" | "financials" | "news";
 
 export default function Research() {
@@ -387,6 +449,13 @@ export default function Research() {
                     <Bot size={12} /> Ask AI
                   </button>
                 </div>
+                {fund.bmg_score && (
+                  <BmgScoreBadge
+                    score={fund.bmg_score.score}
+                    grade={fund.bmg_score.grade}
+                    components={fund.bmg_score.components}
+                  />
+                )}
               </div>
             </div>
           </div>

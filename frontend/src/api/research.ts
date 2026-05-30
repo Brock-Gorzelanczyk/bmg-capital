@@ -61,6 +61,11 @@ export interface Fundamentals {
       eps: number | null;
     }>;
   } | null;
+  bmg_score?: {
+    score: number;
+    grade: string;
+    components: Record<string, number>;
+  } | null;
 }
 
 export async function getFundamentals(symbol: string): Promise<Fundamentals> {

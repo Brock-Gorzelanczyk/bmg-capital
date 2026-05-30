@@ -9,6 +9,100 @@ import yfinance as yf
 logger = logging.getLogger(__name__)
 
 
+def compute_bmg_score(info: dict) -> dict:
+    """Compute a 1-10 BMG composite quality/momentum score from yfinance info dict."""
+
+    def safe(key, default=None):
+        val = info.get(key)
+        if val in (None, "N/A", ""):
+            return default
+        return val
+
+    components: dict = {}
+
+    # 1. Value (0-2): based on forwardPE
+    forward_pe = safe("forwardPE")
+    if forward_pe is not None and forward_pe > 0:
+        if forward_pe < 15:
+            components["value"] = 2
+        elif forward_pe <= 25:
+            components["value"] = 1
+        else:
+            components["value"] = 0
+    else:
+        components["value"] = 0
+
+    # 2. Growth (0-2): based on revenueGrowth
+    revenue_growth = safe("revenueGrowth")
+    if revenue_growth is not None:
+        if revenue_growth > 0.15:
+            components["growth"] = 2
+        elif revenue_growth >= 0.05:
+            components["growth"] = 1
+        else:
+            components["growth"] = 0
+    else:
+        components["growth"] = 0
+
+    # 3. Profitability (0-2): based on profitMargins
+    profit_margins = safe("profitMargins")
+    if profit_margins is not None:
+        if profit_margins > 0.15:
+            components["profitability"] = 2
+        elif profit_margins >= 0.05:
+            components["profitability"] = 1
+        else:
+            components["profitability"] = 0
+    else:
+        components["profitability"] = 0
+
+    # 4. Momentum (0-2): price position within 52-week range
+    current_price = safe("currentPrice") or safe("regularMarketPrice")
+    high_52 = safe("fiftyTwoWeekHigh")
+    low_52 = safe("fiftyTwoWeekLow")
+    if current_price is not None and high_52 is not None and low_52 is not None:
+        price_range = high_52 - low_52
+        if price_range > 0:
+            position = (current_price - low_52) / price_range
+            if position > 0.7:
+                components["momentum"] = 2
+            elif position >= 0.4:
+                components["momentum"] = 1
+            else:
+                components["momentum"] = 0
+        else:
+            components["momentum"] = 0
+    else:
+        components["momentum"] = 0
+
+    # 5. Analyst Consensus (0-2): based on recommendationMean (1=Strong Buy … 5=Strong Sell)
+    rec_mean = safe("recommendationMean")
+    if rec_mean is not None:
+        if rec_mean <= 2.0:
+            components["analyst"] = 2
+        elif rec_mean <= 2.5:
+            components["analyst"] = 1
+        else:
+            components["analyst"] = 0
+    else:
+        components["analyst"] = 1  # neutral default when missing
+
+    score = float(sum(components.values()))
+
+    if score >= 8:
+        grade = "A"
+    elif score >= 6:
+        grade = "B"
+    elif score >= 4:
+        grade = "C"
+    elif score >= 2:
+        grade = "D"
+    else:
+        grade = "F"
+
+    return {"score": score, "grade": grade, "components": components}
+
+
 def _safe_get(info: dict, key: str, default=None):
     val = info.get(key)
     if val in (None, "N/A", ""):
@@ -117,6 +211,7 @@ async def get_fundamentals(symbol: str) -> Dict[str, Any]:
             "recommendation": _safe_get(info, "recommendationKey"),
             "num_analysts": _safe_get(info, "numberOfAnalystOpinions"),
             "financials": {"quarterly": quarterly} if quarterly else None,
+            "bmg_score": compute_bmg_score(info),
         }
 
     try:
