@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { getEarnings } from "@/api/market";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Calendar, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
+import { Calendar, ChevronRight, TrendingUp, TrendingDown, Bot } from "lucide-react";
 import SectorPill from "@/components/ui/SectorPill";
 import { COMPANY_INFO } from "@/data/companyInfo";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
 function groupByDate(events: any[]) {
   const map = new Map<string, any[]>();
@@ -94,6 +95,7 @@ function EarningsRow({ event }: { event: any }) {
 
 export default function Earnings() {
   const [daysAhead, setDaysAhead] = useState(14);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["earnings", daysAhead],
@@ -110,19 +112,27 @@ export default function Earnings() {
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Earnings Calendar</h1>
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Upcoming earnings reports</p>
         </div>
-        <div className="flex items-center gap-1 bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg p-1">
-          {[7, 14, 30].map((d) => (
-            <button
-              key={d}
-              onClick={() => setDaysAhead(d)}
-              className={cn(
-                "px-3 py-1 rounded text-sm transition-colors",
-                daysAhead === d ? "bg-white text-black font-semibold" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-              )}
-            >
-              {d}d
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Bot size={12} /> Ask AI
+          </button>
+          <div className="flex items-center gap-1 bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg p-1">
+            {[7, 14, 30].map((d) => (
+              <button
+                key={d}
+                onClick={() => setDaysAhead(d)}
+                className={cn(
+                  "px-3 py-1 rounded text-sm transition-colors",
+                  daysAhead === d ? "bg-white text-black font-semibold" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                )}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -164,6 +174,20 @@ export default function Earnings() {
           ))}
         </div>
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Earnings"
+        context="Earnings Calendar"
+        suggestedQuestions={[
+          "Which earnings reports look most interesting this week?",
+          "What are analysts expecting from major upcoming reporters?",
+          "Explain implied move from the options market",
+          "Which sectors report earnings most this week?",
+          "What should I watch for in upcoming earnings calls?",
+        ]}
+      />
     </div>
   );
 }

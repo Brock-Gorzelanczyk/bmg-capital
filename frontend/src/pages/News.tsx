@@ -263,6 +263,27 @@ export default function News() {
           ))}
         </div>
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title={filterSymbol ? `Ask BMG about ${filterSymbol}` : "Ask BMG about News"}
+        context={filterSymbol ? `News feed filtered for ${filterSymbol}` : "Market News"}
+        suggestedQuestions={
+          filterSymbol
+            ? [
+                `What's the sentiment on ${filterSymbol} this week?`,
+                "Summarize the recent news",
+                "Is this news bullish or bearish?",
+                "How should I interpret these headlines?",
+              ]
+            : [
+                "What are the biggest market stories today?",
+                "Summarize recent market news",
+                "Which sectors are in the news most?",
+              ]
+        }
+      />
     </div>
   );
 }
