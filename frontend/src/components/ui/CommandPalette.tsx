@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, LayoutDashboard, LineChart, Filter, BookMarked, Briefcase, Bell, FlaskConical, Newspaper, Calendar, Microscope, PlayCircle } from "lucide-react";
+import { Search, LayoutDashboard, LineChart, Filter, BookMarked, Briefcase, Bell, FlaskConical, Newspaper, Calendar, Microscope, PlayCircle, TrendingUp, BookOpen, Layers, Globe, BarChart2, Shield, Zap, Users, Compass } from "lucide-react";
 import { COMPANY_INFO } from "@/data/companyInfo";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,16 @@ const PAGES = [
   { label: "Earnings", to: "/earnings", Icon: Calendar },
   { label: "Research", to: "/research", Icon: Microscope },
   { label: "Paper Trading", to: "/paper", Icon: PlayCircle },
+  { label: "Discovery", to: "/discover", Icon: Compass },
+  { label: "Trade Journal", to: "/journal", Icon: BookOpen },
+  { label: "Analytics", to: "/analytics", Icon: BarChart2 },
+  { label: "TA Workshop", to: "/workshop", Icon: LineChart },
+  { label: "Crypto Lab", to: "/crypto", Icon: Zap },
+  { label: "Options Lab", to: "/options", Icon: Layers },
+  { label: "DeFi", to: "/defi", Icon: Globe },
+  { label: "Social", to: "/social", Icon: Users },
+  { label: "Security", to: "/security", Icon: Shield },
+  { label: "Learn", to: "/learn", Icon: TrendingUp },
 ];
 
 const SYMBOLS = Object.entries(COMPANY_INFO).map(([sym, info]) => ({ sym, name: info.name, sector: info.sector }));
@@ -69,15 +79,23 @@ export default function CommandPalette({ open, onClose }: Props) {
 
     const symMatches: CommandItem[] = SYMBOLS
       .filter((s) => s.sym.toLowerCase().startsWith(q) || s.name.toLowerCase().includes(q))
-      .slice(0, 8)
-      .map((s) => ({
-        type: "symbol" as const,
-        label: s.sym,
-        subtitle: s.name,
-        action: () => { navigate(`/chart?symbol=${s.sym}`); onClose(); },
-      }));
+      .slice(0, 5)
+      .flatMap((s) => [
+        {
+          type: "symbol" as const,
+          label: s.sym,
+          subtitle: `Chart — ${s.name}`,
+          action: () => { navigate(`/chart?symbol=${s.sym}`); onClose(); },
+        },
+        {
+          type: "symbol" as const,
+          label: s.sym,
+          subtitle: `Research — ${s.name}`,
+          action: () => { navigate(`/research?symbol=${s.sym}`); onClose(); },
+        },
+      ]);
 
-    return [...pageMatches, ...symMatches].slice(0, 10);
+    return [...pageMatches, ...symMatches].slice(0, 12);
   })();
 
   const select = useCallback((idx: number) => {
@@ -134,13 +152,13 @@ export default function CommandPalette({ open, onClose }: Props) {
                 {item.type === "page" ? (
                   <span className="text-[var(--text-tertiary)] shrink-0">{item.icon}</span>
                 ) : (
-                  <span className="w-4 h-4 rounded-sm bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] text-[8px] font-bold flex items-center justify-center shrink-0">$</span>
+                  <span className="w-5 h-5 rounded-sm bg-teal-500/15 text-teal-400 text-[9px] font-bold flex items-center justify-center shrink-0 border border-teal-500/20">$</span>
                 )}
                 <span className="text-sm font-medium text-[var(--text-primary)] truncate">{item.label}</span>
                 {item.subtitle && (
-                  <span className="text-xs text-[var(--text-tertiary)] truncate ml-auto shrink-0 max-w-[160px]">{item.subtitle}</span>
+                  <span className="text-xs text-[var(--text-tertiary)] truncate ml-auto shrink-0 max-w-[200px]">{item.subtitle}</span>
                 )}
-                {item.type === "page" && (
+                {item.type === "page" && !item.subtitle && (
                   <span className="ml-auto text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider shrink-0">page</span>
                 )}
               </button>
