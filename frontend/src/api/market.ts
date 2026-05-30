@@ -22,3 +22,20 @@ export async function getEarnings(daysAhead = 14): Promise<EarningsEvent[]> {
   const { data } = await client.get<{ earnings: EarningsEvent[] }>("/earnings", { params: { days_ahead: daysAhead } });
   return data.earnings;
 }
+
+export async function getImpliedMove(symbol: string): Promise<{ symbol: string; implied_move_pct: number | null }> {
+  const { data } = await client.get<{ symbol: string; implied_move_pct: number | null }>(`/earnings/implied-move/${symbol}`);
+  return data;
+}
+
+export interface EarningsHistoryEntry {
+  period: string;
+  eps_actual: number | null;
+  eps_estimate: number | null;
+  surprise_pct: number | null;
+}
+
+export async function getEarningsHistory(symbol: string): Promise<EarningsHistoryEntry[]> {
+  const { data } = await client.get<{ symbol: string; history: EarningsHistoryEntry[] }>(`/earnings/history/${symbol}`);
+  return data.history;
+}
