@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { COMPANY_INFO } from "@/data/companyInfo";
 import SectorPill from "@/components/ui/SectorPill";
 import GlossaryTooltip from "@/components/explain/GlossaryTooltip";
-import ReadingLevelSlider, { ReadingLevel } from "@/components/ui/ReadingLevelSlider";
+import ReadingLevelSlider, { type ReadingLevel } from "@/components/ui/ReadingLevelSlider";
 import client from "@/api/client";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 

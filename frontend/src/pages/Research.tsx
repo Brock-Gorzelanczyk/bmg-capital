@@ -9,7 +9,7 @@ import { LineChart, ExternalLink, Search, Building2, Globe, Users, Bot } from "l
 import SectorPill from "@/components/ui/SectorPill";
 import ExplainButton from "@/components/explain/ExplainButton";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
-import ReadingLevelSlider, { ReadingLevel } from "@/components/ui/ReadingLevelSlider";
+import ReadingLevelSlider, { type ReadingLevel } from "@/components/ui/ReadingLevelSlider";
 import client from "@/api/client";
 
 // Labels that have glossary entries — gets an ExplainButton
