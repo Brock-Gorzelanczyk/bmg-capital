@@ -87,8 +87,9 @@ export default {
         "card-hover": "0 1px 2px rgba(0,0,0,0.25), 0 12px 32px rgba(0,0,0,0.25)",
       },
       animation: {
-        'count-up': 'countUp 0.6s ease-out',
-        'fade-in':  'fadeIn 0.2s ease-out',
+        'count-up':    'countUp 0.6s ease-out',
+        'fade-in':     'fadeIn 0.2s ease-out',
+        'pulse-once':  'pulseOnce 1.4s ease-in-out',
       },
       keyframes: {
         countUp: {
@@ -98,6 +99,11 @@ export default {
         fadeIn: {
           '0%':   { opacity: '0' },
           '100%': { opacity: '1' },
+        },
+        pulseOnce: {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgba(139,92,246,0)' },
+          '40%':      { boxShadow: '0 0 0 6px rgba(139,92,246,0.35)' },
+          '70%':      { boxShadow: '0 0 0 10px rgba(139,92,246,0.10)' },
         },
       },
       transitionDuration: {

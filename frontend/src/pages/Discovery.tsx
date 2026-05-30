@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { TrendingUp, TrendingDown, ExternalLink, RefreshCw, AlertTriangle, Vote, Zap, Flame } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { TrendingUp, TrendingDown, ExternalLink, RefreshCw, AlertTriangle, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getThemes, getIPOs, getInsiders, getSectorPerformance, getCryptoLaunches, getNarratives, getIdoCalendar, getMemecoins } from "@/api/discovery";
+import { getThemes, getIPOs, getInsiders, getSectorPerformance, getCryptoLaunches, getNarratives, getIdoCalendar, getMemecoins, generateTheme } from "@/api/discovery";
 import { getGovernanceProposals } from "@/api/governance";
-import type { Theme, IPO, InsiderTrade, CryptoLaunch, Narrative, IdoEvent } from "@/api/discovery";
+import type { Theme, IPO, InsiderTrade, CryptoLaunch, Narrative, IdoEvent, AITheme } from "@/api/discovery";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -129,16 +129,61 @@ const TEXT_MAP: Record<string, string> = {
   pink: "text-pink-400",
 };
 
+// ── Share Button ─────────────────────────────────────────────────────────────
+
+function ShareButton({ themeId }: { themeId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleShare(e: React.MouseEvent) {
+    e.stopPropagation();
+    const url = window.location.origin + "/discover?theme=" + themeId;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleShare}
+        className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-0.5 rounded"
+        title="Copy shareable link"
+      >
+        <Share2 size={13} />
+      </button>
+      {copied && (
+        <div className="absolute right-0 top-6 z-10 bg-[var(--bg-elevated-2)] border border-[var(--border)] text-[var(--text-primary)] text-[10px] font-medium px-2 py-1 rounded shadow-lg whitespace-nowrap pointer-events-none">
+          Copied!
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Theme Card ──────────────────────────────────────────────────────────────
 
-function ThemeCard({ theme, onTickerClick }: { theme: Theme; onTickerClick: (s: string) => void }) {
+function ThemeCard({ theme, onTickerClick, highlighted }: { theme: Theme; onTickerClick: (s: string) => void; highlighted?: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const colorClass = COLOR_MAP[theme.color] ?? COLOR_MAP.blue;
   const textClass = TEXT_MAP[theme.color] ?? TEXT_MAP.blue;
   const pos = theme.avg_change_pct >= 0;
 
+  useEffect(() => {
+    if (highlighted && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlighted]);
+
   return (
-    <div className={cn("border rounded-xl p-4 transition-colors hover:border-opacity-60 cursor-pointer", colorClass)}
+    <div
+      ref={cardRef}
+      className={cn(
+        "border rounded-xl p-4 transition-colors hover:border-opacity-60 cursor-pointer",
+        colorClass,
+        highlighted && "ring-2 ring-violet-500 ring-offset-1 ring-offset-transparent animate-pulse-once"
+      )}
       onClick={() => setExpanded((e) => !e)}
     >
       <div className="flex items-start justify-between gap-3">
@@ -149,11 +194,14 @@ function ThemeCard({ theme, onTickerClick }: { theme: Theme; onTickerClick: (s: 
             <div className="text-[var(--text-tertiary)] text-xs mt-0.5 line-clamp-1">{theme.description}</div>
           </div>
         </div>
-        <div className="text-right shrink-0">
-          <div className={cn("font-bold text-sm font-mono", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-            {fmtPct(theme.avg_change_pct)}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <div className={cn("font-bold text-sm font-mono", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+              {fmtPct(theme.avg_change_pct)}
+            </div>
+            <div className="text-[var(--text-tertiary)] text-[10px]">avg today</div>
           </div>
-          <div className="text-[var(--text-tertiary)] text-[10px]">avg today</div>
+          <ShareButton themeId={theme.id} />
         </div>
       </div>
 
@@ -181,10 +229,57 @@ function ThemeCard({ theme, onTickerClick }: { theme: Theme; onTickerClick: (s: 
   );
 }
 
+// ── AI Theme Card ─────────────────────────────────────────────────────────────
+
+function AIThemeCard({ theme, onTickerClick }: { theme: AITheme; onTickerClick: (s: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div
+      className="border-2 border-violet-600 bg-violet-950/20 rounded-xl p-4 cursor-pointer hover:border-violet-500 transition-colors relative col-span-full sm:col-span-2"
+      onClick={() => setExpanded((e) => !e)}
+    >
+      {/* AI Generated badge */}
+      <div className="absolute top-3 right-3 flex items-center gap-1.5">
+        <ShareButton themeId={theme.id} />
+        <span className="text-[10px] font-semibold text-violet-300 bg-violet-900/60 border border-violet-700 px-2 py-0.5 rounded-full">
+          AI Generated
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2.5 pr-32">
+        <span className="text-2xl">{theme.emoji}</span>
+        <div>
+          <div className="font-semibold text-sm text-violet-300">{theme.name}</div>
+          <div className="text-[var(--text-tertiary)] text-xs mt-0.5 line-clamp-1">{theme.description}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mt-3">
+        {(expanded ? theme.tickers : theme.tickers.slice(0, 6)).map((ticker) => (
+          <button
+            key={ticker}
+            onClick={(e) => { e.stopPropagation(); onTickerClick(ticker); }}
+            className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border bg-violet-950/50 border-violet-800 text-violet-300 hover:bg-violet-900/50 transition-colors"
+          >
+            {ticker}
+          </button>
+        ))}
+        {!expanded && theme.tickers.length > 6 && (
+          <span className="text-[10px] text-[var(--text-tertiary)] self-center">+{theme.tickers.length - 6} more</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Themes Tab ──────────────────────────────────────────────────────────────
 
 function ThemesTab() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const highlightedId = searchParams.get("theme") ?? "";
+
   const { data, isLoading } = useQuery({
     queryKey: ["discovery-themes"],
     queryFn: getThemes,
@@ -192,9 +287,72 @@ function ThemesTab() {
   });
   const themes = data?.themes ?? [];
 
+  // AI generator state
+  const [prompt, setPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [aiTheme, setAiTheme] = useState<AITheme | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = prompt.trim();
+    if (!trimmed || generating) return;
+    setGenerating(true);
+    try {
+      const result = await generateTheme(trimmed);
+      setAiTheme(result.theme);
+      setPrompt("");
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 503) {
+        showToast("AI theme generation requires API key configuration");
+      } else {
+        showToast("Failed to generate theme — please try again");
+      }
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-4 py-2.5 rounded-xl shadow-lg">
+          {toast}
+        </div>
+      )}
+
+      {/* AI Theme Generator */}
+      <form onSubmit={handleGenerate} className="flex gap-2 items-center">
+        <span className="text-base shrink-0" title="AI Theme Generator">🤖</span>
+        <input
+          type="text"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="e.g. 'companies benefiting from aging demographics'"
+          className="flex-1 bg-[var(--bg-elevated-2)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:border-violet-600 transition-colors"
+          disabled={generating}
+        />
+        <button
+          type="submit"
+          disabled={!prompt.trim() || generating}
+          className="shrink-0 bg-violet-700 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+        >
+          {generating ? (
+            <RefreshCw size={13} className="animate-spin" />
+          ) : null}
+          {generating ? "Generating…" : "Generate →"}
+        </button>
+      </form>
+
       <p className="text-[var(--text-tertiary)] text-sm">Curated baskets of stocks around major investment themes. Click a ticker to view its chart.</p>
+
       {isLoading ? (
         <div className="grid sm:grid-cols-2 gap-3">
           {[...Array(6)].map((_, i) => (
@@ -203,10 +361,18 @@ function ThemesTab() {
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 gap-3">
+          {/* AI-generated theme always at the top */}
+          {aiTheme && (
+            <AIThemeCard
+              theme={aiTheme}
+              onTickerClick={(s) => navigate(`/chart?symbol=${s}`)}
+            />
+          )}
           {themes.map((theme) => (
             <ThemeCard
               key={theme.id}
               theme={theme}
+              highlighted={theme.id === highlightedId}
               onTickerClick={(s) => navigate(`/chart?symbol=${s}`)}
             />
           ))}

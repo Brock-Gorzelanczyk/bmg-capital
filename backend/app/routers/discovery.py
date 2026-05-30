@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import json
+import logging
+import uuid
 
+import httpx
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+
+from app.config import settings
 from app.dependencies import get_current_user
 from app.db.models.users import User
 from app.services.discovery import get_themes_with_performance, get_ipo_calendar, get_insider_trades
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/discovery", tags=["discovery"])
 
 
@@ -14,6 +22,72 @@ router = APIRouter(prefix="/api/discovery", tags=["discovery"])
 @router.get("/themes")
 async def themes():
     return {"themes": await get_themes_with_performance()}
+
+
+# ── AI Theme Generator ───────────────────────────────────────────────────────
+
+class GenerateThemeRequest(BaseModel):
+    prompt: str
+
+
+_THEME_SYSTEM = (
+    "You are a financial analyst. Generate a thematic stock basket based on the user's description. "
+    'Return JSON: { "name": str, "description": str (1 sentence), "emoji": str, "tickers": [str] (5-8 NYSE/NASDAQ symbols) } '
+    "Only include real, well-known public companies. Return ONLY valid JSON."
+)
+
+
+@router.post("/themes/generate")
+async def generate_theme(
+    body: GenerateThemeRequest,
+    _user: User = Depends(get_current_user),
+):
+    if not settings.anthropic_api_key:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="AI theme generation requires API key configuration")
+
+    hdrs = {
+        "x-api-key": settings.anthropic_api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=hdrs,
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 512,
+                    "system": _THEME_SYSTEM,
+                    "messages": [{"role": "user", "content": body.prompt}],
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            raw_text = "".join(
+                b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
+            )
+            parsed = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        logger.warning(f"Theme generation JSON parse error: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=502, detail="AI returned invalid JSON")
+    except Exception as e:
+        logger.warning(f"Theme generation failed: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=502, detail=str(e))
+
+    theme = {
+        "id": f"custom-{uuid.uuid4().hex[:8]}",
+        "name": parsed.get("name", "Custom Theme"),
+        "description": parsed.get("description", ""),
+        "emoji": parsed.get("emoji", "✨"),
+        "tickers": parsed.get("tickers", []),
+        "performance": [],
+    }
+    return {"theme": theme}
 
 
 @router.get("/ipos")

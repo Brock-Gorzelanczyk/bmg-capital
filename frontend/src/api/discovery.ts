@@ -114,3 +114,17 @@ export const getNarratives = (): Promise<{ narratives: Narrative[] }> =>
 
 export const getIdoCalendar = (): Promise<{ events: IdoEvent[] }> =>
   client.get("/discovery/crypto/ido-calendar").then((r) => r.data);
+
+// ── AI Theme Generator ────────────────────────────────────────────────────────
+
+export interface AITheme {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  tickers: string[];
+  performance: unknown[];
+}
+
+export const generateTheme = (prompt: string): Promise<{ theme: AITheme }> =>
+  client.post("/discovery/themes/generate", { prompt }).then((r) => r.data);
