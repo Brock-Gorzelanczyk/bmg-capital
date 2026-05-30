@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, RefreshCw, X } from "lucide-react";
+import { ChevronDown, RefreshCw, X, Bot } from "lucide-react";
 import { getOptionsChain, getExpirations } from "@/api/options";
 import OptionsChain from "@/components/options/OptionsChain";
 import SpreadBuilder from "@/components/options/SpreadBuilder";
 import PLChart from "@/components/options/PLChart";
 import type { OptionContract, OptionsLeg } from "@/types/options";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
 const DEFAULT_SYMBOLS = ["AAPL", "TSLA", "SPY", "QQQ", "NVDA", "AMZN", "MSFT", "META"];
 
@@ -15,6 +16,7 @@ export default function OptionsLab() {
   const [expiration, setExpiration] = useState<string | undefined>(undefined);
   const [legs, setLegs] = useState<OptionsLeg[]>([]);
   const [activeTab, setActiveTab] = useState<"calls" | "puts" | "all">("all");
+  const [aiOpen, setAiOpen] = useState(false);
 
   const { data: expirations = [] } = useQuery({
     queryKey: ["options-expirations"],
@@ -74,11 +76,19 @@ export default function OptionsLab() {
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Options Lab</h1>
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Build and analyze options strategies</p>
         </div>
-        {chain?.source === "synthetic" && (
-          <span className="text-[10px] px-2 py-1 rounded-full bg-amber-950 text-amber-400 border border-amber-900 font-medium">
-            Synthetic B-S pricing
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {chain?.source === "synthetic" && (
+            <span className="text-[10px] px-2 py-1 rounded-full bg-amber-950 text-amber-400 border border-amber-900 font-medium">
+              Synthetic B-S pricing
+            </span>
+          )}
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Bot size={12} /> Ask AI
+          </button>
+        </div>
       </div>
 
       {/* Symbol + expiration bar */}
@@ -256,6 +266,20 @@ export default function OptionsLab() {
           )}
         </div>
       </div>
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title={`Ask BMG about ${symbol} Options`}
+        context={`Options Lab — analyzing ${symbol} options chain`}
+        suggestedQuestions={[
+          `What's the implied volatility telling us about ${symbol}?`,
+          "Explain the P&L profile of this spread",
+          "What's the max profit and max loss here?",
+          "How does theta decay affect this position over time?",
+          "What's the breakeven price at expiration?",
+        ]}
+      />
     </div>
   );
 }

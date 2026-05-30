@@ -25,11 +25,13 @@ import {
   CheckCircle2,
   XCircle,
   Ban,
+  Bot,
 } from "lucide-react";
 import { toast } from "sonner";
 import { COMPANY_INFO } from "@/data/companyInfo";
 import OrderTicket from "@/components/trading/OrderTicket";
 import PositionDrawer from "@/components/trading/PositionDrawer";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -583,6 +585,7 @@ export default function PaperTrading() {
 
   const [activeTab, setActiveTab] = useState<PageTab>("positions");
   const [showReset, setShowReset] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [ticketModal, setTicketModal] = useState<{ symbol: string; side: "buy" | "sell" } | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<PaperPosition | null>(null);
   const [fabSymbol, setFabSymbol] = useState("AAPL");
@@ -658,6 +661,12 @@ export default function PaperTrading() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Bot size={12} /> Ask AI
+          </button>
           <button
             onClick={() => {
               const confirmed = window.confirm(
@@ -842,6 +851,20 @@ export default function PaperTrading() {
           }}
         />
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Paper Trading"
+        context="Paper Trading simulator"
+        suggestedQuestions={[
+          "How should I think about position sizing in a paper portfolio?",
+          "What's a good risk/reward ratio for swing trades?",
+          "How does paper trading differ from live trading psychologically?",
+          "What's a stop-loss strategy for volatile stocks?",
+          "How can I measure whether my paper trading strategy is working?",
+        ]}
+      />
     </div>
   );
 }
