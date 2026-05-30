@@ -28,6 +28,7 @@ export interface IPO {
 
 export interface InsiderTrade {
   symbol: string;
+  company?: string;
   name: string;
   title: string;
   transaction: "buy" | "sell";

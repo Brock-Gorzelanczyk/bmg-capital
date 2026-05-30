@@ -449,9 +449,177 @@ function IPOsTab() {
 
 // ── Insider Trades Tab ──────────────────────────────────────────────────────
 
+type SignificanceLevel = "HIGH" | "MEDIUM" | "LOW";
+
+const CSUITE_KEYWORDS = ["CEO", "CFO", "CTO", "President", "Director", "Chairman"];
+
+function getSignificance(trade: InsiderTrade): SignificanceLevel {
+  const isBuy = trade.transaction === "buy";
+  const isCsuite = CSUITE_KEYWORDS.some((kw) =>
+    trade.title.toUpperCase().includes(kw.toUpperCase())
+  );
+  if (isBuy && trade.value > 500_000 && isCsuite) return "HIGH";
+  if (isBuy || (isCsuite && trade.value > 1_000_000)) return "MEDIUM";
+  return "LOW";
+}
+
+function SignificanceBadge({ level }: { level: SignificanceLevel }) {
+  if (level === "HIGH")
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" /> HIGH
+      </span>
+    );
+  if (level === "MEDIUM")
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" /> MED
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--text-tertiary)]">
+      <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] inline-block" /> LOW
+    </span>
+  );
+}
+
+interface CompanyCluster {
+  symbol: string;
+  company: string;
+  trades: InsiderTrade[];
+  totalBuyValue: number;
+  totalSellValue: number;
+  insiderCount: number;
+}
+
+function buildClusters(trades: InsiderTrade[]): CompanyCluster[] {
+  const map = new Map<string, CompanyCluster>();
+  for (const t of trades) {
+    if (!map.has(t.symbol)) {
+      map.set(t.symbol, {
+        symbol: t.symbol,
+        company: t.company ?? t.symbol,
+        trades: [],
+        totalBuyValue: 0,
+        totalSellValue: 0,
+        insiderCount: 0,
+      });
+    }
+    const cluster = map.get(t.symbol)!;
+    cluster.trades.push(t);
+    if (t.transaction === "buy") cluster.totalBuyValue += t.value;
+    else cluster.totalSellValue += t.value;
+  }
+  // Count unique insiders per cluster
+  for (const cluster of map.values()) {
+    cluster.insiderCount = new Set(cluster.trades.map((t) => t.name)).size;
+  }
+  // Sort clusters: net buyers first, then by total volume
+  return Array.from(map.values()).sort((a, b) => {
+    const netA = a.totalBuyValue - a.totalSellValue;
+    const netB = b.totalBuyValue - b.totalSellValue;
+    return netB - netA;
+  });
+}
+
+function ClusterRow({ cluster, onNavigate }: { cluster: CompanyCluster; onNavigate: (sym: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const total = cluster.totalBuyValue + cluster.totalSellValue;
+  const buyPct = total > 0 ? (cluster.totalBuyValue / total) * 100 : 0;
+  const netPositive = cluster.totalBuyValue >= cluster.totalSellValue;
+
+  return (
+    <div className="border-b border-[var(--border-subtle)]/50 last:border-0">
+      {/* Cluster header row */}
+      <div
+        className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--bg-elevated-2)]/30 transition-colors cursor-pointer"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={(e) => { e.stopPropagation(); onNavigate(cluster.symbol); }}
+              className="font-mono font-bold text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors text-sm"
+            >
+              {cluster.symbol}
+            </button>
+            <span className="text-xs text-[var(--text-tertiary)] truncate max-w-[160px]">{cluster.company}</span>
+            <span className="text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] px-1.5 py-0.5 rounded">
+              {cluster.insiderCount} insider{cluster.insiderCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+          {/* Buy/sell ratio bar */}
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="flex-1 max-w-[140px] h-1.5 rounded-full bg-[var(--bg-elevated-2)] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-[var(--accent-positive)] transition-all"
+                style={{ width: `${buyPct}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-[var(--text-tertiary)]">{buyPct.toFixed(0)}% buys</span>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          {cluster.totalBuyValue > 0 && (
+            <div className="text-xs font-mono text-[var(--accent-positive)]">+{fmtValue(cluster.totalBuyValue)}</div>
+          )}
+          {cluster.totalSellValue > 0 && (
+            <div className="text-xs font-mono text-[var(--accent-negative)]">-{fmtValue(cluster.totalSellValue)}</div>
+          )}
+          <div className={cn("text-[10px] font-semibold mt-0.5", netPositive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+            Net {netPositive ? "Buy" : "Sell"}
+          </div>
+        </div>
+        <span className="text-[var(--text-tertiary)] text-xs ml-1">{expanded ? "▲" : "▼"}</span>
+      </div>
+      {/* Expanded individual transactions */}
+      {expanded && (
+        <div className="bg-[var(--bg-elevated-2)]/20 border-t border-[var(--border-subtle)]/30">
+          {cluster.trades.map((t, i) => {
+            const sig = getSignificance(t);
+            return (
+              <div key={i} className="flex items-center gap-3 px-6 py-2 border-b border-[var(--border-subtle)]/20 last:border-0 text-xs">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[var(--text-secondary)] truncate max-w-[120px]">{t.name || "—"}</span>
+                    <span className="text-[var(--text-tertiary)] truncate max-w-[100px]">{t.title || "—"}</span>
+                    <SignificanceBadge level={sig} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {t.transaction === "buy" ? (
+                    <span className="inline-flex items-center gap-0.5 text-[var(--accent-positive)] font-semibold">
+                      <TrendingUp size={10} /> Buy
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 text-[var(--accent-negative)] font-semibold">
+                      <TrendingDown size={10} /> Sell
+                    </span>
+                  )}
+                  <span className={cn(
+                    "font-mono",
+                    sig === "HIGH" && t.transaction === "buy"
+                      ? "text-[var(--accent-positive)] font-bold text-sm"
+                      : "text-[var(--text-secondary)]"
+                  )}>
+                    {fmtValue(t.value)}
+                  </span>
+                  <span className="text-[var(--text-tertiary)]">{t.date}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InsidersTab() {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<"all" | "buy" | "sell">("all");
+  const [txFilter, setTxFilter] = useState<"all" | "buy" | "sell">("all");
+  const [sigFilter, setSigFilter] = useState<"all" | "high" | "high+medium">("all");
+  const [grouped, setGrouped] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["discovery-insiders"],
@@ -460,25 +628,116 @@ function InsidersTab() {
   });
 
   const all: InsiderTrade[] = data?.insiders ?? [];
-  const filtered = filter === "all" ? all : all.filter((t) => t.transaction === filter);
+
+  // Significance scoring
+  const withSig = all.map((t) => ({ ...t, _sig: getSignificance(t) }));
+
+  // Apply filters
+  const filtered = withSig.filter((t) => {
+    if (txFilter === "buy" && t.transaction !== "buy") return false;
+    if (txFilter === "sell" && t.transaction !== "sell") return false;
+    if (sigFilter === "high" && t._sig !== "HIGH") return false;
+    if (sigFilter === "high+medium" && t._sig === "LOW") return false;
+    return true;
+  });
+
+  // Smart Money Score stats (from full unfiltered set)
+  const totalBuys = all.filter((t) => t.transaction === "buy").reduce((s, t) => s + t.value, 0);
+  const totalSells = all.filter((t) => t.transaction === "sell").reduce((s, t) => s + t.value, 0);
+  const highBuyCount = withSig.filter((t) => t._sig === "HIGH" && t.transaction === "buy").length;
+  const netPositive = totalBuys >= totalSells;
+
+  const clusters = buildClusters(filtered);
 
   return (
     <div className="space-y-3">
+      {/* Smart Money Score header card */}
+      <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-xs text-[var(--text-tertiary)] font-medium mb-1.5 uppercase tracking-wide">Smart Money Score</div>
+            <div className={cn(
+              "text-sm font-bold",
+              netPositive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"
+            )}>
+              {netPositive ? "Insiders are net BUYERS" : "Insiders are net SELLERS"}
+            </div>
+            <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">
+              {highBuyCount} HIGH-significance buy{highBuyCount !== 1 ? "s" : ""} in dataset
+            </div>
+          </div>
+          <div className="flex gap-4 text-right">
+            <div>
+              <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Total Buys</div>
+              <div className="font-mono font-semibold text-[var(--accent-positive)] text-sm">{fmtValue(totalBuys)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Total Sells</div>
+              <div className="font-mono font-semibold text-[var(--accent-negative)] text-sm">{fmtValue(totalSells)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Net Flow</div>
+              <div className={cn(
+                "font-mono font-bold text-sm",
+                netPositive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"
+              )}>
+                {netPositive ? "+" : "-"}{fmtValue(Math.abs(totalBuys - totalSells))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter bar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[var(--text-tertiary)] text-sm">Recent Form 4 filings via OpenInsider (SEC data).</p>
-        <div className="flex items-center gap-1 bg-[var(--bg-elevated-2)] p-0.5 rounded-lg">
-          {(["all", "buy", "sell"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "text-xs px-2.5 py-1 rounded-md font-medium capitalize transition-colors",
-                filter === f ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              )}
-            >
-              {f === "all" ? "All" : f === "buy" ? "🟢 Buys" : "🔴 Sells"}
-            </button>
-          ))}
+        <p className="text-[var(--text-tertiary)] text-sm">Recent Form 4 filings (SEC EDGAR data).</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Transaction type filter */}
+          <div className="flex items-center gap-0.5 bg-[var(--bg-elevated-2)] p-0.5 rounded-lg">
+            {(["all", "buy", "sell"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setTxFilter(f)}
+                className={cn(
+                  "text-xs px-2.5 py-1 rounded-md font-medium capitalize transition-colors",
+                  txFilter === f
+                    ? "bg-[var(--bg-card)] text-[var(--text-primary)] shadow-sm"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                )}
+              >
+                {f === "all" ? "All" : f === "buy" ? "Buys only" : "Sells only"}
+              </button>
+            ))}
+          </div>
+          {/* Significance filter */}
+          <div className="flex items-center gap-0.5 bg-[var(--bg-elevated-2)] p-0.5 rounded-lg">
+            {(["all", "high", "high+medium"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSigFilter(s)}
+                className={cn(
+                  "text-xs px-2.5 py-1 rounded-md font-medium transition-colors",
+                  sigFilter === s
+                    ? "bg-[var(--bg-card)] text-[var(--text-primary)] shadow-sm"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                )}
+              >
+                {s === "all" ? "All" : s === "high" ? "High only" : "High + Med"}
+              </button>
+            ))}
+          </div>
+          {/* Group by company toggle */}
+          <button
+            onClick={() => setGrouped((v) => !v)}
+            className={cn(
+              "text-xs px-2.5 py-1 rounded-lg font-medium transition-colors border",
+              grouped
+                ? "bg-[var(--accent-primary)]/20 border-[var(--accent-primary)]/40 text-[var(--accent-primary)]"
+                : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+            )}
+          >
+            Group by company
+          </button>
         </div>
       </div>
 
@@ -488,7 +747,19 @@ function InsidersTab() {
             <div key={i} className="h-14 bg-[var(--bg-elevated-2)] rounded-xl animate-pulse" />
           ))}
         </div>
+      ) : grouped ? (
+        /* ── Grouped / clustered view ── */
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+          {clusters.length === 0 ? (
+            <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">No transactions found</div>
+          ) : (
+            clusters.map((cluster) => (
+              <ClusterRow key={cluster.symbol} cluster={cluster} onNavigate={(sym) => navigate(`/chart?symbol=${sym}`)} />
+            ))
+          )}
+        </div>
       ) : (
+        /* ── Flat table view (original) ── */
         <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
           <div className="overflow-x-auto -mx-0">
           <table className="w-full text-sm min-w-[420px]">
@@ -497,6 +768,7 @@ function InsidersTab() {
                 <th className="text-left px-4 py-3 font-medium">Symbol</th>
                 <th className="text-left px-3 py-3 font-medium hidden sm:table-cell">Insider</th>
                 <th className="text-left px-3 py-3 font-medium hidden md:table-cell">Title</th>
+                <th className="text-center px-3 py-3 font-medium">Sig</th>
                 <th className="text-center px-3 py-3 font-medium">Type</th>
                 <th className="text-right px-3 py-3 font-medium hidden sm:table-cell">Shares</th>
                 <th className="text-right px-3 py-3 font-medium">Value</th>
@@ -504,38 +776,53 @@ function InsidersTab() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((t, i) => (
-                <tr key={i} className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => navigate(`/chart?symbol=${t.symbol}`)}
-                      className="font-mono font-bold text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
-                    >
-                      {t.symbol}
-                    </button>
-                  </td>
-                  <td className="px-3 py-3 text-[var(--text-secondary)] hidden sm:table-cell max-w-[140px] truncate">{t.name}</td>
-                  <td className="px-3 py-3 text-[var(--text-tertiary)] text-xs hidden md:table-cell">{t.title}</td>
-                  <td className="px-3 py-3 text-center">
-                    {t.transaction === "buy" ? (
-                      <span className="inline-flex items-center gap-1 text-[var(--accent-positive)] text-xs font-semibold">
-                        <TrendingUp size={11} /> Buy
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[var(--accent-negative)] text-xs font-semibold">
-                        <TrendingDown size={11} /> Sell
-                      </span>
+              {filtered.map((t, i) => {
+                const isHighBuy = t._sig === "HIGH" && t.transaction === "buy";
+                return (
+                  <tr
+                    key={i}
+                    className={cn(
+                      "border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors",
+                      isHighBuy && "bg-emerald-950/20"
                     )}
-                  </td>
-                  <td className="px-3 py-3 text-[var(--text-secondary)] text-right font-mono text-xs hidden sm:table-cell">
-                    {t.shares.toLocaleString()}
-                  </td>
-                  <td className="px-3 py-3 text-right font-mono text-[var(--text-secondary)] text-xs">
-                    {fmtValue(t.value)}
-                  </td>
-                  <td className="px-3 py-3 text-[var(--text-tertiary)] text-right text-xs">{t.date}</td>
-                </tr>
-              ))}
+                  >
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => navigate(`/chart?symbol=${t.symbol}`)}
+                        className="font-mono font-bold text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
+                      >
+                        {t.symbol}
+                      </button>
+                    </td>
+                    <td className="px-3 py-3 text-[var(--text-secondary)] hidden sm:table-cell max-w-[140px] truncate">{t.name}</td>
+                    <td className="px-3 py-3 text-[var(--text-tertiary)] text-xs hidden md:table-cell">{t.title}</td>
+                    <td className="px-3 py-3 text-center">
+                      <SignificanceBadge level={t._sig} />
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {t.transaction === "buy" ? (
+                        <span className="inline-flex items-center gap-1 text-[var(--accent-positive)] text-xs font-semibold">
+                          <TrendingUp size={11} /> Buy
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[var(--accent-negative)] text-xs font-semibold">
+                          <TrendingDown size={11} /> Sell
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-[var(--text-secondary)] text-right font-mono text-xs hidden sm:table-cell">
+                      {t.shares.toLocaleString()}
+                    </td>
+                    <td className={cn(
+                      "px-3 py-3 text-right font-mono",
+                      isHighBuy ? "text-[var(--accent-positive)] font-bold text-sm" : "text-[var(--text-secondary)] text-xs"
+                    )}>
+                      {fmtValue(t.value)}
+                    </td>
+                    <td className="px-3 py-3 text-[var(--text-tertiary)] text-right text-xs">{t.date}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {filtered.length === 0 && (
