@@ -3,8 +3,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, ChevronRight, CheckCircle2, Clock, Zap,
-  BookOpen, Video, FlaskConical, Trophy, ExternalLink, Award,
+  BookOpen, Video, FlaskConical, Trophy, ExternalLink, Award, Bot,
 } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { completeLesson, submitQuiz } from "@/api/learn";
 import { useLearnStore } from "@/store/learnStore";
 import { LESSON_MAP, COURSE_MAP, TRACK_MAP, lessonsForCourse } from "@/data/curriculum";
@@ -38,6 +39,7 @@ export default function LearnLesson() {
 
   const [quizDone, setQuizDone] = useState(false);
   const [quizScore, setQuizScore] = useState<number | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
   const [showXP, setShowXP] = useState(false);
   const [earnedXP, setEarnedXP] = useState(0);
   const [newBadges, setNewBadges] = useState<string[]>([]);
@@ -146,7 +148,15 @@ export default function LearnLesson() {
             </span>
           )}
         </div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">{lesson.title}</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">{lesson.title}</h1>
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
+          >
+            <Bot size={12} /> Ask AI
+          </button>
+        </div>
       </div>
 
       {/* Body */}
@@ -302,6 +312,20 @@ export default function LearnLesson() {
           onClose={() => setShowCert(false)}
         />
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title={`Ask about "${lesson.title}"`}
+        context={`Learning: ${lesson.title}. Course: ${course?.title ?? "BMG Academy"}`}
+        suggestedQuestions={[
+          `Can you explain "${lesson.title}" in simpler terms?`,
+          "Give me a real-world example of this concept",
+          "What's the most important thing to remember from this lesson?",
+          "How does this relate to actual trading decisions?",
+          "What should I learn next after this topic?",
+        ]}
+      />
     </div>
   );
 }
