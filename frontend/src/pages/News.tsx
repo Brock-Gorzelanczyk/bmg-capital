@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { getNews } from "@/api/market";
 import { ExternalLink, RefreshCw, X, Bot } from "lucide-react";
@@ -21,7 +21,7 @@ function timeAgo(dateStr: string) {
 }
 
 function SymbolChip({ symbol, onClick }: { symbol: string; onClick: () => void }) {
-  const name = COMPANY_INFO[symbol]?.name;
+  const _name = COMPANY_INFO[symbol]?.name;
   return (
     <button
       onClick={onClick}
@@ -41,26 +41,87 @@ async function rewriteContent(content: string, level: ReadingLevel): Promise<str
   return res.data.rewritten as string;
 }
 
+interface AnalysisResult {
+  sentiment: "bullish" | "bearish" | "neutral";
+  tldr: string;
+  tier: "major" | "notable" | "standard";
+}
+
+async function analyzeArticle(
+  headline: string,
+  summary: string,
+  symbol?: string,
+): Promise<AnalysisResult> {
+  const res = await client.post("/api/news/analyze", { headline, summary, symbol });
+  return res.data as AnalysisResult;
+}
+
+function TierPill({ tier }: { tier: "major" | "notable" | "standard" }) {
+  if (tier === "standard") return null;
+  if (tier === "major") {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-red-500/20 text-red-400 border border-red-500/30">
+        MAJOR
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-amber-500/20 text-amber-400 border border-amber-500/30">
+      NOTABLE
+    </span>
+  );
+}
+
+function SentimentBadge({ sentiment }: { sentiment: "bullish" | "bearish" | "neutral" }) {
+  if (sentiment === "bullish") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+        🟢 Bullish
+      </span>
+    );
+  }
+  if (sentiment === "bearish") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-400">
+        🔴 Bearish
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-tertiary)]">
+      ⚪ Neutral
+    </span>
+  );
+}
+
 function NewsCard({
   article,
   level,
   rewriteCache,
+  analyzeCache,
   onSymbolClick,
   onCacheUpdate,
+  onAnalyzeCacheUpdate,
 }: {
   article: any;
   level: ReadingLevel;
   rewriteCache: Map<string, string>;
+  analyzeCache: Map<string, AnalysisResult>;
   onSymbolClick: (s: string) => void;
   onCacheUpdate: (key: string, value: string) => void;
+  onAnalyzeCacheUpdate: (key: string, value: AnalysisResult) => void;
 }) {
   const ago = timeAgo(article.published_at);
   const cacheKey = `${article.id}:${level}`;
   const cached = rewriteCache.get(cacheKey);
 
   const [rewriting, setRewriting] = useState(false);
+  const [showTldr, setShowTldr] = useState(false);
   const activeKey = useRef<string | null>(null);
 
+  const analysis = analyzeCache.get(String(article.id));
+
+  // Rewrite effect (existing logic unchanged)
   useEffect(() => {
     // "investor" is the default API level — no rewrite needed
     if (level === "investor" || !article.summary) return;
@@ -85,6 +146,24 @@ function NewsCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey]);
 
+  // Analyze effect — fires once per article, lazy/silent
+  useEffect(() => {
+    const id = String(article.id);
+    if (analyzeCache.has(id)) return;
+    if (!article.headline) return;
+
+    const primarySymbol: string | undefined = article.symbols?.[0];
+
+    analyzeArticle(article.headline, article.summary ?? "", primarySymbol)
+      .then((result) => {
+        onAnalyzeCacheUpdate(id, result);
+      })
+      .catch(() => {
+        // Silently fail — UI shows nothing until result arrives
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [article.id]);
+
   const displaySummary = level === "investor"
     ? article.summary
     : cached ?? article.summary;
@@ -93,14 +172,24 @@ function NewsCard({
     <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 hover:border-[var(--border-emphasis)] transition-colors duration-150 group">
       <div className="flex gap-4">
         <div className="flex-1 min-w-0">
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--text-primary)] font-medium text-sm leading-snug hover:text-[var(--text-secondary)] transition-colors duration-150 line-clamp-2 group-hover:underline"
-          >
-            {article.headline}
-          </a>
+          {/* Header row: headline + tier pill (top-right, only when loaded + non-standard) */}
+          <div className="flex items-start justify-between gap-2">
+            <a
+              href={article.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 min-w-0 text-[var(--text-primary)] font-medium text-sm leading-snug hover:text-[var(--text-secondary)] transition-colors duration-150 line-clamp-2 group-hover:underline"
+            >
+              {article.headline}
+            </a>
+            {analysis && (
+              <div className="shrink-0 mt-0.5">
+                <TierPill tier={analysis.tier} />
+              </div>
+            )}
+          </div>
+
+          {/* Summary */}
           {displaySummary && (
             <p className={cn(
               "mt-1.5 text-[var(--text-tertiary)] text-xs leading-relaxed line-clamp-2",
@@ -109,12 +198,44 @@ function NewsCard({
               {rewriting ? "Rewriting…" : <GlossaryTooltip>{displaySummary}</GlossaryTooltip>}
             </p>
           )}
+
+          {/* TL;DR toggle */}
+          {!rewriting && article.summary && (
+            <div className="mt-1.5">
+              {!showTldr ? (
+                <button
+                  onClick={() => setShowTldr(true)}
+                  className="text-[10px] font-semibold text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors duration-150 cursor-pointer underline decoration-dotted"
+                >
+                  TL;DR
+                </button>
+              ) : (
+                <div className="flex items-start gap-1.5">
+                  <p className="flex-1 text-[11px] text-[var(--text-secondary)] leading-relaxed italic">
+                    {analysis?.tldr ?? "Loading…"}
+                  </p>
+                  <button
+                    onClick={() => setShowTldr(false)}
+                    className="shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer mt-0.5"
+                    aria-label="Close TL;DR"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Footer: source · time · sentiment badge · symbol chips */}
           <div className="mt-2.5 flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
               <span className="font-medium text-[var(--text-tertiary)]">{article.source}</span>
               <span className="text-[var(--border-emphasis)]">·</span>
               <span>{ago}</span>
             </div>
+            {analysis && (
+              <SentimentBadge sentiment={analysis.sentiment} />
+            )}
             {article.symbols?.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">
                 {article.symbols.slice(0, 5).map((s: string) => (
@@ -143,6 +264,7 @@ export default function News() {
   const [inputVal, setInputVal] = useState("");
   const [level, setLevel] = useState<ReadingLevel>("investor");
   const [rewriteCache, setRewriteCache] = useState<Map<string, string>>(new Map());
+  const [analyzeCache, setAnalyzeCache] = useState<Map<string, AnalysisResult>>(new Map());
   const [aiOpen, setAiOpen] = useState(false);
 
   const symbols = filterSymbol ? [filterSymbol] : undefined;
@@ -165,6 +287,10 @@ export default function News() {
 
   const handleCacheUpdate = (key: string, value: string) => {
     setRewriteCache((prev) => new Map(prev).set(key, value));
+  };
+
+  const handleAnalyzeCacheUpdate = (key: string, value: AnalysisResult) => {
+    setAnalyzeCache((prev) => new Map(prev).set(key, value));
   };
 
   return (
@@ -257,8 +383,10 @@ export default function News() {
               article={a}
               level={level}
               rewriteCache={rewriteCache}
+              analyzeCache={analyzeCache}
               onSymbolClick={(s) => { setInputVal(s); setFilterSymbol(s); }}
               onCacheUpdate={handleCacheUpdate}
+              onAnalyzeCacheUpdate={handleAnalyzeCacheUpdate}
             />
           ))}
         </div>

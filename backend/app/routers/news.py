@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-from typing import Optional
+import json
+import logging
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Query
+import httpx
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
+from app.config import settings
+from app.dependencies import get_current_user
+from app.db.models.users import User
 from app.services.news import get_news
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/news", tags=["news"])
 
 
@@ -19,3 +27,72 @@ async def news(
         [s.strip().upper() for s in symbols.split(",") if s.strip()] if symbols else None
     )
     return {"articles": await get_news(symbol_list, limit)}
+
+
+# ── Article analysis endpoint ─────────────────────────────────────────────────
+
+_ANALYZE_SYSTEM = """You are a financial analyst assistant. Given a news headline and summary, return JSON with:
+- sentiment: "bullish", "bearish", or "neutral" (from the perspective of the mentioned stock/market)
+- tldr: a 1-sentence plain-English summary (max 120 chars)
+- tier: "major" (earnings, Fed, M&A, scandal), "notable" (exec changes, analyst upgrades, product launches), "standard" (everything else)
+
+Return ONLY valid JSON, no other text."""
+
+
+class AnalyzeRequest(BaseModel):
+    headline: str
+    summary: str
+    symbol: Optional[str] = None
+
+
+class AnalyzeResponse(BaseModel):
+    sentiment: Literal["bullish", "bearish", "neutral"]
+    tldr: str
+    tier: Literal["major", "notable", "standard"]
+
+
+@router.post("/analyze", response_model=AnalyzeResponse)
+async def analyze_article(
+    body: AnalyzeRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Analyze a news article for sentiment, TL;DR, and importance tier."""
+    if not settings.anthropic_api_key:
+        return AnalyzeResponse(sentiment="neutral", tldr=body.headline[:120], tier="standard")
+
+    user_msg = f"Headline: {body.headline}\n\nSummary: {body.summary[:1000]}"
+    if body.symbol:
+        user_msg = f"Symbol: {body.symbol}\n\n{user_msg}"
+
+    hdrs = {
+        "x-api-key": settings.anthropic_api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=hdrs,
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 256,
+                    "system": _ANALYZE_SYSTEM,
+                    "messages": [{"role": "user", "content": user_msg}],
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            text = "".join(
+                b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
+            )
+            parsed = json.loads(text)
+            return AnalyzeResponse(
+                sentiment=parsed.get("sentiment", "neutral"),
+                tldr=parsed.get("tldr", body.headline[:120]),
+                tier=parsed.get("tier", "standard"),
+            )
+    except Exception as e:
+        logger.warning(f"analyze_article failed: {e}")
+        return AnalyzeResponse(sentiment="neutral", tldr=body.headline[:120], tier="standard")
