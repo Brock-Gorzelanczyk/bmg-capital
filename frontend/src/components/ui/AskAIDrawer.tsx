@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { Bot, X, Send, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseCitations, parseSegments, type Citation, type Segment } from "@/lib/citationParser";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,12 +69,46 @@ function streamCopilot(
   return () => { cancelled = true; };
 }
 
+// ── Citation chip ─────────────────────────────────────────────────────────────
+
+function CitationChip({ num }: { num: number }) {
+  return (
+    <sup>
+      <span className="inline-flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold bg-teal-500/20 text-teal-400 border border-teal-500/30 cursor-default">
+        {num}
+      </span>
+    </sup>
+  );
+}
+
+// ── Sources section ───────────────────────────────────────────────────────────
+
+function SourcesSection({ citations }: { citations: Citation[] }) {
+  if (citations.length === 0) return null;
+  return (
+    <div className="mt-2 pt-2 border-t border-[var(--border-subtle)]">
+      <p className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-1.5">Sources</p>
+      <div className="flex flex-wrap gap-1.5">
+        {citations.map((c) => (
+          <span
+            key={c.num}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-teal-500/10 text-teal-400 border border-teal-500/20"
+          >
+            <span className="font-bold">[{c.num}]</span>
+            <span className="text-[var(--text-tertiary)]">{c.label}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Simple markdown renderer (mirrors CopilotModal) ───────────────────────────
 
-function MarkdownText({ text }: { text: string }) {
+function MarkdownSegment({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\n)/g);
   return (
-    <span>
+    <>
       {parts.map((part, i) => {
         if (part.startsWith("**") && part.endsWith("**")) {
           return <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>;
@@ -84,7 +119,28 @@ function MarkdownText({ text }: { text: string }) {
         if (part === "\n") return <br key={i} />;
         return <span key={i}>{part}</span>;
       })}
-    </span>
+    </>
+  );
+}
+
+function MarkdownText({ text, isAssistant }: { text: string; isAssistant?: boolean }) {
+  if (!isAssistant) {
+    return <MarkdownSegment text={text} />;
+  }
+  const { body, citations } = parseCitations(text);
+  const segments: Segment[] = parseSegments(body);
+  return (
+    <>
+      <span>
+        {segments.map((seg, i) => {
+          if (seg.type === "cite") {
+            return <CitationChip key={i} num={seg.num} />;
+          }
+          return <MarkdownSegment key={i} text={seg.content} />;
+        })}
+      </span>
+      <SourcesSection citations={citations} />
+    </>
   );
 }
 

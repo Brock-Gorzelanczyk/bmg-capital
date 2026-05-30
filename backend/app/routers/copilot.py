@@ -148,7 +148,13 @@ Persona:
 - Keep responses under 300 words unless the user asks for more
 - Answer casual questions conversationally without tools
 
-If asked about something outside your tools, answer from your training knowledge but note it may not be real-time."""
+If asked about something outside your tools, answer from your training knowledge but note it may not be real-time.
+
+When making specific factual claims about financial data (revenue figures, earnings, price moves, ratios), add a bracketed citation like [1], [2] inline after the claim. At the end of your response, add a "---" separator followed by a "Sources:" section listing each citation number with a brief source label, e.g.:
+[1] Yahoo Finance / yfinance data
+[2] SEC filings via yfinance
+[3] Analyst consensus
+Keep citations minimal — only for specific numerical claims, not general statements."""
 
 
 # ── Tool executor (calls internal API endpoints) ──────────────────────────────
