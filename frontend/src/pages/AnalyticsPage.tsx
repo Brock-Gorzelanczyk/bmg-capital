@@ -12,9 +12,10 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { BarChart2, TrendingUp, TrendingDown, Zap, FlaskConical } from "lucide-react";
+import { BarChart2, TrendingUp, TrendingDown, Zap, FlaskConical, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getJournalAnalytics, getDemoAnalytics, type AnalyticsResult } from "@/api/journalAnalytics";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -614,6 +615,7 @@ export default function AnalyticsPage() {
   const [days, setDays] = useState(365);
   const [accountType, setAccountType] = useState("all");
   const [demoMode, setDemoMode] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const realQuery = useQuery({
     queryKey: ["journal-analytics", days, accountType],
@@ -649,6 +651,12 @@ export default function AnalyticsPage() {
 
         {/* Filters + demo toggle */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Bot size={12} /> Ask AI
+          </button>
           {/* Demo toggle */}
           <button
             onClick={() => setDemoMode(v => !v)}
@@ -760,6 +768,20 @@ export default function AnalyticsPage() {
       {(hasData || demoMode) && data && data.headline.total_trades > 0 && (
         <AnalyticsDashboard data={data} />
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Your Analytics"
+        context="Trade Analytics dashboard — win rate, P&L, equity curve, trade patterns"
+        suggestedQuestions={[
+          "What does a good Sharpe ratio look like for a retail trader?",
+          "How do I interpret my profit factor?",
+          "What win rate should I target as a swing trader?",
+          "How can I reduce my max drawdown?",
+          "What's the relationship between average R and win rate?",
+        ]}
+      />
     </div>
   );
 }

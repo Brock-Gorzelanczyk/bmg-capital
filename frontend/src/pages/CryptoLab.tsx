@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   Star, RotateCw, X, ChevronUp, ChevronDown, ChevronsUpDown,
-  ArrowLeft, Search, ExternalLink,
+  ArrowLeft, Search, ExternalLink, Bot,
 } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { toast } from "sonner";
 import {
   getCryptoMarket,
@@ -1586,6 +1587,7 @@ export default function CryptoLab() {
   const [watchlist, setWatchlist] = useState<Set<string>>(loadWatchlist);
   const [lastRefreshed, setLastRefreshed] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const { data: market, isLoading: marketLoading } = useQuery({
     queryKey: ["crypto-market-v2"],
@@ -1711,6 +1713,12 @@ export default function CryptoLab() {
             <span className="text-xs text-[var(--text-tertiary)]">Updated {refreshLabel}</span>
           )}
           <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Bot size={12} /> Ask AI
+          </button>
+          <button
             onClick={handleRefresh}
             disabled={refreshing}
             className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer px-3 py-1.5 rounded-lg bg-[var(--bg-elevated-2)] hover:bg-[#334155] disabled:opacity-50"
@@ -1817,6 +1825,20 @@ export default function CryptoLab() {
           onClose={() => setQuizStrategy(null)}
         />
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Crypto"
+        context="Crypto Lab — analyzing crypto markets, strategies, and on-chain data"
+        suggestedQuestions={[
+          "What's driving Bitcoin's price action right now?",
+          "Explain the difference between on-chain metrics and price action",
+          "How does the halving cycle affect crypto prices?",
+          "What are the key signals for altcoin season?",
+          "How should I size a crypto position relative to my portfolio?",
+        ]}
+      />
     </div>
   );
 }

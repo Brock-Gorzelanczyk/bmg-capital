@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { getWatchlists, createWatchlist, addSymbol, removeSymbol, getSnapshot } from "@/api/watchlist";
 import { useMarketStore } from "@/store";
 import { formatCurrency, formatPercent, cn } from "@/lib/utils";
-import { Plus, X, TrendingUp, TrendingDown, Microscope, BookMarked } from "lucide-react";
+import { Plus, X, TrendingUp, TrendingDown, Microscope, BookMarked, Bot } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { COMPANY_INFO } from "@/data/companyInfo";
 import SectorPill from "@/components/ui/SectorPill";
 import Sparkline from "@/components/ui/Sparkline";
@@ -215,6 +216,7 @@ export default function WatchlistPage() {
   const [symbolInput, setSymbolInput] = useState("");
   const [showNewForm, setShowNewForm] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const watchlists = data ?? [];
 
@@ -308,6 +310,12 @@ export default function WatchlistPage() {
           <h2 className="text-xl font-bold text-[var(--text-primary)] font-display">Watchlists</h2>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setAiOpen(true)}
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <Bot size={12} /> Ask AI
+            </button>
+            <button
               onClick={() => setShowTemplates(true)}
               className="text-[var(--text-tertiary)] text-xs hover:text-[var(--text-secondary)] transition-colors px-2 py-1 rounded-lg border border-transparent hover:border-[var(--border-subtle)]"
             >
@@ -385,6 +393,20 @@ export default function WatchlistPage() {
           </div>
         ))}
       </div>
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Stocks"
+        context="Watchlist — researching and tracking stocks"
+        suggestedQuestions={[
+          "What makes a good watchlist stock to monitor?",
+          "How should I organize my watchlists by strategy?",
+          "What signals should I watch for on these stocks?",
+          "How do I identify the best entry point for a stock I'm watching?",
+          "What's the difference between a position list and a watchlist?",
+        ]}
+      />
     </>
   );
 }

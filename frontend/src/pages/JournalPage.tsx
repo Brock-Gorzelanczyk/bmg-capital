@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Edit2, TrendingUp, TrendingDown, BookOpen, BarChart2, Star, Lock, Download } from "lucide-react";
+import { Plus, Trash2, Edit2, TrendingUp, TrendingDown, BookOpen, BarChart2, Star, Lock, Download, Bot } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getEntries, getStats, createEntry, updateEntry, deleteEntry } from "@/api/journal";
@@ -477,6 +478,7 @@ export default function JournalPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<JournalEntry | null>(null);
   const [filterSymbol, setFilterSymbol] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
   const [prefillNotes, setPrefillNotes] = useState<string | null>(null);
   const [importingPaper, setImportingPaper] = useState(false);
 
@@ -606,6 +608,12 @@ export default function JournalPage() {
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Document and reflect on every trade</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAiOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+          >
+            <Bot size={13} /> Ask AI
+          </button>
           <button
             onClick={handleAutoImport}
             disabled={importingPaper}
@@ -758,6 +766,20 @@ export default function JournalPage() {
           }}
         />
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask BMG about Trading"
+        context="Trade Journal — reviewing trades, psychology, and patterns"
+        suggestedQuestions={[
+          "What patterns should I look for in my trade history?",
+          "How can I improve my risk management?",
+          "What does a healthy win rate look like for swing trading?",
+          "How do I identify if I'm overtrading?",
+          "What journal metrics matter most for improving as a trader?",
+        ]}
+      />
     </div>
   );
 }
