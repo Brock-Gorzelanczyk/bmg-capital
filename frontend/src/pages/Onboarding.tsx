@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import {
   ChevronRight, ChevronLeft, CheckCircle2, TrendingUp, Shield, Clock,
@@ -15,25 +15,38 @@ const DEMO_MODE = true;
 
 const TOTAL_STEPS = 16;
 
-// ── Progress bar ──────────────────────────────────────────────────────────────
+// Steps that are essential (no skip button): Welcome (0), Personal Info (7), Identity Verify (8)
+const ESSENTIAL_STEPS = new Set([0, 7, 8]);
 
-function ProgressBar({ step }: { step: number }) {
+// ── Progress bar ───────────────────────────────────────────────────────────────
+// A single 4px bar spanning the full width of the card, animated between steps.
+
+function ProgressBar({ step, total }: { step: number; total: number }) {
+  const pct = Math.round(((step + 1) / total) * 100);
   return (
-    <div className="flex items-center gap-1 mb-8">
-      {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-        <div
-          key={i}
-          className={cn(
-            "h-0.5 rounded-full flex-1 transition-all duration-500",
-            i < step ? "bg-white" : i === step ? "bg-white/40" : "bg-white/10"
-          )}
-        />
-      ))}
+    <div className="w-full h-1 bg-white/10 rounded-full mb-8 overflow-hidden">
+      <div
+        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500 ease-out"
+        style={{ width: `${pct}%` }}
+      />
     </div>
   );
 }
 
-// ── Option card ───────────────────────────────────────────────────────────────
+// ── Skip link ──────────────────────────────────────────────────────────────────
+
+function SkipLink({ onSkip }: { onSkip: () => void }) {
+  return (
+    <button
+      onClick={onSkip}
+      className="text-xs text-white/30 hover:text-white/55 transition-colors text-center mt-1"
+    >
+      Skip for now →
+    </button>
+  );
+}
+
+// ── Option card ────────────────────────────────────────────────────────────────
 
 interface OptionProps {
   label: string;
@@ -72,7 +85,7 @@ function OptionCard({ label, description, icon, selected, onClick }: OptionProps
   );
 }
 
-// ── Continue button ───────────────────────────────────────────────────────────
+// ── Continue button ────────────────────────────────────────────────────────────
 
 function ContinueBtn({ onClick, disabled, label = "Continue" }: { onClick: () => void; disabled?: boolean; label?: string }) {
   return (
@@ -87,7 +100,7 @@ function ContinueBtn({ onClick, disabled, label = "Continue" }: { onClick: () =>
   );
 }
 
-// ── Spinner helper ────────────────────────────────────────────────────────────
+// ── Spinner helper ─────────────────────────────────────────────────────────────
 
 function Spin() {
   return (
@@ -98,7 +111,7 @@ function Spin() {
   );
 }
 
-// ── Data types ────────────────────────────────────────────────────────────────
+// ── Data types ─────────────────────────────────────────────────────────────────
 
 interface OnboardingData {
   goal: string;
@@ -117,7 +130,7 @@ interface OnboardingData {
   deposit_amount: number;
 }
 
-// ── Step 0: Welcome ───────────────────────────────────────────────────────────
+// ── Step 0: Welcome ────────────────────────────────────────────────────────────
 
 function StepWelcome({ onNext }: { onNext: () => void }) {
   return (
@@ -145,13 +158,19 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
       </div>
       <ContinueBtn onClick={onNext} label="Get Started" />
       <p className="text-xs text-white/30">No credit card required</p>
+      <p className="text-xs text-white/30">
+        Already have an account?{" "}
+        <Link to="/login" className="text-white/50 hover:text-white/80 underline underline-offset-2 transition-colors">
+          Sign in
+        </Link>
+      </p>
     </div>
   );
 }
 
-// ── Step 1: Asset classes ─────────────────────────────────────────────────────
+// ── Step 1: Asset classes ──────────────────────────────────────────────────────
 
-function StepAssetClasses({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+function StepAssetClasses({ data, setData, onNext, onSkip }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void; onSkip: () => void }) {
   const toggle = (v: string) =>
     setData((d) => ({
       ...d,
@@ -179,13 +198,14 @@ function StepAssetClasses({ data, setData, onNext }: { data: OnboardingData; set
         ))}
       </div>
       <ContinueBtn onClick={onNext} disabled={data.asset_classes.length === 0} />
+      <SkipLink onSkip={onSkip} />
     </div>
   );
 }
 
-// ── Step 2: Goal ──────────────────────────────────────────────────────────────
+// ── Step 2: Goal ───────────────────────────────────────────────────────────────
 
-function StepGoal({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+function StepGoal({ data, setData, onNext, onSkip }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void; onSkip: () => void }) {
   const opts = [
     { value: "wealth", label: "Grow my wealth", desc: "Long-term capital appreciation", icon: <TrendingUp size={18} className="text-green-400" /> },
     { value: "income", label: "Generate income", desc: "Dividends and yield strategies", icon: <CreditCard size={18} className="text-blue-400" /> },
@@ -206,13 +226,14 @@ function StepGoal({ data, setData, onNext }: { data: OnboardingData; setData: Re
         ))}
       </div>
       <ContinueBtn onClick={onNext} disabled={!data.goal} />
+      <SkipLink onSkip={onSkip} />
     </div>
   );
 }
 
-// ── Step 3: Experience ────────────────────────────────────────────────────────
+// ── Step 3: Experience ─────────────────────────────────────────────────────────
 
-function StepExperience({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+function StepExperience({ data, setData, onNext, onSkip }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void; onSkip: () => void }) {
   const opts = [
     { value: "beginner", label: "Beginner", desc: "New to investing — less than 1 year", icon: "🌱" },
     { value: "intermediate", label: "Intermediate", desc: "1-5 years of experience", icon: "📈" },
@@ -232,13 +253,14 @@ function StepExperience({ data, setData, onNext }: { data: OnboardingData; setDa
         ))}
       </div>
       <ContinueBtn onClick={onNext} disabled={!data.experience} />
+      <SkipLink onSkip={onSkip} />
     </div>
   );
 }
 
-// ── Step 4: Risk ──────────────────────────────────────────────────────────────
+// ── Step 4: Risk ───────────────────────────────────────────────────────────────
 
-function StepRisk({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+function StepRisk({ data, setData, onNext, onSkip }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void; onSkip: () => void }) {
   const opts = [
     { value: "conservative", label: "Conservative", desc: "Capital preservation first. I avoid large swings.", icon: <Shield size={18} className="text-blue-400" /> },
     { value: "moderate", label: "Moderate", desc: "Balanced risk. I can handle occasional 10-20% dips.", icon: <BarChart2 size={18} className="text-green-400" /> },
@@ -258,13 +280,14 @@ function StepRisk({ data, setData, onNext }: { data: OnboardingData; setData: Re
         ))}
       </div>
       <ContinueBtn onClick={onNext} disabled={!data.risk_tolerance} />
+      <SkipLink onSkip={onSkip} />
     </div>
   );
 }
 
-// ── Step 5: Time horizon ──────────────────────────────────────────────────────
+// ── Step 5: Time horizon ───────────────────────────────────────────────────────
 
-function StepTimeHorizon({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+function StepTimeHorizon({ data, setData, onNext, onSkip }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void; onSkip: () => void }) {
   const opts = [
     { value: "short", label: "Short term", desc: "Days to weeks — active trading", icon: <Clock size={18} className="text-yellow-400" /> },
     { value: "medium", label: "1-3 years", desc: "Swing trading and position trades", icon: <Clock size={18} className="text-green-400" /> },
@@ -284,13 +307,14 @@ function StepTimeHorizon({ data, setData, onNext }: { data: OnboardingData; setD
         ))}
       </div>
       <ContinueBtn onClick={onNext} disabled={!data.time_horizon} />
+      <SkipLink onSkip={onSkip} />
     </div>
   );
 }
 
-// ── Step 6: Interests ─────────────────────────────────────────────────────────
+// ── Step 6: Interests ──────────────────────────────────────────────────────────
 
-function StepInterests({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+function StepInterests({ data, setData, onNext, onSkip }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void; onSkip: () => void }) {
   const topics = ["AI & Tech", "Semiconductors", "Clean Energy", "Healthcare", "Biotech", "Defense", "Consumer", "Financials", "Real Estate", "Crypto Narratives", "DeFi", "NFTs & Web3"];
   const toggle = (v: string) =>
     setData((d) => ({
@@ -321,14 +345,12 @@ function StepInterests({ data, setData, onNext }: { data: OnboardingData; setDat
         ))}
       </div>
       <ContinueBtn onClick={onNext} disabled={data.interests.length < 2} />
-      <button onClick={onNext} className="text-xs text-white/30 hover:text-white/50 transition-colors text-center">
-        Skip for now
-      </button>
+      <SkipLink onSkip={onSkip} />
     </div>
   );
 }
 
-// ── Step 7: Personal info (KYC step 1) ───────────────────────────────────────
+// ── Step 7: Personal info (KYC step 1) ────────────────────────────────────────
 
 function StepPersonalInfo({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
   return (
@@ -382,7 +404,7 @@ function StepPersonalInfo({ data, setData, onNext }: { data: OnboardingData; set
   );
 }
 
-// ── Step 8: Identity verify ───────────────────────────────────────────────────
+// ── Step 8: Identity verify ────────────────────────────────────────────────────
 
 function StepIdentityVerify({ setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
   const [verifying, setVerifying] = useState(false);
@@ -449,9 +471,9 @@ function StepIdentityVerify({ setData, onNext }: { data: OnboardingData; setData
   );
 }
 
-// ── Step 9: Bank link ─────────────────────────────────────────────────────────
+// ── Step 9: Bank link ──────────────────────────────────────────────────────────
 
-function StepBankLink({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+function StepBankLink({ data, setData, onNext, onSkip }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void; onSkip: () => void }) {
   const [linking, setLinking] = useState(false);
   const [linked, setLinked] = useState(false);
 
@@ -497,9 +519,7 @@ function StepBankLink({ data, setData, onNext }: { data: OnboardingData; setData
           >
             {linking ? <><Spin /> Connecting…</> : <><Building2 size={15} /> Connect Bank Account</>}
           </button>
-          <button onClick={onNext} className="text-xs text-white/30 hover:text-white/50 transition-colors text-center">
-            Skip — I'll fund my account later
-          </button>
+          <SkipLink onSkip={onSkip} />
         </>
       ) : (
         <div className="flex flex-col items-center gap-4 py-4">
@@ -517,9 +537,9 @@ function StepBankLink({ data, setData, onNext }: { data: OnboardingData; setData
   );
 }
 
-// ── Step 10: Deposit amount ───────────────────────────────────────────────────
+// ── Step 10: Deposit amount ────────────────────────────────────────────────────
 
-function StepDeposit({ data, setData, onNext }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void }) {
+function StepDeposit({ data, setData, onNext, onSkip }: { data: OnboardingData; setData: React.Dispatch<React.SetStateAction<OnboardingData>>; onNext: () => void; onSkip: () => void }) {
   const [custom, setCustom] = useState("");
   const presets = [100, 500, 1000, 5000];
 
@@ -564,16 +584,14 @@ function StepDeposit({ data, setData, onNext }: { data: OnboardingData; setData:
         </div>
       </div>
       <ContinueBtn onClick={onNext} disabled={!data.deposit_amount || data.deposit_amount < 1} label="Deposit" />
-      <button onClick={onNext} className="text-xs text-white/30 hover:text-white/50 transition-colors text-center">
-        Skip — start with paper trading only
-      </button>
+      <SkipLink onSkip={onSkip} />
     </div>
   );
 }
 
-// ── Step 11: Deposit confirm ──────────────────────────────────────────────────
+// ── Step 11: Deposit confirm ───────────────────────────────────────────────────
 
-function StepDepositConfirm({ data, onNext }: { data: OnboardingData; onNext: () => void }) {
+function StepDepositConfirm({ data, onNext, onSkip }: { data: OnboardingData; onNext: () => void; onSkip: () => void }) {
   const [processing, setProcessing] = useState(false);
   const [done, setDone] = useState(false);
   const amt = data.deposit_amount || 0;
@@ -618,6 +636,7 @@ function StepDepositConfirm({ data, onNext }: { data: OnboardingData; onNext: ()
           >
             {processing ? <><Spin /> Processing…</> : `Confirm $${amt.toLocaleString()} Deposit`}
           </button>
+          <SkipLink onSkip={onSkip} />
         </>
       ) : (
         <div className="flex flex-col items-center gap-4 py-4">
@@ -635,9 +654,9 @@ function StepDepositConfirm({ data, onNext }: { data: OnboardingData; onNext: ()
   );
 }
 
-// ── Step 12: Welcome reward ───────────────────────────────────────────────────
+// ── Step 12: Welcome reward ────────────────────────────────────────────────────
 
-function StepWelcomeReward({ onNext }: { onNext: () => void }) {
+function StepWelcomeReward({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const [claimed, setClaimed] = useState(false);
   const [rewardValue, setRewardValue] = useState(22);
 
@@ -687,6 +706,7 @@ function StepWelcomeReward({ onNext }: { onNext: () => void }) {
           >
             {claimMut.isPending ? <><Spin /> Claiming…</> : <><Gift size={16} /> Claim My Free Share</>}
           </button>
+          <SkipLink onSkip={onSkip} />
         </>
       ) : (
         <div className="flex flex-col items-center gap-4">
@@ -699,7 +719,7 @@ function StepWelcomeReward({ onNext }: { onNext: () => void }) {
   );
 }
 
-// ── Step 13: AI calibration ───────────────────────────────────────────────────
+// ── Step 13: AI calibration ────────────────────────────────────────────────────
 
 function StepAICalibrate({ onNext }: { onNext: () => void }) {
   const [progress, setProgress] = useState(0);
@@ -742,9 +762,9 @@ function StepAICalibrate({ onNext }: { onNext: () => void }) {
   );
 }
 
-// ── Step 14: Feature tour ─────────────────────────────────────────────────────
+// ── Step 14: Feature tour ──────────────────────────────────────────────────────
 
-function StepFeatureTour({ onNext }: { onNext: () => void }) {
+function StepFeatureTour({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const [idx, setIdx] = useState(0);
   const features = [
     { icon: <BarChart2 size={32} className="text-blue-400" />, title: "Strategy Lab", desc: "19 automated strategies scan nightly. AI-powered entry/exit, equity tracking, and backtests.", color: "from-blue-500/20 to-blue-600/10" },
@@ -779,11 +799,12 @@ function StepFeatureTour({ onNext }: { onNext: () => void }) {
       ) : (
         <ContinueBtn onClick={onNext} label="I'm ready!" />
       )}
+      <SkipLink onSkip={onSkip} />
     </div>
   );
 }
 
-// ── Step 15: All set ──────────────────────────────────────────────────────────
+// ── Step 15: All set ───────────────────────────────────────────────────────────
 
 function StepAllSet({ onFinish, loading }: { onFinish: () => void; loading: boolean }) {
   return (
@@ -819,11 +840,24 @@ function StepAllSet({ onFinish, loading }: { onFinish: () => void; loading: bool
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Celebration overlay ────────────────────────────────────────────────────────
+
+function CelebrationOverlay() {
+  return (
+    <div className="absolute inset-0 rounded-3xl flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-green-500/20 to-emerald-600/10 backdrop-blur-sm z-10 transition-all duration-500">
+      <span className="text-7xl select-none" role="img" aria-label="checkmark">✓</span>
+      <p className="text-2xl font-bold text-white">You're all set!</p>
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function Onboarding() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
+  const [celebrating, setCelebrating] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<OnboardingData>({
     goal: "",
     experience: "",
@@ -852,39 +886,63 @@ export default function Onboarding() {
         interests: data.interests,
         deposit_amount: data.deposit_amount,
       }).then((r) => r.data),
-    onSuccess: () => navigate("/"),
+    onSuccess: () => {
+      setCelebrating(true);
+      setTimeout(() => navigate("/"), 1500);
+    },
     onError: () => { toast.error("Failed to save profile"); navigate("/"); },
   });
 
-  const next = () => setStep((s) => s + 1);
+  const next = useCallback(() => setStep((s) => s + 1), []);
   const back = () => setStep((s) => Math.max(s - 1, 0));
+  // Skip simply advances without calling any API
+  const skip = useCallback(() => setStep((s) => s + 1), []);
 
   const allSteps = [
     <StepWelcome onNext={next} />,
-    <StepAssetClasses data={data} setData={setData} onNext={next} />,
-    <StepGoal data={data} setData={setData} onNext={next} />,
-    <StepExperience data={data} setData={setData} onNext={next} />,
-    <StepRisk data={data} setData={setData} onNext={next} />,
-    <StepTimeHorizon data={data} setData={setData} onNext={next} />,
-    <StepInterests data={data} setData={setData} onNext={next} />,
+    <StepAssetClasses data={data} setData={setData} onNext={next} onSkip={skip} />,
+    <StepGoal data={data} setData={setData} onNext={next} onSkip={skip} />,
+    <StepExperience data={data} setData={setData} onNext={next} onSkip={skip} />,
+    <StepRisk data={data} setData={setData} onNext={next} onSkip={skip} />,
+    <StepTimeHorizon data={data} setData={setData} onNext={next} onSkip={skip} />,
+    <StepInterests data={data} setData={setData} onNext={next} onSkip={skip} />,
     <StepPersonalInfo data={data} setData={setData} onNext={next} />,
     <StepIdentityVerify data={data} setData={setData} onNext={next} />,
-    <StepBankLink data={data} setData={setData} onNext={next} />,
-    <StepDeposit data={data} setData={setData} onNext={next} />,
-    data.deposit_amount > 0 ? <StepDepositConfirm data={data} onNext={next} /> : null,
-    <StepWelcomeReward onNext={next} />,
+    <StepBankLink data={data} setData={setData} onNext={next} onSkip={skip} />,
+    <StepDeposit data={data} setData={setData} onNext={next} onSkip={skip} />,
+    data.deposit_amount > 0 ? <StepDepositConfirm data={data} onNext={next} onSkip={skip} /> : null,
+    <StepWelcomeReward onNext={next} onSkip={skip} />,
     <StepAICalibrate onNext={next} />,
-    <StepFeatureTour onNext={next} />,
+    <StepFeatureTour onNext={next} onSkip={skip} />,
     <StepAllSet onFinish={() => completeMut.mutate()} loading={completeMut.isPending} />,
   ].filter(Boolean) as React.ReactElement[];
 
   const currentStep = allSteps[Math.min(step, allSteps.length - 1)];
   const isLast = step >= allSteps.length - 1;
+  const isEssential = ESSENTIAL_STEPS.has(step);
+
+  // Keyboard navigation: Enter on the card fires the primary CTA
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== "Enter") return;
+      // Don't intercept Enter inside text inputs or textareas
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON") return;
+      e.preventDefault();
+      // Find the first non-disabled button in the card that looks like a CTA
+      const btn = cardRef.current?.querySelector<HTMLButtonElement>(
+        "button:not([disabled])"
+      );
+      btn?.click();
+    },
+    []
+  );
 
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-between mb-6">
+        {/* Step counter row */}
+        <div className="flex items-center justify-between mb-4">
           {step > 0 && !isLast ? (
             <button onClick={back} className="flex items-center gap-1.5 text-white/40 hover:text-white/70 transition-colors text-sm">
               <ChevronLeft size={16} /> Back
@@ -892,10 +950,28 @@ export default function Onboarding() {
           ) : (
             <div />
           )}
-          <span className="text-xs text-white/30 font-mono">{Math.min(step + 1, allSteps.length)}/{allSteps.length}</span>
+          <span className="text-xs text-white/30 font-mono">
+            {Math.min(step + 1, allSteps.length)}/{allSteps.length}
+          </span>
         </div>
-        <ProgressBar step={Math.min(step, TOTAL_STEPS - 1)} />
-        <div key={step}>{currentStep}</div>
+
+        {/* Thin progress bar */}
+        <ProgressBar step={Math.min(step, allSteps.length - 1)} total={allSteps.length} />
+
+        {/* Card — keyboard nav target */}
+        <div
+          ref={cardRef}
+          key={step}
+          tabIndex={-1}
+          onKeyDown={handleKeyDown}
+          className="relative outline-none rounded-3xl"
+        >
+          {celebrating && <CelebrationOverlay />}
+          {currentStep}
+        </div>
+
+        {/* "Skip for now" hint on essential steps that lack a skip CTA */}
+        {!isEssential && false /* skip buttons are embedded in each step */}
       </div>
     </div>
   );
