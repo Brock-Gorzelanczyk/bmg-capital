@@ -11,7 +11,9 @@ import {
   Lock,
   Unlock,
   ChevronDown,
+  Bot,
 } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -610,14 +612,24 @@ function ApprovalsPanel() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Security() {
+  const [aiOpen, setAiOpen] = useState(false);
+
   return (
     <div className="max-w-6xl mx-auto space-y-5 pb-10">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)] font-[var(--font-display)]">Security Suite</h1>
-        <p className="text-[var(--text-tertiary)] text-sm mt-1">
-          Verify token contracts and audit wallet approvals before transacting
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] font-[var(--font-display)]">Security Suite</h1>
+          <p className="text-[var(--text-tertiary)] text-sm mt-1">
+            Verify token contracts and audit wallet approvals before transacting
+          </p>
+        </div>
+        <button
+          onClick={() => setAiOpen(true)}
+          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
+        >
+          <Bot size={12} /> Ask AI
+        </button>
       </div>
 
       {/* Two-column layout */}
@@ -625,6 +637,20 @@ export default function Security() {
         <TokenPanel />
         <ApprovalsPanel />
       </div>
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Ask about Web3 Security"
+        context="BMG Capital Security Suite — token contract security checks, wallet approval audits, DeFi risk analysis"
+        suggestedQuestions={[
+          "What makes a token contract a honeypot?",
+          "What are unlimited token approvals and why are they dangerous?",
+          "How do I read a token's security score?",
+          "What red flags should I look for before buying a new token?",
+          "How can I protect my wallet from crypto scams?",
+        ]}
+      />
     </div>
   );
 }
