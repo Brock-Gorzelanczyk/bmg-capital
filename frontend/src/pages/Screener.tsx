@@ -172,15 +172,55 @@ export default function Screener() {
   const [nlQuery, setNlQuery] = useState("");
   const [nlParsing, setNlParsing] = useState(false);
   const [nlExplanation, setNlExplanation] = useState<string | null>(null);
+  const [nlRefinementChips, setNlRefinementChips] = useState<Array<{ label: string; isNew: boolean }>>([]);
+  const [nlFollowUpMode, setNlFollowUpMode] = useState(false);
+
+  // Convert active FilterConfig[] to FilterChip[] for passing as existing_filters
+  const filtersAsChips = filters.map((f) => ({
+    field: f.field,
+    operator: f.operator,
+    value: f.value as string | number,
+    label: `${f.field} ${f.operator} ${f.value}`,
+  }));
 
   const handleNLSearch = async () => {
     if (!nlQuery.trim() || nlParsing) return;
     setNlParsing(true);
     setNlExplanation(null);
+    const isFollowUp = filters.length > 0;
     try {
-      const result = await parseNaturalLanguage(nlQuery.trim());
+      const result = await parseNaturalLanguage(
+        nlQuery.trim(),
+        isFollowUp ? filtersAsChips : undefined,
+      );
       if (result.filters.length > 0) {
-        setFilters(result.filters.map((f) => ({ field: f.field, operator: f.operator, value: f.value })));
+        const incoming = result.filters.map((f) => ({
+          field: f.field,
+          operator: f.operator,
+          value: f.value,
+        }));
+        if (result.merge) {
+          // Merge: overwrite by field, append new fields
+          const merged = [...filters];
+          const refinementChips: Array<{ label: string; isNew: boolean }> = [];
+          for (const inc of incoming) {
+            const existingIdx = merged.findIndex((e) => e.field === inc.field);
+            if (existingIdx >= 0) {
+              refinementChips.push({ label: `Changed: ${inc.field}`, isNew: false });
+              merged[existingIdx] = inc;
+            } else {
+              refinementChips.push({ label: `+ ${inc.field}`, isNew: true });
+              merged.push(inc);
+            }
+          }
+          setFilters(merged);
+          setNlRefinementChips(refinementChips);
+          setNlFollowUpMode(true);
+        } else {
+          setFilters(incoming);
+          setNlRefinementChips([]);
+          setNlFollowUpMode(false);
+        }
         setNlExplanation(result.explanation);
       }
     } catch {
@@ -188,6 +228,17 @@ export default function Screener() {
     } finally {
       setNlParsing(false);
     }
+  };
+
+  const handleClearAndStartOver = () => {
+    setFilters([]);
+    setNlQuery("");
+    setNlExplanation(null);
+    setNlRefinementChips([]);
+    setNlFollowUpMode(false);
+    setRan(false);
+    setResults([]);
+    setActivePreset(null);
   };
 
   const { data: savedScreens = [] } = useQuery({
@@ -227,7 +278,14 @@ export default function Screener() {
   }, [infoOpen]);
 
   const addFilter = () => setFilters([...filters, { field: "rsi", operator: "lt", value: 30 }]);
-  const removeFilter = (i: number) => setFilters(filters.filter((_, idx) => idx !== i));
+  const removeFilter = (i: number) => {
+    const next = filters.filter((_, idx) => idx !== i);
+    setFilters(next);
+    if (next.length === 0) {
+      setNlRefinementChips([]);
+      setNlFollowUpMode(false);
+    }
+  };
   const updateFilter = (i: number, patch: Partial<FilterConfig>) =>
     setFilters(filters.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
 
@@ -274,7 +332,7 @@ export default function Screener() {
             value={nlQuery}
             onChange={e => setNlQuery(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleNLSearch()}
-            placeholder='Try: "show me tech stocks with RSI under 30 and rising volume"'
+            placeholder={filters.length > 0 ? 'Refine results, e.g. "now narrow to large-cap"' : 'Try: "show me tech stocks with RSI under 30 and rising volume"'}
             className="w-full bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-sm text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent-positive)] pr-24"
           />
           <button
@@ -290,6 +348,30 @@ export default function Screener() {
           <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
             <Sparkles size={11} className="text-[var(--accent-positive)] shrink-0" />
             <span><span className="text-[var(--text-secondary)] font-medium">Interpreted as:</span> {nlExplanation}</span>
+          </div>
+        )}
+        {nlFollowUpMode && nlRefinementChips.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Refined:</span>
+            {nlRefinementChips.map((chip, i) => (
+              <span
+                key={i}
+                className={cn(
+                  "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border",
+                  chip.isNew
+                    ? "bg-[var(--accent-positive)]/10 border-[var(--accent-positive)]/30 text-[var(--accent-positive)]"
+                    : "bg-[var(--bg-elevated-2)] border-[var(--border-emphasis)] text-[var(--text-secondary)]"
+                )}
+              >
+                {chip.label}
+              </span>
+            ))}
+            <button
+              onClick={handleClearAndStartOver}
+              className="ml-auto text-[11px] text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors underline underline-offset-2"
+            >
+              Clear &amp; start over
+            </button>
           </div>
         )}
       </div>

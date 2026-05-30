@@ -40,9 +40,17 @@ export async function deleteSavedScreen(id: number): Promise<void> {
 export interface NLParseResult {
   filters: FilterChip[];
   explanation: string;
+  merge: boolean;
 }
 
-export async function parseNaturalLanguage(query: string): Promise<NLParseResult> {
-  const { data } = await client.post<NLParseResult>("/screener/parse-natural-language", { query });
+export async function parseNaturalLanguage(
+  query: string,
+  existingFilters?: FilterChip[],
+): Promise<NLParseResult> {
+  const body: { query: string; existing_filters?: FilterChip[] } = { query };
+  if (existingFilters && existingFilters.length > 0) {
+    body.existing_filters = existingFilters;
+  }
+  const { data } = await client.post<NLParseResult>("/screener/parse-natural-language", body);
   return data;
 }

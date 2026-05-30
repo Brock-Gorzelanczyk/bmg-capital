@@ -37,14 +37,16 @@ class FilterChip(BaseModel):
 
 class NLParseRequest(BaseModel):
     query: str
+    existing_filters: List[FilterChip] | None = None
 
 
 class NLParseResponse(BaseModel):
     filters: List[FilterChip]
     explanation: str
+    merge: bool = False
 
 
-_NL_SYSTEM = """You are a stock screener assistant. Parse the user's natural language query into structured filter chips.
+_NL_SYSTEM_BASE = """You are a stock screener assistant. Parse the user's natural language query into structured filter chips.
 
 Available fields: rsi, price, volume, rel_volume, change_1d, change_5d, market_cap, pe_ratio, ma50_cross, ma200_cross, above_ma50, above_ma200, macd_positive, breakout_30d
 
@@ -61,12 +63,50 @@ Return JSON only:
 
 Keep it to 3-6 filters max. Return valid JSON only, no preamble."""
 
+_NL_SYSTEM_FOLLOWUP = """You are a stock screener assistant helping the user refine an existing screen. The user already has active filters and is making a follow-up request.
+
+Existing filters: {existing_filters_summary}
+
+Parse their follow-up query and return ONLY the new/modified filters to MERGE with the existing ones. Do not re-return filters that are not being changed. Only include filters for fields that are new or being modified.
+
+Available fields: rsi, price, volume, rel_volume, change_1d, change_5d, market_cap, pe_ratio, ma50_cross, ma200_cross, above_ma50, above_ma200, macd_positive, breakout_30d
+
+Available operators: gt (greater than), lt (less than), gte, lte, eq, cross_above, cross_below, is_true
+
+Return JSON only:
+{{
+  "filters": [
+    {{"field": "market_cap", "operator": "gt", "value": 10000000000, "label": "Market Cap > 10B"}},
+    ...
+  ],
+  "explanation": "Narrowing to large-cap stocks..."
+}}
+
+Return valid JSON only, no preamble."""
+
+
+def _build_existing_filters_summary(existing_filters: List[FilterChip]) -> str:
+    parts = []
+    for f in existing_filters:
+        op_map = {"gt": ">", "lt": "<", "gte": ">=", "lte": "<=", "eq": "=", "cross_above": "cross above", "cross_below": "cross below", "is_true": "is true"}
+        op_str = op_map.get(f.operator, f.operator)
+        parts.append(f"{f.field}{op_str}{f.value}")
+    return ", ".join(parts)
+
 
 @router.post("/parse-natural-language", response_model=NLParseResponse)
 async def parse_natural_language(req: NLParseRequest):
     """Parse a natural language query into structured filter chips using Claude."""
     if not settings.anthropic_api_key:
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured")
+
+    is_followup = bool(req.existing_filters)
+
+    if is_followup:
+        summary = _build_existing_filters_summary(req.existing_filters)  # type: ignore[arg-type]
+        system_prompt = _NL_SYSTEM_FOLLOWUP.format(existing_filters_summary=summary)
+    else:
+        system_prompt = _NL_SYSTEM_BASE
 
     hdrs = {
         "x-api-key": settings.anthropic_api_key,
@@ -82,7 +122,7 @@ async def parse_natural_language(req: NLParseRequest):
                 json={
                     "model": "claude-haiku-4-5-20251001",
                     "max_tokens": 512,
-                    "system": _NL_SYSTEM,
+                    "system": system_prompt,
                     "messages": [{"role": "user", "content": req.query}],
                 },
             )
@@ -100,6 +140,7 @@ async def parse_natural_language(req: NLParseRequest):
         return NLParseResponse(
             filters=[FilterChip(**f) for f in parsed.get("filters", [])],
             explanation=parsed.get("explanation", ""),
+            merge=is_followup,
         )
     except Exception as e:
         logger.warning(f"NL parse failed to decode JSON: {e} — raw: {raw_text[:300]}")
