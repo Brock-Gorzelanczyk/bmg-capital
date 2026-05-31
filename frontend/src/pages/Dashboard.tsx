@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, LayoutGrid, Bot } from "lucide-react";
+import { getStreak } from "@/api/portfolio";
+import { StreakBadgeDashboard } from "@/components/portfolio/MilestonesPanel";
 import { Responsive, useContainerWidth, verticalCompactor, type LayoutItem, type Layout, type ResponsiveLayouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -141,6 +143,13 @@ export default function Dashboard() {
 
   const layouts = { lg: activeWorkspace.layout, md: activeWorkspace.layout };
 
+  // Streak badge data
+  const { data: streakData } = useQuery({
+    queryKey: ["portfolio-streak"],
+    queryFn: getStreak,
+    staleTime: 120_000,
+  });
+
   return (
     <div className="max-w-[1600px] mx-auto pb-20 md:pb-6">
       {/* Dashboard header */}
@@ -152,6 +161,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {streakData && <StreakBadgeDashboard streak={streakData.current_streak_weeks} />}
           <button onClick={() => setAiOpen(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
             <Bot size={12} /> Ask AI
           </button>

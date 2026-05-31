@@ -127,3 +127,36 @@ export async function seedDemo(): Promise<{ ok: boolean }> {
   const { data } = await client.post<{ ok: boolean }>("/paper/seed-demo");
   return data;
 }
+
+// ---------------------------------------------------------------------------
+// Agent execute
+// ---------------------------------------------------------------------------
+
+export interface AgentPreviewOrder {
+  symbol: string;
+  action: "buy" | "sell";
+  amount_dollars: number;
+  rationale: string;
+  current_price: number | null;
+  approx_shares: number | null;
+  paper_only: true;
+  confirmed: boolean;
+}
+
+export interface AgentExecuteResponse {
+  status: "preview" | "executed";
+  order: AgentPreviewOrder | PaperOrder;
+  preview?: AgentPreviewOrder;
+  message: string;
+}
+
+export async function agentExecute(
+  instruction: string,
+  confirmed: boolean = false
+): Promise<AgentExecuteResponse> {
+  const { data } = await client.post<AgentExecuteResponse>("/paper/agent-execute", {
+    instruction,
+    confirmed,
+  });
+  return data;
+}

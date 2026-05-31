@@ -38,6 +38,7 @@ import SettingsPage from "@/pages/Settings";
 import NetWorthPage from "@/pages/NetWorthPage";
 import TaxXRayPage from "@/pages/TaxXRayPage";
 import PodsPage from "@/pages/PodsPage";
+import RiskParityPage from "@/pages/RiskParityPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 
@@ -132,6 +133,7 @@ function AppInner() {
         <Route path="/net-worth" element={<NetWorthPage />} />
         <Route path="/tax-xray" element={<TaxXRayPage />} />
         <Route path="/pods" element={<PodsPage />} />
+        <Route path="/risk-parity" element={<RiskParityPage />} />
       </Route>
     </Routes>
   );

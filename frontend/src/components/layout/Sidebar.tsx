@@ -5,7 +5,7 @@ import {
   FlaskConical, Layers, Bitcoin, PenTool,
   Filter, Newspaper, Calendar, Microscope, Compass,
   Droplets, ShieldCheck, Activity,
-  GraduationCap, Users, Landmark, ScanSearch,
+  GraduationCap, Users, Landmark, ScanSearch, Scale,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -53,7 +53,8 @@ const NAV_LEARN = [
 ];
 
 const NAV_TOOLS = [
-  { to: "/tax-xray", label: "Tax X-Ray", Icon: ScanSearch },
+  { to: "/tax-xray",     label: "Tax X-Ray",       Icon: ScanSearch },
+  { to: "/risk-parity",  label: "Risk Parity",      Icon: Scale },
 ];
 
 const NAV_COMMUNITY = [

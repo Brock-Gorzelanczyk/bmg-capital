@@ -33,10 +33,14 @@ import {
   DollarSign,
   Activity,
   AlertTriangle,
+  RefreshCw,
+  Scale,
 } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import DrawdownBudget from "@/components/portfolio/DrawdownBudget";
 import FeeAnalyzer from "@/components/portfolio/FeeAnalyzer";
+import FactorXRay from "@/components/portfolio/FactorXRay";
+import StressTest from "@/components/portfolio/StressTest";
 import MilestonesPanel from "@/components/portfolio/MilestonesPanel";
 import RebalanceView from "@/components/portfolio/RebalanceView";
 import RiskParityAllocator from "@/components/portfolio/RiskParityAllocator";
@@ -1388,11 +1392,16 @@ export default function Portfolio() {
             {activeTab === "factorxray"  && <FactorXRayTab />}
             {activeTab === "fees"        && <FeeAnalyzer positions={positions} />}
             {activeTab === "stresstest"  && <StressTestTab />}
+            {activeTab === "rebalance"   && <RebalanceView positions={positions} />}
+            {activeTab === "risk-parity" && <RiskParityAllocator />}
           </>
         )}
       </div>
 
-      {/* Section 4: Recent Activity */}
+      {/* Section 4: Milestones */}
+      <MilestonesPanel />
+
+      {/* Section 5: Recent Activity */}
       <RecentActivity transactions={transactions} />
 
       {/* Position Drawer */}
