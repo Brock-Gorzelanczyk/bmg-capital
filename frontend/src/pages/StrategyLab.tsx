@@ -865,6 +865,49 @@ export default function StrategyLab() {
             )}
           </div>
         </div>
+
+        {/* Regime filter row */}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider shrink-0">Regime filter:</span>
+          {(["Trend-Up", "Trend-Down", "Range", "Crisis"] as RegimeTag[]).map((r) => {
+            const active = regimeFilter.includes(r);
+            const colorMap: Record<RegimeTag, string> = {
+              "Trend-Up":   "border-emerald-400/40 text-emerald-400 bg-emerald-400/10",
+              "Trend-Down": "border-red-400/40 text-red-400 bg-red-400/10",
+              "Range":      "border-blue-400/40 text-blue-400 bg-blue-400/10",
+              "Crisis":     "border-orange-400/40 text-orange-400 bg-orange-400/10",
+            };
+            const inactiveMap: Record<RegimeTag, string> = {
+              "Trend-Up":   "border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-emerald-400/30 hover:text-emerald-400",
+              "Trend-Down": "border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-red-400/30 hover:text-red-400",
+              "Range":      "border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-blue-400/30 hover:text-blue-400",
+              "Crisis":     "border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-orange-400/30 hover:text-orange-400",
+            };
+            return (
+              <button
+                key={r}
+                onClick={() => setRegimeFilter((prev) =>
+                  prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]
+                )}
+                className={cn(
+                  "text-[10px] px-2.5 py-1 rounded-full border font-medium transition-colors",
+                  active ? colorMap[r] : inactiveMap[r]
+                )}
+              >
+                {r}
+              </button>
+            );
+          })}
+          {regimeFilter.length > 0 && (
+            <button
+              onClick={() => setRegimeFilter([])}
+              className="text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex items-center gap-0.5 transition-colors"
+            >
+              <X size={10} /> Clear
+            </button>
+          )}
+        </div>
+
         {(() => {
           const sorted = [...STRATEGIES].sort((a, b) => {
             const aOpen = openByPreset[a.key] ?? 0;
@@ -875,7 +918,10 @@ export default function StrategyLab() {
             if (aWatch !== bWatch) return bWatch - aWatch;
             return 0;
           });
-          const visible = showAllStrategies ? sorted : sorted.slice(0, 5);
+          const regimeFiltered = regimeFilter.length > 0
+            ? sorted.filter((s) => s.regimes.some((r) => regimeFilter.includes(r)))
+            : sorted;
+          const visible = showAllStrategies ? regimeFiltered : regimeFiltered.slice(0, 5);
           return (
             <>
               <div className="flex flex-wrap gap-2.5">
@@ -887,20 +933,23 @@ export default function StrategyLab() {
                     openCount={openByPreset[s.key] ?? 0}
                     watchCount={watchByPreset[s.key] ?? 0}
                     selected={selectedStrategy === s.key}
+                    isBestInRegime={normalizedRegime !== null && s.regimes.includes(normalizedRegime)}
                     onClick={() => setSelectedStrategy(selectedStrategy === s.key ? null : s.key)}
                     onInfo={() => setInfoModal(s.key)}
                   />
                 ))}
               </div>
-              <button
-                onClick={() => setShowAllStrategies((v) => !v)}
-                className="mt-3 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1.5"
-              >
-                {showAllStrategies
-                  ? <><X size={11} /> Show less</>
-                  : <><span className="text-[var(--text-tertiary)]">+{STRATEGIES.length - 5} more</span> · View all {STRATEGIES.length} strategies</>
-                }
-              </button>
+              {regimeFiltered.length > 5 && (
+                <button
+                  onClick={() => setShowAllStrategies((v) => !v)}
+                  className="mt-3 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1.5"
+                >
+                  {showAllStrategies
+                    ? <><X size={11} /> Show less</>
+                    : <><span className="text-[var(--text-tertiary)]">+{regimeFiltered.length - 5} more</span> · View all {regimeFiltered.length} strategies</>
+                  }
+                </button>
+              )}
             </>
           );
         })()}

@@ -1,9 +1,10 @@
-import { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu, Clock } from "lucide-react";
+import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu, Clock, TrendingUp, TrendingDown, BarChart2, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useWsStore, useAlertStore, useUiStore, useNotificationStore, useMarketStore } from "@/store";
 import { getNotifications } from "@/api/notifications";
+import { getRegime } from "@/api/strategy";
 import SymbolSearch from "@/components/ui/SymbolSearch";
 import { DEMO_MODE } from "@/lib/demoMode";
 
@@ -59,6 +60,24 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   });
   useEffect(() => { if (data) setNotifications(data); }, [data, setNotifications]);
 
+  const { data: regimeData } = useQuery({
+    queryKey: ["strategy-regime"],
+    queryFn: getRegime,
+    staleTime: 300_000,
+  });
+  const regime: string = regimeData?.regime ?? "unknown";
+
+  const REGIME_MAP: Record<string, { label: string; abbr: string; cls: string; icon: React.ReactNode }> = {
+    "Trend-Up":   { label: "Trend-Up",   abbr: "TU", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
+    "Trend-Down": { label: "Trend-Down", abbr: "TD", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
+    "Range":      { label: "Range",      abbr: "R",  cls: "text-blue-400 border-blue-400/30 bg-blue-400/8",           icon: <BarChart2 size={11} /> },
+    "Crisis":     { label: "Crisis",     abbr: "Cr", cls: "text-orange-400 border-orange-400/30 bg-orange-400/8",     icon: <AlertTriangle size={11} /> },
+    bull:         { label: "Trend-Up",   abbr: "TU", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
+    risk_off:     { label: "Trend-Down", abbr: "TD", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
+    unknown:      { label: "Regime…",    abbr: "—",  cls: "text-zinc-400 border-zinc-400/20 bg-zinc-400/5",           icon: <BarChart2 size={11} /> },
+  };
+  const regimeChip = REGIME_MAP[regime] ?? REGIME_MAP.unknown;
+
   return (
     <header className="h-14 backdrop-blur-md bg-[var(--bg-base)]/95 border-b border-[var(--border-subtle)] flex items-center px-3 md:px-4 gap-2 md:gap-4 shrink-0">
       {/* Hamburger — mobile only */}
@@ -85,6 +104,12 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
             Demo
           </div>
         )}
+        {/* Regime chip */}
+        <div className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${regimeChip.cls}`}>
+          {regimeChip.icon}
+          <span className="sm:hidden">{regimeChip.abbr}</span>
+          <span className="hidden sm:inline">{regimeChip.label}</span>
+        </div>
         {/* Stale data indicator */}
         {isStale && (
           <span className="text-[9px] text-[#F59E0B] px-1.5 py-0.5 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/20">Data delayed</span>
