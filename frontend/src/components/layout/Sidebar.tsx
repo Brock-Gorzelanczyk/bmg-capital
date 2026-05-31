@@ -7,6 +7,7 @@ import {
   Droplets, ShieldCheck, Activity,
   GraduationCap, Users, Landmark, ScanSearch, Scale,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
+  Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -33,6 +34,7 @@ const NAV_LABS = [
   { to: "/options",  label: "Options Lab",   Icon: Layers },
   { to: "/crypto",   label: "Crypto Lab",    Icon: Bitcoin },
   { to: "/workshop", label: "TA Workshop",   Icon: PenTool },
+  { to: "/paper",    label: "Paper Trading", Icon: Wallet },
 ];
 
 const NAV_MARKETS = [
@@ -41,6 +43,7 @@ const NAV_MARKETS = [
   { to: "/earnings",  label: "Earnings",  Icon: Calendar },
   { to: "/research",  label: "Research",  Icon: Microscope },
   { to: "/discovery", label: "Discovery", Icon: Compass },
+  { to: "/alerts",    label: "Alerts",    Icon: Bell },
 ];
 
 const NAV_CRYPTO_PLUS = [
@@ -53,8 +56,12 @@ const NAV_LEARN = [
 ];
 
 const NAV_TOOLS = [
-  { to: "/tax-xray",     label: "Tax X-Ray",       Icon: ScanSearch },
-  { to: "/risk-parity",  label: "Risk Parity",      Icon: Scale },
+  { to: "/tax-xray",       label: "Tax X-Ray",      Icon: ScanSearch },
+  { to: "/risk-parity",    label: "Risk Parity",     Icon: Scale },
+  { to: "/smart-transfers",label: "Smart Transfers", Icon: ArrowLeftRight },
+  { to: "/rsu-console",    label: "RSU Console",     Icon: ClipboardList },
+  { to: "/estate",         label: "Estate Plan",     Icon: Building2 },
+  { to: "/rules",          label: "Trading Rules",   Icon: ScrollText },
 ];
 
 const NAV_COMMUNITY = [
