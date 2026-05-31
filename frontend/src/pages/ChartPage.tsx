@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { LayoutList, X, Check } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { useSearchParams } from "react-router-dom";
-import CandlestickChart, { type ChartHandle, type TradeLevels } from "@/components/chart/CandlestickChart";
+import CandlestickChart, { type ChartHandle, type TradeLevels, type SignalMarker } from "@/components/chart/CandlestickChart";
+import { getTrades } from "@/api/strategy";
 import RsiChart from "@/components/chart/RsiChart";
 import MacdChart from "@/components/chart/MacdChart";
 import OscillatorPane from "@/components/chart/OscillatorPane";
@@ -245,6 +247,36 @@ export default function ChartPage() {
     const cfg = PERIOD_CONFIGS[period];
     return { timeframe: cfg.timeframe, start: cfg.getStart() };
   }, [period, tradeLevels, userPickedPeriod]);
+
+  // Strategy signal markers for current symbol
+  const { data: allTrades } = useQuery({
+    queryKey: ["strategy-trades"],
+    queryFn: getTrades,
+    staleTime: 60_000,
+  });
+  const signalMarkers = useMemo<SignalMarker[]>(() => {
+    if (!allTrades?.trades) return [];
+    return (allTrades.trades as any[])
+      .filter((t) => t.symbol === symbol && (t.entry_date || t.exit_date))
+      .flatMap((t): SignalMarker[] => {
+        const markers: SignalMarker[] = [];
+        if (t.entry_date) {
+          markers.push({
+            time: Math.floor(new Date(t.entry_date).getTime() / 1000),
+            isEntry: true,
+            label: `B ${t.preset_label ?? ""}`.trim(),
+          });
+        }
+        if (t.exit_date && t.status === "closed") {
+          markers.push({
+            time: Math.floor(new Date(t.exit_date).getTime() / 1000),
+            isEntry: false,
+            label: `S ${t.exit_reason ?? ""}`.replace("_", " ").trim(),
+          });
+        }
+        return markers;
+      });
+  }, [allTrades, symbol]);
 
   // Extra years added when user zooms past the left edge
   const [extraYears, setExtraYears] = useState(0);
@@ -717,6 +749,7 @@ export default function ChartPage() {
                 activeTool={proMode ? activeTool : "cursor"}
                 drawings={drawings}
                 tradeLevels={tradeLevels}
+                signalMarkers={signalMarkers}
                 compareBars={compareData?.bars}
                 compareSymbol={compareSymbol ?? undefined}
                 onCrosshairMove={setHoveredBar}

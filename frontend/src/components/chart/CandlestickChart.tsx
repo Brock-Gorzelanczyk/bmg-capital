@@ -27,6 +27,12 @@ export interface TradeLevels {
   exitReason?: string;
 }
 
+export interface SignalMarker {
+  time: number;
+  isEntry: boolean;
+  label: string;
+}
+
 interface Props {
   bars: Bar[];
   indicators?: Record<string, (number | null)[]>;
@@ -36,6 +42,7 @@ interface Props {
   tradeLevels?: TradeLevels;
   compareBars?: Bar[];
   compareSymbol?: string;
+  signalMarkers?: SignalMarker[];
   onCrosshairMove: (bar: HoveredBar | null) => void;
   onAddDrawing: (d: Omit<Drawing, "id">) => void;
   onNearLeftEdge?: () => void;
@@ -94,7 +101,7 @@ function computeHA(bars: Bar[]): Bar[] {
 type AnyMain = ISeriesApi<"Candlestick"> | ISeriesApi<"Bar"> | ISeriesApi<"Line"> | ISeriesApi<"Area">;
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(
-  ({ bars, indicators = {}, chartType, activeTool, drawings, tradeLevels, compareBars, compareSymbol, onCrosshairMove, onAddDrawing, onNearLeftEdge }, ref) => {
+  ({ bars, indicators = {}, chartType, activeTool, drawings, tradeLevels, compareBars, compareSymbol, signalMarkers, onCrosshairMove, onAddDrawing, onNearLeftEdge }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const mainSeriesRef = useRef<AnyMain | null>(null);
@@ -357,6 +364,28 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         lineSeriesRef.current[key].setData(data);
       });
     }, [indicators, bars]);
+
+    // ── Signal markers (strategy entries/exits) ───────────────────────────────
+    useEffect(() => {
+      const series = mainSeriesRef.current;
+      if (!series || !bars.length) return;
+      if (!signalMarkers || signalMarkers.length === 0) {
+        try { (series as any).setMarkers([]); } catch {}
+        return;
+      }
+      const markers = signalMarkers
+        .filter((m) => m.time >= toTime(bars[0].t) && m.time <= toTime(bars[bars.length - 1].t))
+        .map((m) => ({
+          time: m.time as UTCTimestamp,
+          position: m.isEntry ? "belowBar" as const : "aboveBar" as const,
+          color: m.isEntry ? "#BEF264" : "#FB7185",
+          shape: m.isEntry ? "arrowUp" as const : "arrowDown" as const,
+          text: m.label,
+          size: 1,
+        }))
+        .sort((a, b) => a.time - b.time);
+      try { (series as any).setMarkers(markers); } catch {}
+    }, [signalMarkers, bars]);
 
     // ── Sync drawings ─────────────────────────────────────────────────────────
     useEffect(() => {
