@@ -21,7 +21,7 @@ from app.alpaca.stream import stream_manager
 from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
-from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax
+from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +160,11 @@ app.include_router(monitoring.router)
 app.include_router(gdpr.router)
 app.include_router(net_worth.router)
 app.include_router(tax.router)
+app.include_router(estate.router)
+app.include_router(pods.router)
+app.include_router(rules.router)
+app.include_router(rules.transfers_router)
+app.include_router(tlh.router)
 
 
 @app.get("/health", tags=["health"])

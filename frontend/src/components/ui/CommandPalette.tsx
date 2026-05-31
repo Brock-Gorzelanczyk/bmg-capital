@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, LayoutDashboard, LineChart, Filter, BookMarked, Briefcase, Bell, FlaskConical, Newspaper, Calendar, Microscope, PlayCircle, TrendingUp, BookOpen, Layers, Globe, BarChart2, Shield, Zap, Users, Compass, Landmark } from "lucide-react";
+import { Search, LayoutDashboard, LineChart, Filter, BookMarked, Briefcase, Bell, FlaskConical, Newspaper, Calendar, Microscope, PlayCircle, TrendingUp, BookOpen, Layers, Globe, BarChart2, Shield, Zap, Users, Compass, Landmark, ScanSearch } from "lucide-react";
 import { COMPANY_INFO } from "@/data/companyInfo";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,7 @@ const PAGES = [
   { label: "Security", to: "/security", Icon: Shield },
   { label: "Learn", to: "/learn", Icon: TrendingUp },
   { label: "Net Worth", to: "/net-worth", Icon: Landmark },
+  { label: "Tax X-Ray", to: "/tax-xray", Icon: ScanSearch },
 ];
 
 const SYMBOLS = Object.entries(COMPANY_INFO).map(([sym, info]) => ({ sym, name: info.name, sector: info.sector }));

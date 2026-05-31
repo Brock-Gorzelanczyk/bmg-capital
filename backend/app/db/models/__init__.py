@@ -24,6 +24,7 @@ from app.db.models.monitoring import MonitoringResult, AuditLog, LoginAttempt
 from app.db.models.net_worth import NetWorthAccount, NetWorthSnapshot
 from app.db.models.rule import UserRule
 from app.db.models.pod import Pod, PodPosition
+from app.db.models.estate import BeneficiaryRecord, DigitalAssetRecord
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -44,4 +45,5 @@ __all__ = [
     "NetWorthAccount", "NetWorthSnapshot",
     "UserRule",
     "Pod", "PodPosition",
+    "BeneficiaryRecord", "DigitalAssetRecord",
 ]

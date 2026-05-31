@@ -22,6 +22,7 @@ from app.db.models.paper import (
     STARTING_BALANCE,
 )
 from app.services.fill_simulator import get_quote, simulate_fill
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/paper", tags=["paper"])
@@ -1018,4 +1019,174 @@ async def liquidate_strategy(
         "liquidated": len(liquidated),
         "positions": liquidated,
         "message": f"Liquidated {len(liquidated)} position(s) for strategy '{strategy_key}'",
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/paper/agent-execute  — NL Agent (paper trading only)
+# ---------------------------------------------------------------------------
+
+class AgentExecuteRequest(BaseModel):
+    instruction: str  # e.g. "Buy $100 of AAPL every Friday"
+    confirmed: bool = False  # must be True to actually execute
+
+
+async def _parse_instruction_with_claude(instruction: str) -> dict:
+    """Call Claude to parse a natural language trade instruction into a structured order."""
+    import httpx
+
+    if not settings.anthropic_api_key:
+        # Fallback simple parser when no API key
+        return _fallback_parse(instruction)
+
+    system = (
+        "You are a paper trading assistant. Parse the user's instruction into a structured trade order. "
+        "Return ONLY valid JSON with these fields: "
+        '{"symbol": "TICKER", "action": "buy" or "sell", "amount_dollars": number, "rationale": "brief explanation"}. '
+        "If the instruction is ambiguous, make a reasonable assumption. "
+        "action must be exactly 'buy' or 'sell'. symbol must be a valid US equity or crypto ticker (e.g. AAPL, BTC-USD). "
+        "amount_dollars is the dollar amount to trade (required, positive number). "
+        "If the instruction mentions shares instead of dollars, estimate the dollar amount using a reasonable current price. "
+        "Return ONLY the JSON object, no markdown, no explanation."
+    )
+    messages = [{"role": "user", "content": instruction}]
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": settings.anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 256,
+                "system": system,
+                "messages": messages,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text = data["content"][0]["text"].strip()
+
+    import json as _json
+    # Strip markdown code fences if present
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    parsed = _json.loads(text)
+    return parsed
+
+
+def _fallback_parse(instruction: str) -> dict:
+    """
+    Simple regex-based fallback parser used when ANTHROPIC_API_KEY is not set.
+    Handles patterns like 'Buy $100 of AAPL' or 'Sell 50 dollars of SPY'.
+    """
+    import re
+    text = instruction.lower()
+    action = "buy" if "buy" in text else ("sell" if "sell" in text else "buy")
+
+    # Find dollar amount
+    amount_match = re.search(r"\$?\s*(\d+(?:\.\d+)?)", text)
+    amount_dollars = float(amount_match.group(1)) if amount_match else 100.0
+
+    # Find ticker (1-5 uppercase letters or crypto like BTC-USD)
+    ticker_match = re.search(r'\b([A-Z]{1,5}(?:-USD)?)\b', instruction)
+    if not ticker_match:
+        # Scan for known patterns
+        common = ["AAPL", "SPY", "QQQ", "TSLA", "MSFT", "NVDA", "BTC-USD", "ETH-USD", "GLD", "VIX"]
+        symbol = next((s for s in common if s.lower() in text), "SPY")
+    else:
+        symbol = ticker_match.group(1).upper()
+
+    return {
+        "symbol": symbol,
+        "action": action,
+        "amount_dollars": amount_dollars,
+        "rationale": f"Parsed from: '{instruction}' (fallback parser — add ANTHROPIC_API_KEY for AI parsing)",
+    }
+
+
+@router.post("/agent-execute")
+async def agent_execute(
+    req: AgentExecuteRequest,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Parse a natural language instruction and optionally execute a paper trade.
+
+    - confirmed=False: parse only, return structured order for user review
+    - confirmed=True: parse and execute the paper trade
+    """
+    if not req.instruction or not req.instruction.strip():
+        raise HTTPException(status_code=400, detail="instruction is required")
+
+    # Parse the instruction
+    try:
+        parsed = await _parse_instruction_with_claude(req.instruction)
+    except Exception as e:
+        logger.error(f"Agent parse error: {e}", exc_info=True)
+        raise HTTPException(status_code=422, detail=f"Could not parse instruction: {str(e)}")
+
+    # Validate parsed fields
+    symbol = (parsed.get("symbol") or "").upper().strip()
+    action = (parsed.get("action") or "buy").lower()
+    amount_dollars = float(parsed.get("amount_dollars") or 100.0)
+    rationale = parsed.get("rationale", "")
+
+    if not symbol:
+        raise HTTPException(status_code=422, detail="Could not identify a symbol from the instruction")
+    if action not in ("buy", "sell"):
+        action = "buy"
+    if amount_dollars <= 0:
+        raise HTTPException(status_code=422, detail="amount_dollars must be positive")
+
+    # Fetch current quote for display
+    quote = await get_quote(symbol)
+    current_price = quote["last"] if quote else None
+    approx_shares = round(amount_dollars / current_price, 4) if current_price else None
+
+    preview = {
+        "symbol": symbol,
+        "action": action,
+        "amount_dollars": amount_dollars,
+        "rationale": rationale,
+        "current_price": current_price,
+        "approx_shares": approx_shares,
+        "paper_only": True,
+        "confirmed": req.confirmed,
+    }
+
+    if not req.confirmed:
+        return {
+            "status": "preview",
+            "order": preview,
+            "message": (
+                f"I'll {action} ${amount_dollars:,.2f} of {symbol}."
+                + (f" Current price: ${current_price:,.2f}. This will purchase ~{approx_shares} shares in paper trading." if current_price and action == "buy" else "")
+                + " Confirm to execute this paper trade."
+            ),
+        }
+
+    # Execute the paper trade
+    if not quote:
+        raise HTTPException(status_code=400, detail=f"Could not fetch price for {symbol} — cannot execute")
+
+    order_req = OrderRequest(
+        symbol=symbol,
+        side=action,
+        notional=amount_dollars,
+        order_type="market",
+    )
+    result = await place_order(order_req, db=db, user=user)
+
+    return {
+        "status": "executed",
+        "order": result,
+        "preview": preview,
+        "message": f"Paper trade executed: {action} ${amount_dollars:,.2f} of {symbol} at ${result.get('fill_price', '?')}.",
     }

@@ -5,7 +5,7 @@ import {
   FlaskConical, Layers, Bitcoin, PenTool,
   Filter, Newspaper, Calendar, Microscope, Compass,
   Droplets, ShieldCheck, Activity,
-  GraduationCap, Users, Landmark,
+  GraduationCap, Users, Landmark, ScanSearch,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,10 @@ const NAV_CRYPTO_PLUS = [
 
 const NAV_LEARN = [
   { to: "/learn", label: "Learning Center", Icon: GraduationCap },
+];
+
+const NAV_TOOLS = [
+  { to: "/tax-xray", label: "Tax X-Ray", Icon: ScanSearch },
 ];
 
 const NAV_COMMUNITY = [
@@ -374,6 +378,8 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
           expanded={expanded}
           headerRight={streak > 0 ? <StreakBadge streak={streak} size="sm" /> : undefined}
         />
+
+        <NavSection label="Tools" items={NAV_TOOLS} expanded={expanded} />
 
         <NavSection label="Community" items={NAV_COMMUNITY} expanded={expanded} />
 
