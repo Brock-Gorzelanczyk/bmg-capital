@@ -125,7 +125,16 @@ export const getCryptoStrategyEquity = () =>
   api.get("/crypto-strategy/equity").then((r) => r.data);
 
 export const runCryptoStrategyNow = () =>
-  api.post("/crypto-strategy/run-now").then((r) => r.data);
+  api.post("/crypto-strategy/run-now").then((r) => r.data as { ok: boolean; scan_id: string; message: string });
+
+export const getCryptoScanStatus = (scanId: string) =>
+  api.get(`/crypto-strategy/scan/${scanId}`).then((r) => r.data as {
+    scan_id: string;
+    status: "running" | "complete" | "failed" | "unknown";
+    started_at?: string;
+    result?: { regime: string; coins_attempted: number; coins_scanned: number; new_candidates: number; entries: number; exits: number };
+    error?: string;
+  });
 
 export interface StrategyDefinition {
   id: number;

@@ -1,20 +1,28 @@
 import { useMemo, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu, Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useWsStore, useAlertStore, useUiStore, useNotificationStore, useMarketStore } from "@/store";
 import { getNotifications } from "@/api/notifications";
 import SymbolSearch from "@/components/ui/SymbolSearch";
 import { DEMO_MODE } from "@/lib/demoMode";
 
-function useMarketStatus() {
+type MarketState = "open" | "after-hours" | "closed";
+
+// Routes where the market is always 24/7 live (crypto, DeFi)
+const ALWAYS_LIVE_PREFIXES = ["/crypto", "/defi", "/security"];
+
+function useEquityMarketStatus(): MarketState {
   return useMemo(() => {
     const now = new Date();
     const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
     const day = et.getDay();
     const mins = et.getHours() * 60 + et.getMinutes();
     const isWeekday = day >= 1 && day <= 5;
-    return isWeekday && mins >= 570 && mins < 960 ? "open" : "closed";
+    if (!isWeekday) return "closed";
+    if (mins >= 570 && mins < 960) return "open";
+    if ((mins >= 240 && mins < 570) || (mins >= 960 && mins < 1200)) return "after-hours";
+    return "closed";
   }, []);
 }
 
@@ -24,8 +32,11 @@ interface TopBarProps {
 
 export default function TopBar({ onMenuToggle }: TopBarProps) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const wsStatus = useWsStore((s) => s.status);
-  const marketStatus = useMarketStatus();
+  const equityStatus = useEquityMarketStatus();
+  const isCryptoRoute = ALWAYS_LIVE_PREFIXES.some((p) => pathname.startsWith(p));
+  const marketStatus: MarketState = isCryptoRoute ? "open" : equityStatus;
   const mode = useUiStore((s) => s.mode);
   const toggleMode = useUiStore((s) => s.toggleMode);
   const { unreadCount, openPanel, setNotifications } = useNotificationStore();
@@ -80,23 +91,29 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
         )}
         {/* Market status pill */}
         <div className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
-          {wsStatus === "connected" && marketStatus === "open" ? (
+          {wsStatus !== "connected" ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
+              <WifiOff size={12} className="text-[#F59E0B]" />
+              <span className="text-[#F59E0B] hidden sm:block font-medium">Offline</span>
+            </>
+          ) : marketStatus === "open" ? (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
               <Wifi size={12} className="text-[var(--accent-positive)]" />
               <span className="text-[var(--accent-positive)] hidden sm:block font-medium">Live</span>
             </>
-          ) : wsStatus === "connected" ? (
+          ) : marketStatus === "after-hours" ? (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
-              <Moon size={12} className="text-[#F59E0B]" />
-              <span className="text-[#F59E0B] hidden sm:block font-medium">Closed</span>
+              <Clock size={12} className="text-[#F59E0B]" />
+              <span className="text-[#F59E0B] hidden sm:block font-medium">After Hours</span>
             </>
           ) : (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
-              <WifiOff size={12} className="text-[#F59E0B]" />
-              <span className="text-[#F59E0B] hidden sm:block font-medium">Offline</span>
+              <Moon size={12} className="text-[#F59E0B]" />
+              <span className="text-[#F59E0B] hidden sm:block font-medium">Closed</span>
             </>
           )}
         </div>

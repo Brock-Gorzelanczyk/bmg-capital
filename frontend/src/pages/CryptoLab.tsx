@@ -17,6 +17,7 @@ import {
   getCryptoStrategySummary,
   getCryptoStrategyDefinitions,
   runCryptoStrategyNow,
+  getCryptoScanStatus,
   getCryptoOHLCV,
   getCryptoQuizStatus,
   completeCryptoQuiz,
@@ -1209,18 +1210,37 @@ function CryptoStrategyPanel() {
     setRunning(true);
     setRunStatus(null);
     try {
-      await runCryptoStrategyNow();
-      setRunStatus({ ok: true, msg: "Scanning… results update in ~30 seconds" });
-      toast.success("Crypto scan started — results update shortly", { duration: 5000 });
-      // Invalidate at 30s, 60s, and 90s to catch scan completion quickly
-      [30_000, 60_000, 90_000].forEach((delay, i) => {
-        setTimeout(() => {
-          qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] });
-          qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] });
-          qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] });
-          if (i === 2) setRunStatus(null);
-        }, delay);
-      });
+      const { scan_id } = await runCryptoStrategyNow();
+      setRunStatus({ ok: true, msg: "Scanning… fetching market data" });
+      toast.success("Crypto scan started", { duration: 3000 });
+
+      // Poll scan status every 8s until complete or failed (max 3 min)
+      let attempts = 0;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const status = await getCryptoScanStatus(scan_id);
+          if (status.status === "complete") {
+            clearInterval(pollInterval);
+            const r = status.result;
+            const msg = r
+              ? `Scan complete — ${r.coins_scanned}/${r.coins_attempted} coins · ${r.new_candidates} new signals · ${r.entries} entries`
+              : "Scan complete";
+            setRunStatus({ ok: true, msg });
+            qc.invalidateQueries({ queryKey: ["crypto-strategy-trades"] });
+            qc.invalidateQueries({ queryKey: ["crypto-strategy-candidates"] });
+            qc.invalidateQueries({ queryKey: ["crypto-strategy-summary"] });
+            setTimeout(() => setRunStatus(null), 8000);
+          } else if (status.status === "failed") {
+            clearInterval(pollInterval);
+            setRunStatus({ ok: false, msg: `Scan failed: ${status.error ?? "data source unavailable — check CCXT/Binance connectivity"}` });
+          }
+          if (attempts >= 22) { // 22 × 8s = ~3 min timeout
+            clearInterval(pollInterval);
+            setRunStatus({ ok: false, msg: "Scan timed out — check Railway logs for details" });
+          }
+        } catch { /* ignore polling errors */ }
+      }, 8_000);
     } catch (e: any) {
       const detail = e?.response?.data?.detail ?? e?.message ?? "Unknown error";
       setRunStatus({ ok: false, msg: `Scan failed: ${detail}` });

@@ -87,15 +87,17 @@ def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1d", limit: int = 5
     if missing:
         import yfinance as yf
         for sym in missing:
-            yf_sym = sym.replace("/", "-").replace("USDT", "USD")
+            # BTC/USDT → BTC-USD, ETH/BTC → ETH-BTC (correct yfinance format)
+            yf_sym = sym.replace("USDT", "USD").replace("/", "-")
             try:
                 df = yf.download(yf_sym, period="2y", interval="1d", progress=False, auto_adjust=True)
                 if df.empty:
+                    logger.debug(f"yfinance returned empty df for {sym} (as {yf_sym})")
                     continue
-                df.columns = [c.lower() for c in df.columns]
+                df.columns = [c.lower() if isinstance(c, str) else c[0].lower() for c in df.columns]
                 bars[sym] = df
             except Exception as e:
-                logger.debug(f"yfinance fallback failed for {sym}: {e}")
+                logger.debug(f"yfinance fallback failed for {sym} (as {yf_sym}): {e}")
 
     return bars
 
@@ -786,9 +788,11 @@ async def run_crypto_automation(user_id: int) -> Dict[str, Any]:
 
     # Fetch bars for all coins in universe
     bars = await loop.run_in_executor(None, lambda: _fetch_crypto_bars(CRYPTO_UNIVERSE))
+    coins_attempted = len(CRYPTO_UNIVERSE)
+    coins_fetched = len(bars)
     if not bars:
-        logger.warning("[crypto] No bars fetched — skipping run")
-        return {"entries": 0, "new_candidates": 0, "exits": 0}
+        logger.warning(f"[crypto] No bars fetched for {coins_attempted} attempted coins — data source unavailable")
+        raise RuntimeError(f"Data fetch failed: 0/{coins_attempted} coins returned bars. Check CCXT/Binance connectivity.")
 
     prices = _get_crypto_prices(list(bars.keys()), bars)
     regime = _check_crypto_regime(bars)
@@ -819,10 +823,11 @@ async def run_crypto_automation(user_id: int) -> Dict[str, Any]:
         _snapshot_crypto_equity(db, prices, user_id)
         db.commit()
 
-        logger.info(f"[crypto] Done: {new_cands} new candidates, {entries} entries, {exits} exits")
+        logger.info(f"[crypto] Done: {coins_fetched}/{coins_attempted} coins, {new_cands} new candidates, {entries} entries, {exits} exits")
         return {
             "regime": regime,
-            "coins_scanned": len(bars),
+            "coins_attempted": coins_attempted,
+            "coins_scanned": coins_fetched,
             "new_candidates": new_cands,
             "entries": entries,
             "exits": exits,

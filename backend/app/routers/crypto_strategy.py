@@ -269,13 +269,25 @@ async def get_crypto_equity(
     }
 
 
-async def _run_crypto_wrapper(user_id: int) -> None:
+# ---------------------------------------------------------------------------
+# In-process scan status registry (persists for the lifetime of the worker)
+# ---------------------------------------------------------------------------
+
+import uuid as _uuid
+
+_SCAN_STATUS: dict[str, dict] = {}
+
+
+async def _run_crypto_wrapper(user_id: int, scan_id: str) -> None:
+    _SCAN_STATUS[scan_id] = {"status": "running", "started_at": _now().isoformat(), "result": None, "error": None}
     try:
-        logger.info(f"[crypto] Background run-now starting for user {user_id}")
-        await run_crypto_automation(user_id=user_id)
-        logger.info(f"[crypto] Background run-now complete for user {user_id}")
+        logger.info(f"[crypto] Background run-now starting for user {user_id} scan={scan_id}")
+        result = await run_crypto_automation(user_id=user_id)
+        logger.info(f"[crypto] Background run-now complete for user {user_id}: {result}")
+        _SCAN_STATUS[scan_id].update({"status": "complete", "result": result})
     except Exception as e:
         logger.error(f"[crypto] Background run-now failed for user {user_id}: {e}", exc_info=True)
+        _SCAN_STATUS[scan_id].update({"status": "failed", "error": str(e)})
 
 
 @router.post("/run-now")
@@ -283,9 +295,22 @@ async def run_crypto_now(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
-    """Kick off crypto automation as a background task and return immediately."""
-    background_tasks.add_task(_run_crypto_wrapper, current_user.id)
-    return {"ok": True, "message": "Crypto scan started — results update in ~2 minutes"}
+    """Kick off crypto automation as a background task and return a scan_id for polling."""
+    scan_id = str(_uuid.uuid4())
+    background_tasks.add_task(_run_crypto_wrapper, current_user.id, scan_id)
+    return {"ok": True, "scan_id": scan_id, "message": "Crypto scan started"}
+
+
+@router.get("/scan/{scan_id}")
+async def get_scan_status(
+    scan_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Poll scan status by scan_id returned from /run-now."""
+    entry = _SCAN_STATUS.get(scan_id)
+    if not entry:
+        return {"status": "unknown", "scan_id": scan_id}
+    return {"scan_id": scan_id, **entry}
 
 
 @router.get("/quiz-status")
