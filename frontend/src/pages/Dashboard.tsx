@@ -25,6 +25,7 @@ import SectorPerformanceWidget from "@/components/widgets/impl/SectorPerformance
 import MarketNewsWidget from "@/components/widgets/impl/MarketNewsWidget";
 import WatchlistTableWidget from "@/components/widgets/impl/WatchlistTableWidget";
 import TopMoversWidget from "@/components/widgets/impl/TopMoversWidget";
+import DrawdownBudgetWidget from "@/components/widgets/impl/DrawdownBudgetWidget";
 import { useState } from "react";
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
@@ -38,6 +39,7 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
   "market-news": MarketNewsWidget,
   "watchlist-table": WatchlistTableWidget,
   "top-movers": TopMoversWidget,
+  "drawdown-budget": DrawdownBudgetWidget,
 };
 
 function ComingSoonWidget({ name }: { name: string }) {

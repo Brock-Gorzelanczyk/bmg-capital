@@ -1488,9 +1488,12 @@ function StrategyCard({
               <span className="text-[9px] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100">Click to apply →</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)]" />
-              <span className="text-[10px] text-[var(--text-tertiary)]">Coming Soon</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-[var(--border-emphasis)]" />
+                <span className="text-[10px] text-[var(--text-tertiary)]">Inactive</span>
+              </div>
+              <span className="text-[9px] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity">Enable in settings →</span>
             </div>
           )}
         </div>
