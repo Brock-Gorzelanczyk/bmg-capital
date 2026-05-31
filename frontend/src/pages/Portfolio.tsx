@@ -1047,36 +1047,6 @@ function PerformanceTab({ positions, account }: PerformanceTabProps) {
   );
 }
 
-// ─── Factor X-Ray Stub ───────────────────────────────────────────────────────
-
-function FactorXRayTab() {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
-      <Activity size={32} className="text-[var(--text-tertiary)]" />
-      <p className="text-[var(--text-secondary)] font-semibold">Factor X-Ray</p>
-      <p className="text-xs text-[var(--text-tertiary)] max-w-sm">
-        Factor exposure analysis (Value, Growth, Momentum, Quality) coming soon.
-        This will decompose your portfolio returns into systematic risk factors.
-      </p>
-    </div>
-  );
-}
-
-// ─── Stress Test Stub ────────────────────────────────────────────────────────
-
-function StressTestTab() {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
-      <ShieldAlert size={32} className="text-[var(--text-tertiary)]" />
-      <p className="text-[var(--text-secondary)] font-semibold">Stress Test</p>
-      <p className="text-xs text-[var(--text-tertiary)] max-w-sm">
-        Scenario analysis (2008 crisis, 2020 COVID crash, rate shock) coming soon.
-        This will estimate your portfolio drawdown under historical stress scenarios.
-      </p>
-    </div>
-  );
-}
-
 // ─── Recent Activity ──────────────────────────────────────────────────────────
 
 function RecentActivity({ transactions }: { transactions: PaperTransaction[] }) {
@@ -1389,9 +1359,9 @@ export default function Portfolio() {
             {activeTab === "allocation"  && <AllocationTab positions={positions} />}
             {activeTab === "risk"        && <RiskTab positions={positions} />}
             {activeTab === "performance" && <PerformanceTab positions={positions} account={account} />}
-            {activeTab === "factorxray"  && <FactorXRayTab />}
+            {activeTab === "factorxray"  && <FactorXRay portfolioId={1} />}
             {activeTab === "fees"        && <FeeAnalyzer positions={positions} />}
-            {activeTab === "stresstest"  && <StressTestTab />}
+            {activeTab === "stresstest"  && <StressTest positions={positions} />}
             {activeTab === "rebalance"   && <RebalanceView positions={positions} />}
             {activeTab === "risk-parity" && <RiskParityAllocator />}
           </>

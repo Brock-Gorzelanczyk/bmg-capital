@@ -245,6 +245,29 @@ export default function ChartPage() {
     const cfg = PERIOD_CONFIGS[period];
     return { timeframe: cfg.timeframe, start: cfg.getStart() };
   }, [period, tradeLevels, userPickedPeriod]);
+
+  // Extra years added when user zooms past the left edge
+  const [extraYears, setExtraYears] = useState(0);
+  const loadingMoreRef = useRef(false);
+
+  // Reset extra years whenever the period or symbol changes
+  useEffect(() => { setExtraYears(0); }, [period, symbol]);
+
+  // Extend start further back when the user has scrolled past the data window
+  const dynamicStart = useMemo(() => {
+    if (!start || extraYears === 0) return start;
+    const d = new Date(start);
+    d.setFullYear(d.getFullYear() - extraYears);
+    return d.toISOString().slice(0, 10);
+  }, [start, extraYears]);
+
+  const handleNearLeftEdge = useCallback(() => {
+    if (loadingMoreRef.current || period === "All") return;
+    loadingMoreRef.current = true;
+    setExtraYears((y) => y + 2);
+    setTimeout(() => { loadingMoreRef.current = false; }, 4000);
+  }, [period]);
+
   const presetIndsRef = useRef<string[]>([]);
   const [presetActive, setPresetActive] = useState(true);
   const [showPresetBanner, setShowPresetBanner] = useState(!!presetKey);
@@ -253,8 +276,8 @@ export default function ChartPage() {
   const liveBar = useMarketStore((s) => s.liveBars[symbol]);
 
   const indicatorsParam = Array.from(activeIndicators).join(",");
-  const { data, isLoading } = useBars(symbol, timeframe, indicatorsParam || undefined, start);
-  const { data: compareData } = useBars(compareSymbol ?? "", timeframe, undefined, start);
+  const { data, isLoading } = useBars(symbol, timeframe, indicatorsParam || undefined, dynamicStart);
+  const { data: compareData } = useBars(compareSymbol ?? "", timeframe, undefined, dynamicStart);
 
   const bars = data?.bars ?? [];
   const indicators = data?.indicators ?? {};
@@ -698,6 +721,7 @@ export default function ChartPage() {
                 compareSymbol={compareSymbol ?? undefined}
                 onCrosshairMove={setHoveredBar}
                 onAddDrawing={handleAddDrawing}
+                onNearLeftEdge={handleNearLeftEdge}
               />
             )}
           </div>

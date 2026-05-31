@@ -39,6 +39,10 @@ import NetWorthPage from "@/pages/NetWorthPage";
 import TaxXRayPage from "@/pages/TaxXRayPage";
 import PodsPage from "@/pages/PodsPage";
 import RiskParityPage from "@/pages/RiskParityPage";
+import RulesPage from "@/pages/RulesPage";
+import EstatePage from "@/pages/EstatePage";
+import RSUConsolePage from "@/pages/RSUConsolePage";
+import SmartTransfersPage from "@/pages/SmartTransfersPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 
@@ -134,6 +138,10 @@ function AppInner() {
         <Route path="/tax-xray" element={<TaxXRayPage />} />
         <Route path="/pods" element={<PodsPage />} />
         <Route path="/risk-parity" element={<RiskParityPage />} />
+        <Route path="/rules" element={<RulesPage />} />
+        <Route path="/estate" element={<EstatePage />} />
+        <Route path="/rsu-console" element={<RSUConsolePage />} />
+        <Route path="/smart-transfers" element={<SmartTransfersPage />} />
       </Route>
     </Routes>
   );

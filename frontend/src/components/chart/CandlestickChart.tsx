@@ -38,6 +38,7 @@ interface Props {
   compareSymbol?: string;
   onCrosshairMove: (bar: HoveredBar | null) => void;
   onAddDrawing: (d: Omit<Drawing, "id">) => void;
+  onNearLeftEdge?: () => void;
 }
 
 const TV = {
@@ -93,7 +94,7 @@ function computeHA(bars: Bar[]): Bar[] {
 type AnyMain = ISeriesApi<"Candlestick"> | ISeriesApi<"Bar"> | ISeriesApi<"Line"> | ISeriesApi<"Area">;
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(
-  ({ bars, indicators = {}, chartType, activeTool, drawings, tradeLevels, compareBars, compareSymbol, onCrosshairMove, onAddDrawing }, ref) => {
+  ({ bars, indicators = {}, chartType, activeTool, drawings, tradeLevels, compareBars, compareSymbol, onCrosshairMove, onAddDrawing, onNearLeftEdge }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const mainSeriesRef = useRef<AnyMain | null>(null);
@@ -112,9 +113,11 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
     // Stable refs for callbacks so chart subscriptions don't need re-registration
     const onCrosshairMoveRef = useRef(onCrosshairMove);
     const onAddDrawingRef = useRef(onAddDrawing);
+    const onNearLeftEdgeRef = useRef(onNearLeftEdge);
     const toolRef = useRef(activeTool);
     useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
     useEffect(() => { onAddDrawingRef.current = onAddDrawing; }, [onAddDrawing]);
+    useEffect(() => { onNearLeftEdgeRef.current = onNearLeftEdge; }, [onNearLeftEdge]);
     useEffect(() => { toolRef.current = activeTool; }, [activeTool]);
 
     useImperativeHandle(ref, () => ({
@@ -165,7 +168,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
       volSeriesRef.current = vol;
       chartRef.current = chart;
 
-      chart.timeScale().subscribeVisibleLogicalRangeChange(() => setOverlayVersion((v) => v + 1));
+      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        setOverlayVersion((v) => v + 1);
+        if (range && range.from < 5) {
+          onNearLeftEdgeRef.current?.();
+        }
+      });
 
       chart.subscribeCrosshairMove((param) => {
         if (!param.seriesData?.size || !param.point) {
