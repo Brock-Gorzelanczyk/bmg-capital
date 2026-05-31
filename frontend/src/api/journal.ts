@@ -58,3 +58,23 @@ export const updateEntry = (id: number, body: CreateEntryBody): Promise<JournalE
 
 export const deleteEntry = (id: number): Promise<{ ok: boolean }> =>
   client.delete(`/journal/${id}`).then((r) => r.data);
+
+// ── Pre-Mortem ─────────────────────────────────────────────────────────────
+
+export interface PreMortemCreateBody {
+  symbol: string;
+  direction: string;
+  thesis: string;
+  position_size?: number | null;
+  entry_price?: number | null;
+}
+
+export interface PreMortemEntry extends JournalEntry {
+  entry_type: string | null;
+}
+
+export const createPreMortem = (body: PreMortemCreateBody): Promise<PreMortemEntry> =>
+  client.post("/journal/pre-mortem", body).then((r) => r.data);
+
+export const listPreMortems = (): Promise<PreMortemEntry[]> =>
+  client.get("/journal/pre-mortems").then((r) => r.data);

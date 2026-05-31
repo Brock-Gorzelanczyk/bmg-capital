@@ -682,6 +682,21 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           initialAccountSize={buyingPower > 0 ? buyingPower : undefined}
         />
       )}
+
+      {preMortemOpen && (
+        <PreMortemModal
+          symbol={symbol}
+          direction={side === "buy" ? "long" : "short"}
+          positionSize={
+            inputMode === "shares" && sharesAmount ? parseFloat(sharesAmount) : estimatedShares ?? undefined
+          }
+          entryPrice={currentPrice > 0 ? currentPrice : undefined}
+          accountValue={account?.equity ?? buyingPower}
+          onSave={handlePreMortemSave}
+          onSkip={handlePreMortemSkip}
+          onClose={() => setPreMortemOpen(false)}
+        />
+      )}
     </div>
   );
 }

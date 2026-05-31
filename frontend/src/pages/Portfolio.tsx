@@ -31,6 +31,7 @@ import {
   Bot,
 } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
+import DrawdownBudget from "@/components/portfolio/DrawdownBudget";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -1081,6 +1082,15 @@ export default function Portfolio() {
 
       {/* Section 1: Hero P&L Bar */}
       <HeroBar account={account} loading={accountLoading} />
+
+      {/* Section 1b: Drawdown Risk Budget */}
+      {account && (
+        <DrawdownBudget
+          portfolioValue={account.equity}
+          totalPnl={account.total_pnl}
+          startingBalance={account.starting_balance}
+        />
+      )}
 
       {/* Section 2: Performance Chart */}
       <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">

@@ -2,7 +2,7 @@ import React from "react";
 import {
   Sun, BarChart2, Wallet, Briefcase, FlaskConical, Calendar,
   TrendingUp, Newspaper, Zap, BookMarked, GraduationCap,
-  MessageSquare, Bitcoin, Activity,
+  MessageSquare, Bitcoin, Activity, ShieldAlert,
 } from "lucide-react";
 
 export type WidgetCategory =
@@ -171,6 +171,15 @@ export const WIDGET_REGISTRY: Record<string, WidgetDef> = {
     icon: Activity,
     tierRequired: "plus",
     comingSoon: true,
+  },
+  "drawdown-budget": {
+    id: "drawdown-budget",
+    name: "Drawdown Risk Budget",
+    description: "Track your annual drawdown budget usage with a configurable max-drawdown slider and 1-day VaR estimate",
+    category: "Portfolio",
+    defaultLayout: { x: 0, y: 0, w: 6, h: 6, minW: 4, minH: 5 },
+    icon: ShieldAlert,
+    tierRequired: "free",
   },
 };
 

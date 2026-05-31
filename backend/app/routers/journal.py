@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date as date_type
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,6 +32,7 @@ def _ser(e: JournalEntry) -> dict:
         "notes": e.notes,
         "lessons": e.lessons,
         "rating": e.rating,
+        "entry_type": getattr(e, "entry_type", None),
         "created_at": e.created_at.isoformat() if e.created_at else None,
     }
 
@@ -115,6 +116,54 @@ def create_entry(
     db.commit()
     db.refresh(entry)
     return _ser(entry)
+
+
+# ── Pre-Mortem endpoints ──────────────────────────────────────────────────────
+
+class PreMortemCreate(BaseModel):
+    symbol: str
+    direction: str          # "long" or "short"
+    thesis: str             # user's pre-mortem text (failure scenario)
+    position_size: Optional[float] = None
+    entry_price: Optional[float] = None
+
+
+@router.post("/pre-mortem")
+def create_pre_mortem(
+    body: PreMortemCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Save a pre-mortem entry before placing a trade."""
+    entry = JournalEntry(
+        user_id=current_user.id,
+        symbol=body.symbol.upper(),
+        trade_date=date_type.today(),
+        side=body.direction,
+        qty=body.position_size or 0,
+        entry_price=body.entry_price or 0,
+        notes=body.thesis,
+        setup="pre_mortem",
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return {"id": entry.id, **_ser(entry)}
+
+
+@router.get("/pre-mortems")
+def list_pre_mortems(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all pre-mortem entries with their setup='pre_mortem' marker."""
+    rows = (
+        db.query(JournalEntry)
+        .filter_by(user_id=current_user.id, setup="pre_mortem")
+        .order_by(desc(JournalEntry.created_at))
+        .all()
+    )
+    return [_ser(e) for e in rows]
 
 
 @router.patch("/{entry_id}")
