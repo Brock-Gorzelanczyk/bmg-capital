@@ -29,9 +29,14 @@ import {
   Clock,
   Sprout,
   Bot,
+  Info,
+  DollarSign,
+  Activity,
+  AlertTriangle,
 } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import DrawdownBudget from "@/components/portfolio/DrawdownBudget";
+import FeeAnalyzer from "@/components/portfolio/FeeAnalyzer";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -73,7 +78,7 @@ const PIE_COLORS = [
 
 type HoldingsSort = "symbol" | "shares" | "avg_cost" | "current_price" | "market_value" | "day_pnl" | "unrealized_pnl";
 type SortDir = "asc" | "desc";
-type ActiveTab = "holdings" | "allocation" | "risk";
+type ActiveTab = "holdings" | "allocation" | "risk" | "performance" | "factorxray" | "fees" | "stresstest";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -847,6 +852,224 @@ function RiskTab({ positions }: { positions: PaperPosition[] }) {
   );
 }
 
+// ─── Performance Tab ─────────────────────────────────────────────────────────
+
+interface PerformanceTabProps {
+  positions: PaperPosition[];
+  account: PaperAccount | undefined;
+}
+
+function PerformanceTab({ positions, account }: PerformanceTabProps) {
+  // Derive performance metrics from paper positions (no separate backend call needed for paper trading).
+  const totalCost   = positions.reduce((a, p) => a + p.cost_basis, 0);
+  const totalValue  = positions.reduce((a, p) => a + p.market_value, 0);
+  const totalGain   = totalValue - totalCost;
+
+  const simpleReturn = totalCost > 0 ? (totalGain / totalCost) * 100 : 0;
+  const twrPct       = simpleReturn; // approximation — no daily NAV
+
+  // Days held: use account created_at
+  const accountAge = account?.created_at
+    ? Math.max(1, Math.floor((Date.now() - new Date(account.created_at).getTime()) / 86_400_000))
+    : 365;
+
+  const mwrPct =
+    totalCost > 0 && totalValue > 0
+      ? (Math.pow(totalValue / totalCost, 365 / accountAge) - 1) * 100
+      : 0;
+
+  // Attribution
+  const sorted = [...positions].sort((a, b) => b.unrealized_pnl - a.unrealized_pnl);
+  const top3   = sorted.slice(0, 3);
+  const bot3   = [...positions].sort((a, b) => a.unrealized_pnl - b.unrealized_pnl).slice(0, 3);
+
+  const winners = positions.filter((p) => p.unrealized_pnl >= 0).length;
+  const losers  = positions.filter((p) => p.unrealized_pnl < 0).length;
+
+  const winPcts  = positions.filter((p) => p.unrealized_pnl >= 0).map((p) => p.unrealized_pnl_pct);
+  const lossPcts = positions.filter((p) => p.unrealized_pnl < 0).map((p) => p.unrealized_pnl_pct);
+  const avgWin   = winPcts.length  ? winPcts.reduce((a, b) => a + b, 0) / winPcts.length   : 0;
+  const avgLoss  = lossPcts.length ? lossPcts.reduce((a, b) => a + b, 0) / lossPcts.length : 0;
+
+  // Concentration
+  const maxMv         = positions.length ? Math.max(...positions.map((p) => p.market_value)) : 0;
+  const concentrationPct = totalValue > 0 ? (maxMv / totalValue) * 100 : 0;
+  const showConcentration = concentrationPct > 10;
+
+  // Benchmarks (hardcoded SPY placeholders)
+  const BENCH_YTD = 8.2;
+  const BENCH_1Y  = 24.1;
+
+  if (positions.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-16 text-[var(--text-tertiary)] text-sm">
+        No positions to analyze
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-5 space-y-5">
+      {/* ── Concentration alert ────────────────────────────────────────── */}
+      {showConcentration && (
+        <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
+          <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="text-sm font-semibold text-amber-300">Concentration Risk</div>
+            <div className="text-xs text-amber-400/80 mt-0.5">
+              Your largest position represents {concentrationPct.toFixed(1)}% of your portfolio.
+              Diversification reduces single-stock risk.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TWR vs MWR ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          {
+            label: "TWR",
+            value: twrPct,
+            tooltip: "Time-Weighted Return measures your strategy's skill, eliminating the effect of when you added or withdrew money.",
+          },
+          {
+            label: "MWR",
+            value: mwrPct,
+            tooltip: "Money-Weighted Return reflects YOUR behavior — timing of deposits and withdrawals. If MWR < TWR, you bought high and sold low.",
+          },
+        ].map(({ label, value, tooltip }) => (
+          <div key={label} className="bg-[var(--bg-elevated-2)] rounded-xl px-4 py-4">
+            <div className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
+              {label}
+              <span className="group relative cursor-help">
+                <Info size={10} className="inline" />
+                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-52 rounded-lg bg-[var(--bg-base)] border border-[var(--border-subtle)] px-2.5 py-2 text-[10px] text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-xl">
+                  {tooltip}
+                </span>
+              </span>
+            </div>
+            <div className={cn("text-3xl font-mono font-bold", value >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+              {value >= 0 ? "+" : ""}{value.toFixed(2)}%
+            </div>
+            <div className="text-[10px] text-[var(--text-tertiary)] mt-1">Annualised · {accountAge}d held</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── vs Benchmark ───────────────────────────────────────────────── */}
+      <div className="bg-[var(--bg-elevated-2)] rounded-xl px-4 py-4">
+        <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-3">vs SPY (placeholder)</div>
+        {[
+          { label: "Your portfolio (simple)", value: simpleReturn },
+          { label: "SPY YTD",                value: BENCH_YTD   },
+          { label: "SPY 1-Year",             value: BENCH_1Y    },
+        ].map(({ label, value }) => {
+          const barPct = Math.min(Math.abs(value) / 40, 1) * 100;
+          return (
+            <div key={label} className="mb-2">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-[var(--text-secondary)]">{label}</span>
+                <span className={cn("font-mono font-semibold", value >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                  {value >= 0 ? "+" : ""}{value.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full", value >= 0 ? "bg-[var(--accent-positive)]" : "bg-[var(--accent-negative)]")}
+                  style={{ width: `${barPct}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Attribution ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Top contributors */}
+        <div className="bg-[var(--bg-elevated-2)] rounded-xl p-4">
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-3">Top Contributors</div>
+          <div className="space-y-2">
+            {top3.map((p) => (
+              <div key={p.id} className="flex items-center justify-between text-xs">
+                <span className="font-mono font-bold text-[var(--accent-positive)]">{p.symbol}</span>
+                <span className="font-mono text-[var(--accent-positive)]">
+                  +{formatCurrency(p.unrealized_pnl)} (+{p.unrealized_pnl_pct.toFixed(1)}%)
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom contributors */}
+        <div className="bg-[var(--bg-elevated-2)] rounded-xl p-4">
+          <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-3">Worst Contributors</div>
+          <div className="space-y-2">
+            {bot3.map((p) => (
+              <div key={p.id} className="flex items-center justify-between text-xs">
+                <span className="font-mono font-bold text-[var(--accent-negative)]">{p.symbol}</span>
+                <span className={cn("font-mono", p.unrealized_pnl >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                  {p.unrealized_pnl >= 0 ? "+" : ""}{formatCurrency(p.unrealized_pnl)} ({p.unrealized_pnl_pct.toFixed(1)}%)
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Stats row ──────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-4 gap-2">
+        {[
+          { label: "Winners", value: winners.toString(),       color: "text-[var(--accent-positive)]" },
+          { label: "Losers",  value: losers.toString(),        color: "text-[var(--accent-negative)]" },
+          { label: "Avg Win",   value: `+${avgWin.toFixed(1)}%`,  color: "text-[var(--accent-positive)]" },
+          { label: "Avg Loss",  value: `${avgLoss.toFixed(1)}%`,  color: "text-[var(--accent-negative)]" },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-[var(--bg-elevated-2)] rounded-xl px-3 py-3 text-center">
+            <div className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">{label}</div>
+            <div className={cn("font-mono font-bold text-lg", color)}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-[10px] text-[var(--text-tertiary)]">
+        TWR note: Full time-weighted return requires daily NAV snapshots. MWR is annualised using a simplified power formula from inception date.
+        Benchmark SPY returns are approximate placeholders.
+      </p>
+    </div>
+  );
+}
+
+// ─── Factor X-Ray Stub ───────────────────────────────────────────────────────
+
+function FactorXRayTab() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
+      <Activity size={32} className="text-[var(--text-tertiary)]" />
+      <p className="text-[var(--text-secondary)] font-semibold">Factor X-Ray</p>
+      <p className="text-xs text-[var(--text-tertiary)] max-w-sm">
+        Factor exposure analysis (Value, Growth, Momentum, Quality) coming soon.
+        This will decompose your portfolio returns into systematic risk factors.
+      </p>
+    </div>
+  );
+}
+
+// ─── Stress Test Stub ────────────────────────────────────────────────────────
+
+function StressTestTab() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
+      <ShieldAlert size={32} className="text-[var(--text-tertiary)]" />
+      <p className="text-[var(--text-secondary)] font-semibold">Stress Test</p>
+      <p className="text-xs text-[var(--text-tertiary)] max-w-sm">
+        Scenario analysis (2008 crisis, 2020 COVID crash, rate shock) coming soon.
+        This will estimate your portfolio drawdown under historical stress scenarios.
+      </p>
+    </div>
+  );
+}
+
 // ─── Recent Activity ──────────────────────────────────────────────────────────
 
 function RecentActivity({ transactions }: { transactions: PaperTransaction[] }) {
@@ -1063,9 +1286,13 @@ export default function Portfolio() {
   };
 
   const tabs: { key: ActiveTab; label: string; icon: React.ReactNode }[] = [
-    { key: "holdings",   label: "Holdings",   icon: <Layers size={13} /> },
-    { key: "allocation", label: "Allocation", icon: <PieChart size={13} /> },
-    { key: "risk",       label: "Risk",       icon: <ShieldAlert size={13} /> },
+    { key: "holdings",    label: "Overview",     icon: <Layers size={13} /> },
+    { key: "allocation",  label: "Allocation",   icon: <PieChart size={13} /> },
+    { key: "performance", label: "Performance",  icon: <BarChart2 size={13} /> },
+    { key: "factorxray",  label: "Factor X-Ray", icon: <Activity size={13} /> },
+    { key: "fees",        label: "Fees",         icon: <DollarSign size={13} /> },
+    { key: "stresstest",  label: "Stress Test",  icon: <ShieldAlert size={13} /> },
+    { key: "risk",        label: "Risk",         icon: <TrendingDown size={13} /> },
   ];
 
   return (
@@ -1150,8 +1377,12 @@ export default function Portfolio() {
                 onSeedDemo={() => seedMut.mutate()}
               />
             )}
-            {activeTab === "allocation" && <AllocationTab positions={positions} />}
-            {activeTab === "risk" && <RiskTab positions={positions} />}
+            {activeTab === "allocation"  && <AllocationTab positions={positions} />}
+            {activeTab === "risk"        && <RiskTab positions={positions} />}
+            {activeTab === "performance" && <PerformanceTab positions={positions} account={account} />}
+            {activeTab === "factorxray"  && <FactorXRayTab />}
+            {activeTab === "fees"        && <FeeAnalyzer positions={positions} />}
+            {activeTab === "stresstest"  && <StressTestTab />}
           </>
         )}
       </div>
