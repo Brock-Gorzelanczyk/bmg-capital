@@ -313,6 +313,97 @@ async def get_scan_status(
     return {"scan_id": scan_id, **entry}
 
 
+@router.get("/debug")
+async def get_crypto_debug(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Diagnostic endpoint — returns live system state for debugging zero-result issues.
+
+    Returns:
+      - coin_universe: list of CCXT symbols the scanner iterates over
+      - coin_universe_count: number of coins
+      - last_scan_ids: last 5 scan IDs and their statuses
+      - db_counts: raw counts from strategy_trades and strategy_daily_log for this user
+      - ccxt_available: whether ccxt is installed and importable
+      - data_sample: quick bar-fetch test for BTC/USDT (1 bar)
+    """
+    from app.screener.crypto_filters import CRYPTO_UNIVERSE as _UNI
+
+    # Check CCXT availability
+    ccxt_available = False
+    ccxt_version = None
+    try:
+        import ccxt as _ccxt
+        ccxt_available = True
+        ccxt_version = _ccxt.__version__
+    except ImportError:
+        pass
+
+    # Quick connectivity test — fetch 5 bars for BTC only
+    loop = asyncio.get_running_loop()
+    data_sample: dict = {}
+    try:
+        sample_bars = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: _fetch_crypto_bars(["BTC/USDT"], limit=5)),
+            timeout=30.0,
+        )
+        btc_df = sample_bars.get("BTC/USDT")
+        if btc_df is not None and not btc_df.empty:
+            data_sample = {
+                "ok": True,
+                "symbol": "BTC/USDT",
+                "rows": len(btc_df),
+                "latest_close": float(btc_df["close"].iloc[-1]),
+                "columns": btc_df.columns.tolist(),
+            }
+        else:
+            data_sample = {"ok": False, "reason": "empty dataframe returned"}
+    except asyncio.TimeoutError:
+        data_sample = {"ok": False, "reason": "timeout (30s) fetching BTC/USDT"}
+    except Exception as e:
+        data_sample = {"ok": False, "reason": str(e)}
+
+    # DB counts
+    from sqlalchemy import func as sqlfunc
+    from app.db.models.strategy import StrategyTrade, DailyLog
+    trade_counts = {}
+    for status in ("candidate", "open", "closed"):
+        trade_counts[status] = db.execute(
+            select(sqlfunc.count(StrategyTrade.id))
+            .where(StrategyTrade.user_id == current_user.id)
+            .where(StrategyTrade.asset_class == "crypto")
+            .where(StrategyTrade.status == status)
+        ).scalar() or 0
+    log_count = db.execute(
+        select(sqlfunc.count(DailyLog.id))
+        .where(DailyLog.user_id == current_user.id)
+        .where(DailyLog.preset_key.in_(list(CRYPTO_PRESET_LABELS.keys())))
+    ).scalar() or 0
+
+    # Last scan statuses (most recent 5)
+    last_scans = [
+        {"scan_id": sid, **info}
+        for sid, info in list(_SCAN_STATUS.items())[-5:]
+    ]
+
+    return {
+        "coin_universe_count": len(_UNI),
+        "coin_universe": _UNI,
+        "ccxt_available": ccxt_available,
+        "ccxt_version": ccxt_version,
+        "data_sample": data_sample,
+        "db_counts": {
+            "user_id": current_user.id,
+            "asset_class": "crypto",
+            **trade_counts,
+            "log_entries": log_count,
+        },
+        "last_scans": last_scans,
+    }
+
+
 @router.get("/quiz-status")
 async def get_quiz_status(
     db: Session = Depends(get_db),

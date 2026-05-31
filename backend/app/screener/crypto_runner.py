@@ -58,47 +58,98 @@ def _now() -> datetime:
 # OHLCV fetch via CCXT (Binance public)
 # ---------------------------------------------------------------------------
 
+def _ccxt_sym_to_yf(sym: str) -> str:
+    """
+    Convert a CCXT symbol to a yfinance ticker.
+
+    Examples:
+      BTC/USDT        → BTC-USD
+      ETH/USDT        → ETH-USD
+      BTC/USDT:USDT   → BTC-USD   (perp futures — strip the colon suffix first)
+      SOL/BTC         → SOL-BTC
+      MATIC/USDT      → MATIC-USD
+    """
+    # Strip perpetual futures suffix (e.g. BTC/USDT:USDT → BTC/USDT)
+    if ":" in sym:
+        sym = sym.split(":")[0]
+    # Replace USDT quote → USD (yfinance uses USD not USDT)
+    base, _, quote = sym.partition("/")
+    if not quote:
+        return sym  # unexpected format — return as-is
+    yf_quote = "USD" if quote == "USDT" else quote
+    return f"{base}-{yf_quote}"
+
+
 def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1d", limit: int = 500) -> Dict[str, pd.DataFrame]:
     """
     Fetch daily OHLCV bars for each symbol from Binance via CCXT.
     Returns {symbol: DataFrame(open, high, low, close, volume)}.
     Falls back to yfinance on failure.
+
+    Each coin failure is non-fatal — a bad coin is logged and skipped.
     """
     bars: Dict[str, pd.DataFrame] = {}
+    ccxt_ok = False
+
     try:
         import ccxt
-        exchange = ccxt.binance({"enableRateLimit": True})
+        exchange = ccxt.binance({"enableRateLimit": True, "timeout": 10000})
+        ccxt_ok = True
+        logger.info(f"[crypto] CCXT Binance initialised — fetching {len(symbols)} symbols via CCXT")
+        ccxt_geo_blocked = False
         for sym in symbols:
+            if ccxt_geo_blocked:
+                break
             try:
                 ohlcv = exchange.fetch_ohlcv(sym, timeframe=timeframe, limit=limit)
                 if not ohlcv:
+                    logger.debug(f"[crypto] CCXT returned empty data for {sym}")
                     continue
                 df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
                 df["ts"] = pd.to_datetime(df["ts"], unit="ms")
                 df.set_index("ts", inplace=True)
                 bars[sym] = df
+                logger.debug(f"[crypto] CCXT fetched {len(df)} bars for {sym}")
             except Exception as e:
-                logger.debug(f"CCXT fetch failed for {sym}: {e}")
+                err_str = str(e)
+                # 451 = geo-blocked region — bail out immediately, use yfinance for all
+                if "451" in err_str or "restricted location" in err_str.lower():
+                    logger.warning(
+                        f"[crypto] Binance geo-blocked (451) for {sym} — switching all symbols to yfinance"
+                    )
+                    ccxt_geo_blocked = True
+                    break
+                logger.warning(f"[crypto] CCXT fetch failed for {sym}: {e}")
     except Exception as e:
-        logger.warning(f"CCXT not available or exchange init failed: {e}")
+        logger.warning(f"[crypto] CCXT not available or exchange init failed: {e}")
 
     # yfinance fallback for any symbol not yet fetched
     missing = [s for s in symbols if s not in bars]
     if missing:
+        logger.info(f"[crypto] yfinance fallback for {len(missing)} symbols (CCXT ok={ccxt_ok}): {missing[:5]}{'...' if len(missing) > 5 else ''}")
         import yfinance as yf
         for sym in missing:
-            # BTC/USDT → BTC-USD, ETH/BTC → ETH-BTC (correct yfinance format)
-            yf_sym = sym.replace("USDT", "USD").replace("/", "-")
+            yf_sym = _ccxt_sym_to_yf(sym)
             try:
                 df = yf.download(yf_sym, period="2y", interval="1d", progress=False, auto_adjust=True)
                 if df.empty:
-                    logger.debug(f"yfinance returned empty df for {sym} (as {yf_sym})")
+                    logger.warning(f"[crypto] yfinance returned empty df for {sym} (as {yf_sym})")
                     continue
-                df.columns = [c.lower() if isinstance(c, str) else c[0].lower() for c in df.columns]
+                # yfinance ≥0.2 may return MultiIndex columns — flatten to lowercase strings
+                if hasattr(df.columns, "levels"):
+                    # MultiIndex: ('Close', 'BTC-USD') → 'close'
+                    df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df.columns]
+                else:
+                    df.columns = [c.lower() if isinstance(c, str) else str(c).lower() for c in df.columns]
+                if "close" not in df.columns:
+                    logger.warning(f"[crypto] yfinance df for {sym} missing 'close' column — columns: {df.columns.tolist()}")
+                    continue
                 bars[sym] = df
+                logger.debug(f"[crypto] yfinance fetched {len(df)} bars for {sym} (as {yf_sym})")
             except Exception as e:
-                logger.debug(f"yfinance fallback failed for {sym} (as {yf_sym}): {e}")
+                logger.warning(f"[crypto] yfinance fallback failed for {sym} (as {yf_sym}): {e}")
 
+    logger.info(f"[crypto] _fetch_crypto_bars: {len(bars)}/{len(symbols)} symbols returned data")
     return bars
 
 
@@ -779,51 +830,98 @@ def _prefetch_onchain() -> None:
 
 
 async def run_crypto_automation(user_id: int) -> Dict[str, Any]:
-    logger.info(f"[crypto] Starting automation for user {user_id}")
+    logger.info(f"[crypto] Starting automation for user {user_id} — universe={len(CRYPTO_UNIVERSE)} coins")
     loop = asyncio.get_running_loop()
     today = date.today()
+    fetch_errors: List[str] = []
 
     # Pre-warm on-chain caches (1-hour TTL; no-ops if cache is fresh)
-    await loop.run_in_executor(None, _prefetch_onchain)
+    try:
+        await loop.run_in_executor(None, _prefetch_onchain)
+        logger.info("[crypto] On-chain/derivatives cache pre-warm complete")
+    except Exception as e:
+        logger.warning(f"[crypto] On-chain pre-warm failed (non-fatal): {e}")
 
     # Fetch bars for all coins in universe
+    logger.info(f"[crypto] Fetching OHLCV bars for {len(CRYPTO_UNIVERSE)} coins…")
     bars = await loop.run_in_executor(None, lambda: _fetch_crypto_bars(CRYPTO_UNIVERSE))
     coins_attempted = len(CRYPTO_UNIVERSE)
     coins_fetched = len(bars)
+
     if not bars:
-        logger.warning(f"[crypto] No bars fetched for {coins_attempted} attempted coins — data source unavailable")
-        raise RuntimeError(f"Data fetch failed: 0/{coins_attempted} coins returned bars. Check CCXT/Binance connectivity.")
+        # This should be very rare — log clearly but DON'T raise so the scan still completes
+        msg = (
+            f"[crypto] WARNING: 0/{coins_attempted} coins returned bars — "
+            "both CCXT and yfinance failed. Returning empty result."
+        )
+        logger.error(msg)
+        return {
+            "regime": "unknown",
+            "coins_attempted": coins_attempted,
+            "coins_scanned": 0,
+            "new_candidates": 0,
+            "entries": 0,
+            "exits": 0,
+            "expired": 0,
+            "error": msg,
+            "fetch_errors": fetch_errors,
+        }
+
+    missing = [s for s in CRYPTO_UNIVERSE if s not in bars]
+    if missing:
+        logger.warning(f"[crypto] {len(missing)} coins returned no data: {missing}")
 
     prices = _get_crypto_prices(list(bars.keys()), bars)
     regime = _check_crypto_regime(bars)
-    logger.info(f"[crypto] Regime: {regime}, coins with bars: {len(bars)}")
+    logger.info(
+        f"[crypto] Regime={regime} | bars={coins_fetched}/{coins_attempted} | "
+        f"price samples={len(prices)}"
+    )
 
     screen_results = _collect_crypto_screen_results(regime, bars)
     cross_results  = _collect_cross_sectional_results(bars)
     # Merge: per-coin screens + cross-sectional screens
     all_results: Dict[str, Set[str]] = {**screen_results, **cross_results}
 
+    total_hits = sum(len(s) for s in all_results.values())
+    logger.info(
+        f"[crypto] Screen complete: {total_hits} total hits across "
+        f"{len([k for k, s in all_results.items() if s])} active strategies"
+    )
+    for key, syms in all_results.items():
+        if syms:
+            logger.info(f"[crypto]   {key}: {sorted(syms)}")
+
     db = SessionLocal()
+    expired = 0
     try:
         new_cands = _add_crypto_candidates(db, all_results, today, user_id)
         db.commit()
+        logger.info(f"[crypto] Added {new_cands} new candidates to DB")
 
         expired = _expire_stale_candidates(db, today, user_id)
         if expired:
             db.commit()
+            logger.info(f"[crypto] Expired {expired} stale candidates")
 
         entries = _check_entry_triggers(db, bars, prices, today, user_id)
         if entries:
             db.commit()
+            logger.info(f"[crypto] Opened {entries} new positions")
 
         exits = _settle_crypto_positions(db, bars, prices, today, user_id)
         if exits:
             db.commit()
+            logger.info(f"[crypto] Closed {exits} positions")
 
         _snapshot_crypto_equity(db, prices, user_id)
         db.commit()
 
-        logger.info(f"[crypto] Done: {coins_fetched}/{coins_attempted} coins, {new_cands} new candidates, {entries} entries, {exits} exits")
+        logger.info(
+            f"[crypto] Automation complete for user {user_id}: "
+            f"coins={coins_fetched}/{coins_attempted} | cands={new_cands} | "
+            f"entries={entries} | exits={exits} | expired={expired}"
+        )
         return {
             "regime": regime,
             "coins_attempted": coins_attempted,
@@ -835,7 +933,7 @@ async def run_crypto_automation(user_id: int) -> Dict[str, Any]:
         }
     except Exception as e:
         db.rollback()
-        logger.error(f"[crypto] Automation error for user {user_id}: {e}", exc_info=True)
+        logger.error(f"[crypto] Automation DB error for user {user_id}: {e}", exc_info=True)
         raise
     finally:
         db.close()
