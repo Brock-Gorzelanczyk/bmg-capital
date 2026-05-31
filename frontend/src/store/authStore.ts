@@ -46,13 +46,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   hydrate: async () => {
     const token = get().token;
     if (!token) return;
+    set({ isLoading: true });
     try {
-      set({ isLoading: true });
-      const res = await client.get("/auth/me", { timeout: 6000 });
+      const res = await client.get("/auth/me", { timeout: 15_000 });
       set({ user: res.data });
-    } catch {
-      localStorage.removeItem("bmg_token");
-      set({ token: null, user: null });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 401) {
+        // Explicit invalid/expired token — log the user out
+        localStorage.removeItem("bmg_token");
+        set({ token: null, user: null });
+      } else {
+        // Network timeout, 500, cold-start delay — keep the token.
+        // Set a placeholder so ProtectedRoute stops showing the spinner.
+        // API calls will still carry the JWT; they'll surface real errors if needed.
+        if (!get().user) {
+          set({ user: { id: 0, email: "", username: "—" } });
+        }
+      }
     } finally {
       set({ isLoading: false });
     }

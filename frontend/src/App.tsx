@@ -1,5 +1,5 @@
-import { Component, type ReactNode } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Component, type ReactNode, useEffect } from "react";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
@@ -45,6 +45,7 @@ import RSUConsolePage from "@/pages/RSUConsolePage";
 import SmartTransfersPage from "@/pages/SmartTransfersPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
+import { useAuthStore } from "@/store/authStore";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
@@ -104,6 +105,19 @@ const persister = createSyncStoragePersister({
 function AppInner() {
   useWebSocket();
   useSignalToast();
+  const navigate = useNavigate();
+
+  // Global 401 handler: when any API call receives a 401, the axios interceptor
+  // fires this event. We log the user out and redirect to login.
+  useEffect(() => {
+    const handle = () => {
+      useAuthStore.getState().logout();
+      navigate("/login", { replace: true });
+    };
+    window.addEventListener("auth:expired", handle);
+    return () => window.removeEventListener("auth:expired", handle);
+  }, [navigate]);
+
   return (
     <Routes>
       <Route element={<AppShell />}>

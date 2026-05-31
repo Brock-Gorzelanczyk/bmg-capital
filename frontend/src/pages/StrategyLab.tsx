@@ -838,11 +838,11 @@ export default function StrategyLab() {
 
         {/* Stat pills */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          <StatPill label="Open P&L"    value={overall.open_pnl !== 0 ? `${overall.open_pnl >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(overall.open_pnl))}` : "—"} color={pnlColor(overall.open_pnl)} />
+          <StatPill label="Open P&L"    value={(overall.open_pnl ?? 0) !== 0 ? `${(overall.open_pnl ?? 0) >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(overall.open_pnl ?? 0))}` : "—"} color={pnlColor(overall.open_pnl ?? 0)} />
           <StatPill label="Day's P&L"   value={dayPnl !== 0 ? `${dayPnl >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(dayPnl))}` : "—"} color={dayPnl !== 0 ? pnlColor(dayPnl) : "text-[var(--text-tertiary)]"} sub="vs prev close" />
-          <StatPill label="Win Rate"    value={overall.total_closed > 0 ? `${overall.win_rate}%` : "—"} sub={overall.total_closed > 0 ? `${overall.wins}W · ${overall.losses}L` : "no closed trades"} />
-          <StatPill label="Expectancy"  value={overall.total_closed > 0 ? fmtPct(overall.expectancy) : "—"} color={pnlColor(overall.expectancy)} sub="avg per trade" />
-          <StatPill label="Max Drawdown" value={overall.max_drawdown_pct > 0 ? `-${overall.max_drawdown_pct?.toFixed(1)}%` : "—"} color={overall.max_drawdown_pct > 15 ? "text-[var(--accent-negative)]" : "text-[var(--text-secondary)]"} />
+          <StatPill label="Win Rate"    value={(overall.total_closed ?? 0) > 0 ? `${overall.win_rate}%` : "—"} sub={(overall.total_closed ?? 0) > 0 ? `${overall.wins}W · ${overall.losses}L` : "no closed trades"} />
+          <StatPill label="Expectancy"  value={(overall.total_closed ?? 0) > 0 ? fmtPct(overall.expectancy) : "—"} color={pnlColor(overall.expectancy)} sub="avg per trade" />
+          <StatPill label="Max Drawdown" value={(overall.max_drawdown_pct ?? 0) > 0 ? `-${(overall.max_drawdown_pct ?? 0).toFixed(1)}%` : "—"} color={(overall.max_drawdown_pct ?? 0) > 15 ? "text-[var(--accent-negative)]" : "text-[var(--text-secondary)]"} />
           <StatPill label="Positions"   value={`${overall.open_positions ?? openTrades.length} open · ${overall.candidates ?? candidates.length} watching`} />
         </div>
       </div>

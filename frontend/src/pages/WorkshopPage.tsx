@@ -691,7 +691,7 @@ function WorkshopPanel({
                     </button>
                   </div>
                   <div className="flex flex-col gap-0.5">
-                    {imageAnalysis.key_levels.map((l, i) => (
+                    {(imageAnalysis.key_levels ?? []).map((l, i) => (
                       <div key={i} className="flex items-center justify-between text-[11px]">
                         <span className="text-[var(--text-tertiary)]">{l.label}</span>
                         <span className="font-mono text-[var(--text-secondary)]">${l.price.toLocaleString()}</span>
