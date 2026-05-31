@@ -32,6 +32,7 @@ import { COMPANY_INFO } from "@/data/companyInfo";
 import OrderTicket from "@/components/trading/OrderTicket";
 import PositionDrawer from "@/components/trading/PositionDrawer";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
+import AgentPanel from "@/components/ai/AgentPanel";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ function fmtDate(dateStr: string) {
   });
 }
 
-type PageTab = "positions" | "orders" | "activity";
+type PageTab = "positions" | "orders" | "activity" | "agent";
 type OrderFilter = "working" | "filled" | "all";
 
 const STATUS_ICONS: Record<PaperOrder["status"], React.ReactNode> = {
@@ -784,7 +785,7 @@ export default function PaperTrading() {
       <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         {/* Tab bar */}
         <div className="flex border-b border-[var(--border-subtle)]">
-          {(["positions", "orders", "activity"] as PageTab[]).map((tab) => (
+          {(["positions", "orders", "activity", "agent"] as PageTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -795,7 +796,7 @@ export default function PaperTrading() {
                   : "text-[var(--text-tertiary)] border-transparent hover:text-[var(--text-secondary)]"
               )}
             >
-              {tab}
+              {tab === "agent" ? "AI Agent" : tab}
               {tab === "positions" && positions.length > 0 && (
                 <span className="ml-2 text-xs bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] rounded-full px-1.5 py-0.5">
                   {positions.length}
@@ -820,6 +821,11 @@ export default function PaperTrading() {
         )}
         {activeTab === "orders" && <OrdersTab isLoading={isLoading} />}
         {activeTab === "activity" && <ActivityTab />}
+        {activeTab === "agent" && (
+          <div className="p-4 md:p-6 max-w-2xl">
+            <AgentPanel />
+          </div>
+        )}
       </div>
 
       {/* ── Floating New Order Button ────────────────────────────────────────── */}
