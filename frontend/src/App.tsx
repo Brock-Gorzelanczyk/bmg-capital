@@ -35,6 +35,7 @@ import MonitoringPage from "@/pages/MonitoringPage";
 import Social from "@/pages/Social";
 import UpgradePage from "@/pages/UpgradePage";
 import SettingsPage from "@/pages/Settings";
+import NetWorthPage from "@/pages/NetWorthPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 
@@ -126,6 +127,7 @@ function AppInner() {
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/net-worth" element={<NetWorthPage />} />
       </Route>
     </Routes>
   );

@@ -5,7 +5,7 @@ import {
   FlaskConical, Layers, Bitcoin, PenTool,
   Filter, Newspaper, Calendar, Microscope, Compass,
   Droplets, ShieldCheck, Activity,
-  GraduationCap, Users,
+  GraduationCap, Users, Landmark,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,7 @@ const NAV_TRADE = [
   { to: "/watchlist", label: "Watchlist",    Icon: BookMarked },
   { to: "/journal",   label: "Trade Journal", Icon: BookOpen },
   { to: "/analytics", label: "Analytics",     Icon: BarChart2 },
+  { to: "/net-worth", label: "Net Worth",     Icon: Landmark },
 ];
 
 const NAV_LABS = [

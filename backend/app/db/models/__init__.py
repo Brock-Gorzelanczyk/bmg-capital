@@ -21,6 +21,9 @@ from app.db.models.recap import DailyRecap
 from app.db.models.strategy_definition import StrategyDefinition
 from app.db.models.workspace import UserWorkspace
 from app.db.models.monitoring import MonitoringResult, AuditLog, LoginAttempt
+from app.db.models.net_worth import NetWorthAccount, NetWorthSnapshot
+from app.db.models.rule import UserRule
+from app.db.models.pod import Pod, PodPosition
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -38,4 +41,7 @@ __all__ = [
     "StrategyDefinition",
     "UserWorkspace",
     "MonitoringResult", "AuditLog", "LoginAttempt",
+    "NetWorthAccount", "NetWorthSnapshot",
+    "UserRule",
+    "Pod", "PodPosition",
 ]
