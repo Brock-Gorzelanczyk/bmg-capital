@@ -36,6 +36,7 @@ const PAGES = [
   { label: "Learn", to: "/learn", Icon: TrendingUp },
   { label: "Net Worth", to: "/net-worth", Icon: Landmark },
   { label: "Tax X-Ray", to: "/tax-xray", Icon: ScanSearch },
+  { label: "Capital Pods", to: "/pods", Icon: Layers },
 ];
 
 const SYMBOLS = Object.entries(COMPANY_INFO).map(([sym, info]) => ({ sym, name: info.name, sector: info.sector }));

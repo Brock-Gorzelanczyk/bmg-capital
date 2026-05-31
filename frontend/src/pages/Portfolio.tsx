@@ -37,6 +37,9 @@ import {
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import DrawdownBudget from "@/components/portfolio/DrawdownBudget";
 import FeeAnalyzer from "@/components/portfolio/FeeAnalyzer";
+import MilestonesPanel from "@/components/portfolio/MilestonesPanel";
+import RebalanceView from "@/components/portfolio/RebalanceView";
+import RiskParityAllocator from "@/components/portfolio/RiskParityAllocator";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -78,7 +81,7 @@ const PIE_COLORS = [
 
 type HoldingsSort = "symbol" | "shares" | "avg_cost" | "current_price" | "market_value" | "day_pnl" | "unrealized_pnl";
 type SortDir = "asc" | "desc";
-type ActiveTab = "holdings" | "allocation" | "risk" | "performance" | "factorxray" | "fees" | "stresstest";
+type ActiveTab = "holdings" | "allocation" | "risk" | "performance" | "factorxray" | "fees" | "stresstest" | "rebalance" | "risk-parity";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1293,6 +1296,8 @@ export default function Portfolio() {
     { key: "fees",        label: "Fees",         icon: <DollarSign size={13} /> },
     { key: "stresstest",  label: "Stress Test",  icon: <ShieldAlert size={13} /> },
     { key: "risk",        label: "Risk",         icon: <TrendingDown size={13} /> },
+    { key: "rebalance",   label: "Rebalance",    icon: <RefreshCw size={13} /> },
+    { key: "risk-parity", label: "Risk Parity",  icon: <Scale size={13} /> },
   ];
 
   return (

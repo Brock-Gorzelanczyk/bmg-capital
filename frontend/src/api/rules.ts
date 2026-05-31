@@ -61,3 +61,22 @@ export const testRule = async (id: number): Promise<TestResult> => {
   const res = await client.post(`/api/rules/${id}/test`);
   return res.data;
 };
+
+// ---------------------------------------------------------------------------
+// Transfer suggestions
+// ---------------------------------------------------------------------------
+
+export interface TransferSuggestion {
+  type: "sweep_excess" | "rebalance_drift" | "start_investing" | string;
+  description: string;
+  amount: number;
+}
+
+export interface TransferSuggestionsResponse {
+  suggestions: TransferSuggestion[];
+}
+
+export const getTransferSuggestions = async (): Promise<TransferSuggestionsResponse> => {
+  const res = await client.get<TransferSuggestionsResponse>("/api/transfers/suggestions");
+  return res.data;
+};

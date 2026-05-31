@@ -21,6 +21,7 @@ const NAV_TRADE = [
   { to: "/",          label: "Dashboard",    Icon: LayoutDashboard },
   { to: "/chart",     label: "Chart",        Icon: LineChart },
   { to: "/portfolio", label: "Portfolio",    Icon: Briefcase },
+  { to: "/pods",      label: "Capital Pods", Icon: Layers },
   { to: "/watchlist", label: "Watchlist",    Icon: BookMarked },
   { to: "/journal",   label: "Trade Journal", Icon: BookOpen },
   { to: "/analytics", label: "Analytics",     Icon: BarChart2 },
