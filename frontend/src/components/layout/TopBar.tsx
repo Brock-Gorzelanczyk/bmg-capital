@@ -7,6 +7,7 @@ import { getNotifications } from "@/api/notifications";
 import { getRegime } from "@/api/strategy";
 import SymbolSearch from "@/components/ui/SymbolSearch";
 import { DEMO_MODE } from "@/lib/demoMode";
+import DemoPill from "@/components/demo/DemoPill";
 
 type MarketState = "open" | "after-hours" | "closed";
 
@@ -98,12 +99,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
 
       <div className="flex items-center gap-2 md:gap-3 ml-auto">
         {/* Demo mode pill */}
-        {DEMO_MODE && (
-          <div className="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[#22C55E]/30 bg-[#22C55E]/8 text-[var(--accent-positive)] font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
-            Demo
-          </div>
-        )}
+        {DEMO_MODE && <DemoPill />}
         {/* Regime chip */}
         <div className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${regimeChip.cls}`}>
           {regimeChip.icon}
