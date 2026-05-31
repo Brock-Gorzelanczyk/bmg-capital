@@ -23,6 +23,8 @@ import StrategySignalsWidget from "@/components/widgets/impl/StrategySignalsWidg
 import DailyRecapWidget from "@/components/widgets/impl/DailyRecapWidget";
 import SectorPerformanceWidget from "@/components/widgets/impl/SectorPerformanceWidget";
 import MarketNewsWidget from "@/components/widgets/impl/MarketNewsWidget";
+import WatchlistTableWidget from "@/components/widgets/impl/WatchlistTableWidget";
+import TopMoversWidget from "@/components/widgets/impl/TopMoversWidget";
 import { useState } from "react";
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
@@ -34,6 +36,8 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
   "daily-recap": DailyRecapWidget,
   "sector-performance": SectorPerformanceWidget,
   "market-news": MarketNewsWidget,
+  "watchlist-table": WatchlistTableWidget,
+  "top-movers": TopMoversWidget,
 };
 
 function ComingSoonWidget({ name }: { name: string }) {

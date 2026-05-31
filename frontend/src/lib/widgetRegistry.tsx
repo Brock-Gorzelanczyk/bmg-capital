@@ -120,7 +120,6 @@ export const WIDGET_REGISTRY: Record<string, WidgetDef> = {
     defaultLayout: { x: 0, y: 0, w: 6, h: 7, minW: 4, minH: 5 },
     icon: Zap,
     tierRequired: "free",
-    comingSoon: true,
   },
   "watchlist-table": {
     id: "watchlist-table",
@@ -130,7 +129,6 @@ export const WIDGET_REGISTRY: Record<string, WidgetDef> = {
     defaultLayout: { x: 0, y: 0, w: 12, h: 7, minW: 6, minH: 5 },
     icon: BookMarked,
     tierRequired: "free",
-    comingSoon: true,
   },
   "streak-card": {
     id: "streak-card",
