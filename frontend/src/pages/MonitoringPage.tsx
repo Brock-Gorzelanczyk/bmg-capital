@@ -18,7 +18,9 @@ import {
   ChevronDown,
   ChevronUp,
   Filter,
+  Bot,
 } from "lucide-react";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -666,6 +668,8 @@ export default function MonitoringPage() {
     },
   });
 
+  const [aiOpen, setAiOpen] = useState(false);
+
   // Last updated timestamp
   const lastUpdated = health?.timestamp ?? statusData?.as_of;
 
@@ -696,13 +700,18 @@ export default function MonitoringPage() {
             )}
           </p>
         </div>
-        <button
-          onClick={refreshAll}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-        >
-          <RefreshCw size={12} />
-          Refresh All
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setAiOpen(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+            <Bot size={12} /> Ask AI
+          </button>
+          <button
+            onClick={refreshAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <RefreshCw size={12} />
+            Refresh All
+          </button>
+        </div>
       </div>
 
       {/* ── Status Grid ── */}
@@ -738,6 +747,19 @@ export default function MonitoringPage() {
       <SectionCard title="Health Timeline (last 20 checks)" icon={Clock}>
         <HealthTimeline data={history} />
       </SectionCard>
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        context="BMG Capital Monitoring — trade alerts, position monitoring, risk management"
+        suggestions={[
+          "What thresholds should I set for position alerts?",
+          "How do I monitor for a breakout setup?",
+          "What's the difference between a price alert and a technical alert?",
+          "How do I set up stop-loss monitoring?",
+          "What signals indicate I should exit a position?",
+        ]}
+      />
     </div>
   );
 }

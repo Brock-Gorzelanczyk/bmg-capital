@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, LayoutGrid } from "lucide-react";
+import { Plus, LayoutGrid, Bot } from "lucide-react";
 import { Responsive, useContainerWidth, verticalCompactor, type LayoutItem, type Layout, type ResponsiveLayouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -11,6 +11,7 @@ import { WIDGET_REGISTRY } from "@/lib/widgetRegistry";
 import WidgetFrame from "@/components/widgets/WidgetFrame";
 import WorkspaceSwitcher from "@/components/widgets/WorkspaceSwitcher";
 import WidgetLibraryModal from "@/components/widgets/WidgetLibraryModal";
+import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
 import MorningBriefWidget from "@/components/widgets/impl/MorningBriefWidget";
 import MarketIndicesWidget from "@/components/widgets/impl/MarketIndicesWidget";
@@ -52,6 +53,7 @@ export default function Dashboard() {
   } = useWidgetStore();
 
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { containerRef, width, mounted } = useContainerWidth();
 
@@ -149,14 +151,19 @@ export default function Dashboard() {
             {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </p>
         </div>
-        {editMode && (
-          <button
-            onClick={() => setLibraryOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-emphasis)] transition-all cursor-pointer"
-          >
-            <Plus size={14} /> Add Widget
+        <div className="flex items-center gap-2">
+          <button onClick={() => setAiOpen(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+            <Bot size={12} /> Ask AI
           </button>
-        )}
+          {editMode && (
+            <button
+              onClick={() => setLibraryOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-emphasis)] transition-all cursor-pointer"
+            >
+              <Plus size={14} /> Add Widget
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Workspace switcher */}
@@ -241,6 +248,19 @@ export default function Dashboard() {
           onClose={() => setLibraryOpen(false)}
         />
       )}
+
+      <AskAIDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        context="BMG Capital Dashboard — overview of portfolio, market indices, and daily brief"
+        suggestions={[
+          "What's moving the market today?",
+          "How do I interpret the morning brief?",
+          "What should I add to my watchlist right now?",
+          "Explain today's market sentiment",
+          "What are the key levels to watch this week?",
+        ]}
+      />
     </div>
   );
 }
