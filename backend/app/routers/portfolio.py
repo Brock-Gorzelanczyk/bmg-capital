@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
 from alpaca.data.enums import DataFeed
 from alpaca.data.requests import StockSnapshotRequest
@@ -35,6 +36,14 @@ class PositionCreate(BaseModel):
 class PositionUpdate(BaseModel):
     shares: Optional[float] = None
     average_cost: Optional[float] = None
+
+
+class KellyRequest(BaseModel):
+    win_rate: float           # 0.0–1.0
+    avg_win_pct: float        # e.g. 0.15 for 15%
+    avg_loss_pct: float       # e.g. 0.08 for 8% (positive number)
+    account_size: float       # total account value in dollars
+    kelly_fraction: float = 0.25  # default to quarter-Kelly
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +203,70 @@ def delete_position(
     db.delete(pos)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/kelly")
+def kelly_position_sizer(
+    body: KellyRequest,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Kelly Criterion position sizer.
+
+    Formula: K = (win_rate * avg_win_pct - loss_rate * avg_loss_pct) / avg_win_pct
+    """
+    win_rate = body.win_rate
+    loss_rate = 1.0 - win_rate
+    avg_win = body.avg_win_pct
+    avg_loss = body.avg_loss_pct
+
+    # Edge = expected value per dollar risked
+    edge = win_rate * avg_win - loss_rate * avg_loss
+
+    if avg_win <= 0:
+        raise HTTPException(status_code=422, detail="avg_win_pct must be greater than 0")
+
+    full_kelly_pct = edge / avg_win
+
+    warning: Optional[str] = None
+    if edge <= 0:
+        warning = "Negative edge — do not trade"
+        full_kelly_pct = 0.0
+
+    recommended_pct = body.kelly_fraction * full_kelly_pct
+    recommended_dollars = recommended_pct * body.account_size
+
+    fraction_labels = {
+        1.0:  "Full Kelly",
+        0.5:  "Half-Kelly",
+        0.25: "Quarter-Kelly",
+        0.1:  "Tenth-Kelly",
+    }
+    fraction_label = fraction_labels.get(body.kelly_fraction, f"{body.kelly_fraction:.0%}-Kelly")
+
+    if warning:
+        interpretation = (
+            f"This setup has a negative expected edge ({edge:.2%} per dollar risked). "
+            "Do not size a position until the statistics improve."
+        )
+    else:
+        interpretation = (
+            f"Full Kelly suggests {full_kelly_pct:.1%} of capital. "
+            f"At {fraction_label} ({body.kelly_fraction:.0%}× Kelly) that is "
+            f"{recommended_pct:.1%} of your account, or "
+            f"${recommended_dollars:,.0f} on a ${body.account_size:,.0f} account. "
+            f"Expected edge is {edge:.2%} per dollar risked."
+        )
+
+    return {
+        "full_kelly_pct": round(full_kelly_pct * 100, 4),
+        "recommended_pct": round(recommended_pct * 100, 4),
+        "recommended_dollars": round(recommended_dollars, 2),
+        "max_shares_example": None,
+        "edge": round(edge * 100, 4),
+        "interpretation": interpretation,
+        "warning": warning,
+    }
 
 
 @router.get("/{portfolio_id}/summary")

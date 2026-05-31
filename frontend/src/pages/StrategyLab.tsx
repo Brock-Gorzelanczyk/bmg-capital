@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   FlaskConical, X, Play, TrendingUp, TrendingDown, AlertTriangle,
   Eye, Clock, CheckCircle2, RefreshCw, RotateCw, ExternalLink, BarChart2, Info,
-  Calendar, Search, Bot,
+  Calendar, Search, Bot, Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -26,29 +26,32 @@ import ExplainButton from "@/components/explain/ExplainButton";
 import DailyRecapCard from "@/components/recap/DailyRecapCard";
 import PnlCalendar from "@/components/strategy/PnlCalendar";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
+import KellySizerModal from "@/components/trading/KellySizerModal";
 
 // ─── Strategy metadata ────────────────────────────────────────────────────────
 
+type RegimeTag = "Trend-Up" | "Trend-Down" | "Range" | "Crisis";
+
 const STRATEGIES = [
-  { key: "canslim_leaders",        label: "CAN SLIM Leaders",       category: "Growth",    color: "#26a69a" },
-  { key: "stage2_breakout",        label: "Stage 2 Breakout",        category: "Growth",    color: "#26a69a" },
-  { key: "momentum_surge",         label: "Momentum Surge",          category: "Growth",    color: "#26a69a" },
-  { key: "high_rs_momentum",       label: "High RS Leaders",         category: "Growth",    color: "#26a69a" },
-  { key: "power_trend",            label: "Power Trend",             category: "Growth",    color: "#26a69a" },
-  { key: "turtle_breakout",        label: "Turtle Breakout",         category: "Growth",    color: "#0ea5e9" },
-  { key: "momentum_12m",           label: "12-Month Momentum",       category: "Growth",    color: "#0ea5e9" },
-  { key: "darvas_box",             label: "Darvas Box",              category: "Growth",    color: "#0ea5e9" },
-  { key: "mean_reversion_quality", label: "Quality Dip Buy",         category: "Reversion", color: "#3b82f6" },
-  { key: "deep_value_bounce",      label: "Quality Oversold",        category: "Reversion", color: "#3b82f6" },
-  { key: "rsi_oversold",           label: "RSI Oversold",            category: "Reversion", color: "#3b82f6" },
-  { key: "zscore_reversion",       label: "Z-Score Reversion",       category: "Reversion", color: "#3b82f6" },
-  { key: "volatility_contraction", label: "Volatility Squeeze",      category: "Pattern",   color: "#f59e0b" },
-  { key: "ema_stack_uptrend",      label: "EMA Stack",               category: "Pattern",   color: "#f59e0b" },
-  { key: "consecutive_gains",      label: "Momentum Continuation",   category: "Pattern",   color: "#f59e0b" },
-  { key: "golden_cross",           label: "Golden Cross",            category: "Classic",   color: "#8b5cf6" },
-  { key: "macd_bullish",           label: "MACD Crossover",          category: "Classic",   color: "#8b5cf6" },
-  { key: "volume_surge",           label: "Volume Surge",            category: "Classic",   color: "#8b5cf6" },
-  { key: "breakout_52w",           label: "52-Week High",            category: "Classic",   color: "#8b5cf6" },
+  { key: "canslim_leaders",        label: "CAN SLIM Leaders",       category: "Growth",    color: "#26a69a", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "stage2_breakout",        label: "Stage 2 Breakout",        category: "Growth",    color: "#26a69a", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "momentum_surge",         label: "Momentum Surge",          category: "Growth",    color: "#26a69a", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "high_rs_momentum",       label: "High RS Leaders",         category: "Growth",    color: "#26a69a", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "power_trend",            label: "Power Trend",             category: "Growth",    color: "#26a69a", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "turtle_breakout",        label: "Turtle Breakout",         category: "Growth",    color: "#0ea5e9", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "momentum_12m",           label: "12-Month Momentum",       category: "Growth",    color: "#0ea5e9", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "darvas_box",             label: "Darvas Box",              category: "Growth",    color: "#0ea5e9", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "mean_reversion_quality", label: "Quality Dip Buy",         category: "Reversion", color: "#3b82f6", regimes: ["Range", "Trend-Down"] as RegimeTag[] },
+  { key: "deep_value_bounce",      label: "Quality Oversold",        category: "Reversion", color: "#3b82f6", regimes: ["Range", "Trend-Down"] as RegimeTag[] },
+  { key: "rsi_oversold",           label: "RSI Oversold",            category: "Reversion", color: "#3b82f6", regimes: ["Range", "Trend-Down"] as RegimeTag[] },
+  { key: "zscore_reversion",       label: "Z-Score Reversion",       category: "Reversion", color: "#3b82f6", regimes: ["Range"] as RegimeTag[] },
+  { key: "volatility_contraction", label: "Volatility Squeeze",      category: "Pattern",   color: "#f59e0b", regimes: ["Crisis", "Range"] as RegimeTag[] },
+  { key: "ema_stack_uptrend",      label: "EMA Stack",               category: "Pattern",   color: "#f59e0b", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "consecutive_gains",      label: "Momentum Continuation",   category: "Pattern",   color: "#f59e0b", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "golden_cross",           label: "Golden Cross",            category: "Classic",   color: "#8b5cf6", regimes: ["Trend-Up"] as RegimeTag[] },
+  { key: "macd_bullish",           label: "MACD Crossover",          category: "Classic",   color: "#8b5cf6", regimes: ["Trend-Up", "Range"] as RegimeTag[] },
+  { key: "volume_surge",           label: "Volume Surge",            category: "Classic",   color: "#8b5cf6", regimes: ["Trend-Up", "Range"] as RegimeTag[] },
+  { key: "breakout_52w",           label: "52-Week High",            category: "Classic",   color: "#8b5cf6", regimes: ["Trend-Up"] as RegimeTag[] },
 ];
 
 
@@ -304,13 +307,14 @@ function EquityCurve({ data, baseline }: { data: any[]; baseline: number }) {
 // ─── Strategy Card ────────────────────────────────────────────────────────────
 
 function StrategyCard({
-  strategy, stats, openCount, watchCount, selected, onClick, onInfo,
+  strategy, stats, openCount, watchCount, selected, isBestInRegime, onClick, onInfo,
 }: {
   strategy: typeof STRATEGIES[0];
   stats: any;
   openCount: number;
   watchCount: number;
   selected: boolean;
+  isBestInRegime: boolean;
   onClick: () => void;
   onInfo: () => void;
 }) {
@@ -332,6 +336,13 @@ function StrategyCard({
         <div className="h-0.5 rounded-full mb-3" style={{ backgroundColor: strategy.color }} />
         <div className="pr-4">
           <div className="text-xs font-semibold text-[var(--text-primary)] leading-snug mb-2">{strategy.label}</div>
+          {isBestInRegime && (
+            <div className="flex items-center gap-1 mb-2">
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-400 font-semibold leading-none">
+                Best in current regime
+              </span>
+            </div>
+          )}
           {hasTrades ? (
             <>
               <div className={cn("text-sm font-bold font-mono", pnlColor(pnl))}>
@@ -609,7 +620,9 @@ export default function StrategyLab() {
   const [selectedTrade, setSelectedTrade] = useState<EnrichedTrade | null>(null);
   const [infoModal, setInfoModal] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
+  const [kellyOpen, setKellyOpen] = useState(false);
   const [showAllStrategies, setShowAllStrategies] = useState(false);
+  const [regimeFilter, setRegimeFilter] = useState<RegimeTag[]>([]);
   const [logFilter, setLogFilter] = useState<"all" | "entries" | "exits" | "candidates" | "summary">("all");
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(
@@ -686,6 +699,16 @@ export default function StrategyLab() {
   const baseline: number  = equityData?.baseline ?? 100_000;
   const regime: string    = regimeData?.regime ?? "unknown";
 
+  // Normalize legacy backend values to 4-state labels for regime matching
+  const normalizedRegime: RegimeTag | null = (() => {
+    const r = regime;
+    if (r === "Trend-Up"   || r === "bull")     return "Trend-Up";
+    if (r === "Trend-Down" || r === "risk_off") return "Trend-Down";
+    if (r === "Range")  return "Range";
+    if (r === "Crisis") return "Crisis";
+    return null;
+  })();
+
   const openTrades   = trades.filter((t) => t.status === "open");
   const closedTrades = trades.filter((t) => t.status === "closed" && t.exit_reason !== "expired");
 
@@ -739,6 +762,15 @@ export default function StrategyLab() {
         <div className="flex items-center gap-2">
           <MonitorBadge />
           <RegimePill regime={regime} />
+
+          {/* Kelly Sizer */}
+          <button
+            onClick={() => setKellyOpen(true)}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-500 transition-colors"
+          >
+            <Calculator size={11} />
+            Kelly Sizer
+          </button>
 
           {/* Ask AI */}
           <button
@@ -988,6 +1020,9 @@ export default function StrategyLab() {
             goToChart(sym, preset, levels);
           }}
         />
+      )}
+      {kellyOpen && (
+        <KellySizerModal onClose={() => setKellyOpen(false)} />
       )}
       <AskAIDrawer
         open={aiOpen}
@@ -1473,9 +1508,13 @@ const BACKTEST_UNIVERSE_SIZE = 150;
 
 function RegimePill({ regime }: { regime: string }) {
   const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-    bull:     { label: "Bull Market",   cls: "text-[var(--accent-positive)] border-emerald-400/30 bg-[var(--accent-positive-bg)]",  icon: <TrendingUp size={10} /> },
-    risk_off: { label: "Risk Off",      cls: "text-[var(--accent-negative)] border-red-400/30 bg-[var(--accent-negative-bg)]",         icon: <TrendingDown size={10} /> },
-    unknown:  { label: "Checking…",    cls: "text-[var(--text-tertiary)] border-[var(--border-emphasis)] bg-[var(--bg-elevated-2)]",   icon: <AlertTriangle size={10} /> },
+    "Trend-Up":   { label: "Trend-Up",   cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={10} /> },
+    "Trend-Down": { label: "Trend-Down", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={10} /> },
+    "Range":      { label: "Range",      cls: "text-blue-400 border-blue-400/30 bg-blue-400/8",           icon: <BarChart2 size={10} /> },
+    "Crisis":     { label: "Crisis",     cls: "text-orange-400 border-orange-400/30 bg-orange-400/8",     icon: <AlertTriangle size={10} /> },
+    bull:         { label: "Trend-Up",   cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={10} /> },
+    risk_off:     { label: "Trend-Down", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={10} /> },
+    unknown:      { label: "Checking…",  cls: "text-[var(--text-tertiary)] border-[var(--border-emphasis)] bg-[var(--bg-elevated-2)]", icon: <BarChart2 size={10} /> },
   };
   const { label, cls, icon } = map[regime] ?? map.unknown;
   return (

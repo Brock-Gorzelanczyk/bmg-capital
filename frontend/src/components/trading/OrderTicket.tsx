@@ -6,6 +6,8 @@ import { getAccount, placeOrder } from "@/api/paper";
 import type { PlaceOrderBody } from "@/api/paper";
 import { useMarketStore } from "@/store";
 import { formatCurrency, formatPercent, cn } from "@/lib/utils";
+import KellySizerModal from "./KellySizerModal";
+import PreMortemModal from "./PreMortemModal";
 
 type OrderType = "market" | "limit" | "stop" | "stop_limit" | "bracket" | "trailing_stop";
 type TIF = "day" | "gtc" | "ioc" | "fok";
@@ -65,6 +67,11 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
   const [fillPrice, setFillPrice] = useState<number | null>(null);
   const [fillQty, setFillQty] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [kellyOpen, setKellyOpen] = useState(false);
+
+  // Pre-mortem flow
+  const [preMortemOpen, setPreMortemOpen] = useState(false);
+  const [pendingOrderBody, setPendingOrderBody] = useState<PlaceOrderBody | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const idempotencyKeyRef = useRef(crypto.randomUUID());
@@ -166,7 +173,25 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
   }
 
   function handleConfirm() {
-    mutation.mutate(buildOrderBody());
+    const body = buildOrderBody();
+    // Show pre-mortem modal before placing the order
+    setPendingOrderBody(body);
+    setPreMortemOpen(true);
+  }
+
+  function handlePreMortemSave(preMortemId: number) {
+    setPreMortemOpen(false);
+    if (pendingOrderBody) {
+      // Attach the pre-mortem id as metadata (passed through if backend supports it)
+      mutation.mutate({ ...pendingOrderBody, premortem_id: preMortemId } as PlaceOrderBody);
+    }
+  }
+
+  function handlePreMortemSkip() {
+    setPreMortemOpen(false);
+    if (pendingOrderBody) {
+      mutation.mutate(pendingOrderBody);
+    }
   }
 
   function handleReset() {
@@ -400,12 +425,21 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
             <label className="text-xs text-[var(--text-tertiary)]">
               {inputMode === "dollars" ? "Dollar Amount" : "Shares"}
             </label>
-            <button
-              onClick={() => setInputMode((m) => m === "dollars" ? "shares" : "dollars")}
-              className="text-xs text-[#3B82F6] hover:text-blue-300 transition-colors"
-            >
-              Switch to {inputMode === "dollars" ? "shares" : "$"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setKellyOpen(true)}
+                className="text-xs text-[#3B82F6] hover:text-blue-300 transition-colors"
+              >
+                Kelly Size
+              </button>
+              <span className="text-[var(--text-tertiary)] text-xs">·</span>
+              <button
+                onClick={() => setInputMode((m) => m === "dollars" ? "shares" : "dollars")}
+                className="text-xs text-[#3B82F6] hover:text-blue-300 transition-colors"
+              >
+                Switch to {inputMode === "dollars" ? "shares" : "$"}
+              </button>
+            </div>
           </div>
           <div className="relative">
             {inputMode === "dollars" && (
@@ -641,6 +675,13 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
           Orders execute at live market price. Simulated only.
         </p>
       </div>
+
+      {kellyOpen && (
+        <KellySizerModal
+          onClose={() => setKellyOpen(false)}
+          initialAccountSize={buyingPower > 0 ? buyingPower : undefined}
+        />
+      )}
     </div>
   );
 }
