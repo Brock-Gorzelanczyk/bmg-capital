@@ -751,8 +751,9 @@ export default function MonitoringPage() {
       <AskAIDrawer
         open={aiOpen}
         onClose={() => setAiOpen(false)}
+        title="Ask BMG about Monitoring"
         context="BMG Capital Monitoring — trade alerts, position monitoring, risk management"
-        suggestions={[
+        suggestedQuestions={[
           "What thresholds should I set for position alerts?",
           "How do I monitor for a breakout setup?",
           "What's the difference between a price alert and a technical alert?",

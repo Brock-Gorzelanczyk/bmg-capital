@@ -268,8 +268,9 @@ export default function Dashboard() {
       <AskAIDrawer
         open={aiOpen}
         onClose={() => setAiOpen(false)}
+        title="Ask BMG Intelligence"
         context="BMG Capital Dashboard — overview of portfolio, market indices, and daily brief"
-        suggestions={[
+        suggestedQuestions={[
           "What's moving the market today?",
           "How do I interpret the morning brief?",
           "What should I add to my watchlist right now?",

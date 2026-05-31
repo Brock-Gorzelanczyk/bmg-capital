@@ -435,7 +435,7 @@ function NotificationsSection() {
           <div className="px-4 py-8 text-center text-[var(--text-tertiary)] text-sm animate-pulse">Loading…</div>
         ) : (
           QUICK_NOTIFS.map((n, i) => {
-            const enabled = data?.prefs?.[n.key]?.in_app ?? true;
+            const enabled = (data?.prefs as any)?.[n.key]?.in_app ?? true;
             return (
               <SettingRow key={n.key} label={n.label} sublabel={n.desc} last={i === QUICK_NOTIFS.length - 1}>
                 <Toggle value={enabled} onChange={() => toggle(n.key)} />
