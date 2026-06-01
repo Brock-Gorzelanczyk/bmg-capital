@@ -778,9 +778,324 @@ function WorkshopPanel({
   );
 }
 
+// ── TA Learning Section ────────────────────────────────────────────────────────
+
+interface TASetup {
+  name: string;
+  emoji: string;
+  type: string;
+  typeColor: string;
+  timeframe: string;
+  difficulty: "Beginner" | "Intermediate" | "Advanced";
+  description: string;
+  entry: string;
+  stop: string;
+  target: string;
+  watchFor: string[];
+  avoid: string[];
+  indicators: string[];
+}
+
+const TA_SETUPS: TASetup[] = [
+  {
+    name: "Bull Flag",
+    emoji: "🚩",
+    type: "Continuation",
+    typeColor: "text-emerald-400 bg-emerald-900/30 border-emerald-800/50",
+    timeframe: "1H / 4H / Daily",
+    difficulty: "Beginner",
+    description: "A sharp upward move (the flagpole) followed by a tight consolidation channel sloping slightly down. Signals institutional distribution is low — just a rest before continuation.",
+    entry: "Buy the breakout above the upper flag trendline, ideally with a volume surge",
+    stop: "Below the lower flag trendline or 50% of the flag body",
+    target: "Project the flagpole length from the breakout point",
+    watchFor: ["Tight price action in the flag (small candles)", "Volume drying up in consolidation", "Flag duration: 3–20 candles ideal", "Clear parallel channel structure"],
+    avoid: ["Flags that retrace more than 50% of the pole", "Flags lasting too long (base building instead)", "Breakout without volume"],
+    indicators: ["Volume", "ATR (flag should have lower ATR than pole)", "VWAP as dynamic support"],
+  },
+  {
+    name: "Cup & Handle",
+    emoji: "☕",
+    type: "Continuation",
+    typeColor: "text-emerald-400 bg-emerald-900/30 border-emerald-800/50",
+    timeframe: "Daily / Weekly",
+    difficulty: "Intermediate",
+    description: "A bullish continuation pattern shaped like a teacup. The 'cup' forms via a rounded bottom decline and recovery; the 'handle' is a slight pullback before the breakout.",
+    entry: "Buy the breakout above the handle's resistance with volume confirmation",
+    stop: "Below the handle's low (typically 3–8% risk)",
+    target: "Measure the depth of the cup and project that distance above the breakout point",
+    watchFor: ["Volume expansion on breakout candle", "Handle depth < 50% of cup depth", "Cup forms over 7+ weeks for higher reliability", "Breakout from a base near prior highs"],
+    avoid: ["V-shaped cup (no rounded base = weaker)", "Handle that drifts too far down (>50% retrace)", "Breakout on declining volume"],
+    indicators: ["Volume", "RSI (should reset to ~50 in handle)", "50-day EMA as support"],
+  },
+  {
+    name: "Double Bottom",
+    emoji: "W",
+    type: "Reversal",
+    typeColor: "text-blue-400 bg-blue-900/30 border-blue-800/50",
+    timeframe: "1H / 4H / Daily",
+    difficulty: "Beginner",
+    description: "A bearish-to-bullish reversal forming a 'W' shape. Two tests of the same support level, with the second bottom holding at or above the first, followed by a break above the neckline.",
+    entry: "Buy the breakout above the neckline (the high between the two bottoms) with volume",
+    stop: "Below the second bottom (structure break = pattern fails)",
+    target: "Measure the depth from bottoms to neckline; project that distance above the neckline",
+    watchFor: ["Second bottom forms on lower volume than first (sellers exhausted)", "RSI positive divergence (higher low vs. price lower low)", "Strong rejection candle at the second bottom", "Neckline at a clear prior resistance level"],
+    avoid: ["Neckline too close to bottoms (poor R:R)", "Second bottom significantly lower than first", "Pattern at random levels with no prior significance"],
+    indicators: ["RSI divergence", "Volume", "MACD crossover"],
+  },
+  {
+    name: "Head & Shoulders",
+    emoji: "👤",
+    type: "Reversal (Bearish)",
+    typeColor: "text-red-400 bg-red-900/30 border-red-800/50",
+    timeframe: "4H / Daily / Weekly",
+    difficulty: "Intermediate",
+    description: "A three-peak topping pattern — left shoulder, higher head, right shoulder — signaling trend exhaustion. The neckline breakdown is the entry. Inverse H&S is the bullish mirror.",
+    entry: "Short (or reduce longs) on neckline breakdown; cover at measured target",
+    stop: "Above the right shoulder high (pattern invalidation)",
+    target: "Measure from head to neckline; project downward from breakdown point",
+    watchFor: ["Right shoulder lower than head (bearish pressure)", "Volume declining into the head, low on right shoulder", "Neckline sloping slightly downward = stronger bear signal", "Failed neckline retests after breakdown"],
+    avoid: ["Very asymmetric shoulders (different timing)", "Low volume on breakdown (weak confirmation)", "Playing against a strong macro uptrend"],
+    indicators: ["Volume (must confirm breakdown)", "RSI showing lower highs into head/right shoulder", "200-day EMA overhead as resistance"],
+  },
+  {
+    name: "Ascending Triangle",
+    emoji: "△",
+    type: "Continuation / Reversal",
+    typeColor: "text-amber-400 bg-amber-900/30 border-amber-800/50",
+    timeframe: "1H / 4H / Daily",
+    difficulty: "Beginner",
+    description: "A flat upper resistance line with higher lows creating a rising lower trendline. Buyers are becoming more aggressive with each pullback — pressure building for a breakout.",
+    entry: "Buy the breakout above flat resistance with volume, or buy the rising trendline for anticipatory entry",
+    stop: "Below the last higher low (or 1 ATR below the breakout level)",
+    target: "Measure triangle height at widest point; project from breakout",
+    watchFor: ["Each pullback holding higher than the last", "Volume contraction through the triangle", "Breakout candle closes decisively above flat resistance", "5+ touches of the flat resistance level"],
+    avoid: ["Breakouts that immediately reverse (bull trap)", "Triangles with fewer than 4 total touches", "Very wide triangles (longer = less reliable)"],
+    indicators: ["Volume", "RSI resets to mid-levels between tests", "VWAP inside triangle"],
+  },
+  {
+    name: "Falling Wedge",
+    emoji: "📐",
+    type: "Reversal (Bullish)",
+    typeColor: "text-blue-400 bg-blue-900/30 border-blue-800/50",
+    timeframe: "1H / 4H / Daily",
+    difficulty: "Intermediate",
+    description: "Converging downward-sloping trendlines with lower highs and lower lows — but highs are falling faster than lows. Signals decreasing selling pressure. Resolves bullishly ~70% of the time.",
+    entry: "Buy the breakout above the upper trendline, confirmed by close above it and volume surge",
+    stop: "Below the last lower low within the wedge",
+    target: "Return to the origin of the wedge (start of the pattern at the top)",
+    watchFor: ["Volume declining through the wedge (sellers exhausted)", "RSI positive divergence (price lower low, RSI higher low)", "Wedge forming after a significant prior downtrend", "Consolidation wedge in an uptrend (continuation context)"],
+    avoid: ["Too-steep wedge angle (more likely to break down)", "Breakout on thin volume", "Pattern spanning fewer than 5 candles"],
+    indicators: ["RSI divergence", "Volume", "Fibonacci retracements for target extension"],
+  },
+  {
+    name: "VWAP Reclaim",
+    emoji: "⚡",
+    type: "Intraday",
+    typeColor: "text-violet-400 bg-violet-900/30 border-violet-800/50",
+    timeframe: "5m / 15m / 1H",
+    difficulty: "Intermediate",
+    description: "Price dips below VWAP then reclaims it with conviction. One of the cleanest intraday setups — institutions use VWAP as a benchmark, so reclaims carry institutional backing.",
+    entry: "Buy when price closes back above VWAP on above-average volume (candle close, not wick)",
+    stop: "Close back below VWAP (failed reclaim)",
+    target: "Previous VWAP highs of the session or overnight highs",
+    watchFor: ["Sharp VWAP dip on low volume (weak selling = fast recovery)", "Reclaim happens in the first 1–2 hours of the session", "SPY/QQQ also above their VWAPs (macro alignment)", "Sector ETF confirming the move"],
+    avoid: ["Extended time below VWAP (trend change, not deviation)", "Playing against strong macro downtrends", "Chasing well above VWAP after a big reclaim move"],
+    indicators: ["VWAP (primary)", "Volume profile", "1-minute RSI for momentum confirmation"],
+  },
+  {
+    name: "Golden Cross",
+    emoji: "✨",
+    type: "Trend Confirmation",
+    typeColor: "text-amber-400 bg-amber-900/30 border-amber-800/50",
+    timeframe: "Daily / Weekly",
+    difficulty: "Beginner",
+    description: "The 50-day SMA crosses above the 200-day SMA. A macro bullish signal used by institutional trend followers. Confirms trend rather than predicting tops/bottoms.",
+    entry: "Enter on the cross day, or wait for a pullback to the 50 SMA after the cross for better R:R",
+    stop: "Below the 200 SMA (major structure break)",
+    target: "No fixed target — trail stop using the 50 SMA",
+    watchFor: ["Both MAs trending upward at the time of cross (stronger signal)", "Price already above both MAs before the cross", "Volume expansion around the cross", "Cross occurring after a period of basing (not a V-shape recovery)"],
+    avoid: ["Chasing price far above both MAs at cross time", "Golden crosses in macro bear markets (tend to fail faster)", "Taking the cross as a standalone entry without price context"],
+    indicators: ["SMA 50 and SMA 200 (primary)", "Volume", "ADX > 25 confirms trend strength"],
+  },
+  {
+    name: "RSI Divergence",
+    emoji: "📊",
+    type: "Reversal Signal",
+    typeColor: "text-blue-400 bg-blue-900/30 border-blue-800/50",
+    timeframe: "4H / Daily",
+    difficulty: "Advanced",
+    description: "When price makes a new high/low but RSI makes a lower high/higher low — momentum is diverging from price. Most reliable when combined with key structure levels.",
+    entry: "Bullish: buy when price tests the prior low and RSI holds a higher low. Bearish: short when price rejects key resistance with RSI lower high",
+    stop: "Below the price low in a bullish divergence (above the high for bearish)",
+    target: "Previous swing high for bullish divergence reversal",
+    watchFor: ["Hidden divergence (RSI higher low + price higher low in uptrend = continuation)", "Multiple-candle divergence (more reliable)", "Divergence at major support/resistance levels", "Bearish divergence at all-time highs"],
+    avoid: ["Divergence in strongly trending markets (can persist)", "Trading divergence without price structure confirmation", "Sub-15m timeframes — too noisy"],
+    indicators: ["RSI 14 (primary)", "MACD convergence for confirmation", "Volume pattern at divergence points"],
+  },
+];
+
+const DIFFICULTY_STYLE: Record<string, string> = {
+  Beginner:     "text-emerald-400 bg-emerald-900/20 border-emerald-800/40",
+  Intermediate: "text-amber-400 bg-amber-900/20 border-amber-800/40",
+  Advanced:     "text-red-400 bg-red-900/20 border-red-800/40",
+};
+
+function SetupCard({ setup }: { setup: TASetup }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div
+      className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden transition-all duration-200 hover:border-[var(--border-emphasis)]"
+    >
+      {/* Header — always visible */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
+      >
+        <span className="text-2xl leading-none mt-0.5 select-none">{setup.emoji}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className="font-bold text-[var(--text-primary)] text-sm">{setup.name}</span>
+            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${setup.typeColor}`}>{setup.type}</span>
+            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${DIFFICULTY_STYLE[setup.difficulty]}`}>{setup.difficulty}</span>
+          </div>
+          <div className="text-[10px] text-[var(--text-tertiary)] font-mono mb-1.5">{setup.timeframe}</div>
+          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed line-clamp-2">{setup.description}</p>
+        </div>
+        <span className="text-[var(--text-tertiary)] text-xs mt-1 shrink-0">{expanded ? "▲" : "▼"}</span>
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="px-4 pb-4 space-y-4 border-t border-[var(--border-subtle)] pt-3">
+          {/* Entry / Stop / Target */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-positive)] mb-1.5">Entry</div>
+              <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{setup.entry}</p>
+            </div>
+            <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-negative)] mb-1.5">Stop</div>
+              <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{setup.stop}</p>
+            </div>
+            <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-blue-400 mb-1.5">Target</div>
+              <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{setup.target}</p>
+            </div>
+          </div>
+
+          {/* Watch for + Avoid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-positive)] mb-2">Watch for</div>
+              <ul className="space-y-1.5">
+                {setup.watchFor.map((w, i) => (
+                  <li key={i} className="flex gap-1.5 text-[10px] text-[var(--text-secondary)]">
+                    <span className="text-[var(--accent-positive)] shrink-0 font-bold">+</span>
+                    <span className="leading-relaxed">{w}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-negative)] mb-2">Avoid</div>
+              <ul className="space-y-1.5">
+                {setup.avoid.map((a, i) => (
+                  <li key={i} className="flex gap-1.5 text-[10px] text-[var(--text-secondary)]">
+                    <span className="text-[var(--accent-negative)] shrink-0 font-bold">–</span>
+                    <span className="leading-relaxed">{a}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Indicators */}
+          <div>
+            <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-tertiary)] mb-2">Indicators to pair</div>
+            <div className="flex flex-wrap gap-1.5">
+              {setup.indicators.map((ind, i) => (
+                <span key={i} className="text-[9px] px-2 py-1 rounded-lg bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] font-mono border border-[var(--border-subtle)]">
+                  {ind}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TALearnSection() {
+  const [filter, setFilter] = useState<"all" | "Continuation" | "Reversal" | "Intraday" | "Trend Confirmation" | "Reversal Signal">("all");
+
+  const filters = [
+    { id: "all", label: "All" },
+    { id: "Continuation", label: "Continuation" },
+    { id: "Reversal", label: "Reversal" },
+    { id: "Intraday", label: "Intraday" },
+    { id: "Trend Confirmation", label: "Trend" },
+    { id: "Reversal Signal", label: "Signals" },
+  ] as const;
+
+  const filtered = filter === "all"
+    ? TA_SETUPS
+    : TA_SETUPS.filter((s) => s.type.includes(filter as string));
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      {/* Section header */}
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-[var(--text-primary)] tracking-tight font-display">Learn TA Setups</h2>
+        <p className="text-sm text-[var(--text-tertiary)] mt-1">
+          9 high-probability patterns with entry, stop, target, and common mistakes. Click any card to expand.
+        </p>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-1.5 flex-wrap mb-5">
+        {filters.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id as typeof filter)}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+              filter === f.id
+                ? "bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-emphasis)] shadow-sm"
+                : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] border border-transparent hover:border-[var(--border-subtle)]"
+            )}
+          >
+            {f.label}
+            {f.id !== "all" && (
+              <span className="ml-1 opacity-50 font-mono text-[9px]">
+                {TA_SETUPS.filter((s) => s.type.includes(f.id)).length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Setup cards */}
+      <div className="space-y-3">
+        {filtered.map((setup) => (
+          <SetupCard key={setup.name} setup={setup} />
+        ))}
+      </div>
+
+      {/* Footer note */}
+      <div className="mt-8 p-4 bg-[var(--bg-elevated-2)] rounded-xl border border-[var(--border-subtle)]">
+        <p className="text-xs text-[var(--text-tertiary)] leading-relaxed">
+          <strong className="text-[var(--text-secondary)]">Pro tip:</strong> Switch to Workshop mode and practice drawing these patterns directly on live charts. Use the AI analysis tool to get feedback on your setups.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Main WorkshopPage ──────────────────────────────────────────────────────────
 
 export default function WorkshopPage() {
+  const [workshopView, setWorkshopView] = useState<"chart" | "learn">("chart");
   const [symbol, setSymbol] = useState(getStoredSymbol);
   const [period, setPeriod] = useState<Period>("1Y");
   const [chartType, setChartType] = useState<ChartType>("candle");
@@ -924,6 +1239,38 @@ export default function WorkshopPage() {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-[var(--bg-base)] text-[var(--text-secondary)]">
+      {/* View switcher */}
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)] shrink-0">
+        <button
+          onClick={() => setWorkshopView("chart")}
+          className={cn(
+            "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+            workshopView === "chart"
+              ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)] shadow-sm"
+              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          )}
+        >
+          Workshop
+        </button>
+        <button
+          onClick={() => setWorkshopView("learn")}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+            workshopView === "learn"
+              ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)] shadow-sm"
+              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          )}
+        >
+          <BookOpen size={11} /> Learn TA
+        </button>
+      </div>
+
+      {workshopView === "learn" ? (
+        <div className="flex-1 overflow-y-auto bg-[var(--bg-base)]">
+          <TALearnSection />
+        </div>
+      ) : (
+        <>
       {/* Top bar */}
       <TvTopBar
         symbol={symbol}
@@ -1093,6 +1440,8 @@ export default function WorkshopPage() {
           onChange={setActiveIndicators}
           onClose={() => setShowIndicatorsModal(false)}
         />
+      )}
+        </>
       )}
 
       <AskAIDrawer

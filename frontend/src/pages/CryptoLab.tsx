@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   Star, RotateCw, X, ChevronUp, ChevronDown, ChevronsUpDown,
-  ArrowLeft, Search, ExternalLink, Bot,
+  ArrowLeft, Search, ExternalLink, Bot, Info,
 } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { toast } from "sonner";
@@ -1178,6 +1178,7 @@ const EXIT_BADGE: Record<string, { label: string; cls: string }> = {
 
 function CryptoStrategyPanel() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [running, setRunning] = useState(false);
   const [runStatus, setRunStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [stratTab, setStratTab] = useState<"open" | "watch" | "closed">("open");
@@ -1305,7 +1306,7 @@ function CryptoStrategyPanel() {
           ) : open.map((t) => {
             const pct = t.pnl_pct ?? 0;
             return (
-              <div key={t.id} className="bg-[var(--bg-elevated-2)] rounded-xl px-4 py-3 flex items-center gap-3">
+              <div key={t.id} className="bg-[var(--bg-elevated-2)] rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[var(--bg-elevated)] transition-colors" onClick={() => navigate(`/chart?symbol=${t.symbol.replace("/USDT", "-USD")}`)}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="font-bold text-[var(--text-primary)] text-sm font-mono">{t.symbol.replace("/USDT", "")}</span>
@@ -1331,7 +1332,7 @@ function CryptoStrategyPanel() {
           {candidates.length === 0 ? (
             <p className="text-center text-[var(--text-tertiary)] text-sm py-8">No coins being watched right now</p>
           ) : candidates.map((t) => (
-            <div key={t.id} className="bg-[var(--bg-elevated-2)] rounded-xl px-4 py-3 flex items-center gap-3">
+            <div key={t.id} className="bg-[var(--bg-elevated-2)] rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[var(--bg-elevated)] transition-colors" onClick={() => navigate(`/chart?symbol=${t.symbol.replace("/USDT", "-USD")}`)}>
               <div className="flex-1">
                 <span className="font-bold text-[var(--text-primary)] text-sm font-mono mr-2">{t.symbol.replace("/USDT", "")}</span>
                 <span className="text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded">{t.preset_label}</span>
@@ -1349,7 +1350,7 @@ function CryptoStrategyPanel() {
           ) : closed.slice(0, 25).map((t) => {
             const badge = EXIT_BADGE[t.exit_reason ?? ""] ?? { label: "Manual", cls: "bg-zinc-800 text-zinc-400" };
             return (
-              <div key={t.id} className="bg-[var(--bg-elevated-2)] rounded-xl px-4 py-3 flex items-center gap-3">
+              <div key={t.id} className="bg-[var(--bg-elevated-2)] rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[var(--bg-elevated)] transition-colors" onClick={() => navigate(`/chart?symbol=${t.symbol.replace("/USDT", "-USD")}`)}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-[var(--text-primary)] text-sm font-mono">{t.symbol.replace("/USDT", "")}</span>
@@ -1366,6 +1367,230 @@ function CryptoStrategyPanel() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Crypto Strategy Detail Map ─────────────────────────────────────────────────
+
+const CRYPTO_CATEGORY_DETAIL: Record<string, {
+  howItWorks: string[];
+  signals: string[];
+  bestIn: string;
+  risk: string;
+}> = {
+  "Trend Following": {
+    howItWorks: [
+      "Identifies coins in a confirmed uptrend using EMA crossovers and higher-highs/higher-lows structure",
+      "Enters on pullbacks to the 20 or 50 EMA with a tight stop below the last swing low",
+      "Scales out at 2R and 3R profit targets, moving stop to breakeven after 1R",
+    ],
+    signals: [
+      "EMA 20 > EMA 50 > EMA 200 (bullish alignment)",
+      "Pullback to rising EMA without closing below it",
+      "RSI bouncing from 40–50 zone in uptrend",
+      "Volume contraction on pullback, expansion on breakout resumption",
+    ],
+    bestIn: "Strong directional markets with clear macro tailwinds — BTC bull phases, sector rotations into L1s or DeFi",
+    risk: "Choppy sideways markets produce frequent false entries and whipsaws. Stops can be gapped through on high-volatility events.",
+  },
+  "Momentum": {
+    howItWorks: [
+      "Ranks coins by relative strength over a rolling window (7d, 14d, 30d lookbacks)",
+      "Goes long the top percentile performers; rebalances weekly or bi-weekly",
+      "Cross-sectional comparison ensures you hold the strongest names in the universe",
+    ],
+    signals: [
+      "Coin ranks in top decile of 14d or 30d returns vs. the full universe",
+      "Price holds above VWAP and 20-day EMA",
+      "Relative volume spike confirming institutional accumulation",
+      "Decreasing correlation with BTC (idiosyncratic move, not just beta)",
+    ],
+    bestIn: "Altcoin season and sector rotation cycles where capital flows out of BTC into high-beta plays",
+    risk: "Momentum crashes ('factor unwind') can be severe. During risk-off events, the best performers become the most crowded shorts.",
+  },
+  "On-Chain": {
+    howItWorks: [
+      "Uses blockchain-native data (active addresses, exchange flows, holder distribution) as leading indicators",
+      "Signals fire when on-chain activity diverges from price — e.g., price falling but accumulation rising",
+      "Combines network health metrics with market structure to confirm entries",
+    ],
+    signals: [
+      "Net exchange outflows (coins moving to cold storage → accumulation signal)",
+      "MVRV Z-Score below 1.0 (historically undervalued relative to realized price)",
+      "Percent supply profitable rising from low base",
+      "Whale wallet accumulation (top 100 addresses adding supply)",
+    ],
+    bestIn: "Market cycle bottoms and early bull phases where smart money is accumulating before price confirms",
+    risk: "On-chain data has significant lag — it reflects what happened, not what will happen. Smart contracts can mask true flows.",
+  },
+  "Mean Reversion": {
+    howItWorks: [
+      "Identifies oversold conditions after sharp drawdowns using z-score and Bollinger Band width",
+      "Enters after price closes back inside the lower Bollinger Band or RSI crosses above 30",
+      "Quick 3–5 day holding period targeting return to the 20-day SMA",
+    ],
+    signals: [
+      "RSI < 25 after a 15%+ seven-day drawdown",
+      "Price 2+ standard deviations below 20-day SMA",
+      "Bollinger Band squeeze followed by downside expansion",
+      "Positive RSI divergence (price new low, RSI higher low)",
+    ],
+    bestIn: "Range-bound markets or after large single-day wicks that don't represent fundamental changes",
+    risk: "In trending bear markets, oversold can become more oversold. Mean reversion trades can turn into catching falling knives.",
+  },
+  "Cycle": {
+    howItWorks: [
+      "Maps the 4-year BTC halving cycle and its lagging effects on altcoin multiples",
+      "Identifies phase transitions: accumulation → early bull → peak euphoria → bear market",
+      "Adjusts risk allocation by cycle phase — maximum exposure near cycle bottom, reduced into euphoria",
+    ],
+    signals: [
+      "Puell Multiple below 0.5 → cycle bottom signal",
+      "BTC dominance declining from 60%+ → altcoin season rotating in",
+      "Pi Cycle Top indicator crossing → cycle peak warning",
+      "Fear & Greed Index below 20 sustained for 30+ days → accumulation zone",
+    ],
+    bestIn: "Macro positioning decisions — 3–12 month position sizing adjustments, not short-term trading",
+    risk: "Cycle timing is imprecise. 'This time is different' narratives can compress or extend cycles significantly.",
+  },
+  "Market Structure": {
+    howItWorks: [
+      "Analyzes price for Break of Structure (BOS) and Change of Character (CHoCH) signals",
+      "Identifies liquidity sweeps below key lows (stop hunts) before reversal",
+      "Combines order blocks (supply/demand zones) with Fair Value Gaps as entry targets",
+    ],
+    signals: [
+      "Liquidity sweep of a swing low followed by strong rejection candle",
+      "Break of Structure to the upside after bearish CHoCH",
+      "Price returning to an unfilled Fair Value Gap (FVG)",
+      "Order block at a higher-timeframe level holding as support",
+    ],
+    bestIn: "Intraday to swing timeframes on liquid coins (BTC, ETH, SOL) with higher-timeframe trend aligned",
+    risk: "Institutional order flow in crypto is less predictable than FX. Manipulation and wash trading distort structure on smaller caps.",
+  },
+  "Derivatives": {
+    howItWorks: [
+      "Uses funding rates, open interest, and basis (futures premium/discount) as sentiment extremes to fade",
+      "Extremely positive funding = market overly long → reduces exposure or shorts perpetuals",
+      "Negative funding + rising OI = shorts piling in → contrarian long opportunity",
+    ],
+    signals: [
+      "8-hour funding rate > 0.1% sustained (historically precedes long squeezes)",
+      "Open interest rising while price consolidates (positioning is extended)",
+      "Futures basis flips negative (backwardation → spot demand stronger than leveraged longs)",
+      "Long/Short ratio > 2:1 on exchange aggregates",
+    ],
+    bestIn: "Leveraged markets during periods of extreme sentiment — local tops when everyone is bullish, local bottoms when everyone is bearish",
+    risk: "Funding rates can stay extreme longer than expected. Centralized exchange data is subject to reporting inconsistencies.",
+  },
+  "Whale Activity": {
+    howItWorks: [
+      "Tracks large wallet movements using on-chain analytics (Arkham, Nansen, Glassnode whale cohorts)",
+      "Identifies accumulation patterns: coins moving from exchanges to cold wallets in large tranches",
+      "Monitors known fund wallets and smart money cohorts for positioning changes",
+    ],
+    signals: [
+      "Top 10 wallet cohort net buying over 7 days > 1% of circulating supply",
+      "Exchange whale outflows (>1000 BTC or equivalent) without corresponding OTC data",
+      "Known fund wallets accumulating at current price range (Arkham labels)",
+      "Stablecoin whale inflows to exchanges → dry powder being positioned",
+    ],
+    bestIn: "Pre-breakout accumulation phases and post-crash recovery periods where institutional buyers lead retail",
+    risk: "Whale data is imperfect — addresses can be exchange cold wallets or internal transfers. Alpha edge degrades as data becomes public.",
+  },
+};
+
+function CryptoStrategyInfoModal({ def, onClose }: { def: StrategyDefinition; onClose: () => void }) {
+  const detail = CRYPTO_CATEGORY_DETAIL[def.category];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between p-5 border-b border-[var(--border-subtle)] shrink-0">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div
+                className="h-2 w-2 rounded-full"
+                style={{ background: `linear-gradient(135deg, ${def.category_accent_from}, ${def.category_accent_to})` }}
+              />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-tertiary)]">{def.category}</span>
+            </div>
+            <h2 className="text-base font-bold text-[var(--text-primary)]">{def.name}</h2>
+          </div>
+          <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] p-1 cursor-pointer">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex-1 p-5 space-y-5">
+          {/* Summary from backend */}
+          <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{def.description}</p>
+
+          {detail && (
+            <>
+              {/* How it works */}
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)] mb-2.5">How it works</h3>
+                <ol className="space-y-2">
+                  {detail.howItWorks.map((step, i) => (
+                    <li key={i} className="flex gap-2.5 text-xs text-[var(--text-secondary)]">
+                      <span className="text-[var(--text-tertiary)] font-mono shrink-0 mt-0.5">{i + 1}.</span>
+                      <span className="leading-relaxed">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* Entry signals */}
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)] mb-2.5">Entry signals</h3>
+                <ul className="space-y-2">
+                  {detail.signals.map((sig, i) => (
+                    <li key={i} className="flex gap-2 text-xs text-[var(--text-secondary)]">
+                      <span className="text-[var(--accent-positive)] shrink-0 mt-0.5 font-bold">→</span>
+                      <span className="leading-relaxed">{sig}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Best in / Key risks */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent-positive)] mb-1.5">Best in</div>
+                  <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{detail.bestIn}</p>
+                </div>
+                <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent-negative)] mb-1.5">Key risks</div>
+                  <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{detail.risk}</p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Data sources */}
+          {def.required_data_sources.length > 0 && (
+            <div>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)] mb-2">Data sources</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {def.required_data_sources.map((src) => (
+                  <span
+                    key={src}
+                    className="text-[10px] px-2 py-1 rounded-lg bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] font-mono border border-[var(--border-subtle)]"
+                  >
+                    {SOURCE_BADGE[src] ?? src}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1389,12 +1614,13 @@ const SOURCE_BADGE: Record<string, string> = {
 };
 
 function StrategyCard({
-  def, byPreset, onApply, onToggle, quizPassed,
+  def, byPreset, onApply, onToggle, onInfo, quizPassed,
 }: {
   def: StrategyDefinition;
   byPreset: Record<string, { wins: number; losses: number; total_pnl: number; trades: number }>;
   onApply: (def: StrategyDefinition) => void;
   onToggle: (def: StrategyDefinition) => void;
+  onInfo: (def: StrategyDefinition) => void;
   quizPassed: boolean;
 }) {
   const tier = TIER_BADGE[def.tier_required] ?? TIER_BADGE.free;
@@ -1412,6 +1638,15 @@ function StrategyCard({
           : "opacity-60"
       )}
     >
+        {/* Info button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onInfo(def); }}
+          title="Strategy details"
+          className="absolute top-3 right-10 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-0.5"
+        >
+          <Info size={13} />
+        </button>
+
         {/* Kill switch toggle */}
         <button
           onClick={(e) => { e.stopPropagation(); onToggle(def); }}
@@ -1519,10 +1754,12 @@ const CATEGORY_ORDER = [
 function StrategyCardGrid({
   onApply,
   onToggle,
+  onInfo,
   quizPassedKeys,
 }: {
   onApply: (def: StrategyDefinition) => void;
   onToggle: (def: StrategyDefinition) => void;
+  onInfo: (def: StrategyDefinition) => void;
   quizPassedKeys: Set<string>;
 }) {
   const { data: defsData, isLoading } = useQuery({
@@ -1583,6 +1820,7 @@ function StrategyCardGrid({
                   byPreset={byPreset}
                   onApply={onApply}
                   onToggle={onToggle}
+                  onInfo={onInfo}
                   quizPassed={quizPassedKeys.has(d.strategy_key)}
                 />
             ))}
@@ -1611,6 +1849,7 @@ export default function CryptoLab() {
   const [lastRefreshed, setLastRefreshed] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [infoStrategy, setInfoStrategy] = useState<StrategyDefinition | null>(null);
 
   const { data: market, isLoading: marketLoading } = useQuery({
     queryKey: ["crypto-market-v2"],
@@ -1783,6 +2022,7 @@ export default function CryptoLab() {
             <StrategyCardGrid
               onApply={setApplyStrategy}
               onToggle={handleToggle}
+              onInfo={setInfoStrategy}
               quizPassedKeys={quizPassedKeys}
             />
           </div>
@@ -1830,6 +2070,11 @@ export default function CryptoLab() {
           coins={coins}
           onClose={() => setApplyStrategy(null)}
         />
+      )}
+
+      {/* Strategy info modal */}
+      {infoStrategy && (
+        <CryptoStrategyInfoModal def={infoStrategy} onClose={() => setInfoStrategy(null)} />
       )}
 
       {/* Quiz modal */}
