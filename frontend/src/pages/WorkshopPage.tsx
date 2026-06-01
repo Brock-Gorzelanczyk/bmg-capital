@@ -940,6 +940,213 @@ const DIFFICULTY_STYLE: Record<string, string> = {
   Advanced:     "text-red-400 bg-red-900/20 border-red-800/40",
 };
 
+// ── SVG pattern chart illustrations ───────────────────────────────────────────
+const G = "#26a69a"; // bullish green
+const R = "#ef5350"; // bearish red
+const A = "#f59e0b"; // amber (levels/channels)
+const B = "#3b82f6"; // blue (targets/MA)
+const DIM = "#2a2a38"; // grid
+
+function PatternChart({ name }: { name: string }) {
+  const bg = "#0f0f14";
+  const charts: Record<string, React.ReactNode> = {
+    "Bull Flag": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {/* grid */}
+        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* flagpole bars */}
+        {[[20,110,85],[35,95,70],[50,72,48],[65,50,28],[80,32,14],[95,20,8]].map(([x,b,t],i) => (
+          <g key={i}><rect x={x-4} y={t} width="8" height={b-t} fill={G} rx="1" /><line x1={x} y1={b} x2={x} y2={b+4} stroke={G} strokeWidth="1" /></g>
+        ))}
+        {/* flag channel lines */}
+        <line x1="100" y1="8" x2="175" y2="22" stroke={A} strokeWidth="1.2" strokeDasharray="4,3" />
+        <line x1="100" y1="26" x2="175" y2="40" stroke={A} strokeWidth="1.2" strokeDasharray="4,3" />
+        {/* flag bars */}
+        {[[110,10,22],[125,14,26],[140,17,30],[158,20,34]].map(([x,t,b],i) => (
+          <rect key={i} x={x-4} y={t} width="8" height={b-t} fill={i%2===0?R:G} rx="1" />
+        ))}
+        {/* breakout marker */}
+        <circle cx="178" cy="32" r="3.5" fill={G} />
+        {/* breakout bars */}
+        {[[185,22,10],[200,12,3],[215,5,0]].map(([x,b,t],i) => (
+          <rect key={i} x={x-4} y={t} width="8" height={b-t} fill={G} rx="1" />
+        ))}
+        {/* labels */}
+        <text x="48" y="125" fontSize="8" fill="#6b7280" textAnchor="middle">Flagpole</text>
+        <text x="138" y="50" fontSize="8" fill={A} textAnchor="middle">Flag</text>
+        <text x="200" y="125" fontSize="8" fill={G} textAnchor="middle">Breakout</text>
+        <line x1="178" y1="32" x2="178" y2="120" stroke={G} strokeWidth="0.8" strokeDasharray="3,3" />
+      </svg>
+    ),
+    "Cup & Handle": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* resistance line (neckline/prior high) */}
+        <line x1="10" y1="18" x2="260" y2="18" stroke={A} strokeWidth="1" strokeDasharray="4,3" />
+        {/* cup shape - quadratic bezier */}
+        <path d="M 15,18 Q 30,80 80,105 Q 130,125 175,105 Q 215,80 235,18" stroke={G} strokeWidth="2" fill="none" />
+        {/* handle - small pullback */}
+        <polyline points="235,18 242,28 250,23 258,30 268,18" stroke={G} strokeWidth="2" fill="none" />
+        {/* breakout */}
+        <circle cx="268" cy="18" r="3.5" fill={G} />
+        <polyline points="268,18 278,10 290,4" stroke={G} strokeWidth="2" fill="none" />
+        {/* labels */}
+        <text x="125" y="127" fontSize="8" fill="#6b7280" textAnchor="middle">Cup</text>
+        <text x="252" y="42" fontSize="8" fill={A} textAnchor="middle">Handle</text>
+        <text x="270" y="14" fontSize="7" fill={G}>Break</text>
+        <text x="255" y="15" fontSize="7" fill={A}>—</text>
+      </svg>
+    ),
+    "Double Bottom": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* neckline */}
+        <line x1="10" y1="42" x2="290" y2="42" stroke={A} strokeWidth="1" strokeDasharray="4,3" />
+        {/* W shape */}
+        <polyline points="20,30 40,30 55,95 80,95 95,42 110,42 130,95 155,95 170,42 185,20 200,5 215,5" stroke={G} strokeWidth="2" fill="none" />
+        {/* bottom labels */}
+        <text x="67" y="125" fontSize="8" fill="#6b7280" textAnchor="middle">Bottom 1</text>
+        <text x="143" y="125" fontSize="8" fill="#6b7280" textAnchor="middle">Bottom 2</text>
+        <text x="240" y="39" fontSize="8" fill={A}>Neckline</text>
+        <circle cx="170" cy="42" r="3" fill={G} />
+        <text x="165" y="15" fontSize="7" fill={G}>Break↑</text>
+      </svg>
+    ),
+    "Head & Shoulders": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* neckline */}
+        <line x1="10" y1="72" x2="290" y2="72" stroke={A} strokeWidth="1" strokeDasharray="4,3" />
+        {/* H&S shape: LS, Head, RS, breakdown */}
+        <polyline points="20,72 35,72 50,40 65,40 78,72 92,72 110,12 128,12 145,72 158,72 175,40 190,40 205,72 220,85 235,100 250,110" stroke={R} strokeWidth="2" fill="none" />
+        {/* labels */}
+        <text x="57" y="36" fontSize="8" fill="#6b7280" textAnchor="middle">LS</text>
+        <text x="119" y="8" fontSize="8" fill="#6b7280" textAnchor="middle">Head</text>
+        <text x="182" y="36" fontSize="8" fill="#6b7280" textAnchor="middle">RS</text>
+        <text x="240" y="70" fontSize="8" fill={A}>Neckline</text>
+        <circle cx="205" cy="72" r="3" fill={R} />
+        <text x="208" y="90" fontSize="7" fill={R}>Break↓</text>
+      </svg>
+    ),
+    "Ascending Triangle": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* flat resistance */}
+        <line x1="10" y1="28" x2="250" y2="28" stroke={A} strokeWidth="1.2" strokeDasharray="4,3" />
+        {/* rising support */}
+        <line x1="10" y1="108" x2="210" y2="38" stroke={G} strokeWidth="1.2" strokeDasharray="4,3" />
+        {/* price bouncing inside */}
+        <polyline points="15,105 35,28 55,80 75,28 95,65 120,28 145,50 170,28 190,38 210,38" stroke={G} strokeWidth="2" fill="none" />
+        {/* breakout */}
+        <circle cx="210" cy="28" r="3.5" fill={G} />
+        <polyline points="210,28 230,16 250,8 270,5" stroke={G} strokeWidth="2" fill="none" />
+        <text x="250" y="24" fontSize="7" fill={A}>Resistance</text>
+        <text x="5" y="124" fontSize="7" fill={G}>Support (rising)</text>
+        <text x="240" y="16" fontSize="7" fill={G}>Break↑</text>
+      </svg>
+    ),
+    "Falling Wedge": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* upper falling trendline */}
+        <line x1="10" y1="15" x2="195" y2="68" stroke={R} strokeWidth="1.2" strokeDasharray="4,3" />
+        {/* lower falling trendline (less steep) */}
+        <line x1="10" y1="50" x2="195" y2="82" stroke={R} strokeWidth="1.2" strokeDasharray="4,3" />
+        {/* price oscillating inside wedge */}
+        <polyline points="15,15 40,50 65,30 95,55 130,44 160,60 195,72" stroke={G} strokeWidth="2" fill="none" />
+        {/* breakout */}
+        <circle cx="195" cy="68" r="3.5" fill={G} />
+        <polyline points="195,68 218,50 238,30 258,15" stroke={G} strokeWidth="2" fill="none" />
+        <text x="100" y="12" fontSize="8" fill={R} textAnchor="middle">Falling Wedge</text>
+        <text x="240" y="30" fontSize="7" fill={G}>Break↑</text>
+      </svg>
+    ),
+    "VWAP Reclaim": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* VWAP line */}
+        <line x1="10" y1="55" x2="290" y2="55" stroke="#06b6d4" strokeWidth="1.5" />
+        <text x="264" y="52" fontSize="7" fill="#06b6d4">VWAP</text>
+        {/* price above VWAP, dips below, reclaims */}
+        <polyline points="15,35 40,30 65,38 85,55 100,70 115,82 130,78 140,60 150,48 165,35 185,28 205,22 225,18" stroke={G} strokeWidth="2" fill="none" />
+        {/* dip-below zone */}
+        <rect x="83" y="55" width="60" height="32" fill={R} fillOpacity="0.08" />
+        {/* reclaim marker */}
+        <circle cx="140" cy="60" r="3.5" fill={G} />
+        <line x1="140" y1="60" x2="140" y2="115" stroke={G} strokeWidth="0.8" strokeDasharray="3,3" />
+        <text x="108" y="100" fontSize="7.5" fill={R} textAnchor="middle">Below VWAP</text>
+        <text x="185" y="42" fontSize="7.5" fill={G} textAnchor="middle">Reclaim↑</text>
+        {/* volume bars at bottom */}
+        {[20,35,50,65,80,95,110,125,140,155,170,185,200,215,230].map((x,i)=>(
+          <rect key={i} x={x-4} y={118-[6,8,5,7,6,9,12,10,18,8,6,7,5,4,5][i]} width="7" height={[6,8,5,7,6,9,12,10,18,8,6,7,5,4,5][i]} fill={i===8?G:i>5&&i<9?R:"#2a2a38"} rx="1" />
+        ))}
+      </svg>
+    ),
+    "Golden Cross": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* price bars */}
+        {[10,25,40,55,70,85,100,115,130,145,160,175,190,205,220,235,250,265].map((x,i)=>{
+          const pricePath = [90,85,80,78,72,68,60,55,48,42,38,32,28,22,18,15,12,10];
+          const h = pricePath[i];
+          return <rect key={i} x={x-4} y={h} width="8" height={8} fill={i>9?G:G} rx="1" fillOpacity={i>9?1:0.5} />;
+        })}
+        {/* 200 SMA - slow moving, starts above 50 */}
+        <polyline points="10,78 40,76 70,73 100,70 130,67 160,65 190,60 220,55 250,50 280,46" stroke={B} strokeWidth="2" fill="none" />
+        {/* 50 SMA - faster, crosses above 200 */}
+        <polyline points="10,95 40,88 70,80 100,72 130,64 160,57 165,65 190,52 220,42 250,34 280,26" stroke={A} strokeWidth="2" fill="none" />
+        {/* cross point */}
+        <circle cx="163" cy="63" r="5" fill="none" stroke="#fff" strokeWidth="1.5" />
+        <text x="170" y="78" fontSize="7.5" fill="#fff">Cross</text>
+        <text x="12" y="108" fontSize="7" fill={B}>—— SMA 200</text>
+        <text x="12" y="120" fontSize="7" fill={A}>—— SMA 50</text>
+      </svg>
+    ),
+    "RSI Divergence": (
+      <svg viewBox="0 0 300 130" className="w-full h-28">
+        <rect width="300" height="130" fill={bg} rx="6" />
+        {/* price pane */}
+        <text x="8" y="10" fontSize="7" fill="#6b7280">PRICE</text>
+        {[20,40].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
+        {/* price: lower lows */}
+        <polyline points="20,18 50,35 80,22 120,42 150,28 190,48 220,35 260,55" stroke={R} strokeWidth="2" fill="none" />
+        {/* bearish divergence arrows on price */}
+        <line x1="80" y1="22" x2="260" y2="55" stroke={R} strokeWidth="1" strokeDasharray="3,2" />
+        <text x="150" y="20" fontSize="7" fill={R}>Lower highs</text>
+        {/* RSI pane divider */}
+        <line x1="0" y1="70" x2="300" y2="70" stroke="#3a3a4a" strokeWidth="1" />
+        <text x="8" y="80" fontSize="7" fill="#6b7280">RSI</text>
+        {/* RSI levels */}
+        <line x1="0" y1="85" x2="300" y2="85" stroke={DIM} strokeWidth="0.5" />
+        <line x1="0" y1="100" x2="300" y2="100" stroke={DIM} strokeWidth="0.5" />
+        <text x="266" y="88" fontSize="6" fill="#6b7280">50</text>
+        <text x="266" y="103" fontSize="6" fill="#6b7280">30</text>
+        {/* RSI: higher lows (bullish divergence) */}
+        <polyline points="20,98 50,88 80,105 120,88 150,100 190,86 220,97 260,82" stroke={G} strokeWidth="2" fill="none" />
+        {/* bullish divergence line on RSI */}
+        <line x1="80" y1="105" x2="260" y2="82" stroke={G} strokeWidth="1" strokeDasharray="3,2" />
+        <text x="145" y="128" fontSize="7" fill={G}>Higher lows → Divergence</text>
+      </svg>
+    ),
+  };
+
+  const chart = charts[name];
+  if (!chart) return null;
+  return (
+    <div className="bg-[#0f0f14] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+      {chart}
+    </div>
+  );
+}
+
 function SetupCard({ setup }: { setup: TASetup }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -967,6 +1174,8 @@ function SetupCard({ setup }: { setup: TASetup }) {
       {/* Expanded detail */}
       {expanded && (
         <div className="px-4 pb-4 space-y-4 border-t border-[var(--border-subtle)] pt-3">
+          {/* Pattern chart */}
+          <PatternChart name={setup.name} />
           {/* Entry / Stop / Target */}
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">

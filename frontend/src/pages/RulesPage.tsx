@@ -181,11 +181,12 @@ export default function RulesPage() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<RuleForm>(EMPTY_FORM);
 
-  const { data: rules = [], isLoading } = useQuery({
+  const { data: _rulesData, isLoading } = useQuery({
     queryKey: ["rules"],
     queryFn: getRules,
     staleTime: 30_000,
   });
+  const rules: UserRule[] = Array.isArray(_rulesData) ? _rulesData : [];
 
   const createMut = useMutation({
     mutationFn: createRule,
