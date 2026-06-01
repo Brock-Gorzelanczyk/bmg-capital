@@ -50,6 +50,8 @@ import SmartMoneyPage from "@/pages/SmartMoneyPage";
 import BacktestLabPage from "@/pages/BacktestLabPage";
 import ScannersPage from "@/pages/ScannersPage";
 import AlertBuilderPage from "@/pages/AlertBuilderPage";
+import PitchPage from "@/pages/PitchPage";
+import PitchDeckPage from "@/pages/PitchDeckPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -193,6 +195,8 @@ export default function App() {
           <ErrorBoundary>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/pitch" element={<PitchPage />} />
+              <Route path="/pitch/deck" element={<PitchDeckPage />} />
               <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               <Route
                 path="/*"
