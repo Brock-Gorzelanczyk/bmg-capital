@@ -72,7 +72,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             </pre>
             <button
               onClick={() => {
-                ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3"].forEach(k => {
+                ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4"].forEach(k => {
                   try { localStorage.removeItem(k); } catch {}
                 });
                 window.location.reload();
@@ -90,7 +90,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 // Clean up old cache keys from previous versions
-["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3"].forEach(k => {
+["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
 });
 
@@ -114,7 +114,7 @@ const queryClient = new QueryClient({
 
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
-  key: "BMG_QUERY_CACHE_v4",
+  key: "BMG_QUERY_CACHE_v5",
   throttleTime: 1000,
 });
 

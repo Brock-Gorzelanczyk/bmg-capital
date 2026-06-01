@@ -334,7 +334,7 @@ export default function FactorXRay({ portfolioId }: FactorXRayProps) {
     );
   }
 
-  if (data.factors.length === 0) {
+  if (!data.factors || data.factors.length === 0) {
     return (
       <div className="px-4 py-8 text-center text-[var(--text-tertiary)] text-sm">
         No positions to analyze.
@@ -348,7 +348,7 @@ export default function FactorXRay({ portfolioId }: FactorXRayProps) {
       <div className="flex flex-col md:flex-row gap-6 items-start">
         {/* Radar */}
         <div className="flex justify-center w-full md:w-auto">
-          <RadarChart factors={data.factors} size={260} />
+          <RadarChart factors={data.factors ?? []} size={260} />
         </div>
 
         {/* Right side: insight + top factors */}
@@ -364,13 +364,13 @@ export default function FactorXRay({ portfolioId }: FactorXRayProps) {
           </div>
 
           {/* Top factors badges */}
-          {data.top_factors.length > 0 && (
+          {(data.top_factors ?? []).length > 0 && (
             <div>
               <p className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-2">
                 Your top 2 factors
               </p>
               <div className="flex flex-wrap gap-2">
-                {data.top_factors.map((f) => {
+                {(data.top_factors ?? []).map((f) => {
                   const match = data.factors.find((x) => x.name === f);
                   const color = match ? FACTOR_COLORS[match.label] : "#3B82F6";
                   return (
@@ -423,7 +423,7 @@ export default function FactorXRay({ portfolioId }: FactorXRayProps) {
           Factor breakdown — tap any row for explanation
         </p>
         <div className="space-y-2">
-          {data.factors.map((f) => (
+          {(data.factors ?? []).map((f) => (
             <FactorRow
               key={f.name}
               factor={f}

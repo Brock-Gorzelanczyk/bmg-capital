@@ -107,11 +107,12 @@ function MilestoneCard({ milestone }: { milestone: Milestone }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function MilestonesPanel() {
-  const { data: milestones = [], isLoading: milestonesLoading } = useQuery({
+  const { data: rawMilestones, isLoading: milestonesLoading } = useQuery({
     queryKey: ["portfolio-milestones"],
     queryFn: getMilestones,
     staleTime: 60_000,
   });
+  const milestones = Array.isArray(rawMilestones) ? rawMilestones : [];
 
   const { data: streak } = useQuery({
     queryKey: ["portfolio-streak"],

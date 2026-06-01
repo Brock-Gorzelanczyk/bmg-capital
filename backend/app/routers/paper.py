@@ -53,6 +53,85 @@ _DEMO_BASE_PRICES: dict[str, float] = {
     "SOFI":  10.8,
     "RKLB":  22.0,
     "IONQ":  28.0,
+    # Large-cap equities
+    "GOOG":  175.0,
+    "GOOGL": 175.0,
+    "NFLX":  890.0,
+    "JPM":   245.0,
+    "V":     290.0,
+    "MA":    520.0,
+    "JNJ":   155.0,
+    "UNH":   520.0,
+    "XOM":   115.0,
+    "CVX":   155.0,
+    "BAC":    45.0,
+    "WMT":    90.0,
+    "HD":    385.0,
+    "PG":    170.0,
+    "KO":     65.0,
+    "PEP":   170.0,
+    "ABBV":  190.0,
+    "MRK":   115.0,
+    "LLY":   830.0,
+    "PFE":    27.0,
+    "TMO":   490.0,
+    "EMR":   115.0,
+    "COF":   175.0,
+    "ULTA":  380.0,
+    "PHM":   130.0,
+    "SYBT":   50.0,
+    "TECH":   32.0,
+    # ETFs
+    "IWM":   220.0,
+    "GLD":   230.0,
+    "TLT":    92.0,
+    "DIA":   430.0,
+    "VTI":   270.0,
+    "VOO":   495.0,
+    "ARKK":   55.0,
+    "XLK":   225.0,
+    # Tech
+    "ADBE":  390.0,
+    "CRM":   285.0,
+    "ORCL":  145.0,
+    "INTC":   22.0,
+    "AVGO":  215.0,
+    "MU":     85.0,
+    "ARM":   135.0,
+    "PANW":  185.0,
+    "CRWD":  395.0,
+    "SNOW":  165.0,
+    "NET":   115.0,
+    "DDOG":  115.0,
+    "SHOP":   95.0,
+    "UBER":   78.0,
+    "LYFT":   17.0,
+    "ROKU":   65.0,
+    # Finance
+    "GS":    510.0,
+    "MS":    120.0,
+    "BLK":   960.0,
+    "C":      68.0,
+    "WFC":    72.0,
+    "SCHW":   76.0,
+    "AXP":   275.0,
+    "BRK.B": 480.0,
+    # Consumer / other
+    "NKE":    78.0,
+    "SBUX":   82.0,
+    "MCD":   308.0,
+    "TGT":   125.0,
+    "COST":  920.0,
+    "AMGN":  315.0,
+    "DIS":   108.0,
+    "CMCSA":  40.0,
+    # Crypto-related
+    "BTC":  98000.0,
+    "ETH":   3800.0,
+    "SOL":    195.0,
+    "HIMS":   38.0,
+    "RXRX":    8.0,
+    "ACHR":   15.0,
 }
 
 
@@ -825,13 +904,10 @@ async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user
             logger.info(f"CASH_CHANGE user={user.id} delta={DEMO_CASH:.4f} new_balance={acct.cash:.4f} reason='demo seed reset'")
         db.commit()
 
-        # 2. Fetch current prices in parallel
+        # 2. Use demo prices for seeding (consistent with get_account demo pricing,
+        # avoids live-quote failures causing bogus prev_close / day-P&L percentages)
         symbols = [p["symbol"] for p in DEMO_POSITIONS]
-        quotes_list = await asyncio.gather(*[get_quote(s) for s in symbols], return_exceptions=True)
-        quotes = {}
-        for sym, q in zip(symbols, quotes_list):
-            if isinstance(q, dict):
-                quotes[sym] = q
+        quotes = {sym: _demo_price(sym, user.id) for sym in symbols}
 
         # 3. Create positions and initial filled orders (representing entry buys)
         now = datetime.now(timezone.utc)
