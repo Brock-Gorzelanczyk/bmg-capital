@@ -24,3 +24,21 @@ export function formatVolume(value: number): string {
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return value.toString();
 }
+
+export function timeAgo(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
+  const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
+  const days = Math.floor(diff / 86_400_000);
+  const hrs  = Math.floor(diff / 3_600_000);
+  const mins = Math.floor(diff / 60_000);
+  if (days >= 1) return `${days}d ago`;
+  if (hrs  >= 1) return `${hrs}h ago`;
+  if (mins >= 1) return `${mins}m ago`;
+  return "just now";
+}
+
+export function formatShareQty(qty: number): string {
+  if (Math.abs(qty) >= 100) return qty.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (Math.abs(qty) >= 1)   return qty.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  return qty.toFixed(6);
+}

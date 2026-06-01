@@ -3,15 +3,7 @@ import { ExternalLink } from "lucide-react";
 import { getNews } from "@/api/market";
 import { Card, CardLabel } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor(diff / 60_000);
-  if (h >= 24) return `${Math.floor(h / 24)}d ago`;
-  if (h >= 1) return `${h}h ago`;
-  return `${m}m ago`;
-}
+import { timeAgo } from "@/lib/utils";
 
 export default function MarketNewsWidget() {
   const { data: rawNews, isLoading } = useQuery({ queryKey: ["news"], queryFn: () => getNews(), staleTime: 300_000 });

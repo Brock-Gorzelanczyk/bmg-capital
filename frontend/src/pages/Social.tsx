@@ -4,7 +4,7 @@ import { Heart, MessageCircle, Trash2, Send, TrendingUp, BookMarked, Users, Bot 
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { getFeed, createPost, deletePost, toggleLike, getComments, addComment } from "@/api/social";
 import type { SocialPost, SocialComment } from "@/api/social";
@@ -12,17 +12,6 @@ import { COMPANY_INFO } from "@/data/companyInfo";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function timeAgo(iso: string | null) {
-  if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60_000);
-  const h = Math.floor(diff / 3_600_000);
-  const d = Math.floor(diff / 86_400_000);
-  if (d >= 1) return `${d}d ago`;
-  if (h >= 1) return `${h}h ago`;
-  if (m >= 1) return `${m}m ago`;
-  return "just now";
-}
 
 function avatar(username: string) {
   return username?.[0]?.toUpperCase() ?? "?";

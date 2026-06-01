@@ -30,14 +30,18 @@ function formatDate(dateStr: string) {
   }
 }
 
+function localDateStr(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function isToday(dateStr: string) {
-  const today = new Date().toISOString().slice(0, 10);
-  return dateStr === today;
+  return dateStr === localDateStr(0);
 }
 
 function isTomorrow(dateStr: string) {
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  return dateStr === tomorrow;
+  return dateStr === localDateStr(1);
 }
 
 /** True if US equity market is currently open (9:30–16:00 ET on weekdays). */
@@ -395,7 +399,7 @@ export default function Earnings() {
                 {isTomorrow(date) && (
                   <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 border border-blue-400/20 px-1.5 py-px rounded-full">TOMORROW</span>
                 )}
-                <span className="ml-auto text-xs text-[var(--text-tertiary)]">{dayEvents.length} companies</span>
+                <span className="ml-auto text-xs text-[var(--text-tertiary)]">{dayEvents.length} {dayEvents.length === 1 ? "company" : "companies"}</span>
               </div>
               {dayEvents.map((e: any) => (
                 <EarningsRow key={e.symbol} event={e} isPast={e.date < today} />

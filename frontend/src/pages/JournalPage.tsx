@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Edit2, TrendingUp, TrendingDown, BookOpen, BarChart2, Star, Lock, Download, Bot } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { getEntries, getStats, createEntry, updateEntry, deleteEntry } from "@/api/journal";
 import { getOrders, getTransactions } from "@/api/paper";
 import type { JournalEntry, CreateEntryBody } from "@/api/journal";
@@ -18,13 +18,6 @@ function moodLabel(v: number) {
   return ["", "😞", "😕", "😐", "😊", "😄"][v] ?? "—";
 }
 
-function timeAgo(iso: string | null) {
-  if (!iso) return "";
-  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (d === 0) return "Today";
-  if (d === 1) return "Yesterday";
-  return `${d}d ago`;
-}
 
 // ── Template system ──────────────────────────────────────────────────────────
 

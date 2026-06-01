@@ -261,7 +261,7 @@ def _sse(data: dict) -> str:
 
 async def _stream_copilot(messages: list, page: str, token: str) -> AsyncGenerator[str, None]:
     if not settings.anthropic_api_key:
-        yield _sse({"type": "text_delta", "delta": "AI Co-Pilot requires ANTHROPIC_API_KEY in your environment."})
+        yield _sse({"type": "error", "message": "AI features are not available right now. Check back soon."})
         yield _sse({"type": "done"})
         return
 

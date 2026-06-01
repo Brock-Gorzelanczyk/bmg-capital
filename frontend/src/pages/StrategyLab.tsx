@@ -761,7 +761,7 @@ export default function StrategyLab() {
         </div>
         <div className="flex items-center gap-2">
           <MonitorBadge />
-          <RegimePill regime={regime} />
+          {regime !== "unknown" && <RegimePill regime={regime} />}
 
           {/* Kelly Sizer */}
           <button

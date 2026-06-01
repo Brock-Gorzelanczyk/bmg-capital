@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Bell, BellOff, TrendingUp, TrendingDown, Zap, AlertTriangle, Activity,
@@ -170,15 +170,6 @@ const MOCK_ALERTS: Alert[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60_000);
-  const h = Math.floor(diff / 3_600_000);
-  if (h >= 24) return `${Math.floor(h / 24)}d ago`;
-  if (h >= 1) return `${h}h ago`;
-  if (m >= 1) return `${m}m ago`;
-  return "just now";
-}
 
 function tickerColor(ticker: string): string {
   const colors = [

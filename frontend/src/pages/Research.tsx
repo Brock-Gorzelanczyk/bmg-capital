@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { getFundamentals } from "@/api/research";
 import { getNews } from "@/api/market";
 import { useMarketStore } from "@/store";
-import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
+import { formatCurrency, formatPercent, formatVolume, timeAgo, cn } from "@/lib/utils";
 import { LineChart, ExternalLink, Search, Building2, Globe, Users, Bot } from "lucide-react";
 import SectorPill from "@/components/ui/SectorPill";
 import ExplainButton from "@/components/explain/ExplainButton";
@@ -55,15 +55,6 @@ function fmtPct(v?: number | null): string | null {
 function fmtNum(v?: number | null, decimals = 2): string | null {
   if (v == null) return null;
   return v.toFixed(decimals);
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor(diff / 60_000);
-  if (h >= 24) return `${Math.floor(h / 24)}d ago`;
-  if (h >= 1) return `${h}h ago`;
-  return `${m}m ago`;
 }
 
 // ── Financials tab ────────────────────────────────────────────────────────────
@@ -340,8 +331,8 @@ export default function Research() {
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
-            placeholder="Enter symbol (e.g. AAPL)"
-            className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-base md:text-sm pl-9 pr-4 py-2 rounded-lg placeholder-zinc-600 focus:outline-none focus:border-zinc-600 uppercase w-52"
+            placeholder="Symbol (e.g. AAPL)"
+            className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-base md:text-sm pl-9 pr-4 py-2 rounded-lg placeholder-zinc-600 focus:outline-none focus:border-zinc-600 uppercase w-44 md:w-52"
           />
         </div>
         <button
@@ -371,6 +362,20 @@ export default function Research() {
       {error && (
         <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 text-[var(--accent-negative)] text-sm">
           Could not load data for <strong>{activeSymbol}</strong>. Check the symbol and try again.
+        </div>
+      )}
+
+      {!isLoading && !error && !fund && activeSymbol && (
+        <div className="text-center py-16 text-[var(--text-tertiary)]">
+          <Building2 size={36} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No data found for <strong className="text-[var(--text-secondary)]">{activeSymbol}</strong>.</p>
+          <p className="text-xs mt-1">Check the symbol and try again, or tap Retry below.</p>
+          <button
+            onClick={() => navigate(`/research?symbol=${activeSymbol}`, { replace: true })}
+            className="mt-4 text-xs text-[var(--accent-positive)] hover:brightness-110 font-semibold"
+          >
+            Retry ↺
+          </button>
         </div>
       )}
 
@@ -431,8 +436,8 @@ export default function Research() {
                 )}
                 {changePct != null && (
                   <div className={cn("text-sm font-medium mt-1", isPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                    {isPos ? "+" : ""}{formatPercent(changePct)}
-                    {change != null && <span className="ml-1 text-xs opacity-75">({isPos ? "+" : ""}{change.toFixed(2)})</span>}
+                    {formatPercent(changePct)}
+                    {change != null && <span className="ml-1 text-xs opacity-75">({change >= 0 ? "+" : ""}{change.toFixed(2)})</span>}
                   </div>
                 )}
                 <div className="mt-2 flex items-center gap-2 justify-end">

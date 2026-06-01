@@ -11,7 +11,7 @@ import {
 } from "@/api/paper";
 import type { PaperPosition, PaperOrder, PaperTransaction } from "@/api/paper";
 import { useMarketStore } from "@/store";
-import { formatCurrency, formatPercent, cn } from "@/lib/utils";
+import { formatCurrency, formatPercent, timeAgo, cn } from "@/lib/utils";
 import {
   Plus,
   RotateCcw,
@@ -36,15 +36,6 @@ import AgentPanel from "@/components/ai/AgentPanel";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor(diff / 60_000);
-  if (h >= 24) return `${Math.floor(h / 24)}d ago`;
-  if (h >= 1) return `${h}h ago`;
-  if (m >= 1) return `${m}m ago`;
-  return "just now";
-}
 
 function fmtDate(dateStr: string) {
   return new Date(dateStr).toLocaleString("en-US", {

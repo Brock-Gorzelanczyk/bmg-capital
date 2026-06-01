@@ -107,7 +107,6 @@ function MarketPulsePills({ indices }: { indices: PulseIndex[] }) {
         const isPos = idx.change_pct > 0;
         const isNeg = idx.change_pct < 0;
         const label = PULSE_LABELS[idx.symbol] ?? idx.symbol;
-        const sign = isPos ? "+" : "";
         return (
           <span
             key={idx.symbol}
@@ -128,10 +127,7 @@ function MarketPulsePills({ indices }: { indices: PulseIndex[] }) {
               <Minus size={9} />
             )}
             <span>{label}</span>
-            <span>
-              {sign}
-              {formatPercent(idx.change_pct)}
-            </span>
+            <span>{formatPercent(idx.change_pct)}</span>
           </span>
         );
       })}
@@ -183,7 +179,7 @@ export default function MorningBriefWidget() {
       (_err) => {
         setIsGenerating(false);
         setAiText(
-          "• Unable to generate summary — check your AI configuration.\n• Market data is still available above.\n• Try refreshing to retry."
+          "• AI summary unavailable — market data is still shown above.\n• Prices, sector moves, and signals update automatically.\n• Try refreshing to regenerate."
         );
       }
     );

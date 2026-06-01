@@ -9,7 +9,7 @@ import {
 } from "@/api/paper";
 import type { PaperPosition, PaperAccount, DailySnapshot, PaperTransaction } from "@/api/paper";
 import { fetchBars } from "@/api/bars";
-import { formatCurrency, formatPercent, cn } from "@/lib/utils";
+import { formatCurrency, formatPercent, formatShareQty, cn } from "@/lib/utils";
 import { TICKER_NAMES } from "@/data/tickerNames";
 import SectorPill from "@/components/ui/SectorPill";
 import ExplainButton from "@/components/explain/ExplainButton";
@@ -429,7 +429,7 @@ function PositionDrawer({ position, onClose, onTrade }: DrawerProps) {
           {/* Stats grid */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: "Shares", value: position.qty.toString() },
+              { label: "Shares", value: formatShareQty(position.qty) },
               { label: "Avg Cost", value: formatCurrency(position.avg_cost) },
               { label: "Market Value", value: formatCurrency(position.market_value) },
               { label: "Cost Basis", value: formatCurrency(position.cost_basis) },
@@ -591,7 +591,7 @@ function HoldingsTab({
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-mono font-semibold text-[var(--text-primary)]">{formatCurrency(pos.market_value)}</div>
-                  <div className="text-[11px] text-[var(--text-tertiary)]">{pos.qty} sh @ {formatCurrency(pos.avg_cost)}</div>
+                  <div className="text-[11px] text-[var(--text-tertiary)]">{formatShareQty(pos.qty)} sh @ {formatCurrency(pos.avg_cost)}</div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -655,7 +655,7 @@ function HoldingsTab({
                       <SectorPill symbol={pos.symbol} />
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-right font-mono text-[var(--text-secondary)]">{pos.qty}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-[var(--text-secondary)]">{formatShareQty(pos.qty)}</td>
                   <td className="px-3 py-2.5 text-right font-mono text-[var(--text-secondary)]">{formatCurrency(pos.avg_cost)}</td>
                   <td className="px-3 py-2.5 text-right font-mono text-[var(--text-primary)]">{formatCurrency(pos.current_price)}</td>
                   <td className="px-3 py-2.5 text-right font-mono text-[var(--text-primary)] font-medium">{formatCurrency(pos.market_value)}</td>

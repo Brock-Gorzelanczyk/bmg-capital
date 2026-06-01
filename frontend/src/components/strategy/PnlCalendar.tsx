@@ -170,8 +170,9 @@ export default function PnlCalendar() {
           const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const dow = new Date(year, month, day).getDay(); // 0=Sun, 6=Sat
           const isWeekend = dow === 0 || dow === 6;
-          const pnlDay = isWeekend ? undefined : dayMap.get(dateStr);
+          const isFuture = dateStr > todayStr;
           const isToday = dateStr === todayStr;
+          const pnlDay = (isWeekend || isFuture) ? undefined : dayMap.get(dateStr);
           const isUp = pnlDay && pnlDay.day_pnl >= 0;
           const isBigUp = pnlDay && pnlDay.day_pnl_pct > 1;
           const isBigDown = pnlDay && pnlDay.day_pnl_pct < -1;
@@ -180,19 +181,20 @@ export default function PnlCalendar() {
             <button
               key={i}
               onClick={() => pnlDay && setSelected(pnlDay)}
+              disabled={isFuture}
               className={cn(
                 "relative aspect-square rounded-lg flex flex-col items-center justify-center transition-all text-[11px] font-medium",
-                pnlDay ? "cursor-pointer" : "cursor-default",
-                isToday && "ring-1 ring-[#3B82F6]",
-                !pnlDay && "text-[var(--border-emphasis)]",
+                isFuture ? "opacity-20 cursor-not-allowed" : pnlDay ? "cursor-pointer" : "cursor-default",
+                isToday && "ring-2 ring-[var(--accent-positive)] bg-[var(--accent-positive)]/5",
+                !pnlDay && !isFuture && !isToday && "text-[var(--border-emphasis)]",
                 pnlDay && isUp && !isBigUp && "bg-emerald-900/25 text-emerald-400 hover:bg-emerald-900/40",
                 pnlDay && isBigUp && "bg-emerald-900/50 text-emerald-300 hover:bg-emerald-900/60",
                 pnlDay && !isUp && !isBigDown && "bg-red-900/25 text-red-400 hover:bg-red-900/40",
                 pnlDay && isBigDown && "bg-red-900/50 text-red-300 hover:bg-red-900/60",
-                !pnlDay && "text-[var(--border-emphasis)] hover:bg-[var(--bg-elevated-2)]/40",
+                !pnlDay && !isFuture && "hover:bg-[var(--bg-elevated-2)]/40",
               )}
             >
-              <span>{day}</span>
+              <span className={cn(isToday && "font-bold text-[var(--accent-positive)]")}>{day}</span>
               {pnlDay && (
                 <>
                   <span className="text-[9px] font-mono leading-none mt-0.5 opacity-90">
@@ -210,7 +212,8 @@ export default function PnlCalendar() {
 
       {/* Monthly summary */}
       {data && data.days.length > 0 && (() => {
-        const monthDays = data.days.filter(d => d.date.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`));
+        const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+        const monthDays = data.days.filter(d => d.date.startsWith(monthPrefix) && d.date <= todayStr);
         if (!monthDays.length) return null;
         const monthPnl = monthDays.reduce((s, d) => s + d.day_pnl, 0);
         const upDays = monthDays.filter(d => d.day_pnl > 0).length;

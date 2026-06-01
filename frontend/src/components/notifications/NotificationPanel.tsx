@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { X, Bell, Trash2, CheckCheck, Settings } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { useNotificationStore } from "@/store/notificationStore";
 import {
   getNotifications,
@@ -13,16 +13,6 @@ import {
 import { EVENT_ICONS } from "@/types/notifications";
 import type { AppNotification } from "@/types/notifications";
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60_000);
-  const h = Math.floor(diff / 3_600_000);
-  const d = Math.floor(diff / 86_400_000);
-  if (d >= 1) return `${d}d ago`;
-  if (h >= 1) return `${h}h ago`;
-  if (m >= 1) return `${m}m ago`;
-  return "just now";
-}
 
 function groupByDay(notifications: AppNotification[]) {
   const groups: { label: string; items: AppNotification[] }[] = [];

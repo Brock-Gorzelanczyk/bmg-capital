@@ -3,22 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { getNews } from "@/api/market";
 import { ExternalLink, RefreshCw, X, Bot } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { COMPANY_INFO } from "@/data/companyInfo";
 import SectorPill from "@/components/ui/SectorPill";
 import GlossaryTooltip from "@/components/explain/GlossaryTooltip";
 import ReadingLevelSlider, { type ReadingLevel } from "@/components/ui/ReadingLevelSlider";
 import client from "@/api/client";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor(diff / 60_000);
-  if (h >= 24) return `${Math.floor(h / 24)}d ago`;
-  if (h >= 1) return `${h}h ago`;
-  return `${m}m ago`;
-}
 
 function SymbolChip({ symbol, onClick }: { symbol: string; onClick: () => void }) {
   const _name = COMPANY_INFO[symbol]?.name;
