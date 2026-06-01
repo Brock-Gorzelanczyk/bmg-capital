@@ -72,7 +72,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             </pre>
             <button
               onClick={() => {
-                ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4"].forEach(k => {
+                ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4", "BMG_QUERY_CACHE_v5"].forEach(k => {
                   try { localStorage.removeItem(k); } catch {}
                 });
                 window.location.reload();
@@ -93,6 +93,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
 });
+// Note: v5 is the active key — only cleared on error boundary, not on startup
 
 // Apply saved appearance preferences before first render so there's no flash
 try {

@@ -494,7 +494,11 @@ async def place_order(
     acct = _get_or_create_account(db, user.id)
 
     # Always fetch a quote so we can compute qty from notional and validate limit orders
-    quote = await get_quote(req.symbol)
+    is_demo_order = getattr(user, "email", "") == DEMO_EMAIL
+    if is_demo_order:
+        quote = _demo_price(req.symbol, user.id)
+    else:
+        quote = await get_quote(req.symbol)
     if not quote:
         raise HTTPException(status_code=400, detail=f"Could not fetch price for {req.symbol}")
 
