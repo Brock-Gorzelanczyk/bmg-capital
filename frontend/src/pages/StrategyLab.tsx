@@ -624,6 +624,7 @@ export default function StrategyLab() {
   const [showAllStrategies, setShowAllStrategies] = useState(false);
   const [regimeFilter, setRegimeFilter] = useState<RegimeTag[]>([]);
   const [logFilter, setLogFilter] = useState<"all" | "entries" | "exits" | "candidates" | "summary">("all");
+  const [assetClass, setAssetClass] = useState<"all" | "equity" | "crypto">("all");
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(
     () => localStorage.getItem("strategy_last_refreshed")
@@ -709,8 +710,15 @@ export default function StrategyLab() {
     return null;
   })();
 
-  const openTrades   = trades.filter((t) => t.status === "open");
-  const closedTrades = trades.filter((t) => t.status === "closed" && t.exit_reason !== "expired");
+  const isCryptoSymbol = (sym: string) => sym?.includes("/") || sym?.includes("-USD") || ["BTC","ETH","SOL","DOGE","ADA","XRP","AVAX","DOT","LINK","MATIC"].includes(sym);
+  const assetFilter = (t: any) => {
+    if (assetClass === "equity") return !isCryptoSymbol(t.symbol);
+    if (assetClass === "crypto") return isCryptoSymbol(t.symbol);
+    return true;
+  };
+
+  const openTrades   = trades.filter((t) => t.status === "open").filter(assetFilter);
+  const closedTrades = trades.filter((t) => t.status === "closed" && t.exit_reason !== "expired").filter(assetFilter);
 
   const portfolioValue = overall.portfolio_value ?? baseline;
   const totalReturn    = portfolioValue - baseline;
@@ -737,10 +745,11 @@ export default function StrategyLab() {
   }, [candidates]);
 
   // Filter by selected strategy
+  const filteredCandidates = candidates.filter(assetFilter);
   const filteredOpen   = selectedStrategy ? openTrades.filter((t) => t.preset_key === selectedStrategy) : openTrades;
-  const filteredWatch  = selectedStrategy ? candidates.filter((t) => t.preset_key === selectedStrategy) : candidates;
+  const filteredWatch  = selectedStrategy ? filteredCandidates.filter((t) => t.preset_key === selectedStrategy) : filteredCandidates;
   const filteredClosed = selectedStrategy ? closedTrades.filter((t) => t.preset_key === selectedStrategy) : closedTrades;
-  const filteredLog    = selectedStrategy ? logEntries.filter((e) => e.preset_key === selectedStrategy) : logEntries;
+  const filteredLog    = (selectedStrategy ? logEntries.filter((e) => e.preset_key === selectedStrategy) : logEntries).filter((e) => assetFilter({ symbol: e.symbol }));
 
   const tabs = [
     { key: "open",     label: "Open",     count: filteredOpen.length },
@@ -760,6 +769,24 @@ export default function StrategyLab() {
           <span className="text-[11px] text-[var(--text-tertiary)] hidden md:block">· 19 strategies · $100k paper · auto-runs 4:05 PM ET</span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Stocks / Crypto toggle */}
+          <div className="flex items-center bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg p-0.5">
+            {(["all", "equity", "crypto"] as const).map((ac) => (
+              <button
+                key={ac}
+                onClick={() => setAssetClass(ac)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors",
+                  assetClass === ac
+                    ? "bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-sm"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                )}
+              >
+                {ac === "all" ? "All" : ac === "equity" ? "📈 Stocks" : "₿ Crypto"}
+              </button>
+            ))}
+          </div>
+
           <MonitorBadge />
           {regime !== "unknown" && <RegimePill regime={regime} />}
 
