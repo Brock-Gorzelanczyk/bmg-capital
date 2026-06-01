@@ -308,7 +308,7 @@ export default function ChartPage() {
   const liveBar = useMarketStore((s) => s.liveBars[symbol]);
 
   const indicatorsParam = Array.from(activeIndicators).join(",");
-  const { data, isLoading, isError } = useBars(symbol, timeframe, indicatorsParam || undefined, dynamicStart);
+  const { data, isLoading, isFetching, isError } = useBars(symbol, timeframe, indicatorsParam || undefined, dynamicStart);
   const { data: compareData } = useBars(compareSymbol ?? "", timeframe, undefined, dynamicStart);
 
   const bars = data?.bars ?? [];
@@ -740,7 +740,7 @@ export default function ChartPage() {
               <div className="w-full h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
                 Loading {symbol}...
               </div>
-            ) : isError ? (
+            ) : isError && bars.length === 0 ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-8">
                 <div className="text-3xl">📡</div>
                 <p className="text-[var(--text-secondary)] font-semibold text-sm">No chart data for {symbol}</p>
@@ -749,21 +749,31 @@ export default function ChartPage() {
                 </p>
               </div>
             ) : (
-              <CandlestickChart
-                ref={chartRef}
-                bars={bars}
-                indicators={indicators}
-                chartType={chartType}
-                activeTool={proMode ? activeTool : "cursor"}
-                drawings={drawings}
-                tradeLevels={tradeLevels}
-                signalMarkers={signalMarkers}
-                compareBars={compareData?.bars}
-                compareSymbol={compareSymbol ?? undefined}
-                onCrosshairMove={setHoveredBar}
-                onAddDrawing={handleAddDrawing}
-                onNearLeftEdge={handleNearLeftEdge}
-              />
+              <>
+                <CandlestickChart
+                  ref={chartRef}
+                  bars={bars}
+                  indicators={indicators}
+                  chartType={chartType}
+                  activeTool={proMode ? activeTool : "cursor"}
+                  drawings={drawings}
+                  tradeLevels={tradeLevels}
+                  signalMarkers={signalMarkers}
+                  compareBars={compareData?.bars}
+                  compareSymbol={compareSymbol ?? undefined}
+                  onCrosshairMove={setHoveredBar}
+                  onAddDrawing={handleAddDrawing}
+                  onNearLeftEdge={handleNearLeftEdge}
+                />
+                {isFetching && (
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                    <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-elevated)]/90 border border-[var(--border-subtle)] px-2.5 py-1 rounded-full backdrop-blur-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] animate-pulse" />
+                      Loading…
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
