@@ -8,6 +8,7 @@ import {
   GraduationCap, Users, Landmark, ScanSearch, Scale,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
+  Grid3X3, Zap, Globe, Eye, TestTube2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -69,7 +70,12 @@ const NAV_COMMUNITY = [
 ];
 
 const NAV_ADMIN = [
-  { to: "/admin/monitoring", label: "Monitoring", Icon: Activity },
+  { to: "/admin/monitoring",   label: "Monitoring",     Icon: Activity   },
+  { to: "/admin/heatmap",      label: "Heat Map",        Icon: Grid3X3    },
+  { to: "/admin/flow",         label: "Options Flow",    Icon: Zap        },
+  { to: "/admin/macro",        label: "Macro Dashboard", Icon: Globe      },
+  { to: "/admin/smart-money",  label: "Smart Money",     Icon: Eye        },
+  { to: "/admin/backtest",     label: "Backtest Lab",    Icon: TestTube2  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

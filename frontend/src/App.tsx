@@ -43,6 +43,11 @@ import RulesPage from "@/pages/RulesPage";
 import EstatePage from "@/pages/EstatePage";
 import RSUConsolePage from "@/pages/RSUConsolePage";
 import SmartTransfersPage from "@/pages/SmartTransfersPage";
+import HeatMapPage from "@/pages/HeatMapPage";
+import OptionsFlowPage from "@/pages/OptionsFlowPage";
+import MacroDashboardPage from "@/pages/MacroDashboardPage";
+import SmartMoneyPage from "@/pages/SmartMoneyPage";
+import BacktestLabPage from "@/pages/BacktestLabPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -144,7 +149,12 @@ function AppInner() {
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/workshop" element={<WorkshopPage />} />
-        <Route path="/admin/monitoring" element={<MonitoringPage />} />
+        <Route path="/admin/monitoring"  element={<MonitoringPage />} />
+        <Route path="/admin/heatmap"     element={<HeatMapPage />} />
+        <Route path="/admin/flow"        element={<OptionsFlowPage />} />
+        <Route path="/admin/macro"       element={<MacroDashboardPage />} />
+        <Route path="/admin/smart-money" element={<SmartMoneyPage />} />
+        <Route path="/admin/backtest"    element={<BacktestLabPage />} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
