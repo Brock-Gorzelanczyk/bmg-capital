@@ -95,38 +95,100 @@
 }
 
 /* ── Light theme ────────────────────────────────────────────────────────── */
-[data-theme="light"] {
-  --bg-base:            #F8FAFC;
-  --bg-elevated:        #FFFFFF;
-  --bg-elevated-2:      #F1F5F9;
-  --border-subtle:      rgba(0,0,0,0.07);
-  --border-emphasis:    rgba(0,0,0,0.14);
-  --text-primary:       #0F172A;
-  --text-secondary:     #475569;
-  --text-tertiary:      #94A3B8;
-  --accent-positive:        #16A34A;
-  --accent-negative:        #DC2626;
-  --accent-positive-bg:     rgba(22,163,74,0.08);
-  --accent-negative-bg:     rgba(220,38,38,0.08);
+[data-theme="light"],
+[data-theme="system"]:where([data-prefers-light]) {
+  /* shadcn HSL tokens — updated for light */
+  --background:         220 16% 88%;
+  --foreground:         222 47% 13%;
+  --card:               220 16% 91%;
+  --card-foreground:    222 47% 13%;
+  --muted:              220 14% 84%;
+  --muted-foreground:   215 16% 44%;
+  --border:             220 13% 78%;
+  --input:              220 14% 84%;
+  --secondary:          220 14% 84%;
+  --secondary-foreground: 222 47% 13%;
+
+  /* BMG design tokens — warm medium-gray palette */
+  --bg-base:            #D8DCE5;   /* base: medium cool gray — not white */
+  --bg-elevated:        #E4E7EE;   /* cards sit lighter than the base */
+  --bg-elevated-2:      #CDD1DA;   /* interactive elements, tab strips */
+  --border-subtle:      rgba(0,0,0,0.10);
+  --border-emphasis:    rgba(0,0,0,0.20);
+  --text-primary:       #1A2234;   /* deep slate-navy */
+  --text-secondary:     #3D4F6E;   /* medium slate */
+  --text-tertiary:      #6C7E9A;   /* lighter slate */
+  --accent-positive:        #15803D;   /* green-700, good contrast on gray */
+  --accent-negative:        #BE123C;   /* rose-700 */
+  --accent-positive-bg:     rgba(21,128,61,0.12);
+  --accent-negative-bg:     rgba(190,18,60,0.12);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
-    --bg-base:            #F8FAFC;
-    --bg-elevated:        #FFFFFF;
-    --bg-elevated-2:      #F1F5F9;
-    --border-subtle:      rgba(0,0,0,0.07);
-    --border-emphasis:    rgba(0,0,0,0.14);
-    --text-primary:       #0F172A;
-    --text-secondary:     #475569;
-    --text-tertiary:      #94A3B8;
-    --accent-positive:        #16A34A;
-    --accent-negative:        #DC2626;
-    --accent-positive-bg:     rgba(22,163,74,0.08);
-    --accent-negative-bg:     rgba(220,38,38,0.08);
+    --background:         220 16% 88%;
+    --foreground:         222 47% 13%;
+    --card:               220 16% 91%;
+    --card-foreground:    222 47% 13%;
+    --muted:              220 14% 84%;
+    --muted-foreground:   215 16% 44%;
+    --border:             220 13% 78%;
+    --input:              220 14% 84%;
+    --secondary:          220 14% 84%;
+    --secondary-foreground: 222 47% 13%;
+
+    --bg-base:            #D8DCE5;
+    --bg-elevated:        #E4E7EE;
+    --bg-elevated-2:      #CDD1DA;
+    --border-subtle:      rgba(0,0,0,0.10);
+    --border-emphasis:    rgba(0,0,0,0.20);
+    --text-primary:       #1A2234;
+    --text-secondary:     #3D4F6E;
+    --text-tertiary:      #6C7E9A;
+    --accent-positive:        #15803D;
+    --accent-negative:        #BE123C;
+    --accent-positive-bg:     rgba(21,128,61,0.12);
+    --accent-negative-bg:     rgba(190,18,60,0.12);
     color-scheme: light;
   }
+}
+
+/* ── Light mode overrides for hardcoded dark patterns ────────────────────── */
+[data-theme="light"] body,
+[data-theme="system"] body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* Scrollbars */
+[data-theme="light"] ::-webkit-scrollbar-track,
+[data-theme="system"] ::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb,
+[data-theme="system"] ::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.18);
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover,
+[data-theme="system"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.30);
+}
+
+/* Text selection */
+[data-theme="light"] ::selection,
+[data-theme="system"] ::selection {
+  background: rgba(21,128,61,0.20);
+  color: var(--text-primary);
+}
+
+/* Inputs — many use hardcoded dark bg; pull them to the elevated surface */
+[data-theme="light"] input:not([class*="bg-"]),
+[data-theme="light"] textarea:not([class*="bg-"]),
+[data-theme="light"] select:not([class*="bg-"]) {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-emphasis);
 }
 
 /* ── Density ─────────────────────────────────────────────────────────────── */
