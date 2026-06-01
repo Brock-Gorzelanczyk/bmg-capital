@@ -171,6 +171,12 @@ export default function MilestonesPanel() {
               <div key={i} className="h-36 animate-pulse bg-[var(--bg-elevated-2)] rounded-xl" />
             ))}
           </div>
+        ) : milestones.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
+            <div className="text-4xl">🏆</div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">No milestones yet</p>
+            <p className="text-xs text-[var(--text-tertiary)]">Start trading to unlock achievements</p>
+          </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {milestones.map((m) => (

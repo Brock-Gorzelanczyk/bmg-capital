@@ -38,7 +38,6 @@ export function timeAgo(dateStr: string | null | undefined): string {
 }
 
 export function formatShareQty(qty: number): string {
-  if (Math.abs(qty) >= 100) return qty.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  if (Math.abs(qty) >= 1)   return qty.toLocaleString("en-US", { maximumFractionDigits: 4 });
-  return qty.toFixed(6);
+  if (qty % 1 === 0) return qty.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return qty.toFixed(4).replace(/\.?0+$/, "");
 }

@@ -218,8 +218,11 @@ function PerfChart({ snapshots, spyBars, spyDates, loading }: PerfChartProps) {
     }
   });
 
-  const spyNorm = alignedSpy.length >= 2
-    ? alignedSpy.map((v) => (v / alignedSpy[0]) * 100)
+  // If date alignment produced too few points (e.g. snapshot dates don't overlap with SPY bars),
+  // fall back to all available SPY bars truncated to the same length as the portfolio series.
+  const spySource = alignedSpy.length >= 2 ? alignedSpy : spyBars.slice(0, portNorm.length);
+  const spyNorm = spySource.length >= 2
+    ? spySource.map((v) => (v / spySource[0]) * 100)
     : [];
 
   const allVals = [...portNorm, ...spyNorm];
@@ -630,7 +633,7 @@ function HoldingsTab({
               <SortHeader col="current_price" className="text-right px-3">Current</SortHeader>
               <SortHeader col="market_value" className="text-right px-3">Mkt Value</SortHeader>
               <SortHeader col="day_pnl" className="text-right px-3">Day P&L</SortHeader>
-              <SortHeader col="unrealized_pnl" className="text-right px-4">Total Return</SortHeader>
+              <SortHeader col="unrealized_pnl" className="text-right px-4 min-w-[120px]">Total Return</SortHeader>
             </tr>
           </thead>
           <tbody>
@@ -663,9 +666,9 @@ function HoldingsTab({
                     <div className="font-medium">{pnlSign(pos.day_pnl)}{formatCurrency(pos.day_pnl)}</div>
                     <div className="text-xs opacity-80">{dayPct >= 0 ? "+" : ""}{dayPct.toFixed(2)}%</div>
                   </td>
-                  <td className={cn("px-4 py-2.5 text-right font-mono", pnlColor(pos.unrealized_pnl))}>
-                    <div className="font-medium">{pnlSign(pos.unrealized_pnl)}{formatCurrency(pos.unrealized_pnl)}</div>
-                    <div className="text-xs opacity-80">{totalPct >= 0 ? "+" : ""}{totalPct.toFixed(2)}%</div>
+                  <td className={cn("px-4 py-2.5 text-right font-mono min-w-[120px]", pnlColor(pos.unrealized_pnl))}>
+                    <div className="font-medium whitespace-nowrap tabular-nums">{pnlSign(pos.unrealized_pnl)}{formatCurrency(pos.unrealized_pnl)}</div>
+                    <div className="text-xs opacity-80 whitespace-nowrap tabular-nums">{totalPct >= 0 ? "+" : ""}{totalPct.toFixed(2)}%</div>
                   </td>
                 </tr>
               );
@@ -1152,7 +1155,7 @@ function HeroBar({ account, loading }: { account: PaperAccount | undefined; load
           <div className="flex items-center gap-1.5 mt-1.5">
             <Wallet size={11} className="text-[var(--text-tertiary)]" />
             <span className="text-xs text-[var(--text-tertiary)] font-mono">
-              Buying power: {formatCurrency(account.cash)}
+              Buying power: {formatCurrency(Math.max(0, account.cash))}
             </span>
           </div>
         </div>

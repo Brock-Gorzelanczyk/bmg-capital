@@ -222,7 +222,7 @@ export default function DrawdownBudget({
           <span className="text-[var(--text-tertiary)]/70">{tick25}%</span>
           <span className="text-amber-500/70">{tick50}%</span>
           <span className="text-red-500/70">{tick75}%</span>
-          <span>{tick100}%</span>
+          <span className="text-right">{tick100}%</span>
         </div>
       </div>
 
