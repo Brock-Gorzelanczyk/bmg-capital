@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import {
   FlaskConical, X, Play, TrendingUp, TrendingDown, AlertTriangle,
   Eye, Clock, CheckCircle2, RefreshCw, RotateCw, ExternalLink, BarChart2, Info,
-  Calendar, Search, Bot, Calculator,
+  Calendar, Search, Bot, Calculator, LayoutDashboard, List,
 } from "lucide-react";
+import LabShell from "@/components/labs/LabShell";
 import { cn } from "@/lib/utils";
 import {
   getTrades, getCandidates, getSummary, getLog, getEquity, getRegime, runNow, closeTrade,
@@ -614,6 +615,7 @@ function DailyRecapSection() {
 export default function StrategyLab() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [labsMode, setLabsMode] = useState(false);
   const [runningNow, setRunningNow] = useState(false);
   const [activeTab, setActiveTab] = useState<"open" | "watching" | "closed" | "log">("open");
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
@@ -841,8 +843,34 @@ export default function StrategyLab() {
             <Play size={11} className={runningNow ? "animate-pulse" : ""} />
             {runningNow ? "Running…" : "Run Now"}
           </button>
+
+          {/* Labs Mode toggle */}
+          <button
+            onClick={() => setLabsMode((v) => !v)}
+            className={cn(
+              "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors font-semibold",
+              labsMode
+                ? "border-[#BEF264]/60 bg-[#BEF264]/10 text-[#BEF264] hover:bg-[#BEF264]/20"
+                : "border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-zinc-500"
+            )}
+            title={labsMode ? "Switch to Standard Mode" : "Switch to Labs Mode (dockable workspace)"}
+          >
+            {labsMode ? <List size={11} /> : <LayoutDashboard size={11} />}
+            {labsMode ? "Standard" : "Labs Mode"}
+          </button>
         </div>
       </div>
+
+      {/* ── Labs Mode (dockable workspace) ─────────────────────────── */}
+      {labsMode && (
+        <div className="h-[calc(100vh-10rem)] min-h-[500px] rounded-xl overflow-hidden border border-[var(--border-emphasis)]">
+          <LabShell labId="strategy" />
+        </div>
+      )}
+
+      {/* ── Standard Mode content ──────────────────────────────────── */}
+      {!labsMode && (
+      <div className="space-y-5">
 
       {/* ── Portfolio hero ─────────────────────────────────────────── */}
       <div className="bg-[var(--bg-elevated-2)]/60 border border-[var(--border-emphasis)] rounded-2xl p-5">

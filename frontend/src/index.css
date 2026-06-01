@@ -267,6 +267,36 @@
 }
 .lesson-table tr:last-child td { border-bottom: none; }
 
+/* ── Dockview BMG dark theme overrides ──────────────────────────────────── */
+.dockview-theme-bmg {
+  --dv-background-color:              var(--bg-elevated);
+  --dv-tabs-and-actions-container-background-color: var(--bg-base);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg-elevated);
+  --dv-activegroup-hiddenpanel-tab-background-color:  var(--bg-base);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-base);
+  --dv-inactivegroup-hiddenpanel-tab-background-color:  var(--bg-base);
+  --dv-tab-divider-color:             var(--border-subtle, #3f3f46);
+  --dv-activegroup-visiblepanel-tab-color:   var(--text-primary);
+  --dv-activegroup-hiddenpanel-tab-color:    var(--text-tertiary);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text-tertiary);
+  --dv-inactivegroup-hiddenpanel-tab-color:  var(--text-tertiary);
+  --dv-separator-border-color:        var(--border-subtle, #3f3f46);
+  --dv-drag-over-background-color:    rgba(190,242,100,0.08);
+  --dv-drag-over-border-color:        #BEF264;
+  --dv-tabs-container-scrollbar-color: var(--bg-elevated-2);
+}
+
+/* Active tab lime underline in dockview panel tabs */
+.dockview-theme-bmg .dv-tab.active-tab {
+  border-bottom: 2px solid #BEF264 !important;
+}
+
+/* Panel background */
+.dockview-theme-bmg .view-container,
+.dockview-theme-bmg .content-container {
+  background: var(--bg-elevated);
+}
+
 /* ── Confetti animation ──────────────────────────────────────────────────── */
 @keyframes confetti-fall {
   0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
