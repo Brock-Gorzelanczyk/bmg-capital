@@ -48,16 +48,32 @@ interface Props {
   onNearLeftEdge?: () => void;
 }
 
-const TV = {
-  bg: "#18181B",
-  grid: "rgba(255,255,255,0.04)",
-  text: "#A1A1AA",
-  border: "rgba(255,255,255,0.08)",
-  up: "#BEF264",
-  down: "#FB7185",
-  upVol: "#BEF26428",
-  downVol: "#FB718528",
-};
+function getThemeColors() {
+  const isLight = document.documentElement.dataset.theme === "light" ||
+    (document.documentElement.dataset.theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
+  return isLight ? {
+    bg:      "#D8DCE5",
+    grid:    "rgba(0,0,0,0.06)",
+    text:    "#1A2234",
+    border:  "rgba(0,0,0,0.15)",
+    up:      "#15803D",
+    down:    "#BE123C",
+    upVol:   "#15803D28",
+    downVol: "#BE123C28",
+  } : {
+    bg:      "#18181B",
+    grid:    "rgba(255,255,255,0.04)",
+    text:    "#A1A1AA",
+    border:  "rgba(255,255,255,0.08)",
+    up:      "#BEF264",
+    down:    "#FB7185",
+    upVol:   "#BEF26428",
+    downVol: "#FB718528",
+  };
+}
+
+// TV is read at module init; chart-level updates come from the MutationObserver below
+const TV = getThemeColors();
 
 const OVERLAY_COLORS: Record<string, string> = {
   SMA_20: "#f59e0b", SMA_50: "#3b82f6", SMA_200: "#8b5cf6",
@@ -199,6 +215,33 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         onCrosshairMoveRef.current(bar);
       });
 
+      // ── Theme-change observer ─────────────────────────────────────────────
+      const themeObserver = new MutationObserver(() => {
+        const colors = getThemeColors();
+        chart.applyOptions({
+          layout: { background: { type: ColorType.Solid, color: colors.bg }, textColor: colors.text },
+          grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
+          rightPriceScale: { borderColor: colors.border },
+          timeScale: { borderColor: colors.border },
+        });
+        volSeriesRef.current?.applyOptions({ color: colors.upVol });
+        if (mainSeriesRef.current) {
+          const st = mainSeriesRef.current.seriesType();
+          if (st === "Candlestick") {
+            (mainSeriesRef.current as ISeriesApi<"Candlestick">).applyOptions({
+              upColor: colors.up, downColor: colors.down,
+              borderUpColor: colors.up, borderDownColor: colors.down,
+              wickUpColor: colors.up, wickDownColor: colors.down,
+            });
+          } else if (st === "Bar") {
+            (mainSeriesRef.current as ISeriesApi<"Bar">).applyOptions({
+              upColor: colors.up, downColor: colors.down,
+            });
+          }
+        }
+      });
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
       chart.subscribeClick((param) => {
         if (!param.point || !mainSeriesRef.current) return;
         const tool = toolRef.current;
@@ -242,6 +285,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
       });
 
       return () => {
+        themeObserver.disconnect();
         chart.remove();
         chartRef.current = null;
         mainSeriesRef.current = null;

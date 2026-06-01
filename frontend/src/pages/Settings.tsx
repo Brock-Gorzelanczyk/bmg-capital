@@ -422,12 +422,67 @@ function NotificationsSection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notif-settings"] }),
   });
 
+  // ── In-app toggles ────────────────────────────────────────────────────────
   const toggle = (eventKey: string) => {
     if (!data) return;
     const updated = JSON.parse(JSON.stringify(data.prefs ?? {}));
     const current = updated[eventKey]?.in_app ?? true;
     updated[eventKey] = { ...updated[eventKey], in_app: !current };
     mut.mutate(updated);
+  };
+
+  // ── Email digest ──────────────────────────────────────────────────────────
+  const [emailEnabled, setEmailEnabled] = useState<boolean>(() => loadPrefs().emailDigestEnabled ?? false);
+
+  const toggleEmail = () => {
+    const next = !emailEnabled;
+    setEmailEnabled(next);
+    savePrefs({ emailDigestEnabled: next });
+    if (data) {
+      const updated = JSON.parse(JSON.stringify(data.prefs ?? {}));
+      updated._email_digest = next;
+      mut.mutate(updated);
+    }
+    toast.success(next ? "Daily email digest enabled" : "Email digest disabled");
+  };
+
+  // ── Push notifications ────────────────────────────────────────────────────
+  const [pushEnabled, setPushEnabled] = useState<boolean>(() => {
+    if (typeof Notification === "undefined") return false;
+    return Notification.permission === "granted" && (loadPrefs().pushEnabled ?? false);
+  });
+  const [pushDenied, setPushDenied] = useState<boolean>(() =>
+    typeof Notification !== "undefined" && Notification.permission === "denied"
+  );
+
+  const togglePush = async () => {
+    if (pushEnabled) {
+      savePrefs({ pushEnabled: false });
+      setPushEnabled(false);
+      toast.success("Push notifications disabled");
+      return;
+    }
+    if (pushDenied) {
+      toast.error("Notifications are blocked — enable them in your browser site settings");
+      return;
+    }
+    if (typeof Notification === "undefined") {
+      toast.error("Push notifications are not supported in this browser");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      savePrefs({ pushEnabled: true });
+      setPushEnabled(true);
+      new Notification("BMG Capital", {
+        body: "You'll now receive real-time alerts here.",
+        icon: "/favicon.ico",
+      });
+      toast.success("Push notifications enabled!");
+    } else if (permission === "denied") {
+      setPushDenied(true);
+      toast.error("Notifications blocked — check browser settings to allow them");
+    }
   };
 
   return (
@@ -456,11 +511,24 @@ function NotificationsSection() {
         <div className="px-4 py-2.5 border-b border-[var(--border-subtle)]/60">
           <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Delivery Channels</span>
         </div>
-        <SettingRow label="Email digests" sublabel="Daily summary of signals and activity">
-          <span className="text-xs text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] px-2.5 py-1 rounded-lg">Coming soon</span>
+        <SettingRow label="Email digests" sublabel="Daily summary of signals and activity sent to your email">
+          <Toggle value={emailEnabled} onChange={toggleEmail} />
         </SettingRow>
-        <SettingRow label="Push notifications" sublabel="Browser notifications for real-time alerts" last>
-          <span className="text-xs text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] px-2.5 py-1 rounded-lg">Coming soon</span>
+        <SettingRow
+          label="Push notifications"
+          sublabel={pushDenied ? "Blocked in browser — click to learn how to enable" : "Browser notifications for real-time alerts"}
+          last
+        >
+          {pushDenied ? (
+            <button
+              onClick={togglePush}
+              className="text-xs text-[var(--accent-negative)] bg-[var(--accent-negative-bg)] border border-[var(--accent-negative)]/20 px-2.5 py-1 rounded-lg hover:brightness-110 transition-colors"
+            >
+              Blocked
+            </button>
+          ) : (
+            <Toggle value={pushEnabled} onChange={togglePush} />
+          )}
         </SettingRow>
       </Card>
     </div>
