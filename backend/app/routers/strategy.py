@@ -155,7 +155,22 @@ async def get_trades(
 
     _settle_open_trades([t for t in trades if t.status == "open"], prices, db)
 
-    enriched = [_enrich_trade(t, prices) for t in trades]
+    # Deduplicate closed trades by (symbol, entry_date.date()) — keep lowest id.
+    # Multiple preset_keys can produce one DB row per preset for the same underlying
+    # trade, causing the same (ticker, entry_date) to fan-out N times in the UI.
+    open_trades = [t for t in trades if t.status == "open"]
+    closed_raw = [t for t in trades if t.status == "closed"]
+    seen: dict = {}
+    for t in sorted(closed_raw, key=lambda x: x.id):
+        key = (t.symbol, t.entry_date.date() if t.entry_date else None)
+        if key not in seen:
+            seen[key] = t
+    closed_deduped = list(seen.values())
+    # Re-sort deduped closed trades by entry_date desc to match original ordering
+    closed_deduped.sort(key=lambda x: x.entry_date or _now(), reverse=True)
+
+    deduped_trades = open_trades + closed_deduped
+    enriched = [_enrich_trade(t, prices) for t in deduped_trades]
     return {"trades": enriched}
 
 
