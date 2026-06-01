@@ -6,31 +6,31 @@ import { cn } from "@/lib/utils";
 // ── Data ───────────────────────────────────────────────────────────────────────
 
 const CONGRESS_TRADES = [
-  { member: "Nancy Pelosi",    party: "D", state: "CA", ticker: "NVDA", type: "Purchase", amount: "$1M–$5M", date: "Jan 12, 2025", sector: "Technology" },
-  { member: "Dan Crenshaw",    party: "R", state: "TX", ticker: "XOM",  type: "Purchase", amount: "$50K–$100K", date: "Jan 15, 2025", sector: "Energy" },
-  { member: "Josh Gottheimer", party: "D", state: "NJ", ticker: "MSFT", type: "Purchase", amount: "$500K–$1M",  date: "Jan 18, 2025", sector: "Technology" },
-  { member: "Marjorie Greene",  party: "R", state: "GA", ticker: "TSLA", type: "Purchase", amount: "$15K–$50K",  date: "Jan 22, 2025", sector: "Consumer Disc" },
-  { member: "Ro Khanna",       party: "D", state: "CA", ticker: "GOOGL",type: "Sale",     amount: "$100K–$250K",date: "Jan 24, 2025", sector: "Communication" },
-  { member: "Tommy Tuberville", party: "R", state: "AL", ticker: "SPY",  type: "Purchase", amount: "$50K–$100K", date: "Jan 28, 2025", sector: "ETF" },
-  { member: "Shelley Capito",   party: "R", state: "WV", ticker: "CVX",  type: "Purchase", amount: "$15K–$50K",  date: "Feb 3, 2025",  sector: "Energy" },
-  { member: "Mark Warner",     party: "D", state: "VA", ticker: "AMZN", type: "Sale",     amount: "$250K–$500K",date: "Feb 5, 2025",  sector: "Consumer Disc" },
-  { member: "Pete Sessions",   party: "R", state: "TX", ticker: "JPM",  type: "Purchase", amount: "$15K–$50K",  date: "Feb 10, 2025", sector: "Financials" },
-  { member: "David Rouzer",    party: "R", state: "NC", ticker: "AAPL", type: "Sale",     amount: "$50K–$100K", date: "Feb 14, 2025", sector: "Technology" },
-  { member: "Marie Gluesenkamp", party:"D", state: "WA", ticker: "META", type: "Purchase", amount: "$100K–$250K",date: "Feb 18, 2025", sector: "Communication" },
-  { member: "Suzan DelBene",   party: "D", state: "WA", ticker: "AMD",  type: "Purchase", amount: "$1M–$5M",    date: "Feb 21, 2025", sector: "Technology" },
+  { member: "Nancy Pelosi",      party: "D", state: "CA", ticker: "NVDA", type: "Purchase", amount: "$1M–$5M",     date: "May 28, 2026", sector: "Technology" },
+  { member: "Marjorie Greene",   party: "R", state: "GA", ticker: "TSLA", type: "Purchase", amount: "$50K–$100K",  date: "May 22, 2026", sector: "Consumer Disc" },
+  { member: "Ro Khanna",         party: "D", state: "CA", ticker: "AMZN", type: "Sale",     amount: "$250K–$500K", date: "May 19, 2026", sector: "Consumer Disc" },
+  { member: "Suzan DelBene",     party: "D", state: "WA", ticker: "AMD",  type: "Purchase", amount: "$500K–$1M",   date: "May 14, 2026", sector: "Technology" },
+  { member: "Dan Crenshaw",      party: "R", state: "TX", ticker: "XOM",  type: "Purchase", amount: "$50K–$100K",  date: "May 9, 2026",  sector: "Energy" },
+  { member: "Josh Gottheimer",   party: "D", state: "NJ", ticker: "MSFT", type: "Purchase", amount: "$500K–$1M",   date: "May 5, 2026",  sector: "Technology" },
+  { member: "Tommy Tuberville",  party: "R", state: "AL", ticker: "SPY",  type: "Purchase", amount: "$100K–$250K", date: "Apr 29, 2026", sector: "ETF" },
+  { member: "Mark Warner",       party: "D", state: "VA", ticker: "GOOGL",type: "Sale",     amount: "$100K–$250K", date: "Apr 24, 2026", sector: "Communication" },
+  { member: "Shelley Capito",    party: "R", state: "WV", ticker: "CVX",  type: "Purchase", amount: "$15K–$50K",   date: "Apr 18, 2026", sector: "Energy" },
+  { member: "Pete Sessions",     party: "R", state: "TX", ticker: "JPM",  type: "Purchase", amount: "$50K–$100K",  date: "Apr 11, 2026", sector: "Financials" },
+  { member: "Marie Gluesenkamp",party: "D", state: "WA", ticker: "META", type: "Purchase", amount: "$100K–$250K", date: "Apr 4, 2026",  sector: "Communication" },
+  { member: "David Rouzer",      party: "R", state: "NC", ticker: "AAPL", type: "Sale",     amount: "$50K–$100K",  date: "Mar 28, 2026", sector: "Technology" },
 ];
 
 const INSIDER_TRADES = [
-  { name: "Jensen Huang",    title: "CEO",     company: "NVIDIA",    ticker: "NVDA", shares: 280000, value: "$40.3M", type: "Sale",     date: "Jan 8" },
-  { name: "Tim Cook",        title: "CEO",     company: "Apple",     ticker: "AAPL", shares: 150000, value: "$30.1M", type: "Sale",     date: "Jan 12" },
-  { name: "Elon Musk",       title: "CEO",     company: "Tesla",     ticker: "TSLA", shares: 500000, value: "$135M",  type: "Sale",     date: "Jan 15" },
-  { name: "Mark Zuckerberg", title: "CEO",     company: "Meta",      ticker: "META", shares: 220000, value: "$127M",  type: "Sale",     date: "Jan 19" },
-  { name: "Andy Jassy",      title: "CEO",     company: "Amazon",    ticker: "AMZN", shares: 80000,  value: "$17.6M", type: "Sale",     date: "Jan 22" },
-  { name: "Satya Nadella",   title: "CEO",     company: "Microsoft", ticker: "MSFT", shares: 42000,  value: "$18.4M", type: "Sale",     date: "Jan 25" },
-  { name: "Lisa Su",         title: "CEO",     company: "AMD",       ticker: "AMD",  shares: 120000, value: "$20.9M", type: "Sale",     date: "Feb 2" },
-  { name: "Brian Moynihan",  title: "CEO",     company: "B of A",    ticker: "BAC",  shares: 180000, value: "$7.8M",  type: "Purchase", date: "Feb 8" },
-  { name: "Jamie Dimon",     title: "CEO",     company: "JPMorgan",  ticker: "JPM",  shares: 95000,  value: "$21.4M", type: "Purchase", date: "Feb 12" },
-  { name: "Pat Gelsinger",   title: "CEO",     company: "Intel",     ticker: "INTC", shares: 250000, value: "$5.1M",  type: "Purchase", date: "Feb 18" },
+  { name: "Jensen Huang",    title: "CEO",      company: "NVIDIA",    ticker: "NVDA", shares: 310000, value: "$52.7M", type: "Sale",     date: "May 27, 2026" },
+  { name: "Mark Zuckerberg", title: "CEO",      company: "Meta",      ticker: "META", shares: 185000, value: "$142M",  type: "Sale",     date: "May 21, 2026" },
+  { name: "Andy Jassy",      title: "CEO",      company: "Amazon",    ticker: "AMZN", shares: 95000,  value: "$22.1M", type: "Sale",     date: "May 16, 2026" },
+  { name: "Jamie Dimon",     title: "CEO",      company: "JPMorgan",  ticker: "JPM",  shares: 120000, value: "$29.3M", type: "Purchase", date: "May 9, 2026"  },
+  { name: "Lisa Su",         title: "CEO",      company: "AMD",       ticker: "AMD",  shares: 140000, value: "$24.6M", type: "Sale",     date: "May 2, 2026"  },
+  { name: "Satya Nadella",   title: "CEO",      company: "Microsoft", ticker: "MSFT", shares: 55000,  value: "$26.8M", type: "Sale",     date: "Apr 25, 2026" },
+  { name: "Brian Moynihan",  title: "CEO",      company: "B of A",    ticker: "BAC",  shares: 200000, value: "$9.4M",  type: "Purchase", date: "Apr 17, 2026" },
+  { name: "Tim Cook",        title: "CEO",      company: "Apple",     ticker: "AAPL", shares: 175000, value: "$36.2M", type: "Sale",     date: "Apr 10, 2026" },
+  { name: "Sundar Pichai",   title: "CEO",      company: "Alphabet",  ticker: "GOOGL",shares: 68000,  value: "$13.9M", type: "Sale",     date: "Apr 3, 2026"  },
+  { name: "Pat Gelsinger",   title: "CEO",      company: "Intel",     ticker: "INTC", shares: 300000, value: "$6.3M",  type: "Purchase", date: "Mar 26, 2026" },
 ];
 
 const HEDGE_FUNDS = [
@@ -211,7 +211,7 @@ export default function SmartMoneyPage() {
       {tab === "hedge" && (
         <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
-            <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">13F Institutional Holdings — Q4 2024</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">13F Institutional Holdings — Q1 2026</div>
             <span className="text-[10px] text-[var(--text-tertiary)]">Quarterly SEC filings · Notable position changes</span>
           </div>
           <div className="overflow-x-auto">
