@@ -48,6 +48,7 @@ import OptionsFlowPage from "@/pages/OptionsFlowPage";
 import MacroDashboardPage from "@/pages/MacroDashboardPage";
 import SmartMoneyPage from "@/pages/SmartMoneyPage";
 import BacktestLabPage from "@/pages/BacktestLabPage";
+import ScannersPage from "@/pages/ScannersPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -89,6 +90,13 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
 });
+
+// Apply saved appearance preferences before first render so there's no flash
+try {
+  const prefs = JSON.parse(window.localStorage.getItem("bmg_ui_prefs") ?? "{}");
+  if (prefs.theme)   document.documentElement.dataset.theme   = prefs.theme;
+  if (prefs.density) document.documentElement.dataset.density = prefs.density;
+} catch {}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -155,6 +163,7 @@ function AppInner() {
         <Route path="/admin/macro"       element={<MacroDashboardPage />} />
         <Route path="/admin/smart-money" element={<SmartMoneyPage />} />
         <Route path="/admin/backtest"    element={<BacktestLabPage />} />
+        <Route path="/admin/scanners"    element={<ScannersPage />} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />

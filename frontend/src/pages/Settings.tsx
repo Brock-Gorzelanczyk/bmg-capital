@@ -44,6 +44,11 @@ function savePrefs(patch: Record<string, unknown>) {
   const current = loadPrefs();
   localStorage.setItem(PREFS_KEY, JSON.stringify({ ...current, ...patch }));
 }
+function applyPrefs(patch: Record<string, unknown>) {
+  const html = document.documentElement;
+  if ("theme" in patch && patch.theme)     html.dataset.theme   = patch.theme as string;
+  if ("density" in patch && patch.density) html.dataset.density = patch.density as string;
+}
 
 // ── Sub-sections ──────────────────────────────────────────────────────────────
 
@@ -196,6 +201,7 @@ const TIMEZONE_OPTIONS = [
 
 function AppearanceSection() {
   const prefs = loadPrefs();
+  const [theme, setTheme]        = useState<string>(prefs.theme      ?? "dark");
   const [density, setDensity]    = useState<string>(prefs.density    ?? "default");
   const [chartStyle, setChart]   = useState<string>(prefs.chartStyle ?? "candles");
   const [timezone, setTimezone]  = useState<string>(prefs.timezone   ?? "America/New_York");
@@ -204,6 +210,7 @@ function AppearanceSection() {
 
   const persist = (patch: Record<string, unknown>) => {
     savePrefs(patch);
+    applyPrefs(patch);
     toast.success("Preference saved");
   };
 
@@ -224,10 +231,10 @@ function AppearanceSection() {
           ].map(({ value, Icon, label }) => (
             <button
               key={value}
-              onClick={() => persist({ theme: value })}
+              onClick={() => { setTheme(value); persist({ theme: value }); }}
               className={cn(
                 "flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-medium transition-colors",
-                (prefs.theme ?? "dark") === value
+                theme === value
                   ? "bg-[var(--bg-elevated-2)] border-[var(--accent-positive)] text-[var(--accent-positive)]"
                   : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
               )}
