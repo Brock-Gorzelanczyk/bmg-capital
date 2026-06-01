@@ -591,12 +591,14 @@ export default function AlertBuilderPage() {
       ? "text-[var(--accent-positive)]"
       : "text-amber-400";
 
-  const filteredFields = leftSearch
+  const filteredFields: Record<string, string[]> = leftSearch
     ? Object.fromEntries(
-        Object.entries(FIELD_CATALOG).map(([cat, fields]) => [
-          cat,
-          fields.filter((f) => f.toLowerCase().includes(leftSearch.toLowerCase())),
-        ]).filter(([, fields]) => (fields as string[]).length > 0)
+        Object.entries(FIELD_CATALOG)
+          .map(([cat, fields]): [string, string[]] => [
+            cat,
+            fields.filter((f) => f.toLowerCase().includes(leftSearch.toLowerCase())),
+          ])
+          .filter(([, fields]) => fields.length > 0)
       )
     : FIELD_CATALOG;
 
