@@ -49,6 +49,7 @@ import MacroDashboardPage from "@/pages/MacroDashboardPage";
 import SmartMoneyPage from "@/pages/SmartMoneyPage";
 import BacktestLabPage from "@/pages/BacktestLabPage";
 import ScannersPage from "@/pages/ScannersPage";
+import AlertBuilderPage from "@/pages/AlertBuilderPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -175,6 +176,7 @@ function AppInner() {
         <Route path="/estate" element={<EstatePage />} />
         <Route path="/rsu-console" element={<RSUConsolePage />} />
         <Route path="/smart-transfers" element={<SmartTransfersPage />} />
+        <Route path="/alerts/builder" element={<AlertBuilderPage />} />
       </Route>
     </Routes>
   );
