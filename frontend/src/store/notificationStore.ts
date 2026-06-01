@@ -27,27 +27,30 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
   addNotification: (n) =>
     set((s) => {
-      const notifications = [n, ...s.notifications];
+      const prev = Array.isArray(s.notifications) ? s.notifications : [];
+      const notifications = [n, ...prev];
       return { notifications, unreadCount: notifications.filter((x) => !x.is_read).length };
     }),
 
   markRead: (id) =>
     set((s) => {
-      const notifications = s.notifications.map((n) =>
+      const prev = Array.isArray(s.notifications) ? s.notifications : [];
+      const notifications = prev.map((n) =>
         n.id === id ? { ...n, is_read: true } : n
       );
       return { notifications, unreadCount: notifications.filter((n) => !n.is_read).length };
     }),
 
   markAllRead: () =>
-    set((s) => ({
-      notifications: s.notifications.map((n) => ({ ...n, is_read: true })),
-      unreadCount: 0,
-    })),
+    set((s) => {
+      const prev = Array.isArray(s.notifications) ? s.notifications : [];
+      return { notifications: prev.map((n) => ({ ...n, is_read: true })), unreadCount: 0 };
+    }),
 
   removeNotification: (id) =>
     set((s) => {
-      const notifications = s.notifications.filter((n) => n.id !== id);
+      const prev = Array.isArray(s.notifications) ? s.notifications : [];
+      const notifications = prev.filter((n) => n.id !== id);
       return { notifications, unreadCount: notifications.filter((n) => !n.is_read).length };
     }),
 
