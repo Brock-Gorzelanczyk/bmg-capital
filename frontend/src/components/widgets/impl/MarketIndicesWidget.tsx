@@ -54,7 +54,7 @@ export default function MarketIndicesWidget() {
                 {INDEX_NAMES[idx.symbol] ?? idx.symbol}
               </span>
               {bad
-                ? <AlertCircle size={11} className="text-[var(--text-tertiary)] shrink-0" title="Price data unavailable" />
+                ? <AlertCircle size={11} className="text-[var(--text-tertiary)] shrink-0" aria-label="Price data unavailable" />
                 : <LineChart size={11} className="text-[var(--text-tertiary)] group-hover:text-[var(--accent-positive)] transition-colors shrink-0" />
               }
             </div>
