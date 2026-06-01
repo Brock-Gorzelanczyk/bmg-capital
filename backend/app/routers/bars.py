@@ -68,6 +68,33 @@ def _max_indicator_lookback(indicators_str: Optional[str]) -> int:
     return max_p
 
 
+_CCXT_TF_MAP = {
+    "1Min": "1m", "5Min": "5m", "15Min": "15m", "30Min": "30m",
+    "1Hour": "1h", "4Hour": "4h", "1Day": "1d", "1Week": "1w", "1Month": "1M",
+}
+
+
+def _fetch_ccxt_ohlcv(symbol: str, timeframe: str, start_str: str) -> list[dict]:
+    """CCXT/Binance fallback for crypto symbols like FET-USD → FET/USDT."""
+    try:
+        import ccxt
+        base = symbol.upper().replace("-USD", "").replace("-USDT", "")
+        ccxt_sym = f"{base}/USDT"
+        ccxt_tf = _CCXT_TF_MAP.get(timeframe, "1d")
+        since = int(datetime.fromisoformat(start_str).timestamp() * 1000)
+        exchange = ccxt.binance({"enableRateLimit": True})
+        ohlcv = exchange.fetch_ohlcv(ccxt_sym, timeframe=ccxt_tf, since=since, limit=1000)
+        return [
+            {
+                "_t": datetime.utcfromtimestamp(r[0] / 1000).isoformat(),
+                "open": r[1], "high": r[2], "low": r[3], "close": r[4], "volume": r[5],
+            }
+            for r in ohlcv if r[4] is not None
+        ]
+    except Exception:
+        return []
+
+
 def _fetch_yf_ohlcv(ticker: yf.Ticker, start_str: str, end_str: str, interval: str, timeframe: str) -> list[dict]:
     """Fetch OHLCV from yfinance and return as a list of dicts with open/high/low/close/volume."""
     hist = ticker.history(
@@ -145,6 +172,9 @@ async def get_bars(
         try:
             ticker = yf.Ticker(symbol.upper())
             rows = _fetch_yf_ohlcv(ticker, start_str, end_exclusive, interval, timeframe)
+            if not rows:
+                # CCXT fallback for crypto symbols (e.g. FET-USD → FET/USDT on Binance)
+                rows = _fetch_ccxt_ohlcv(symbol, timeframe, start_str)
             if not rows:
                 raise HTTPException(status_code=404, detail=f"No data for {symbol}")
 

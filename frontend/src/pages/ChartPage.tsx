@@ -308,7 +308,7 @@ export default function ChartPage() {
   const liveBar = useMarketStore((s) => s.liveBars[symbol]);
 
   const indicatorsParam = Array.from(activeIndicators).join(",");
-  const { data, isLoading } = useBars(symbol, timeframe, indicatorsParam || undefined, dynamicStart);
+  const { data, isLoading, isError } = useBars(symbol, timeframe, indicatorsParam || undefined, dynamicStart);
   const { data: compareData } = useBars(compareSymbol ?? "", timeframe, undefined, dynamicStart);
 
   const bars = data?.bars ?? [];
@@ -739,6 +739,14 @@ export default function ChartPage() {
             {isLoading ? (
               <div className="w-full h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
                 Loading {symbol}...
+              </div>
+            ) : isError ? (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-8">
+                <div className="text-3xl">📡</div>
+                <p className="text-[var(--text-secondary)] font-semibold text-sm">No chart data for {symbol}</p>
+                <p className="text-[var(--text-tertiary)] text-xs max-w-xs leading-relaxed">
+                  This symbol may not be supported. For crypto, try the full ticker (e.g. BTC-USD) or check the Crypto Lab for on-chain data.
+                </p>
               </div>
             ) : (
               <CandlestickChart

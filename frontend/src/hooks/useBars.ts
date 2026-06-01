@@ -7,5 +7,6 @@ export function useBars(symbol: string, timeframe: string, indicators?: string, 
     queryFn: () => fetchBars(symbol, timeframe, indicators, start),
     enabled: Boolean(symbol),
     staleTime: timeframe === "1Day" ? 60_000 : 30_000,
+    retry: 1,
   });
 }
