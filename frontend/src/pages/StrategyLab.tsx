@@ -1682,6 +1682,80 @@ function OpenTable({ trades, onClose, onChart, onRowClick }: { trades: any[]; on
     else { setSortKey(key); setSortDir("desc"); }
   };
 
+  const stocks = sorted.filter((t) => !t.symbol?.includes("/"));
+  const crypto = sorted.filter((t) =>  t.symbol?.includes("/"));
+  const hasBoth = stocks.length > 0 && crypto.length > 0;
+
+  const renderRows = (rows: typeof sorted) => rows.map((t) => {
+    const pos = (t.pnl_pct ?? 0) >= 0;
+    const dayPos = (t.day_pnl ?? 0) >= 0;
+    const strat = stratMap[t.preset_key];
+    const stopPct = t.entry_price && t.stop_price ? ((t.stop_price - t.entry_price) / t.entry_price * 100) : null;
+    const tgtPct  = t.entry_price && t.target_price ? ((t.target_price - t.entry_price) / t.entry_price * 100) : null;
+    const hasBar = t.stop_price && t.entry_price && t.current_price && t.target_price;
+    return (
+      <tr key={t.id} onClick={() => onRowClick(t)} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/3 transition-colors cursor-pointer">
+        <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { entry: t.entry_price, stop: t.stop_price, target: t.target_price, entryDate: t.entry_date })} /></TD>
+        <TD>
+          <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: strat?.color, backgroundColor: `${strat?.color}15` }}>
+            {t.preset_label}
+          </span>
+        </TD>
+        <TD>
+          <div className="font-mono text-xs text-[var(--text-secondary)]">{t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"}</div>
+          {t.entry_date && <div className="text-[10px] text-[var(--text-tertiary)]">{new Date(t.entry_date).toLocaleDateString()}</div>}
+        </TD>
+        <TD>
+          <div className="font-mono text-xs text-[var(--text-secondary)]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</div>
+          {hasBar && <PositionBar stop={t.stop_price} entry={t.entry_price} current={t.current_price} target={t.target_price} />}
+        </TD>
+        <TD>
+          <div className={cn("font-mono text-sm font-bold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+            {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
+          </div>
+          {t.pnl != null && <div className={cn("text-[10px] font-mono", pos ? "text-[var(--accent-positive)]/70" : "text-[var(--accent-negative)]/70")}>{pos ? "+" : ""}{fmt$(t.pnl, 0)}</div>}
+        </TD>
+        <TD>
+          {t.day_pnl != null ? (
+            <div className={cn("font-mono text-xs font-semibold", dayPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+              {dayPos ? "+" : ""}{fmt$(t.day_pnl, 0)}
+            </div>
+          ) : (
+            <span className="text-[var(--text-tertiary)] text-xs">—</span>
+          )}
+        </TD>
+        <TD className="text-xs font-mono">
+          <div>
+            <span className="text-[var(--accent-negative)]/70">{t.stop_price ? `$${t.stop_price.toFixed(2)}` : "—"}</span>
+            {stopPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> ({stopPct.toFixed(1)}%)</span>}
+          </div>
+          <div>
+            <span className="text-[var(--accent-positive)]/70">{t.target_price ? `$${t.target_price.toFixed(2)}` : "—"}</span>
+            {tgtPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> (+{tgtPct.toFixed(1)}%)</span>}
+          </div>
+        </TD>
+        <TD className="text-xs text-[var(--text-tertiary)]">${t.risk_dollars?.toFixed(0) ?? "—"}</TD>
+        <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
+        <TD>
+          <button onClick={(e) => { e.stopPropagation(); onClose(t.id); }} className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors p-1 rounded hover:bg-red-400/10">
+            <X size={13} />
+          </button>
+        </TD>
+      </tr>
+    );
+  });
+
+  const COL_COUNT = 10;
+
+  const SectionHeader = ({ label, count, color }: { label: string; count: number; color: string }) => (
+    <tr>
+      <td colSpan={COL_COUNT} className="px-4 py-1.5 bg-[var(--bg-elevated-2)]/60 border-b border-[var(--border-emphasis)]/60">
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color }}>{label}</span>
+        <span className="ml-2 text-[10px] text-[var(--text-tertiary)]">{count} position{count !== 1 ? "s" : ""}</span>
+      </td>
+    </tr>
+  );
+
   return (
     <div className="overflow-x-auto -mx-4">
       <table className="w-full text-sm">
@@ -1696,66 +1770,14 @@ function OpenTable({ trades, onClose, onChart, onRowClick }: { trades: any[]; on
           <TH></TH>
         </tr></thead>
         <tbody>
-          {sorted.map((t) => {
-            const pos = (t.pnl_pct ?? 0) >= 0;
-            const dayPos = (t.day_pnl ?? 0) >= 0;
-            const strat = stratMap[t.preset_key];
-            const stopPct = t.entry_price && t.stop_price ? ((t.stop_price - t.entry_price) / t.entry_price * 100) : null;
-            const tgtPct  = t.entry_price && t.target_price ? ((t.target_price - t.entry_price) / t.entry_price * 100) : null;
-            const hasBar = t.stop_price && t.entry_price && t.current_price && t.target_price;
-            return (
-              <tr key={t.id} onClick={() => onRowClick(t)} className="border-b border-[var(--border-emphasis)]/40 hover:bg-white/3 transition-colors cursor-pointer">
-                <TD><SymCell symbol={t.symbol} preset={t.preset_key} onClick={() => onChart(t.symbol, t.preset_key, { entry: t.entry_price, stop: t.stop_price, target: t.target_price, entryDate: t.entry_date })} /></TD>
-                <TD>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: strat?.color, backgroundColor: `${strat?.color}15` }}>
-                    {t.preset_label}
-                  </span>
-                </TD>
-                <TD>
-                  <div className="font-mono text-xs text-[var(--text-secondary)]">{t.entry_price ? `$${t.entry_price.toFixed(2)}` : "—"}</div>
-                  {t.entry_date && <div className="text-[10px] text-[var(--text-tertiary)]">{new Date(t.entry_date).toLocaleDateString()}</div>}
-                </TD>
-                <TD>
-                  <div className="font-mono text-xs text-[var(--text-secondary)]">{t.current_price ? `$${t.current_price.toFixed(2)}` : "—"}</div>
-                  {hasBar && (
-                    <PositionBar stop={t.stop_price} entry={t.entry_price} current={t.current_price} target={t.target_price} />
-                  )}
-                </TD>
-                <TD>
-                  <div className={cn("font-mono text-sm font-bold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                    {t.pnl_pct != null ? `${pos ? "▲" : "▼"} ${Math.abs(t.pnl_pct).toFixed(2)}%` : "—"}
-                  </div>
-                  {t.pnl != null && <div className={cn("text-[10px] font-mono", pos ? "text-[var(--accent-positive)]/70" : "text-[var(--accent-negative)]/70")}>{pos ? "+" : ""}{fmt$(t.pnl, 0)}</div>}
-                </TD>
-                <TD>
-                  {t.day_pnl != null ? (
-                    <div className={cn("font-mono text-xs font-semibold", dayPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
-                      {dayPos ? "+" : ""}{fmt$(t.day_pnl, 0)}
-                    </div>
-                  ) : (
-                    <span className="text-[var(--text-tertiary)] text-xs">—</span>
-                  )}
-                </TD>
-                <TD className="text-xs font-mono">
-                  <div>
-                    <span className="text-[var(--accent-negative)]/70">{t.stop_price ? `$${t.stop_price.toFixed(2)}` : "—"}</span>
-                    {stopPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> ({stopPct.toFixed(1)}%)</span>}
-                  </div>
-                  <div>
-                    <span className="text-[var(--accent-positive)]/70">{t.target_price ? `$${t.target_price.toFixed(2)}` : "—"}</span>
-                    {tgtPct != null && <span className="text-[var(--text-tertiary)] text-[10px]"> (+{tgtPct.toFixed(1)}%)</span>}
-                  </div>
-                </TD>
-                <TD className="text-xs text-[var(--text-tertiary)]">${t.risk_dollars?.toFixed(0) ?? "—"}</TD>
-                <TD className="text-xs text-[var(--text-tertiary)]">{t.days_held}d</TD>
-                <TD>
-                  <button onClick={(e) => { e.stopPropagation(); onClose(t.id); }} className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors p-1 rounded hover:bg-red-400/10">
-                    <X size={13} />
-                  </button>
-                </TD>
-              </tr>
-            );
-          })}
+          {hasBoth ? (
+            <>
+              {stocks.length > 0 && <><SectionHeader label="Stocks" count={stocks.length} color="#3b82f6" />{renderRows(stocks)}</>}
+              {crypto.length > 0 && <><SectionHeader label="Crypto" count={crypto.length} color="#f59e0b" />{renderRows(crypto)}</>}
+            </>
+          ) : (
+            renderRows(sorted)
+          )}
         </tbody>
       </table>
     </div>
