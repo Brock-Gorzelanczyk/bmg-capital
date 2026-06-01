@@ -194,7 +194,8 @@ function ILBadge({ risk }: { risk: YieldOpportunity["il_risk"] }) {
     medium: { label: "Medium IL", cls: "bg-yellow-500/10 text-yellow-400" },
     high:   { label: "High IL",   cls: "bg-[var(--accent-negative-bg)] text-[var(--accent-negative)]" },
   };
-  const { label, cls } = map[risk];
+  const entry = map[risk as keyof typeof map] ?? { label: risk ?? "Unknown", cls: "bg-[var(--bg-elevated-2)] text-[var(--text-secondary)]" };
+  const { label, cls } = entry;
   return <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", cls)}>{label}</span>;
 }
 
