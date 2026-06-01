@@ -1141,6 +1141,8 @@ export default function StrategyLab() {
           "What's a good entry/exit rule for momentum strategies?",
         ]}
       />
+      </div>
+      )}
     </div>
   );
 }
