@@ -467,7 +467,7 @@ const EXPLAIN_DATA: Record<number, { plain: string; fires: number; avgReturn: st
   20: { plain: "Monitors stablecoins continuously for any deviation beyond 0.5% from their $1.00 peg lasting more than 5 minutes — early warning for depegging events.", fires: 29, avgReturn: "N/A", winRate: "N/A" },
   21: { plain: "On Fridays after 11am, flags stocks trading within 1% of the highest open-interest options strike — the pin risk zone where market makers hedge.", fires: 156, avgReturn: "+1.9%", winRate: "71%" },
   22: { plain: "Combines your personal trading history, win/loss patterns, and favorite setups with real-time market conditions to surface the setups most likely to match your style.", fires: 481, avgReturn: "+6.2%", winRate: "68%" },
-];
+};
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
