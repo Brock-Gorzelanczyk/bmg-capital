@@ -64,7 +64,7 @@ export default function LabShell({ labId }: LabShellProps) {
       // Load a sensible default
       const defaultLayout = getDefaultLayout(activeWorkspace?.name ?? "");
       try {
-        event.api.fromJSON(defaultLayout as Parameters<DockviewApi["fromJSON"]>[0]);
+        event.api.fromJSON(defaultLayout as unknown as Parameters<DockviewApi["fromJSON"]>[0]);
       } catch {
         // Manual panel add as fallback
         event.api.addPanel({ id: "position-blotter", component: "position-blotter", title: "Position Blotter" });

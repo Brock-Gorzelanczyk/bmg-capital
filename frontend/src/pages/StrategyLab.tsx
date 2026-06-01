@@ -1607,8 +1607,6 @@ function BacktestSection() {
         </>
       )}
     </div>
-      )}
-    </div>
   );
 }
 

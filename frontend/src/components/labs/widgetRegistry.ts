@@ -7,7 +7,7 @@ import WatchlistWidget from "./widgets/WatchlistWidget";
 import DailyRecapWidget from "./widgets/DailyRecapWidget";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const WIDGET_REGISTRY: Record<string, React.ComponentType<IDockviewPanelProps<any>>> = {
+export const WIDGET_REGISTRY: Record<string, React.FunctionComponent<IDockviewPanelProps<any>>> = {
   "position-blotter": PositionBlotterWidget,
   "equity-curve": EquityCurveWidget,
   "pnl-calendar": PnLCalendarWidget,
