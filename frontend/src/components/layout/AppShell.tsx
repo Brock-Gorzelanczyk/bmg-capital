@@ -138,7 +138,7 @@ export default function AppShell() {
       <CopilotModal open={copilotOpen} onClose={() => setCopilotOpen(false)} />
       <ExplainPanel />
       <NotificationPanel />
-      <SupportChatWidget />
+      <div className="md:hidden"><SupportChatWidget /></div>
     </div>
   );
 }

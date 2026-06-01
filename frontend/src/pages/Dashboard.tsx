@@ -163,7 +163,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)] tracking-tight font-display">Dashboard</h1>
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
           </p>
         </div>
         <div className="flex items-center gap-2">

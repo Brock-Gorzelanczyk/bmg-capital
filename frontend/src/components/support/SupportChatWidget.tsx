@@ -41,7 +41,7 @@ export default function SupportChatWidget() {
   };
 
   return (
-    <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-3 md:bottom-4 md:right-4 z-50 flex flex-col items-end gap-2">
+    <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-3 md:bottom-6 md:right-6 z-50 flex flex-col items-end gap-2">
       {/* Chat panel */}
       {open && (
         <div className="w-[calc(100vw-1.5rem)] md:w-80 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl shadow-black/60 flex flex-col overflow-hidden">

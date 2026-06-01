@@ -195,13 +195,22 @@ async def get_summary(
     prev_closes = await loop.run_in_executor(None, lambda: _get_prev_closes_sync(open_syms))
     _settle_open_trades(open_trades, prices, db)
 
-    closed = [
+    _closed_raw = [
         t for t in all_trades
         if t.status == "closed"
         and t.exit_reason not in ("expired",)
         and t.entry_price and t.entry_price > 0
         and t.exit_price
     ]
+    # Deduplicate by (symbol, entry_date.date()) — keep first (lowest id) so that
+    # the same underlying trade isn't counted once per preset_key.
+    _seen_trade_keys: set = set()
+    closed: list = []
+    for t in sorted(_closed_raw, key=lambda x: x.id):
+        _key = (t.symbol, t.entry_date.date() if t.entry_date else None)
+        if _key not in _seen_trade_keys:
+            _seen_trade_keys.add(_key)
+            closed.append(t)
     candidates_count = sum(1 for t in all_trades if t.status == "candidate")
     open_count = sum(1 for t in all_trades if t.status == "open")
 
@@ -237,6 +246,34 @@ async def get_summary(
         peak = max(peak, running)
         dd = (peak - running) / PAPER_PORTFOLIO * 100 if peak > 0 else 0
         max_dd = max(max_dd, dd)
+
+    # Sortino ratio
+    import math as _math
+    trade_returns = [
+        (t.exit_price - t.entry_price) / t.entry_price * 100
+        for t in closed
+    ]
+    if trade_returns:
+        mean_ret = sum(trade_returns) / len(trade_returns)
+        down_sq = [(r ** 2) for r in trade_returns if r < 0]
+        if down_sq:
+            downside_std = _math.sqrt(sum(down_sq) / len(down_sq))
+            sortino = mean_ret / downside_std if downside_std > 0 else 99.0
+        else:
+            sortino = 99.0
+    else:
+        sortino = 0.0
+
+    # Calmar ratio
+    if closed:
+        sorted_closed = sorted(closed, key=lambda x: x.exit_date or _now())
+        first_date = sorted_closed[0].entry_date or sorted_closed[0].exit_date or _now()
+        last_date = sorted_closed[-1].exit_date or _now()
+        total_days = max((last_date - first_date).days, 1)
+        annualized_return = (realized_pnl / PAPER_PORTFOLIO * 100) * (252 / total_days)
+        calmar = annualized_return / max_dd if max_dd > 0 else 99.0
+    else:
+        calmar = 0.0
 
     # Per-preset stats
     preset_stats: Dict[str, Any] = {}
@@ -291,6 +328,8 @@ async def get_summary(
             "best_preset": best_preset,
             "expectancy": round(expectancy, 2),
             "max_drawdown_pct": round(max_dd, 2),
+            "sortino_ratio": round(sortino, 2),
+            "calmar_ratio": round(calmar, 2),
         },
         "by_preset": sorted(preset_list, key=lambda x: -x["total_pnl"]),
     }

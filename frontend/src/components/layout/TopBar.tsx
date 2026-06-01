@@ -92,9 +92,9 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
 
       <SymbolSearch
         onSelect={(s) => navigate(`/chart?symbol=${s}`)}
-        placeholder="Search ticker… AAPL"
+        placeholder="Search ticker (e.g. AAPL)"
         className="flex-1 max-w-xs"
-        inputClassName="w-full h-9 bg-[var(--bg-elevated)] text-[var(--text-primary)] text-sm px-3 rounded-l border border-[var(--border-subtle)] focus:outline-none focus:border-[#3B82F6] focus:bg-[var(--bg-elevated)] placeholder-[#475569] uppercase transition-colors duration-150"
+        inputClassName="w-full h-9 bg-[var(--bg-elevated)] text-[var(--text-primary)] text-sm px-3 rounded-l border border-[var(--border-subtle)] focus:outline-none focus:border-[#3B82F6] focus:bg-[var(--bg-elevated)] placeholder-[#475569] transition-colors duration-150"
       />
 
       <div className="flex items-center gap-2 md:gap-3 ml-auto">

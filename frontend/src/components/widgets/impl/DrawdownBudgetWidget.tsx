@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert, AlertTriangle, Info } from "lucide-react";
 import { getAccount } from "@/api/paper";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
 const LS_KEY = "bmg_drawdown_budget";
 
@@ -52,13 +52,41 @@ export default function DrawdownBudgetWidget() {
     currentDrawdownPct = Math.max(0, (-totalPnl / impliedPeak) * 100);
   }
 
+  // budgetUsedPct: 0–100+ where 100 = budget fully consumed
   const budgetUsedPct = maxDrawdown > 0 ? (currentDrawdownPct / maxDrawdown) * 100 : 0;
-  const capped = Math.min(budgetUsedPct, 100);
+  const exceeded = budgetUsedPct > 100;
+  // Bar fill capped at 100% of the budget range
+  const barFill = Math.min(budgetUsedPct, 100);
 
-  const barColor = capped < 50 ? "#22C55E" : capped < 75 ? "#F59E0B" : "#EF4444";
-  const statusLabel = capped < 50 ? "On track" : capped < 75 ? "Caution" : "De-risk zone";
+  // Color thresholds (based on % of budget used)
+  const barColor =
+    exceeded            ? "#EF4444" :
+    budgetUsedPct >= 80 ? "#EF4444" :
+    budgetUsedPct >= 50 ? "#F59E0B" :
+    "#22C55E";
+
+  // Badge
+  const badgeLabel =
+    exceeded            ? "EXCEEDED" :
+    budgetUsedPct >= 80 ? "Near limit" :
+    budgetUsedPct >= 50 ? "Approaching" :
+    "On track";
+
   const dailyVaR = portfolioValue * 0.02;
-  const isDeRiskZone = capped >= 75;
+
+  // Banner: hide when <50% used
+  const showBanner = budgetUsedPct >= 50;
+
+  const bannerTitle =
+    exceeded            ? "Budget Exceeded" :
+    budgetUsedPct >= 80 ? "Near Limit" :
+    "Approaching Limit";
+
+  // Tick marks at 25 / 50 / 75 / 100% of budget
+  const tick25  = (maxDrawdown * 0.25).toFixed(1);
+  const tick50  = (maxDrawdown * 0.50).toFixed(1);
+  const tick75  = (maxDrawdown * 0.75).toFixed(1);
+  const tick100 = maxDrawdown.toFixed(1);
 
   return (
     <div className="h-full overflow-auto space-y-4">
@@ -94,35 +122,67 @@ export default function DrawdownBudgetWidget() {
 
       {/* Progress bar */}
       <div>
+        {/* Primary label — single source of truth for drawdown figure */}
         <div className="flex items-center justify-between mb-1.5 text-xs">
           <span className="text-[var(--text-tertiary)]">
-            Used{" "}
-            <span className="font-mono font-semibold" style={{ color: barColor }}>
-              {currentDrawdownPct.toFixed(1)}%
-            </span>
-            {" "}of{" "}
-            <span className="font-mono font-semibold text-[var(--text-secondary)]">
-              {maxDrawdown}%
-            </span>
+            {exceeded ? (
+              <>
+                <span className="font-mono font-semibold text-red-400">
+                  Drawdown EXCEEDED —{" "}
+                  <span style={{ color: barColor }}>{currentDrawdownPct.toFixed(1)}%</span>
+                </span>
+                {" "}
+                <span className="text-[var(--text-tertiary)]">vs</span>
+                {" "}
+                <span className="font-mono font-semibold text-[var(--text-secondary)]">
+                  {maxDrawdown}% budget
+                </span>
+              </>
+            ) : (
+              <>
+                {"Drawdown "}
+                <span className="font-mono font-semibold" style={{ color: barColor }}>
+                  {currentDrawdownPct.toFixed(1)}%
+                </span>
+                {" / "}
+                <span className="font-mono font-semibold text-[var(--text-secondary)]">
+                  {maxDrawdown}% budget
+                </span>
+              </>
+            )}
           </span>
           <span
             className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
             style={{ backgroundColor: `${barColor}20`, color: barColor, border: `1px solid ${barColor}30` }}
           >
-            {statusLabel}
+            {badgeLabel}
           </span>
         </div>
-        <div className="h-3 bg-[var(--bg-elevated-2)] rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${capped}%`, backgroundColor: barColor }}
-          />
+
+        {/* Bar + optional overflow indicator */}
+        <div className="flex items-center gap-1">
+          <div className="flex-1 h-3 bg-[var(--bg-elevated-2)] rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${barFill}%`, backgroundColor: barColor }}
+            />
+          </div>
+          {exceeded && (
+            <div
+              className="h-3 w-3 rounded-sm shrink-0 animate-pulse"
+              style={{ backgroundColor: "#EF4444" }}
+              title={`${currentDrawdownPct.toFixed(1)}% drawdown exceeds ${maxDrawdown}% budget`}
+            />
+          )}
         </div>
+
+        {/* Tick marks at 25 / 50 / 75 / 100% of budget */}
         <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] mt-1">
           <span>0%</span>
-          <span className="text-amber-500/70">50%</span>
-          <span className="text-red-500/70">75%</span>
-          <span>{maxDrawdown}%</span>
+          <span className="text-[var(--text-tertiary)]/70">{tick25}%</span>
+          <span className="text-amber-500/70">{tick50}%</span>
+          <span className="text-red-500/70">{tick75}%</span>
+          <span>{tick100}%</span>
         </div>
       </div>
 
@@ -161,14 +221,26 @@ export default function DrawdownBudgetWidget() {
         </p>
       </div>
 
-      {/* De-risk alert */}
-      {isDeRiskZone && (
-        <div className="flex items-start gap-2.5 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-3">
-          <AlertTriangle size={14} className="text-red-400 shrink-0 mt-0.5" />
+      {/* Banner — shown only at 50%+ utilization, no conflicting % values */}
+      {showBanner && (
+        <div
+          className="flex items-start gap-2.5 rounded-xl px-3 py-3"
+          style={{
+            backgroundColor: `${barColor}10`,
+            border: `1px solid ${barColor}30`,
+          }}
+        >
+          <AlertTriangle size={14} style={{ color: barColor }} className="shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs font-semibold text-red-300 mb-0.5">De-risk Recommendation</p>
-            <p className="text-[11px] text-red-400/80 leading-relaxed">
-              You've used <span className="font-bold">{capped.toFixed(0)}%</span> of your annual risk budget. Consider reducing exposure.
+            <p className="text-xs font-semibold mb-0.5" style={{ color: barColor }}>
+              {bannerTitle}
+            </p>
+            <p className="text-[11px] leading-relaxed" style={{ color: `${barColor}CC` }}>
+              {exceeded
+                ? `Your drawdown of ${currentDrawdownPct.toFixed(1)}% has exceeded the ${maxDrawdown}% budget. Consider reducing exposure or hedging to protect capital.`
+                : budgetUsedPct >= 80
+                ? `You are near your ${maxDrawdown}% annual drawdown limit. Consider reducing exposure or hedging open positions.`
+                : `You have used over half of your ${maxDrawdown}% annual drawdown allowance. Monitor positions closely.`}
             </p>
           </div>
         </div>

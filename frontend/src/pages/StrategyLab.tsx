@@ -842,7 +842,7 @@ export default function StrategyLab() {
           <StatPill label="Day's P&L"   value={dayPnl !== 0 ? `${dayPnl >= 0 ? "▲" : "▼"} ${fmt$(Math.abs(dayPnl))}` : "—"} color={dayPnl !== 0 ? pnlColor(dayPnl) : "text-[var(--text-tertiary)]"} sub="vs prev close" />
           <StatPill label="Win Rate"    value={(overall.total_closed ?? 0) > 0 ? `${overall.win_rate}%` : "—"} sub={(overall.total_closed ?? 0) > 0 ? `${overall.wins}W · ${overall.losses}L` : "no closed trades"} />
           <StatPill label="Expectancy"  value={(overall.total_closed ?? 0) > 0 ? fmtPct(overall.expectancy) : "—"} color={pnlColor(overall.expectancy)} sub="avg per trade" />
-          <StatPill label="Max Drawdown" value={(overall.max_drawdown_pct ?? 0) > 0 ? `-${(overall.max_drawdown_pct ?? 0).toFixed(1)}%` : "—"} color={(overall.max_drawdown_pct ?? 0) > 15 ? "text-[var(--accent-negative)]" : "text-[var(--text-secondary)]"} />
+          <StatPill label="Max Drawdown" value={(overall.total_closed ?? 0) > 0 ? `-${(overall.max_drawdown_pct ?? 0).toFixed(1)}%` : "—"} color={(overall.max_drawdown_pct ?? 0) > 15 ? "text-[var(--accent-negative)]" : "text-[var(--text-secondary)]"} />
           <StatPill label="Positions"   value={`${overall.open_positions ?? openTrades.length} open · ${overall.candidates ?? candidates.length} watching`} />
         </div>
       </div>

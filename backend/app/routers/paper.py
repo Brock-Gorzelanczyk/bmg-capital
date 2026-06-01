@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import random
 import re
 from datetime import datetime, timedelta, timezone
@@ -26,6 +27,56 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/paper", tags=["paper"])
+
+# ---------------------------------------------------------------------------
+# Demo-mode deterministic pricing
+# ---------------------------------------------------------------------------
+
+DEMO_EMAIL = "demo@bmgcapital.com"
+
+# Base prices used as anchors for demo accounts (approximate realistic values).
+_DEMO_BASE_PRICES: dict[str, float] = {
+    "AAPL": 211.0,
+    "NVDA": 950.0,
+    "MSFT": 435.0,
+    "TSLA": 245.0,
+    "AMZN": 215.0,
+    "SPY":  535.0,
+    "META": 620.0,
+    # extras sometimes seen in positions
+    "AMD":  178.0,
+    "SMCI": 420.0,
+    "PLTR":  28.0,
+    "MSTR": 520.0,
+    "COIN": 235.0,
+    "QQQ":  465.0,
+    "SOFI":  10.8,
+    "RKLB":  22.0,
+    "IONQ":  28.0,
+}
+
+
+def _demo_price(symbol: str, user_id: int) -> dict:
+    """Return a deterministic quote for demo accounts.
+
+    Price drifts smoothly with a sine wave keyed on user_id and minute_of_day,
+    giving realistic-looking movement without per-request randomness.
+    """
+    base = _DEMO_BASE_PRICES.get(symbol.upper(), 100.0)
+    now = datetime.utcnow()
+    minute_of_day = now.hour * 60 + now.minute
+    drift = 1.0 + 0.001 * math.sin(user_id * 7 + minute_of_day)
+    last = round(base * drift, 2)
+    half_spread = round(last * 0.0005 / 2, 2)
+    # prev_close: yesterday's sine at same minute but different seed
+    prev_drift = 1.0 + 0.001 * math.sin(user_id * 7 + minute_of_day - 1440)
+    prev_close = round(base * prev_drift, 2)
+    return {
+        "bid": round(last - half_spread, 2),
+        "ask": round(last + half_spread, 2),
+        "last": last,
+        "prev_close": prev_close,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +249,13 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
     acct = _get_or_create_account(db, user.id)
     positions = db.query(PaperPosition).filter_by(user_id=user.id).all()
 
-    # Fetch all quotes in parallel
+    # For demo accounts, use deterministic pricing instead of live quotes so
+    # that Portfolio Value, Day's P&L, and Total Return are stable across refreshes.
+    is_demo = getattr(user, "email", "") == DEMO_EMAIL
+
+    # Fetch all quotes in parallel (skipped for demo users)
     symbols = [p.symbol for p in positions]
-    if symbols:
+    if symbols and not is_demo:
         quotes_list = await asyncio.gather(
             *[get_quote(s) for s in symbols], return_exceptions=True
         )
@@ -208,6 +263,8 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
         for sym, q in zip(symbols, quotes_list):
             if isinstance(q, dict):
                 quotes[sym] = q
+    elif symbols and is_demo:
+        quotes = {sym: _demo_price(sym, user.id) for sym in symbols}
     else:
         quotes = {}
 
@@ -217,12 +274,13 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
 
     for p in positions:
         q = quotes.get(p.symbol)
-        stale = q is None  # H8: track if quote is missing
+        stale = q is None and not is_demo  # H8: track if quote is missing
         if q:
             current_price = q["last"]
         else:
             current_price = getattr(p, "last_price", None) or p.avg_cost
-            logger.warning(f"Quote fetch failed for {p.symbol}, using fallback price")
+            if not is_demo:
+                logger.warning(f"Quote fetch failed for {p.symbol}, using fallback price")
         prev_close = p.prev_close if p.prev_close is not None else (q["prev_close"] if q else p.avg_cost)
 
         # H20: use Decimal for all financial math
@@ -779,6 +837,11 @@ async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user
         now = datetime.now(timezone.utc)
         total_positions_value = 0.0
 
+        # Use a seeded RNG so re-seeding produces identical position dates and
+        # snapshot noise — making demo data deterministic across invocations.
+        date_str = now.strftime("%Y-%m-%d")
+        _rng = random.Random(f"{user.id}:{date_str}")
+
         for dp in DEMO_POSITIONS:
             symbol = dp["symbol"]
             qty = dp["qty"]
@@ -794,7 +857,7 @@ async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user
                 qty=qty,
                 avg_cost=avg_cost,
                 prev_close=prev_close,
-                opened_at=now - timedelta(days=random.randint(30, 90)),
+                opened_at=now - timedelta(days=_rng.randint(30, 90)),
             )
             db.add(pos)
             total_positions_value += current_price * qty
@@ -811,8 +874,8 @@ async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user
                 fill_price=avg_cost,
                 fill_qty=qty,
                 slippage=round(avg_cost * 0.0001, 4),
-                filled_at=now - timedelta(days=random.randint(30, 90)),
-                created_at=now - timedelta(days=random.randint(30, 90)),
+                filled_at=now - timedelta(days=_rng.randint(30, 90)),
+                created_at=now - timedelta(days=_rng.randint(30, 90)),
             )
             db.add(entry_order)
 
@@ -839,8 +902,8 @@ async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user
                 fill_price=sell_price,
                 fill_qty=qty_sold,
                 slippage=round(sell_price * 0.0001, 4),
-                filled_at=now - timedelta(days=random.randint(5, 20)),
-                created_at=now - timedelta(days=random.randint(5, 20)),
+                filled_at=now - timedelta(days=_rng.randint(5, 20)),
+                created_at=now - timedelta(days=_rng.randint(5, 20)),
             )
             db.add(sell_order)
             db.flush()
@@ -870,7 +933,7 @@ async def seed_demo(db: Session = Depends(get_db), user=Depends(get_current_user
             snap_date = today - timedelta(days=i)
             day_fraction = (90 - i) / 90
             trend_equity = base_equity + total_gain * day_fraction
-            noise = trend_equity * random.uniform(-0.008, 0.012)  # -0.8% to +1.2% noise
+            noise = trend_equity * _rng.uniform(-0.008, 0.012)  # -0.8% to +1.2% noise
             snap_equity = round(max(trend_equity + noise, base_equity * 0.85), 2)
             day_pnl = round(snap_equity - prev_snap_equity, 2)
             snap_positions_value = round(snap_equity * 0.65, 2)  # ~65% invested
