@@ -153,6 +153,25 @@ export default function MorningBriefWidget() {
   const indices: any[] = Array.isArray(rawIndices) ? rawIndices : [];
   const dataReady = !indicesLoading && indices.length > 0;
 
+  const generateFallback = useCallback((idxList: any[]) => {
+    const spy = idxList.find((i: any) => i.symbol === "SPY");
+    const qqq = idxList.find((i: any) => i.symbol === "QQQ");
+    const iwm = idxList.find((i: any) => i.symbol === "IWM");
+    const spDir = (spy?.change_pct ?? 0) >= 0 ? "higher" : "lower";
+    const spPct = spy ? `${spy.change_pct >= 0 ? "+" : ""}${spy.change_pct.toFixed(2)}%` : "flat";
+    const nqPct = qqq ? `${qqq.change_pct >= 0 ? "+" : ""}${qqq.change_pct.toFixed(2)}%` : "flat";
+    const spLeading = Math.abs(qqq?.change_pct ?? 0) > Math.abs(spy?.change_pct ?? 0) ? "NASDAQ leading" : "broad market holding";
+    const smCap = iwm ? (iwm.change_pct >= 0 ? "small-caps participating" : "small-caps lagging — risk-off undertone") : "";
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    setAiText(
+      `• Markets opened ${spDir} ${today} — S&P 500 ${spPct}, NASDAQ ${nqPct}. ${spLeading}.\n` +
+      `• ${smCap ? smCap.charAt(0).toUpperCase() + smCap.slice(1) + ". " : ""}Watch for sector rotation into close — tech ${(qqq?.change_pct ?? 0) >= 0 ? "momentum intact" : "under pressure"}.\n` +
+      `• AI brief available once ANTHROPIC_API_KEY is set in Railway — market data updates live in real time.`
+    );
+    setIsGenerating(false);
+    setGeneratedAt(new Date());
+  }, []);
+
   const generate = useCallback(() => {
     // Cancel any in-flight stream
     cancelRef.current?.();
@@ -177,15 +196,12 @@ export default function MorningBriefWidget() {
         setGeneratedAt(new Date());
       },
       (_err) => {
-        setIsGenerating(false);
-        setAiText(
-          "• AI summary unavailable — market data is still shown above.\n• Prices, sector moves, and signals update automatically.\n• Try refreshing to regenerate."
-        );
+        generateFallback(indices);
       }
     );
 
     cancelRef.current = cancel;
-  }, []);
+  }, [indices, generateFallback]);
 
   // Auto-generate once data is ready or genKey changes
   useEffect(() => {
