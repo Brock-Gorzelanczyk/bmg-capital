@@ -82,6 +82,22 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("league_tier",               "VARCHAR"),
         ("freeze_month",              "INTEGER"),
     ],
+    "robo_risk_profiles": [
+        ("income_bracket",      "VARCHAR"),
+        ("savings_rate",        "FLOAT"),
+        ("has_emergency_fund",  "BOOLEAN"),
+    ],
+    "robo_goals": [
+        ("notes",           "TEXT"),
+        ("probability_pct", "FLOAT"),
+    ],
+    "robo_core_portfolios": [
+        ("direct_index_min_value",  "FLOAT"),
+        ("drift_pct",               "FLOAT"),
+    ],
+    "robo_direct_index": [
+        ("estimated_tax_savings", "FLOAT"),
+    ],
 }
 
 

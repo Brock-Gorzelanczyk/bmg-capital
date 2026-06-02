@@ -26,6 +26,7 @@ from app.db.models.rule import UserRule
 from app.db.models.pod import Pod, PodPosition
 from app.db.models.estate import BeneficiaryRecord, DigitalAssetRecord
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
+from app.db.models.robo import RiskProfile, RoboGoal, CorePortfolio, DirectIndexPortfolio, RebalanceLog, WashSaleGuard  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -48,4 +49,5 @@ __all__ = [
     "Pod", "PodPosition",
     "BeneficiaryRecord", "DigitalAssetRecord",
     "MarketChallenge", "MarketChallengeAttempt", "LeagueCohort", "LeaguePoints",
+    "RiskProfile", "RoboGoal", "CorePortfolio", "DirectIndexPortfolio", "RebalanceLog", "WashSaleGuard",
 ]

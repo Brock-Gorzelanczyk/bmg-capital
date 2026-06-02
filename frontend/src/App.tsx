@@ -56,6 +56,10 @@ import DailyChallengePage from "@/pages/DailyChallengePage";
 import MorningBriefPage from "@/pages/MorningBriefPage";
 import AchievementsPage from "@/pages/AchievementsPage";
 import LeaguesPage from "@/pages/LeaguesPage";
+import RoboDashboard from "@/pages/RoboDashboard";
+import RiskQuizPage from "@/pages/RiskQuizPage";
+import GoalsPage from "@/pages/GoalsPage";
+import DirectIndexingPage from "@/pages/DirectIndexingPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -188,6 +192,10 @@ function AppInner() {
         <Route path="/morning-brief" element={<MorningBriefPage />} />
         <Route path="/achievements" element={<AchievementsPage />} />
         <Route path="/leagues" element={<LeaguesPage />} />
+        <Route path="/robo" element={<RoboDashboard />} />
+        <Route path="/robo/quiz" element={<RiskQuizPage />} />
+        <Route path="/robo/goals" element={<GoalsPage />} />
+        <Route path="/robo/direct-index" element={<DirectIndexingPage />} />
       </Route>
     </Routes>
   );
