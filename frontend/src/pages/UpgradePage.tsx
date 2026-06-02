@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Zap, Crown, Star, Shield, TrendingUp, BookOpen, BarChart2 } from "lucide-react";
+import { Check, Zap, Crown, Star, Shield, TrendingUp, BookOpen, BarChart2, Bot, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMyTier, createCheckout, startTrial } from "@/api/tiers";
 import { useTierStore } from "@/store/tierStore";
@@ -129,11 +130,25 @@ export default function UpgradePage() {
               <div className="text-[var(--text-secondary)] text-xs">Forever free</div>
             </div>
           </div>
-          <div className="mb-6">
+          <div className="mb-4">
             <span className="text-3xl font-bold text-[var(--text-primary)]">$0</span>
             <span className="text-[var(--text-tertiary)] text-xs ml-1">/month</span>
           </div>
-          <div className="mt-auto py-2.5 text-center text-sm rounded-xl bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)]">
+          <ul className="space-y-2 mb-6 flex-1">
+            {[
+              "Manual everything",
+              "Basic strategy execution (paper only)",
+              "Watchlist + alerts (manually configured)",
+              "Basic tax document generation",
+              "No automation",
+            ].map((f) => (
+              <li key={f} className="flex items-start gap-2 text-xs text-[var(--text-tertiary)]">
+                <Check size={12} className="text-[var(--text-tertiary)] shrink-0 mt-0.5" />
+                {f}
+              </li>
+            ))}
+          </ul>
+          <div className="py-2.5 text-center text-sm rounded-xl bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)]">
             {currentTier === "free" ? "Current plan" : "Downgrade"}
           </div>
         </div>
@@ -164,7 +179,20 @@ export default function UpgradePage() {
           {billing === "annual" && (
             <div className="text-[var(--accent-positive)] text-xs mb-2">billed $59/year — save $12.88</div>
           )}
-          <div className="flex-1" />
+          <ul className="space-y-2 mb-6 flex-1">
+            {[
+              "Full Labs autonomy (Trading & Strategies)",
+              "Smart Transfers + Round-ups",
+              "Auto-rebalance + auto-curated watchlist",
+              "AI bill negotiation (1 bill/month)",
+              "Morning Brief + Daily Digest",
+            ].map((f) => (
+              <li key={f} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+                <Check size={12} className="text-[var(--accent-positive)] shrink-0 mt-0.5" />
+                {f}
+              </li>
+            ))}
+          </ul>
 
           {currentTier === "plus" ? (
             <div className="py-2.5 text-center text-sm text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] rounded-xl">
@@ -194,18 +222,21 @@ export default function UpgradePage() {
 
         {/* Premium */}
         <div className={cn(
-          "bg-gradient-to-b from-[#2a1d00] to-[#0F172A] border rounded-2xl p-6 flex flex-col",
+          "bg-gradient-to-b from-[#0d1f0a] to-[#0F172A] border rounded-2xl p-6 flex flex-col relative",
           currentTier === "premium"
-            ? "border-[#F59E0B]/60 ring-1 ring-[#F59E0B]/30"
-            : "border-[#F59E0B]/30"
+            ? "border-[#84cc16]/60 ring-1 ring-[#84cc16]/30"
+            : "border-[#84cc16]/40"
         )}>
+          <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#84cc16] text-black text-[10px] font-bold px-3 py-0.5 rounded-full uppercase tracking-wider">
+            Recommended
+          </div>
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-[#F59E0B]/15 flex items-center justify-center">
-              <Crown size={18} className="text-[#F59E0B]" />
+            <div className="w-10 h-10 rounded-xl bg-[#84cc16]/15 flex items-center justify-center">
+              <Crown size={18} className="text-[#84cc16]" />
             </div>
             <div>
               <div className="text-[var(--text-primary)] font-bold">Premium</div>
-              <div className="text-[#F59E0B] text-xs">For professionals</div>
+              <div className="text-[#84cc16] text-xs">Full Autopilot</div>
             </div>
           </div>
           <div className="mb-1">
@@ -213,9 +244,26 @@ export default function UpgradePage() {
             <span className="text-[var(--text-tertiary)] text-xs ml-1">/month</span>
           </div>
           {billing === "annual" && (
-            <div className="text-[var(--accent-positive)] text-xs mb-2">billed $199/year — save $40.88</div>
+            <div className="text-[#84cc16] text-xs mb-2">billed $199/year — save $40.88</div>
           )}
-          <div className="flex-1" />
+          <ul className="space-y-2 mb-6 flex-1">
+            {[
+              "Everything in Plus",
+              "Full Autopilot — 9-category automation",
+              "Tax-loss harvesting (cross-account)",
+              "Direct indexing",
+              "AI thesis updates + quarterly review",
+              "Subscription analyzer (unlimited negotiation)",
+              "Custom guardrail tuning",
+              "Auto-tax planning (Roth conversion, estimated taxes)",
+              "Priority support",
+            ].map((f) => (
+              <li key={f} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+                <Check size={12} className="text-[#84cc16] shrink-0 mt-0.5" />
+                {f}
+              </li>
+            ))}
+          </ul>
 
           {currentTier === "premium" ? (
             <div className="py-2.5 text-center text-sm text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] rounded-xl">
@@ -225,12 +273,34 @@ export default function UpgradePage() {
             <button
               onClick={() => handleSubscribe("premium")}
               disabled={!!loadingPlan}
-              className="w-full py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-[#F59E0B] to-[#D97706] hover:from-[#D97706] hover:to-[#B45309] text-[var(--text-primary)] transition-colors disabled:opacity-50"
+              className="w-full py-2.5 rounded-xl text-sm font-bold bg-[#84cc16] hover:brightness-110 text-black transition-colors disabled:opacity-50"
             >
               {loadingPlan === "premium" ? "Loading…" : "Upgrade to Premium"}
             </button>
           )}
         </div>
+      </div>
+
+      {/* What Full Autopilot means */}
+      <div className="bg-[var(--bg-elevated)] border border-[#84cc16]/30 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Bot size={18} className="text-[#84cc16]" />
+          <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">
+            What "Full Autopilot" means
+          </span>
+        </div>
+        <p className="text-[var(--text-secondary)] text-sm leading-relaxed max-w-2xl">
+          While you sleep, BMG is running 247 strategies, harvesting tax losses, curating your watchlist,
+          tracking your bills, and generating your morning brief. Today alone, it did{" "}
+          <span className="text-[#84cc16] font-semibold">47 things</span> for you.
+        </p>
+        <Link
+          to="/autopilot/activity"
+          className="inline-flex items-center gap-2 text-sm text-[#84cc16] hover:underline font-semibold"
+        >
+          See your Autopilot activity
+          <ArrowRight size={14} />
+        </Link>
       </div>
 
       {/* Feature comparison table */}

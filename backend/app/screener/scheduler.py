@@ -416,6 +416,88 @@ async def run_learning_job() -> None:
         logger.error(f"Learning job setup failed: {e}", exc_info=True)
 
 
+async def run_journal_job() -> None:
+    """Runs daily at 6:00 PM ET, M-F — after market close when trades are done."""
+    logger.info("Running journal autopilot job...")
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.users import User
+        from app.services.journal_autopilot import (
+            auto_prompt_trade_reflection,
+            detect_loss_patterns,
+        )
+        from app.services.autopilot_policy import check_category_enabled
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).limit(50).all()
+            for user in users:
+                try:
+                    if not check_category_enabled(user.id, "journal", db):
+                        continue
+                    await auto_prompt_trade_reflection(user_id=user.id, db=db)
+                    await detect_loss_patterns(user_id=user.id, db=db)
+                except Exception as e:
+                    logger.error(f"Journal job failed for user {user.id}: {e}", exc_info=True)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Journal job setup failed: {e}", exc_info=True)
+
+
+async def run_quarterly_review_job() -> None:
+    """Runs daily at 8:00 AM ET — only does real work on quarter start days (Jan/Apr/Jul/Oct 1)."""
+    logger.info("Running quarterly review job...")
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.users import User
+        from app.services.journal_autopilot import generate_quarterly_review
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).limit(50).all()
+            for user in users:
+                try:
+                    await generate_quarterly_review(user_id=user.id, db=db)
+                except Exception as e:
+                    logger.error(f"Quarterly review failed for user {user.id}: {e}", exc_info=True)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Quarterly review job setup failed: {e}", exc_info=True)
+
+
+async def run_money_job() -> None:
+    """Runs weekly on Monday at 10:00 AM ET — money movement simulations."""
+    logger.info("Running money autopilot job...")
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.users import User
+        from app.services.money_autopilot import (
+            simulate_round_up,
+            simulate_cash_sweep,
+            analyze_subscription_spend,
+        )
+        from app.services.autopilot_policy import check_category_enabled
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).limit(50).all()
+            for user in users:
+                try:
+                    if not check_category_enabled(user.id, "money", db):
+                        continue
+                    await simulate_round_up(user_id=user.id, db=db)
+                    await simulate_cash_sweep(user_id=user.id, db=db)
+                    await analyze_subscription_spend(user_id=user.id, db=db)
+                except Exception as e:
+                    logger.error(f"Money job failed for user {user.id}: {e}", exc_info=True)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Money job setup failed: {e}", exc_info=True)
+
+
 async def run_crypto_automation_job() -> None:
     """Run crypto strategy automation for all active users (24/7, every 15 min)."""
     logger.info("Starting scheduled crypto automation...")
@@ -575,5 +657,29 @@ def setup_scheduler() -> None:
         run_learning_job,
         CronTrigger(hour=7, minute=0, timezone=ET),
         id="learning_job",
+        replace_existing=True,
+    )
+
+    # Journal job: 6:00 PM ET, M-F — post-mortem after market close
+    scheduler.add_job(
+        run_journal_job,
+        CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=ET),
+        id="journal_job",
+        replace_existing=True,
+    )
+
+    # Quarterly review: 8:00 AM ET, daily — guard inside fn checks quarter start
+    scheduler.add_job(
+        run_quarterly_review_job,
+        CronTrigger(hour=8, minute=0, timezone=ET),
+        id="quarterly_review_job",
+        replace_existing=True,
+    )
+
+    # Money job: Monday 10:00 AM ET — weekly money movement simulations
+    scheduler.add_job(
+        run_money_job,
+        CronTrigger(day_of_week="mon", hour=10, minute=0, timezone=ET),
+        id="money_job",
         replace_existing=True,
     )

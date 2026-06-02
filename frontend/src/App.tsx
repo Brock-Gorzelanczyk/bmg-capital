@@ -62,6 +62,7 @@ import GoalsPage from "@/pages/GoalsPage";
 import DirectIndexingPage from "@/pages/DirectIndexingPage";
 import MissionControlPage from "@/pages/MissionControlPage";
 import AutopilotPage from "@/pages/AutopilotPage";
+import AutopilotPromisePage from "@/pages/AutopilotPromisePage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -201,6 +202,7 @@ function AppInner() {
         <Route path="/mission-control" element={<MissionControlPage />} />
         <Route path="/autopilot" element={<AutopilotPage />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
+        <Route path="/autopilot/promise" element={<AutopilotPromisePage />} />
       </Route>
     </Routes>
   );

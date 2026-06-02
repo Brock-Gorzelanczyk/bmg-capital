@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -190,4 +190,131 @@ def _serialize(n: Notification) -> dict:
         "is_read": n.is_read,
         "meta": n.meta or {},
         "created_at": n.created_at.isoformat() if n.created_at else None,
+    }
+
+
+# ── Push-policy endpoints ───────────────────────────────────────────────────
+
+AUTOPILOT_CATEGORIES = [
+    "trading", "portfolio", "money", "research",
+    "learning", "journal", "tax", "alerts", "account",
+]
+
+
+@router.get("/policy")
+def get_notification_policy(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns the user's full notification / push policy:
+    - max_push_per_day
+    - quiet_hours start/end (UTC)
+    - push_per_category: {category: bool}
+    - push_used_today
+    - is_quiet_hours_now
+    """
+    from app.db.models.autopilot import AutopilotPolicy
+    from app.services.notification_policy import (
+        is_quiet_hours,
+        get_push_budget,
+        get_push_count_today,
+        QUIET_HOURS_START_UTC,
+        QUIET_HOURS_END_UTC,
+    )
+
+    push_per_category: dict[str, bool] = {}
+    for category in AUTOPILOT_CATEGORIES:
+        policy = db.query(AutopilotPolicy).filter_by(
+            user_id=current_user.id, category=category
+        ).first()
+        if policy and policy.config:
+            push_per_category[category] = bool(policy.config.get("push_enabled", True))
+        else:
+            push_per_category[category] = True
+
+    return {
+        "max_push_per_day": get_push_budget(current_user.id, db),
+        "quiet_hours_start": QUIET_HOURS_START_UTC,
+        "quiet_hours_end": QUIET_HOURS_END_UTC,
+        "push_per_category": push_per_category,
+        "push_used_today": get_push_count_today(current_user.id, db),
+        "is_quiet_hours_now": is_quiet_hours(),
+    }
+
+
+class PolicyUpdate(BaseModel):
+    max_push_per_day: Optional[int] = None
+    quiet_hours_start: Optional[int] = None
+    quiet_hours_end: Optional[int] = None
+    category_push: Optional[dict[str, bool]] = None
+
+
+@router.patch("/policy")
+def update_notification_policy(
+    body: PolicyUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update push notification policy.
+    - max_push_per_day stored in AutopilotPolicy "alerts" config
+    - category_push: {category: bool} → stored as push_enabled in each category's config
+    """
+    from app.db.models.autopilot import AutopilotPolicy
+
+    def _get_or_create_policy(category: str) -> AutopilotPolicy:
+        policy = db.query(AutopilotPolicy).filter_by(
+            user_id=current_user.id, category=category
+        ).first()
+        if not policy:
+            policy = AutopilotPolicy(
+                user_id=current_user.id,
+                category=category,
+                enabled=True,
+                config={},
+            )
+            db.add(policy)
+        return policy
+
+    if body.max_push_per_day is not None:
+        alerts_policy = _get_or_create_policy("alerts")
+        config = dict(alerts_policy.config or {})
+        config["max_push_per_day"] = body.max_push_per_day
+        alerts_policy.config = config
+        alerts_policy.updated_at = datetime.now(timezone.utc)
+
+    if body.category_push:
+        for category, enabled in body.category_push.items():
+            if category not in AUTOPILOT_CATEGORIES:
+                continue
+            cat_policy = _get_or_create_policy(category)
+            config = dict(cat_policy.config or {})
+            config["push_enabled"] = bool(enabled)
+            cat_policy.config = config
+            cat_policy.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/quiet-hours")
+def get_quiet_hours(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns quiet-hours state:
+    { active: bool, start_utc: int, end_utc: int, local_description: str }
+    """
+    from app.services.notification_policy import (
+        is_quiet_hours,
+        QUIET_HOURS_START_UTC,
+        QUIET_HOURS_END_UTC,
+    )
+
+    return {
+        "active": is_quiet_hours(),
+        "start_utc": QUIET_HOURS_START_UTC,
+        "end_utc": QUIET_HOURS_END_UTC,
+        "local_description": "9PM–7AM",
     }
