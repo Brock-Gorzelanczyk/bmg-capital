@@ -99,6 +99,201 @@ def create_portfolio(
     return _portfolio_to_dict(p, include_positions=True)
 
 
+# NOTE: /milestones and /streak must be declared BEFORE /{portfolio_id:int}
+# so FastAPI does not attempt to coerce "milestones"/"streak" as an integer
+# and return a 422 before reaching the correct handler.
+
+@router.get("/milestones", response_model=None)
+def get_milestones(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return milestone achievements for the current user across all portfolios."""
+    portfolios = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
+    all_positions: List[Position] = []
+    for p in portfolios:
+        all_positions.extend(p.positions)
+
+    total_cost_basis = sum(pos.shares * pos.average_cost for pos in all_positions)
+    sectors = set(SECTOR_MAP_MILESTONES.get(pos.symbol, "Other") for pos in all_positions)
+
+    has_positions = len(all_positions) > 0
+    has_profitable = any(pos.shares > 0 and pos.average_cost > 0 for pos in all_positions)
+
+    total_gain = 0.0
+
+    placeholder_milestones: List[Dict[str, Any]] = []
+    if not has_positions:
+        placeholder_milestones = [
+            {
+                "id": "paper_trading_activated",
+                "label": "Paper trading activated",
+                "description": "First trade — Paper trading activated",
+                "achieved": True,
+                "achieved_at": None,
+                "icon_emoji": "🚀",
+                "placeholder": True,
+            },
+            {
+                "id": "watchlist_started",
+                "label": "Watchlist started",
+                "description": "Watchlist started — Added first ticker",
+                "achieved": True,
+                "achieved_at": None,
+                "icon_emoji": "👀",
+                "placeholder": True,
+            },
+            {
+                "id": "strategy_scan_completed",
+                "label": "Strategy scan completed",
+                "description": "Strategy scan completed",
+                "achieved": True,
+                "achieved_at": None,
+                "icon_emoji": "🔍",
+                "placeholder": True,
+            },
+        ]
+        return {"milestones": placeholder_milestones}
+
+    milestones: List[Dict[str, Any]] = [
+        {
+            "id": "first_position",
+            "label": "First Position",
+            "description": "Add your first position to a portfolio",
+            "achieved": has_positions,
+            "achieved_at": (
+                min((pos.opened_at.isoformat() for pos in all_positions if pos.opened_at), default=None)
+                if has_positions else None
+            ),
+            "icon_emoji": "🌱",
+        },
+        {
+            "id": "first_1k_invested",
+            "label": "First $1K Invested",
+            "description": "Reach $1,000 in total cost basis",
+            "achieved": total_cost_basis >= 1_000,
+            "achieved_at": None,
+            "icon_emoji": "💰",
+        },
+        {
+            "id": "first_10k_invested",
+            "label": "First $10K Invested",
+            "description": "Reach $10,000 in total cost basis",
+            "achieved": total_cost_basis >= 10_000,
+            "achieved_at": None,
+            "icon_emoji": "🏦",
+        },
+        {
+            "id": "first_profitable_position",
+            "label": "First Profitable Position",
+            "description": "Hold a position with positive gain",
+            "achieved": has_profitable,
+            "achieved_at": None,
+            "icon_emoji": "📈",
+        },
+        {
+            "id": "diversified",
+            "label": "Diversified",
+            "description": "Hold positions in 3 or more different sectors",
+            "achieved": len(sectors) >= 3,
+            "achieved_at": None,
+            "icon_emoji": "🌐",
+        },
+        {
+            "id": "first_100_gain",
+            "label": "First $100 Gain",
+            "description": "Earn $100 in unrealized gains",
+            "achieved": total_gain >= 100,
+            "achieved_at": None,
+            "icon_emoji": "✨",
+        },
+        {
+            "id": "first_1k_gain",
+            "label": "First $1K Gain",
+            "description": "Earn $1,000 in unrealized gains",
+            "achieved": total_gain >= 1_000,
+            "achieved_at": None,
+            "icon_emoji": "🏆",
+        },
+    ]
+
+    return {"milestones": milestones}
+
+
+def _iso_week(d: date) -> Tuple[int, int]:
+    """Return (ISO year, ISO week number) for a date."""
+    iso = d.isocalendar()
+    return (iso[0], iso[1])
+
+
+@router.get("/streak", response_model=None)
+def get_streak(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return activity streak info based on position open dates."""
+    portfolios = db.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
+    all_positions: List[Position] = []
+    for p in portfolios:
+        all_positions.extend(p.positions)
+
+    if not all_positions:
+        return {
+            "current_streak_weeks": 0,
+            "longest_streak_weeks": 0,
+            "last_activity_date": None,
+        }
+
+    activity_dates: List[date] = [
+        pos.opened_at.date() if isinstance(pos.opened_at, datetime) else pos.opened_at
+        for pos in all_positions
+        if pos.opened_at is not None
+    ]
+
+    if not activity_dates:
+        return {
+            "current_streak_weeks": 0,
+            "longest_streak_weeks": 0,
+            "last_activity_date": None,
+        }
+
+    last_activity = max(activity_dates)
+    active_weeks = sorted(set(_iso_week(d) for d in activity_dates))
+
+    longest = 1
+    current_run = 1
+    for i in range(1, len(active_weeks)):
+        prev_year, prev_week = active_weeks[i - 1]
+        curr_year, curr_week = active_weeks[i]
+        prev_d = date.fromisocalendar(prev_year, prev_week, 1)
+        curr_d = date.fromisocalendar(curr_year, curr_week, 1)
+        if (curr_d - prev_d).days == 7:
+            current_run += 1
+            longest = max(longest, current_run)
+        else:
+            current_run = 1
+
+    today_week = _iso_week(date.today())
+    current_streak = 0
+    check_year, check_week = today_week
+    active_week_set = set(active_weeks)
+    while True:
+        if (check_year, check_week) in active_week_set:
+            current_streak += 1
+        else:
+            break
+        check_d = date.fromisocalendar(check_year, check_week, 1) - timedelta(weeks=1)
+        check_year, check_week = _iso_week(check_d)
+        if current_streak > 52:
+            break
+
+    return {
+        "current_streak_weeks": current_streak,
+        "longest_streak_weeks": longest,
+        "last_activity_date": last_activity.isoformat(),
+    }
+
+
 @router.get("/{portfolio_id:int}")
 def get_portfolio(
     portfolio_id: int,

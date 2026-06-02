@@ -159,8 +159,8 @@ export default function DrawdownBudget({
       {/* Progress bar */}
       <div>
         {/* Primary label — single source of truth for the drawdown figure */}
-        <div className="flex items-center justify-between mb-1.5 text-xs">
-          <span className="text-[var(--text-tertiary)]">
+        <div className="flex items-center justify-between mb-1.5 text-xs gap-2">
+          <span className="text-[var(--text-tertiary)] overflow-hidden min-w-0 truncate">
             {exceeded ? (
               <>
                 <span className="font-mono font-semibold text-red-400">
