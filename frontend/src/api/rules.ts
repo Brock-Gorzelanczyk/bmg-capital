@@ -77,6 +77,6 @@ export interface TransferSuggestionsResponse {
 }
 
 export const getTransferSuggestions = async (): Promise<TransferSuggestionsResponse> => {
-  const res = await client.get<TransferSuggestionsResponse>("/api/transfers/suggestions");
+  const res = await client.get<TransferSuggestionsResponse>("/transfers/suggestions");
   return res.data;
 };

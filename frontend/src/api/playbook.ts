@@ -52,12 +52,12 @@ export interface Decision {
 }
 
 export async function getPlaybookStatus(): Promise<PlaybookStatus> {
-  const { data } = await client.get("/api/playbook/status");
+  const { data } = await client.get("/playbook/status");
   return data;
 }
 
 export async function getPlaybookPhases(): Promise<PlaybookPhase[]> {
-  const { data } = await client.get("/api/playbook/phases");
+  const { data } = await client.get("/playbook/phases");
   return data;
 }
 
@@ -65,7 +65,7 @@ export async function patchPlaybookTask(
   taskId: number,
   body: { status?: string; completion_note?: string }
 ): Promise<PlaybookTask> {
-  const { data } = await client.patch(`/api/playbook/tasks/${taskId}`, body);
+  const { data } = await client.patch(`/playbook/tasks/${taskId}`, body);
   return data;
 }
 
@@ -77,21 +77,21 @@ export async function createPlaybookTask(body: {
   priority?: string;
   day_focus?: string;
 }): Promise<PlaybookTask> {
-  const { data } = await client.post("/api/playbook/tasks", body);
+  const { data } = await client.post("/playbook/tasks", body);
   return data;
 }
 
 export async function getDoNotDo(): Promise<{ items: string[] }> {
-  const { data } = await client.get("/api/playbook/do-not-do");
+  const { data } = await client.get("/playbook/do-not-do");
   return data;
 }
 
 export async function getDecisions(): Promise<{ decisions: Decision[] }> {
-  const { data } = await client.get("/api/playbook/decisions");
+  const { data } = await client.get("/playbook/decisions");
   return data;
 }
 
 export async function initPlaybook(): Promise<{ seeded: boolean; phases: number }> {
-  const { data } = await client.post("/api/playbook/init");
+  const { data } = await client.post("/playbook/init");
   return data;
 }

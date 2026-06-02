@@ -29,6 +29,20 @@ async def get_market_overview() -> List[Dict[str, Any]]:
                 prev_close = float(prev.close) if prev else price
                 change = price - prev_close
                 change_pct = (change / prev_close * 100) if prev_close else 0.0
+
+                # Sanity check: index ETF prices have known realistic ranges.
+                # SPY trades ~$400–$700, so anything below $200 or above $1200 is stale/bad data.
+                PRICE_FLOOR: dict = {"SPY": 200, "QQQ": 150, "DIA": 200, "IWM": 100}
+                floor = PRICE_FLOOR.get(symbol, 1)
+                if price < floor:
+                    logger.warning(
+                        "Sanity check failed for %s: price %.2f is below floor %.0f — returning null",
+                        symbol, price, floor,
+                    )
+                    price = None  # type: ignore[assignment]
+                    change = None  # type: ignore[assignment]
+                    change_pct = None  # type: ignore[assignment]
+
                 result.append(
                     {
                         "symbol": symbol,

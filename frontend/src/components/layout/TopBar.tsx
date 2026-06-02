@@ -128,13 +128,13 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
               <Clock size={12} className="text-[#F59E0B]" />
-              <span className="text-[#F59E0B] hidden sm:block font-medium">After Hours</span>
+              <span className="text-[#F59E0B] hidden sm:block font-medium">AFTER HOURS</span>
             </>
           ) : (
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
               <Moon size={12} className="text-[#F59E0B]" />
-              <span className="text-[#F59E0B] hidden sm:block font-medium">Closed</span>
+              <span className="text-[#F59E0B] hidden sm:block font-medium">CLOSED</span>
             </>
           )}
         </div>

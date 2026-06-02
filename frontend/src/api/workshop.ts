@@ -24,7 +24,7 @@ export interface AIAnalysis {
 }
 
 export const listAnalyses = (symbol?: string): Promise<ChartAnalysis[]> =>
-  client.get("/api/workshop/analyses", { params: symbol ? { symbol } : {} })
+  client.get("/workshop/analyses", { params: symbol ? { symbol } : {} })
     .then((r) => (Array.isArray(r.data) ? r.data : []))
     .catch(() => []);
 
@@ -35,17 +35,17 @@ export const createAnalysis = (body: {
   thesis?: string;
   drawings?: Drawing[];
 }): Promise<{ id: number; name: string; symbol: string; timeframe: string }> =>
-  client.post("/api/workshop/analyses", body).then((r) => r.data);
+  client.post("/workshop/analyses", body).then((r) => r.data);
 
 export const updateAnalysis = (id: number, body: {
   name?: string;
   thesis?: string;
   drawings?: Drawing[];
 }): Promise<{ ok: boolean }> =>
-  client.put(`/api/workshop/analyses/${id}`, body).then((r) => r.data);
+  client.put(`/workshop/analyses/${id}`, body).then((r) => r.data);
 
 export const deleteAnalysis = (id: number): Promise<{ ok: boolean }> =>
-  client.delete(`/api/workshop/analyses/${id}`).then((r) => r.data);
+  client.delete(`/workshop/analyses/${id}`).then((r) => r.data);
 
 export const analyzeChart = (body: {
   symbol: string;
@@ -55,7 +55,7 @@ export const analyzeChart = (body: {
   indicators: string[];
   thesis?: string;
 }): Promise<{ analysis: AIAnalysis }> =>
-  client.post("/api/workshop/analyze", body).then((r) => r.data);
+  client.post("/workshop/analyze", body).then((r) => r.data);
 
 export const analyzeAndSave = (analysisId: number, body: {
   symbol: string;
@@ -65,7 +65,7 @@ export const analyzeAndSave = (analysisId: number, body: {
   indicators: string[];
   thesis?: string;
 }): Promise<{ analysis: AIAnalysis }> =>
-  client.post(`/api/workshop/analyses/${analysisId}/analyze`, body).then((r) => r.data);
+  client.post(`/workshop/analyses/${analysisId}/analyze`, body).then((r) => r.data);
 
 export interface ImageDrawingDetected {
   type: string;
@@ -97,7 +97,7 @@ export interface ImageAnalysis {
 export const analyzeImage = (file: File): Promise<{ analysis: ImageAnalysis }> => {
   const form = new FormData();
   form.append("file", file);
-  return client.post("/api/workshop/analyze-image", form, {
+  return client.post("/workshop/analyze-image", form, {
     headers: { "Content-Type": "multipart/form-data" },
   }).then((r) => r.data);
 };

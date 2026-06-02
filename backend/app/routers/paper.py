@@ -357,16 +357,21 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
         if q:
             current_price = q["last"]
         else:
-            current_price = getattr(p, "last_price", None) or p.avg_cost
+            # When price fetch fails, use last known price (if any) — never a fake constant.
+            current_price = getattr(p, "last_price", None)
             if not is_demo:
-                logger.warning(f"Quote fetch failed for {p.symbol}, using fallback price")
-        prev_close = p.prev_close if p.prev_close is not None else (q["prev_close"] if q else p.avg_cost)
+                logger.warning(f"Quote fetch failed for {p.symbol}, returning null price")
+        # prev_close: use stored value or quote value; fall back to None (not avg_cost) so
+        # we don't fabricate a 0% day-P&L with a fake baseline.
+        prev_close = p.prev_close if p.prev_close is not None else (q["prev_close"] if q else None)
 
         # H20: use Decimal for all financial math
-        d_price = _d(current_price)
+        # When current_price is None we still compute market_value from avg_cost so totals
+        # remain coherent, but we surface None to the frontend for the price cell.
+        d_price = _d(current_price if current_price is not None else p.avg_cost)
         d_qty = _d(p.qty)
         d_avg_cost = _d(p.avg_cost)
-        d_prev_close = _d(prev_close)
+        d_prev_close = _d(prev_close) if prev_close is not None else None
 
         market_value = _money(d_price * d_qty)
         cost_basis_total = _money(d_avg_cost * d_qty)
@@ -376,9 +381,18 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
         d_cost_abs = abs(_d(cost_basis_total))
         unrealized_pnl_pct = _money(d_unrealized_pnl / d_cost_abs * _d(100)) if d_cost_abs else 0.0
 
-        d_pos_day_pnl = (d_price - d_prev_close) * d_qty
-        pos_day_pnl = _money(d_pos_day_pnl)
-        pos_day_pnl_pct = _money((d_price - d_prev_close) / d_prev_close * _d(100)) if prev_close else 0.0
+        # day P&L: only compute when we have a valid previous close
+        if d_prev_close is not None and d_prev_close != 0:
+            d_pos_day_pnl = (d_price - d_prev_close) * d_qty
+            pos_day_pnl = _money(d_pos_day_pnl)
+            # Fix day_pct formula: (current - prev_close) / prev_close * 100
+            # Clamp to ±50% — values outside that range indicate stale/bad data
+            raw_day_pct = float((d_price - d_prev_close) / d_prev_close * _d(100))
+            clamped_pct = max(-50.0, min(50.0, raw_day_pct))
+            pos_day_pnl_pct = round(clamped_pct, 4)
+        else:
+            pos_day_pnl = 0.0
+            pos_day_pnl_pct = 0.0
 
         total_positions_value += market_value
         day_pnl_total += pos_day_pnl

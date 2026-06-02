@@ -30,11 +30,11 @@ export interface TLHSummary {
 }
 
 export async function getTLHOpportunities(): Promise<TLHOpportunitiesResponse> {
-  const { data } = await client.get<TLHOpportunitiesResponse>("/api/tlh/opportunities");
+  const { data } = await client.get<TLHOpportunitiesResponse>("/tlh/opportunities");
   return data;
 }
 
 export async function getTLHSummary(): Promise<TLHSummary> {
-  const { data } = await client.get<TLHSummary>("/api/tlh/summary");
+  const { data } = await client.get<TLHSummary>("/tlh/summary");
   return data;
 }

@@ -422,7 +422,7 @@ function PositionDrawer({ position, onClose, onTrade }: DrawerProps) {
           {/* Current price */}
           <div>
             <div className="text-2xl font-mono font-bold text-[var(--text-primary)]">
-              {formatCurrency(position.current_price)}
+              {position.current_price != null ? formatCurrency(position.current_price) : <span className="text-[var(--text-tertiary)]">—</span>}
             </div>
             <div className={cn("text-sm font-mono mt-0.5", pnlColor(position.day_pnl))}>
               {pnlSign(position.day_pnl)}{formatCurrency(position.day_pnl)} today ({dayPct >= 0 ? "+" : ""}{dayPct.toFixed(2)}%)
@@ -660,7 +660,9 @@ function HoldingsTab({
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono text-[var(--text-secondary)]">{formatShareQty(pos.qty)}</td>
                   <td className="px-3 py-2.5 text-right font-mono text-[var(--text-secondary)]">{formatCurrency(pos.avg_cost)}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-[var(--text-primary)]">{formatCurrency(pos.current_price)}</td>
+                  <td className="px-3 py-2.5 text-right font-mono text-[var(--text-primary)]">
+                    {pos.current_price != null ? formatCurrency(pos.current_price) : <span className="text-[var(--text-tertiary)]">—</span>}
+                  </td>
                   <td className="px-3 py-2.5 text-right font-mono text-[var(--text-primary)] font-medium">{formatCurrency(pos.market_value)}</td>
                   <td className={cn("px-3 py-2.5 text-right font-mono", pnlColor(pos.day_pnl))}>
                     <div className="font-medium">{pnlSign(pos.day_pnl)}{formatCurrency(pos.day_pnl)}</div>

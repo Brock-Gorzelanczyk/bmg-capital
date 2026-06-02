@@ -556,7 +556,7 @@ SECTOR_MAP_MILESTONES: Dict[str, str] = {
 }
 
 
-@router.get("/milestones")
+@router.get("/milestones", response_model=None)
 def get_milestones(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -575,6 +575,40 @@ def get_milestones(
 
     # Total gain: without live prices we approximate 0; frontend can enrich
     total_gain = 0.0
+
+    # Seed 3 placeholder milestones for new users with no positions yet
+    placeholder_milestones: List[Dict[str, Any]] = []
+    if not has_positions:
+        placeholder_milestones = [
+            {
+                "id": "paper_trading_activated",
+                "label": "Paper trading activated",
+                "description": "First trade — Paper trading activated",
+                "achieved": True,
+                "achieved_at": None,
+                "icon_emoji": "🚀",
+                "placeholder": True,
+            },
+            {
+                "id": "watchlist_started",
+                "label": "Watchlist started",
+                "description": "Watchlist started — Added first ticker",
+                "achieved": True,
+                "achieved_at": None,
+                "icon_emoji": "👀",
+                "placeholder": True,
+            },
+            {
+                "id": "strategy_scan_completed",
+                "label": "Strategy scan completed",
+                "description": "Strategy scan completed",
+                "achieved": True,
+                "achieved_at": None,
+                "icon_emoji": "🔍",
+                "placeholder": True,
+            },
+        ]
+        return {"milestones": placeholder_milestones}
 
     milestones: List[Dict[str, Any]] = [
         {
@@ -651,7 +685,7 @@ def _iso_week(d: date) -> Tuple[int, int]:
     return (iso[0], iso[1])
 
 
-@router.get("/streak")
+@router.get("/streak", response_model=None)
 def get_streak(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

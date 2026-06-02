@@ -83,7 +83,7 @@ export default function OrderTicket({ symbol, defaultSide = "buy", onClose, comp
     staleTime: 10_000,
   });
 
-  const buyingPower = account?.cash ?? 0;
+  const buyingPower = Math.max(0, account?.cash ?? 0);
 
   // Derived share estimate
   const estimatedShares =

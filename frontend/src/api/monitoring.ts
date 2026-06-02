@@ -90,22 +90,22 @@ export interface StatusResponse {
 // ── API functions ─────────────────────────────────────────────────────────────
 
 export const getHealth = (): Promise<HealthResult> =>
-  client.get("/api/monitoring/health").then((r) => r.data);
+  client.get("/monitoring/health").then((r) => r.data);
 
 export const getHistory = (): Promise<HistoryResult> =>
-  client.get("/api/monitoring/history").then((r) => r.data);
+  client.get("/monitoring/history").then((r) => r.data);
 
 export const getIntegrity = (): Promise<IntegrityResult> =>
-  client.get("/api/monitoring/integrity").then((r) => r.data);
+  client.get("/monitoring/integrity").then((r) => r.data);
 
 export const triggerSentinel = (): Promise<SentinelResult> =>
-  client.post("/api/monitoring/sentinel").then((r) => r.data);
+  client.post("/monitoring/sentinel").then((r) => r.data);
 
 export const getSentinelLatest = (): Promise<SentinelResult> =>
-  client.get("/api/monitoring/sentinel/latest").then((r) => r.data);
+  client.get("/monitoring/sentinel/latest").then((r) => r.data);
 
 export const getChecks = (): Promise<CheckRegistryResult> =>
-  client.get("/api/monitoring/checks").then((r) => r.data);
+  client.get("/monitoring/checks").then((r) => r.data);
 
 export const getResults = (params?: {
   check_id?: string;
@@ -113,7 +113,7 @@ export const getResults = (params?: {
   hours?: number;
   passed?: boolean;
 }): Promise<MonitoringResultsResponse> =>
-  client.get("/api/monitoring/results", { params }).then((r) => r.data);
+  client.get("/monitoring/results", { params }).then((r) => r.data);
 
 export const getStatus = (): Promise<StatusResponse> =>
-  client.get("/api/monitoring/status").then((r) => r.data);
+  client.get("/monitoring/status").then((r) => r.data);

@@ -263,9 +263,9 @@ export default function TvTopBar({
         {wsStatus === "connected" && marketStatus === "open" ? (
           <><Wifi size={13} className="text-[var(--accent-positive)]" /><span className="text-[var(--accent-positive)] hidden sm:block">Live</span></>
         ) : wsStatus === "connected" ? (
-          <><Moon size={13} className="text-amber-500" /><span className="text-amber-500 hidden sm:block">Closed</span></>
+          <><Moon size={13} className="text-amber-500" /><span className="text-amber-500 hidden sm:block">CLOSED</span></>
         ) : (
-          <><WifiOff size={13} className="text-[var(--accent-negative)]" /><span className="text-[var(--accent-negative)] hidden sm:block">Off</span></>
+          <><WifiOff size={13} className="text-[var(--accent-negative)]" /><span className="text-[var(--accent-negative)] hidden sm:block">Offline</span></>
         )}
       </div>
 
