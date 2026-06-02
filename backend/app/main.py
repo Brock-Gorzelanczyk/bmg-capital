@@ -99,6 +99,14 @@ async def lifespan(app: FastAPI):
     # Kick off strategy scan in background — won't block server startup
     asyncio.create_task(_startup_strategy_scan())
 
+    # Health check: warn if ANTHROPIC_API_KEY is missing — AI features degrade gracefully
+    import os
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        logger.warning(
+            "ANTHROPIC_API_KEY not set — AI features degraded. "
+            "Set in Railway environment variables."
+        )
+
     yield
 
     # Graceful shutdown
