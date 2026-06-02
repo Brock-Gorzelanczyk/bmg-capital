@@ -48,15 +48,17 @@ function ContractCell({
 }
 
 export default function OptionsChain({ calls, puts, underlyingPrice, legs, onAddLeg }: Props) {
-  const legSymbols = new Set(legs.map((l) => l.contract.symbol));
+  const legSymbols = new Set((legs ?? []).map((l) => l.contract.symbol));
 
   // Align calls and puts by strike
+  const safeCalls = calls ?? [];
+  const safePuts = puts ?? [];
   const allStrikes = Array.from(
-    new Set([...calls.map((c) => c.strike), ...puts.map((p) => p.strike)])
+    new Set([...safeCalls.map((c) => c.strike), ...safePuts.map((p) => p.strike)])
   ).sort((a, b) => a - b);
 
-  const callByStrike = new Map(calls.map((c) => [c.strike, c]));
-  const putByStrike = new Map(puts.map((p) => [p.strike, p]));
+  const callByStrike = new Map(safeCalls.map((c) => [c.strike, c]));
+  const putByStrike = new Map(safePuts.map((p) => [p.strike, p]));
 
   return (
     <div className="overflow-x-auto">

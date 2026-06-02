@@ -1,4 +1,4 @@
-import { Component, type ReactNode, useEffect } from "react";
+import { Component, type ReactNode, useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -6,66 +6,81 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
 import ProtectedRoute from "@/components/ProtectedRoute";
+// Critical-path pages — kept as static imports
 import Dashboard from "@/pages/Dashboard";
 import ChartPage from "@/pages/ChartPage";
 import Screener from "@/pages/Screener";
-import WatchlistPage from "@/pages/WatchlistPage";
-import Portfolio from "@/pages/Portfolio";
-import Alerts from "@/pages/Alerts";
-import StrategyLab from "@/pages/StrategyLab";
-import News from "@/pages/News";
-import Earnings from "@/pages/Earnings";
-import Research from "@/pages/Research";
-import PaperTrading from "@/pages/PaperTrading";
 import LoginPage from "@/pages/LoginPage";
-import LearnHome from "@/pages/LearnHome";
-import LearnCourse from "@/pages/LearnCourse";
-import LearnLesson from "@/pages/LearnLesson";
-import OptionsLab from "@/pages/OptionsLab";
-import CryptoLab from "@/pages/CryptoLab";
-import NotificationsPage from "@/pages/NotificationsPage";
-import Discovery from "@/pages/Discovery";
-import DeFi from "@/pages/DeFi";
-import Security from "@/pages/Security";
-import Onboarding from "@/pages/Onboarding";
-import JournalPage from "@/pages/JournalPage";
-import AnalyticsPage from "@/pages/AnalyticsPage";
-import WorkshopPage from "@/pages/WorkshopPage";
-import MonitoringPage from "@/pages/MonitoringPage";
-import Social from "@/pages/Social";
-import UpgradePage from "@/pages/UpgradePage";
-import SettingsPage from "@/pages/Settings";
-import NetWorthPage from "@/pages/NetWorthPage";
-import TaxXRayPage from "@/pages/TaxXRayPage";
-import PodsPage from "@/pages/PodsPage";
-import RiskParityPage from "@/pages/RiskParityPage";
-import RulesPage from "@/pages/RulesPage";
-import EstatePage from "@/pages/EstatePage";
-import RSUConsolePage from "@/pages/RSUConsolePage";
-import SmartTransfersPage from "@/pages/SmartTransfersPage";
-import HeatMapPage from "@/pages/HeatMapPage";
-import OptionsFlowPage from "@/pages/OptionsFlowPage";
-import MacroDashboardPage from "@/pages/MacroDashboardPage";
-import SmartMoneyPage from "@/pages/SmartMoneyPage";
-import BacktestLabPage from "@/pages/BacktestLabPage";
-import ScannersPage from "@/pages/ScannersPage";
-import AlertBuilderPage from "@/pages/AlertBuilderPage";
-import PitchPage from "@/pages/PitchPage";
-import PitchDeckPage from "@/pages/PitchDeckPage";
-import DailyChallengePage from "@/pages/DailyChallengePage";
-import MorningBriefPage from "@/pages/MorningBriefPage";
-import AchievementsPage from "@/pages/AchievementsPage";
-import LeaguesPage from "@/pages/LeaguesPage";
-import RoboDashboard from "@/pages/RoboDashboard";
-import RiskQuizPage from "@/pages/RiskQuizPage";
-import GoalsPage from "@/pages/GoalsPage";
-import DirectIndexingPage from "@/pages/DirectIndexingPage";
-import MissionControlPage from "@/pages/MissionControlPage";
-import AutopilotPage from "@/pages/AutopilotPage";
-import AutopilotPromisePage from "@/pages/AutopilotPromisePage";
+// Heavy/non-critical pages — lazy-loaded for code splitting
+const WatchlistPage = lazy(() => import("@/pages/WatchlistPage"));
+const Portfolio = lazy(() => import("@/pages/Portfolio"));
+const Alerts = lazy(() => import("@/pages/Alerts"));
+const StrategyLab = lazy(() => import("@/pages/StrategyLab"));
+const News = lazy(() => import("@/pages/News"));
+const Earnings = lazy(() => import("@/pages/Earnings"));
+const Research = lazy(() => import("@/pages/Research"));
+const PaperTrading = lazy(() => import("@/pages/PaperTrading"));
+const LearnHome = lazy(() => import("@/pages/LearnHome"));
+const LearnCourse = lazy(() => import("@/pages/LearnCourse"));
+const LearnLesson = lazy(() => import("@/pages/LearnLesson"));
+const OptionsLab = lazy(() => import("@/pages/OptionsLab"));
+const CryptoLab = lazy(() => import("@/pages/CryptoLab"));
+const NotificationsPage = lazy(() => import("@/pages/NotificationsPage"));
+const Discovery = lazy(() => import("@/pages/Discovery"));
+const DeFi = lazy(() => import("@/pages/DeFi"));
+const Security = lazy(() => import("@/pages/Security"));
+const Onboarding = lazy(() => import("@/pages/Onboarding"));
+const JournalPage = lazy(() => import("@/pages/JournalPage"));
+const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
+const WorkshopPage = lazy(() => import("@/pages/WorkshopPage"));
+const MonitoringPage = lazy(() => import("@/pages/MonitoringPage"));
+const Social = lazy(() => import("@/pages/Social"));
+const UpgradePage = lazy(() => import("@/pages/UpgradePage"));
+const SettingsPage = lazy(() => import("@/pages/Settings"));
+const NetWorthPage = lazy(() => import("@/pages/NetWorthPage"));
+const TaxXRayPage = lazy(() => import("@/pages/TaxXRayPage"));
+const PodsPage = lazy(() => import("@/pages/PodsPage"));
+const RiskParityPage = lazy(() => import("@/pages/RiskParityPage"));
+const RulesPage = lazy(() => import("@/pages/RulesPage"));
+const EstatePage = lazy(() => import("@/pages/EstatePage"));
+const RSUConsolePage = lazy(() => import("@/pages/RSUConsolePage"));
+const SmartTransfersPage = lazy(() => import("@/pages/SmartTransfersPage"));
+const HeatMapPage = lazy(() => import("@/pages/HeatMapPage"));
+const OptionsFlowPage = lazy(() => import("@/pages/OptionsFlowPage"));
+const MacroDashboardPage = lazy(() => import("@/pages/MacroDashboardPage"));
+const SmartMoneyPage = lazy(() => import("@/pages/SmartMoneyPage"));
+const BacktestLabPage = lazy(() => import("@/pages/BacktestLabPage"));
+const ScannersPage = lazy(() => import("@/pages/ScannersPage"));
+const AlertBuilderPage = lazy(() => import("@/pages/AlertBuilderPage"));
+const PitchPage = lazy(() => import("@/pages/PitchPage"));
+const PitchDeckPage = lazy(() => import("@/pages/PitchDeckPage"));
+const DailyChallengePage = lazy(() => import("@/pages/DailyChallengePage"));
+const MorningBriefPage = lazy(() => import("@/pages/MorningBriefPage"));
+const AchievementsPage = lazy(() => import("@/pages/AchievementsPage"));
+const LeaguesPage = lazy(() => import("@/pages/LeaguesPage"));
+const RoboDashboard = lazy(() => import("@/pages/RoboDashboard"));
+const RiskQuizPage = lazy(() => import("@/pages/RiskQuizPage"));
+const GoalsPage = lazy(() => import("@/pages/GoalsPage"));
+const DirectIndexingPage = lazy(() => import("@/pages/DirectIndexingPage"));
+const MissionControlPage = lazy(() => import("@/pages/MissionControlPage"));
+const AutopilotPage = lazy(() => import("@/pages/AutopilotPage"));
+const AutopilotPromisePage = lazy(() => import("@/pages/AutopilotPromisePage"));
+const PlaybookPage = lazy(() => import("@/pages/PlaybookPage"));
+const PlaybookDecisionsPage = lazy(() => import("@/pages/PlaybookDecisionsPage"));
+const InvestorPipelinePage = lazy(() => import("@/pages/InvestorPipelinePage"));
+const FounderHubPage = lazy(() => import("@/pages/FounderHubPage"));
+const WaitlistAnalyticsPage = lazy(() => import("@/pages/WaitlistAnalyticsPage"));
+const ContentCalendarPage = lazy(() => import("@/pages/ContentCalendarPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
+
+const PageLoader = () => (
+  <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ width: 32, height: 32, border: "2px solid #84cc16", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
@@ -147,6 +162,7 @@ function AppInner() {
   }, [navigate]);
 
   return (
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<Dashboard />} />
@@ -203,8 +219,15 @@ function AppInner() {
         <Route path="/autopilot" element={<AutopilotPage />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
         <Route path="/autopilot/promise" element={<AutopilotPromisePage />} />
+        <Route path="/settings/pitch/playbook" element={<PlaybookPage />} />
+        <Route path="/settings/pitch/playbook/decisions" element={<PlaybookDecisionsPage />} />
+        <Route path="/settings/founder" element={<FounderHubPage />} />
+        <Route path="/settings/founder/investors" element={<InvestorPipelinePage />} />
+        <Route path="/settings/founder/waitlist" element={<WaitlistAnalyticsPage />} />
+        <Route path="/settings/founder/content" element={<ContentCalendarPage />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }
 
@@ -217,6 +240,7 @@ export default function App() {
       >
         <BrowserRouter>
           <ErrorBoundary>
+            <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/pitch" element={<PitchPage />} />
@@ -231,6 +255,7 @@ export default function App() {
                 }
               />
             </Routes>
+            </Suspense>
             <Toaster position="bottom-right" theme="dark" richColors />
           </ErrorBoundary>
         </BrowserRouter>

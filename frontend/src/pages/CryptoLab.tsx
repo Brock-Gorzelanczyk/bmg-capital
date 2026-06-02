@@ -318,7 +318,7 @@ function CoinTradingPanel({
           <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-1 rounded-lg hover:bg-[var(--bg-elevated-2)] cursor-pointer flex-shrink-0">
             <ArrowLeft size={16} />
           </button>
-          {coin.image && <img src={coin.image} alt={coin.symbol} className="w-9 h-9 rounded-full flex-shrink-0" />}
+          {coin.image && <img src={coin.image} alt={coin.symbol} loading="lazy" className="w-9 h-9 rounded-full flex-shrink-0" />}
           <div className="flex-1 min-w-0">
             <div className="font-bold text-[var(--text-primary)] text-sm leading-tight truncate">{coin.name}</div>
             <div className="text-[11px] text-[var(--text-tertiary)] font-mono">{coin.symbol} · #{coin.market_cap_rank}</div>
@@ -830,7 +830,7 @@ function StrategyApplyModal({
                         : "border-[var(--border-subtle)] text-[var(--text-secondary)] bg-[var(--bg-elevated-2)] hover:border-[var(--border-emphasis)]"
                   )}
                 >
-                  {c.image && <img src={c.image} alt="" className="w-4 h-4 rounded-full flex-shrink-0" />}
+                  {c.image && <img src={c.image} alt="" loading="lazy" className="w-4 h-4 rounded-full flex-shrink-0" />}
                   {c.symbol}
                   {inUniverse && <span className="text-[8px] opacity-60 ml-0.5">★</span>}
                 </button>
@@ -997,7 +997,7 @@ function CoinTable({
                 {/* Name */}
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2.5">
-                    {coin.image && <img src={coin.image} alt={coin.symbol} className="w-7 h-7 rounded-full flex-shrink-0" />}
+                    {coin.image && <img src={coin.image} alt={coin.symbol} loading="lazy" className="w-7 h-7 rounded-full flex-shrink-0" />}
                     <div className="min-w-0">
                       <div className="font-semibold text-[var(--text-primary)] text-sm leading-tight truncate max-w-[120px]">{coin.name}</div>
                       <div className="text-[10px] font-mono text-[var(--text-tertiary)]">{coin.symbol}</div>
@@ -1019,7 +1019,7 @@ function CoinTable({
                 {/* Sparkline */}
                 <td className="px-3 py-2.5 hidden sm:table-cell">
                   {showSparklineUrl && coin.sparkline_url
-                    ? <img src={coin.sparkline_url} alt="7d" className="w-[72px] h-6 object-contain" />
+                    ? <img src={coin.sparkline_url} alt="7d" loading="lazy" className="w-[72px] h-6 object-contain" />
                     : <SparkLine prices={coin.sparkline} />}
                 </td>
                 {/* Trade button */}
@@ -1132,7 +1132,7 @@ function MyHoldingsTab({
           >
             <div className="flex items-center gap-3">
               {coin?.image
-                ? <img src={coin.image} alt={p.symbol} className="w-9 h-9 rounded-full flex-shrink-0" />
+                ? <img src={coin.image} alt={p.symbol} loading="lazy" className="w-9 h-9 rounded-full flex-shrink-0" />
                 : <div className="w-9 h-9 rounded-full bg-[var(--bg-elevated-2)] flex items-center justify-center text-xs font-bold text-[var(--text-tertiary)]">{p.symbol.replace("-USD", "").slice(0, 2)}</div>}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-0.5">

@@ -7,6 +7,7 @@ from typing import Optional
 import pandas as pd
 import yfinance as yf
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.indicators.engine import compute_indicators
 from app.services.bar_cache import get_cached, set_cache
@@ -119,6 +120,85 @@ def _fetch_yf_ohlcv(ticker: yf.Ticker, start_str: str, end_str: str, interval: s
         rows.append({"open": o, "high": h, "low": l, "close": c, "volume": v,
                      "_t": idx.isoformat() if hasattr(idx, "isoformat") else str(idx)})
     return rows
+
+
+class BatchBarsRequest(BaseModel):
+    symbols: list[str]
+    start: str | None = None
+    end: str | None = None
+    timeframe: str = "1Day"
+
+
+async def _fetch_bars_for_symbol(
+    symbol: str,
+    start: Optional[str],
+    end: Optional[str],
+    timeframe: str,
+) -> dict:
+    """Fetch OHLCV bars for a single symbol. Returns same shape as GET /{symbol} (without indicators)."""
+    interval = YF_INTERVAL_MAP.get(timeframe, "1d")
+    end_dt = datetime.utcnow() if not end else datetime.fromisoformat(end)
+
+    if not start:
+        if timeframe == "1Month":
+            days_back = 9125
+        elif timeframe == "1Week":
+            days_back = 7300
+        elif timeframe == "1Day":
+            days_back = 5475
+        elif timeframe in ("4Hour", "1Hour"):
+            days_back = 729
+        elif timeframe in ("30Min", "15Min", "5Min"):
+            days_back = 59
+        else:
+            days_back = 7
+        max_days = YF_MAX_DAYS.get(timeframe, 20000)
+        days_back = min(days_back, max_days)
+        start_dt = end_dt - timedelta(days=days_back)
+    else:
+        start_dt = datetime.fromisoformat(start)
+        max_days = YF_MAX_DAYS.get(timeframe)
+        if max_days:
+            earliest = end_dt - timedelta(days=max_days)
+            if start_dt < earliest:
+                start_dt = earliest
+
+    start_str = start_dt.date().isoformat()
+    end_str = end_dt.date().isoformat()
+    end_exclusive = (end_dt + timedelta(days=1)).date().isoformat()
+
+    cached = get_cached(symbol, timeframe, start_str, end_str)
+    if cached:
+        bars_list = cached
+    else:
+        ticker = yf.Ticker(symbol.upper())
+        rows = _fetch_yf_ohlcv(ticker, start_str, end_exclusive, interval, timeframe)
+        if not rows:
+            rows = _fetch_ccxt_ohlcv(symbol, timeframe, start_str)
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"No data for {symbol}")
+
+        bars_list = [
+            {"t": r["_t"], "o": r["open"], "h": r["high"], "l": r["low"], "c": r["close"], "v": r["volume"]}
+            for r in rows
+        ]
+        ttl = 3600 if timeframe in ("4Hour", "1Hour") else 300 if timeframe in ("30Min", "15Min", "5Min", "1Min") else 86400
+        set_cache(symbol, timeframe, start_str, end_str, bars_list, ttl)
+
+    return {"bars": bars_list}
+
+
+@router.post("/batch")
+async def get_bars_batch(body: BatchBarsRequest):
+    """Fetch OHLCV bars for multiple symbols in a single request (capped at 20 symbols)."""
+    results = {}
+    for symbol in body.symbols[:20]:
+        try:
+            bars_data = await _fetch_bars_for_symbol(symbol, body.start, body.end, body.timeframe)
+            results[symbol] = bars_data
+        except Exception as e:
+            results[symbol] = {"bars": [], "error": str(e)}
+    return {"results": results}
 
 
 @router.get("/{symbol}")

@@ -124,6 +124,40 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("asset",          "VARCHAR"),
         ("outcome_value",  "FLOAT"),
     ],
+    "playbook_phases": [
+        ("phase_number",   "INTEGER"),
+        ("name",           "VARCHAR"),
+        ("day_start",      "INTEGER"),
+        ("day_end",        "INTEGER"),
+        ("outcome_target", "TEXT"),
+    ],
+    "playbook_weeks": [
+        ("phase_id",       "INTEGER"),
+        ("week_number",    "INTEGER"),
+        ("title",          "VARCHAR"),
+        ("day_start",      "INTEGER"),
+        ("day_end",        "INTEGER"),
+        ("outcome_target", "TEXT"),
+        ("status",         "VARCHAR DEFAULT 'pending'"),
+    ],
+    "playbook_tasks": [
+        ("week_id",          "INTEGER"),
+        ("day_focus",        "VARCHAR"),
+        ("title",            "VARCHAR"),
+        ("description",      "TEXT"),
+        ("effort_hours",     "FLOAT DEFAULT 4.0"),
+        ("priority",         "VARCHAR DEFAULT 'P1'"),
+        ("status",           "VARCHAR DEFAULT 'pending'"),
+        ("completion_note",  "TEXT"),
+        ("completed_at",     "DATETIME"),
+        ("sort_order",       "INTEGER DEFAULT 0"),
+    ],
+    "playbook_start": [
+        ("started_at", "DATETIME"),
+    ],
+    "investors": [],
+    "content_posts": [],
+    "waitlist_signups": [],
 }
 
 

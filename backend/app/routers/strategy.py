@@ -36,6 +36,21 @@ _regime_cache: Tuple[Any, float] | None = None
 _PRICE_TTL = 60.0   # seconds
 _REGIME_TTL = 300.0  # seconds
 
+# Response-level TTL cache for expensive endpoints (trades, summary)
+_CACHE: dict = {}
+_CACHE_TTL = 300  # 5 minutes
+
+
+def _cache_get(key: str):
+    entry = _CACHE.get(key)
+    if entry and time.time() - entry["ts"] < _CACHE_TTL:
+        return entry["data"]
+    return None
+
+
+def _cache_set(key: str, data):
+    _CACHE[key] = {"data": data, "ts": time.time()}
+
 
 def _get_prices_cached(symbols: List[str]) -> Dict[str, float]:
     if not symbols:
@@ -142,6 +157,11 @@ async def get_trades(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    cache_key = f"strategy_trades_{current_user.id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     trades = db.execute(
         select(StrategyTrade)
         .where(StrategyTrade.status.in_(["open", "closed"]))
@@ -171,7 +191,9 @@ async def get_trades(
 
     deduped_trades = open_trades + closed_deduped
     enriched = [_enrich_trade(t, prices) for t in deduped_trades]
-    return {"trades": enriched}
+    result = {"trades": enriched}
+    _cache_set(cache_key, result)
+    return result
 
 
 @router.get("/candidates")
@@ -198,6 +220,11 @@ async def get_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    cache_key = f"strategy_summary_{current_user.id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     all_trades = db.execute(
         select(StrategyTrade).where(StrategyTrade.user_id == current_user.id)
     ).scalars().all()
@@ -328,7 +355,7 @@ async def get_summary(
             "total_pnl": round(s["total_pnl"], 2),
         })
 
-    return {
+    result = {
         "overall": {
             "total_closed": len(closed),
             "wins": len(wins),
@@ -348,6 +375,8 @@ async def get_summary(
         },
         "by_preset": sorted(preset_list, key=lambda x: -x["total_pnl"]),
     }
+    _cache_set(cache_key, result)
+    return result
 
 
 @router.get("/log")

@@ -29,6 +29,8 @@ from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, Le
 from app.db.models.robo import RiskProfile, RoboGoal, CorePortfolio, DirectIndexPortfolio, RebalanceLog, WashSaleGuard  # noqa: F401
 from app.db.models.autonomous import AutonomousAction, AutonomousGuardrail, AutonomousDigest  # noqa: F401
 from app.db.models.autopilot import AutopilotPolicy, AutopilotGuardrail, AutopilotAction  # noqa: F401
+from app.db.models.playbook import PlaybookPhase, PlaybookWeek, PlaybookTask, PlaybookStart  # noqa: F401
+from app.db.models.founder import Investor, ContentPost, WaitlistSignup  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -54,4 +56,6 @@ __all__ = [
     "RiskProfile", "RoboGoal", "CorePortfolio", "DirectIndexPortfolio", "RebalanceLog", "WashSaleGuard",
     "AutonomousAction", "AutonomousGuardrail", "AutonomousDigest",
     "AutopilotPolicy", "AutopilotGuardrail", "AutopilotAction",
+    "PlaybookPhase", "PlaybookWeek", "PlaybookTask", "PlaybookStart",
+    "Investor", "ContentPost", "WaitlistSignup",
 ]
