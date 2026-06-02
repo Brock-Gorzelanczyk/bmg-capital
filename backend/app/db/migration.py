@@ -98,6 +98,16 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "robo_direct_index": [
         ("estimated_tax_savings", "FLOAT"),
     ],
+    "autonomous_actions": [
+        ("outcome_value", "FLOAT"),
+        ("strategy_id",   "VARCHAR"),
+    ],
+    "autonomous_guardrails": [
+        ("paused_at", "DATETIME"),
+    ],
+    "autonomous_digests": [
+        ("portfolio_delta", "FLOAT"),
+    ],
 }
 
 

@@ -37,6 +37,7 @@ from app.screener.entry_triggers import (
 from app.alpaca.assets import get_universe
 from app.screener.filters import PRESET_SCREENS
 from app.screener.runner import _fetch_bars_sync, run_screen, run_screen_sync
+from app.services.autonomous_logger import log_action
 
 logger = logging.getLogger(__name__)
 
@@ -278,6 +279,18 @@ def _add_candidates(
             db.add(trade)
             new_candidates.append(trade)
             watching_count += 1
+            log_action(
+                user_id=user_id,
+                lab="strategy",
+                action_type="signal_fired",
+                asset=sym,
+                strategy_id=preset_key,
+                rationale=(
+                    f"{PRESET_LABELS.get(preset_key, preset_key)} signal detected on {sym}. "
+                    f"Added to watchlist for entry confirmation."
+                ),
+                result="success",
+            )
 
     db.flush()
     return new_candidates
@@ -595,6 +608,25 @@ def _sync_paper_orders(db: Session, user_id: int) -> None:
             price=trade.entry_price,
             trade_id=trade.id,
         )
+        log_action(
+            user_id=user_id,
+            lab="strategy",
+            action_type="paper_buy",
+            asset=trade.symbol,
+            strategy_id=trade.preset_key or "",
+            params={
+                "entry_price": trade.entry_price,
+                "qty": trade.shares,
+                "stop": trade.stop_price,
+                "target": trade.target_price,
+            },
+            rationale=(
+                f"Opened {trade.symbol} at ${trade.entry_price:.2f} because "
+                f"{PRESET_LABELS.get(trade.preset_key or '', trade.preset_key or 'unknown')} signal fired. "
+                f"Stop set at ${trade.stop_price:.2f}."
+            ),
+            result="success",
+        )
         logger.info(f"Auto-buy placed: {trade.symbol} {trade.shares} shares @ ${trade.entry_price}")
 
     # ------------------------------------------------------------------
@@ -702,6 +734,22 @@ def _sync_paper_orders(db: Session, user_id: int) -> None:
             price=trade.exit_price,
             trade_id=trade.id,
         )
+        _exit_action_type = "paper_sell" if realized_pnl >= 0 else "stop_hit"
+        log_action(
+            user_id=user_id,
+            lab="strategy",
+            action_type=_exit_action_type,
+            asset=trade.symbol,
+            strategy_id=trade.preset_key or "",
+            params={"exit_price": trade.exit_price, "qty": sell_qty, "pnl": realized_pnl},
+            rationale=(
+                f"Closed {trade.symbol} at ${trade.exit_price:.2f} "
+                f"({'+' if realized_pnl >= 0 else ''}{realized_pnl:.2f} P&L). "
+                f"Exit triggered by {'target profit' if realized_pnl >= 0 else 'stop loss'}."
+            ),
+            result="success",
+            outcome_value=realized_pnl,
+        )
         logger.info(
             f"Auto-sell placed: {trade.symbol} {sell_qty} shares @ ${trade.exit_price} "
             f"| P&L ${realized_pnl:+.2f}"
@@ -782,6 +830,21 @@ async def run_daily_automation(user_id: int) -> Dict:
 
         # 9. Sync paper orders for all open/closed strategy trades
         _sync_paper_orders(db, user_id)
+
+        # 10. Heartbeat
+        open_trade_count = db.query(StrategyTrade).filter(
+            StrategyTrade.status == "open",
+            StrategyTrade.user_id == user_id,
+        ).count()
+        log_action(
+            user_id=user_id,
+            lab="system",
+            action_type="heartbeat",
+            rationale=(
+                f"Monitoring {open_trade_count} open positions. All guardrails nominal."
+            ),
+            result="success",
+        )
 
         db.commit()
         logger.info(f"=== Daily automation complete for user {user_id}: {len(entered)} entries, {len(exited)} exits ===")

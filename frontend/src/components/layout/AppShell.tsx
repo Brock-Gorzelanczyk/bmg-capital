@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, NavLink } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { House, LineChart, BookMarked, Briefcase, GraduationCap } from "lucide-react";
+import { House, LineChart, BookMarked, Briefcase, GraduationCap, Cpu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import CommandPalette from "@/components/ui/CommandPalette";
@@ -12,15 +12,16 @@ import SupportChatWidget from "@/components/support/SupportChatWidget";
 import { getTrades, getCandidates, getSummary, getLog, getEquity, getRegime } from "@/api/strategy";
 import { getMyTier } from "@/api/tiers";
 import { getTodayChallenge } from "@/api/engagement";
+import { getStatus as getAutonomousStatus, getLatestDigest } from "@/api/autonomous";
 import { useTierStore } from "@/store/tierStore";
 import { cn } from "@/lib/utils";
 
 const BOTTOM_NAV = [
-  { to: "/",          label: "Home",      Icon: House },
-  { to: "/chart",     label: "Chart",     Icon: LineChart },
-  { to: "/watchlist", label: "Watchlist", Icon: BookMarked },
-  { to: "/portfolio", label: "Portfolio", Icon: Briefcase },
-  { to: "/learn",     label: "Learn",     Icon: GraduationCap },
+  { to: "/",                 label: "Home",       Icon: House },
+  { to: "/chart",            label: "Chart",      Icon: LineChart },
+  { to: "/watchlist",        label: "Watchlist",  Icon: BookMarked },
+  { to: "/portfolio",        label: "Portfolio",  Icon: Briefcase },
+  { to: "/mission-control",  label: "Autonomous", Icon: Cpu },
 ];
 
 export default function AppShell() {
@@ -36,6 +37,22 @@ export default function AppShell() {
     queryFn: getTodayChallenge,
     staleTime: 60_000,
   });
+
+  const { data: autoStatus } = useQuery({
+    queryKey: ["autonomous-status"],
+    queryFn: getAutonomousStatus,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+
+  const { data: latestDigest } = useQuery({
+    queryKey: ["autonomous-digest-latest"],
+    queryFn: getLatestDigest,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const digestIsToday = latestDigest?.digest_date?.slice(0, 10) === todayStr;
 
   useEffect(() => {
     qc.prefetchQuery({ queryKey: ["strategy-trades"],     queryFn: getTrades,        staleTime: 55_000 });
@@ -122,6 +139,16 @@ export default function AppShell() {
             challengeData != null &&
             !challengeData.already_answered;
 
+          const showAutonomousDot =
+            to === "/mission-control" &&
+            autoStatus?.engine_running === true &&
+            autoStatus?.autonomous_paused !== true;
+
+          const showDigestDot =
+            to === "/" &&
+            digestIsToday &&
+            latestDigest != null;
+
           return (
             <NavLink
               key={to}
@@ -143,6 +170,12 @@ export default function AppShell() {
                     <Icon size={20} />
                     {showChallengeDot && (
                       <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#3B82F6]" />
+                    )}
+                    {showAutonomousDot && (
+                      <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#84cc16] animate-pulse" />
+                    )}
+                    {showDigestDot && (
+                      <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#84cc16]" />
                     )}
                   </span>
                   <span className="font-medium">{label}</span>

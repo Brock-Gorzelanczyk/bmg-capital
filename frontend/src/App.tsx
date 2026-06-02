@@ -60,6 +60,7 @@ import RoboDashboard from "@/pages/RoboDashboard";
 import RiskQuizPage from "@/pages/RiskQuizPage";
 import GoalsPage from "@/pages/GoalsPage";
 import DirectIndexingPage from "@/pages/DirectIndexingPage";
+import MissionControlPage from "@/pages/MissionControlPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -196,6 +197,7 @@ function AppInner() {
         <Route path="/robo/quiz" element={<RiskQuizPage />} />
         <Route path="/robo/goals" element={<GoalsPage />} />
         <Route path="/robo/direct-index" element={<DirectIndexingPage />} />
+        <Route path="/mission-control" element={<MissionControlPage />} />
       </Route>
     </Routes>
   );

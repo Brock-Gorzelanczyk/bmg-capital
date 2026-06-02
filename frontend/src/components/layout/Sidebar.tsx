@@ -8,8 +8,10 @@ import {
   GraduationCap, Users, Landmark, ScanSearch, Scale,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
-  Grid3X3, Zap, Globe, Eye, TestTube2,
+  Grid3X3, Zap, Globe, Eye, TestTube2, Cpu,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { getStatus as getAutonomousStatus, getLatestDigest } from "@/api/autonomous";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useLearnStore } from "@/store/learnStore";
@@ -20,14 +22,15 @@ import StreakBadge from "@/components/learn/StreakBadge";
 // ─── Nav item definitions ─────────────────────────────────────────────────────
 
 const NAV_TRADE = [
-  { to: "/",          label: "Dashboard",    Icon: LayoutDashboard },
-  { to: "/chart",     label: "Chart",        Icon: LineChart },
-  { to: "/portfolio", label: "Portfolio",    Icon: Briefcase },
-  { to: "/pods",      label: "Capital Pods", Icon: Layers },
-  { to: "/watchlist", label: "Watchlist",    Icon: BookMarked },
-  { to: "/journal",   label: "Trade Journal", Icon: BookOpen },
-  { to: "/analytics", label: "Analytics",     Icon: BarChart2 },
-  { to: "/net-worth", label: "Net Worth",     Icon: Landmark },
+  { to: "/",                 label: "Dashboard",       Icon: LayoutDashboard },
+  { to: "/mission-control",  label: "Mission Control", Icon: Cpu },
+  { to: "/chart",            label: "Chart",           Icon: LineChart },
+  { to: "/portfolio",        label: "Portfolio",       Icon: Briefcase },
+  { to: "/pods",             label: "Capital Pods",    Icon: Layers },
+  { to: "/watchlist",        label: "Watchlist",       Icon: BookMarked },
+  { to: "/journal",          label: "Trade Journal",   Icon: BookOpen },
+  { to: "/analytics",        label: "Analytics",       Icon: BarChart2 },
+  { to: "/net-worth",        label: "Net Worth",       Icon: Landmark },
 ];
 
 const NAV_LABS = [
@@ -97,6 +100,8 @@ function NavItem({
   expanded,
   badge,
   end: endProp,
+  pulseDot,
+  staticDot,
 }: {
   to: string;
   label: string;
@@ -104,6 +109,10 @@ function NavItem({
   expanded: boolean;
   badge?: number;
   end?: boolean;
+  /** If true, show an animated lime dot (engine live) */
+  pulseDot?: boolean;
+  /** If true, show a static lime dot (digest available) */
+  staticDot?: boolean;
 }) {
   return (
     <NavLink
@@ -124,7 +133,16 @@ function NavItem({
           {isActive && (
             <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-[var(--accent-positive)] rounded-full" />
           )}
-          <Icon size={16} className="shrink-0" />
+          {/* Icon wrapper with optional dot */}
+          <span className="relative shrink-0">
+            <Icon size={16} />
+            {pulseDot && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#84cc16] animate-pulse" />
+            )}
+            {staticDot && !pulseDot && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#84cc16]" />
+            )}
+          </span>
           <span className={cn("flex-1 truncate", show(expanded))}>{label}</span>
           {badge != null && badge > 0 && (
             <span className={cn(
@@ -342,6 +360,24 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
   const navigate = useNavigate();
   const streak = useLearnStore((s) => s.progress?.streak ?? 0);
   const tier = useTierStore((s) => s.tier);
+
+  const { data: autoStatus } = useQuery({
+    queryKey: ["autonomous-status"],
+    queryFn: getAutonomousStatus,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+
+  const { data: latestDigest } = useQuery({
+    queryKey: ["autonomous-digest-latest"],
+    queryFn: getLatestDigest,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const showAutonomousDot =
+    autoStatus?.engine_running === true && autoStatus?.autonomous_paused !== true;
+  const showDigestDot = latestDigest?.digest_date?.slice(0, 10) === todayStr;
 
   const handleLogout = () => {
     logout();

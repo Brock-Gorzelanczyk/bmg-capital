@@ -52,5 +52,17 @@ class ConnectionManager:
         for c in dead:
             self.disconnect(c)
 
+    async def broadcast_autonomous_action(self, action_data: dict) -> None:
+        """Broadcast an autonomous action event to all connected WebSocket clients."""
+        message = json.dumps({"type": "autonomous_action", "data": action_data})
+        dead = []
+        for client_id, ws in list(self.connections.items()):
+            try:
+                await ws.send_text(message)
+            except Exception:
+                dead.append(client_id)
+        for client_id in dead:
+            self.disconnect(client_id)
+
 
 connection_manager = ConnectionManager()
