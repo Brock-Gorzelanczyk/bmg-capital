@@ -458,6 +458,21 @@ export default function CopilotModal({ open, onClose }: Props) {
                 <p className="text-xs text-[var(--text-tertiary)]">Live market data · Strategy signals · DeFi yields · Token security</p>
               </div>
               <div className="flex flex-wrap gap-2 justify-center">
+                {/* Workspace builder chip — only on lab pages */}
+                {getLabId(pathname) && (
+                  <button
+                    onClick={() => send("Build me a workspace for this lab")}
+                    className="text-xs px-3 py-1.5 rounded-full border transition-all font-mono flex items-center gap-1.5"
+                    style={{
+                      background: "rgba(132,204,22,0.08)",
+                      borderColor: "rgba(132,204,22,0.35)",
+                      color: "#84cc16",
+                    }}
+                  >
+                    <span style={{ fontSize: 9 }}>✦</span>
+                    Build workspace with AI
+                  </button>
+                )}
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s}
