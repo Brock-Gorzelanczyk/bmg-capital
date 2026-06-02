@@ -65,6 +65,23 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("user_id",     "INTEGER"),
         ("asset_class", "VARCHAR DEFAULT 'equity'"),
     ],
+    "market_challenge_attempts": [
+        ("time_ms", "INTEGER"),
+    ],
+    "league_cohorts": [
+        ("finalized", "BOOLEAN"),
+    ],
+    "league_points": [
+        ("breakdown", "TEXT"),
+    ],
+    "learn_progress": [
+        ("market_challenge_streak",   "INTEGER"),
+        ("market_challenges_total",   "INTEGER"),
+        ("market_challenges_correct", "INTEGER"),
+        ("category_strengths",        "TEXT"),
+        ("league_tier",               "VARCHAR"),
+        ("freeze_month",              "INTEGER"),
+    ],
 }
 
 

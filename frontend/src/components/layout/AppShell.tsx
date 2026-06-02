@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, NavLink } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { House, LineChart, BookMarked, Briefcase, GraduationCap } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
@@ -11,6 +11,7 @@ import NotificationPanel from "@/components/notifications/NotificationPanel";
 import SupportChatWidget from "@/components/support/SupportChatWidget";
 import { getTrades, getCandidates, getSummary, getLog, getEquity, getRegime } from "@/api/strategy";
 import { getMyTier } from "@/api/tiers";
+import { getTodayChallenge } from "@/api/engagement";
 import { useTierStore } from "@/store/tierStore";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,12 @@ export default function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const { data: challengeData } = useQuery({
+    queryKey: ["engagement-challenge-today"],
+    queryFn: getTodayChallenge,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     qc.prefetchQuery({ queryKey: ["strategy-trades"],     queryFn: getTrades,        staleTime: 55_000 });
@@ -109,29 +116,41 @@ export default function AppShell() {
         className="fixed bottom-0 left-0 right-0 md:hidden bg-[var(--bg-base)]/95 backdrop-blur-md border-t border-[var(--border-subtle)] flex z-30"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {BOTTOM_NAV.map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === "/"}
-            className={({ isActive }) =>
-              cn(
-                "flex-1 flex flex-col items-center gap-1 py-3 text-[10px] transition-colors relative min-h-[52px] justify-center",
-                isActive ? "text-[#3B82F6]" : "text-[var(--text-tertiary)]"
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#3B82F6] rounded-full" />
-                )}
-                <Icon size={20} />
-                <span className="font-medium">{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+        {BOTTOM_NAV.map(({ to, label, Icon }) => {
+          const showChallengeDot =
+            to === "/learn" &&
+            challengeData != null &&
+            !challengeData.already_answered;
+
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === "/"}
+              className={({ isActive }) =>
+                cn(
+                  "flex-1 flex flex-col items-center gap-1 py-3 text-[10px] transition-colors relative min-h-[52px] justify-center",
+                  isActive ? "text-[#3B82F6]" : "text-[var(--text-tertiary)]"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#3B82F6] rounded-full" />
+                  )}
+                  <span className="relative">
+                    <Icon size={20} />
+                    {showChallengeDot && (
+                      <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#3B82F6]" />
+                    )}
+                  </span>
+                  <span className="font-medium">{label}</span>
+                </>
+              )}
+            </NavLink>
+          );
+        })}
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

@@ -52,6 +52,10 @@ import ScannersPage from "@/pages/ScannersPage";
 import AlertBuilderPage from "@/pages/AlertBuilderPage";
 import PitchPage from "@/pages/PitchPage";
 import PitchDeckPage from "@/pages/PitchDeckPage";
+import DailyChallengePage from "@/pages/DailyChallengePage";
+import MorningBriefPage from "@/pages/MorningBriefPage";
+import AchievementsPage from "@/pages/AchievementsPage";
+import LeaguesPage from "@/pages/LeaguesPage";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -180,6 +184,10 @@ function AppInner() {
         <Route path="/rsu-console" element={<RSUConsolePage />} />
         <Route path="/smart-transfers" element={<SmartTransfersPage />} />
         <Route path="/alerts/builder" element={<AlertBuilderPage />} />
+        <Route path="/challenge" element={<DailyChallengePage />} />
+        <Route path="/morning-brief" element={<MorningBriefPage />} />
+        <Route path="/achievements" element={<AchievementsPage />} />
+        <Route path="/leagues" element={<LeaguesPage />} />
       </Route>
     </Routes>
   );
