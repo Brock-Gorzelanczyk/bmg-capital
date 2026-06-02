@@ -6,7 +6,7 @@ export const getDrawings = (
   timeframe: string
 ): Promise<{ drawings: Drawing[] }> =>
   client
-    .get("/api/chart-drawings", { params: { symbol, timeframe } })
+    .get("/chart-drawings", { params: { symbol, timeframe } })
     .then((r) => r.data);
 
 export const saveDrawings = (
@@ -15,5 +15,5 @@ export const saveDrawings = (
   drawings: Drawing[]
 ): Promise<{ ok: boolean }> =>
   client
-    .put("/api/chart-drawings", { symbol, timeframe, drawings })
+    .put("/chart-drawings", { symbol, timeframe, drawings })
     .then((r) => r.data);

@@ -83,25 +83,25 @@ export interface AnnualRecap {
 }
 
 export const getTodayChallenge = () =>
-  client.get<TodayChallenge>("/api/engagement/challenge/today").then(r => r.data);
+  client.get<TodayChallenge>("/engagement/challenge/today").then(r => r.data);
 
 export const submitChallengeAttempt = (challenge_id: number, choice_idx: number) =>
-  client.post<AttemptResult>("/api/engagement/challenge/attempt", { challenge_id, choice_idx }).then(r => r.data);
+  client.post<AttemptResult>("/engagement/challenge/attempt", { challenge_id, choice_idx }).then(r => r.data);
 
 export const getStreak = () =>
-  client.get<StreakState>("/api/engagement/streak").then(r => r.data);
+  client.get<StreakState>("/engagement/streak").then(r => r.data);
 
 export const logActivity = (activity_type: string) =>
-  client.post<{ streak_updated: boolean; current_streak: number; points_earned: number }>("/api/engagement/streak/activity", { activity_type }).then(r => r.data);
+  client.post<{ streak_updated: boolean; current_streak: number; points_earned: number }>("/engagement/streak/activity", { activity_type }).then(r => r.data);
 
 export const getAchievements = () =>
-  client.get<{ achievements: Achievement[] }>("/api/engagement/achievements").then(r => r.data);
+  client.get<{ achievements: Achievement[] }>("/engagement/achievements").then(r => r.data);
 
 export const getLeague = () =>
-  client.get<LeagueState>("/api/engagement/leagues/me").then(r => r.data);
+  client.get<LeagueState>("/engagement/leagues/me").then(r => r.data);
 
 export const getWeeklyRecap = () =>
-  client.get<WeeklyRecap>("/api/engagement/recap/weekly").then(r => r.data);
+  client.get<WeeklyRecap>("/engagement/recap/weekly").then(r => r.data);
 
 export const getAnnualRecap = () =>
-  client.get<AnnualRecap>("/api/engagement/recap/annual").then(r => r.data);
+  client.get<AnnualRecap>("/engagement/recap/annual").then(r => r.data);

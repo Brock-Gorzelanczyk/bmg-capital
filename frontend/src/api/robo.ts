@@ -55,10 +55,10 @@ export interface RebalanceSimulation {
 }
 
 export const getRoboDashboard = () =>
-  client.get<RoboDashboard>("/api/robo/dashboard").then((r) => r.data);
+  client.get<RoboDashboard>("/robo/dashboard").then((r) => r.data);
 
 export const getRoboProfile = () =>
-  client.get<{ profile: RiskProfile | null }>("/api/robo/profile").then((r) => r.data);
+  client.get<{ profile: RiskProfile | null }>("/robo/profile").then((r) => r.data);
 
 export const submitQuiz = (answers: object) =>
   client
@@ -67,19 +67,19 @@ export const submitQuiz = (answers: object) =>
       target_allocation: Record<string, number>;
       portfolio_type: string;
       message: string;
-    }>("/api/robo/quiz", answers)
+    }>("/robo/quiz", answers)
     .then((r) => r.data);
 
 export const getGoals = () =>
-  client.get<{ goals: RoboGoal[] }>("/api/robo/goals").then((r) => r.data);
+  client.get<{ goals: RoboGoal[] }>("/robo/goals").then((r) => r.data);
 
 export const createGoal = (data: object) =>
-  client.post<RoboGoal>("/api/robo/goals", data).then((r) => r.data);
+  client.post<RoboGoal>("/robo/goals", data).then((r) => r.data);
 
 export const updateGoal = (id: number, data: object) =>
-  client.put<RoboGoal>(`/api/robo/goals/${id}`, data).then((r) => r.data);
+  client.put<RoboGoal>(`/robo/goals/${id}`, data).then((r) => r.data);
 
-export const deleteGoal = (id: number) => client.delete(`/api/robo/goals/${id}`);
+export const deleteGoal = (id: number) => client.delete(`/robo/goals/${id}`);
 
 export const getGoalProjection = (id: number) =>
   client
@@ -90,20 +90,20 @@ export const getGoalProjection = (id: number) =>
       percentile_50: number;
       percentile_90: number;
       monthly_needed_for_90pct: number;
-    }>(`/api/robo/goals/${id}/projection`)
+    }>(`/robo/goals/${id}/projection`)
     .then((r) => r.data);
 
 export const simulateRebalance = (deposit?: number) =>
   client
-    .post<RebalanceSimulation>("/api/robo/rebalance/simulate", {
+    .post<RebalanceSimulation>("/robo/rebalance/simulate", {
       deposit_amount: deposit,
     })
     .then((r) => r.data);
 
 export const getRebalanceHistory = () =>
-  client.get<{ logs: object[] }>("/api/robo/rebalance/history").then((r) => r.data);
+  client.get<{ logs: object[] }>("/robo/rebalance/history").then((r) => r.data);
 
 export const getAiExplanation = (context: string, data: object) =>
   client
-    .post<{ explanation: string }>("/api/robo/ai/explain", { context, data })
+    .post<{ explanation: string }>("/robo/ai/explain", { context, data })
     .then((r) => r.data);

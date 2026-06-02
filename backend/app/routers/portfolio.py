@@ -99,7 +99,7 @@ def create_portfolio(
     return _portfolio_to_dict(p, include_positions=True)
 
 
-@router.get("/{portfolio_id}")
+@router.get("/{portfolio_id:int}")
 def get_portfolio(
     portfolio_id: int,
     db: Session = Depends(get_db),

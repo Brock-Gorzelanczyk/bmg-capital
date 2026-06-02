@@ -39,12 +39,12 @@ export interface TestResult {
 }
 
 export const getRules = async (): Promise<UserRule[]> => {
-  const res = await client.get("/api/rules");
+  const res = await client.get("/rules");
   return Array.isArray(res.data) ? res.data : [];
 };
 
 export const createRule = async (data: RuleCreate): Promise<UserRule> => {
-  const res = await client.post("/api/rules", data);
+  const res = await client.post("/rules", data);
   return res.data;
 };
 

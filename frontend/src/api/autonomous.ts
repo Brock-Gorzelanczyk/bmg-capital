@@ -63,28 +63,28 @@ export interface AutonomousDigest {
 }
 
 export const getStatus = () =>
-  client.get<AutonomousStatus>("/api/autonomous/status").then(r => r.data);
+  client.get<AutonomousStatus>("/autonomous/status").then(r => r.data);
 
 export const getActionsFeed = () =>
-  client.get<{ actions: AutonomousAction[] }>("/api/autonomous/actions/feed").then(r => r.data);
+  client.get<{ actions: AutonomousAction[] }>("/autonomous/actions/feed").then(r => r.data);
 
 export const getStats24h = () =>
-  client.get<AutonomousStats>("/api/autonomous/stats/24h").then(r => r.data);
+  client.get<AutonomousStats>("/autonomous/stats/24h").then(r => r.data);
 
 export const getGuardrails = () =>
-  client.get<AutonomousGuardrail>("/api/autonomous/guardrails").then(r => r.data);
+  client.get<AutonomousGuardrail>("/autonomous/guardrails").then(r => r.data);
 
 export const pauseAutonomous = (reason?: string) =>
-  client.post<AutonomousGuardrail>("/api/autonomous/pause", { reason }).then(r => r.data);
+  client.post<AutonomousGuardrail>("/autonomous/pause", { reason }).then(r => r.data);
 
 export const resumeAutonomous = () =>
-  client.post<AutonomousGuardrail>("/api/autonomous/resume").then(r => r.data);
+  client.post<AutonomousGuardrail>("/autonomous/resume").then(r => r.data);
 
 export const updateGuardrails = (data: Partial<AutonomousGuardrail>) =>
-  client.put<AutonomousGuardrail>("/api/autonomous/guardrails", data).then(r => r.data);
+  client.put<AutonomousGuardrail>("/autonomous/guardrails", data).then(r => r.data);
 
 export const getLatestDigest = () =>
-  client.get<AutonomousDigest | null>("/api/autonomous/digest/latest").then(r => r.data);
+  client.get<AutonomousDigest | null>("/autonomous/digest/latest").then(r => r.data);
 
 export const getDigestHistory = () =>
-  client.get<{ digests: AutonomousDigest[] }>("/api/autonomous/digest/history").then(r => r.data);
+  client.get<{ digests: AutonomousDigest[] }>("/autonomous/digest/history").then(r => r.data);

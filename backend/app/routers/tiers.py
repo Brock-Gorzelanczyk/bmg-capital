@@ -74,8 +74,18 @@ def get_my_tier(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    row = _get_or_create_tier(db, current_user.id)
-    ents = get_entitlements(row)
+    try:
+        row = _get_or_create_tier(db, current_user.id)
+        ents = get_entitlements(row)
+    except Exception:
+        from app.services.entitlements import ENTITLEMENTS
+        ents = {**ENTITLEMENTS["free"], "_tier": "free", "_status": "active"}
+        return {
+            "tier": "free", "status": "active", "entitlements": ents,
+            "billing_interval": None, "trial_ends_at": None,
+            "current_period_end": None, "cancel_at_period_end": False,
+            "aum_override": None, "has_stripe": False,
+        }
     return {
         "tier": ents["_tier"],
         "status": ents["_status"],
