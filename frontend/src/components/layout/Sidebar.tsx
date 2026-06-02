@@ -24,6 +24,7 @@ import StreakBadge from "@/components/learn/StreakBadge";
 const NAV_TRADE = [
   { to: "/",                 label: "Dashboard",       Icon: LayoutDashboard },
   { to: "/mission-control",  label: "Mission Control", Icon: Cpu },
+  { to: "/autopilot",        label: "Autopilot",       Icon: Zap },
   { to: "/chart",            label: "Chart",           Icon: LineChart },
   { to: "/portfolio",        label: "Portfolio",       Icon: Briefcase },
   { to: "/pods",             label: "Capital Pods",    Icon: Layers },
@@ -165,11 +166,13 @@ function NavSection({
   items,
   expanded,
   headerRight,
+  itemDots,
 }: {
   label: string;
   items: { to: string; label: string; Icon: React.ComponentType<{ size?: number; className?: string }> }[];
   expanded: boolean;
   headerRight?: React.ReactNode;
+  itemDots?: Record<string, { pulse?: boolean; static?: boolean }>;
 }) {
   return (
     <div>
@@ -181,7 +184,15 @@ function NavSection({
       </div>
       <div className="space-y-0.5">
         {items.map(({ to, label: itemLabel, Icon }) => (
-          <NavItem key={to} to={to} label={itemLabel} Icon={Icon} expanded={expanded} />
+          <NavItem
+            key={to}
+            to={to}
+            label={itemLabel}
+            Icon={Icon}
+            expanded={expanded}
+            pulseDot={itemDots?.[to]?.pulse}
+            staticDot={itemDots?.[to]?.static}
+          />
         ))}
       </div>
     </div>
@@ -415,7 +426,15 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
 
       {/* Nav sections */}
       <nav className="flex-1 overflow-y-auto min-h-0 px-2 space-y-4 pb-2">
-        <NavSection label="Trade" items={NAV_TRADE} expanded={expanded} />
+        <NavSection
+          label="Trade"
+          items={NAV_TRADE}
+          expanded={expanded}
+          itemDots={{
+            "/":               { static: showDigestDot },
+            "/mission-control":{ pulse: showAutonomousDot },
+          }}
+        />
 
         <NavSection label="Labs" items={NAV_LABS} expanded={expanded} />
 

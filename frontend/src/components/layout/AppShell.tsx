@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, NavLink } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { House, LineChart, BookMarked, Briefcase, GraduationCap, Cpu } from "lucide-react";
+import { House, LineChart, BookMarked, Briefcase, GraduationCap, Cpu, Zap } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import CommandPalette from "@/components/ui/CommandPalette";
@@ -22,6 +22,7 @@ const BOTTOM_NAV = [
   { to: "/watchlist",        label: "Watchlist",  Icon: BookMarked },
   { to: "/portfolio",        label: "Portfolio",  Icon: Briefcase },
   { to: "/mission-control",  label: "Autonomous", Icon: Cpu },
+  { to: "/autopilot",        label: "Autopilot",  Icon: Zap },
 ];
 
 export default function AppShell() {

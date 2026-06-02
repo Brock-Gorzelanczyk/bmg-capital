@@ -15,6 +15,7 @@ import WorkspaceSwitcher from "@/components/widgets/WorkspaceSwitcher";
 import WidgetLibraryModal from "@/components/widgets/WidgetLibraryModal";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 
+import AutopilotHeroCard from "@/components/autopilot/AutopilotHeroCard";
 import MorningBriefWidget from "@/components/widgets/impl/MorningBriefWidget";
 import MarketIndicesWidget from "@/components/widgets/impl/MarketIndicesWidget";
 import PaperAccountWidget from "@/components/widgets/impl/PaperAccountWidget";
@@ -158,6 +159,9 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-[1600px] mx-auto pb-20 md:pb-6">
+      {/* Autopilot hero card — full width, always first */}
+      <AutopilotHeroCard />
+
       {/* Dashboard header */}
       <div className="flex items-start justify-between gap-3 mb-5">
         <div>

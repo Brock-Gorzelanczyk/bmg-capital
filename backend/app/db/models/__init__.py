@@ -28,6 +28,7 @@ from app.db.models.estate import BeneficiaryRecord, DigitalAssetRecord
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
 from app.db.models.robo import RiskProfile, RoboGoal, CorePortfolio, DirectIndexPortfolio, RebalanceLog, WashSaleGuard  # noqa: F401
 from app.db.models.autonomous import AutonomousAction, AutonomousGuardrail, AutonomousDigest  # noqa: F401
+from app.db.models.autopilot import AutopilotPolicy, AutopilotGuardrail, AutopilotAction  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -52,4 +53,5 @@ __all__ = [
     "MarketChallenge", "MarketChallengeAttempt", "LeagueCohort", "LeaguePoints",
     "RiskProfile", "RoboGoal", "CorePortfolio", "DirectIndexPortfolio", "RebalanceLog", "WashSaleGuard",
     "AutonomousAction", "AutonomousGuardrail", "AutonomousDigest",
+    "AutopilotPolicy", "AutopilotGuardrail", "AutopilotAction",
 ]

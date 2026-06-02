@@ -320,6 +320,102 @@ async def run_autonomous_digest_job() -> None:
         logger.error(f"Autonomous digest job failed: {e}", exc_info=True)
 
 
+async def run_portfolio_scan_job() -> None:
+    """Runs every hour during market hours (9–16 ET, M-F) — drift + concentration checks."""
+    logger.info("Running portfolio scan (drift + concentration)...")
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.users import User
+        from app.services.portfolio_autopilot import scan_portfolio_drift, check_concentration_caps
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).limit(50).all()
+            for user in users:
+                try:
+                    await scan_portfolio_drift(user_id=user.id, db=db)
+                    await check_concentration_caps(user_id=user.id, db=db)
+                except Exception as e:
+                    logger.error(f"Portfolio scan failed for user {user.id}: {e}", exc_info=True)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Portfolio scan job setup failed: {e}", exc_info=True)
+
+
+async def run_tax_scan_job() -> None:
+    """Runs daily at 4:00 PM ET, M-F — tax-loss harvesting scan."""
+    logger.info("Running tax-loss harvesting scan...")
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.users import User
+        from app.services.portfolio_autopilot import scan_tax_loss_opportunities
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).limit(50).all()
+            for user in users:
+                try:
+                    await scan_tax_loss_opportunities(user_id=user.id, db=db)
+                except Exception as e:
+                    logger.error(f"Tax scan failed for user {user.id}: {e}", exc_info=True)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Tax scan job setup failed: {e}", exc_info=True)
+
+
+async def run_research_job() -> None:
+    """Runs daily at 9:00 AM ET, M-F — watchlist curation, earnings brief, related assets."""
+    logger.info("Running research autopilot job...")
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.users import User
+        from app.services.research_autopilot import (
+            curate_watchlist,
+            prep_earnings_brief,
+            flag_related_assets,
+        )
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).limit(50).all()
+            for user in users:
+                try:
+                    await curate_watchlist(user_id=user.id, db=db)
+                    await prep_earnings_brief(user_id=user.id, db=db)
+                    await flag_related_assets(user_id=user.id, db=db)
+                except Exception as e:
+                    logger.error(f"Research job failed for user {user.id}: {e}", exc_info=True)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Research job setup failed: {e}", exc_info=True)
+
+
+async def run_learning_job() -> None:
+    """Runs daily at 7:00 AM ET — lesson assignment + trade pattern detection."""
+    logger.info("Running learning autopilot job...")
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.users import User
+        from app.services.learning_autopilot import assign_daily_lesson, detect_trade_patterns
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).limit(50).all()
+            for user in users:
+                try:
+                    await assign_daily_lesson(user_id=user.id, db=db)
+                    await detect_trade_patterns(user_id=user.id, db=db)
+                except Exception as e:
+                    logger.error(f"Learning job failed for user {user.id}: {e}", exc_info=True)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Learning job setup failed: {e}", exc_info=True)
+
+
 async def run_crypto_automation_job() -> None:
     """Run crypto strategy automation for all active users (24/7, every 15 min)."""
     logger.info("Starting scheduled crypto automation...")
@@ -447,5 +543,37 @@ def setup_scheduler() -> None:
         run_autonomous_digest_job,
         CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=ET),
         id="autonomous_digest",
+        replace_existing=True,
+    )
+
+    # Portfolio scan: every hour during market hours (9–16 ET), M-F
+    scheduler.add_job(
+        run_portfolio_scan_job,
+        CronTrigger(day_of_week="mon-fri", hour="9-16", minute=0, timezone=ET),
+        id="portfolio_scan",
+        replace_existing=True,
+    )
+
+    # Tax-loss harvest scan: 4:00 PM ET, M-F
+    scheduler.add_job(
+        run_tax_scan_job,
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=0, timezone=ET),
+        id="tax_scan",
+        replace_existing=True,
+    )
+
+    # Research job: 9:00 AM ET, M-F
+    scheduler.add_job(
+        run_research_job,
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=0, timezone=ET),
+        id="research_job",
+        replace_existing=True,
+    )
+
+    # Learning job: 7:00 AM ET, daily (including weekends)
+    scheduler.add_job(
+        run_learning_job,
+        CronTrigger(hour=7, minute=0, timezone=ET),
+        id="learning_job",
         replace_existing=True,
     )

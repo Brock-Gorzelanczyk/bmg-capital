@@ -108,6 +108,22 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "autonomous_digests": [
         ("portfolio_delta", "FLOAT"),
     ],
+    "autopilot_policies": [
+        ("config",      "TEXT"),
+        ("created_at",  "DATETIME"),
+        ("updated_at",  "DATETIME"),
+    ],
+    "autopilot_guardrails": [
+        ("cash_drain_per_week",               "FLOAT DEFAULT 500.0"),
+        ("max_position_concentration_pct",    "FLOAT DEFAULT 15.0"),
+        ("max_subscriptions_cancel_per_week", "INTEGER DEFAULT 3"),
+        ("paused_at",                         "DATETIME"),
+        ("updated_at",                        "DATETIME"),
+    ],
+    "autopilot_actions": [
+        ("asset",          "VARCHAR"),
+        ("outcome_value",  "FLOAT"),
+    ],
 }
 
 
