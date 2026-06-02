@@ -699,12 +699,12 @@ export default function MissionControlPage() {
               </div>
 
               {/* Open positions list */}
-              {paperAccount && paperAccount.positions.length > 0 && (
+              {(paperAccount?.positions ?? []).length > 0 && (
                 <div className="mt-2 space-y-1.5 border-t border-[var(--border-subtle)] pt-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)] mb-2">
                     Positions
                   </p>
-                  {paperAccount.positions.slice(0, 6).map(pos => (
+                  {(paperAccount?.positions ?? []).slice(0, 6).map(pos => (
                     <div
                       key={pos.id}
                       className="flex items-center justify-between text-xs"
@@ -721,9 +721,9 @@ export default function MissionControlPage() {
                       </span>
                     </div>
                   ))}
-                  {paperAccount.positions.length > 6 && (
+                  {(paperAccount?.positions ?? []).length > 6 && (
                     <p className="text-[10px] text-[var(--text-tertiary)]">
-                      +{paperAccount.positions.length - 6} more
+                      +{(paperAccount?.positions ?? []).length - 6} more
                     </p>
                   )}
                 </div>

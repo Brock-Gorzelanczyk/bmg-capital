@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     stripe_price_premium_monthly: str = ""
     stripe_price_premium_annual: str = ""
 
+    # ── Plaid ─────────────────────────────────────────────────────────────────
+    plaid_client_id: str = ""
+    plaid_secret: str = ""
+    plaid_env: str = "sandbox"
+
     # ── Observability ─────────────────────────────────────────────────────────
     sentry_dsn: str = ""
     log_level: str = "INFO"

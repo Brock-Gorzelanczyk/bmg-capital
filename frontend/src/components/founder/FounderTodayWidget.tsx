@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/authStore";
 import { getDailySummary } from "@/api/founder";
 import { patchPlaybookTask } from "@/api/playbook";
 
-const ADMIN_EMAIL = "demo@bmgcapital.com";
+const ADMIN_EMAILS = new Set(["demo@bmgcapital.com", "32bgorzelanczyk@gmail.com"]);
 
 function priorityBadge(priority: string) {
   if (priority === "P0")
@@ -33,7 +33,7 @@ export default function FounderTodayWidget() {
   const qc = useQueryClient();
 
   const isAdmin =
-    user?.email === ADMIN_EMAIL || user?.email?.endsWith("@bmgcapital.com");
+    ADMIN_EMAILS.has(user?.email ?? "") || user?.email?.endsWith("@bmgcapital.com");
 
   const { data: summary } = useQuery({
     queryKey: ["founder-daily-summary"],

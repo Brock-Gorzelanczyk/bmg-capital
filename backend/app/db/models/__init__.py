@@ -31,6 +31,16 @@ from app.db.models.autonomous import AutonomousAction, AutonomousGuardrail, Auto
 from app.db.models.autopilot import AutopilotPolicy, AutopilotGuardrail, AutopilotAction  # noqa: F401
 from app.db.models.playbook import PlaybookPhase, PlaybookWeek, PlaybookTask, PlaybookStart  # noqa: F401
 from app.db.models.founder import Investor, ContentPost, WaitlistSignup  # noqa: F401
+from app.db.models.voice_session import VoiceSession  # noqa: F401
+from app.db.models.daily_brief import DailyBrief  # noqa: F401
+from app.db.models.linked_accounts import LinkedBrokerage, ExternalHolding  # noqa: F401
+from app.db.models.deposit_match import DepositMatch  # noqa: F401
+from app.db.models.referral import ReferralCode, ReferralReward  # noqa: F401
+from app.db.models.earn_rewards import LearnEarnLesson, EarnReward  # noqa: F401
+from app.db.models.ipo_access import IPODeal, IPORegistration  # noqa: F401
+from app.db.models.cfp_booking import CFPBooking  # noqa: F401
+from app.db.models.staking import StakingPosition, StakingRewardLog  # noqa: F401
+from app.db.models.dca_baskets import DCABasket, DCABasketAsset  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -58,4 +68,14 @@ __all__ = [
     "AutopilotPolicy", "AutopilotGuardrail", "AutopilotAction",
     "PlaybookPhase", "PlaybookWeek", "PlaybookTask", "PlaybookStart",
     "Investor", "ContentPost", "WaitlistSignup",
+    "VoiceSession",
+    "DailyBrief",
+    "LinkedBrokerage", "ExternalHolding",
+    "DepositMatch",
+    "ReferralCode", "ReferralReward",
+    "LearnEarnLesson", "EarnReward",
+    "IPODeal", "IPORegistration",
+    "CFPBooking",
+    "StakingPosition", "StakingRewardLog",
+    "DCABasket", "DCABasketAsset",
 ]

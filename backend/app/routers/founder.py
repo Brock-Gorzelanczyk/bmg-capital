@@ -27,13 +27,13 @@ from app.db.models.playbook import PlaybookTask, PlaybookStart
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/founder", tags=["founder"])
 
-ADMIN_EMAIL = "demo@bmgcapital.com"
+ADMIN_EMAILS = {"demo@bmgcapital.com", "32bgorzelanczyk@gmail.com"}
 
 
 # ── Admin guard ────────────────────────────────────────────────────────────────
 
 def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.email != ADMIN_EMAIL:
+    if current_user.email not in ADMIN_EMAILS:
         raise HTTPException(status_code=403, detail="Admin only")
     return current_user
 

@@ -1,4 +1,4 @@
-import { Component, type ReactNode, useEffect, lazy, Suspense } from "react";
+import { Component, type ReactNode, useEffect, useState, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -71,9 +71,18 @@ const InvestorPipelinePage = lazy(() => import("@/pages/InvestorPipelinePage"));
 const FounderHubPage = lazy(() => import("@/pages/FounderHubPage"));
 const WaitlistAnalyticsPage = lazy(() => import("@/pages/WaitlistAnalyticsPage"));
 const ContentCalendarPage = lazy(() => import("@/pages/ContentCalendarPage"));
+const ExternalPortfolioPage = lazy(() => import("@/pages/ExternalPortfolioPage"));
+const ReferralPage = lazy(() => import("@/pages/ReferralPage"));
+const LearnEarnPage = lazy(() => import("@/pages/LearnEarnPage"));
+const IPOAccessPage = lazy(() => import("@/pages/IPOAccessPage"));
+const CFPBookingPage = lazy(() => import("@/pages/CFPBookingPage"));
+const StakingPage = lazy(() => import("@/pages/StakingPage"));
+const DCABasketsPage = lazy(() => import("@/pages/DCABasketsPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
+import VoiceAIModal from "@/components/voice/VoiceAIModal";
+import VoiceAIButton from "@/components/voice/VoiceAIButton";
 
 const PageLoader = () => (
   <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -149,6 +158,7 @@ function AppInner() {
   useWebSocket();
   useSignalToast();
   const navigate = useNavigate();
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   // Global 401 handler: when any API call receives a 401, the axios interceptor
   // fires this event. We log the user out and redirect to login.
@@ -160,6 +170,18 @@ function AppInner() {
     window.addEventListener("auth:expired", handle);
     return () => window.removeEventListener("auth:expired", handle);
   }, [navigate]);
+
+  // Global Cmd+Shift+V shortcut to toggle Voice AI
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "v") {
+        e.preventDefault();
+        setVoiceOpen(v => !v);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   return (
     <Suspense fallback={<PageLoader />}>
@@ -225,8 +247,17 @@ function AppInner() {
         <Route path="/settings/founder/investors" element={<InvestorPipelinePage />} />
         <Route path="/settings/founder/waitlist" element={<WaitlistAnalyticsPage />} />
         <Route path="/settings/founder/content" element={<ContentCalendarPage />} />
+        <Route path="/external-portfolio" element={<ExternalPortfolioPage />} />
+        <Route path="/referral" element={<ReferralPage />} />
+        <Route path="/learn/earn" element={<LearnEarnPage />} />
+        <Route path="/ipo" element={<IPOAccessPage />} />
+        <Route path="/settings/cfp" element={<CFPBookingPage />} />
+        <Route path="/staking" element={<StakingPage />} />
+        <Route path="/dca-baskets" element={<DCABasketsPage />} />
       </Route>
     </Routes>
+    <VoiceAIButton onClick={() => setVoiceOpen(true)} />
+    <VoiceAIModal open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </Suspense>
   );
 }

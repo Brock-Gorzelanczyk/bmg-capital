@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   FileText,
   Shield,
@@ -9,9 +10,11 @@ import {
   TrendingUp,
   DollarSign,
   Percent,
+  Download,
 } from "lucide-react";
 import { analyzeTaxReturn, type TaxAnalysisResult, type TaxOpportunity } from "@/api/tax";
 import RothLadder from "@/components/tax/RothLadder";
+import client from "@/api/client";
 
 // ── Typewriter loading steps ───────────────────────────────────────────────────
 
@@ -115,6 +118,117 @@ function OpportunityCard({ opp }: { opp: TaxOpportunity }) {
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── 1099-DA Section ────────────────────────────────────────────────────────────
+
+interface Tax1099Summary {
+  tax_year: number;
+  total_proceeds: number;
+  total_cost_basis: number;
+  short_term_gains: number;
+  long_term_gains: number;
+  transactions_count: number;
+  assets_covered: string[];
+}
+
+function CryptoTaxReport1099() {
+  const { data, isLoading } = useQuery<Tax1099Summary>({
+    queryKey: ["tax-1099-da-summary"],
+    queryFn: () => client.get("/tax/1099-da/summary").then(r => r.data),
+    staleTime: 60_000,
+  });
+
+  const netGain = (data?.short_term_gains ?? 0) + (data?.long_term_gains ?? 0);
+
+  return (
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-bold text-[var(--text-primary)]">
+          Crypto Tax Report (1099-DA)
+        </h2>
+        {data && (
+          <span className="text-xs text-[var(--text-tertiary)]">Tax Year {data.tax_year}</span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-16 bg-[var(--bg-base)] rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="bg-[var(--bg-base)] rounded-xl p-3">
+              <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider font-semibold">Total Proceeds</p>
+              <p className="text-lg font-bold text-[var(--text-primary)] mt-0.5">
+                ${data.total_proceeds.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="bg-[var(--bg-base)] rounded-xl p-3">
+              <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider font-semibold">Cost Basis</p>
+              <p className="text-lg font-bold text-[var(--text-primary)] mt-0.5">
+                ${data.total_cost_basis.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="bg-[var(--bg-base)] rounded-xl p-3">
+              <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider font-semibold">Net Gain/Loss</p>
+              <p className={`text-lg font-bold mt-0.5 ${netGain >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {netGain >= 0 ? "+" : ""}${netGain.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="bg-[var(--bg-base)] rounded-xl p-3">
+              <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider font-semibold">Short-Term Gains</p>
+              <p className={`text-base font-bold mt-0.5 ${data.short_term_gains >= 0 ? "text-amber-400" : "text-red-400"}`}>
+                ${data.short_term_gains.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="bg-[var(--bg-base)] rounded-xl p-3">
+              <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider font-semibold">Long-Term Gains</p>
+              <p className={`text-base font-bold mt-0.5 ${data.long_term_gains >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                ${data.long_term_gains.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="bg-[var(--bg-base)] rounded-xl p-3">
+              <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider font-semibold">Transactions</p>
+              <p className="text-base font-bold text-[var(--text-primary)] mt-0.5">{data.transactions_count}</p>
+            </div>
+          </div>
+
+          {data.assets_covered.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {data.assets_covered.map(a => (
+                <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-500/10 text-blue-400 border-blue-500/20">{a}</span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => window.open("/api/tax/1099-da/export.csv")}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-base)] border border-[var(--border-subtle)] text-sm font-semibold text-[var(--text-primary)] hover:border-[#84cc16] transition-colors cursor-pointer"
+            >
+              <Download size={14} />
+              Download CSV
+            </button>
+            <button
+              onClick={() => window.open("/api/tax/1099-da/export.csv")}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-base)] border border-[var(--border-subtle)] text-sm font-semibold text-[var(--text-primary)] hover:border-[#84cc16] transition-colors cursor-pointer"
+            >
+              <FileText size={14} />
+              Export to TurboTax
+            </button>
+          </div>
+
+          <p className="text-xs font-semibold text-[#84cc16]">
+            Federal mandate effective 2025 — BMG handles this automatically.
+          </p>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -344,6 +458,9 @@ export default function TaxXRayPage() {
               </div>
             )}
 
+            {/* 1099-DA crypto tax report */}
+            <CryptoTaxReport1099 />
+
             {/* Disclaimer */}
             <p className="text-xs text-[var(--text-tertiary)] border-t border-[var(--border-subtle)] pt-4">
               {result.disclaimer}
@@ -431,6 +548,11 @@ export default function TaxXRayPage() {
       {/* Roth Ladder standalone — shown below upload when no result */}
       <div className="pt-4 border-t border-[var(--border-subtle)]">
         <RothLadder />
+      </div>
+
+      {/* 1099-DA crypto tax report — always visible */}
+      <div className="pt-4 border-t border-[var(--border-subtle)]">
+        <CryptoTaxReport1099 />
       </div>
     </div>
   );

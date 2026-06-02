@@ -52,7 +52,15 @@ export const getAutopilotStatus = () =>
   client.get<AutopilotStatus>("/autopilot/status").then(r => r.data);
 
 export const getAutopilotActivity = (params?: { category?: string; page?: number }) =>
-  client.get<AutopilotAction[]>("/autopilot/activity", { params }).then(r => r.data);
+  client
+    .get<{ items: AutopilotAction[]; total: number; page: number; pages: number } | AutopilotAction[]>(
+      "/autopilot/activity",
+      { params }
+    )
+    .then(r => {
+      const d = r.data as any;
+      return (Array.isArray(d) ? d : (d?.items ?? [])) as AutopilotAction[];
+    });
 
 export const getAutopilotPolicies = () =>
   client.get<AutopilotPolicy[]>("/autopilot/policies").then(r => r.data);

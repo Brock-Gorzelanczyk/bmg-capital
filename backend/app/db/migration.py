@@ -158,6 +158,22 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "investors": [],
     "content_posts": [],
     "waitlist_signups": [],
+    "voice_sessions": [],
+    "daily_briefs": [],
+    "linked_brokerages": [],
+    "external_holdings": [],
+    "deposit_matches": [],
+    "referral_codes": [],
+    "referral_rewards": [],
+    "learn_earn_lessons": [],
+    "earn_rewards": [],
+    "ipo_deals": [],
+    "ipo_registrations": [],
+    "cfp_bookings": [],
+    "staking_positions": [],
+    "staking_reward_logs": [],
+    "dca_baskets": [],
+    "dca_basket_assets": [],
 }
 
 

@@ -5,6 +5,7 @@ import {
   Star, RotateCw, X, ChevronUp, ChevronDown, ChevronsUpDown,
   ArrowLeft, Search, ExternalLink, Bot, Info,
 } from "lucide-react";
+import USDCYieldCard from "@/components/crypto/USDCYieldCard";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { toast } from "sonner";
 import {
@@ -1993,6 +1994,9 @@ export default function CryptoLab() {
 
       {/* Overview bar */}
       <OverviewBar data={overview} />
+
+      {/* USDC Yield card */}
+      <USDCYieldCard />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-[var(--bg-elevated-2)] p-1 rounded-xl w-fit overflow-x-auto">
