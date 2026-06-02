@@ -39,6 +39,32 @@ const TOOL_META: Record<string, { label: string; icon: React.FC<{ size?: number;
   explain_term:           { label: "Explaining term",          icon: Bot },
 };
 
+// ── Workspace-build intent detection ─────────────────────────────────────────
+
+const LAB_PATHS: Record<string, string> = {
+  "/strategy": "strategy",
+  "/options": "options",
+  "/crypto": "crypto",
+  "/workshop": "ta-workshop",
+};
+
+function isWorkspaceBuildIntent(msg: string): boolean {
+  const patterns = [
+    /build.*workspace/i,
+    /set.*me.*up/i,
+    /create.*workspace/i,
+    /show.*me.*everything/i,
+    /configure.*workspace/i,
+    /make.*workspace/i,
+    /build.*me.*a/i,
+  ];
+  return patterns.some((p) => p.test(msg));
+}
+
+function getLabId(pathname: string): string | null {
+  return LAB_PATHS[pathname] ?? null;
+}
+
 // ── Page label detection ──────────────────────────────────────────────────────
 
 function usePageLabel() {
@@ -283,9 +309,11 @@ interface Props {
 
 export default function CopilotModal({ open, onClose }: Props) {
   const page = usePageLabel();
+  const { pathname } = useLocation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [buildingWorkspace, setBuildingWorkspace] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -304,6 +332,20 @@ export default function CopilotModal({ open, onClose }: Props) {
   const send = useCallback((text: string) => {
     const q = text.trim();
     if (!q || streaming) return;
+
+    // Check for workspace-build intent on a lab page
+    const labId = getLabId(pathname);
+    if (labId && isWorkspaceBuildIntent(q)) {
+      setBuildingWorkspace(true);
+      window.dispatchEvent(
+        new CustomEvent("bmg:build-workspace", { detail: { prompt: q, labId } })
+      );
+      setTimeout(() => {
+        setBuildingWorkspace(false);
+        onClose();
+      }, 800);
+      return;
+    }
 
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: q };
     const assistantId = crypto.randomUUID();
@@ -439,6 +481,16 @@ export default function CopilotModal({ open, onClose }: Props) {
           <div ref={bottomRef} />
         </div>
 
+        {/* Workspace build loading overlay */}
+        {buildingWorkspace && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--bg-base)]/90 backdrop-blur-sm rounded-2xl z-10">
+            <Loader2 size={24} className="animate-spin text-[#84cc16]" />
+            <p className="text-sm font-mono text-[#84cc16]">
+              ✦ Building your workspace...
+            </p>
+          </div>
+        )}
+
         {/* Input */}
         <div className="px-4 py-3 border-t border-[var(--border-subtle)] flex-shrink-0">
           <form onSubmit={handleSubmit} className="flex gap-2">
@@ -448,15 +500,15 @@ export default function CopilotModal({ open, onClose }: Props) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask about markets, your portfolio, crypto, DeFi…"
-              disabled={streaming}
+              disabled={streaming || buildingWorkspace}
               className="flex-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus:border-blue-500/50 disabled:opacity-60 transition-colors"
             />
             <button
               type="submit"
-              disabled={!input.trim() || streaming}
+              disabled={!input.trim() || streaming || buildingWorkspace}
               className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
             >
-              {streaming ? (
+              {streaming || buildingWorkspace ? (
                 <Loader2 size={15} className="animate-spin text-white" />
               ) : (
                 <Send size={15} className="text-white" />

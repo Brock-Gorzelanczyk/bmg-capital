@@ -7,6 +7,9 @@ import { useWorkspaceStore } from "@/store/workspaceStore";
 import type { LabId } from "@/types/workspace";
 import { WIDGET_REGISTRY, WIDGET_CATALOG } from "./widgetRegistry";
 import { DEFAULT_LAYOUT, ANALYSIS_LAYOUT } from "./defaultLayouts";
+import AIWorkspaceAnimator, { type GeneratedWidget } from "./AIWorkspaceAnimator";
+import AIWorkspaceBuilder from "./AIWorkspaceBuilder";
+import client from "@/api/client";
 
 interface LabShellProps {
   labId: LabId;
@@ -24,6 +27,23 @@ interface ContextMenu {
   workspaceId: string;
 }
 
+interface AnimatorState {
+  active: boolean;
+  prompt: string;
+  workspaceName: string;
+  widgets: GeneratedWidget[];
+}
+
+interface AddWorkspacePicker {
+  open: boolean;
+}
+
+interface GenerateResponse {
+  workspace_name: string;
+  reasoning: string;
+  widgets: GeneratedWidget[];
+}
+
 export default function LabShell({ labId }: LabShellProps) {
   const store = useWorkspaceStore();
   const workspaces = store.getWorkspaces(labId);
@@ -33,6 +53,11 @@ export default function LabShell({ labId }: LabShellProps) {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [addWidgetOpen, setAddWidgetOpen] = useState(false);
+  const [addWorkspacePicker, setAddWorkspacePicker] = useState<AddWorkspacePicker>({ open: false });
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [animatorState, setAnimatorState] = useState<AnimatorState | null>(null);
+  const [contentPanned, setContentPanned] = useState(false);
+  const [currentPrompt, setCurrentPrompt] = useState("");
   const dockviewApiRef = useRef<DockviewApi | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -88,8 +113,63 @@ export default function LabShell({ labId }: LabShellProps) {
 
   function handleAdd() {
     if (workspaces.length >= 9) return;
+    setAddWorkspacePicker({ open: true });
+  }
+
+  function handleAddBlank() {
+    setAddWorkspacePicker({ open: false });
     store.addWorkspace(labId);
   }
+
+  function handleAddWithAI() {
+    setAddWorkspacePicker({ open: false });
+    setBuilderOpen(true);
+  }
+
+  function handleWorkspaceGenerated(result: {
+    workspaceName: string;
+    widgets: GeneratedWidget[];
+    reasoning: string;
+  }) {
+    setBuilderOpen(false);
+    store.addWorkspace(labId, result.workspaceName);
+    // Trigger camera pan during phase 3
+    setContentPanned(true);
+    setTimeout(() => setContentPanned(false), 1500);
+    setAnimatorState({
+      active: true,
+      prompt: currentPrompt,
+      workspaceName: result.workspaceName,
+      widgets: result.widgets,
+    });
+  }
+
+  // Listen for bmg:build-workspace events from CopilotModal
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ prompt: string; labId: string }>).detail;
+      if (detail.labId !== labId) return;
+      setCurrentPrompt(detail.prompt);
+      client
+        .post<GenerateResponse>("/api/workspaces/generate", {
+          prompt: detail.prompt,
+          lab_id: labId,
+        })
+        .then((r) => {
+          handleWorkspaceGenerated({
+            workspaceName: r.data.workspace_name,
+            widgets: r.data.widgets,
+            reasoning: r.data.reasoning,
+          });
+        })
+        .catch((err) => {
+          console.error("bmg:build-workspace handler error:", err);
+        });
+    };
+    window.addEventListener("bmg:build-workspace", handler);
+    return () => window.removeEventListener("bmg:build-workspace", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labId]);
 
   function handleContextMenu(e: React.MouseEvent, id: string) {
     e.preventDefault();
@@ -140,8 +220,14 @@ export default function LabShell({ labId }: LabShellProps) {
 
   return (
     <div className="flex flex-col h-full" ref={containerRef}>
-      {/* Main dockview area */}
-      <div className="flex-1 min-h-0 relative dv-bmg-theme">
+      {/* Main dockview area — wrapped for camera pan effect */}
+      <div
+        className="flex-1 min-h-0 relative dv-bmg-theme"
+        style={{
+          transition: "transform 1.5s cubic-bezier(0.22, 1, 0.36, 1)",
+          transform: contentPanned ? "translate(30px, 50px)" : "translate(0, 0)",
+        }}
+      >
         <DockviewReact
           key={activeId} // re-mount on workspace switch
           className="dockview-theme-bmg"
@@ -295,6 +381,63 @@ export default function LabShell({ labId }: LabShellProps) {
             )}
           </div>
         </>
+      )}
+
+      {/* Add workspace picker (blank vs AI) */}
+      {addWorkspacePicker.open && (
+        <>
+          <div
+            className="fixed inset-0 z-[180]"
+            onClick={() => setAddWorkspacePicker({ open: false })}
+          />
+          <div className="fixed z-[181] bottom-12 left-2 bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl shadow-2xl p-3 flex flex-col gap-2 min-w-44">
+            <p className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
+              New Workspace
+            </p>
+            <button
+              onClick={handleAddBlank}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-[var(--bg-elevated-2)] transition-colors"
+            >
+              <span>📊</span>
+              <span className="text-xs text-[var(--text-primary)]">Blank workspace</span>
+            </button>
+            <button
+              onClick={handleAddWithAI}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-[var(--bg-elevated-2)] transition-colors"
+            >
+              <span>🤖</span>
+              <span className="text-xs text-[var(--text-primary)]">Use AI</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* AI Workspace Builder modal */}
+      {builderOpen && (
+        <AIWorkspaceBuilder
+          labId={labId}
+          onWorkspaceGenerated={(result) => {
+            setCurrentPrompt(result.workspaceName);
+            handleWorkspaceGenerated(result);
+          }}
+          onClose={() => setBuilderOpen(false)}
+        />
+      )}
+
+      {/* Cinematic animator */}
+      {animatorState?.active && (
+        <AIWorkspaceAnimator
+          isActive={true}
+          prompt={animatorState.prompt}
+          workspaceName={animatorState.workspaceName}
+          widgets={animatorState.widgets}
+          onComplete={() => setAnimatorState(null)}
+          onSave={() => setAnimatorState(null)}
+          onRefine={() => {
+            setAnimatorState(null);
+            setBuilderOpen(true);
+          }}
+        />
       )}
     </div>
   );
