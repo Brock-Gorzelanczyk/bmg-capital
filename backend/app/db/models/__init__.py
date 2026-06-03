@@ -41,7 +41,7 @@ from app.db.models.ipo_access import IPODeal, IPORegistration  # noqa: F401
 from app.db.models.cfp_booking import CFPBooking  # noqa: F401
 from app.db.models.staking import StakingPosition, StakingRewardLog  # noqa: F401
 from app.db.models.dca_baskets import DCABasket, DCABasketAsset  # noqa: F401
-from app.db.models.bots import BotProfile, BotAllocation, BotSignal, BotPosition, BotTrade, BotDailyPnL, GoLiveWaitlist, BotWatchlist, BotHealth, RegimeSnapshot, CatalystEvent  # noqa: F401
+from app.db.models.bots import BotProfile, BotAllocation, BotSignal, BotPosition, BotTrade, BotDailyPnL, GoLiveWaitlist, BotWatchlist, BotHealth, RegimeSnapshot, CatalystEvent, StrategyWeight, CrossBotPosition, NewsEvent, AnomalyEvent  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -81,4 +81,5 @@ __all__ = [
     "DCABasket", "DCABasketAsset",
     "BotProfile", "BotAllocation", "BotSignal", "BotPosition", "BotTrade", "BotDailyPnL", "GoLiveWaitlist",
     "BotWatchlist", "BotHealth", "RegimeSnapshot", "CatalystEvent",
+    "StrategyWeight", "CrossBotPosition", "NewsEvent", "AnomalyEvent",
 ]

@@ -192,6 +192,10 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "bot_health": [],
     "regime_snapshots": [],
     "catalyst_events": [],
+    "strategy_weights": [],
+    "cross_bot_positions": [],
+    "news_events": [],
+    "anomaly_events": [],
 }
 
 

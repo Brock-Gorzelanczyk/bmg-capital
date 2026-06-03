@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, date, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, JSON, String, Text, ForeignKey, func
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, JSON, String, Text, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -167,3 +167,61 @@ class CatalystEvent(Base):
     event_ts: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     source: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class StrategyWeight(Base):
+    """Thompson sampling weights per strategy per bot profile."""
+    __tablename__ = "strategy_weights"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("bot_profiles.id"))
+    strategy_name: Mapped[str] = mapped_column(String(100))
+    current_weight: Mapped[float] = mapped_column(Float, default=1.0)
+    base_weight: Mapped[float] = mapped_column(Float, default=1.0)
+    wins: Mapped[int] = mapped_column(Integer, default=0)  # for Thompson sampling Beta
+    losses: Mapped[int] = mapped_column(Integer, default=0)
+    last_30_trades: Mapped[dict] = mapped_column(JSON, default=list)  # [{won, pnl_pct, ts}]
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    user_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = (UniqueConstraint("profile_id", "strategy_name"),)
+
+
+class CrossBotPosition(Base):
+    """Aggregate position across all bots for conflict resolution."""
+    __tablename__ = "cross_bot_positions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"))
+    symbol: Mapped[str] = mapped_column(String(20))
+    total_qty: Mapped[float] = mapped_column(Float, default=0.0)
+    by_bot: Mapped[dict] = mapped_column(JSON, default=dict)  # {"stock_swing": qty, ...}
+    net_exposure_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("user_id", "symbol"),)
+
+
+class NewsEvent(Base):
+    """News events with sentiment for stop adjustment and blackouts."""
+    __tablename__ = "news_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # null = market-wide
+    ts: Mapped[datetime] = mapped_column(DateTime)
+    sentiment: Mapped[str] = mapped_column(String(20))  # bullish|bearish|neutral
+    severity: Mapped[str] = mapped_column(String(20))  # major|normal|minor
+    headline: Mapped[str] = mapped_column(String(500))
+    source: Mapped[str] = mapped_column(String(100))
+
+
+class AnomalyEvent(Base):
+    """Market anomalies detected by anomaly_detector.py."""
+    __tablename__ = "anomaly_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    allocation_id: Mapped[int] = mapped_column(Integer, ForeignKey("bot_allocations.id"))
+    symbol: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    anomaly_type: Mapped[str] = mapped_column(String(50))  # flash_crash|vol_spike|halt|circuit_breaker
+    snapshot: Mapped[dict] = mapped_column(JSON, default=dict)

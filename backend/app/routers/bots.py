@@ -20,7 +20,7 @@ import random
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -36,6 +36,8 @@ from app.db.models.bots import (
     BotWatchlist,
     BotHealth,
     RegimeSnapshot,
+    StrategyWeight,
+    CrossBotPosition,
 )
 
 logger = logging.getLogger(__name__)
@@ -328,6 +330,268 @@ def resume_all_bots(
         count += 1
     db.commit()
     return {"status": "resumed", "allocations_resumed": count}
+
+
+# ── GET /api/bots/cross-bot-positions ────────────────────────────────────────
+
+@router.get("/cross-bot-positions")
+def get_cross_bot_positions(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return CrossBotPosition rows (aggregate exposure across all bots) for the current user."""
+    rows = (
+        db.query(CrossBotPosition)
+        .filter(CrossBotPosition.user_id == current_user.id)
+        .order_by(CrossBotPosition.symbol)
+        .all()
+    )
+    return {
+        "positions": [
+            {
+                "id": r.id,
+                "symbol": r.symbol,
+                "total_qty": r.total_qty,
+                "by_bot": r.by_bot,
+                "net_exposure_pct": r.net_exposure_pct,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ],
+        "count": len(rows),
+    }
+
+
+# ── GET /api/bots/{profile_name}/activity ────────────────────────────────────
+
+@router.get("/{profile_name}/activity")
+def get_bot_activity(
+    profile_name: str,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return recent signals/fills for the activity tab of a bot profile."""
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        raise HTTPException(404, f"Bot profile '{profile_name}' not found")
+
+    allocation = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not allocation:
+        return {"activity": [], "demo": True}
+
+    signals = (
+        db.query(BotSignal)
+        .filter(BotSignal.allocation_id == allocation.id)
+        .order_by(BotSignal.ts.desc())
+        .limit(limit)
+        .all()
+    )
+
+    # Build a lookup: symbol → most recent trade to enrich signals with result
+    recent_trades_by_symbol: dict[str, BotTrade] = {}
+    if signals:
+        symbols = list({s.symbol for s in signals})
+        trades = (
+            db.query(BotTrade)
+            .filter(
+                BotTrade.allocation_id == allocation.id,
+                BotTrade.symbol.in_(symbols),
+            )
+            .order_by(BotTrade.ts.desc())
+            .all()
+        )
+        for t in trades:
+            if t.symbol not in recent_trades_by_symbol:
+                recent_trades_by_symbol[t.symbol] = t
+
+    activity = []
+    for s in signals:
+        trade = recent_trades_by_symbol.get(s.symbol)
+        result = None
+        if trade and trade.ts >= s.ts:
+            result = {
+                "fill_price": round(trade.fill_price_cents / 100, 2),
+                "qty": trade.qty,
+                "side": trade.side,
+                "ts": trade.ts.isoformat() if trade.ts else None,
+            }
+        activity.append({
+            "id": s.id,
+            "ts": s.ts.isoformat() if s.ts else None,
+            "symbol": s.symbol,
+            "side": s.side,
+            "confidence": s.confidence,
+            "size_hint": s.size_hint,
+            "reason": s.reason,
+            "strategy": s.strategy,
+            "result": result,
+        })
+
+    return {"activity": activity, "demo": False, "count": len(activity)}
+
+
+# ── GET /api/bots/{profile_name}/strategy-weights ────────────────────────────
+
+@router.get("/{profile_name}/strategy-weights")
+def get_strategy_weights(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return StrategyWeight rows for the given bot profile."""
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        raise HTTPException(404, f"Bot profile '{profile_name}' not found")
+
+    rows = (
+        db.query(StrategyWeight)
+        .filter(StrategyWeight.profile_id == profile.id)
+        .order_by(StrategyWeight.strategy_name)
+        .all()
+    )
+    return {
+        "profile_name": profile_name,
+        "weights": [
+            {
+                "id": r.id,
+                "strategy_name": r.strategy_name,
+                "current_weight": r.current_weight,
+                "base_weight": r.base_weight,
+                "wins": r.wins,
+                "losses": r.losses,
+                "win_rate": round(r.wins / max(r.wins + r.losses, 1), 3),
+                "last_30_trades": r.last_30_trades or [],
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                "user_locked": r.user_locked,
+            }
+            for r in rows
+        ],
+        "count": len(rows),
+    }
+
+
+# ── PATCH /api/bots/{profile_name}/strategy-weights/{strategy} ───────────────
+
+@router.patch("/{profile_name}/strategy-weights/{strategy}")
+def update_strategy_weight(
+    profile_name: str,
+    strategy: str,
+    data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Lock or unlock a strategy weight for a bot profile.
+
+    Body: {user_locked: bool}
+    Only user_locked may be set via this endpoint; weight adjustment is
+    handled by the Thompson sampling engine.
+    """
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        raise HTTPException(404, f"Bot profile '{profile_name}' not found")
+
+    row = (
+        db.query(StrategyWeight)
+        .filter(
+            StrategyWeight.profile_id == profile.id,
+            StrategyWeight.strategy_name == strategy,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(404, f"Strategy weight not found: {strategy}")
+
+    if "user_locked" in data:
+        user_locked = bool(data["user_locked"])
+        row.user_locked = user_locked
+
+    db.commit()
+    db.refresh(row)
+    return {
+        "strategy_name": row.strategy_name,
+        "user_locked": row.user_locked,
+        "current_weight": row.current_weight,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+# ── POST /api/bots/{profile_name}/qa ─────────────────────────────────────────
+
+@router.post("/{profile_name}/qa")
+def ask_bot_question(
+    profile_name: str,
+    data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Co-Pilot Q&A endpoint for a bot profile.
+
+    Body: {question: str}
+    Returns: {answer: str, citations: list, confidence: float}
+    """
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        raise HTTPException(404, f"Bot profile '{profile_name}' not found")
+
+    question = str(data.get("question", "")).strip()
+    if not question:
+        raise HTTPException(400, "question is required")
+
+    # Attempt to use expert-layer bot_qa module if available
+    try:
+        from strategy_lab.expert import bot_qa  # type: ignore[import]
+        result = bot_qa.answer_question(
+            question=question,
+            profile_name=profile_name,
+            profile_config=profile.config_json or {},
+            db=db,
+            user_id=current_user.id,
+        )
+        return {
+            "answer": result.get("answer", ""),
+            "citations": result.get("citations", []),
+            "confidence": result.get("confidence", 0.0),
+        }
+    except ImportError:
+        pass
+    except Exception as exc:
+        logger.warning(f"bot_qa.answer_question failed: {exc}")
+
+    # Fallback: minimal rule-based responses
+    q_lower = question.lower()
+    if any(w in q_lower for w in ("sharpe", "performance", "return", "backtest")):
+        answer = (
+            f"The {profile_name} bot is running in paper mode. "
+            "Check the /backtest endpoint for demo performance metrics including Sharpe, Sortino, and max drawdown."
+        )
+    elif any(w in q_lower for w in ("position", "holding", "open")):
+        answer = (
+            f"Use GET /api/bots/{profile_name}/positions to see current open positions, "
+            "or visit the Positions tab in the Strategy Lab dashboard."
+        )
+    elif any(w in q_lower for w in ("strategy", "signal", "weight")):
+        answer = (
+            f"The {profile_name} bot uses multiple strategies with Thompson-sampled weights. "
+            f"Use GET /api/bots/{profile_name}/strategy-weights to inspect per-strategy weights and win rates."
+        )
+    elif any(w in q_lower for w in ("stop", "pause", "halt")):
+        answer = "Use POST /api/bots/pause-all to pause all bots, or update your allocation to enabled=false."
+    else:
+        answer = (
+            f"I'm the Co-Pilot for the {profile_name} bot. You can ask about performance, "
+            "positions, strategies, or risk settings. The full expert Q&A module (bot_qa.py) "
+            "is not yet loaded — answers are currently rule-based."
+        )
+
+    return {"answer": answer, "citations": [], "confidence": 0.4}
 
 
 # ── GET /api/bots/{profile_name} ─────────────────────────────────────────────

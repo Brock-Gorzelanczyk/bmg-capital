@@ -22,6 +22,9 @@ strategies:
   - intraday_momentum_noise_band
   - pead_intraday_drift
   - fomc_drift
+  - heston_half_hour_continuation
+  - first_half_hour_predicts_last
+  - gex_pin_reversion
 ensemble: weighted_vote
 position_cap: 3
 position_size_pct: 5
