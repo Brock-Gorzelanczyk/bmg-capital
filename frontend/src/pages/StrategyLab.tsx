@@ -50,11 +50,11 @@ const BOT_META: Record<
 };
 
 const BOT_ORDER = [
-  "stock_swing",
   "stock_day",
+  "stock_swing",
   "stock_lt",
-  "crypto_swing",
   "crypto_day",
+  "crypto_swing",
   "crypto_lt",
 ];
 
