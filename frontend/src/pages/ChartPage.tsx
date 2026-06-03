@@ -596,14 +596,12 @@ export default function ChartPage() {
 
       {/* Main area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left drawing toolbar — only visible in pro mode */}
-        {proMode && (
-          <DrawingToolbar
-            activeTool={activeTool}
-            onChange={setActiveTool}
-            onClearAll={handleClearDrawings}
-          />
-        )}
+        {/* Left drawing toolbar */}
+        <DrawingToolbar
+          activeTool={activeTool}
+          onChange={setActiveTool}
+          onClearAll={handleClearDrawings}
+        />
 
         {/* Chart area */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
@@ -755,7 +753,7 @@ export default function ChartPage() {
                   bars={bars}
                   indicators={indicators}
                   chartType={chartType}
-                  activeTool={proMode ? activeTool : "cursor"}
+                  activeTool={activeTool}
                   drawings={drawings}
                   tradeLevels={tradeLevels}
                   signalMarkers={signalMarkers}

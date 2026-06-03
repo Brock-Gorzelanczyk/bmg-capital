@@ -1214,8 +1214,8 @@ export default function BotDetailPage() {
 
   const profile = data?.profile;
   const allocation = data?.allocation;
-  const positions: BotPosition[] = data?.positions ?? [];
-  const signals: BotSignal[] = data?.signals ?? [];
+  const positions: BotPosition[] = Array.isArray(data?.positions) ? data!.positions : [];
+  const signals: BotSignal[] = Array.isArray(data?.signals) ? data!.signals : [];
   const stats = (data?.stats ?? {}) as {
     return_30d_pct?: number;
     today_pnl?: number;
@@ -1258,7 +1258,7 @@ export default function BotDetailPage() {
     onError: () => toast.error("Failed to update waitlist"),
   });
 
-  const equityCurve: EquityPoint[] = stats.equity_curve ?? [];
+  const equityCurve: EquityPoint[] = Array.isArray(stats.equity_curve) ? stats.equity_curve : [];
   const totalPnl = stats.today_pnl ?? 0;
 
   // Keyboard shortcuts (defined after allocateMut and isEnabled are available)
