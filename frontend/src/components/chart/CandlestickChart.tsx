@@ -193,7 +193,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
 
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         setOverlayVersion((v) => v + 1);
-        if (range && range.from < 5) {
+        // Pre-fetch when within 30 bars of the left edge so data arrives before the user hits the wall
+        if (range && range.from < 30) {
           onNearLeftEdgeRef.current?.();
         }
       });

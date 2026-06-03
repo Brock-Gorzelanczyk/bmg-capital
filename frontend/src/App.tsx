@@ -78,6 +78,7 @@ const IPOAccessPage = lazy(() => import("@/pages/IPOAccessPage"));
 const CFPBookingPage = lazy(() => import("@/pages/CFPBookingPage"));
 const StakingPage = lazy(() => import("@/pages/StakingPage"));
 const DCABasketsPage = lazy(() => import("@/pages/DCABasketsPage"));
+const BotDetailPage = lazy(() => import("@/pages/BotDetailPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -191,6 +192,7 @@ function AppInner() {
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<StrategyLab />} />
+        <Route path="/strategy/:botName" element={<BotDetailPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/alerts" element={<Alerts />} />

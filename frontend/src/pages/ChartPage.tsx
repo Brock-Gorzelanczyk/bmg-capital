@@ -297,7 +297,7 @@ export default function ChartPage() {
     if (loadingMoreRef.current || period === "All") return;
     loadingMoreRef.current = true;
     setExtraYears((y) => y + 2);
-    setTimeout(() => { loadingMoreRef.current = false; }, 4000);
+    setTimeout(() => { loadingMoreRef.current = false; }, 1500);
   }, [period]);
 
   const presetIndsRef = useRef<string[]>([]);
