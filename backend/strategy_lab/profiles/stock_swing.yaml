@@ -1,0 +1,19 @@
+name: stock_swing
+asset_class: stock
+broker: alpaca_paper_stocks
+universe: russell_1000
+cadence: "5 16 * * 1-5"  # 4:05pm ET weekdays
+strategies:
+  - momentum_breakout
+  - mean_reversion
+  - rsi_bands
+position_cap: 8
+position_size_pct: 12.5  # 1/8 of capital
+stop_loss_pct: -8.0
+take_profit_pct: 18.0
+trailing_stop_activate_at_pct: 10.0
+max_drawdown_pct: -20.0
+hold_min_days: 1
+hold_max_days: 30
+paper_only: true
+regime_filters: []

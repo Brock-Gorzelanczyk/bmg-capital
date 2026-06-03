@@ -1,0 +1,19 @@
+name: stock_day
+asset_class: stock
+broker: alpaca_paper_stocks
+universe: russell_1000
+cadence: "*/1 9-15 * * 1-5"  # every minute during market hours
+strategies:
+  - opening_range
+  - vwap_reversion
+  - momentum_breakout
+position_cap: 3
+position_size_pct: 33.33  # 1/3 of capital
+stop_loss_pct: -1.5
+take_profit_pct: 2.5
+trailing_stop_activate_at_pct: null
+max_drawdown_pct: -6.0
+hold_min_days: 0
+hold_max_days: 0  # intraday — flat by EOD
+paper_only: true
+regime_filters: []

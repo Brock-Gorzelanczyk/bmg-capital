@@ -1,0 +1,19 @@
+name: crypto_day
+asset_class: crypto
+broker: alpaca_paper_crypto
+universe: top_20_crypto
+cadence: "*/1 * * * *"  # every minute, 24/7
+strategies:
+  - vwap_reversion
+  - opening_range
+  - momentum_breakout
+position_cap: 3
+position_size_pct: 33.33  # 1/3 of capital
+stop_loss_pct: -2.0
+take_profit_pct: 3.0
+trailing_stop_activate_at_pct: null
+max_drawdown_pct: -8.0
+hold_min_days: 0
+hold_max_days: 0  # short-term, flat frequently
+paper_only: true
+regime_filters: []

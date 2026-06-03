@@ -1,0 +1,19 @@
+name: crypto_swing
+asset_class: crypto
+broker: alpaca_paper_crypto
+universe: top_20_crypto
+cadence: "0 */4 * * *"  # every 4 hours
+strategies:
+  - momentum_breakout
+  - mean_reversion
+  - rsi_bands
+position_cap: 5
+position_size_pct: 20.0  # 1/5 of capital
+stop_loss_pct: -15.0
+take_profit_pct: 30.0
+trailing_stop_activate_at_pct: 20.0
+max_drawdown_pct: -35.0
+hold_min_days: 1
+hold_max_days: 21
+paper_only: true
+regime_filters: []

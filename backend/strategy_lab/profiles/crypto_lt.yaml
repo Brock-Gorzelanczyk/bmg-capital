@@ -1,0 +1,18 @@
+name: crypto_lt
+asset_class: crypto
+broker: alpaca_paper_crypto
+universe: top_10_crypto
+cadence: "0 10 * * 1"  # every Monday at 10am — DCA schedule
+strategies:
+  - dca
+  - factor_blend
+position_cap: 8
+position_size_pct: 12.5  # 1/8 of capital per position
+stop_loss_pct: null
+take_profit_pct: null
+trailing_stop_activate_at_pct: null
+max_drawdown_pct: -50.0
+hold_min_days: 30
+hold_max_days: 730  # up to 2 years
+paper_only: true
+regime_filters: []

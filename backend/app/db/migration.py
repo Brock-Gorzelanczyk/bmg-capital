@@ -174,6 +174,13 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "staking_reward_logs": [],
     "dca_baskets": [],
     "dca_basket_assets": [],
+    "bot_profiles": [],
+    "bot_allocations": [],
+    "bot_signals": [],
+    "bot_positions": [],
+    "bot_trades": [],
+    "bot_daily_pnl": [],
+    "go_live_waitlist": [],
 }
 
 
