@@ -29,7 +29,7 @@ def compute_vwap(highs: list[float], lows: list[float], closes: list[float], vol
     return cum_tp_vol / cum_vol if cum_vol > 0 else 0.0
 
 
-def generate_signals(
+def _v1_signals(
     symbol: str,
     closes: list[float],
     highs: list[float],
@@ -80,6 +80,30 @@ def generate_signals(
         )]
 
     return []
+
+
+def generate_signals(bars: dict, profile_config: dict, regime: dict) -> List[Signal]:
+    """New-style interface called by runner.py.
+
+    Regime gate: VWAP reversion only works in choppy/range-bound markets.
+    Skip if trend_regime is strongly directional (bull or bear).
+    """
+    trend = regime.get("trend_regime", "chop")
+    if trend in ("bull", "bear"):
+        logger.debug("[vwap_reversion] Skipping — trend_regime=%s (needs chop)", trend)
+        return []
+
+    out: List[Signal] = []
+    threshold = profile_config.get("vwap_deviation_pct", DEVIATION_THRESHOLD_PCT)
+    for symbol, bar_list in bars.items():
+        if not bar_list:
+            continue
+        closes  = [float(b.get("c", 0)) for b in bar_list]
+        highs   = [float(b.get("h", 0)) for b in bar_list]
+        lows    = [float(b.get("l", 0)) for b in bar_list]
+        volumes = [float(b.get("v", 0)) for b in bar_list]
+        out.extend(_v1_signals(symbol, closes, highs, lows, volumes, threshold))
+    return out
 
 
 # Backwards-compat shim

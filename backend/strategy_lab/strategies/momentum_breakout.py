@@ -18,7 +18,7 @@ PERIOD = 20
 VOLUME_MULTIPLIER = 1.5
 
 
-def generate_signals(
+def _v1_signals(
     symbol: str,
     closes: list[float],
     volumes: list[float],
@@ -60,6 +60,18 @@ def generate_signals(
         )]
 
     return []
+
+
+def generate_signals(bars: dict, profile_config: dict, regime: dict) -> List[Signal]:
+    """New-style interface called by runner.py."""
+    out: List[Signal] = []
+    for symbol, bar_list in bars.items():
+        if not bar_list:
+            continue
+        closes = [float(b.get("c", 0)) for b in bar_list]
+        volumes = [float(b.get("v", 0)) for b in bar_list]
+        out.extend(_v1_signals(symbol, closes, volumes))
+    return out
 
 
 # Backwards-compat shim

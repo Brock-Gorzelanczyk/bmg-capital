@@ -25,7 +25,7 @@ _MARKET_OPEN = time(9, 30)
 _RANGE_END = time(10, 0)  # 30 min after open
 
 
-def generate_signals(
+def _v1_signals(
     symbol: str,
     closes: list[float],
     highs: list[float],
@@ -77,6 +77,32 @@ def generate_signals(
         )]
 
     return []
+
+
+def generate_signals(bars: dict, profile_config: dict, regime: dict) -> List[Signal]:
+    """New-style interface called by runner.py."""
+    out: List[Signal] = []
+    for symbol, bar_list in bars.items():
+        if not bar_list:
+            continue
+        closes     = [float(b.get("c", 0)) for b in bar_list]
+        highs      = [float(b.get("h", 0)) for b in bar_list]
+        lows       = [float(b.get("l", 0)) for b in bar_list]
+        timestamps = [b.get("t") for b in bar_list]
+        # Parse ISO string timestamps if needed
+        parsed_ts: list[datetime] = []
+        for t in timestamps:
+            if isinstance(t, str):
+                try:
+                    parsed_ts.append(datetime.fromisoformat(t.replace("Z", "+00:00")))
+                except ValueError:
+                    parsed_ts.append(datetime.now(timezone.utc))
+            elif isinstance(t, datetime):
+                parsed_ts.append(t)
+            else:
+                parsed_ts.append(datetime.now(timezone.utc))
+        out.extend(_v1_signals(symbol, closes, highs, lows, parsed_ts))
+    return out
 
 
 # Backwards-compat shim

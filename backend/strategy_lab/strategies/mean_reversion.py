@@ -32,7 +32,7 @@ def _std(prices: list[float], period: int) -> float:
     return math.sqrt(variance)
 
 
-def generate_signals(symbol: str, closes: list[float], period: int = PERIOD) -> List[Signal]:
+def _v1_signals(symbol: str, closes: list[float], period: int = PERIOD) -> List[Signal]:
     """Return Signals for a close-price series.
 
     Args:
@@ -82,6 +82,18 @@ def generate_signals(symbol: str, closes: list[float], period: int = PERIOD) -> 
         )]
 
     return []
+
+
+def generate_signals(bars: dict, profile_config: dict, regime: dict) -> List[Signal]:
+    """New-style interface called by runner.py. Wraps v1 logic over all symbols in bars."""
+    out: List[Signal] = []
+    period = profile_config.get("mean_reversion_period", PERIOD)
+    for symbol, bar_list in bars.items():
+        if not bar_list:
+            continue
+        closes = [float(b.get("c", 0)) for b in bar_list]
+        out.extend(_v1_signals(symbol, closes, period))
+    return out
 
 
 # Backwards-compat shim for code that calls generate_signal() directly
