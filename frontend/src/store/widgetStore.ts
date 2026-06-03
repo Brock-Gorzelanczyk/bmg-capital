@@ -197,6 +197,14 @@ export const useWidgetStore = create<WidgetStore>()(
         },
       };
     },
-    { name: "bmg-widget-store", version: 1 }
+    {
+      name: "bmg-widget-store",
+      version: 2,
+      // v2: dropped stale workspace state that was missing widgets/layout arrays
+      migrate: (_state, _version) => {
+        const defaults = buildDefaultWorkspaces();
+        return { workspaces: defaults, activeWorkspaceId: defaults[0].id, editMode: false };
+      },
+    }
   )
 );

@@ -66,7 +66,11 @@ export default function Dashboard() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { containerRef, width, mounted } = useContainerWidth();
 
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0];
+  const rawWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0];
+  // Guard stale rehydrated state — older persisted objects may be missing widgets/layout
+  const activeWorkspace = rawWorkspace
+    ? { ...rawWorkspace, widgets: rawWorkspace.widgets ?? [], layout: rawWorkspace.layout ?? [] }
+    : rawWorkspace;
 
   // Load workspaces from backend on mount
   const { data: backendWorkspaces } = useQuery({
