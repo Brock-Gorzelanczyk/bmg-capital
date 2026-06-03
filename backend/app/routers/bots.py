@@ -567,3 +567,139 @@ def leave_waitlist(
     existing.opted_out_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "opted_out"}
+
+
+# ── POST /api/bots/migrate-legacy ─────────────────────────────────────────────
+
+@router.post("/migrate-legacy")
+def migrate_legacy_positions(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    One-shot migration: copies open positions and candidates from the old
+    strategy_trades table into stock_swing / crypto_swing BotPosition /
+    BotSignal rows. Also seeds BotAllocations if they don't exist yet.
+    Safe to call multiple times — skips symbols already migrated.
+    """
+    from app.db.models.strategy import StrategyTrade
+    from app.db.models.watchlist import WatchlistItem, Watchlist
+
+    now = datetime.now(timezone.utc)
+    stats = {"positions_migrated": 0, "signals_migrated": 0, "already_existed": 0}
+
+    # Map asset_class → bot profile name
+    PROFILE_MAP = {
+        "equity": "stock_swing",
+        "stock": "stock_swing",
+        "crypto": "crypto_swing",
+    }
+
+    for asset_class, bot_name in [("equity", "stock_swing"), ("crypto", "crypto_swing")]:
+        profile = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
+        if not profile:
+            continue
+
+        # Get or create BotAllocation for this user + profile
+        allocation = (
+            db.query(BotAllocation)
+            .filter(
+                BotAllocation.user_id == current_user.id,
+                BotAllocation.profile_id == profile.id,
+            )
+            .first()
+        )
+        if not allocation:
+            allocation = BotAllocation(
+                user_id=current_user.id,
+                profile_id=profile.id,
+                capital_pct=15.0,
+                risk_profile="standard",
+                paper_mode=True,
+                go_live_requested=False,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(allocation)
+            db.flush()  # get allocation.id
+
+        # Existing migrated symbols (avoid dupes)
+        existing_symbols = {
+            p.symbol
+            for p in db.query(BotPosition)
+            .filter(BotPosition.allocation_id == allocation.id, BotPosition.closed_at.is_(None))
+            .all()
+        }
+        existing_signal_symbols = {
+            s.symbol
+            for s in db.query(BotSignal)
+            .filter(BotSignal.allocation_id == allocation.id)
+            .all()
+        }
+
+        # ── Open positions ────────────────────────────────────────────────────
+        open_trades = (
+            db.query(StrategyTrade)
+            .filter(
+                StrategyTrade.status == "open",
+                StrategyTrade.asset_class.in_([asset_class, "equity" if asset_class == "stock" else asset_class]),
+            )
+            .all()
+        )
+        for t in open_trades:
+            if t.symbol in existing_symbols:
+                stats["already_existed"] += 1
+                continue
+            avg_cost_cents = int(round(t.entry_price * 100))
+            pos = BotPosition(
+                allocation_id=allocation.id,
+                symbol=t.symbol,
+                qty=t.shares,
+                avg_cost_cents=avg_cost_cents,
+                opened_at=t.entry_date if t.entry_date else now,
+                closed_at=None,
+                exit_reason=None,
+                is_paper=True,
+            )
+            db.add(pos)
+            existing_symbols.add(t.symbol)
+            stats["positions_migrated"] += 1
+
+        # ── Candidates → BotSignal (buy) ──────────────────────────────────────
+        candidates = (
+            db.query(StrategyTrade)
+            .filter(
+                StrategyTrade.status == "candidate",
+                StrategyTrade.asset_class.in_([asset_class, "equity" if asset_class == "stock" else asset_class]),
+            )
+            .all()
+        )
+        for c in candidates:
+            if c.symbol in existing_signal_symbols:
+                stats["already_existed"] += 1
+                continue
+            sig = BotSignal(
+                allocation_id=allocation.id,
+                ts=c.candidate_since if c.candidate_since else now,
+                symbol=c.symbol,
+                side="buy",
+                confidence=0.7,
+                size_hint=None,
+                reason=f"Migrated from legacy strategy lab ({c.preset_key})",
+                strategy=c.preset_key,
+            )
+            db.add(sig)
+            existing_signal_symbols.add(c.symbol)
+            stats["signals_migrated"] += 1
+
+    db.commit()
+    return {
+        "status": "ok",
+        "migrated": stats,
+        "message": (
+            f"Migrated {stats['positions_migrated']} positions and "
+            f"{stats['signals_migrated']} watchlist signals into stock_swing / crypto_swing. "
+            f"{stats['already_existed']} already existed and were skipped."
+        ),
+    }
