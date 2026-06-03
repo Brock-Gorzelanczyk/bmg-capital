@@ -123,6 +123,9 @@ export const joinWaitlist = (name: string) =>
 export const leaveWaitlist = (name: string) =>
   client.delete(`/bots/waitlist/${name}`).then((r) => r.data);
 
+export const migrateLegacyPositions = () =>
+  client.post<{ status: string; migrated: Record<string, number>; message: string }>("/bots/migrate-legacy").then((r) => r.data);
+
 export const getBotBacktest = (
   name: string,
   params: { from: string; to: string; capital: number }

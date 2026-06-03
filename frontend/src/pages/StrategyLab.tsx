@@ -7,6 +7,7 @@ import {
   allocateBot,
   joinWaitlist,
   leaveWaitlist,
+  migrateLegacyPositions,
   type BotListItem,
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
@@ -318,6 +319,15 @@ export default function StrategyLab() {
     onError: () => toast.error("Failed to join waitlist"),
   });
 
+  const migrateMut = useMutation({
+    mutationFn: migrateLegacyPositions,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
+      toast.success(data.message);
+    },
+    onError: () => toast.error("Migration failed — check console"),
+  });
+
   // Build the ordered bot list — fall back to hardcoded if anything goes wrong
   let bots: BotListItem[] = [];
   if (isLoading) {
@@ -387,9 +397,19 @@ export default function StrategyLab() {
       )}
 
       {/* Footer */}
-      <p className="text-xs text-center text-zinc-600 mt-8">
-        Paper trading. Not investment advice. Not a registered investment adviser.
-      </p>
+      <div className="flex items-center justify-between mt-8">
+        <p className="text-xs text-zinc-600">
+          Paper trading. Not investment advice. Not a registered investment adviser.
+        </p>
+        <button
+          onClick={() => migrateMut.mutate()}
+          disabled={migrateMut.isPending}
+          title="Import open positions and watchlist from the old Strategy Lab into Stock Swing & Crypto Swing"
+          className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors disabled:opacity-40"
+        >
+          {migrateMut.isPending ? "Importing…" : "Import legacy positions →"}
+        </button>
+      </div>
     </div>
   );
 }
