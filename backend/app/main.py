@@ -102,6 +102,8 @@ async def lifespan(app: FastAPI):
     setup_scheduler()
     from app.routers.monitoring import setup_monitoring_scheduler
     setup_monitoring_scheduler(scheduler)
+    from strategy_lab.bot_scheduler import setup_bot_scheduler
+    setup_bot_scheduler(scheduler)
     scheduler.start()
 
     # Kick off strategy scan in background — won't block server startup
