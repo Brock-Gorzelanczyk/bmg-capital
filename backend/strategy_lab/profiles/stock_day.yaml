@@ -20,11 +20,12 @@ watchlist:
 strategies:
   - orb_stocks_in_play
   - intraday_momentum_noise_band
-  - pead_intraday_drift
-  - fomc_drift
   - heston_half_hour_continuation
   - first_half_hour_predicts_last
+  - pead_intraday_drift
   - gex_pin_reversion
+  - fomc_drift
+  - vwap_reversion_chop
 ensemble: weighted_vote
 position_cap: 3
 position_size_pct: 5

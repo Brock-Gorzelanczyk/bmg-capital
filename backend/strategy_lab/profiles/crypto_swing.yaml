@@ -17,6 +17,9 @@ strategies:
   - crypto_rsi_mean_reversion
   - crypto_momentum_breakout
   - crypto_btc_dominance_regime
+  - crypto_macd_swing
+  - crypto_ema_cross
+  - crypto_relative_strength
 ensemble: weighted_vote
 position_cap: 5
 position_size_pct: 20.0

@@ -17,6 +17,12 @@ watchlist:
 strategies:
   - factor_blend
   - dividend_growth
+  - quality_score
+  - low_vol_anomaly
+  - momentum_12_1
+  - small_cap_value
+  - shareholder_yield
+  - monthly_rebalance
 ensemble: factor_rank
 position_cap: 20
 position_size_pct: 5.0

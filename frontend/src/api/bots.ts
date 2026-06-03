@@ -282,3 +282,53 @@ export const getPendingReviews = (): Promise<PendingReview[]> =>
     .get<PendingReview[]>("/bots/pending-reviews")
     .then((r) => r.data ?? [])
     .catch(() => []);
+
+// ─── Strategy Lab aggregate portfolio ────────────────────────────────────────
+
+export interface PortfolioLeaderboardEntry {
+  rank: number;
+  profile: string;
+  name: string;
+  return_30d_pct: number;
+  today_pnl_cents: number;
+  watchlist_count: number;
+  portfolio_value_cents: number;
+}
+
+export interface PortfolioData {
+  total_value_cents: number;
+  yesterday_value_cents: number;
+  today_pnl_cents: number;
+  today_pnl_pct: number;
+  return_30d_pct: number;
+  return_30d_value_cents: number;
+  return_all_time_pct: number;
+  sharpe_30d: number;
+  total_open_positions: number;
+  total_watchlist_count: number;
+  equity_curve: Array<{ date: string; value_cents: number }>;
+  leaderboard: PortfolioLeaderboardEntry[];
+  best_performer: { profile: string; return_30d_pct: number } | null;
+  worst_performer: { profile: string; return_30d_pct: number } | null;
+}
+
+export const getStrategyLabPortfolio = (): Promise<PortfolioData> =>
+  client
+    .get<PortfolioData>("/strategy-lab/portfolio")
+    .then((r) => r.data)
+    .catch((): PortfolioData => ({
+      total_value_cents: 0,
+      yesterday_value_cents: 0,
+      today_pnl_cents: 0,
+      today_pnl_pct: 0,
+      return_30d_pct: 0,
+      return_30d_value_cents: 0,
+      return_all_time_pct: 0,
+      sharpe_30d: 0,
+      total_open_positions: 0,
+      total_watchlist_count: 0,
+      equity_curve: [],
+      leaderboard: [],
+      best_performer: null,
+      worst_performer: null,
+    }));

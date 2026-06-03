@@ -20,14 +20,17 @@ strategies:
   # v1 ported (preserved — no regression per acceptance criterion #9)
   - mean_reversion
   - momentum_breakout
-  - opening_range
   - rsi_bands
-  - vwap_reversion
-  # v2 additions
+  # v2 swing roster (10-strategy total per spec)
   - fifty_two_week_high_momentum
   - relative_strength_leaders
   - factor_momentum_value
-ensemble: majority_vote
+  - golden_cross
+  - bollinger_squeeze
+  - cup_and_handle
+  - macd_crossover
+  - earnings_drift_post
+ensemble: weighted_vote
 position_cap: 8
 position_size_pct: 12.5
 stop_loss_pct: 8.0

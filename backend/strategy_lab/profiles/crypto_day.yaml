@@ -17,6 +17,7 @@ strategies:
   - crypto_weekend_momentum
   - crypto_volatility_breakout
   - crypto_news_sentiment
+  - crypto_session_open
 ensemble: weighted_vote
 position_cap: 3
 position_size_pct: 15.0

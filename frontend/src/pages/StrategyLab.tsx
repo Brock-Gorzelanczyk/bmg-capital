@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+} from "recharts";
+import {
   getBots,
   allocateBot,
   joinWaitlist,
@@ -12,9 +15,11 @@ import {
   pauseAllBots,
   resumeAllBots,
   getPendingReviews,
+  getStrategyLabPortfolio,
   type BotListItem,
   type RegimeData,
   type PendingReview,
+  type PortfolioData,
 } from "@/api/bots";
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
 import { cn } from "@/lib/utils";
@@ -153,6 +158,213 @@ function RegimeBar({ regime, isLoading }: { regime: RegimeData | undefined; isLo
         <span className="text-zinc-500">BTC Dom</span>
         <span>{btcDom}</span>
       </span>
+    </div>
+  );
+}
+
+// ─── Portfolio hero ────────────────────────────────────────────────────────────
+
+type EquityPeriod = "7d" | "30d" | "90d" | "1y" | "all";
+const PERIOD_DAYS: Record<EquityPeriod, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365, "all": Infinity };
+
+function filterCurve(
+  curve: PortfolioData["equity_curve"],
+  period: EquityPeriod
+): PortfolioData["equity_curve"] {
+  if (period === "all") return curve;
+  const cutoff = Date.now() - PERIOD_DAYS[period] * 86_400_000;
+  return curve.filter((pt) => new Date(pt.date).getTime() >= cutoff);
+}
+
+function dollars(cents: number): string {
+  const abs = Math.abs(cents / 100);
+  return abs >= 1000
+    ? `$${(abs / 1000).toFixed(1)}k`
+    : `$${abs.toFixed(2)}`;
+}
+
+function PortfolioHeroSkeleton() {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 animate-pulse space-y-5">
+      <div className="h-4 w-40 bg-zinc-800 rounded" />
+      <div className="grid grid-cols-3 gap-6">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="space-y-2">
+            <div className="h-8 w-32 bg-zinc-800 rounded" />
+            <div className="h-3 w-24 bg-zinc-800 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-4 gap-4 pt-4 border-t border-zinc-800">
+        {[0, 1, 2, 3].map((i) => <div key={i} className="h-8 bg-zinc-800 rounded" />)}
+      </div>
+      <div className="h-28 bg-zinc-800 rounded-xl" />
+      <div className="space-y-2 pt-4 border-t border-zinc-800">
+        {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-9 bg-zinc-800 rounded-xl" />)}
+      </div>
+    </div>
+  );
+}
+
+function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => void }) {
+  const [period, setPeriod] = useState<EquityPeriod>("30d");
+
+  const { data: p, isLoading } = useQuery({
+    queryKey: ["strategy-lab-portfolio"],
+    queryFn: getStrategyLabPortfolio,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    retry: 0,
+  });
+
+  if (isLoading) return <PortfolioHeroSkeleton />;
+
+  const totalVal   = (p?.total_value_cents ?? 0) / 100;
+  const yestVal    = (p?.yesterday_value_cents ?? 0) / 100;
+  const todayPnl   = (p?.today_pnl_cents ?? 0) / 100;
+  const todayPos   = todayPnl >= 0;
+  const ret30      = p?.return_30d_pct ?? 0;
+  const ret30Pos   = ret30 >= 0;
+  const retAll     = p?.return_all_time_pct ?? 0;
+  const sharpe     = p?.sharpe_30d ?? 0;
+
+  const chartData = filterCurve(p?.equity_curve ?? [], period).map((pt) => ({
+    date: pt.date.slice(5),   // "MM-DD"
+    value: pt.value_cents / 100,
+  }));
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+          Strategy Lab Portfolio
+        </h2>
+        <span className="text-[10px] text-zinc-700">Live · refreshes every 60 s</span>
+      </div>
+
+      {/* Primary metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div>
+          <p className="text-3xl font-bold text-white tabular-nums">
+            ${totalVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">Total Portfolio Value</p>
+          {yestVal > 0 && (
+            <p className="text-[11px] text-zinc-600 mt-0.5">
+              from ${yestVal.toLocaleString("en-US", { minimumFractionDigits: 2 })} yesterday
+            </p>
+          )}
+        </div>
+        <div>
+          <p className={cn("text-3xl font-bold tabular-nums", todayPos ? "text-lime-400" : "text-red-400")}>
+            {todayPos ? "+" : "−"}${Math.abs(todayPnl).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">Today's P&L</p>
+          <p className="text-[11px] text-zinc-600 mt-0.5">across {p?.leaderboard.length ?? 6} bots</p>
+        </div>
+        <div>
+          <p className={cn("text-3xl font-bold tabular-nums", ret30Pos ? "text-lime-400" : "text-red-400")}>
+            {formatPct(ret30)}
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">30d Return</p>
+          {(p?.return_30d_value_cents ?? 0) !== 0 && (
+            <p className="text-[11px] text-zinc-600 mt-0.5">
+              {dollars(Math.abs(p!.return_30d_value_cents))} {ret30Pos ? "gain" : "loss"}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Secondary metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-zinc-800">
+        {[
+          { label: "All-time Return", val: formatPct(retAll), color: retAll >= 0 ? "text-lime-400" : "text-red-400" },
+          { label: "Sharpe (30d)",    val: sharpe.toFixed(2),  color: "text-white" },
+          { label: "Open Positions",  val: String(p?.total_open_positions ?? 0), color: "text-white" },
+          { label: "Watchlists",      val: `${p?.total_watchlist_count ?? 0} names`, color: "text-white" },
+        ].map(({ label, val, color }) => (
+          <div key={label}>
+            <p className="text-[11px] text-zinc-600">{label}</p>
+            <p className={cn("text-sm font-semibold mt-0.5", color)}>{val}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Equity curve */}
+      <div className="pt-3 border-t border-zinc-800">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-zinc-400">Aggregate Equity Curve</p>
+          <div className="flex gap-0.5">
+            {(["7d", "30d", "90d", "1y", "all"] as EquityPeriod[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded transition-colors",
+                  period === p
+                    ? "bg-lime-500/20 text-lime-400 border border-lime-500/30"
+                    : "text-zinc-600 hover:text-zinc-400"
+                )}
+              >
+                {p.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+        {chartData.length > 1 ? (
+          <ResponsiveContainer width="100%" height={120}>
+            <LineChart data={chartData}>
+              <YAxis domain={["auto", "auto"]} hide />
+              <XAxis dataKey="date" hide />
+              <Tooltip
+                contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 11 }}
+                formatter={(v: number) => [`$${v.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, "Portfolio"]}
+              />
+              <Line type="monotone" dataKey="value" stroke="#84cc16" dot={false} strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-28 flex items-center justify-center text-zinc-600 text-xs">
+            Equity history builds after the first daily run
+          </div>
+        )}
+      </div>
+
+      {/* Leaderboard */}
+      <div className="pt-3 border-t border-zinc-800">
+        <p className="text-xs font-semibold text-zinc-400 mb-3">Bot Leaderboard — ranked by 30d return</p>
+        <div className="space-y-1.5">
+          {(p?.leaderboard ?? []).map((entry) => {
+            const ePos = entry.return_30d_pct >= 0;
+            const tPnl = entry.today_pnl_cents / 100;
+            const tPos = tPnl >= 0;
+            const isCrypto = entry.profile.includes("crypto");
+            return (
+              <button
+                key={entry.profile}
+                onClick={() => onNavigateBot(entry.profile)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 transition-colors text-left"
+              >
+                <span className="text-[10px] font-bold text-zinc-600 w-4 flex-shrink-0">
+                  #{entry.rank}
+                </span>
+                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isCrypto ? "bg-orange-400" : "bg-blue-400")} />
+                <span className="flex-1 text-xs font-semibold text-white truncate">{entry.name}</span>
+                <span className={cn("text-xs font-bold w-14 text-right", ePos ? "text-lime-400" : "text-red-400")}>
+                  {formatPct(entry.return_30d_pct)}
+                </span>
+                <span className={cn("text-xs w-20 text-right", tPos ? "text-lime-400" : "text-red-400")}>
+                  {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
+                </span>
+                <span className="text-[10px] text-zinc-600 w-16 text-right flex-shrink-0">
+                  {entry.watchlist_count} names
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -887,6 +1099,9 @@ export default function StrategyLab() {
               Join the waitlist →
             </button>
           </div>
+
+          {/* Aggregate portfolio hero */}
+          <PortfolioHero onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
 
           {/* Regime status bar */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
