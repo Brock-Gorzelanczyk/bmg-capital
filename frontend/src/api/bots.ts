@@ -166,8 +166,13 @@ export interface WatchlistItem {
 
 export const getBotWatchlist = (name: string): Promise<WatchlistItem[]> =>
   client
-    .get<WatchlistItem[]>(`/bots/${name}/watchlist`)
-    .then((r) => r.data ?? [])
+    .get(`/bots/${name}/watchlist`)
+    .then((r) => {
+      const d = r.data;
+      if (Array.isArray(d)) return d;
+      if (d && Array.isArray(d.watchlist)) return d.watchlist;
+      return [];
+    })
     .catch(() => []);
 
 export const runBacktest = (

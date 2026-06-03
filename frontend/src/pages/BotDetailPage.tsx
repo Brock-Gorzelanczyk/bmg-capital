@@ -574,7 +574,9 @@ function WatchlistTable({ botName }: { botName: string }) {
     );
   }
 
-  if (!watchlist || watchlist.length === 0) {
+  const safeWatchlist = Array.isArray(watchlist) ? watchlist : [];
+
+  if (safeWatchlist.length === 0) {
     return (
       <p className="text-zinc-600 text-sm py-6 text-center">
         Watchlist rebuilds at next scheduled cadence
@@ -582,7 +584,7 @@ function WatchlistTable({ botName }: { botName: string }) {
     );
   }
 
-  const displayed = showAll ? watchlist : watchlist.slice(0, 20);
+  const displayed = showAll ? safeWatchlist : safeWatchlist.slice(0, 20);
 
   function statusBadgeClass(status: string): string {
     const s = status?.toLowerCase() ?? "";
@@ -643,12 +645,12 @@ function WatchlistTable({ botName }: { botName: string }) {
           </tbody>
         </table>
       </div>
-      {watchlist.length > 20 && (
+      {safeWatchlist.length > 20 && (
         <button
           onClick={() => setShowAll((v) => !v)}
           className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
         >
-          {showAll ? "Show fewer" : `Show all ${watchlist.length} symbols`}
+          {showAll ? "Show fewer" : `Show all ${safeWatchlist.length} symbols`}
         </button>
       )}
     </div>
