@@ -93,45 +93,7 @@ export default function CoPilot({ isOpen, onClose, currentBotName, prefillQuery 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-focus when opened; apply prefill if provided
-  useEffect(() => {
-    if (isOpen) {
-      const initial = prefillQuery ?? "";
-      setQuery(initial);
-      setResponse(null);
-      setIsLoading(false);
-      setTimeout(() => {
-        inputRef.current?.focus();
-        // If prefill, kick off the query immediately
-        if (initial) {
-          // executeQuery will be called by the debounce handler via handleChange re-run
-        }
-      }, 50);
-    }
-  }, [isOpen, prefillQuery]);
-
-  // When isOpen becomes true and prefillQuery is set, run the query immediately
-  useEffect(() => {
-    if (isOpen && prefillQuery) {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => executeQuery(prefillQuery), 200);
-    }
-  }, [isOpen, prefillQuery, executeQuery]);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!isOpen) return;
-    function handler(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    }
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose]);
-
-  // Debounced query execution
+  // Debounced query execution — declared first so it can be referenced in effects below
   const executeQuery = useCallback(
     async (q: string) => {
       if (!q.trim()) {
@@ -156,6 +118,40 @@ export default function CoPilot({ isOpen, onClose, currentBotName, prefillQuery 
     },
     [currentBotName]
   );
+
+  // Auto-focus when opened; apply prefill if provided
+  useEffect(() => {
+    if (isOpen) {
+      const initial = prefillQuery ?? "";
+      setQuery(initial);
+      setResponse(null);
+      setIsLoading(false);
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    }
+  }, [isOpen, prefillQuery]);
+
+  // When isOpen becomes true and prefillQuery is set, run the query immediately
+  useEffect(() => {
+    if (isOpen && prefillQuery) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => executeQuery(prefillQuery), 200);
+    }
+  }, [isOpen, prefillQuery, executeQuery]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    function handler(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isOpen, onClose]);
 
   function handleChange(value: string) {
     setQuery(value);
