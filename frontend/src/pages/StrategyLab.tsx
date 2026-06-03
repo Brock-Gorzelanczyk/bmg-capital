@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
   getBots,
@@ -11,9 +11,12 @@ import {
   getRegime,
   pauseAllBots,
   resumeAllBots,
+  getPendingReviews,
   type BotListItem,
   type RegimeData,
+  type PendingReview,
 } from "@/api/bots";
+import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
 import { cn } from "@/lib/utils";
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
@@ -516,6 +519,223 @@ function makeFallbackBots(): BotListItem[] {
   }));
 }
 
+// ─── Activity feed time format ────────────────────────────────────────────────
+
+function timeAgo(ts: string): string {
+  try {
+    const diff = Date.now() - new Date(ts).getTime();
+    const m = Math.floor(diff / 60000);
+    const h = Math.floor(diff / 3600000);
+    const d = Math.floor(diff / 86400000);
+    if (d >= 1) return `${d}d ago`;
+    if (h >= 1) return `${h}h ago`;
+    if (m >= 1) return `${m}m ago`;
+    return "just now";
+  } catch {
+    return "";
+  }
+}
+
+// ─── Right-rail activity feed ─────────────────────────────────────────────────
+
+function ActivityRail({ onClose }: { onClose: () => void }) {
+  const { data: feed = [], isLoading } = useQuery({
+    queryKey: ["autopilot-activity-feed"],
+    queryFn: () => getAutopilotActivity({ page: 1 }),
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+    retry: 0,
+  });
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">
+          Activity
+        </span>
+        <button
+          onClick={onClose}
+          className="text-zinc-600 hover:text-white text-xs transition-colors"
+        >
+          ‹ Hide
+        </button>
+      </div>
+      {isLoading ? (
+        <div className="space-y-2 animate-pulse">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-10 bg-zinc-800 rounded-lg" />
+          ))}
+        </div>
+      ) : feed.length === 0 ? (
+        <p className="text-zinc-600 text-xs text-center py-6">No activity yet</p>
+      ) : (
+        <div className="space-y-1 overflow-y-auto flex-1">
+          {feed.slice(0, 20).map((item: AutopilotAction) => (
+            <div
+              key={item.id}
+              className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs"
+            >
+              <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 font-medium text-xs">
+                  {item.category?.replace(/_/g, " ")}
+                </span>
+                {item.asset && (
+                  <span className="font-semibold text-white">{item.asset}</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-zinc-500 truncate">
+                  {item.action_type?.replace(/_/g, " ")}
+                </span>
+                <span className="text-zinc-700 whitespace-nowrap flex-shrink-0">
+                  {timeAgo(item.created_at)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Today's Questions ────────────────────────────────────────────────────────
+
+interface TodaysQuestionsProps {
+  onAskCoPilot: (question: string) => void;
+}
+
+function TodaysQuestions({ onAskCoPilot }: TodaysQuestionsProps) {
+  const [dismissed, setDismissed] = useState<Set<string | number>>(new Set());
+
+  const { data: reviews = [] } = useQuery({
+    queryKey: ["pending-reviews"],
+    queryFn: getPendingReviews,
+    retry: 0,
+    staleTime: 60_000,
+  });
+
+  const visible = reviews.filter((r: PendingReview) => !dismissed.has(r.id));
+
+  function dismiss(id: string | number) {
+    setDismissed((prev) => new Set([...prev, id]));
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-zinc-300">
+          Today's questions for you
+          {visible.length > 0 && (
+            <span className="ml-2 text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400">
+              {visible.length}
+            </span>
+          )}
+        </h2>
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-6 text-center">
+          <p className="text-zinc-500 text-sm">No questions today ✓</p>
+          <p className="text-zinc-600 text-xs mt-1">All borderline signals have been reviewed.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {visible.map((r: PendingReview) => {
+            const display = r.bot_name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+            const confPct = Math.round((r.confidence ?? 0) * 100);
+            const timeStr = (() => {
+              try {
+                return new Date(r.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+              } catch {
+                return r.ts;
+              }
+            })();
+            const coPilotQ = `Why did ${display} consider ${r.side === "buy" ? "buying" : "selling"} ${r.symbol} at ${timeStr} with ${confPct}% confidence?`;
+
+            return (
+              <div
+                key={r.id}
+                className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3"
+              >
+                <p className="text-sm text-zinc-300 mb-2">
+                  <span className="font-semibold text-white">{display}</span> considered{" "}
+                  {r.side === "buy" ? "buying" : "selling"}{" "}
+                  <span className="font-semibold text-white">{r.symbol}</span> at {timeStr} —{" "}
+                  confidence{" "}
+                  <span className="text-amber-400 font-semibold">{confPct}%</span>. Review?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => dismiss(r.id)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+                  >
+                    Looks good
+                  </button>
+                  <button
+                    onClick={() => {
+                      dismiss(r.id);
+                      onAskCoPilot(coPilotQ);
+                    }}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 text-teal-300 hover:bg-teal-500/20 transition-colors"
+                  >
+                    Ask Co-Pilot
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Mobile bottom nav ────────────────────────────────────────────────────────
+
+interface BottomNavProps {
+  onOpenActivity: () => void;
+  onOpenCoPilot: () => void;
+}
+
+function BottomNav({ onOpenActivity, onOpenCoPilot }: BottomNavProps) {
+  const navigate = useNavigate();
+  return (
+    <nav className="fixed bottom-0 inset-x-0 bg-slate-900 border-t border-slate-700 md:hidden z-40">
+      <div className="grid grid-cols-4 h-16">
+        <button
+          onClick={() => navigate("/strategy")}
+          className="flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-white transition-colors"
+        >
+          <span className="text-lg">⊞</span>
+          <span className="text-[10px] font-medium">Bots</span>
+        </button>
+        <button
+          onClick={onOpenActivity}
+          className="flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-white transition-colors"
+        >
+          <span className="text-lg">⚡</span>
+          <span className="text-[10px] font-medium">Activity</span>
+        </button>
+        <button
+          onClick={onOpenCoPilot}
+          className="flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-white transition-colors"
+        >
+          <span className="text-lg">⌘</span>
+          <span className="text-[10px] font-medium">Co-Pilot</span>
+        </button>
+        <button
+          onClick={() => navigate("/settings")}
+          className="flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-white transition-colors"
+        >
+          <span className="text-lg">⚙</span>
+          <span className="text-[10px] font-medium">Settings</span>
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StrategyLab() {
@@ -523,6 +743,11 @@ export default function StrategyLab() {
   const qc = useQueryClient();
   // null = unknown (first load), true = paused, false = running
   const [allPaused, setAllPaused] = useState<boolean | null>(null);
+  const [railOpen, setRailOpen] = useState(false);
+  // Dispatch a custom event so the global CoPilot (rendered in App) can open with a prefill
+  const openCoPilot = useCallback((q?: string) => {
+    window.dispatchEvent(new CustomEvent("copilot:open", { detail: { query: q ?? "" } }));
+  }, []);
 
   // "bots-v2" busts any persisted localStorage cache with old flat data shape
   const { data, isLoading, isError } = useQuery({
@@ -600,91 +825,136 @@ export default function StrategyLab() {
   const isPauseOrResumePending = pauseAllMut.isPending || resumeAllMut.isPending;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      {/* Title + Pause All button */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Strategy Lab</h1>
-          <p className="text-zinc-500 text-sm mt-1">
-            Six autonomous paper-trading bots. Each runs its own strategy, tracks P&L, and signals entries.
-          </p>
+    <>
+      {/* Outer layout: content area + optional right rail */}
+      <div className={cn("flex gap-6 max-w-7xl mx-auto px-4 py-6 pb-20 md:pb-6")}>
+        {/* Main content */}
+        <div className="flex-1 min-w-0 space-y-6">
+          {/* Title row */}
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Strategy Lab</h1>
+              <p className="text-zinc-500 text-sm mt-1">
+                Six autonomous paper-trading bots. Each runs its own strategy, tracks P&L, and signals entries.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Portfolio View link */}
+              <Link
+                to="/net-portfolio"
+                className="text-xs text-teal-400 hover:text-teal-300 underline underline-offset-2 transition-colors whitespace-nowrap"
+              >
+                Portfolio View →
+              </Link>
+              {/* Activity rail toggle (desktop) */}
+              <button
+                onClick={() => setRailOpen((v) => !v)}
+                className="hidden md:inline-flex text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors whitespace-nowrap"
+              >
+                {railOpen ? "‹ Activity" : "Activity ›"}
+              </button>
+              {allPaused ? (
+                <button
+                  onClick={() => resumeAllMut.mutate()}
+                  disabled={isPauseOrResumePending}
+                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50 shadow-lg shadow-lime-500/20"
+                >
+                  {resumeAllMut.isPending ? "Resuming…" : "Resume All Bots"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => pauseAllMut.mutate()}
+                  disabled={isPauseOrResumePending}
+                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-500 transition-colors disabled:opacity-50 shadow-lg shadow-red-600/20"
+                >
+                  {pauseAllMut.isPending ? "Pausing…" : "Pause All Bots"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Paper-only banner */}
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+            <span className="text-amber-400 text-sm font-semibold">📄 Paper trading only.</span>
+            <span className="text-amber-300 text-xs">
+              Live trading unlocks Q3 2026 when BMG completes RIA registration.
+            </span>
+            <button
+              onClick={() => globalWaitlistMut.mutate()}
+              disabled={globalWaitlistMut.isPending}
+              className="ml-auto text-xs text-amber-400 underline whitespace-nowrap"
+            >
+              Join the waitlist →
+            </button>
+          </div>
+
+          {/* Regime status bar */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+            <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-2">Market Regime</p>
+            <RegimeBar regime={regime} isLoading={regimeLoading} />
+          </div>
+
+          {/* 2×3 grid */}
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : (
+            <div className={cn(
+              "grid gap-4",
+              railOpen
+                ? "grid-cols-1 sm:grid-cols-2"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            )}>
+              {bots.map((item) => (
+                <BotCard
+                  key={item.profile.name}
+                  item={item}
+                  onNavigate={(name) => navigate(`/strategy/${name}`)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Comparison table */}
+          {!isLoading && bots.length > 0 && <ComparisonTable bots={bots} />}
+
+          {/* Today's Questions */}
+          <TodaysQuestions
+            onAskCoPilot={(q) => openCoPilot(q)}
+          />
+
+          {/* Footer */}
+          <div className="flex items-center justify-between mt-8">
+            <p className="text-xs text-zinc-600">
+              Paper trading. Not investment advice. Not a registered investment adviser.
+            </p>
+            <button
+              onClick={() => migrateMut.mutate()}
+              disabled={migrateMut.isPending}
+              title="Import open positions and watchlist from the old Strategy Lab into Stock Swing & Crypto Swing"
+              className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors disabled:opacity-40"
+            >
+              {migrateMut.isPending ? "Importing…" : "Import legacy positions →"}
+            </button>
+          </div>
         </div>
-        {allPaused ? (
-          <button
-            onClick={() => resumeAllMut.mutate()}
-            disabled={isPauseOrResumePending}
-            className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50 shadow-lg shadow-lime-500/20"
-          >
-            {resumeAllMut.isPending ? "Resuming…" : "Resume All Bots"}
-          </button>
-        ) : (
-          <button
-            onClick={() => pauseAllMut.mutate()}
-            disabled={isPauseOrResumePending}
-            className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-500 transition-colors disabled:opacity-50 shadow-lg shadow-red-600/20"
-          >
-            {pauseAllMut.isPending ? "Pausing…" : "Pause All Bots"}
-          </button>
+
+        {/* Right rail (desktop only) */}
+        {railOpen && (
+          <aside className="hidden md:flex flex-col w-72 flex-shrink-0 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 self-start sticky top-20 max-h-[calc(100vh-6rem)] overflow-hidden">
+            <ActivityRail onClose={() => setRailOpen(false)} />
+          </aside>
         )}
       </div>
 
-      {/* Paper-only banner */}
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
-        <span className="text-amber-400 text-sm font-semibold">📄 Paper trading only.</span>
-        <span className="text-amber-300 text-xs">
-          Live trading unlocks Q3 2026 when BMG completes RIA registration.
-        </span>
-        <button
-          onClick={() => globalWaitlistMut.mutate()}
-          disabled={globalWaitlistMut.isPending}
-          className="ml-auto text-xs text-amber-400 underline whitespace-nowrap"
-        >
-          Join the waitlist →
-        </button>
-      </div>
-
-      {/* Regime status bar */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-        <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-2">Market Regime</p>
-        <RegimeBar regime={regime} isLoading={regimeLoading} />
-      </div>
-
-      {/* 2×3 grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {bots.map((item) => (
-            <BotCard
-              key={item.profile.name}
-              item={item}
-              onNavigate={(name) => navigate(`/strategy/${name}`)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Comparison table */}
-      {!isLoading && bots.length > 0 && <ComparisonTable bots={bots} />}
-
-      {/* Footer */}
-      <div className="flex items-center justify-between mt-8">
-        <p className="text-xs text-zinc-600">
-          Paper trading. Not investment advice. Not a registered investment adviser.
-        </p>
-        <button
-          onClick={() => migrateMut.mutate()}
-          disabled={migrateMut.isPending}
-          title="Import open positions and watchlist from the old Strategy Lab into Stock Swing & Crypto Swing"
-          className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors disabled:opacity-40"
-        >
-          {migrateMut.isPending ? "Importing…" : "Import legacy positions →"}
-        </button>
-      </div>
-    </div>
+      {/* Mobile bottom nav */}
+      <BottomNav
+        onOpenActivity={() => setRailOpen(true)}
+        onOpenCoPilot={() => openCoPilot()}
+      />
+    </>
   );
 }

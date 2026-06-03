@@ -197,3 +197,88 @@ export const getCatalysts = (): Promise<CatalystEvent[]> =>
     .get<CatalystEvent[]>("/bots/catalysts")
     .then((r) => r.data ?? [])
     .catch(() => []);
+
+// ─── Activity ─────────────────────────────────────────────────────────────────
+
+export interface ActivityEvent {
+  id: string | number;
+  ts: string;
+  category: "signal" | "fill" | "skip" | string;
+  symbol: string;
+  side?: "buy" | "sell" | "hold";
+  strategy?: string;
+  reason?: string;
+  result?: "filled" | "skipped" | "error";
+}
+
+export const getActivity = (
+  name: string,
+  params?: { category?: string; limit?: number; page?: number }
+): Promise<{ items: ActivityEvent[]; total: number }> =>
+  client
+    .get<any>(`/bots/${name}/activity`, { params })
+    .then((r) => {
+      const d = r.data as any;
+      if (Array.isArray(d)) return { items: d as ActivityEvent[], total: d.length };
+      return { items: (d?.items ?? []) as ActivityEvent[], total: d?.total ?? 0 };
+    })
+    .catch(() => ({ items: [], total: 0 }));
+
+// ─── Strategy weights ─────────────────────────────────────────────────────────
+
+export interface StrategyWeight {
+  strategy: string;
+  weight_pct: number;
+  wins_30d: number;
+  losses_30d: number;
+  locked: boolean;
+}
+
+export const getStrategyWeights = (name: string): Promise<StrategyWeight[]> =>
+  client
+    .get<StrategyWeight[]>(`/bots/${name}/strategy-weights`)
+    .then((r) => r.data ?? [])
+    .catch(() => []);
+
+export const updateStrategyWeight = (
+  name: string,
+  strategy: string,
+  data: { locked?: boolean; weight_pct?: number }
+) =>
+  client
+    .patch<StrategyWeight>(`/bots/${name}/strategy-weights/${strategy}`, data)
+    .then((r) => r.data);
+
+// ─── Cross-bot positions ──────────────────────────────────────────────────────
+
+export interface CrossBotPosition {
+  symbol: string;
+  total_qty: number;
+  bots_holding: string[];
+  exposure_pct: number;
+  pnl: number;
+}
+
+export const getCrossBotPositions = (): Promise<CrossBotPosition[]> =>
+  client
+    .get<CrossBotPosition[]>("/bots/cross-bot-positions")
+    .then((r) => r.data ?? [])
+    .catch(() => []);
+
+// ─── Pending reviews (borderline signals) ────────────────────────────────────
+
+export interface PendingReview {
+  id: string | number;
+  bot_name: string;
+  symbol: string;
+  ts: string;
+  confidence: number;
+  side: "buy" | "sell" | "hold";
+  reason?: string;
+}
+
+export const getPendingReviews = (): Promise<PendingReview[]> =>
+  client
+    .get<PendingReview[]>("/bots/pending-reviews")
+    .then((r) => r.data ?? [])
+    .catch(() => []);

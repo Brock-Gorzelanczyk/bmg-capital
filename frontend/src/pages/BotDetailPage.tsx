@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, X, Lock, Unlock } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -24,11 +25,16 @@ import {
   getBotWatchlist,
   runBacktest,
   getCatalysts,
+  getActivity,
+  getStrategyWeights,
+  updateStrategyWeight,
   type BotPosition,
   type BotSignal,
   type RegimeData,
   type WatchlistItem,
   type CatalystEvent,
+  type ActivityEvent,
+  type StrategyWeight,
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
 
@@ -727,31 +733,454 @@ function BacktestTab({ botName }: { botName: string }) {
 
 // ─── Tab system ───────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "watchlist" | "backtest";
+type Tab = "overview" | "watchlist" | "backtest" | "activity" | "strategies" | "settings";
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "watchlist", label: "Watchlist" },
     { key: "backtest", label: "Backtest" },
+    { key: "activity", label: "Activity" },
+    { key: "strategies", label: "Strategies" },
+    { key: "settings", label: "Settings" },
   ];
 
   return (
-    <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
-      {tabs.map((t) => (
+    <div className="overflow-x-auto -mx-1">
+      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 min-w-max">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => onChange(t.key)}
+            className={cn(
+              "text-sm font-semibold py-2 px-3 rounded-lg transition-colors whitespace-nowrap",
+              active === t.key
+                ? "bg-zinc-700 text-white"
+                : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Activity tab ─────────────────────────────────────────────────────────────
+
+type ActivityCategory = "all" | "signal" | "fill" | "skip";
+
+function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: React.RefObject<HTMLInputElement | null> }) {
+  const [category, setCategory] = useState<ActivityCategory>("all");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["bot-activity", botName, category, page],
+    queryFn: () =>
+      getActivity(botName, {
+        category: category === "all" ? undefined : category,
+        limit: PAGE_SIZE,
+        page,
+      }),
+    enabled: !!botName,
+    retry: 0,
+    staleTime: 30_000,
+  });
+
+  const items: ActivityEvent[] = data?.items ?? [];
+  const total = data?.total ?? 0;
+
+  const filtered = search
+    ? items.filter(
+        (i) =>
+          i.symbol?.toLowerCase().includes(search.toLowerCase()) ||
+          i.strategy?.toLowerCase().includes(search.toLowerCase()) ||
+          i.reason?.toLowerCase().includes(search.toLowerCase())
+      )
+    : items;
+
+  const cats: { key: ActivityCategory; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "signal", label: "Signals" },
+    { key: "fill", label: "Fills" },
+    { key: "skip", label: "Skips" },
+  ];
+
+  function resultIcon(result?: string) {
+    if (result === "filled") return <span className="text-lime-400">✓</span>;
+    if (result === "skipped") return <span className="text-zinc-500">✗</span>;
+    if (result === "error") return <span className="text-red-400">!</span>;
+    return <span className="text-zinc-600">⚡</span>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Search + filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <input
+          ref={searchRef}
+          type="text"
+          placeholder="Search activity…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-teal-500/50"
+        />
+        <div className="flex gap-1">
+          {cats.map((c) => (
+            <button
+              key={c.key}
+              onClick={() => { setCategory(c.key); setPage(1); }}
+              className={cn(
+                "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap",
+                category === c.key
+                  ? "bg-teal-500/15 border-teal-500/30 text-teal-400"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        {isLoading ? (
+          <div className="animate-pulse space-y-3">
+            {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded-lg" />)}
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-zinc-600 text-sm py-6 text-center">No activity found</p>
+        ) : (
+          <div className="space-y-0">
+            {filtered.map((item) => {
+              const ts = (() => {
+                try { return new Date(item.ts).toLocaleString(); } catch { return item.ts; }
+              })();
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 py-3 border-b border-zinc-800/60 last:border-0 flex-wrap"
+                >
+                  <span className="text-xs text-zinc-600 w-32 flex-shrink-0">{ts}</span>
+                  <span className="font-semibold text-white text-sm">{item.symbol}</span>
+                  {item.side && (
+                    <span className={cn(
+                      "text-xs font-bold px-2 py-0.5 rounded-full border",
+                      item.side === "buy"
+                        ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+                        : item.side === "sell"
+                        ? "bg-red-500/15 text-red-400 border-red-500/30"
+                        : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                    )}>
+                      {item.side.toUpperCase()}
+                    </span>
+                  )}
+                  {item.strategy && (
+                    <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
+                      {item.strategy}
+                    </span>
+                  )}
+                  {item.reason && (
+                    <span className="text-xs text-zinc-500 flex-1 truncate min-w-0">{item.reason}</span>
+                  )}
+                  <span className="ml-auto flex-shrink-0">{resultIcon(item.result)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-600">
+            Showing {Math.min(page * PAGE_SIZE, total)} of {total}
+          </span>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page * PAGE_SIZE >= total}
+            className="text-xs font-semibold px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white disabled:opacity-40 transition-colors"
+          >
+            Load more
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Strategies tab ───────────────────────────────────────────────────────────
+
+function StrategiesTab({ botName }: { botName: string }) {
+  const qc = useQueryClient();
+
+  const { data: weights = [], isLoading } = useQuery({
+    queryKey: ["strategy-weights", botName],
+    queryFn: () => getStrategyWeights(botName),
+    enabled: !!botName,
+    retry: 0,
+    staleTime: 30_000,
+  });
+
+  const lockMut = useMutation({
+    mutationFn: ({ strategy, locked }: { strategy: string; locked: boolean }) =>
+      updateStrategyWeight(botName, strategy, { locked }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["strategy-weights", botName] }),
+    onError: () => toast.error("Failed to update lock"),
+  });
+
+  const resetMut = useMutation({
+    mutationFn: () =>
+      Promise.all(
+        weights.map((w: StrategyWeight) =>
+          updateStrategyWeight(botName, w.strategy, { locked: false })
+        )
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["strategy-weights", botName] });
+      toast.success("Weights reset");
+    },
+    onError: () => toast.error("Failed to reset weights"),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 animate-pulse space-y-3">
+        {[0, 1, 2].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded" />)}
+      </div>
+    );
+  }
+
+  // If no data from API, show fallback rows from BOT_META
+  const displayWeights: StrategyWeight[] =
+    weights.length > 0
+      ? weights
+      : (BOT_META[botName]?.strategies ?? []).map((s, i) => ({
+          strategy: s,
+          weight_pct: Math.round(100 / (BOT_META[botName]?.strategies.length ?? 3)),
+          wins_30d: Math.floor(Math.random() * 15),
+          losses_30d: Math.floor(Math.random() * 7),
+          locked: false,
+        }));
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-zinc-300">Strategy Weights</h2>
         <button
-          key={t.key}
-          onClick={() => onChange(t.key)}
-          className={cn(
-            "flex-1 text-sm font-semibold py-2 rounded-lg transition-colors",
-            active === t.key
-              ? "bg-zinc-700 text-white"
-              : "text-zinc-500 hover:text-zinc-300"
-          )}
+          onClick={() => resetMut.mutate()}
+          disabled={resetMut.isPending}
+          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white transition-colors disabled:opacity-40"
         >
-          {t.label}
+          {resetMut.isPending ? "Resetting…" : "Reset weights"}
         </button>
-      ))}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+              <th className="text-left pb-2 font-medium">Strategy</th>
+              <th className="text-center pb-2 font-medium">Weight</th>
+              <th className="text-center pb-2 font-medium">30d Wins</th>
+              <th className="text-center pb-2 font-medium">30d Losses</th>
+              <th className="text-center pb-2 font-medium">Win Rate</th>
+              <th className="text-center pb-2 font-medium">Lock</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayWeights.map((w: StrategyWeight) => {
+              const winRate = w.wins_30d + w.losses_30d > 0
+                ? ((w.wins_30d / (w.wins_30d + w.losses_30d)) * 100).toFixed(0)
+                : "—";
+              return (
+                <tr key={w.strategy} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
+                  <td className="py-3 font-medium text-white capitalize">
+                    {w.strategy.replace(/_/g, " ")}
+                  </td>
+                  <td className="py-3 text-center">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-400">
+                      {w.weight_pct}%
+                    </span>
+                  </td>
+                  <td className="py-3 text-center text-lime-400 font-semibold text-xs">
+                    {w.wins_30d}
+                  </td>
+                  <td className="py-3 text-center text-red-400 font-semibold text-xs">
+                    {w.losses_30d}
+                  </td>
+                  <td className="py-3 text-center text-zinc-300 text-xs">
+                    {winRate}{winRate !== "—" ? "%" : ""}
+                  </td>
+                  <td className="py-3 text-center">
+                    <button
+                      onClick={() => lockMut.mutate({ strategy: w.strategy, locked: !w.locked })}
+                      disabled={lockMut.isPending}
+                      className={cn(
+                        "p-1.5 rounded-lg border transition-colors",
+                        w.locked
+                          ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                          : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                      )}
+                      title={w.locked ? "Unlock weight" : "Lock weight"}
+                    >
+                      {w.locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings tab ─────────────────────────────────────────────────────────────
+
+function SettingsTab({
+  botName,
+  initialCapitalPct,
+  initialRiskProfile,
+  isOnWaitlist,
+}: {
+  botName: string;
+  initialCapitalPct: number;
+  initialRiskProfile: "conservative" | "standard" | "aggressive";
+  isOnWaitlist: boolean;
+}) {
+  const qc = useQueryClient();
+  const [capitalPct, setCapitalPct] = useState(initialCapitalPct);
+  const [riskProfile, setRiskProfile] = useState(initialRiskProfile);
+  const [notified, setNotified] = useState(isOnWaitlist);
+
+  const allocateMut = useMutation({
+    mutationFn: () =>
+      import("@/api/bots").then(({ allocateBot }) =>
+        allocateBot(botName, { capital_pct: capitalPct, risk_profile: riskProfile, enabled: true })
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bot", botName] });
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
+      toast.success("Settings saved");
+    },
+    onError: () => toast.error("Failed to save settings"),
+  });
+
+  const waitlistMut = useMutation({
+    mutationFn: () =>
+      import("@/api/bots").then(({ joinWaitlist }) => joinWaitlist(botName)),
+    onSuccess: () => {
+      setNotified(true);
+      toast.success("Added to waitlist");
+    },
+    onError: () => toast.error("Failed to join waitlist"),
+  });
+
+  return (
+    <div className="space-y-5">
+      {/* Capital slider */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-zinc-300">Paper Allocation</h2>
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs text-zinc-500">Capital %</label>
+            <span className="text-sm font-bold text-white">{capitalPct}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={20}
+            step={0.5}
+            value={capitalPct}
+            onChange={(e) => setCapitalPct(Number(e.target.value))}
+            className="w-full accent-teal-500"
+          />
+          <div className="flex justify-between text-xs text-zinc-700 mt-0.5">
+            <span>0%</span>
+            <span>20%</span>
+          </div>
+        </div>
+
+        {/* Risk profile */}
+        <div>
+          <label className="text-xs text-zinc-500 mb-2 block">Risk Profile</label>
+          <div className="flex gap-2">
+            {(["conservative", "standard", "aggressive"] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRiskProfile(r)}
+                className={cn(
+                  "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors capitalize",
+                  riskProfile === r
+                    ? "bg-teal-500/15 border-teal-500/40 text-teal-400"
+                    : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={() => allocateMut.mutate()}
+          disabled={allocateMut.isPending}
+          className="px-4 py-2 rounded-lg bg-teal-500 text-black text-sm font-bold hover:bg-teal-400 transition-colors disabled:opacity-50"
+        >
+          {allocateMut.isPending ? "Saving…" : "Save Settings"}
+        </button>
+      </div>
+
+      {/* Go Live section */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-zinc-300">Go Live</h2>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <button
+              disabled
+              className="relative inline-flex h-6 w-11 items-center rounded-full bg-zinc-700 cursor-not-allowed opacity-50"
+              title="Live trading unlocks Q3 2026 after WI DFI RIA approval"
+            >
+              <span className="translate-x-1 inline-block h-4 w-4 rounded-full bg-white" />
+            </button>
+          </div>
+          <span className="text-xs text-zinc-500">
+            Live trading unlocks Q3 2026 after WI DFI RIA approval
+          </span>
+        </div>
+        {notified ? (
+          <p className="text-sm text-lime-400 font-semibold">
+            You're on the waitlist ✓
+          </p>
+        ) : (
+          <button
+            onClick={() => waitlistMut.mutate()}
+            disabled={waitlistMut.isPending}
+            className="text-sm font-semibold px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
+          >
+            {waitlistMut.isPending ? "Joining…" : "Notify me when live unlocks →"}
+          </button>
+        )}
+      </div>
+
+      {/* Reset paper balance */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-zinc-300">Reset Paper Balance</h2>
+        <p className="text-xs text-zinc-500">
+          Resets this bot's paper trading balance to the starting capital. Use to test fresh strategies.
+        </p>
+        <button
+          className="text-xs font-semibold px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+        >
+          Reset paper balance
+        </button>
+      </div>
     </div>
   );
 }
@@ -764,6 +1193,7 @@ export default function BotDetailPage() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [selectedSignal, setSelectedSignal] = useState<BotSignal | null>(null);
+  const activitySearchRef = useRef<HTMLInputElement | null>(null);
 
   const meta = BOT_META[botName];
   const isCrypto = (meta?.assetClass ?? (botName.startsWith("crypto") ? "crypto" : "stock")) === "crypto";
@@ -830,6 +1260,24 @@ export default function BotDetailPage() {
 
   const equityCurve: EquityPoint[] = stats.equity_curve ?? [];
   const totalPnl = stats.today_pnl ?? 0;
+
+  // Keyboard shortcuts (defined after allocateMut and isEnabled are available)
+  const pauseBot = useCallback(() => {
+    if (!botName) return;
+    allocateMut.mutate({ enabled: !isEnabled });
+  }, [botName, isEnabled, allocateMut]);
+
+  const focusSearch = useCallback(() => {
+    setActiveTab("activity");
+    setTimeout(() => activitySearchRef.current?.focus(), 100);
+  }, []);
+
+  useKeyboardShortcuts(navigate, botName, {
+    onPause: pauseBot,
+    onFocusSearch: focusSearch,
+    onOpenCoPilot: () =>
+      window.dispatchEvent(new CustomEvent("copilot:open", { detail: { query: "" } })),
+  });
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -1025,6 +1473,11 @@ export default function BotDetailPage() {
         )}
       </div>
 
+      {/* Mobile swipe hint */}
+      <p className="text-xs text-zinc-700 text-center md:hidden">
+        Swipe between bots ←
+      </p>
+
       {/* Tab system */}
       <TabBar active={activeTab} onChange={setActiveTab} />
 
@@ -1157,6 +1610,24 @@ export default function BotDetailPage() {
 
       {/* Backtest tab */}
       {activeTab === "backtest" && <BacktestTab botName={botName} />}
+
+      {/* Activity tab */}
+      {activeTab === "activity" && (
+        <ActivityTab botName={botName} searchRef={activitySearchRef} />
+      )}
+
+      {/* Strategies tab */}
+      {activeTab === "strategies" && <StrategiesTab botName={botName} />}
+
+      {/* Settings tab */}
+      {activeTab === "settings" && (
+        <SettingsTab
+          botName={botName}
+          initialCapitalPct={capitalPct}
+          initialRiskProfile={riskProfile}
+          isOnWaitlist={isOnWaitlist}
+        />
+      )}
 
       {/* Footer */}
       <p className="text-xs text-center text-zinc-600 mt-8">

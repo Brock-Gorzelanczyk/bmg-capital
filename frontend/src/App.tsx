@@ -79,11 +79,14 @@ const CFPBookingPage = lazy(() => import("@/pages/CFPBookingPage"));
 const StakingPage = lazy(() => import("@/pages/StakingPage"));
 const DCABasketsPage = lazy(() => import("@/pages/DCABasketsPage"));
 const BotDetailPage = lazy(() => import("@/pages/BotDetailPage"));
+const NetPortfolio = lazy(() => import("@/pages/NetPortfolio"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
 import VoiceAIModal from "@/components/voice/VoiceAIModal";
 import VoiceAIButton from "@/components/voice/VoiceAIButton";
+import CoPilot from "@/components/CoPilot";
+import { useCoPilot } from "@/hooks/useCoPilot";
 
 const PageLoader = () => (
   <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -160,6 +163,7 @@ function AppInner() {
   useSignalToast();
   const navigate = useNavigate();
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const coPilot = useCoPilot();
 
   // Global 401 handler: when any API call receives a 401, the axios interceptor
   // fires this event. We log the user out and redirect to login.
@@ -193,6 +197,7 @@ function AppInner() {
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<StrategyLab />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
+        <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/alerts" element={<Alerts />} />
@@ -260,6 +265,11 @@ function AppInner() {
     </Routes>
     <VoiceAIButton onClick={() => setVoiceOpen(true)} />
     <VoiceAIModal open={voiceOpen} onClose={() => setVoiceOpen(false)} />
+    <CoPilot
+      isOpen={coPilot.isOpen}
+      onClose={coPilot.close}
+      prefillQuery={coPilot.prefillQuery}
+    />
     </Suspense>
   );
 }
