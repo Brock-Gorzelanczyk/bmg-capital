@@ -17,11 +17,16 @@ watchlist:
     volume_trend: 0.2
     near_52w_high: 0.2
 strategies:
+  # v1 ported (preserved — no regression per acceptance criterion #9)
+  - mean_reversion
+  - momentum_breakout
+  - opening_range
+  - rsi_bands
+  - vwap_reversion
+  # v2 additions
   - fifty_two_week_high_momentum
   - relative_strength_leaders
   - factor_momentum_value
-  - mean_reversion
-  - momentum_breakout
 ensemble: majority_vote
 position_cap: 8
 position_size_pct: 12.5
