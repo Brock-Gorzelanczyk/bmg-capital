@@ -63,7 +63,10 @@ export const getAutopilotActivity = (params?: { category?: string; page?: number
     });
 
 export const getAutopilotPolicies = () =>
-  client.get<AutopilotPolicy[]>("/autopilot/policies").then(r => r.data);
+  client.get("/autopilot/policies").then(r => {
+    const d = r.data as any;
+    return (Array.isArray(d) ? d : (d?.policies ?? d?.items ?? [])) as AutopilotPolicy[];
+  }).catch(() => [] as AutopilotPolicy[]);
 
 export const updatePolicy = (category: string, data: { enabled?: boolean; config?: Record<string, unknown> }) =>
   client.patch<AutopilotPolicy>(`/autopilot/policies/${category}`, data).then(r => r.data);

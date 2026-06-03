@@ -689,7 +689,7 @@ function ActivityLog({ initialCategory }: { initialCategory?: string }) {
       <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-sm text-[var(--text-tertiary)]">Loading…</div>
-        ) : !actions || actions.length === 0 ? (
+        ) : !Array.isArray(actions) || actions.length === 0 ? (
           <div className="p-8 text-center text-sm text-[var(--text-tertiary)]">No actions found</div>
         ) : (
           <div className="overflow-x-auto">
@@ -807,11 +807,11 @@ export default function AutopilotPage() {
 
   // Build policy map keyed by category
   const policyMap: Record<string, AutopilotPolicy> = {};
-  (policies ?? []).forEach(p => { policyMap[p.category] = p; });
+  (Array.isArray(policies) ? policies : []).forEach(p => { policyMap[p.category] = p; });
 
   // Build status entry map keyed by category name
   const statusMap: Record<string, NonNullable<typeof status>["categories"][0]> = {};
-  (status?.categories ?? []).forEach(c => { statusMap[c.name] = c; });
+  (Array.isArray(status?.categories) ? status!.categories : []).forEach(c => { statusMap[c.name] = c; });
 
   // Summary line items
   const highlights = summary?.highlights ?? [];
@@ -891,7 +891,7 @@ export default function AutopilotPage() {
           </div>
         )}
 
-        {summary && Object.keys(summary.by_category).length > 0 && (
+        {summary && summary.by_category && Object.keys(summary.by_category).length > 0 && (
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
             {Object.entries(summary.by_category).map(([cat, count]) => (
               <span key={cat} className="text-xs text-[var(--text-tertiary)]">
