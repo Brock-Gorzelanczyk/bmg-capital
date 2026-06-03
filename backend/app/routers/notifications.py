@@ -318,3 +318,100 @@ def get_quiet_hours(
         "end_utc": QUIET_HOURS_END_UTC,
         "local_description": "9PM–7AM",
     }
+
+
+# ── Bot-alert notification preferences ─────────────────────────────────────
+#
+# Notification types for strategy-lab bot events:
+#   anomaly            — always on (cannot disable)
+#   health_alert       — always on
+#   pending_review_gt5 — always on
+#   daily_summary      — default on, configurable
+#   per_trade_fill     — default off, configurable
+
+_BOT_ALWAYS_ON = {"anomaly", "health_alert", "pending_review_gt5"}
+_BOT_CONFIGURABLE = {"daily_summary", "per_trade_fill"}
+_BOT_DEFAULTS = {
+    "anomaly": True,
+    "health_alert": True,
+    "pending_review_gt5": True,
+    "daily_summary": True,
+    "per_trade_fill": False,
+}
+
+# In-memory store for bot alert prefs keyed by user_id.
+# Upgrade to DB-backed storage when a dedicated table is available.
+_bot_alert_prefs: dict[int, dict[str, bool]] = {}
+
+
+class BotAlertPrefsUpdate(BaseModel):
+    daily_summary: Optional[bool] = None
+    per_trade_fill: Optional[bool] = None
+
+
+@router.get("/bot-alerts/preferences")
+def get_bot_alert_preferences(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return the user's bot-alert notification preferences.
+    Always-on types (anomaly, health_alert, pending_review_gt5) are read-only.
+    """
+    stored = _bot_alert_prefs.get(current_user.id, {})
+    merged = {
+        k: stored.get(k, v)
+        for k, v in _BOT_DEFAULTS.items()
+    }
+    # Always-on types are always True regardless of stored value
+    for t in _BOT_ALWAYS_ON:
+        merged[t] = True
+    return merged
+
+
+@router.patch("/bot-alerts/preferences")
+def update_bot_alert_preferences(
+    body: BotAlertPrefsUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update configurable bot-alert preferences (daily_summary, per_trade_fill).
+    Attempts to disable always-on types are silently ignored.
+    """
+    current = dict(_bot_alert_prefs.get(current_user.id, {}))
+
+    updates = body.model_dump(exclude_none=True)
+    for key, value in updates.items():
+        if key in _BOT_CONFIGURABLE:
+            current[key] = bool(value)
+        # always-on keys are silently ignored
+
+    _bot_alert_prefs[current_user.id] = current
+
+    # Return merged result
+    merged = {k: current.get(k, v) for k, v in _BOT_DEFAULTS.items()}
+    for t in _BOT_ALWAYS_ON:
+        merged[t] = True
+    return {"ok": True, "preferences": merged}
+
+
+@router.post("/bot-alerts/send-test")
+def send_bot_alert_test(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Send a test bot-alert notification email to the current user."""
+    from strategy_lab.notifier import notify
+
+    notify(
+        user_id=current_user.id,
+        user_email=current_user.email,
+        notification_type="health_alert",
+        subject="Test notification from BMG Strategy Lab",
+        body=(
+            "This is a test notification confirming your bot-alert email delivery "
+            "is configured correctly. No action is required."
+        ),
+        bot_name=None,
+        deep_link=None,
+    )
+    return {"ok": True, "message": f"Test notification sent to {current_user.email}"}

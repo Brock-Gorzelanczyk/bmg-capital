@@ -89,7 +89,52 @@ def setup_bot_scheduler(scheduler) -> None:
         replace_existing=True,
     )
 
+    # ------------------------------------------------------------------
+    # Daily briefing email: 8:00 AM ET, Mon-Fri
+    # ------------------------------------------------------------------
+    def _run_daily_briefing():
+        from app.db.session import SessionLocal
+        from strategy_lab.daily_briefing import run_daily_briefing_job
+
+        db = SessionLocal()
+        try:
+            run_daily_briefing_job(db)
+        except Exception as exc:
+            logger.error("daily_briefing job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_daily_briefing,
+        CronTrigger(day_of_week="mon-fri", hour=8, minute=0, timezone=ET),
+        id="daily_briefing_email",
+        replace_existing=True,
+    )
+
+    # ------------------------------------------------------------------
+    # Dead-man's switch: every hour during market hours, Mon-Fri
+    # (check_dead_mans_switch itself gates on 9:30–16:00 ET)
+    # ------------------------------------------------------------------
+    def _run_dead_mans_switch():
+        from app.db.session import SessionLocal
+        from strategy_lab.core.bot_health import check_dead_mans_switch
+
+        db = SessionLocal()
+        try:
+            check_dead_mans_switch(db, lookback_hours=4)
+        except Exception as exc:
+            logger.error("dead_mans_switch job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_dead_mans_switch,
+        CronTrigger(day_of_week="mon-fri", hour="9-15", minute=0, timezone=ET),
+        id="dead_mans_switch",
+        replace_existing=True,
+    )
+
     logger.info(
         "strategy_lab: bot scheduler registered (stock_swing, stock_day, stock_lt, "
-        "crypto_swing, crypto_day, crypto_lt)"
+        "crypto_swing, crypto_day, crypto_lt, daily_briefing_email, dead_mans_switch)"
     )

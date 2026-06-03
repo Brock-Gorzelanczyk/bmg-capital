@@ -161,6 +161,108 @@ def check_divergence(
     return round(divergence_sigma, 3)
 
 
+def check_dead_mans_switch(db: Session, lookback_hours: int = 4) -> bool:
+    """
+    Alert if 0 signals across ALL active bots during US market hours.
+    Only active Mon-Fri 9:30am-4:00pm ET.
+    Returns True if switch tripped (silence detected), False if all clear.
+    """
+    import pytz
+    from datetime import datetime, timezone, timedelta
+    from app.db.models.bots import BotSignal, AnomalyEvent
+
+    et = pytz.timezone("America/New_York")
+    now_et = datetime.now(et)
+
+    # Only check on weekdays
+    if now_et.weekday() >= 5:
+        return False
+
+    # Only check during market hours (9:30 AM – 4:00 PM ET)
+    in_session = (now_et.hour == 9 and now_et.minute >= 30) or (
+        10 <= now_et.hour < 16
+    )
+    if not in_session:
+        return False
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    try:
+        recent_signals = (
+            db.query(BotSignal).filter(BotSignal.ts > cutoff).count()
+        )
+    except Exception as exc:
+        logger.error("[dead_mans_switch] DB query failed: %s", exc)
+        return False
+
+    if recent_signals == 0:
+        logger.warning(
+            "[dead_mans_switch] TRIPPED: 0 signals in last %dh during market hours",
+            lookback_hours,
+        )
+        # Log as AnomalyEvent — use first active allocation_id as the anchor
+        # (system-wide event; allocation_id FK is non-nullable in schema)
+        try:
+            from app.db.models.bots import BotAllocation as _BotAlloc
+
+            first_alloc = (
+                db.query(_BotAlloc)
+                .filter(_BotAlloc.enabled.is_(True))
+                .first()
+            )
+            if first_alloc:
+                event = AnomalyEvent(
+                    allocation_id=first_alloc.id,
+                    anomaly_type="dead_mans_switch",
+                    snapshot={
+                        "lookback_hours": lookback_hours,
+                        "market_time_et": now_et.isoformat(),
+                        "system_wide": True,
+                    },
+                )
+                db.add(event)
+                db.commit()
+        except Exception as exc:
+            logger.debug("[dead_mans_switch] Could not log AnomalyEvent: %s", exc)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+        # Notify all active users
+        try:
+            from app.db.models.bots import BotAllocation
+            from app.db.models.users import User
+            from strategy_lab.notifier import notify
+
+            user_ids = (
+                db.query(BotAllocation.user_id)
+                .filter(BotAllocation.enabled.is_(True))
+                .distinct()
+                .all()
+            )
+            for (uid,) in user_ids:
+                user = db.query(User).filter(User.id == uid).first()
+                if user:
+                    notify(
+                        user_id=uid,
+                        user_email=user.email,
+                        notification_type="health_alert",
+                        subject=f"Dead-man's switch tripped — 0 signals in {lookback_hours}h",
+                        body=(
+                            f"No trading signals have been generated across any active bot "
+                            f"in the last {lookback_hours} hours during market hours. "
+                            f"Check the Command Center immediately."
+                        ),
+                        deep_link=None,
+                    )
+        except Exception as exc:
+            logger.error("[dead_mans_switch] Notification failed: %s", exc)
+
+        return True
+
+    return False
+
+
 def run_health_check(
     allocation_id: int,
     db: Session,
@@ -236,4 +338,37 @@ def run_health_check(
         "notes": notes,
     }
     logger.info("Health check allocation=%d: %s", allocation_id, result)
+
+    # Fire health-alert notification when bot is auto-paused
+    if paused_by_health and notes:
+        try:
+            from app.db.models.bots import BotAllocation, BotProfile
+            from app.db.models.users import User
+            from strategy_lab.notifier import notify
+
+            alloc = db.query(BotAllocation).filter(BotAllocation.id == allocation_id).first()
+            if alloc:
+                user = db.query(User).filter(User.id == alloc.user_id).first()
+                profile = db.query(BotProfile).filter(BotProfile.id == alloc.profile_id).first()
+                bot_label = profile.name if profile else f"allocation_{allocation_id}"
+                if user:
+                    notify(
+                        user_id=user.id,
+                        user_email=user.email,
+                        notification_type="health_alert",
+                        subject=f"Bot health alert — {bot_label} auto-paused",
+                        body=(
+                            f"Bot <strong>{bot_label}</strong> has been auto-paused due to "
+                            f"health check failure: {notes}. "
+                            f"Review the Command Center and resume when ready."
+                        ),
+                        bot_name=bot_label,
+                    )
+        except Exception as exc:
+            logger.error(
+                "[bot_health] Failed to send health alert notification for allocation %d: %s",
+                allocation_id,
+                exc,
+            )
+
     return result

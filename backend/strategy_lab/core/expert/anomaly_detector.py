@@ -48,7 +48,7 @@ def _log_anomaly(allocation_id: int, anomaly_type: str, snapshot: dict, db) -> N
             allocation_id=allocation_id,
             anomaly_type=anomaly_type,
             snapshot=snapshot,
-            detected_at=datetime.now(timezone.utc),
+            ts=datetime.now(timezone.utc),
         )
         db.add(event)
         db.commit()
