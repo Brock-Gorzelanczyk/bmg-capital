@@ -1,18 +1,36 @@
 name: crypto_lt
 asset_class: crypto
 broker: alpaca_paper_crypto
-universe: top_10_crypto
-cadence: "0 10 * * 1"  # every Monday at 10am — DCA schedule
+universe:
+  source: top_10_crypto
+  filters: []
+cadence: "0 10 * * 1"
+watchlist:
+  rebuild_at: "0 10 * * 1"
+  size: 10
+  top_n_for_signals: 8
+  scoring:
+    momentum_12m: 0.5
+    btc_dominance: 0.3
+    funding_rate: 0.2
 strategies:
   - dca
   - factor_blend
+ensemble: factor_rank
 position_cap: 8
-position_size_pct: 12.5  # 1/8 of capital per position
-stop_loss_pct: null
-take_profit_pct: null
-trailing_stop_activate_at_pct: null
-max_drawdown_pct: -50.0
+position_size_pct: 12.5
 hold_min_days: 30
-hold_max_days: 730  # up to 2 years
+rebalance_only: true
+risk_overlay:
+  portfolio_drawdown_circuit_pct: 35
+regime_filters:
+  - halve_size_if: vix_regime == 'high'
+catalyst_gates: []
+execution:
+  order_type: limit
+  limit_offset_bps: 5
+  reprice_after_seconds: 60
+  reprice_attempts: 5
+  fallback_to_market: true
+  use_brackets: false
 paper_only: true
-regime_filters: []

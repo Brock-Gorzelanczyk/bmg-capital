@@ -1,19 +1,44 @@
 name: crypto_day
 asset_class: crypto
 broker: alpaca_paper_crypto
-universe: top_20_crypto
-cadence: "*/1 * * * *"  # every minute, 24/7
+universe:
+  source: top_20_crypto
+  filters:
+    - adv_gte: 10000000
+cadence: "*/1 * * * *"
+watchlist:
+  rebuild_at: "0 * * * *"
+  size: 20
+  scoring:
+    momentum_4h: 0.4
+    volume_surge: 0.3
+    btc_correlation: 0.3
 strategies:
   - vwap_reversion
   - opening_range
   - momentum_breakout
+ensemble: weighted_vote
 position_cap: 3
-position_size_pct: 33.33  # 1/3 of capital
-stop_loss_pct: -2.0
+position_size_pct: 33.33
+stop_loss_pct: 2.0
 take_profit_pct: 3.0
-trailing_stop_activate_at_pct: null
-max_drawdown_pct: -8.0
-hold_min_days: 0
-hold_max_days: 0  # short-term, flat frequently
+trailing_stop_activate_at_pct: 1.5
+hold_max_hours: 24
+risk_overlay:
+  daily_loss_limit_pct: 4.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  per_trade_risk_pct: 2.0
+  portfolio_drawdown_circuit_pct: 10
+regime_filters:
+  - halve_size_if: vix_regime == 'high'
+  - halt_if: vix_regime == 'panic'
+catalyst_gates: []
+execution:
+  order_type: limit
+  limit_offset_bps: 10
+  reprice_after_seconds: 15
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
 paper_only: true
-regime_filters: []

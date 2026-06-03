@@ -1,18 +1,35 @@
 name: stock_lt
-asset_class: stock
+asset_class: equities
 broker: alpaca_paper_stocks
-universe: russell_1000
-cadence: "0 10 1-7 * 2"  # first Tuesday of each month at 10am
+universe:
+  source: sp500
+  size: 500
+cadence: "0 10 1-7 * 2"
+watchlist:
+  rebuild_at: "0 10 1-7 * 2"
+  size: 50
+  top_n_for_signals: 20
+  scoring:
+    momentum_12m_1m: 0.4
+    quality_stability: 0.2
+    value_52w_position: 0.2
+    low_volatility_30d: 0.2
 strategies:
   - factor_blend
-  - mean_reversion
+  - dividend_growth
+ensemble: factor_rank
 position_cap: 20
-position_size_pct: 5.0  # 1/20 of capital
-stop_loss_pct: null
-take_profit_pct: null
-trailing_stop_activate_at_pct: null
-max_drawdown_pct: -30.0
+position_size_pct: 5.0
 hold_min_days: 30
-hold_max_days: 365
-paper_only: true
+rebalance_only: true
+risk_overlay:
+  portfolio_drawdown_circuit_pct: 15
 regime_filters: []
+execution:
+  order_type: limit
+  limit_offset_bps: 3
+  reprice_after_seconds: 60
+  reprice_attempts: 5
+  fallback_to_market: true
+  use_brackets: false
+paper_only: true

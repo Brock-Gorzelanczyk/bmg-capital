@@ -1,19 +1,46 @@
 name: crypto_swing
 asset_class: crypto
 broker: alpaca_paper_crypto
-universe: top_20_crypto
-cadence: "0 */4 * * *"  # every 4 hours
+universe:
+  source: top_20_crypto
+  filters:
+    - adv_gte: 5000000
+cadence: "0 */4 * * *"
+watchlist:
+  rebuild_at: "0 0 * * *"
+  size: 20
+  top_n_for_signals: 10
+  scoring:
+    momentum_7d: 0.4
+    volume_trend: 0.3
+    btc_dominance_shift: 0.3
 strategies:
   - momentum_breakout
   - mean_reversion
   - rsi_bands
+ensemble: majority_vote
 position_cap: 5
-position_size_pct: 20.0  # 1/5 of capital
-stop_loss_pct: -15.0
+position_size_pct: 20.0
+stop_loss_pct: 15.0
 take_profit_pct: 30.0
 trailing_stop_activate_at_pct: 20.0
-max_drawdown_pct: -35.0
 hold_min_days: 1
 hold_max_days: 21
+risk_overlay:
+  daily_loss_limit_pct: 6.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  per_trade_risk_pct: 3.0
+  portfolio_drawdown_circuit_pct: 20
+regime_filters:
+  - halve_size_if: vix_regime == 'high'
+  - halt_if: vix_regime == 'panic'
+catalyst_gates: []
+execution:
+  order_type: limit
+  limit_offset_bps: 10
+  reprice_after_seconds: 30
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
 paper_only: true
-regime_filters: []

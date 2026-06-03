@@ -1,19 +1,55 @@
 name: stock_day
-asset_class: stock
+asset_class: equities
 broker: alpaca_paper_stocks
-universe: russell_1000
-cadence: "*/1 9-15 * * 1-5"  # every minute during market hours
+universe:
+  source: russell_1000
+  filters:
+    - price_gte: 10
+    - adv_gte: 50000000
+    - no_earnings_within_days: 5
+    - no_halt_within_days: 5
+cadence: "* 9-15 * * 1-5"
+watchlist:
+  rebuild_at: "30 8 * * 1-5"
+  size: 50
+  scoring:
+    overnight_gap_pct: 0.3
+    premarket_vol_ratio: 0.3
+    earnings_calendar_hit: 0.2
+    news_catalyst_score: 0.2
 strategies:
-  - opening_range
-  - vwap_reversion
-  - momentum_breakout
+  - orb_stocks_in_play
+  - intraday_momentum_noise_band
+  - pead_intraday_drift
+  - fomc_drift
+ensemble: weighted_vote
 position_cap: 3
-position_size_pct: 33.33  # 1/3 of capital
-stop_loss_pct: -1.5
+position_size_pct: 5
+stop_loss_pct: 1.5
 take_profit_pct: 2.5
-trailing_stop_activate_at_pct: null
-max_drawdown_pct: -6.0
-hold_min_days: 0
-hold_max_days: 0  # intraday — flat by EOD
+trailing_stop_activate_at_pct: 0.8
+hold_max_hours: 6.5
+risk_overlay:
+  daily_loss_limit_pct: 2.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  per_trade_risk_pct: 1.0
+  pdt_enforce: true
+  max_sector_concentration_pct: 30
+  portfolio_drawdown_circuit_pct: 10
+regime_filters:
+  - require: trend_regime != 'bear'
+  - halve_size_if: vix_regime == 'high'
+  - halt_if: vix_regime == 'panic'
+catalyst_gates:
+  - blackout_minutes_around: [FOMC, CPI, NFP, PCE]
+    minutes_before: 5
+    minutes_after: 5
+execution:
+  order_type: limit
+  limit_offset_bps: 5
+  reprice_after_seconds: 30
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
 paper_only: true
-regime_filters: []
