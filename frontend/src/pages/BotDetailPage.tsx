@@ -140,15 +140,19 @@ function formatPct(val: number): string {
   return `${sign}${val.toFixed(2)}%`;
 }
 
-function formatCents(cents: number): string {
+function formatCents(cents: number | null | undefined): string {
+  if (cents == null || isNaN(cents)) return "—";
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function formatTime(ts: string): string {
+function formatTime(ts: string | null | undefined): string {
+  if (!ts) return "—";
   try {
-    return new Date(ts).toLocaleString();
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleString();
   } catch {
-    return ts;
+    return "—";
   }
 }
 
@@ -1503,6 +1507,7 @@ export default function BotDetailPage() {
     today_pnl?: number;
     open_positions?: number;
     win_rate_pct?: number;
+    win_rate_30d?: { pct: number | null; wins: number; losses: number; display: string };
     equity_curve?: EquityPoint[];
   };
 
@@ -1656,9 +1661,9 @@ export default function BotDetailPage() {
                 },
                 {
                   label: "Win Rate",
-                  value: `${(stats?.win_rate_pct ?? 0).toFixed(1)}%`,
-                  positive: (stats?.win_rate_pct ?? 0) >= 50,
-                  colored: true,
+                  value: stats?.win_rate_30d?.display ?? (stats?.win_rate_30d?.pct != null ? `${(stats.win_rate_30d.pct * 100).toFixed(1)}%` : "—"),
+                  positive: (stats?.win_rate_30d?.pct ?? 0) >= 0.5,
+                  colored: stats?.win_rate_30d?.pct != null,
                 },
               ].map((s) => (
                 <div key={s.label} className="bg-zinc-950 rounded-xl px-4 py-3 border border-zinc-800">

@@ -279,18 +279,15 @@ def run_bot_profile(profile_name: str) -> dict:
                     )
                     signals_by_strategy.append([])
 
-            # Fallback stub signal when no strategies returned anything
+            # When no strategies produced signals, proceed with empty list (no stub hold).
+            # Strategies return [] when bars are empty or no entry conditions are met — both are
+            # normal operating states, not errors.
             if not any(signals_by_strategy):
-                from strategy_lab.core.signals import Signal
-                default_symbol = _default_symbol_for_profile(profile_name, profile)
-                signals_by_strategy = [[Signal(
-                    symbol=default_symbol,
-                    side="hold",
-                    confidence=0.5,
-                    size_hint=1.0,
-                    reason="No strategy signals — stub hold",
-                    strategy=_primary_strategy(profile_name),
-                )]]
+                logger.info(
+                    "[runner:%s] %d strategies evaluated, 0 entry conditions met — skipping cycle",
+                    profile_name, strategies_loaded,
+                )
+                # No-op: signals_by_strategy stays as-is (list of empty lists)
 
             # 8. Apply ensemble vote
             ensemble = profile.get("ensemble", "weighted_vote")

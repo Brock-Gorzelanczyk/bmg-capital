@@ -211,7 +211,7 @@ def get_portfolio(
     thirty_days_ago = today - timedelta(days=30)
     ninety_days_ago = today - timedelta(days=90)
 
-    # ── 1. Enabled allocations (auto-seed if first visit) ────────────────────
+    # ── 1. Enabled allocations (auto-seed if first visit or PnL data is missing) ──
     allocations: List[BotAllocation] = db.execute(
         select(BotAllocation).where(
             BotAllocation.user_id == current_user.id,
@@ -219,7 +219,18 @@ def get_portfolio(
         )
     ).scalars().all()
 
-    if not allocations:
+    # Seed when: no allocations at all, OR allocations exist but have no PnL history
+    # (catches users whose allocations pre-date the seeding code)
+    needs_seed = not allocations
+    if not needs_seed and allocations:
+        pnl_count = db.execute(
+            select(func.count(BotDailyPnL.id)).where(
+                BotDailyPnL.allocation_id.in_([a.id for a in allocations])
+            )
+        ).scalar() or 0
+        needs_seed = pnl_count < 5
+
+    if needs_seed:
         _seed_demo_allocations(db, current_user.id)
         allocations = db.execute(
             select(BotAllocation).where(

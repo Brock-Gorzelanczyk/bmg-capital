@@ -163,15 +163,29 @@ export const useWidgetStore = create<WidgetStore>()(
         syncFromBackend: (bws) => {
           if (!bws.length) return;
           set((s) => {
-            const mapped: Workspace[] = bws.map((b) => ({
-              id: b.id.toString(),
-              backendId: b.id,
-              name: b.name,
-              icon: b.icon,
-              layout: (() => { try { return JSON.parse(b.layout_json); } catch { return []; } })(),
-              widgets: (() => { try { return JSON.parse(b.widgets_json); } catch { return []; } })(),
-              isDefault: b.is_default,
-            }));
+            const defaults = buildDefaultWorkspaces();
+            const mapped: Workspace[] = bws.map((b, idx) => {
+              const widgets: WidgetInstance[] = (() => {
+                try { const p = JSON.parse(b.widgets_json); return Array.isArray(p) ? p : []; }
+                catch { return []; }
+              })();
+              const layout = (() => {
+                try { const p = JSON.parse(b.layout_json); return Array.isArray(p) ? p : []; }
+                catch { return []; }
+              })();
+              // When a backend workspace has no widgets (e.g., was saved before widgets loaded),
+              // fall back to the default workspace at the same index so the dashboard isn't blank.
+              const fallback = defaults[idx] ?? defaults[0];
+              return {
+                id: b.id.toString(),
+                backendId: b.id,
+                name: b.name,
+                icon: b.icon,
+                layout: layout.length > 0 ? layout : fallback.layout,
+                widgets: widgets.length > 0 ? widgets : fallback.widgets,
+                isDefault: b.is_default,
+              };
+            });
             const activeId = mapped.find((w) => w.isDefault)?.id ?? mapped[0]?.id ?? s.activeWorkspaceId;
             return { workspaces: mapped, activeWorkspaceId: activeId };
           });

@@ -89,19 +89,27 @@ def _demo_positions(profile_name: str, asset_class: str) -> list[dict]:
     count = rng.randint(0, 3)
     symbols = _DEMO_SYMBOLS.get(asset_class, _DEMO_SYMBOLS["stock"])
     positions = []
-    for _ in range(count):
+    base_time = datetime.now(timezone.utc)
+    for i in range(count):
         sym = rng.choice(symbols)
         entry = round(rng.uniform(50.0, 500.0), 2)
         change_pct = rng.uniform(-5.0, 12.0)
         current = round(entry * (1 + change_pct / 100), 2)
         qty = round(rng.uniform(1.0, 20.0), 4)
+        opened_at = base_time - timedelta(days=rng.randint(1, 7))
         positions.append({
+            "id": -(i + 1),  # negative IDs for demo rows
             "symbol": sym,
             "qty": qty,
+            "avg_cost_cents": int(entry * 100),
             "avg_cost": entry,
             "current_price": current,
             "unrealized_pnl": round((current - entry) * qty, 2),
             "unrealized_pnl_pct": round(change_pct, 2),
+            "opened_at": opened_at.isoformat(),
+            "closed_at": None,
+            "exit_reason": None,
+            "is_paper": True,
             "is_demo": True,
         })
     return positions
