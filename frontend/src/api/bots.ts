@@ -55,18 +55,62 @@ export interface BotPosition {
 }
 
 export const getBots = () =>
-  client.get<{ bots: BotListItem[] }>("/bots").then((r) => r.data);
+  client.get<{ bots: any[] }>("/bots").then((r) => {
+    const raw: any[] = r.data?.bots ?? [];
+    return {
+      bots: raw.map((b): BotListItem => ({
+        profile: {
+          id: b.id,
+          name: b.name,
+          description: b.description ?? "",
+          asset_class: b.asset_class ?? "stock",
+          position_cap: b.config?.position_cap ?? 10,
+          cadence: b.config?.cadence ?? "daily",
+          stop_loss_pct: b.config?.stop_loss_pct ?? null,
+          take_profit_pct: b.config?.take_profit_pct ?? null,
+          paper_only: true,
+          enabled: b.enabled ?? true,
+        },
+        allocation: b.allocation ?? null,
+        stats: {
+          return_30d_pct: b.return_30d_pct ?? 0,
+          today_pnl: b.today_pnl_usd ?? 0,
+          open_positions: Array.isArray(b.open_positions) ? b.open_positions.length : 0,
+          total_trades: b.total_trades ?? 0,
+          win_rate_pct: b.win_rate_pct ?? 0,
+        },
+      })),
+    };
+  });
 
 export const getBot = (name: string) =>
-  client
-    .get<{
-      profile: BotProfile;
-      allocation: BotAllocation | null;
-      positions: BotPosition[];
-      signals: BotSignal[];
-      stats: Record<string, unknown>;
-    }>(`/bots/${name}`)
-    .then((r) => r.data);
+  client.get<any>(`/bots/${name}`).then((r) => {
+    const b = r.data;
+    return {
+      profile: {
+        id: b.id,
+        name: b.name,
+        description: b.description ?? "",
+        asset_class: b.asset_class ?? "stock",
+        position_cap: b.config?.position_cap ?? 10,
+        cadence: b.config?.cadence ?? "daily",
+        stop_loss_pct: b.config?.stop_loss_pct ?? null,
+        take_profit_pct: b.config?.take_profit_pct ?? null,
+        paper_only: true as const,
+        enabled: b.enabled ?? true,
+      } as BotProfile,
+      allocation: b.allocation as BotAllocation | null,
+      positions: (b.open_positions ?? []) as BotPosition[],
+      signals: (b.recent_signals ?? []) as BotSignal[],
+      stats: {
+        return_30d_pct: b.return_30d_pct ?? 0,
+        today_pnl: b.today_pnl_usd ?? 0,
+        open_positions: Array.isArray(b.open_positions) ? b.open_positions.length : 0,
+        win_rate_pct: b.win_rate_pct ?? 0,
+        equity_curve: b.equity_curve ?? [],
+      },
+    };
+  });
 
 export const allocateBot = (
   name: string,
