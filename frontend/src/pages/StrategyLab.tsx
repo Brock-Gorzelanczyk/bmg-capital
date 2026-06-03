@@ -1066,6 +1066,13 @@ export default function StrategyLab() {
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
+              {/* Strategy Library link */}
+              <Link
+                to="/strategy/library"
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-400 hover:bg-teal-500/25 transition-colors whitespace-nowrap"
+              >
+                Strategy Library →
+              </Link>
               {/* Portfolio View link */}
               <Link
                 to="/net-portfolio"
