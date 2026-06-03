@@ -1,0 +1,47 @@
+name: options_directional
+asset_class: options
+broker: alpaca_paper_stocks
+universe:
+  source: russell_1000_momentum
+  filters:
+    - price_gte: 20
+    - adv_gte: 5000000
+cadence: "45 9 * * 1-5"
+watchlist:
+  rebuild_at: "30 9 * * 1-5"
+  size: 20
+  top_n_for_signals: 8
+  scoring:
+    momentum_30d: 0.4
+    technical_setup: 0.35
+    catalyst_proximity: 0.25
+strategies:
+  - bull_put_credit_spread
+  - bear_call_credit_spread
+  - bull_call_debit_spread
+  - leaps_stock_replacement
+  - long_call_directional
+ensemble: weighted_vote
+position_cap: 4
+position_size_pct: 15.0
+stop_loss_pct: 100.0
+take_profit_pct: 50.0
+hold_max_days: 45
+risk_overlay:
+  daily_loss_limit_pct: 2.5
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 12
+  pdt_enforce: false
+regime_filters:
+  - require: trend_regime != 'bear'
+  - halt_if: vix_regime == 'panic'
+execution:
+  order_type: limit
+  limit_offset_bps: 5
+  reprice_after_seconds: 30
+  reprice_attempts: 2
+  fallback_to_market: false
+  use_brackets: true
+paper_only: true
+notes: "PDT eliminated FINRA Notice 26-10 June 4 2026. Requires Alpaca Level 2 options approval."

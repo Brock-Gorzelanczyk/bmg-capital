@@ -38,7 +38,7 @@ risk_overlay:
   consecutive_loss_halve_at: 3
   consecutive_loss_halt_at: 5
   per_trade_risk_pct: 1.0
-  pdt_enforce: true
+  pdt_enforce: false  # PDT minimum eliminated by FINRA Notice 26-10, effective June 4 2026
   max_sector_concentration_pct: 30
   portfolio_drawdown_circuit_pct: 10
 regime_filters:

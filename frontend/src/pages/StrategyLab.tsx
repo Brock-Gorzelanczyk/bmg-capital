@@ -60,6 +60,16 @@ const BOT_META: Record<
     description: "BTC/ETH + majors, weekly DCA & monthly rebalance",
     assetClass: "crypto",
   },
+  options_income: {
+    displayName: "Options Income",
+    description: "Wheel, covered calls, CSPs, iron condors — premium collection",
+    assetClass: "stock",
+  },
+  options_directional: {
+    displayName: "Options Directional",
+    description: "Credit spreads, debit spreads, LEAPS — directional options plays",
+    assetClass: "stock",
+  },
 };
 
 const BOT_ORDER = [
@@ -69,6 +79,8 @@ const BOT_ORDER = [
   "crypto_day",
   "crypto_swing",
   "crypto_lt",
+  "options_income",
+  "options_directional",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -340,6 +352,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
             const tPnl = entry.today_pnl_cents / 100;
             const tPos = tPnl >= 0;
             const isCrypto = entry.profile.includes("crypto");
+            const isOptions = entry.profile.includes("options");
             return (
               <button
                 key={entry.profile}
@@ -349,7 +362,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
                 <span className="text-[10px] font-bold text-zinc-600 w-4 flex-shrink-0">
                   #{entry.rank}
                 </span>
-                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isCrypto ? "bg-orange-400" : "bg-blue-400")} />
+                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-orange-400" : "bg-blue-400")} />
                 <span className="flex-1 text-xs font-semibold text-white truncate">{entry.name}</span>
                 <span className={cn("text-xs font-bold w-14 text-right", ePos ? "text-lime-400" : "text-red-400")}>
                   {formatPct(entry.return_30d_pct)}
@@ -448,9 +461,11 @@ function BotCard({ item, onNavigate }: BotCardProps) {
   const returnPositive = (stats?.return_30d_pct ?? 0) >= 0;
 
   // Left border color by asset class
-  const leftBorderClass = assetClass === "crypto"
-    ? "border-l-4 border-l-orange-500/60"
-    : "border-l-4 border-l-blue-500/60";
+  const leftBorderClass = profile.name.includes("options")
+    ? "border-l-4 border-l-purple-500/60"
+    : assetClass === "crypto"
+      ? "border-l-4 border-l-orange-500/60"
+      : "border-l-4 border-l-blue-500/60";
 
   return (
     <div
@@ -668,7 +683,7 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
                 <tr key={item.profile.name} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
                   <td className="py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", assetClass === "crypto" ? "bg-orange-400" : "bg-blue-400")} />
+                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", item.profile.name.includes("options") ? "bg-purple-400" : assetClass === "crypto" ? "bg-orange-400" : "bg-blue-400")} />
                       <span className="font-semibold text-white text-xs">{displayName(item.profile.name)}</span>
                     </div>
                   </td>
@@ -1109,10 +1124,10 @@ export default function StrategyLab() {
             <RegimeBar regime={regime} isLoading={regimeLoading} />
           </div>
 
-          {/* 2×3 grid */}
+          {/* 2×4 grid */}
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
                 <SkeletonCard key={i} />
               ))}
             </div>
@@ -1121,7 +1136,7 @@ export default function StrategyLab() {
               "grid gap-4",
               railOpen
                 ? "grid-cols-1 sm:grid-cols-2"
-                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
             )}>
               {bots.map((item) => (
                 <BotCard
