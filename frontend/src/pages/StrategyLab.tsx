@@ -135,7 +135,7 @@ function BotCard({ item, onNavigate }: BotCardProps) {
         enabled,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["bots"] });
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
       toast.success(
         allocation?.enabled ? `${displayName(profile.name)} disabled` : `${displayName(profile.name)} enabled`
       );
@@ -147,7 +147,7 @@ function BotCard({ item, onNavigate }: BotCardProps) {
     mutationFn: (joining: boolean) =>
       joining ? joinWaitlist(profile.name) : leaveWaitlist(profile.name),
     onSuccess: (_data, joining) => {
-      qc.invalidateQueries({ queryKey: ["bots"] });
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
       toast.success(joining ? "Added to live waitlist" : "Removed from waitlist");
     },
     onError: () => toast.error("Failed to update waitlist"),
@@ -305,8 +305,9 @@ export default function StrategyLab() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
+  // "bots-v2" busts any persisted localStorage cache with old flat data shape
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["bots"],
+    queryKey: ["bots-v2"],
     queryFn: getBots,
     retry: 1,
   });
@@ -317,24 +318,28 @@ export default function StrategyLab() {
     onError: () => toast.error("Failed to join waitlist"),
   });
 
-  // Build the ordered bot list — fall back to hardcoded if no data
+  // Build the ordered bot list — fall back to hardcoded if anything goes wrong
   let bots: BotListItem[] = [];
   if (isLoading) {
-    bots = []; // show skeletons
-  } else if (isError || !data?.bots || data.bots.length === 0) {
+    bots = [];
+  } else if (isError || !data?.bots || !Array.isArray(data.bots) || data.bots.length === 0) {
     bots = makeFallbackBots();
   } else {
-    // Sort by canonical order, then append any extras
-    const byName = new Map(data.bots.map((b) => [b.profile.name, b]));
-    bots = BOT_ORDER.map(
-      (name) =>
-        byName.get(name) ??
-        makeFallbackBots().find((b) => b.profile.name === name)!
-    ).filter(Boolean);
-    // Append any bots returned by API that aren't in our order list
-    data.bots.forEach((b) => {
-      if (!BOT_ORDER.includes(b.profile.name)) bots.push(b);
-    });
+    try {
+      const byName = new Map(
+        data.bots
+          .filter((b): b is BotListItem => !!b?.profile?.name)
+          .map((b) => [b.profile.name, b])
+      );
+      bots = BOT_ORDER.map(
+        (name) => byName.get(name) ?? makeFallbackBots().find((b) => b.profile.name === name)!
+      ).filter((item): item is BotListItem => !!item?.profile?.name);
+      data.bots.forEach((b) => {
+        if (b?.profile?.name && !BOT_ORDER.includes(b.profile.name)) bots.push(b);
+      });
+    } catch {
+      bots = makeFallbackBots();
+    }
   }
 
   return (

@@ -233,7 +233,7 @@ export default function BotDetailPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bot", botName] });
-      qc.invalidateQueries({ queryKey: ["bots"] });
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
       toast.success("Allocation saved");
     },
     onError: () => toast.error("Failed to save allocation"),
