@@ -1742,6 +1742,20 @@ export default function BotDetailPage() {
         Swipe between bots ←
       </p>
 
+      {/* PDT removal notice for day-trading bots */}
+      {(botName === "stock_day" || botName === "crypto_day") && (
+        <div className="flex items-start gap-3 bg-teal-500/10 border border-teal-500/30 rounded-xl px-4 py-3">
+          <span className="text-teal-400 mt-0.5 text-base leading-none">⚡</span>
+          <div>
+            <p className="text-xs font-semibold text-teal-400">PDT Rule Eliminated — June 4, 2026</p>
+            <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+              FINRA Notice 26-10 removed the Pattern Day Trader $25,000 minimum. This bot now
+              trades without account-size restrictions. <span className="text-zinc-400">Paper mode active.</span>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Tab system */}
       <TabBar active={activeTab} onChange={setActiveTab} />
 
