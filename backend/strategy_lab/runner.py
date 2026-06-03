@@ -223,9 +223,21 @@ def run_bot_profile(profile_name: str) -> dict:
             bars: dict[str, list[dict]] = {}
 
             # 7. Run generate_signals for each strategy module in profile
+            #    Strategy signals are weighted by Thompson-sampled strategy_weights.
             strategy_names: list[str] = profile.get("strategies", [])
             if not strategy_names:
                 strategy_names = [_primary_strategy(profile_name)]
+
+            # 7a. Load Thompson-sampled strategy weights (graceful)
+            strategy_weight_map: dict[str, float] = {}
+            try:
+                from strategy_lab.core.expert.strategy_weights import get_weights
+                for alloc in allocations:
+                    strategy_weight_map = get_weights(alloc.profile_id, strategy_names, db)
+                    break  # same profile → same weights
+                logger.debug("[runner:%s] Strategy weights: %s", profile_name, strategy_weight_map)
+            except Exception as exc:
+                logger.warning("[runner:%s] strategy_weights unavailable: %s", profile_name, exc)
 
             signals_by_strategy: list[list] = []
             strategies_loaded = 0
@@ -239,6 +251,21 @@ def run_bot_profile(profile_name: str) -> dict:
                     continue
                 try:
                     strat_signals = mod.generate_signals(bars, profile, regime)
+                    # Apply strategy weight as confidence multiplier
+                    weight = strategy_weight_map.get(strat_name, 1.0)
+                    if weight != 1.0 and strat_signals:
+                        from strategy_lab.core.signals import Signal
+                        strat_signals = [
+                            Signal(
+                                symbol=s.symbol,
+                                side=s.side,
+                                confidence=min(1.0, s.confidence * weight),
+                                size_hint=s.size_hint,
+                                reason=f"[w={weight:.3f}] {s.reason}",
+                                strategy=s.strategy,
+                            )
+                            for s in strat_signals
+                        ]
                     signals_by_strategy.append(strat_signals or [])
                     strategies_loaded += 1
                     logger.debug(
@@ -269,6 +296,32 @@ def run_bot_profile(profile_name: str) -> dict:
             ensemble = profile.get("ensemble", "weighted_vote")
             signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded))
 
+            # 8a. Multi-timeframe confluence filter (graceful)
+            bot_cadence = _cadence_for_profile(profile_name)
+            filtered_signals = []
+            for sig in signals:
+                if sig.side == "hold":
+                    filtered_signals.append(sig)
+                    continue
+                try:
+                    from strategy_lab.core.expert.multi_timeframe import check_confluence
+                    score = check_confluence(sig.symbol, sig, bars, bot_cadence)
+                    if score >= 0.66:
+                        filtered_signals.append(sig)
+                        logger.debug(
+                            "[runner:%s] MTF confluence %s %s: score=%.2f PASS",
+                            profile_name, sig.symbol, sig.side, score,
+                        )
+                    else:
+                        logger.info(
+                            "[runner:%s] MTF confluence %s %s: score=%.2f SKIP",
+                            profile_name, sig.symbol, sig.side, score,
+                        )
+                except Exception as exc:
+                    logger.warning("[runner:%s] multi_timeframe failed for %s: %s", profile_name, sig.symbol, exc)
+                    filtered_signals.append(sig)  # degrade gracefully
+            signals = filtered_signals
+
             # 9. Apply risk overlay (graceful — may not be built yet)
             try:
                 from strategy_lab.core.risk_overlay import apply_overlay  # type: ignore
@@ -276,12 +329,156 @@ def run_bot_profile(profile_name: str) -> dict:
             except (ImportError, Exception) as exc:
                 logger.debug("[runner:%s] risk_overlay unavailable: %s", profile_name, exc)
 
-            # 10. Audit non-hold signals
+            # 10. Expert decision layer: per-signal processing for actionable signals
             from strategy_lab.core.audit import log_signal
 
             actionable = [s for s in signals if s.side != "hold"]
+            processed_signals = []
+
             for alloc in allocations:
+                alloc_user_id = alloc.user_id
+
+                # Gather open symbols for correlation check (graceful)
+                open_symbols: list[str] = []
+                try:
+                    from app.db.models.bots import BotPosition
+                    open_pos_rows = (
+                        db.query(BotPosition)
+                        .filter(
+                            BotPosition.allocation_id == alloc.id,
+                            BotPosition.closed_at.is_(None),
+                        )
+                        .all()
+                    )
+                    open_symbols = [p.symbol for p in open_pos_rows]
+                except Exception as exc:
+                    logger.warning("[runner:%s] Could not fetch open positions: %s", profile_name, exc)
+
                 for sig in actionable:
+                    if sig.side == "hold":
+                        continue
+
+                    symbol_bars = bars.get(sig.symbol, [])
+
+                    # 10a. Anomaly detector — halt on abnormal conditions
+                    try:
+                        from strategy_lab.core.expert.anomaly_detector import check_for_anomaly
+                        anomaly = check_for_anomaly(sig.symbol, symbol_bars, alloc.id, db)
+                        if anomaly.get("halt"):
+                            logger.warning(
+                                "[runner:%s] Anomaly halt for %s: %s",
+                                profile_name, sig.symbol, anomaly.get("anomaly_type"),
+                            )
+                            continue  # skip this signal
+                    except Exception as exc:
+                        logger.warning("[runner:%s] anomaly_detector failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # 10b. News entry block check
+                    try:
+                        from strategy_lab.core.expert.news_stop_adjuster import should_block_new_entries
+                        if should_block_new_entries(sig.symbol, db):
+                            logger.info(
+                                "[runner:%s] News block on new entry: %s", profile_name, sig.symbol
+                            )
+                            continue
+                    except Exception as exc:
+                        logger.warning("[runner:%s] news_stop_adjuster failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # 10c. Cross-bot conflict resolution
+                    adjusted_size_pct = sig.size_hint * 100  # convert 0-1 hint to pct
+                    try:
+                        from strategy_lab.core.expert.bot_coordinator import check_conflicts
+                        coord_result = check_conflicts(
+                            alloc_user_id, sig.symbol, profile_name,
+                            sig.side, adjusted_size_pct, db,
+                        )
+                        if not coord_result.get("allowed", True):
+                            logger.info(
+                                "[runner:%s] Bot coordinator blocked %s: %s",
+                                profile_name, sig.symbol, coord_result.get("reason"),
+                            )
+                            continue
+                        adjusted_size_pct = coord_result.get("adjusted_size_pct", adjusted_size_pct)
+                    except Exception as exc:
+                        logger.warning("[runner:%s] bot_coordinator failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # 10d. Correlation size adjustment
+                    try:
+                        from strategy_lab.core.expert.correlation_sizer import adjust_size_for_correlation
+                        adjusted_size_pct = adjust_size_for_correlation(
+                            sig.symbol, adjusted_size_pct, open_symbols, bars,
+                        )
+                    except Exception as exc:
+                        logger.warning("[runner:%s] correlation_sizer failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # 10e. Volatility-weighted final sizing
+                    try:
+                        from strategy_lab.core.expert.vol_weighted_sizing import compute_vol_weighted_size
+                        risk_overlay_cfg = profile.get("risk_overlay", {})
+                        target_risk = risk_overlay_cfg.get("max_position_risk_pct", 1.0)
+                        max_size = risk_overlay_cfg.get("max_position_size_pct", 10.0)
+                        vol_size = compute_vol_weighted_size(
+                            sig.symbol, symbol_bars,
+                            target_risk_pct=target_risk,
+                            max_size_pct=max_size,
+                        )
+                        # Take the smaller of the two sizing methods
+                        adjusted_size_pct = min(adjusted_size_pct, vol_size)
+                    except Exception as exc:
+                        logger.warning("[runner:%s] vol_weighted_sizing failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # 10f. Smart stop placement
+                    stop_info: dict = {}
+                    try:
+                        from strategy_lab.core.expert.smart_stops import compute_stop
+                        # Use a stub entry price (bars[-1].close or 0) since real fills happen in execution
+                        entry_price = 0.0
+                        if symbol_bars:
+                            last_bar = symbol_bars[-1]
+                            entry_price = float(last_bar.get("c") or last_bar.get("close") or 0)
+                        if entry_price > 0:
+                            stop_info = compute_stop(sig.symbol, sig.side, entry_price, symbol_bars)
+                    except Exception as exc:
+                        logger.warning("[runner:%s] smart_stops failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # 10g. Pyramid: enter at 50% of adjusted size
+                    final_size_pct = adjusted_size_pct
+                    try:
+                        from strategy_lab.core.expert.position_pyramid import initial_size_pct
+                        final_size_pct = initial_size_pct(adjusted_size_pct)
+                    except Exception as exc:
+                        logger.warning("[runner:%s] position_pyramid failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # 10h. Trade journal — write entry rationale
+                    why_opened_json = "{}"
+                    try:
+                        from strategy_lab.core.expert.trade_journal import write_entry_journal
+                        confluence_score = 1.0  # already passed confluence gate above
+                        why_opened_json = write_entry_journal(
+                            sig.symbol, sig, regime, confluence_score, stop_info, profile,
+                        )
+                    except Exception as exc:
+                        logger.warning("[runner:%s] trade_journal failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # Audit the signal
+                    log_signal(db, alloc.id, sig)
+                    processed_signals.append({
+                        "signal": sig,
+                        "final_size_pct": final_size_pct,
+                        "stop_info": stop_info,
+                        "why_opened_json": why_opened_json,
+                    })
+
+                    logger.info(
+                        "[runner:%s] Signal ACCEPTED: %s %s size=%.2f%% stop=%s",
+                        profile_name, sig.side, sig.symbol,
+                        final_size_pct, stop_info.get("stop_price", "n/a"),
+                    )
+
+            # Also audit hold signals per allocation (non-expert path)
+            hold_signals = [s for s in signals if s.side == "hold"]
+            for alloc in allocations:
+                for sig in hold_signals:
                     log_signal(db, alloc.id, sig)
 
             # 11. Build and persist audit record
@@ -292,6 +489,7 @@ def run_bot_profile(profile_name: str) -> dict:
                 "ensemble": ensemble,
                 "signals_total": len(signals),
                 "signals_actionable": len(actionable),
+                "signals_processed": len(processed_signals),
                 "regime_snapshot": regime_snapshot,
                 "ts": datetime.now(timezone.utc).isoformat(),
             }
@@ -301,6 +499,7 @@ def run_bot_profile(profile_name: str) -> dict:
                 "profile": profile_name,
                 "allocations": len(allocations),
                 "signals": len(actionable),
+                "signals_processed": len(processed_signals),
                 "strategies_loaded": strategies_loaded,
                 "ensemble": ensemble,
                 "regime_snapshot": regime_snapshot,
@@ -367,3 +566,12 @@ def _primary_strategy(profile_name: str) -> str:
         "crypto_lt": "dca_btc_eth",
     }
     return _map.get(profile_name, "mean_reversion")
+
+
+def _cadence_for_profile(profile_name: str) -> str:
+    """Map profile name to bot cadence: 'day' | 'swing' | 'lt'."""
+    if "day" in profile_name:
+        return "day"
+    if "lt" in profile_name:
+        return "lt"
+    return "swing"
