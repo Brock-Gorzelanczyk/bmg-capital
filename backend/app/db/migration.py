@@ -175,12 +175,23 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "dca_baskets": [],
     "dca_basket_assets": [],
     "bot_profiles": [],
-    "bot_allocations": [],
+    "bot_allocations": [
+        ("paused_reason", "VARCHAR"),
+    ],
     "bot_signals": [],
     "bot_positions": [],
-    "bot_trades": [],
-    "bot_daily_pnl": [],
+    "bot_trades": [
+        ("expected_fill_cents", "INTEGER"),
+        ("slippage_bps",        "FLOAT"),
+    ],
+    "bot_daily_pnl": [
+        ("peak_drawdown_pct", "FLOAT"),
+    ],
     "go_live_waitlist": [],
+    "bot_watchlist": [],
+    "bot_health": [],
+    "regime_snapshots": [],
+    "catalyst_events": [],
 }
 
 

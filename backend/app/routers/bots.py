@@ -33,6 +33,9 @@ from app.db.models.bots import (
     BotTrade,
     BotDailyPnL,
     GoLiveWaitlist,
+    BotWatchlist,
+    BotHealth,
+    RegimeSnapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -235,6 +238,96 @@ def list_bots(
         result.append(row)
 
     return {"bots": result}
+
+
+# ── GET /api/bots/regime ─────────────────────────────────────────────────────
+
+@router.get("/regime")
+def get_regime(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return the latest RegimeSnapshot from the database."""
+    snap = db.query(RegimeSnapshot).order_by(RegimeSnapshot.ts.desc()).first()
+    if not snap:
+        # Return safe defaults if no snapshot exists yet
+        return {
+            "vix_regime": "mid",
+            "trend_regime": "chop",
+            "vol_pctile": 50.0,
+            "btc_dominance": 50.0,
+            "btc_funding_rate": 0.0,
+            "spy_price": None,
+            "vix_value": None,
+            "ts": None,
+            "source": "defaults",
+        }
+    return {
+        "id": snap.id,
+        "ts": snap.ts.isoformat() if snap.ts else None,
+        "vix_regime": snap.vix_regime,
+        "trend_regime": snap.trend_regime,
+        "vol_pctile": snap.vol_pctile,
+        "btc_dominance": snap.btc_dominance,
+        "btc_funding_rate": snap.btc_funding_rate,
+        "spy_price": snap.spy_price,
+        "vix_value": snap.vix_value,
+        "source": "db",
+    }
+
+
+# ── POST /api/bots/pause-all ──────────────────────────────────────────────────
+
+@router.post("/pause-all")
+def pause_all_bots(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Pause all of the current user's BotAllocations."""
+    allocs = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.enabled.is_(True),
+        )
+        .all()
+    )
+    count = 0
+    now = datetime.now(timezone.utc)
+    for a in allocs:
+        a.enabled = False
+        a.paused_reason = "user_pause"
+        a.updated_at = now
+        count += 1
+    db.commit()
+    return {"status": "paused", "allocations_paused": count}
+
+
+# ── POST /api/bots/resume-all ─────────────────────────────────────────────────
+
+@router.post("/resume-all")
+def resume_all_bots(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Resume all of the current user's BotAllocations (clears paused_reason)."""
+    allocs = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.enabled.is_(False),
+        )
+        .all()
+    )
+    count = 0
+    now = datetime.now(timezone.utc)
+    for a in allocs:
+        a.enabled = True
+        a.paused_reason = None
+        a.updated_at = now
+        count += 1
+    db.commit()
+    return {"status": "resumed", "allocations_resumed": count}
 
 
 # ── GET /api/bots/{profile_name} ─────────────────────────────────────────────
@@ -496,6 +589,103 @@ def get_signals(
         .all()
     )
     return {"signals": [_signal_to_dict(s) for s in signals], "demo": False}
+
+
+# ── GET /api/bots/{profile_name}/watchlist ────────────────────────────────────
+
+@router.get("/{profile_name}/watchlist")
+def get_watchlist(
+    profile_name: str,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return the BotWatchlist for a given profile, sorted by score desc."""
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        raise HTTPException(404, f"Bot profile '{profile_name}' not found")
+
+    rows = (
+        db.query(BotWatchlist)
+        .filter(
+            BotWatchlist.profile_id == profile.id,
+            BotWatchlist.status == "active",
+        )
+        .order_by(BotWatchlist.score.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "profile_name": profile_name,
+        "watchlist": [
+            {
+                "id": r.id,
+                "symbol": r.symbol,
+                "score": r.score,
+                "rank": r.rank,
+                "reasons": r.reasons,
+                "status": r.status,
+                "added_at": r.added_at.isoformat() if r.added_at else None,
+                "last_evaluated_at": (
+                    r.last_evaluated_at.isoformat() if r.last_evaluated_at else None
+                ),
+            }
+            for r in rows
+        ],
+        "count": len(rows),
+    }
+
+
+# ── GET /api/bots/{profile_name}/health ───────────────────────────────────────
+
+@router.get("/{profile_name}/health")
+def get_health(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return the latest BotHealth record for the user's allocation of this bot."""
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        raise HTTPException(404, f"Bot profile '{profile_name}' not found")
+
+    allocation = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not allocation:
+        return {"health": None, "message": "No allocation found for this profile"}
+
+    health = (
+        db.query(BotHealth)
+        .filter(BotHealth.allocation_id == allocation.id)
+        .order_by(BotHealth.date.desc())
+        .first()
+    )
+    if not health:
+        return {
+            "allocation_id": allocation.id,
+            "health": None,
+            "message": "No health records yet",
+        }
+    return {
+        "allocation_id": allocation.id,
+        "health": {
+            "id": health.id,
+            "date": health.date.isoformat() if health.date else None,
+            "live_sharpe_30d": health.live_sharpe_30d,
+            "backtest_sharpe": health.backtest_sharpe,
+            "divergence_sigma": health.divergence_sigma,
+            "paused_by_health": health.paused_by_health,
+            "strategies_disabled": health.strategies_disabled,
+            "heartbeat_ok": health.heartbeat_ok,
+            "notes": health.notes,
+        },
+    }
 
 
 # ── POST /api/bots/waitlist/{profile_name} ────────────────────────────────────

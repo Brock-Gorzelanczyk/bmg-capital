@@ -34,6 +34,7 @@ class BotAllocation(Base):
     paper_mode: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     go_live_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    paused_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -85,6 +86,8 @@ class BotTrade(Base):
     alpaca_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     position_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("bot_positions.id"), nullable=True)
     is_paper: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    expected_fill_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    slippage_bps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
 
 class BotDailyPnL(Base):
@@ -96,6 +99,7 @@ class BotDailyPnL(Base):
     realized_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unrealized_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     fees_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    peak_drawdown_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
 
 class GoLiveWaitlist(Base):
@@ -109,3 +113,57 @@ class GoLiveWaitlist(Base):
     )
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     opted_out_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class BotWatchlist(Base):
+    __tablename__ = "bot_watchlist"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("bot_profiles.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String, nullable=False)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    reasons: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {component: score}
+    status: Mapped[str] = mapped_column(String, default="active")  # active|inactive|blacklisted
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    last_evaluated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class BotHealth(Base):
+    __tablename__ = "bot_health"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    allocation_id: Mapped[int] = mapped_column(Integer, ForeignKey("bot_allocations.id"), index=True)
+    date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    live_sharpe_30d: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    backtest_sharpe: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    divergence_sigma: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    paused_by_health: Mapped[bool] = mapped_column(Boolean, default=False)
+    strategies_disabled: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    heartbeat_ok: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class RegimeSnapshot(Base):
+    __tablename__ = "regime_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, index=True, default=lambda: datetime.now(timezone.utc))
+    vix_regime: Mapped[str] = mapped_column(String, default="mid")   # low|mid|high|panic
+    trend_regime: Mapped[str] = mapped_column(String, default="chop")  # bull|bear|chop
+    vol_pctile: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    btc_dominance: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    btc_funding_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    spy_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    vix_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
+class CatalystEvent(Base):
+    __tablename__ = "catalyst_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)  # earnings|fomc|cpi|nfp|pce|token_unlock|rebalance
+    symbol: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    event_ts: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    source: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
