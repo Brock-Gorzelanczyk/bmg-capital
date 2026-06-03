@@ -2,42 +2,38 @@ name: crypto_day
 asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
-  source: top_20_crypto
-  filters:
-    - adv_gte: 10000000
-cadence: "*/1 * * * *"
+  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, BNB/USD, MATIC/USD, ATOM/USD, LINK/USD, DOT/USD, ADA/USD]
+cadence: "* * * * *"
 watchlist:
-  rebuild_at: "0 * * * *"
-  size: 20
+  rebuild_at: "0 */4 * * *"
+  size: 10
+  top_n_for_signals: 5
   scoring:
-    momentum_4h: 0.4
-    volume_surge: 0.3
+    intraday_momentum: 0.4
+    volume_ratio: 0.3
     btc_correlation: 0.3
 strategies:
-  - vwap_reversion
-  - opening_range
-  - momentum_breakout
+  - crypto_intraday_momentum
+  - crypto_weekend_momentum
+  - crypto_volatility_breakout
 ensemble: weighted_vote
 position_cap: 3
-position_size_pct: 33.33
+position_size_pct: 15.0
 stop_loss_pct: 2.0
 take_profit_pct: 3.0
-trailing_stop_activate_at_pct: 1.5
 hold_max_hours: 24
 risk_overlay:
   daily_loss_limit_pct: 4.0
   consecutive_loss_halve_at: 3
   consecutive_loss_halt_at: 5
-  per_trade_risk_pct: 2.0
   portfolio_drawdown_circuit_pct: 10
+  pdt_enforce: false
 regime_filters:
-  - halve_size_if: vix_regime == 'high'
-  - halt_if: vix_regime == 'panic'
-catalyst_gates: []
+  - halt_if: btc_funding_rate > 0.003
 execution:
   order_type: limit
   limit_offset_bps: 10
-  reprice_after_seconds: 15
+  reprice_after_seconds: 30
   reprice_attempts: 3
   fallback_to_market: true
   use_brackets: true

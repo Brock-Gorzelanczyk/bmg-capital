@@ -2,35 +2,28 @@ name: crypto_lt
 asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
-  source: top_10_crypto
-  filters: []
-cadence: "0 10 * * 1"
-watchlist:
-  rebuild_at: "0 10 * * 1"
-  size: 10
-  top_n_for_signals: 8
-  scoring:
-    momentum_12m: 0.5
-    btc_dominance: 0.3
-    funding_rate: 0.2
+  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, LINK/USD]
+  target_weights:
+    BTC/USD: 0.40
+    ETH/USD: 0.30
+    SOL/USD: 0.15
+    AVAX/USD: 0.10
+    LINK/USD: 0.05
+cadence_dca: "0 10 * * 1"
+cadence_rebalance: "0 10 1-7 * 2"
 strategies:
-  - dca
-  - factor_blend
-ensemble: factor_rank
+  - dca_btc_eth
+  - monthly_rebalance_majors
 position_cap: 8
-position_size_pct: 12.5
-hold_min_days: 30
+position_size_pct: 20.0
 rebalance_only: true
 risk_overlay:
-  portfolio_drawdown_circuit_pct: 35
-regime_filters:
-  - halve_size_if: vix_regime == 'high'
-catalyst_gates: []
+  portfolio_drawdown_circuit_pct: 25
+regime_filters: []
 execution:
   order_type: limit
   limit_offset_bps: 5
   reprice_after_seconds: 60
-  reprice_attempts: 5
   fallback_to_market: true
   use_brackets: false
 paper_only: true

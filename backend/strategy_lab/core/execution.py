@@ -7,10 +7,94 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Optional
 
 from strategy_lab.core.signals import Signal
 
+
+# ── Execution config ──────────────────────────────────────────────────────────
+
+@dataclass
+class ExecutionConfig:
+    """Parsed from the profile YAML execution section."""
+
+    order_type: str = "limit"
+    limit_offset_bps: int = 5
+    reprice_after_seconds: int = 30
+    reprice_attempts: int = 3
+    fallback_to_market: bool = True
+    use_brackets: bool = True
+
+    @classmethod
+    def from_profile(cls, profile_config: dict) -> "ExecutionConfig":
+        """Build an ExecutionConfig from a profile YAML dict."""
+        exec_section = profile_config.get("execution", {}) or {}
+        return cls(
+            order_type=exec_section.get("order_type", "limit"),
+            limit_offset_bps=int(exec_section.get("limit_offset_bps", 5)),
+            reprice_after_seconds=int(exec_section.get("reprice_after_seconds", 30)),
+            reprice_attempts=int(exec_section.get("reprice_attempts", 3)),
+            fallback_to_market=bool(exec_section.get("fallback_to_market", True)),
+            use_brackets=bool(exec_section.get("use_brackets", True)),
+        )
+
+
+# ── Execution quality helpers ─────────────────────────────────────────────────
+
+def compute_limit_price(current_price: float, side: str, offset_bps: int) -> float:
+    """Compute a limit price slightly above (buy) or below (sell) current price.
+
+    For buy orders we go slightly higher to increase fill probability.
+    For sell orders we go slightly lower.
+
+    Args:
+        current_price: Current market price.
+        side: "buy" or "sell".
+        offset_bps: Basis-point offset (e.g. 10 bps = 0.10%).
+
+    Returns:
+        Limit price rounded to 4 decimal places.
+    """
+    offset = current_price * (offset_bps / 10_000)
+    if side == "buy":
+        return round(current_price + offset, 4)
+    return round(current_price - offset, 4)
+
+
+def compute_bracket_prices(entry: float, profile_config: dict) -> tuple[float, float]:
+    """Compute stop-loss and take-profit prices for a long bracket order.
+
+    Args:
+        entry: Expected entry price.
+        profile_config: Profile YAML dict with stop_loss_pct / take_profit_pct.
+
+    Returns:
+        (stop_price, target_price) tuple, both rounded to 4 decimal places.
+    """
+    stop_pct = abs(profile_config.get("stop_loss_pct", 5.0)) / 100
+    target_pct = abs(profile_config.get("take_profit_pct", 10.0)) / 100
+    stop_price = round(entry * (1 - stop_pct), 4)
+    target_price = round(entry * (1 + target_pct), 4)
+    return stop_price, target_price
+
+
+def track_slippage(expected_cents: int, actual_cents: int) -> float:
+    """Compute execution slippage in basis points.
+
+    Args:
+        expected_cents: Expected fill price in cents.
+        actual_cents: Actual fill price in cents.
+
+    Returns:
+        Absolute slippage in basis points (always positive).
+    """
+    if expected_cents == 0:
+        return 0.0
+    return abs(actual_cents - expected_cents) / expected_cents * 10_000
+
+
+# ── Broker adapter ABC ────────────────────────────────────────────────────────
 
 class BrokerAdapter(ABC):
     """Abstract broker interface.  All implementations must be paper-safe."""
@@ -33,6 +117,34 @@ class BrokerAdapter(ABC):
     @abstractmethod
     def cancel_order(self, order_id: str) -> bool:
         """Cancel an open order by ID.  Returns True on success."""
+        ...
+
+    @abstractmethod
+    def submit_bracket_order(
+        self,
+        symbol: str,
+        qty: float,
+        side: str,
+        stop_price: float,
+        target_price: float,
+        limit_price: Optional[float] = None,
+    ) -> dict:
+        """Submit entry + stop-loss + take-profit as an OCO bracket order.
+
+        Uses Alpaca's order_class='bracket' with take_profit.limit_price
+        and stop_loss.stop_price legs.
+
+        Args:
+            symbol: Asset symbol.
+            qty: Quantity to trade.
+            side: "buy" or "sell".
+            stop_price: Stop-loss trigger price.
+            target_price: Take-profit limit price.
+            limit_price: Entry limit price; if None, submits a market entry.
+
+        Returns:
+            Order dict with at least 'order_id'.
+        """
         ...
 
 

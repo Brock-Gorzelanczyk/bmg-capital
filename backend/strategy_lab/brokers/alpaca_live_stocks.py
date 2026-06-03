@@ -11,6 +11,8 @@ from typing import Any
 
 import requests
 
+from typing import Optional
+
 from strategy_lab.core.execution import BrokerAdapter
 
 logger = logging.getLogger(__name__)
@@ -86,3 +88,40 @@ class LiveStocksAdapter(BrokerAdapter):
 
     def cancel_order(self, order_id: str) -> bool:
         return self._delete(f"/orders/{order_id}")
+
+    def submit_bracket_order(
+        self,
+        symbol: str,
+        qty: float,
+        side: str,
+        stop_price: float,
+        target_price: float,
+        limit_price: Optional[float] = None,
+    ) -> dict:
+        """Submit an OCO bracket order via Alpaca LIVE API for US stocks.
+
+        THIS TOUCHES REAL MONEY — only callable when RIA_REGISTERED=true.
+        """
+        payload: dict = {
+            "symbol": symbol,
+            "qty": str(qty),
+            "side": side,
+            "time_in_force": "day",
+            "order_class": "bracket",
+            "take_profit": {"limit_price": str(target_price)},
+            "stop_loss": {"stop_price": str(stop_price)},
+        }
+        if limit_price is not None:
+            payload["type"] = "limit"
+            payload["limit_price"] = str(limit_price)
+        else:
+            payload["type"] = "market"
+
+        data = self._post("/orders", payload)
+        logger.warning(
+            "[LIVE-STOCKS] REAL BRACKET ORDER: %s %s x%.4f entry=%s stop=%.4f target=%.4f → id=%s",
+            side, symbol, qty,
+            f"limit@{limit_price}" if limit_price else "market",
+            stop_price, target_price, data.get("id"),
+        )
+        return {"order_id": data.get("id"), "raw": data}

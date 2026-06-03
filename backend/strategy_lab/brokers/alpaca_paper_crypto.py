@@ -10,6 +10,8 @@ from typing import Any
 
 import requests
 
+from typing import Optional
+
 from strategy_lab.core.execution import BrokerAdapter
 
 logger = logging.getLogger(__name__)
@@ -81,3 +83,42 @@ class PaperCryptoAdapter(BrokerAdapter):
 
     def cancel_order(self, order_id: str) -> bool:
         return self._delete(f"/orders/{order_id}")
+
+    def submit_bracket_order(
+        self,
+        symbol: str,
+        qty: float,
+        side: str,
+        stop_price: float,
+        target_price: float,
+        limit_price: Optional[float] = None,
+    ) -> dict:
+        """Submit an OCO bracket order via Alpaca paper API for crypto.
+
+        Uses order_class='bracket' with take_profit.limit_price and
+        stop_loss.stop_price legs.  Crypto always uses GTC time_in_force.
+        Entry is a limit order if limit_price is provided, otherwise market.
+        """
+        payload: dict = {
+            "symbol": symbol,
+            "qty": str(qty),
+            "side": side,
+            "time_in_force": "gtc",
+            "order_class": "bracket",
+            "take_profit": {"limit_price": str(target_price)},
+            "stop_loss": {"stop_price": str(stop_price)},
+        }
+        if limit_price is not None:
+            payload["type"] = "limit"
+            payload["limit_price"] = str(limit_price)
+        else:
+            payload["type"] = "market"
+
+        data = self._post("/orders", payload)
+        logger.info(
+            "[PAPER-CRYPTO] Bracket order: %s %s x%.6f entry=%s stop=%.4f target=%.4f → id=%s",
+            side, symbol, qty,
+            f"limit@{limit_price}" if limit_price else "market",
+            stop_price, target_price, data.get("id"),
+        )
+        return {"order_id": data.get("id"), "raw": data}

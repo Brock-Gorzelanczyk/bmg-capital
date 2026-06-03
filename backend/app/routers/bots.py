@@ -453,34 +453,49 @@ def allocate_bot(
 @router.get("/{profile_name}/backtest")
 def get_backtest(
     profile_name: str,
+    start: str = "2019-01-01",
+    end: str = "2024-01-01",
+    capital: float = 100_000,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Stub backtest — returns a deterministic demo equity curve and key metrics."""
+    """Run (demo) backtest for a bot profile.
+
+    Returns a full BacktestResult with equity curve, Sharpe, Sortino,
+    Calmar, max drawdown, win rate, profit factor, Monte Carlo bounds,
+    and beta-vs-SPY.  Currently deterministic demo data — full walk-forward
+    implementation requires POLYGON_API_KEY.
+
+    Query params:
+        start: ISO date string for backtest start (default 2019-01-01).
+        end: ISO date string for backtest end (default 2024-01-01).
+        capital: Starting capital in USD (default 100000).
+    """
+    import dataclasses
+    from pathlib import Path
+
+    import yaml
+
+    from strategy_lab.core.backtester import run_backtest
+
     profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
     if not profile:
         raise HTTPException(404, f"Bot profile '{profile_name}' not found")
 
-    rng = _seeded_rng(profile_name + "_bt")
-    equity_curve = _demo_equity_curve(profile_name)
-    start_equity = equity_curve[0]["equity"]
-    end_equity = equity_curve[-1]["equity"]
-    total_return_pct = round((end_equity - start_equity) / start_equity * 100, 2)
+    # Load YAML profile config for stop/target percentages
+    profiles_dir = (
+        Path(__file__).parent.parent.parent.parent / "strategy_lab" / "profiles"
+    )
+    yaml_file = profiles_dir / f"{profile_name}.yaml"
+    config: dict = {}
+    if yaml_file.exists():
+        try:
+            config = yaml.safe_load(yaml_file.read_text()) or {}
+        except Exception:
+            config = {}
 
-    return {
-        "profile_name": profile_name,
-        "period_days": 30,
-        "start_equity": start_equity,
-        "end_equity": end_equity,
-        "total_return_pct": total_return_pct,
-        "sharpe_ratio": round(rng.uniform(0.6, 2.2), 2),
-        "max_drawdown_pct": round(rng.uniform(-3.0, -12.0), 2),
-        "win_rate_pct": round(rng.uniform(48.0, 65.0), 1),
-        "total_trades": rng.randint(15, 80),
-        "equity_curve": equity_curve,
-        "stub": True,
-        "note": "Demo backtest data. Live backtesting engine coming soon.",
-    }
+    result = run_backtest(profile_name, config, start, end, capital)
+    return dataclasses.asdict(result)
 
 
 # ── GET /api/bots/{profile_name}/positions ────────────────────────────────────
