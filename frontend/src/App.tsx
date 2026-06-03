@@ -81,6 +81,7 @@ const DCABasketsPage = lazy(() => import("@/pages/DCABasketsPage"));
 const BotDetailPage = lazy(() => import("@/pages/BotDetailPage"));
 const NetPortfolio = lazy(() => import("@/pages/NetPortfolio"));
 const StrategyLibraryPage = lazy(() => import("@/pages/StrategyLibraryPage"));
+const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -198,6 +199,7 @@ function AppInner() {
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<StrategyLab />} />
         <Route path="/strategy/library" element={<StrategyLibraryPage />} />
+        <Route path="/strategy/library/custom-bot" element={<CustomBotBuilderPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
         <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />

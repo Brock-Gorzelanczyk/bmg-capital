@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -37,6 +37,7 @@ import {
   type StrategyWeight,
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
+import { CoachmarkOverlay } from "@/pages/CustomBotBuilderPage";
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
 
@@ -1462,12 +1463,29 @@ export default function BotDetailPage() {
   const meta = BOT_META[botName];
   const isCrypto = (meta?.assetClass ?? (botName.startsWith("crypto") ? "crypto" : "stock")) === "crypto";
 
+  const [showCoachmark, setShowCoachmark] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ["bot", botName],
     queryFn: () => getBot(botName),
     enabled: !!botName,
     retry: 1,
   });
+
+  useEffect(() => {
+    const profileId = data?.profile?.id;
+    if (!profileId) return;
+    const key = `coachmark_pending_${profileId}`;
+    if (localStorage.getItem(key)) {
+      setShowCoachmark(true);
+    }
+  }, [data?.profile?.id]);
+
+  function dismissCoachmark() {
+    const profileId = data?.profile?.id;
+    if (profileId) localStorage.removeItem(`coachmark_pending_${profileId}`);
+    setShowCoachmark(false);
+  }
 
   const { data: regime, isLoading: regimeLoading } = useQuery({
     queryKey: ["regime"],
@@ -1870,6 +1888,11 @@ export default function BotDetailPage() {
         takeProfitPct={profile?.take_profit_pct ?? null}
         onClose={() => setSelectedPosition(null)}
       />
+
+      {/* Coachmark overlay (first visit after custom bot deploy) */}
+      {showCoachmark && (
+        <CoachmarkOverlay botId={String(data?.profile?.id ?? "")} onDone={dismissCoachmark} />
+      )}
     </div>
   );
 }
