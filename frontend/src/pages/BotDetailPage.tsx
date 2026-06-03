@@ -48,37 +48,63 @@ const BOT_META: Record<
     displayName: "Stock Swing",
     description: "Russell 1000 momentum plays, 1-30 day holds",
     assetClass: "stock",
-    strategies: ["momentum", "breakout", "mean_reversion"],
+    strategies: [
+      "mean_reversion", "momentum_breakout", "rsi_bands",
+      "fifty_two_week_high_momentum", "relative_strength_leaders",
+      "factor_momentum_value", "golden_cross", "bollinger_squeeze",
+      "cup_and_handle", "macd_crossover", "earnings_drift_post",
+    ],
   },
   stock_day: {
     displayName: "Stock Day",
     description: "Intraday gappers & earnings momentum, EOD flat",
     assetClass: "stock",
-    strategies: ["gap_and_go", "earnings_momentum", "vwap_reclaim"],
+    strategies: [
+      "orb_stocks_in_play", "intraday_momentum_noise_band",
+      "heston_half_hour_continuation", "first_half_hour_predicts_last",
+      "pead_intraday_drift", "gex_pin_reversion", "fomc_drift",
+      "vwap_reversion_chop",
+    ],
   },
   stock_lt: {
     displayName: "Stock Long-Term",
     description: "S&P 500 factor model, monthly rebalance",
     assetClass: "stock",
-    strategies: ["value_factor", "quality_factor", "low_vol_factor"],
+    strategies: [
+      "factor_blend", "dividend_growth", "quality_score",
+      "low_vol_anomaly", "momentum_12_1", "small_cap_value",
+      "shareholder_yield", "monthly_rebalance",
+    ],
   },
   crypto_swing: {
     displayName: "Crypto Swing",
     description: "Top 20 crypto by mcap, 1-30 day holds",
     assetClass: "crypto",
-    strategies: ["momentum", "on_chain_signal", "funding_reversal"],
+    strategies: [
+      "crypto_rsi_mean_reversion", "crypto_momentum_breakout",
+      "crypto_btc_dominance_regime", "crypto_macd_swing",
+      "crypto_ema_cross", "crypto_relative_strength",
+    ],
   },
   crypto_day: {
     displayName: "Crypto Day",
     description: "BTC/ETH/SOL intraday momentum, 24h force-close",
     assetClass: "crypto",
-    strategies: ["orderflow", "liquidation_hunt", "trend_follow"],
+    strategies: [
+      "crypto_intraday_momentum", "crypto_weekend_momentum",
+      "crypto_volatility_breakout", "crypto_news_sentiment",
+      "crypto_session_open",
+    ],
   },
   crypto_lt: {
     displayName: "Crypto L-T DCA",
     description: "BTC/ETH + majors, weekly DCA & monthly rebalance",
     assetClass: "crypto",
-    strategies: ["dca_core", "rebalance", "altseason_rotate"],
+    strategies: [
+      "dca_btc_eth", "monthly_rebalance_majors",
+      "btc_dominance_rotation", "dollar_cost_average_dip",
+      "yield_overlay",
+    ],
   },
 };
 
@@ -332,6 +358,132 @@ function CatalystCalendar() {
 }
 
 // ─── Why modal ────────────────────────────────────────────────────────────────
+
+// ─── Position detail modal ────────────────────────────────────────────────────
+
+interface PositionDetailModalProps {
+  pos: BotPosition | null;
+  signal: BotSignal | null;
+  stopLossPct: number | null;
+  takeProfitPct: number | null;
+  onClose: () => void;
+}
+
+function PositionDetailModal({
+  pos, signal, stopLossPct, takeProfitPct, onClose,
+}: PositionDetailModalProps) {
+  if (!pos) return null;
+
+  const entry = pos.avg_cost_cents / 100;
+  const stopPrice = stopLossPct != null ? entry * (1 - stopLossPct / 100) : null;
+  const targetPrice = takeProfitPct != null ? entry * (1 + takeProfitPct / 100) : null;
+
+  const heldMs = Date.now() - new Date(pos.opened_at).getTime();
+  const heldDays = Math.floor(heldMs / 86_400_000);
+  const heldHours = Math.floor((heldMs % 86_400_000) / 3_600_000);
+  const holdStr = heldDays > 0 ? `${heldDays}d ${heldHours}h` : `${heldHours}h`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h3 className="text-white font-bold text-lg">{pos.symbol}</h3>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-lime-500/15 border border-lime-500/30 text-lime-400">
+              LONG
+            </span>
+            {pos.is_paper && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500">
+                PAPER
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Key levels */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-zinc-950 rounded-xl p-3 border border-zinc-800">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Entry</p>
+            <p className="text-sm font-bold text-white mt-1">${entry.toFixed(2)}</p>
+          </div>
+          <div className="bg-zinc-950 rounded-xl p-3 border border-red-900/30">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Stop Loss</p>
+            <p className="text-sm font-bold text-red-400 mt-1">
+              {stopPrice != null ? `$${stopPrice.toFixed(2)}` : "—"}
+            </p>
+            {stopLossPct != null && (
+              <p className="text-[10px] text-zinc-600 mt-0.5">−{stopLossPct}%</p>
+            )}
+          </div>
+          <div className="bg-zinc-950 rounded-xl p-3 border border-lime-900/30">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Target</p>
+            <p className="text-sm font-bold text-lime-400 mt-1">
+              {targetPrice != null ? `$${targetPrice.toFixed(2)}` : "—"}
+            </p>
+            {takeProfitPct != null && (
+              <p className="text-[10px] text-zinc-600 mt-0.5">+{takeProfitPct}%</p>
+            )}
+          </div>
+        </div>
+
+        {/* Position info */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs text-zinc-500">Qty</p>
+            <p className="text-sm font-semibold text-white">{pos.qty}</p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Hold Time</p>
+            <p className="text-sm font-semibold text-white">{holdStr}</p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Opened</p>
+            <p className="text-sm font-semibold text-zinc-300">{formatTime(pos.opened_at)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Unrealized P&L</p>
+            <p className="text-sm font-semibold text-zinc-500">—</p>
+          </div>
+        </div>
+
+        {/* Why we opened it */}
+        {signal && (
+          <div className="bg-zinc-800/60 rounded-xl p-4 space-y-2">
+            <p className="text-xs font-semibold text-zinc-400">Why we opened this</p>
+            <p className="text-xs text-zinc-500">
+              <span className="text-zinc-400">Strategy:</span> {signal.strategy}
+            </p>
+            <p className="text-xs text-zinc-300 leading-relaxed">{signal.reason || "No reason recorded"}</p>
+            <div className="flex items-center gap-2 pt-1">
+              <p className="text-xs text-zinc-500">Confidence</p>
+              <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-lime-500 rounded-full"
+                  style={{ width: `${Math.round(signal.confidence * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-zinc-400">{Math.round(signal.confidence * 100)}%</p>
+            </div>
+          </div>
+        )}
+
+        {!signal && (
+          <p className="text-xs text-zinc-600 text-center py-2">
+            No signal record found for this position
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface WhyModalProps {
   signal: BotSignal | null;
@@ -916,7 +1068,66 @@ function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: Reac
 
 // ─── Strategies tab ───────────────────────────────────────────────────────────
 
-function StrategiesTab({ botName }: { botName: string }) {
+const STRATEGY_DESCRIPTIONS: Record<string, string> = {
+  mean_reversion: "RSI(14) < 30 → buy, exit RSI > 60. Stop −8%.",
+  momentum_breakout: "Break above 20d high with volume > 1.5× avg.",
+  rsi_bands: "Buy RSI < 30, sell RSI > 70. Confidence scales with deviation.",
+  fifty_two_week_high_momentum: "Long within 5% of 52w high with positive 50d slope.",
+  relative_strength_leaders: "Top 5% RS rank in Russell 1000. Hold to 30d or RS exits top 20%.",
+  factor_momentum_value: "Momentum (6m return) + value (low P/E). Long top decile.",
+  golden_cross: "50d MA crosses above 200d MA. Exit on death cross or −10% stop.",
+  bollinger_squeeze: "BB width at 6m low (squeeze), buy on upper-band breakout.",
+  cup_and_handle: "Rounding base (15-40% depth) + handle (<8% pullback) + breakout.",
+  macd_crossover: "MACD line crosses signal line on daily bars. Exit on reverse cross.",
+  earnings_drift_post: "PEAD proxy: gap >3% + 2× volume surge after earnings. Hold 5-15d.",
+  orb_stocks_in_play: "5-min ORB on top-20 stocks with first-5-min relative vol > 100%. (Sharpe 2.81, SSRN 4729284)",
+  intraday_momentum_noise_band: "Noise-boundary band; long upper break, short lower, trailing stop. (Sharpe 1.33-3.0)",
+  heston_half_hour_continuation: "Cross-sectional half-hour return continuation at day multiples.",
+  first_half_hour_predicts_last: "First 30-min SPY/QQQ direction → trade in last 30 min.",
+  pead_intraday_drift: "Post-earnings drift, intraday window + NLP sentiment overlay.",
+  gex_pin_reversion: "Fade extensions toward dealer pin on positive GEX days.",
+  fomc_drift: "Long SPY 24h before FOMC, exit at announcement. (Sharpe 0.6-1.07)",
+  vwap_reversion_chop: "VWAP mean reversion, gated to chop regime (ADX < 20).",
+  factor_blend: "Equal-weight: value + quality + momentum + low-vol. Top 20 S&P 500.",
+  dividend_growth: "5+ yr dividend growth + payout < 60%. Hold for income.",
+  quality_score: "High 1yr win rate + max DD > −15% + positive annual return.",
+  low_vol_anomaly: "Lowest 1yr realized vol decile. Risk-adj outperformance.",
+  momentum_12_1: "12-month return ex last month. Long top decile.",
+  small_cap_value: "Price < $20 proxy + 60d momentum not below −10%.",
+  shareholder_yield: "Annual return > 5% + monthly win rate ≥ 60%.",
+  monthly_rebalance: "Rebalance engine, first Tuesday monthly.",
+  crypto_rsi_mean_reversion: "BTC/ETH: long RSI < 25, exit RSI > 75. Wider stops than equity.",
+  crypto_momentum_breakout: "Top-20 alts: long break above 30d high with volume confirm.",
+  crypto_btc_dominance_regime: "BTC.D falling → rotate to alts. Rising → rotate to BTC.",
+  crypto_macd_swing: "MACD cross on 4h bars. Bear regime blocks buy signals.",
+  crypto_ema_cross: "9 EMA crosses 21 EMA on daily + BTC trend filter.",
+  crypto_relative_strength: "Rank top-30 alts by 14d RS vs BTC. Long top tier.",
+  crypto_intraday_momentum: "Noise-band momentum on BTC/ETH/SOL 1h-4h + vol filter. (Sharpe 1.12-1.42)",
+  crypto_weekend_momentum: "Hold Fri-close direction Sat-Sun, exit Monday.",
+  crypto_volatility_breakout: "Donchian breakout + ATR stops + BTC dominance gate.",
+  crypto_news_sentiment: "LunarCrush sentiment overlay on momentum signals.",
+  crypto_session_open: "Fade gaps at 00:00 / 12:00 UTC institutional opens.",
+  dca_btc_eth: "Weekly DCA Monday 10am UTC into BTC + ETH at target weights.",
+  monthly_rebalance_majors: "First Tuesday monthly snap to 60/30/10 BTC/ETH/basket.",
+  btc_dominance_rotation: "Rotate BTC↔alts based on BTC.D direction.",
+  dollar_cost_average_dip: "Extra DCA fires on > 10% drawdown from 30d rolling high.",
+  yield_overlay: "Park idle stables in highest-yield instrument.",
+};
+
+function strategyLabel(name: string): string {
+  return name
+    .replace(/^crypto_/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function StrategiesTab({
+  botName,
+  signals,
+}: {
+  botName: string;
+  signals: BotSignal[];
+}) {
   const qc = useQueryClient();
 
   const { data: weights = [], isLoading } = useQuery({
@@ -950,93 +1161,143 @@ function StrategiesTab({ botName }: { botName: string }) {
 
   if (isLoading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 animate-pulse space-y-3">
-        {[0, 1, 2].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded" />)}
+      <div className="space-y-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 animate-pulse h-28" />
+        ))}
       </div>
     );
   }
 
-  // If no data from API, show fallback rows from BOT_META
-  const displayWeights: StrategyWeight[] =
-    weights.length > 0
-      ? weights
-      : (BOT_META[botName]?.strategies ?? []).map((s, i) => ({
-          strategy: s,
-          weight_pct: Math.round(100 / (BOT_META[botName]?.strategies.length ?? 3)),
-          wins_30d: Math.floor(Math.random() * 15),
-          losses_30d: Math.floor(Math.random() * 7),
-          locked: false,
-        }));
+  const roster = BOT_META[botName]?.strategies ?? [];
+  const weightMap = new Map(weights.map((w: StrategyWeight) => [w.strategy, w]));
+
+  // Build display list: use API weight if available, else sensible defaults
+  const displayList = roster.map((name) => {
+    const w = weightMap.get(name);
+    return w ?? {
+      strategy: name,
+      weight_pct: Math.round(100 / Math.max(roster.length, 1)),
+      wins_30d: 0,
+      losses_30d: 0,
+      locked: false,
+    };
+  });
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-300">Strategy Weights</h2>
+        <p className="text-sm font-semibold text-zinc-300">
+          Strategy Roster
+          <span className="ml-2 text-xs font-normal text-zinc-600">
+            {displayList.length} strategies · ensemble: weighted_vote
+          </span>
+        </p>
         <button
           onClick={() => resetMut.mutate()}
-          disabled={resetMut.isPending}
+          disabled={resetMut.isPending || weights.length === 0}
           className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white transition-colors disabled:opacity-40"
         >
           {resetMut.isPending ? "Resetting…" : "Reset weights"}
         </button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-              <th className="text-left pb-2 font-medium">Strategy</th>
-              <th className="text-center pb-2 font-medium">Weight</th>
-              <th className="text-center pb-2 font-medium">30d Wins</th>
-              <th className="text-center pb-2 font-medium">30d Losses</th>
-              <th className="text-center pb-2 font-medium">Win Rate</th>
-              <th className="text-center pb-2 font-medium">Lock</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayWeights.map((w: StrategyWeight) => {
-              const winRate = w.wins_30d + w.losses_30d > 0
-                ? ((w.wins_30d / (w.wins_30d + w.losses_30d)) * 100).toFixed(0)
-                : "—";
-              return (
-                <tr key={w.strategy} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
-                  <td className="py-3 font-medium text-white capitalize">
-                    {w.strategy.replace(/_/g, " ")}
-                  </td>
-                  <td className="py-3 text-center">
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-400">
-                      {w.weight_pct}%
+
+      {displayList.map((w) => {
+        const total = w.wins_30d + w.losses_30d;
+        const winRate = total > 0 ? (w.wins_30d / total) * 100 : null;
+        const sharpeProxy = total > 0
+          ? Math.max(0, ((w.wins_30d / total) - 0.5) * Math.sqrt(total) * 1.2).toFixed(2)
+          : "—";
+        const lastSignal = signals.find((s) => s.strategy === w.strategy);
+        const description = STRATEGY_DESCRIPTIONS[w.strategy];
+
+        return (
+          <div
+            key={w.strategy}
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3"
+          >
+            {/* Header row */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-semibold text-white">
+                    {strategyLabel(w.strategy)}
+                  </h3>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-400">
+                    weight {w.weight_pct}%
+                  </span>
+                  {w.locked && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                      locked
                     </span>
-                  </td>
-                  <td className="py-3 text-center text-lime-400 font-semibold text-xs">
-                    {w.wins_30d}
-                  </td>
-                  <td className="py-3 text-center text-red-400 font-semibold text-xs">
-                    {w.losses_30d}
-                  </td>
-                  <td className="py-3 text-center text-zinc-300 text-xs">
-                    {winRate}{winRate !== "—" ? "%" : ""}
-                  </td>
-                  <td className="py-3 text-center">
-                    <button
-                      onClick={() => lockMut.mutate({ strategy: w.strategy, locked: !w.locked })}
-                      disabled={lockMut.isPending}
-                      className={cn(
-                        "p-1.5 rounded-lg border transition-colors",
-                        w.locked
-                          ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
-                          : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
-                      )}
-                      title={w.locked ? "Unlock weight" : "Lock weight"}
-                    >
-                      {w.locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                  )}
+                </div>
+                {description && (
+                  <p className="text-xs text-zinc-600 mt-1 leading-relaxed">{description}</p>
+                )}
+              </div>
+              <button
+                onClick={() => lockMut.mutate({ strategy: w.strategy, locked: !w.locked })}
+                disabled={lockMut.isPending}
+                title={w.locked ? "Unlock weight" : "Lock weight"}
+                className={cn(
+                  "p-1.5 rounded-lg border transition-colors flex-shrink-0",
+                  w.locked
+                    ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                    : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                {w.locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wide">30d W / L</p>
+                <p className="text-xs font-semibold mt-0.5">
+                  <span className="text-lime-400">{w.wins_30d}W</span>
+                  <span className="text-zinc-600 mx-1">/</span>
+                  <span className="text-red-400">{w.losses_30d}L</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Win Rate</p>
+                <p className={cn(
+                  "text-xs font-semibold mt-0.5",
+                  winRate !== null ? (winRate >= 50 ? "text-lime-400" : "text-red-400") : "text-zinc-500"
+                )}>
+                  {winRate !== null ? `${winRate.toFixed(0)}%` : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Sharpe Est</p>
+                <p className="text-xs font-semibold text-white mt-0.5">{sharpeProxy}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Last Signal</p>
+                {lastSignal ? (
+                  <p className="text-xs font-semibold mt-0.5">
+                    <span className={lastSignal.side === "buy" ? "text-lime-400" : "text-red-400"}>
+                      {lastSignal.side.toUpperCase()}
+                    </span>
+                    <span className="text-zinc-500 ml-1">{lastSignal.symbol}</span>
+                  </p>
+                ) : (
+                  <p className="text-xs text-zinc-600 mt-0.5">—</p>
+                )}
+              </div>
+            </div>
+
+            {/* Last signal reason */}
+            {lastSignal?.reason && (
+              <p className="text-[11px] text-zinc-500 bg-zinc-800/60 rounded-lg px-3 py-2 leading-relaxed">
+                "{lastSignal.reason}"
+              </p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1193,6 +1454,7 @@ export default function BotDetailPage() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [selectedSignal, setSelectedSignal] = useState<BotSignal | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<BotPosition | null>(null);
   const activitySearchRef = useRef<HTMLInputElement | null>(null);
 
   const meta = BOT_META[botName];
@@ -1525,17 +1787,21 @@ export default function BotDetailPage() {
                   </thead>
                   <tbody>
                     {positions.map((pos) => {
-                      // Find associated signal for "Why?" button
                       const signal = signals.find((s) => s.symbol === pos.symbol) ?? null;
                       return (
-                        <tr key={pos.id} className="border-b border-zinc-800/50 last:border-0">
+                        <tr
+                          key={pos.id}
+                          className="border-b border-zinc-800/50 last:border-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                          onClick={() => setSelectedPosition(pos)}
+                          title="Click for position detail"
+                        >
                           <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
                           <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
                           <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
                           <td className="py-2.5 text-right text-zinc-500">—</td>
                           <td className="py-2.5 text-right text-zinc-500">—</td>
                           <td className="py-2.5 text-right text-zinc-500 text-xs">{formatTime(pos.opened_at)}</td>
-                          <td className="py-2.5 text-right">
+                          <td className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                             {signal && (
                               <button
                                 onClick={() => setSelectedSignal(signal)}
@@ -1617,7 +1883,7 @@ export default function BotDetailPage() {
       )}
 
       {/* Strategies tab */}
-      {activeTab === "strategies" && <StrategiesTab botName={botName} />}
+      {activeTab === "strategies" && <StrategiesTab botName={botName} signals={signals} />}
 
       {/* Settings tab */}
       {activeTab === "settings" && (
@@ -1636,6 +1902,13 @@ export default function BotDetailPage() {
 
       {/* Why modal */}
       <WhyModal signal={selectedSignal} onClose={() => setSelectedSignal(null)} />
+      <PositionDetailModal
+        pos={selectedPosition}
+        signal={selectedPosition ? (signals.find((s) => s.symbol === selectedPosition.symbol) ?? null) : null}
+        stopLossPct={profile?.stop_loss_pct ?? null}
+        takeProfitPct={profile?.take_profit_pct ?? null}
+        onClose={() => setSelectedPosition(null)}
+      />
     </div>
   );
 }
