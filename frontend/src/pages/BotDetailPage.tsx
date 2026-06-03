@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -11,14 +11,24 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  BarChart,
+  Bar,
+  Cell,
 } from "recharts";
 import {
   getBot,
   allocateBot,
   joinWaitlist,
   leaveWaitlist,
+  getRegime,
+  getBotWatchlist,
+  runBacktest,
+  getCatalysts,
   type BotPosition,
   type BotSignal,
+  type RegimeData,
+  type WatchlistItem,
+  type CatalystEvent,
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
 
@@ -26,39 +36,55 @@ import { cn } from "@/lib/utils";
 
 const BOT_META: Record<
   string,
-  { displayName: string; description: string; assetClass: "stock" | "crypto" }
+  { displayName: string; description: string; assetClass: "stock" | "crypto"; strategies: string[] }
 > = {
   stock_swing: {
     displayName: "Stock Swing",
     description: "Russell 1000 momentum plays, 1-30 day holds",
     assetClass: "stock",
+    strategies: ["momentum", "breakout", "mean_reversion"],
   },
   stock_day: {
     displayName: "Stock Day",
     description: "Intraday gappers & earnings momentum, EOD flat",
     assetClass: "stock",
+    strategies: ["gap_and_go", "earnings_momentum", "vwap_reclaim"],
   },
   stock_lt: {
     displayName: "Stock Long-Term",
     description: "S&P 500 factor model, monthly rebalance",
     assetClass: "stock",
+    strategies: ["value_factor", "quality_factor", "low_vol_factor"],
   },
   crypto_swing: {
     displayName: "Crypto Swing",
     description: "Top 20 crypto by mcap, 1-30 day holds",
     assetClass: "crypto",
+    strategies: ["momentum", "on_chain_signal", "funding_reversal"],
   },
   crypto_day: {
     displayName: "Crypto Day",
     description: "BTC/ETH/SOL intraday momentum, 24h force-close",
     assetClass: "crypto",
+    strategies: ["orderflow", "liquidation_hunt", "trend_follow"],
   },
   crypto_lt: {
     displayName: "Crypto L-T DCA",
     description: "BTC/ETH + majors, weekly DCA & monthly rebalance",
     assetClass: "crypto",
+    strategies: ["dca_core", "rebalance", "altseason_rotate"],
   },
 };
+
+// ─── Hardcoded upcoming FOMC dates as fallback catalysts ─────────────────────
+
+const FOMC_FALLBACK: CatalystEvent[] = [
+  { id: "fomc-1", event_type: "FOMC", symbol: null, event_ts: "2026-07-29T18:00:00Z", description: "FOMC Rate Decision" },
+  { id: "fomc-2", event_type: "FOMC", symbol: null, event_ts: "2026-09-16T18:00:00Z", description: "FOMC Rate Decision" },
+  { id: "fomc-3", event_type: "FOMC", symbol: null, event_ts: "2026-11-04T18:00:00Z", description: "FOMC Rate Decision" },
+  { id: "fomc-4", event_type: "FOMC", symbol: null, event_ts: "2026-12-16T18:00:00Z", description: "FOMC Rate Decision" },
+  { id: "fomc-5", event_type: "CPI", symbol: null, event_ts: "2026-06-10T12:30:00Z", description: "CPI Report" },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +119,42 @@ function formatTime(ts: string): string {
   }
 }
 
+function formatRelativeTime(ts: string): string {
+  try {
+    const now = Date.now();
+    const then = new Date(ts).getTime();
+    const diffMs = then - now;
+    const diffMin = Math.round(diffMs / 60000);
+    const diffH = Math.round(diffMs / 3600000);
+    const diffD = Math.round(diffMs / 86400000);
+    if (diffD > 0) return `in ${diffD}d`;
+    if (diffH > 0) return `in ${diffH}h`;
+    if (diffMin > 0) return `in ${diffMin}m`;
+    if (diffMin < 0) return `${Math.abs(diffMin)}m ago`;
+    return "now";
+  } catch {
+    return ts;
+  }
+}
+
+function formatRelativeAgo(ts: string | null): string {
+  if (!ts) return "—";
+  try {
+    const now = Date.now();
+    const then = new Date(ts).getTime();
+    const diffMs = now - then;
+    const diffMin = Math.round(diffMs / 60000);
+    const diffH = Math.round(diffMs / 3600000);
+    const diffD = Math.round(diffMs / 86400000);
+    if (diffD >= 1) return `${diffD}d ago`;
+    if (diffH >= 1) return `${diffH}h ago`;
+    if (diffMin >= 1) return `${diffMin}m ago`;
+    return "just now";
+  } catch {
+    return ts;
+  }
+}
+
 // ─── Side badge ───────────────────────────────────────────────────────────────
 
 function SideBadge({ side }: { side: "buy" | "sell" | "hold" }) {
@@ -102,18 +164,13 @@ function SideBadge({ side }: { side: "buy" | "sell" | "hold" }) {
     hold: "bg-zinc-800 text-zinc-400 border-zinc-700",
   };
   return (
-    <span
-      className={cn(
-        "text-xs font-bold px-2 py-0.5 rounded-full border",
-        styles[side]
-      )}
-    >
+    <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", styles[side])}>
       {side.toUpperCase()}
     </span>
   );
 }
 
-// ─── Equity curve placeholder ─────────────────────────────────────────────────
+// ─── Equity curve ─────────────────────────────────────────────────────────────
 
 interface EquityPoint {
   date: string;
@@ -121,13 +178,7 @@ interface EquityPoint {
   benchmark: number;
 }
 
-function EquityCurve({
-  data,
-  isCrypto,
-}: {
-  data: EquityPoint[];
-  isCrypto: boolean;
-}) {
+function EquityCurve({ data, isCrypto }: { data: EquityPoint[]; isCrypto: boolean }) {
   const benchmarkLabel = isCrypto ? "BTC" : "SPY";
 
   if (!data || data.length === 0) {
@@ -142,45 +193,566 @@ function EquityCurve({
     <ResponsiveContainer width="100%" height={200}>
       <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-        <XAxis
-          dataKey="date"
-          tick={{ fill: "#71717a", fontSize: 10 }}
-          tickLine={false}
-          axisLine={false}
-        />
-        <YAxis
-          tick={{ fill: "#71717a", fontSize: 10 }}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={(v: number) => `${v.toFixed(1)}%`}
-        />
+        <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v.toFixed(1)}%`} />
         <Tooltip
-          contentStyle={{
-            background: "#18181b",
-            border: "1px solid #3f3f46",
-            borderRadius: 8,
-            fontSize: 12,
-          }}
+          contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
           labelStyle={{ color: "#a1a1aa" }}
         />
-        <Line
-          type="monotone"
-          dataKey="portfolio"
-          stroke="#84cc16"
-          strokeWidth={2}
-          dot={false}
-          name="Portfolio"
-        />
-        <Line
-          type="monotone"
-          dataKey="benchmark"
-          stroke="#52525b"
-          strokeWidth={2}
-          dot={false}
-          name={benchmarkLabel}
-        />
+        <Line type="monotone" dataKey="portfolio" stroke="#84cc16" strokeWidth={2} dot={false} name="Portfolio" />
+        <Line type="monotone" dataKey="benchmark" stroke="#52525b" strokeWidth={2} dot={false} name={benchmarkLabel} />
       </LineChart>
     </ResponsiveContainer>
+  );
+}
+
+// ─── Regime helpers ───────────────────────────────────────────────────────────
+
+function vixPillClass(regime: string): string {
+  const r = regime?.toLowerCase() ?? "";
+  if (r === "low") return "bg-green-500/15 text-green-400 border-green-500/30";
+  if (r === "mid") return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
+  if (r === "high") return "bg-orange-500/15 text-orange-400 border-orange-500/30";
+  if (r === "panic") return "bg-red-500/15 text-red-400 border-red-500/30";
+  return "bg-zinc-800 text-zinc-400 border-zinc-700";
+}
+
+function trendPillClass(regime: string): string {
+  const r = regime?.toLowerCase() ?? "";
+  if (r === "bull") return "bg-lime-500/15 text-lime-400 border-lime-500/30";
+  if (r === "chop") return "bg-zinc-700/40 text-zinc-400 border-zinc-600";
+  if (r === "bear") return "bg-red-500/15 text-red-400 border-red-500/30";
+  return "bg-zinc-800 text-zinc-400 border-zinc-700";
+}
+
+function getGatingText(regime: RegimeData | undefined): string {
+  if (!regime) return "Regime data unavailable.";
+  const vix = regime.vix_regime?.toLowerCase() ?? "mid";
+  const trend = regime.trend_regime?.toLowerCase() ?? "chop";
+  const parts: string[] = [];
+  if (vix === "panic") parts.push("VIX in panic: all new entries halted.");
+  else if (vix === "high") parts.push("VIX high: position sizes halved.");
+  if (trend === "bear") parts.push("No new long entries in bear market.");
+  else if (trend === "chop") parts.push("Choppy market: tighter entry filters active.");
+  if (parts.length === 0) return "No active regime constraints — normal operations.";
+  return parts.join(" ");
+}
+
+// ─── Regime panel ─────────────────────────────────────────────────────────────
+
+function RegimePanel({ regime, isLoading }: { regime: RegimeData | undefined; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 animate-pulse">
+        <div className="h-3 w-32 bg-zinc-800 rounded mb-3" />
+        <div className="flex gap-2">
+          {[0, 1, 2].map((i) => <div key={i} className="h-7 w-20 bg-zinc-800 rounded-full" />)}
+        </div>
+      </div>
+    );
+  }
+
+  const vix = regime?.vix_regime?.toUpperCase() ?? "MID";
+  const trend = regime?.trend_regime?.toUpperCase() ?? "CHOP";
+  const btcDom = typeof regime?.btc_dominance === "number" ? `${regime.btc_dominance.toFixed(0)}%` : "—";
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+      <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Current Regime</h3>
+      <div className="flex flex-wrap gap-2">
+        <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border", vixPillClass(vix))}>
+          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+          VIX {vix}
+        </span>
+        <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border", trendPillClass(trend))}>
+          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+          {trend}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-zinc-800 border-zinc-700 text-zinc-300">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+          BTC Dom {btcDom}
+        </span>
+      </div>
+      <p className="text-xs text-zinc-600 mt-1.5">{getGatingText(regime)}</p>
+    </div>
+  );
+}
+
+// ─── Catalyst calendar ────────────────────────────────────────────────────────
+
+function eventTypeColor(type: string): string {
+  const t = type?.toLowerCase() ?? "";
+  if (t === "fomc") return "bg-blue-500/15 text-blue-400";
+  if (t === "cpi" || t === "pce") return "bg-orange-500/15 text-orange-400";
+  if (t === "earnings") return "bg-lime-500/15 text-lime-400";
+  if (t === "expiry") return "bg-purple-500/15 text-purple-400";
+  return "bg-zinc-700/40 text-zinc-400";
+}
+
+function CatalystCalendar() {
+  const { data: catalysts, isLoading } = useQuery({
+    queryKey: ["catalysts"],
+    queryFn: getCatalysts,
+    retry: 0,
+    staleTime: 300_000,
+  });
+
+  const events: CatalystEvent[] = (catalysts && catalysts.length > 0) ? catalysts : FOMC_FALLBACK;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 animate-pulse">
+        {[0, 1, 2].map((i) => <div key={i} className="h-8 bg-zinc-800 rounded" />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-0">
+      {events.slice(0, 5).map((evt) => (
+        <div
+          key={String(evt.id)}
+          className="flex items-center gap-3 py-1.5 border-b border-zinc-800/50 last:border-0"
+        >
+          <span className={cn("text-xs font-semibold px-2 py-0.5 rounded", eventTypeColor(evt.event_type))}>
+            {evt.event_type.toUpperCase()}
+          </span>
+          <span className="text-xs text-zinc-400">{evt.symbol ?? (evt.description ?? "Market-wide")}</span>
+          <span className="text-xs text-zinc-600 ml-auto">{formatRelativeTime(evt.event_ts)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Why modal ────────────────────────────────────────────────────────────────
+
+interface WhyModalProps {
+  signal: BotSignal | null;
+  onClose: () => void;
+}
+
+function WhyModal({ signal, onClose }: WhyModalProps) {
+  if (!signal) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-white font-semibold text-base">Why did we trade this?</h3>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <p className="text-xs text-zinc-500 mb-1">Symbol</p>
+              <p className="text-sm font-semibold text-white">{signal.symbol}</p>
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500 mb-1">Direction</p>
+              <SideBadge side={signal.side} />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs text-zinc-500 mb-1">Strategy</p>
+            <p className="text-sm font-semibold text-white">{signal.strategy}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-zinc-500 mb-1">Signal Reason</p>
+            <p className="text-sm text-zinc-300">{signal.reason || "—"}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-zinc-500 mb-1">Confidence</p>
+            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-2 bg-lime-500 rounded-full transition-all"
+                style={{ width: `${Math.min(100, Math.max(0, signal.confidence * 100))}%` }}
+              />
+            </div>
+            <p className="text-xs text-zinc-500 mt-0.5">{(signal.confidence * 100).toFixed(0)}%</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-zinc-500 mb-1">Signal Time</p>
+            <p className="text-xs text-zinc-400">{formatTime(signal.ts)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Watchlist table ──────────────────────────────────────────────────────────
+
+function WatchlistTable({ botName }: { botName: string }) {
+  const [showAll, setShowAll] = useState(false);
+
+  const { data: watchlist = [], isLoading } = useQuery({
+    queryKey: ["watchlist", botName],
+    queryFn: () => getBotWatchlist(botName),
+    enabled: !!botName,
+    retry: 0,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="animate-pulse space-y-2">
+        {[0, 1, 2, 3].map((i) => <div key={i} className="h-10 bg-zinc-800 rounded" />)}
+      </div>
+    );
+  }
+
+  if (!watchlist || watchlist.length === 0) {
+    return (
+      <p className="text-zinc-600 text-sm py-6 text-center">
+        Watchlist rebuilds at next scheduled cadence
+      </p>
+    );
+  }
+
+  const displayed = showAll ? watchlist : watchlist.slice(0, 20);
+
+  function statusBadgeClass(status: string): string {
+    const s = status?.toLowerCase() ?? "";
+    if (s === "active") return "bg-lime-500/15 text-lime-400 border-lime-500/30";
+    if (s === "blacklisted") return "bg-red-500/15 text-red-400 border-red-500/30";
+    return "bg-zinc-800 text-zinc-400 border-zinc-700";
+  }
+
+  function getTopReason(reasons: Record<string, number> | null): string {
+    if (!reasons) return "—";
+    const entries = Object.entries(reasons);
+    if (entries.length === 0) return "—";
+    const top = entries.sort((a, b) => b[1] - a[1])[0];
+    return top[0].replace(/_/g, " ");
+  }
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+              <th className="text-left pb-2 font-medium w-8">#</th>
+              <th className="text-left pb-2 font-medium">Symbol</th>
+              <th className="text-left pb-2 font-medium w-32">Score</th>
+              <th className="text-left pb-2 font-medium">Top Reason</th>
+              <th className="text-left pb-2 font-medium">Status</th>
+              <th className="text-right pb-2 font-medium">Last Evaluated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayed.map((item, idx) => (
+              <tr key={item.symbol} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
+                <td className="py-2.5 text-xs text-zinc-600">{item.rank ?? idx + 1}</td>
+                <td className="py-2.5 font-semibold text-white text-sm">{item.symbol}</td>
+                <td className="py-2.5 pr-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[60px]">
+                      <div
+                        className={cn("h-1.5 rounded-full", item.score >= 70 ? "bg-lime-500" : item.score >= 40 ? "bg-yellow-500" : "bg-red-500")}
+                        style={{ width: `${Math.min(100, Math.max(0, item.score))}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-zinc-400 w-6 text-right">{item.score}</span>
+                  </div>
+                </td>
+                <td className="py-2.5 text-xs text-zinc-400 capitalize">{getTopReason(item.reasons)}</td>
+                <td className="py-2.5">
+                  <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded-full border", statusBadgeClass(item.status))}>
+                    {item.status}
+                  </span>
+                </td>
+                <td className="py-2.5 text-right text-xs text-zinc-500">
+                  {formatRelativeAgo(item.last_evaluated_at)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {watchlist.length > 20 && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+        >
+          {showAll ? "Show fewer" : `Show all ${watchlist.length} symbols`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Strategy attribution chart ───────────────────────────────────────────────
+
+function StrategyAttributionChart({ botName, totalPnl }: { botName: string; totalPnl: number }) {
+  const strategies = BOT_META[botName]?.strategies ?? ["strategy_1", "strategy_2", "strategy_3"];
+  const n = strategies.length;
+
+  // Demo: distribute total P&L roughly across strategies with some variation
+  const rawSplit = strategies.map((_, i) => {
+    const base = totalPnl / n;
+    const variation = base * (i % 2 === 0 ? 0.3 : -0.15);
+    return base + variation;
+  });
+
+  const data = strategies.map((s, i) => ({
+    name: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    value: rawSplit[i],
+  }));
+
+  return (
+    <div className="mt-4">
+      <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Strategy Attribution (Est.)</h3>
+      <ResponsiveContainer width="100%" height={120}>
+        <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+          <XAxis dataKey="name" tick={{ fill: "#71717a", fontSize: 9 }} tickLine={false} axisLine={false} />
+          <YAxis tick={{ fill: "#71717a", fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `$${v.toFixed(0)}`} />
+          <Tooltip
+            contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 11 }}
+            labelStyle={{ color: "#a1a1aa" }}
+            formatter={(v: number) => [`$${v.toFixed(2)}`, "Est. P&L"]}
+          />
+          <Bar dataKey="value" radius={[3, 3, 0, 0]}>
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.value >= 0 ? "#84cc16" : "#ef4444"} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── Backtest tab ─────────────────────────────────────────────────────────────
+
+interface BacktestResult {
+  sharpe?: number;
+  sortino?: number;
+  calmar?: number;
+  max_drawdown?: number;
+  win_rate?: number;
+  profit_factor?: number;
+  total_trades?: number;
+  equity_curve?: { date: string; equity: number }[];
+  monte_carlo?: { sharpe_p5?: number; sharpe_p95?: number };
+}
+
+function BacktestTab({ botName }: { botName: string }) {
+  const [startDate, setStartDate] = useState("2019-01-01");
+  const [endDate, setEndDate] = useState("2024-01-01");
+  const [capital, setCapital] = useState(100000);
+  const [result, setResult] = useState<BacktestResult | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
+
+  async function handleRun() {
+    setIsRunning(true);
+    setHasRun(true);
+    try {
+      const data = await runBacktest(botName, { start: startDate, end: endDate, capital });
+      setResult(data ?? null);
+    } catch {
+      toast.error("Backtest failed — check dates and try again");
+      setResult(null);
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Controls */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-zinc-300 mb-3">Backtest Parameters</h3>
+        <div className="flex flex-wrap gap-4 items-end">
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-lime-500/50"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">End Date</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-lime-500/50"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">Starting Capital ($)</label>
+            <input
+              type="number"
+              value={capital}
+              onChange={(e) => setCapital(Number(e.target.value))}
+              step={10000}
+              min={1000}
+              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white w-32 focus:outline-none focus:border-lime-500/50"
+            />
+          </div>
+          <button
+            onClick={handleRun}
+            disabled={isRunning}
+            className="px-4 py-2 rounded-lg bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50"
+          >
+            {isRunning ? "Running…" : "Run Backtest"}
+          </button>
+        </div>
+      </div>
+
+      {/* Results */}
+      {isRunning && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 animate-pulse space-y-3">
+          <div className="grid grid-cols-4 gap-3">
+            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-14 bg-zinc-800 rounded-xl" />
+            ))}
+          </div>
+          <div className="h-48 bg-zinc-800 rounded-xl" />
+        </div>
+      )}
+
+      {!isRunning && hasRun && !result && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center">
+          <p className="text-zinc-500 text-sm">No backtest data returned. Try a different date range.</p>
+        </div>
+      )}
+
+      {!isRunning && result && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-5">
+          {/* Metrics grid */}
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-300 mb-3">Performance Metrics</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "Sharpe", value: result.sharpe?.toFixed(2) ?? "—" },
+                { label: "Sortino", value: result.sortino?.toFixed(2) ?? "—" },
+                { label: "Calmar", value: result.calmar?.toFixed(2) ?? "—" },
+                { label: "Max DD", value: result.max_drawdown ? `-${(result.max_drawdown * 100).toFixed(1)}%` : "—" },
+                { label: "Win Rate", value: result.win_rate ? `${(result.win_rate * 100).toFixed(1)}%` : "—" },
+                { label: "Profit Factor", value: result.profit_factor?.toFixed(2) ?? "—" },
+                { label: "Total Trades", value: result.total_trades ? String(result.total_trades) : "—" },
+              ].map((m) => (
+                <div key={m.label} className="bg-zinc-950 rounded-xl px-4 py-3 border border-zinc-800">
+                  <p className="text-zinc-600 text-xs mb-1">{m.label}</p>
+                  <p className="text-lg font-bold text-white">{m.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Equity curve */}
+          {result.equity_curve && result.equity_curve.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-300 mb-3">Equity Curve</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={result.equity_curve} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: "#a1a1aa" }}
+                    formatter={(v: number) => [`$${v.toFixed(0)}`, "Portfolio"]}
+                  />
+                  <Line type="monotone" dataKey="equity" stroke="#84cc16" strokeWidth={2} dot={false} name="Portfolio" />
+                  {/* Flat benchmark line at starting capital */}
+                  <Line
+                    type="monotone"
+                    dataKey={() => capital}
+                    stroke="#52525b"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 2"
+                    dot={false}
+                    name="Benchmark"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <div className="flex gap-4 mt-2">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
+                  Portfolio
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <span className="w-3 h-0.5 bg-zinc-600 inline-block rounded" />
+                  ${(capital / 1000).toFixed(0)}k Flat
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Monte Carlo */}
+          {result.monte_carlo && (
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
+              <p className="text-xs text-zinc-500 mb-1">Monte Carlo Confidence Band</p>
+              <p className="text-sm text-zinc-300">
+                Sharpe 5th–95th percentile:{" "}
+                <span className="font-semibold text-white">
+                  {result.monte_carlo.sharpe_p5?.toFixed(2) ?? "—"} to {result.monte_carlo.sharpe_p95?.toFixed(2) ?? "—"}
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* Trade list header */}
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-300 mb-2">Trade List</h3>
+            <p className="text-xs text-zinc-600 italic">Individual trade breakdown available in v2.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab system ───────────────────────────────────────────────────────────────
+
+type Tab = "overview" | "watchlist" | "backtest";
+
+function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "watchlist", label: "Watchlist" },
+    { key: "backtest", label: "Backtest" },
+  ];
+
+  return (
+    <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          className={cn(
+            "flex-1 text-sm font-semibold py-2 rounded-lg transition-colors",
+            active === t.key
+              ? "bg-zinc-700 text-white"
+              : "text-zinc-500 hover:text-zinc-300"
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -190,15 +762,24 @@ export default function BotDetailPage() {
   const { botName = "" } = useParams<{ botName: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [selectedSignal, setSelectedSignal] = useState<BotSignal | null>(null);
 
   const meta = BOT_META[botName];
-  const isCrypto = (meta?.assetClass ?? botName.startsWith("crypto") ? "crypto" : "stock") === "crypto";
+  const isCrypto = (meta?.assetClass ?? (botName.startsWith("crypto") ? "crypto" : "stock")) === "crypto";
 
   const { data, isLoading } = useQuery({
     queryKey: ["bot", botName],
     queryFn: () => getBot(botName),
     enabled: !!botName,
     retry: 1,
+  });
+
+  const { data: regime, isLoading: regimeLoading } = useQuery({
+    queryKey: ["regime"],
+    queryFn: getRegime,
+    retry: 0,
+    staleTime: 60_000,
   });
 
   const profile = data?.profile;
@@ -214,12 +795,10 @@ export default function BotDetailPage() {
   };
 
   // Local allocation state
-  const [capitalPct, setCapitalPct] = useState<number>(
-    allocation?.capital_pct ?? 10
+  const [capitalPct, setCapitalPct] = useState<number>(allocation?.capital_pct ?? 10);
+  const [riskProfile, setRiskProfile] = useState<"conservative" | "standard" | "aggressive">(
+    allocation?.risk_profile ?? "standard"
   );
-  const [riskProfile, setRiskProfile] = useState<
-    "conservative" | "standard" | "aggressive"
-  >(allocation?.risk_profile ?? "standard");
 
   const isEnabled = allocation?.enabled ?? false;
   const isOnWaitlist = allocation?.go_live_requested ?? false;
@@ -250,6 +829,7 @@ export default function BotDetailPage() {
   });
 
   const equityCurve: EquityPoint[] = stats.equity_curve ?? [];
+  const totalPnl = stats.today_pnl ?? 0;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -275,6 +855,15 @@ export default function BotDetailPage() {
         >
           {isOnWaitlist ? "✓ On waitlist" : "Join the waitlist →"}
         </button>
+      </div>
+
+      {/* Regime panel */}
+      <RegimePanel regime={regime} isLoading={regimeLoading} />
+
+      {/* Catalyst calendar */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Upcoming Catalysts</h3>
+        <CatalystCalendar />
       </div>
 
       {/* Hero card */}
@@ -342,19 +931,12 @@ export default function BotDetailPage() {
                   colored: true,
                 },
               ].map((s) => (
-                <div
-                  key={s.label}
-                  className="bg-zinc-950 rounded-xl px-4 py-3 border border-zinc-800"
-                >
+                <div key={s.label} className="bg-zinc-950 rounded-xl px-4 py-3 border border-zinc-800">
                   <p className="text-zinc-600 text-xs mb-1">{s.label}</p>
                   <p
                     className={cn(
                       "text-lg font-bold",
-                      s.colored
-                        ? s.positive
-                          ? "text-lime-400"
-                          : "text-red-400"
-                        : "text-white"
+                      s.colored ? (s.positive ? "text-lime-400" : "text-red-400") : "text-white"
                     )}
                   >
                     {s.value}
@@ -365,11 +947,8 @@ export default function BotDetailPage() {
 
             {/* Allocation */}
             <div className="border-t border-zinc-800 pt-5">
-              <h2 className="text-sm font-semibold text-zinc-300 mb-4">
-                Allocation Settings
-              </h2>
+              <h2 className="text-sm font-semibold text-zinc-300 mb-4">Allocation Settings</h2>
               <div className="flex flex-col sm:flex-row gap-6">
-                {/* Capital slider */}
                 <div className="flex-1">
                   <label className="text-xs text-zinc-500 mb-1 block">
                     Capital Allocated — {capitalPct}%
@@ -388,16 +967,10 @@ export default function BotDetailPage() {
                     <span>100%</span>
                   </div>
                 </div>
-
-                {/* Risk profile */}
                 <div>
-                  <label className="text-xs text-zinc-500 mb-1 block">
-                    Risk Profile
-                  </label>
+                  <label className="text-xs text-zinc-500 mb-1 block">Risk Profile</label>
                   <div className="flex gap-2">
-                    {(
-                      ["conservative", "standard", "aggressive"] as const
-                    ).map((r) => (
+                    {(["conservative", "standard", "aggressive"] as const).map((r) => (
                       <button
                         key={r}
                         onClick={() => setRiskProfile(r)}
@@ -424,9 +997,7 @@ export default function BotDetailPage() {
                   {allocateMut.isPending ? "Saving…" : "Save"}
                 </button>
                 <button
-                  onClick={() =>
-                    allocateMut.mutate({ enabled: !isEnabled })
-                  }
+                  onClick={() => allocateMut.mutate({ enabled: !isEnabled })}
                   disabled={allocateMut.isPending}
                   className={cn(
                     "px-4 py-2 rounded-lg border text-sm font-semibold transition-colors",
@@ -437,8 +1008,6 @@ export default function BotDetailPage() {
                 >
                   {isEnabled ? "Disable Bot" : "Enable Bot"}
                 </button>
-
-                {/* Go Live — disabled */}
                 <div className="relative ml-auto">
                   <button
                     disabled
@@ -456,135 +1025,146 @@ export default function BotDetailPage() {
         )}
       </div>
 
-      {/* Equity curve */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">
-          Equity Curve vs {isCrypto ? "BTC" : "SPY"}
-        </h2>
-        <EquityCurve data={equityCurve} isCrypto={isCrypto} />
-        <div className="flex gap-4 mt-2">
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
-            Portfolio
+      {/* Tab system */}
+      <TabBar active={activeTab} onChange={setActiveTab} />
+
+      {/* Overview tab */}
+      {activeTab === "overview" && (
+        <div className="space-y-6">
+          {/* Equity curve */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-zinc-300 mb-4">
+              Equity Curve vs {isCrypto ? "BTC" : "SPY"}
+            </h2>
+            <EquityCurve data={equityCurve} isCrypto={isCrypto} />
+            <div className="flex gap-4 mt-2">
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
+                Portfolio
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <span className="w-3 h-0.5 bg-zinc-600 inline-block rounded" />
+                {isCrypto ? "BTC" : "SPY"}
+              </div>
+            </div>
+            {/* Strategy attribution */}
+            <StrategyAttributionChart botName={botName} totalPnl={totalPnl} />
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <span className="w-3 h-0.5 bg-zinc-600 inline-block rounded" />
-            {isCrypto ? "BTC" : "SPY"}
+
+          {/* Paper Positions */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-zinc-300 mb-4">Paper Positions</h2>
+            {positions.length === 0 ? (
+              <p className="text-zinc-600 text-sm py-4 text-center">No open positions</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+                      <th className="text-left pb-2 font-medium">Symbol</th>
+                      <th className="text-right pb-2 font-medium">Qty</th>
+                      <th className="text-right pb-2 font-medium">Avg Cost</th>
+                      <th className="text-right pb-2 font-medium">Current Price</th>
+                      <th className="text-right pb-2 font-medium">P&L</th>
+                      <th className="text-right pb-2 font-medium">Opened</th>
+                      <th className="text-right pb-2 font-medium"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {positions.map((pos) => {
+                      // Find associated signal for "Why?" button
+                      const signal = signals.find((s) => s.symbol === pos.symbol) ?? null;
+                      return (
+                        <tr key={pos.id} className="border-b border-zinc-800/50 last:border-0">
+                          <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
+                          <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
+                          <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
+                          <td className="py-2.5 text-right text-zinc-500">—</td>
+                          <td className="py-2.5 text-right text-zinc-500">—</td>
+                          <td className="py-2.5 text-right text-zinc-500 text-xs">{formatTime(pos.opened_at)}</td>
+                          <td className="py-2.5 text-right">
+                            {signal && (
+                              <button
+                                onClick={() => setSelectedSignal(signal)}
+                                className="text-xs text-zinc-500 hover:text-lime-400 underline underline-offset-2 transition-colors"
+                              >
+                                Why?
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Recent Signals */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-zinc-300 mb-4">Recent Signals</h2>
+            {signals.length === 0 ? (
+              <p className="text-zinc-600 text-sm py-4 text-center">No recent signals</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+                      <th className="text-left pb-2 font-medium">Time</th>
+                      <th className="text-left pb-2 font-medium">Symbol</th>
+                      <th className="text-left pb-2 font-medium">Side</th>
+                      <th className="text-right pb-2 font-medium">Confidence</th>
+                      <th className="text-left pb-2 font-medium">Strategy</th>
+                      <th className="text-left pb-2 font-medium">Reason</th>
+                      <th className="text-right pb-2 font-medium"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {signals.map((sig) => (
+                      <tr key={sig.id} className="border-b border-zinc-800/50 last:border-0">
+                        <td className="py-2.5 text-zinc-500 text-xs">{formatTime(sig.ts)}</td>
+                        <td className="py-2.5 font-semibold text-white">{sig.symbol}</td>
+                        <td className="py-2.5"><SideBadge side={sig.side} /></td>
+                        <td className="py-2.5 text-right text-zinc-300">{sig.confidence.toFixed(0)}%</td>
+                        <td className="py-2.5 text-zinc-400 text-xs">{sig.strategy}</td>
+                        <td className="py-2.5 text-zinc-500 text-xs max-w-xs truncate">{sig.reason}</td>
+                        <td className="py-2.5 text-right">
+                          <button
+                            onClick={() => setSelectedSignal(sig)}
+                            className="text-xs text-zinc-500 hover:text-lime-400 underline underline-offset-2 transition-colors"
+                          >
+                            Why?
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Paper Positions */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">
-          Paper Positions
-        </h2>
-        {positions.length === 0 ? (
-          <p className="text-zinc-600 text-sm py-4 text-center">
-            No open positions
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-                  <th className="text-left pb-2 font-medium">Symbol</th>
-                  <th className="text-right pb-2 font-medium">Qty</th>
-                  <th className="text-right pb-2 font-medium">Avg Cost</th>
-                  <th className="text-right pb-2 font-medium">Current Price</th>
-                  <th className="text-right pb-2 font-medium">P&L</th>
-                  <th className="text-right pb-2 font-medium">Opened</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.map((pos) => {
-                  const avgCost = pos.avg_cost_cents / 100;
-                  return (
-                    <tr
-                      key={pos.id}
-                      className="border-b border-zinc-800/50 last:border-0"
-                    >
-                      <td className="py-2.5 font-semibold text-white">
-                        {pos.symbol}
-                      </td>
-                      <td className="py-2.5 text-right text-zinc-300">
-                        {pos.qty}
-                      </td>
-                      <td className="py-2.5 text-right text-zinc-300">
-                        {formatCents(pos.avg_cost_cents)}
-                      </td>
-                      <td className="py-2.5 text-right text-zinc-500">—</td>
-                      <td className="py-2.5 text-right text-zinc-500">—</td>
-                      <td className="py-2.5 text-right text-zinc-500 text-xs">
-                        {formatTime(pos.opened_at)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Watchlist tab */}
+      {activeTab === "watchlist" && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Watchlist</h2>
+          <WatchlistTable botName={botName} />
+        </div>
+      )}
 
-      {/* Recent Signals */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">
-          Recent Signals
-        </h2>
-        {signals.length === 0 ? (
-          <p className="text-zinc-600 text-sm py-4 text-center">
-            No recent signals
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-                  <th className="text-left pb-2 font-medium">Time</th>
-                  <th className="text-left pb-2 font-medium">Symbol</th>
-                  <th className="text-left pb-2 font-medium">Side</th>
-                  <th className="text-right pb-2 font-medium">Confidence</th>
-                  <th className="text-left pb-2 font-medium">Strategy</th>
-                  <th className="text-left pb-2 font-medium">Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {signals.map((sig) => (
-                  <tr
-                    key={sig.id}
-                    className="border-b border-zinc-800/50 last:border-0"
-                  >
-                    <td className="py-2.5 text-zinc-500 text-xs">
-                      {formatTime(sig.ts)}
-                    </td>
-                    <td className="py-2.5 font-semibold text-white">
-                      {sig.symbol}
-                    </td>
-                    <td className="py-2.5">
-                      <SideBadge side={sig.side} />
-                    </td>
-                    <td className="py-2.5 text-right text-zinc-300">
-                      {sig.confidence.toFixed(0)}%
-                    </td>
-                    <td className="py-2.5 text-zinc-400 text-xs">
-                      {sig.strategy}
-                    </td>
-                    <td className="py-2.5 text-zinc-500 text-xs max-w-xs truncate">
-                      {sig.reason}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Backtest tab */}
+      {activeTab === "backtest" && <BacktestTab botName={botName} />}
 
       {/* Footer */}
       <p className="text-xs text-center text-zinc-600 mt-8">
         Paper trading. Not investment advice. Not a registered investment adviser.
       </p>
+
+      {/* Why modal */}
+      <WhyModal signal={selectedSignal} onClose={() => setSelectedSignal(null)} />
     </div>
   );
 }

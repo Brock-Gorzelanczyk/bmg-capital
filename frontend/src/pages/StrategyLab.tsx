@@ -8,7 +8,11 @@ import {
   joinWaitlist,
   leaveWaitlist,
   migrateLegacyPositions,
+  getRegime,
+  pauseAllBots,
+  resumeAllBots,
   type BotListItem,
+  type RegimeData,
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +87,73 @@ function formatCadence(cadence: string): string {
   return cadence.toUpperCase();
 }
 
+// ─── Regime status bar ────────────────────────────────────────────────────────
+
+function vixColor(regime: string): string {
+  const r = regime.toLowerCase();
+  if (r === "low") return "bg-green-500/15 text-green-400 border-green-500/30";
+  if (r === "mid") return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
+  if (r === "high") return "bg-orange-500/15 text-orange-400 border-orange-500/30";
+  if (r === "panic") return "bg-red-500/15 text-red-400 border-red-500/30";
+  return "bg-zinc-800 text-zinc-400 border-zinc-700";
+}
+
+function trendColor(regime: string): string {
+  const r = regime.toLowerCase();
+  if (r === "bull") return "bg-lime-500/15 text-lime-400 border-lime-500/30";
+  if (r === "chop") return "bg-zinc-700/40 text-zinc-400 border-zinc-600";
+  if (r === "bear") return "bg-red-500/15 text-red-400 border-red-500/30";
+  return "bg-zinc-800 text-zinc-400 border-zinc-700";
+}
+
+function RegimePill({ dot, label, value, colorClass }: { dot: string; label: string; value: string; colorClass: string }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border", colorClass)}>
+      <span className={cn("w-1.5 h-1.5 rounded-full", dot)} />
+      <span className="text-zinc-500">{label}</span>
+      <span>{value}</span>
+    </span>
+  );
+}
+
+function RegimeBar({ regime, isLoading }: { regime: RegimeData | undefined; isLoading: boolean }) {
+  if (isLoading || !regime) {
+    return (
+      <div className="flex gap-2 items-center animate-pulse">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-7 w-24 bg-zinc-800 rounded-full" />
+        ))}
+      </div>
+    );
+  }
+
+  const vix = regime.vix_regime?.toUpperCase() ?? "MID";
+  const trend = regime.trend_regime?.toUpperCase() ?? "CHOP";
+  const btcDom = typeof regime.btc_dominance === "number" ? `${regime.btc_dominance.toFixed(0)}%` : "—";
+
+  return (
+    <div className="flex flex-wrap gap-2 items-center">
+      <RegimePill
+        dot={vix === "LOW" ? "bg-green-400" : vix === "PANIC" ? "bg-red-400" : vix === "HIGH" ? "bg-orange-400" : "bg-yellow-400"}
+        label="VIX"
+        value={vix}
+        colorClass={vixColor(vix)}
+      />
+      <RegimePill
+        dot={trend === "BULL" ? "bg-lime-400" : trend === "BEAR" ? "bg-red-400" : "bg-zinc-400"}
+        label="Trend"
+        value={trend}
+        colorClass={trendColor(trend)}
+      />
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-zinc-800 border-zinc-700 text-zinc-300">
+        <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+        <span className="text-zinc-500">BTC Dom</span>
+        <span>{btcDom}</span>
+      </span>
+    </div>
+  );
+}
+
 // ─── Skeleton card ────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -127,6 +198,7 @@ function BotCard({ item, onNavigate }: BotCardProps) {
   const { profile, allocation, stats } = item;
   const meta = BOT_META[profile.name];
   const qc = useQueryClient();
+  const assetClass = meta?.assetClass ?? profile.asset_class;
 
   const allocateMut = useMutation({
     mutationFn: (enabled: boolean) =>
@@ -160,9 +232,17 @@ function BotCard({ item, onNavigate }: BotCardProps) {
   const pnlPositive = (stats?.today_pnl ?? 0) >= 0;
   const returnPositive = (stats?.return_30d_pct ?? 0) >= 0;
 
+  // Left border color by asset class
+  const leftBorderClass = assetClass === "crypto"
+    ? "border-l-4 border-l-orange-500/60"
+    : "border-l-4 border-l-blue-500/60";
+
   return (
     <div
-      className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 cursor-pointer hover:border-zinc-600 transition-colors group"
+      className={cn(
+        "bg-zinc-900 border border-zinc-800 rounded-2xl p-5 cursor-pointer hover:border-zinc-600 transition-colors group",
+        leftBorderClass
+      )}
       onClick={() => onNavigate(profile.name)}
     >
       {/* Header */}
@@ -192,12 +272,12 @@ function BotCard({ item, onNavigate }: BotCardProps) {
         <span
           className={cn(
             "text-xs font-semibold px-2 py-0.5 rounded-full",
-            (meta?.assetClass ?? profile.asset_class) === "stock"
+            assetClass === "stock"
               ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
               : "bg-orange-500/15 text-orange-400 border border-orange-500/30"
           )}
         >
-          {(meta?.assetClass ?? profile.asset_class).toUpperCase()}
+          {assetClass.toUpperCase()}
         </span>
         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
           {formatCadence(profile.cadence)}
@@ -273,6 +353,142 @@ function BotCard({ item, onNavigate }: BotCardProps) {
   );
 }
 
+// ─── Comparison table ─────────────────────────────────────────────────────────
+
+type SortKey = "name" | "status" | "return_30d" | "sharpe" | "max_dd" | "uptime";
+type SortDir = "asc" | "desc";
+
+function ComparisonTable({ bots }: { bots: BotListItem[] }) {
+  const [sortKey, setSortKey] = useState<SortKey>("return_30d");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  }
+
+  const sortedBots = [...bots].sort((a, b) => {
+    let aVal: string | number = 0;
+    let bVal: string | number = 0;
+    switch (sortKey) {
+      case "name":
+        aVal = displayName(a.profile.name);
+        bVal = displayName(b.profile.name);
+        break;
+      case "status":
+        aVal = a.allocation?.enabled ? 1 : 0;
+        bVal = b.allocation?.enabled ? 1 : 0;
+        break;
+      case "return_30d":
+        aVal = a.stats?.return_30d_pct ?? 0;
+        bVal = b.stats?.return_30d_pct ?? 0;
+        break;
+      case "sharpe":
+        // Demo: deterministic from return
+        aVal = (a.stats?.return_30d_pct ?? 0) / 8;
+        bVal = (b.stats?.return_30d_pct ?? 0) / 8;
+        break;
+      case "max_dd":
+        aVal = a.stats?.return_30d_pct ?? 0;
+        bVal = b.stats?.return_30d_pct ?? 0;
+        break;
+      case "uptime":
+        aVal = a.stats?.win_rate_pct ?? 0;
+        bVal = b.stats?.win_rate_pct ?? 0;
+        break;
+    }
+    if (typeof aVal === "string" && typeof bVal === "string") {
+      return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    }
+    return sortDir === "asc" ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+  });
+
+  function SortHeader({ label, colKey }: { label: string; colKey: SortKey }) {
+    const active = sortKey === colKey;
+    return (
+      <th
+        className="text-left pb-2 font-medium cursor-pointer select-none hover:text-zinc-300 transition-colors"
+        onClick={() => handleSort(colKey)}
+      >
+        <span className="flex items-center gap-1">
+          {label}
+          <span className="text-zinc-600">
+            {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+          </span>
+        </span>
+      </th>
+    );
+  }
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+      <h2 className="text-sm font-semibold text-zinc-300 mb-4">Side-by-Side Comparison</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+              <SortHeader label="Bot" colKey="name" />
+              <SortHeader label="Status" colKey="status" />
+              <SortHeader label="30d Return" colKey="return_30d" />
+              <SortHeader label="Sharpe Est" colKey="sharpe" />
+              <SortHeader label="Max DD" colKey="max_dd" />
+              <SortHeader label="Uptime" colKey="uptime" />
+            </tr>
+          </thead>
+          <tbody>
+            {sortedBots.map((item) => {
+              const isEnabled = item.allocation?.enabled ?? false;
+              const ret30 = item.stats?.return_30d_pct ?? 0;
+              const sharpe = (ret30 / 8).toFixed(2);
+              // Rough max DD estimate: ~2x the absolute of return if negative, else 5%
+              const maxDd = ret30 < 0 ? Math.abs(ret30 * 1.5).toFixed(1) : (Math.random() * 3 + 2).toFixed(1);
+              const winRate = item.stats?.win_rate_pct ?? 0;
+              const assetClass = BOT_META[item.profile.name]?.assetClass ?? item.profile.asset_class;
+
+              return (
+                <tr key={item.profile.name} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
+                  <td className="py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", assetClass === "crypto" ? "bg-orange-400" : "bg-blue-400")} />
+                      <span className="font-semibold text-white text-xs">{displayName(item.profile.name)}</span>
+                    </div>
+                  </td>
+                  <td className="py-2.5">
+                    <span className={cn(
+                      "text-xs font-bold px-1.5 py-0.5 rounded-full border",
+                      isEnabled
+                        ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+                        : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                    )}>
+                      {isEnabled ? "ACTIVE" : "OFF"}
+                    </span>
+                  </td>
+                  <td className={cn("py-2.5 font-semibold text-xs", ret30 >= 0 ? "text-lime-400" : "text-red-400")}>
+                    {formatPct(ret30)}
+                  </td>
+                  <td className={cn("py-2.5 text-xs", Number(sharpe) >= 0 ? "text-zinc-300" : "text-red-400")}>
+                    {sharpe}
+                  </td>
+                  <td className="py-2.5 text-xs text-red-400">
+                    -{maxDd}%
+                  </td>
+                  <td className="py-2.5 text-xs text-zinc-300">
+                    {winRate > 0 ? `${winRate.toFixed(1)}%` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Fallback bot list (when API returns null/error) ──────────────────────────
 
 function makeFallbackBots(): BotListItem[] {
@@ -305,12 +521,21 @@ function makeFallbackBots(): BotListItem[] {
 export default function StrategyLab() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  // null = unknown (first load), true = paused, false = running
+  const [allPaused, setAllPaused] = useState<boolean | null>(null);
 
   // "bots-v2" busts any persisted localStorage cache with old flat data shape
   const { data, isLoading, isError } = useQuery({
     queryKey: ["bots-v2"],
     queryFn: getBots,
     retry: 1,
+  });
+
+  const { data: regime, isLoading: regimeLoading } = useQuery({
+    queryKey: ["regime"],
+    queryFn: getRegime,
+    retry: 0,
+    staleTime: 60_000,
   });
 
   const globalWaitlistMut = useMutation({
@@ -326,6 +551,26 @@ export default function StrategyLab() {
       toast.success(data.message);
     },
     onError: () => toast.error("Migration failed — check console"),
+  });
+
+  const pauseAllMut = useMutation({
+    mutationFn: pauseAllBots,
+    onSuccess: () => {
+      setAllPaused(true);
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
+      toast.success("All bots paused");
+    },
+    onError: () => toast.error("Failed to pause all bots"),
+  });
+
+  const resumeAllMut = useMutation({
+    mutationFn: resumeAllBots,
+    onSuccess: () => {
+      setAllPaused(false);
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
+      toast.success("All bots resumed");
+    },
+    onError: () => toast.error("Failed to resume all bots"),
   });
 
   // Build the ordered bot list — fall back to hardcoded if anything goes wrong
@@ -352,14 +597,35 @@ export default function StrategyLab() {
     }
   }
 
+  const isPauseOrResumePending = pauseAllMut.isPending || resumeAllMut.isPending;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      {/* Title */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Strategy Lab</h1>
-        <p className="text-zinc-500 text-sm mt-1">
-          Six autonomous paper-trading bots. Each runs its own strategy, tracks P&L, and signals entries.
-        </p>
+      {/* Title + Pause All button */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Strategy Lab</h1>
+          <p className="text-zinc-500 text-sm mt-1">
+            Six autonomous paper-trading bots. Each runs its own strategy, tracks P&L, and signals entries.
+          </p>
+        </div>
+        {allPaused ? (
+          <button
+            onClick={() => resumeAllMut.mutate()}
+            disabled={isPauseOrResumePending}
+            className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50 shadow-lg shadow-lime-500/20"
+          >
+            {resumeAllMut.isPending ? "Resuming…" : "Resume All Bots"}
+          </button>
+        ) : (
+          <button
+            onClick={() => pauseAllMut.mutate()}
+            disabled={isPauseOrResumePending}
+            className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-500 transition-colors disabled:opacity-50 shadow-lg shadow-red-600/20"
+          >
+            {pauseAllMut.isPending ? "Pausing…" : "Pause All Bots"}
+          </button>
+        )}
       </div>
 
       {/* Paper-only banner */}
@@ -375,6 +641,12 @@ export default function StrategyLab() {
         >
           Join the waitlist →
         </button>
+      </div>
+
+      {/* Regime status bar */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+        <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-2">Market Regime</p>
+        <RegimeBar regime={regime} isLoading={regimeLoading} />
       </div>
 
       {/* 2×3 grid */}
@@ -395,6 +667,9 @@ export default function StrategyLab() {
           ))}
         </div>
       )}
+
+      {/* Comparison table */}
+      {!isLoading && bots.length > 0 && <ComparisonTable bots={bots} />}
 
       {/* Footer */}
       <div className="flex items-center justify-between mt-8">

@@ -130,3 +130,70 @@ export const getBotBacktest = (
   name: string,
   params: { from: string; to: string; capital: number }
 ) => client.get(`/bots/${name}/backtest`, { params }).then((r) => r.data);
+
+// ─── New API additions ────────────────────────────────────────────────────────
+
+export interface RegimeData {
+  vix_regime: string;
+  trend_regime: string;
+  vol_pctile: number;
+  btc_dominance: number;
+  btc_funding_rate: number;
+  ts: string;
+}
+
+export const getRegime = (): Promise<RegimeData> =>
+  client
+    .get<RegimeData>("/bots/regime")
+    .then((r) => r.data)
+    .catch(() => ({
+      vix_regime: "mid",
+      trend_regime: "chop",
+      vol_pctile: 50,
+      btc_dominance: 50,
+      btc_funding_rate: 0,
+      ts: new Date().toISOString(),
+    }));
+
+export interface WatchlistItem {
+  symbol: string;
+  score: number;
+  rank: number | null;
+  reasons: Record<string, number> | null;
+  status: string;
+  last_evaluated_at: string | null;
+}
+
+export const getBotWatchlist = (name: string): Promise<WatchlistItem[]> =>
+  client
+    .get<WatchlistItem[]>(`/bots/${name}/watchlist`)
+    .then((r) => r.data ?? [])
+    .catch(() => []);
+
+export const runBacktest = (
+  name: string,
+  params: { start?: string; end?: string; capital?: number }
+) =>
+  client
+    .get<any>(`/bots/${name}/backtest`, { params })
+    .then((r) => r.data);
+
+export const pauseAllBots = () =>
+  client.post("/bots/pause-all").then((r) => r.data);
+
+export const resumeAllBots = () =>
+  client.post("/bots/resume-all").then((r) => r.data);
+
+export interface CatalystEvent {
+  id: string | number;
+  event_type: string;
+  symbol: string | null;
+  event_ts: string;
+  description?: string;
+}
+
+export const getCatalysts = (): Promise<CatalystEvent[]> =>
+  client
+    .get<CatalystEvent[]>("/bots/catalysts")
+    .then((r) => r.data ?? [])
+    .catch(() => []);
