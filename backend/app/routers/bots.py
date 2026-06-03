@@ -594,6 +594,358 @@ def ask_bot_question(
     return {"answer": answer, "citations": [], "confidence": 0.4}
 
 
+# ── Simple 60-second in-memory cache ─────────────────────────────────────────
+
+_cards_cache: dict = {}  # key: user_id, value: {data, ts}
+_CARDS_CACHE_TTL = 60  # seconds
+
+
+# ── GET /api/bots/cards ───────────────────────────────────────────────────────
+
+@router.get("/cards")
+def get_bot_cards(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Returns rich card payload for all 6 bot profiles.
+    Cached 60s per user.
+    """
+    import time
+    import math
+    from datetime import date, timedelta
+
+    user_id = current_user.id
+    now = time.time()
+
+    # Check cache
+    cached = _cards_cache.get(user_id)
+    if cached and (now - cached["ts"]) < _CARDS_CACHE_TTL:
+        return cached["data"]
+
+    profiles = db.query(BotProfile).order_by(BotProfile.id).all()
+    result = []
+
+    for profile in profiles:
+        # Get user's allocation for this bot
+        allocation = db.query(BotAllocation).filter(
+            BotAllocation.profile_id == profile.id,
+            BotAllocation.user_id == current_user.id
+        ).first()
+
+        # Status
+        if allocation is None:
+            status = "inactive"
+        elif not allocation.enabled:
+            status = "paused"
+        elif allocation.paused_reason and "health" in (allocation.paused_reason or ""):
+            status = "halted"
+        else:
+            status = "active"
+
+        # Get last 30 days of BotDailyPnL
+        today = date.today()
+        thirty_days_ago = today - timedelta(days=30)
+        seven_days_ago = today - timedelta(days=7)
+
+        daily_pnl_rows = []
+        if allocation:
+            daily_pnl_rows = db.query(BotDailyPnL).filter(
+                BotDailyPnL.allocation_id == allocation.id,
+                BotDailyPnL.date >= thirty_days_ago
+            ).order_by(BotDailyPnL.date).all()
+
+        # today_pnl
+        today_row = next((r for r in daily_pnl_rows if r.date == today), None)
+        today_pnl_cents = (
+            (today_row.realized_cents or 0) + (today_row.unrealized_cents or 0)
+        ) if today_row else 0
+
+        # capital base (use starting_capital_cents if set, else estimate from capital_pct)
+        # $100k paper balance default
+        PAPER_BALANCE = 100_000_00  # cents = $100,000
+        capital_pct = allocation.capital_pct if allocation else 0
+        capital_cents = int(PAPER_BALANCE * (capital_pct / 100)) if allocation else 0
+        starting_capital = getattr(allocation, 'starting_capital_cents', None) or capital_cents
+
+        # portfolio_value = capital + cumulative realized + today unrealized
+        cumulative_realized = sum(
+            (r.realized_cents or 0) for r in daily_pnl_rows
+        )
+        today_unrealized = (today_row.unrealized_cents or 0) if today_row else 0
+        portfolio_value_cents = capital_cents + cumulative_realized + today_unrealized
+
+        # today_pnl_pct
+        yesterday_value = portfolio_value_cents - today_pnl_cents
+        today_pnl_pct = (today_pnl_cents / yesterday_value) if yesterday_value else 0
+
+        # 7d avg P&L
+        rows_7d = [r for r in daily_pnl_rows if r.date >= seven_days_ago]
+        if rows_7d:
+            daily_pnl_avg_7d_cents = int(
+                sum((r.realized_cents or 0) + (r.unrealized_cents or 0) for r in rows_7d) / len(rows_7d)
+            )
+        else:
+            daily_pnl_avg_7d_cents = None  # show "—"
+
+        # 30d avg P&L
+        if len(daily_pnl_rows) >= 5:  # require at least 5 data points
+            daily_pnl_avg_30d_cents = int(
+                sum((r.realized_cents or 0) + (r.unrealized_cents or 0) for r in daily_pnl_rows) / len(daily_pnl_rows)
+            )
+        else:
+            daily_pnl_avg_30d_cents = None
+
+        # return_30d: use BotDailyPnL equity curve if available
+        oldest_row = daily_pnl_rows[0] if daily_pnl_rows else None
+        if oldest_row and getattr(oldest_row, 'portfolio_value_eod_cents', None):
+            value_30d_ago = oldest_row.portfolio_value_eod_cents
+            return_30d_pct = (portfolio_value_cents - value_30d_ago) / value_30d_ago if value_30d_ago else 0
+        else:
+            # fallback: use cumulative realized over 30d
+            return_30d_pct = (cumulative_realized / capital_cents) if capital_cents else 0
+
+        # all-time return
+        return_all_time_pct = (
+            (portfolio_value_cents - starting_capital) / starting_capital
+        ) if starting_capital else 0
+
+        # Sharpe 30d
+        daily_returns = []
+        if len(daily_pnl_rows) >= 2:
+            for r in daily_pnl_rows:
+                day_total = (r.realized_cents or 0) + (r.unrealized_cents or 0)
+                if capital_cents:
+                    daily_returns.append(day_total / capital_cents)
+
+        sharpe_30d = None
+        if len(daily_returns) >= 5:
+            mean_r = sum(daily_returns) / len(daily_returns)
+            variance = sum((r - mean_r) ** 2 for r in daily_returns) / len(daily_returns)
+            std_r = math.sqrt(variance) if variance > 0 else 0
+            if std_r > 0:
+                sharpe_30d = round((mean_r / std_r) * math.sqrt(252), 2)
+
+        # win_rate_30d from BotTrade
+        trades_30d = []
+        if allocation:
+            trades_30d = db.query(BotTrade).filter(
+                BotTrade.allocation_id == allocation.id,
+                BotTrade.ts >= thirty_days_ago
+            ).all()
+
+        # A "win" = sell trade where fill_price > avg_cost of that position
+        # Simplified: any trade tagged "sell" with positive realized PnL
+        # For paper: count BotPosition rows closed in last 30 days
+        closed_positions_30d = []
+        if allocation:
+            closed_positions_30d = db.query(BotPosition).filter(
+                BotPosition.allocation_id == allocation.id,
+                BotPosition.closed_at >= thirty_days_ago,
+                BotPosition.closed_at.isnot(None)
+            ).all()
+
+        wins = 0
+        losses = 0
+        for pos in closed_positions_30d:
+            # winning if position had positive PnL
+            # approximate: we don't store PnL on BotPosition directly,
+            # use exit_reason as proxy (stop_loss = loss, target = win)
+            exit_r = pos.exit_reason or ""
+            if "target" in exit_r or "profit" in exit_r:
+                wins += 1
+            elif "stop" in exit_r or "loss" in exit_r:
+                losses += 1
+            else:
+                # time stop or manual — count as loss if we don't know
+                losses += 1
+        total_closed = wins + losses
+        win_rate_pct = (wins / total_closed) if total_closed > 0 else None
+
+        # open positions count
+        open_positions_count = 0
+        if allocation:
+            open_positions_count = db.query(BotPosition).filter(
+                BotPosition.allocation_id == allocation.id,
+                BotPosition.closed_at.is_(None)
+            ).count()
+
+        # equity curve: 30 data points (one per session in last 30 days)
+        equity_curve = []
+        for r in daily_pnl_rows:
+            eod_val = getattr(r, 'portfolio_value_eod_cents', None)
+            if eod_val:
+                equity_curve.append({"date": r.date.isoformat(), "value_cents": eod_val})
+            else:
+                # approximate from cumulative realized at that point
+                equity_curve.append({"date": r.date.isoformat(), "value_cents": capital_cents})
+
+        # top 3 watchlist
+        watchlist_top3 = []
+        if allocation:
+            wl_rows = db.query(BotWatchlist).filter(
+                BotWatchlist.profile_id == profile.id,
+                BotWatchlist.status.in_(["watching", "pending_entry", "active"])
+            ).order_by(BotWatchlist.score.desc()).limit(3).all()
+
+            for wl in wl_rows:
+                # top_reason: pull the highest-weight reason from reasons jsonb
+                top_reason = ""
+                if wl.reasons:
+                    top_key = max(wl.reasons, key=lambda k: wl.reasons[k])
+                    top_reason = f"{top_key.replace('_', ' ').title()}: {wl.reasons[top_key]:.2f}"[:32]
+                watchlist_top3.append({
+                    "rank": wl.rank or 0,
+                    "symbol": wl.symbol,
+                    "score": round(wl.score, 2),
+                    "top_reason": top_reason or "—"
+                })
+
+        # helpers for display strings
+        def fmt_cents(cents):
+            if cents is None:
+                return "—"
+            sign = "+" if cents >= 0 else "-"
+            return f"{sign}${abs(cents)/100:,.2f}"
+
+        def fmt_pct(pct):
+            if pct is None:
+                return "—"
+            sign = "+" if pct >= 0 else ""
+            return f"{sign}{pct*100:.2f}%"
+
+        def tone(val):
+            if val is None:
+                return "neutral"
+            return "positive" if val >= 0 else "negative"
+
+        card = {
+            "profile": profile.name,
+            "status": status,
+            "description": profile.description or "",
+            "asset_class": profile.asset_class,
+            "cadence_display": (profile.config_json or {}).get("cadence", ""),
+            "paused_reason": allocation.paused_reason if allocation else None,
+            "metrics": {
+                "portfolio_value": {
+                    "value_cents": portfolio_value_cents,
+                    "display": f"${portfolio_value_cents/100:,.2f}"
+                },
+                "today_pnl": {
+                    "value_cents": today_pnl_cents,
+                    "pct": today_pnl_pct,
+                    "display": f"{fmt_cents(today_pnl_cents)} ({fmt_pct(today_pnl_pct)})",
+                    "tone": tone(today_pnl_cents)
+                },
+                "daily_pnl_avg_7d": {
+                    "value_cents": daily_pnl_avg_7d_cents,
+                    "display": fmt_cents(daily_pnl_avg_7d_cents)
+                },
+                "daily_pnl_avg_30d": {
+                    "value_cents": daily_pnl_avg_30d_cents,
+                    "display": fmt_cents(daily_pnl_avg_30d_cents)
+                },
+                "return_30d": {
+                    "pct": return_30d_pct,
+                    "display": fmt_pct(return_30d_pct),
+                    "tone": tone(return_30d_pct)
+                },
+                "return_all_time": {
+                    "pct": return_all_time_pct,
+                    "display": fmt_pct(return_all_time_pct),
+                    "tone": tone(return_all_time_pct)
+                },
+                "sharpe_30d": {
+                    "value": sharpe_30d,
+                    "display": str(sharpe_30d) if sharpe_30d is not None else "—"
+                },
+                "win_rate_30d": {
+                    "pct": win_rate_pct,
+                    "wins": wins,
+                    "losses": losses,
+                    "display": f"{win_rate_pct*100:.0f}% ({wins}W / {losses}L)" if win_rate_pct is not None else "—"
+                },
+                "open_positions": {
+                    "count": open_positions_count
+                },
+                "capital_allocated": {
+                    "pct": capital_pct,
+                    "display": f"{capital_pct}%"
+                }
+            },
+            "equity_curve_30d": equity_curve,
+            "watchlist_top_3": watchlist_top3,
+            "user_card_config": allocation.card_config if allocation and allocation.card_config else {
+                "visible_metrics": [
+                    "portfolio_value", "today_pnl", "daily_pnl_avg_7d",
+                    "return_30d", "return_all_time", "sharpe_30d",
+                    "open_positions", "win_rate_30d", "capital_allocated"
+                ],
+                "show_equity_curve": True,
+                "show_watchlist": True,
+                "pnl_avg_window": "7d",
+                "density": "standard"
+            }
+        }
+        result.append(card)
+
+    _cards_cache[user_id] = {"data": result, "ts": now}
+    return result
+
+
+# ── PATCH /api/bots/{profile_name}/card-config ────────────────────────────────
+
+@router.patch("/{profile_name}/card-config")
+def update_card_config(
+    profile_name: str,
+    data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Save per-card customization to BotAllocation.card_config"""
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        raise HTTPException(404)
+    allocation = db.query(BotAllocation).filter(
+        BotAllocation.profile_id == profile.id,
+        BotAllocation.user_id == current_user.id
+    ).first()
+    if not allocation:
+        raise HTTPException(404, "No allocation found")
+
+    # Merge with existing config
+    existing = allocation.card_config or {}
+    existing.update(data)
+    allocation.card_config = existing
+    db.commit()
+
+    # Invalidate cache
+    _cards_cache.pop(current_user.id, None)
+
+    return {"status": "saved", "card_config": existing}
+
+
+# ── PATCH /api/bots/cards/bulk-config ────────────────────────────────────────
+
+@router.patch("/cards/bulk-config")
+def bulk_update_card_config(
+    data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Apply same card config to all user's allocations"""
+    allocations = db.query(BotAllocation).filter(
+        BotAllocation.user_id == current_user.id
+    ).all()
+    for alloc in allocations:
+        existing = alloc.card_config or {}
+        existing.update(data)
+        alloc.card_config = existing
+    db.commit()
+    _cards_cache.pop(current_user.id, None)
+    return {"status": "saved", "updated": len(allocations)}
+
+
 # ── GET /api/bots/{profile_name} ─────────────────────────────────────────────
 
 @router.get("/{profile_name}")

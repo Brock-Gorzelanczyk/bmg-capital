@@ -176,7 +176,9 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "dca_basket_assets": [],
     "bot_profiles": [],
     "bot_allocations": [
-        ("paused_reason", "VARCHAR"),
+        ("paused_reason",            "VARCHAR"),
+        ("starting_capital_cents",   "INT"),
+        ("card_config",              "JSONB"),
     ],
     "bot_signals": [],
     "bot_positions": [],
@@ -185,7 +187,8 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("slippage_bps",        "FLOAT"),
     ],
     "bot_daily_pnl": [
-        ("peak_drawdown_pct", "FLOAT"),
+        ("peak_drawdown_pct",           "FLOAT"),
+        ("portfolio_value_eod_cents",   "INT"),
     ],
     "go_live_waitlist": [],
     "bot_watchlist": [],

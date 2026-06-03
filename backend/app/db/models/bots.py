@@ -35,6 +35,12 @@ class BotAllocation(Base):
     go_live_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     paused_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    starting_capital_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # snapshot of paper balance at activation, used for all-time return calc
+    card_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # per-user per-bot display preferences:
+    # {visible_metrics: [...], show_equity_curve: bool, show_watchlist: bool,
+    #  pnl_avg_window: '7d'|'30d'|'all_time', density: 'compact'|'standard'|'expanded'}
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -100,6 +106,8 @@ class BotDailyPnL(Base):
     unrealized_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     fees_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     peak_drawdown_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    portfolio_value_eod_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # end-of-day portfolio value snapshot for sparkline
 
 
 class GoLiveWaitlist(Base):
