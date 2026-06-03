@@ -1657,81 +1657,26 @@ export default function BotDetailPage() {
               ))}
             </div>
 
-            {/* Allocation */}
-            <div className="border-t border-zinc-800 pt-5">
-              <h2 className="text-sm font-semibold text-zinc-300 mb-4">Allocation Settings</h2>
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="flex-1">
-                  <label className="text-xs text-zinc-500 mb-1 block">
-                    Capital Allocated — {capitalPct}%
-                  </label>
-                  <input
-                    type="range"
-                    min={10}
-                    max={100}
-                    step={10}
-                    value={capitalPct}
-                    onChange={(e) => setCapitalPct(Number(e.target.value))}
-                    className="w-full accent-lime-500"
-                  />
-                  <div className="flex justify-between text-xs text-zinc-700 mt-0.5">
-                    <span>10%</span>
-                    <span>100%</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-zinc-500 mb-1 block">Risk Profile</label>
-                  <div className="flex gap-2">
-                    {(["conservative", "standard", "aggressive"] as const).map((r) => (
-                      <button
-                        key={r}
-                        onClick={() => setRiskProfile(r)}
-                        className={cn(
-                          "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors capitalize",
-                          riskProfile === r
-                            ? "bg-lime-500/15 border-lime-500/40 text-lime-400"
-                            : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
-                        )}
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 mt-4">
-                <button
-                  onClick={() => allocateMut.mutate(undefined)}
-                  disabled={allocateMut.isPending}
-                  className="px-4 py-2 rounded-lg bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50"
-                >
-                  {allocateMut.isPending ? "Saving…" : "Save"}
-                </button>
-                <button
-                  onClick={() => allocateMut.mutate({ enabled: !isEnabled })}
-                  disabled={allocateMut.isPending}
-                  className={cn(
-                    "px-4 py-2 rounded-lg border text-sm font-semibold transition-colors",
-                    isEnabled
-                      ? "border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-red-400"
-                      : "border-lime-600/50 text-lime-400 hover:bg-lime-500/10"
-                  )}
-                >
-                  {isEnabled ? "Disable Bot" : "Enable Bot"}
-                </button>
-                <div className="relative ml-auto">
-                  <button
-                    disabled
-                    className="opacity-50 cursor-not-allowed px-4 py-2 rounded-lg border border-zinc-700 text-sm text-zinc-400"
-                  >
-                    Go Live
-                  </button>
-                  <div className="absolute -top-8 left-0 bg-zinc-800 text-xs text-zinc-300 px-2 py-1 rounded whitespace-nowrap pointer-events-none">
-                    Live trading unlocks Q3 2026. Join the waitlist above.
-                  </div>
-                </div>
-              </div>
+            {/* Quick actions */}
+            <div className="border-t border-zinc-800 pt-4 flex items-center gap-3">
+              <button
+                onClick={() => allocateMut.mutate({ enabled: !isEnabled })}
+                disabled={allocateMut.isPending}
+                className={cn(
+                  "px-4 py-2 rounded-lg border text-sm font-semibold transition-colors",
+                  isEnabled
+                    ? "border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-red-400"
+                    : "border-lime-600/50 text-lime-400 hover:bg-lime-500/10"
+                )}
+              >
+                {isEnabled ? "Disable Bot" : "Enable Bot"}
+              </button>
+              <button
+                onClick={() => setActiveTab("settings")}
+                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors ml-auto"
+              >
+                Allocation & settings →
+              </button>
             </div>
           </>
         )}
