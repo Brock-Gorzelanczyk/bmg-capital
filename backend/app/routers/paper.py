@@ -347,11 +347,44 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
     else:
         quotes = {}
 
+    # Load latest open bracket orders per symbol for TP/SL
+    open_orders = (
+        db.query(PaperOrder)
+        .filter_by(user_id=user.id)
+        .filter(PaperOrder.status.in_(["open", "pending"]))
+        .filter(PaperOrder.symbol.in_(symbols) if symbols else False)
+        .all()
+    ) if symbols else []
+    tp_by_symbol = {}
+    sl_by_symbol = {}
+    for o in open_orders:
+        if o.take_profit_price:
+            tp_by_symbol[o.symbol] = o.take_profit_price
+        if o.stop_loss_price:
+            sl_by_symbol[o.symbol] = o.stop_loss_price
+
     position_rows = []
     total_positions_value = 0.0
     day_pnl_total = 0.0
 
+    # Maximum allowed notional per position: 2× the starting balance.
+    # Positions above this are legacy bad data (e.g. crypto qty stored in satoshis)
+    # and must be excluded to avoid billion-dollar phantom values.
+    _MAX_POSITION_NOTIONAL = float(acct.starting_balance) * 2
+
     for p in positions:
+        # Guard: skip positions with clearly bad data (qty or avg_cost out of range)
+        if p.qty <= 0 or p.avg_cost <= 0:
+            logger.warning(f"Skipping invalid position {p.id} {p.symbol}: qty={p.qty}, avg_cost={p.avg_cost}")
+            continue
+        raw_notional = p.qty * p.avg_cost
+        if raw_notional > _MAX_POSITION_NOTIONAL:
+            logger.warning(
+                f"Skipping oversized position {p.id} {p.symbol}: qty={p.qty}, avg_cost={p.avg_cost}, "
+                f"notional=${raw_notional:,.0f} exceeds max ${_MAX_POSITION_NOTIONAL:,.0f}"
+            )
+            continue
+
         q = quotes.get(p.symbol)
         stale = q is None and not is_demo  # H8: track if quote is missing
         if q:
@@ -413,6 +446,8 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
             "prev_close": prev_close,
             "opened_at": p.opened_at.isoformat(),
             "price_stale": stale,
+            "take_profit": tp_by_symbol.get(p.symbol),
+            "stop_loss": sl_by_symbol.get(p.symbol),
         })
 
     d_equity = _d(acct.cash) + _d(total_positions_value)
@@ -870,6 +905,28 @@ def reset_account(db: Session = Depends(get_db), user=Depends(get_current_user))
     except Exception:
         db.rollback()
         raise
+
+
+# ---------------------------------------------------------------------------
+# POST /api/paper/purge-bad-positions
+# ---------------------------------------------------------------------------
+
+@router.post("/purge-bad-positions")
+def purge_bad_positions(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Remove positions with clearly corrupted data (qty≤0, avg_cost≤0, or notional >2× starting balance).
+    Safe to call — legitimate positions are never deleted.
+    """
+    acct = _get_or_create_account(db, user.id)
+    max_notional = float(acct.starting_balance) * 2
+    positions = db.query(PaperPosition).filter_by(user_id=user.id).all()
+    purged = []
+    for p in positions:
+        if p.qty <= 0 or p.avg_cost <= 0 or (p.qty * p.avg_cost) > max_notional:
+            purged.append({"id": p.id, "symbol": p.symbol, "qty": p.qty, "avg_cost": p.avg_cost})
+            db.delete(p)
+    db.commit()
+    logger.info(f"purge_bad_positions: user={user.id} removed {len(purged)} bad positions")
+    return {"purged": len(purged), "details": purged}
 
 
 # ---------------------------------------------------------------------------

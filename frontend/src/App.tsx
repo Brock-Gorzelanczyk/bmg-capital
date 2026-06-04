@@ -37,7 +37,6 @@ const MonitoringPage = lazy(() => import("@/pages/MonitoringPage"));
 const Social = lazy(() => import("@/pages/Social"));
 const UpgradePage = lazy(() => import("@/pages/UpgradePage"));
 const SettingsPage = lazy(() => import("@/pages/Settings"));
-const NetWorthPage = lazy(() => import("@/pages/NetWorthPage"));
 const TaxXRayPage = lazy(() => import("@/pages/TaxXRayPage"));
 const PodsPage = lazy(() => import("@/pages/PodsPage"));
 const RiskParityPage = lazy(() => import("@/pages/RiskParityPage"));
@@ -233,7 +232,6 @@ function AppInner() {
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/net-worth" element={<NetWorthPage />} />
         <Route path="/tax-xray" element={<TaxXRayPage />} />
         <Route path="/pods" element={<PodsPage />} />
         <Route path="/risk-parity" element={<RiskParityPage />} />

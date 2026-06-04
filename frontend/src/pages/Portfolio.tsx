@@ -1,11 +1,12 @@
-import { useState, useMemo, useRef, useEffect } from "react";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   getAccount,
   getSnapshots,
   getTransactions,
   seedDemo,
+  purgeBadPositions,
 } from "@/api/paper";
 import type { PaperPosition, PaperAccount, DailySnapshot, PaperTransaction } from "@/api/paper";
 import { fetchBars } from "@/api/bars";
@@ -35,6 +36,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Scale,
+  LineChart,
+  Target,
+  ShieldOff,
 } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import DrawdownBudget from "@/components/portfolio/DrawdownBudget";
@@ -379,6 +383,7 @@ interface DrawerProps {
 }
 
 function PositionDrawer({ position, onClose, onTrade }: DrawerProps) {
+  const navigate = useNavigate();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -467,6 +472,28 @@ function PositionDrawer({ position, onClose, onTrade }: DrawerProps) {
             </div>
           </div>
 
+          {/* TP / SL levels */}
+          {(position.take_profit != null || position.stop_loss != null) && (
+            <div className="space-y-2">
+              {position.take_profit != null && (
+                <div className="flex items-center justify-between bg-[#22C55E]/8 border border-[#22C55E]/20 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[10px] text-[#22C55E] uppercase tracking-wider font-semibold">
+                    <Target size={11} /> Take Profit
+                  </div>
+                  <span className="font-mono text-sm text-[#22C55E] font-bold">{formatCurrency(position.take_profit)}</span>
+                </div>
+              )}
+              {position.stop_loss != null && (
+                <div className="flex items-center justify-between bg-[#EF4444]/8 border border-[#EF4444]/20 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[10px] text-[#EF4444] uppercase tracking-wider font-semibold">
+                    <ShieldOff size={11} /> Stop Loss
+                  </div>
+                  <span className="font-mono text-sm text-[#EF4444] font-bold">{formatCurrency(position.stop_loss)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Opened at */}
           <div className="text-xs text-[var(--text-tertiary)]">
             Position opened: {new Date(position.opened_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
@@ -474,19 +501,27 @@ function PositionDrawer({ position, onClose, onTrade }: DrawerProps) {
         </div>
 
         {/* Action buttons */}
-        <div className="border-t border-[var(--border-subtle)] px-4 py-3 grid grid-cols-2 gap-2">
+        <div className="border-t border-[var(--border-subtle)] px-4 py-3 space-y-2">
           <button
-            onClick={() => onTrade(position.symbol, "buy")}
-            className="flex items-center justify-center gap-1.5 bg-[var(--accent-positive-bg)] hover:bg-[#22C55E]/20 border border-[#22C55E]/30 text-[var(--accent-positive)] font-semibold text-sm py-2 rounded-lg transition-colors cursor-pointer"
+            onClick={() => { onClose(); navigate(`/chart?symbol=${position.symbol}&entry=${position.avg_cost}${position.take_profit ? `&tp=${position.take_profit}` : ""}${position.stop_loss ? `&sl=${position.stop_loss}` : ""}`); }}
+            className="w-full flex items-center justify-center gap-1.5 bg-[var(--bg-elevated-2)] hover:bg-[var(--bg-elevated-2)]/80 border border-[var(--border-subtle)] text-[var(--text-primary)] font-semibold text-sm py-2 rounded-lg transition-colors cursor-pointer"
           >
-            <ArrowUpRight size={14} /> Buy More
+            <LineChart size={14} /> View Chart
           </button>
-          <button
-            onClick={() => onTrade(position.symbol, "sell")}
-            className="flex items-center justify-center gap-1.5 bg-[var(--accent-negative-bg)] hover:bg-[#EF4444]/20 border border-[#EF4444]/30 text-[var(--accent-negative)] font-semibold text-sm py-2 rounded-lg transition-colors cursor-pointer"
-          >
-            <ArrowDownRight size={14} /> Sell
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => onTrade(position.symbol, "buy")}
+              className="flex items-center justify-center gap-1.5 bg-[var(--accent-positive-bg)] hover:bg-[#22C55E]/20 border border-[#22C55E]/30 text-[var(--accent-positive)] font-semibold text-sm py-2 rounded-lg transition-colors cursor-pointer"
+            >
+              <ArrowUpRight size={14} /> Buy More
+            </button>
+            <button
+              onClick={() => onTrade(position.symbol, "sell")}
+              className="flex items-center justify-center gap-1.5 bg-[var(--accent-negative-bg)] hover:bg-[#EF4444]/20 border border-[#EF4444]/30 text-[var(--accent-negative)] font-semibold text-sm py-2 rounded-lg transition-colors cursor-pointer"
+            >
+              <ArrowDownRight size={14} /> Sell
+            </button>
+          </div>
         </div>
       </div>
     </>
@@ -1216,15 +1251,34 @@ function HeroBar({ account, loading }: { account: PaperAccount | undefined; load
 
 export default function Portfolio() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<ActiveTab>("holdings");
   const [selectedPosition, setSelectedPosition] = useState<PaperPosition | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [purging, setPurging] = useState(false);
 
   const { data: account, isLoading: accountLoading } = useQuery({
     queryKey: ["paper-account"],
     queryFn: getAccount,
     staleTime: 10_000,
   });
+
+  // Auto-detect and remove corrupted positions (e.g. crypto qty stored in satoshis).
+  // Fire once when account loads and equity looks clearly wrong (>$10M on a $100k account).
+  const purgeRan = useRef(false);
+  useEffect(() => {
+    if (!account || purgeRan.current) return;
+    const STARTING = account.starting_balance || 100_000;
+    if (account.equity > STARTING * 20) {
+      purgeRan.current = true;
+      setPurging(true);
+      purgeBadPositions().then(({ purged }) => {
+        if (purged > 0) {
+          qc.invalidateQueries({ queryKey: ["paper-account"] });
+        }
+      }).finally(() => setPurging(false));
+    }
+  }, [account, qc]);
 
   const { data: snapshots = [], isLoading: snapshotsLoading } = useQuery({
     queryKey: ["paper-snapshots"],

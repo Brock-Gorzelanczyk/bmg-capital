@@ -14,6 +14,8 @@ export interface PaperPosition {
   day_pnl_pct: number;
   prev_close: number;
   opened_at: string;
+  take_profit?: number | null;
+  stop_loss?: number | null;
 }
 
 export interface PaperAccount {
@@ -125,6 +127,11 @@ export async function resetAccount(): Promise<{ ok: boolean }> {
 
 export async function seedDemo(): Promise<{ ok: boolean }> {
   const { data } = await client.post<{ ok: boolean }>("/paper/seed-demo");
+  return data;
+}
+
+export async function purgeBadPositions(): Promise<{ purged: number }> {
+  const { data } = await client.post<{ purged: number }>("/paper/purge-bad-positions");
   return data;
 }
 

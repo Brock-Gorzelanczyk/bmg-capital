@@ -5,7 +5,7 @@ import {
   FlaskConical, Layers, Bitcoin, PenTool,
   Filter, Newspaper, Calendar, Microscope, Compass,
   Droplets, ShieldCheck, Activity,
-  GraduationCap, Users, Landmark, ScanSearch, Scale,
+  GraduationCap, Users, ScanSearch, Scale,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
   Grid3X3, Zap, Globe, Eye, TestTube2, Cpu,
@@ -31,7 +31,6 @@ const NAV_TRADE = [
   { to: "/watchlist",        label: "Watchlist",       Icon: BookMarked },
   { to: "/journal",          label: "Trade Journal",   Icon: BookOpen },
   { to: "/analytics",        label: "Analytics",       Icon: BarChart2 },
-  { to: "/net-worth",        label: "Net Worth",       Icon: Landmark },
 ];
 
 const NAV_LABS = [

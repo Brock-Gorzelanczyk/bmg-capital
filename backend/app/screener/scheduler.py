@@ -537,6 +537,18 @@ async def run_strategy_signal_scan_job() -> None:
             today_str = str(date.today())
             tick_str = now_et.strftime("%H%M")  # e.g. "1030" — used in seed so each tick is distinct
 
+            def _is_crypto_symbol(sym: str) -> bool:
+                s = sym.upper()
+                return (
+                    "-USD" in s or "/USD" in s or "/USDT" in s
+                    or s in {"BTC", "ETH", "SOL", "DOGE", "MATIC", "ADA", "XRP", "AVAX", "DOT", "LINK"}
+                )
+
+            def _is_crypto_strategy(s: StrategyDefinition) -> bool:
+                key = (s.strategy_key or "").lower()
+                cat = (s.category or "").lower()
+                return "crypto" in key or "bitcoin" in key or "btc" in key or "eth" in key or "crypto" in cat
+
             for user in users:
                 # Get user's watchlist symbols as the scan universe
                 watchlists = db.query(Watchlist).filter_by(user_id=user.id).all()
@@ -551,7 +563,13 @@ async def run_strategy_signal_scan_job() -> None:
                     symbols = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"]  # default universe
 
                 for strategy in strategies:
-                    for symbol in symbols[:10]:  # cap to keep job fast
+                    strat_is_crypto = _is_crypto_strategy(strategy)
+                    # Only match strategy to symbols of the same asset class
+                    compatible = [
+                        s for s in symbols
+                        if _is_crypto_symbol(s) == strat_is_crypto
+                    ]
+                    for symbol in compatible[:10]:  # cap to keep job fast
                         # Deterministic "did this strategy fire?" — 15% chance per tick per combo
                         seed_str = f"{strategy.strategy_key}-{symbol}-{today_str}-{tick_str}"
                         seed_int = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
