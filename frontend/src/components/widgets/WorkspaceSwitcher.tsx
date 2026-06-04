@@ -19,7 +19,8 @@ interface Props {
 }
 
 export default function WorkspaceSwitcher({ editMode, onToggleEdit }: Props) {
-  const { workspaces, activeWorkspaceId, setActiveWorkspace, addWorkspace, removeWorkspace, renameWorkspace } = useWidgetStore();
+  const { workspaces: rawWorkspaces, activeWorkspaceId, setActiveWorkspace, addWorkspace, removeWorkspace, renameWorkspace } = useWidgetStore();
+  const workspaces = rawWorkspaces ?? [];
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newTemplate, setNewTemplate] = useState(0);

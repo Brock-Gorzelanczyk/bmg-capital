@@ -114,12 +114,13 @@ export const useWidgetStore = create<WidgetStore>()(
           if (!def) throw new Error(`Unknown widget: ${widgetId}`);
           const inst: WidgetInstance = { id: uid(), widgetId, config: {} };
           const ws = get().workspaces.find((w) => w.id === workspaceId);
-          const maxY = ws ? Math.max(0, ...ws.layout.map((l) => l.y + l.h)) : 0;
+          const wsLayout = ws?.layout ?? [];
+          const maxY = wsLayout.length > 0 ? Math.max(0, ...wsLayout.map((l) => l.y + l.h)) : 0;
           const layoutItem = { i: inst.id, ...def.defaultLayout, y: maxY };
           set((s) => ({
             workspaces: s.workspaces.map((w) =>
               w.id === workspaceId
-                ? { ...w, widgets: [...w.widgets, inst], layout: [...w.layout, layoutItem] }
+                ? { ...w, widgets: [...(w.widgets ?? []), inst], layout: [...(w.layout ?? []), layoutItem] }
                 : w
             ),
           }));
@@ -132,8 +133,8 @@ export const useWidgetStore = create<WidgetStore>()(
               w.id === workspaceId
                 ? {
                     ...w,
-                    widgets: w.widgets.filter((wi) => wi.id !== instanceId),
-                    layout: w.layout.filter((l) => l.i !== instanceId),
+                    widgets: (w.widgets ?? []).filter((wi) => wi.id !== instanceId),
+                    layout: (w.layout ?? []).filter((l) => l.i !== instanceId),
                   }
                 : w
             ),
@@ -199,8 +200,8 @@ export const useWidgetStore = create<WidgetStore>()(
     },
     {
       name: "bmg-widget-store",
-      version: 2,
-      // v2: dropped stale workspace state that was missing widgets/layout arrays
+      version: 3,
+      // v3: guard workspaces array against undefined during Zustand rehydration
       migrate: (_state, _version) => {
         const defaults = buildDefaultWorkspaces();
         return { workspaces: defaults, activeWorkspaceId: defaults[0].id, editMode: false };
