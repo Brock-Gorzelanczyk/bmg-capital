@@ -233,18 +233,20 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
     retry: 0,
   });
 
-  const { data: crossPositions = [] } = useQuery<CrossBotPosition[]>({
+  const { data: rawCrossPositions } = useQuery<CrossBotPosition[]>({
     queryKey: ["cross-bot-positions"],
     queryFn: getCrossBotPositions,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+  const crossPositions: CrossBotPosition[] = Array.isArray(rawCrossPositions) ? rawCrossPositions : [];
 
-  const { data: watchlists = [] } = useQuery<Watchlist[]>({
+  const { data: rawWatchlists } = useQuery<Watchlist[]>({
     queryKey: ["watchlists"],
     queryFn: getWatchlists,
     staleTime: 120_000,
   });
+  const watchlists: Watchlist[] = Array.isArray(rawWatchlists) ? rawWatchlists : [];
 
   if (isLoading) return <PortfolioHeroSkeleton />;
 

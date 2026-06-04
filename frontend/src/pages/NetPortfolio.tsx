@@ -42,12 +42,13 @@ function SummaryCard({ label, value, sub }: { label: string; value: string; sub?
 export default function NetPortfolio() {
   const navigate = useNavigate();
 
-  const { data: positions = [], isLoading: posLoading } = useQuery({
+  const { data: rawPositions, isLoading: posLoading } = useQuery({
     queryKey: ["cross-bot-positions"],
     queryFn: getCrossBotPositions,
     retry: 0,
     staleTime: 30_000,
   });
+  const positions: CrossBotPosition[] = Array.isArray(rawPositions) ? rawPositions : [];
 
   const { data: botsData } = useQuery({
     queryKey: ["bots-v2"],
