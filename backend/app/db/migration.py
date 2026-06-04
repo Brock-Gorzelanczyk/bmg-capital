@@ -201,7 +201,12 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "cross_bot_positions": [],
     "news_events": [],
     "anomaly_events": [],
-    "strategy_portfolios": [],
+    "strategy_portfolios": [
+        ("paper_mode",  "BOOLEAN DEFAULT 1"),
+        ("enabled",     "BOOLEAN DEFAULT 1"),
+        ("emoji",       "VARCHAR"),
+        ("color_hex",   "VARCHAR"),
+    ],
     "portfolio_daily_pnl": [],
 }
 

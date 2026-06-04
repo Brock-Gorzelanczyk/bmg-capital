@@ -481,14 +481,21 @@ def get_portfolios(
     from app.db.models.bots import StrategyPortfolio
     from app.core.canonical import compute_portfolio_snapshot, DISPLAY_NAMES
 
-    _ensure_portfolios_for_user(db, current_user.id)
+    try:
+        _ensure_portfolios_for_user(db, current_user.id)
+    except Exception as exc:
+        logger.warning("_ensure_portfolios_for_user failed: %s", exc)
 
-    portfolios_db = (
-        db.query(StrategyPortfolio)
-        .filter(StrategyPortfolio.user_id == current_user.id)
-        .order_by(StrategyPortfolio.id)
-        .all()
-    )
+    try:
+        portfolios_db = (
+            db.query(StrategyPortfolio)
+            .filter(StrategyPortfolio.user_id == current_user.id)
+            .order_by(StrategyPortfolio.id)
+            .all()
+        )
+    except Exception as exc:
+        logger.error("get_portfolios query failed: %s", exc)
+        return {"portfolios": []}
 
     profiles = db.query(BotProfile).filter(BotProfile.enabled.is_(True)).all()
     profile_map = {p.id: p for p in profiles}
@@ -501,57 +508,59 @@ def get_portfolios(
 
     result = []
     for port in portfolios_db:
-        port_allocs = [a for a in all_allocs if a.portfolio_id == port.id]
-        pairs = [(a, profile_map[a.profile_id]) for a in port_allocs if a.profile_id in profile_map]
+        try:
+            port_allocs = [a for a in all_allocs if a.portfolio_id == port.id]
+            pairs = [(a, profile_map[a.profile_id]) for a in port_allocs if a.profile_id in profile_map]
 
-        snap = compute_portfolio_snapshot(port, pairs, db)
+            snap = compute_portfolio_snapshot(port, pairs, db)
+            pnl_cents = snap.portfolio_value_cents - snap.starting_capital_cents
 
-        pnl_cents = snap.portfolio_value_cents - snap.starting_capital_cents
+            bots = []
+            for bot in snap.bots:
+                alloc = next((a for a in port_allocs if a.id == bot.allocation_id), None)
+                profile = next((p for _, p in pairs if p.name == bot.profile_name), None)
 
-        bots = []
-        for bot in snap.bots:
-            alloc = next((a for a in port_allocs if a.id == bot.allocation_id), None)
-            profile = next((p for _, p in pairs if p.name == bot.profile_name), None)
+                row = _profile_to_dict(profile, alloc) if profile and alloc else {}
+                row["name"] = bot.profile_name
+                row["display_name"] = bot.display_name
+                row["demo"] = False
+                row["return_30d_pct"] = bot.return_30d_pct
+                row["today_pnl_usd"] = round(bot.today_pnl_cents / 100, 2)
+                row["open_positions"] = bot.open_positions
+                row["open_positions_count"] = bot.open_positions_count
+                row["portfolio_value_cents"] = bot.portfolio_value_cents
+                row["all_time_return_pct"] = bot.all_time_return_pct
+                row["capital_cents_within_portfolio"] = bot.capital_cents_within_portfolio
+                row["capital_pct_within_portfolio"] = (
+                    round(bot.capital_cents_within_portfolio / snap.starting_capital_cents * 100, 1)
+                    if snap.starting_capital_cents else 0
+                )
+                bots.append(row)
 
-            row = _profile_to_dict(profile, alloc) if profile and alloc else {}
-            row["name"] = bot.profile_name
-            row["display_name"] = bot.display_name
-            row["demo"] = False
-            row["return_30d_pct"] = bot.return_30d_pct
-            row["today_pnl_usd"] = round(bot.today_pnl_cents / 100, 2)
-            row["open_positions"] = bot.open_positions
-            row["open_positions_count"] = bot.open_positions_count
-            row["portfolio_value_cents"] = bot.portfolio_value_cents
-            row["all_time_return_pct"] = bot.all_time_return_pct
-            row["capital_cents_within_portfolio"] = bot.capital_cents_within_portfolio
-            row["capital_pct_within_portfolio"] = (
-                round(bot.capital_cents_within_portfolio / snap.starting_capital_cents * 100, 1)
-                if snap.starting_capital_cents else 0
-            )
-            bots.append(row)
-
-        result.append({
-            "id": port.id,
-            "name": port.name,
-            "asset_class": port.asset_class,
-            "emoji": port.emoji,
-            "color_hex": port.color_hex,
-            "starting_capital_cents": snap.starting_capital_cents,
-            "current_value_cents": snap.portfolio_value_cents,
-            "pnl_cents": pnl_cents,
-            "pnl_pct": round(snap.all_time_return_pct, 3),
-            "today_pnl_cents": snap.today_pnl_cents,
-            "today_pnl_pct": snap.today_pnl_pct,
-            "return_30d_pct": snap.return_30d_pct,
-            "realized_pnl_cents": snap.realized_pnl_cents,
-            "unrealized_pnl_cents": snap.unrealized_pnl_cents,
-            "open_positions_count": snap.open_positions_count,
-            "watchlist_count": snap.watchlist_count,
-            "bots_active": snap.bots_active,
-            "bots_total": snap.bots_total,
-            "enabled": port.enabled,
-            "bots": bots,
-        })
+            result.append({
+                "id": port.id,
+                "name": port.name,
+                "asset_class": port.asset_class,
+                "emoji": port.emoji,
+                "color_hex": port.color_hex,
+                "starting_capital_cents": snap.starting_capital_cents,
+                "current_value_cents": snap.portfolio_value_cents,
+                "pnl_cents": pnl_cents,
+                "pnl_pct": round(snap.all_time_return_pct, 3),
+                "today_pnl_cents": snap.today_pnl_cents,
+                "today_pnl_pct": snap.today_pnl_pct,
+                "return_30d_pct": snap.return_30d_pct,
+                "realized_pnl_cents": snap.realized_pnl_cents,
+                "unrealized_pnl_cents": snap.unrealized_pnl_cents,
+                "open_positions_count": snap.open_positions_count,
+                "watchlist_count": snap.watchlist_count,
+                "bots_active": snap.bots_active,
+                "bots_total": snap.bots_total,
+                "enabled": port.enabled,
+                "bots": bots,
+            })
+        except Exception as exc:
+            logger.error("portfolio snapshot failed for %s: %s", getattr(port, "name", "?"), exc)
 
     return {"portfolios": result}
 
