@@ -431,7 +431,11 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
               {crossPositions.map((pos) => {
                 const pnlPos = pos.pnl >= 0;
                 return (
-                  <div key={pos.symbol} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80">
+                  <div
+                    key={pos.symbol}
+                    onClick={() => navigate(`/chart?symbol=${encodeURIComponent(pos.symbol)}`)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80 cursor-pointer hover:bg-zinc-700/50 hover:border-zinc-600 transition-colors"
+                  >
                     <span className="text-xs font-bold text-white w-14 flex-shrink-0">{pos.symbol}</span>
                     <span className="text-[10px] text-zinc-500 flex-1">{pos.bots_holding.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
                     <span className="text-[10px] text-zinc-500 w-10 text-right">{pos.total_qty} sh</span>
@@ -452,7 +456,11 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
           ) : (
             <div className="space-y-1">
               {watchlistItems.map((item) => (
-                <div key={item.symbol} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80">
+                <div
+                  key={item.symbol}
+                  onClick={() => navigate(`/chart?symbol=${encodeURIComponent(item.symbol)}`)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80 cursor-pointer hover:bg-zinc-700/50 hover:border-zinc-600 transition-colors"
+                >
                   <span className="text-xs font-bold text-white w-14 flex-shrink-0">{item.symbol}</span>
                   <span className="text-[10px] text-zinc-500 flex-1">{item.bots_watching.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
                   <span className="text-[10px] text-zinc-500 w-16 text-right capitalize">{item.status}</span>

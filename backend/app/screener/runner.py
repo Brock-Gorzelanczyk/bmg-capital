@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, List
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import yfinance as yf
@@ -12,14 +13,21 @@ from app.screener.filters import apply_filters, build_filters
 
 logger = logging.getLogger(__name__)
 
+# ── In-memory bar cache (1-hour TTL) ─────────────────────────────────────────
+_bar_cache: Optional[Dict[str, pd.DataFrame]] = None
+_bar_cache_ts: float = 0.0
+_BAR_CACHE_TTL = 3600  # seconds
+_cache_lock = asyncio.Lock()
 
-import time
+
+def _cache_is_fresh() -> bool:
+    return _bar_cache is not None and (time.time() - _bar_cache_ts) < _BAR_CACHE_TTL
 
 
 def _fetch_bars_sync(symbols: List[str], period: str = "1y") -> Dict[str, pd.DataFrame]:
-    """Batch download daily bars via yfinance in chunks with rate-limit delays."""
+    """Batch download daily bars via yfinance in chunks."""
     result: Dict[str, pd.DataFrame] = {}
-    batch_size = 50  # smaller batches = less pressure on Yahoo Finance
+    batch_size = 100  # larger batches = fewer round trips
 
     for i in range(0, len(symbols), batch_size):
         chunk = symbols[i : i + batch_size]
@@ -30,7 +38,7 @@ def _fetch_bars_sync(symbols: List[str], period: str = "1y") -> Dict[str, pd.Dat
                 interval="1d",
                 auto_adjust=True,
                 group_by="ticker",
-                threads=False,  # sequential to avoid triggering rate limits
+                threads=True,
                 progress=False,
             )
             if raw.empty:
@@ -47,17 +55,34 @@ def _fetch_bars_sync(symbols: List[str], period: str = "1y") -> Dict[str, pd.Dat
                 except Exception:
                     continue
         except Exception as e:
-            logger.error(f"yfinance batch fetch error for chunk starting at {chunk[0]}: {e}", exc_info=True)
+            logger.error(f"yfinance batch fetch error at {chunk[0]}: {e}")
 
-        # Pause between batches to stay under Yahoo Finance rate limits
+        # Brief pause between chunks — not needed with threads=True but be polite
         if i + batch_size < len(symbols):
-            time.sleep(2)
+            time.sleep(0.5)
 
     return result
 
 
+async def _get_cached_bars() -> Dict[str, pd.DataFrame]:
+    """Return cached bars, refreshing if stale. Thread-safe via asyncio lock."""
+    global _bar_cache, _bar_cache_ts
+    async with _cache_lock:
+        if _cache_is_fresh():
+            logger.info("Screener: serving bars from cache")
+            return _bar_cache  # type: ignore[return-value]
+        logger.info("Screener: downloading bars (cache miss or expired)")
+        universe = get_universe()
+        loop = asyncio.get_running_loop()
+        bars = await loop.run_in_executor(None, lambda: _fetch_bars_sync(universe))
+        _bar_cache = bars
+        _bar_cache_ts = time.time()
+        logger.info(f"Screener: cached {len(bars)} symbols")
+        return bars
+
+
 async def fetch_bars_batch(symbols: List[str], period: str = "1y") -> Dict[str, pd.DataFrame]:
-    """Async wrapper around the synchronous yfinance batch fetch."""
+    """Async wrapper around the synchronous yfinance batch fetch (no caching)."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, lambda: _fetch_bars_sync(symbols, period))
 
@@ -90,10 +115,6 @@ def run_screen_sync(filter_configs: List[dict], all_bars: Dict[str, pd.DataFrame
 
 
 async def run_screen(filter_configs: List[dict]) -> List[Dict[str, Any]]:
-    """Run a screen across the entire universe (downloads bars independently).
-    For bulk screener runs, prefer run_screen_sync with shared bars."""
-    universe = get_universe()
-    filters = build_filters(filter_configs)
-
-    all_bars = await fetch_bars_batch(universe)
+    """Run a screen using cached bars (downloaded once per hour)."""
+    all_bars = await _get_cached_bars()
     return run_screen_sync(filter_configs, all_bars)
