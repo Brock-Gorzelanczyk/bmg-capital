@@ -1562,6 +1562,65 @@ function SettingsTab({
   );
 }
 
+// ─── Bot Why section (expandable) ────────────────────────────────────────────
+
+function BotWhySection({
+  botName,
+  meta,
+  profile,
+}: {
+  botName: string;
+  meta: { displayName: string; description: string; assetClass: "stock" | "crypto"; strategies: string[] } | undefined;
+  profile: import("@/api/bots").BotProfile | undefined;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const strategies = meta?.strategies ?? [];
+  const description = meta?.description ?? profile?.description ?? "";
+
+  const strategySnippets = strategies.slice(0, 4).map((s) => {
+    const desc = STRATEGY_DESCRIPTIONS[s];
+    return { name: strategyLabel(s), desc: desc ?? null };
+  });
+
+  return (
+    <div className="border border-zinc-800 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/40 transition-colors"
+      >
+        <span className="text-xs font-semibold text-zinc-400">Why this bot?</span>
+        <span className="text-zinc-600 text-xs">{expanded ? "▲" : "▼"}</span>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3 border-t border-zinc-800">
+          {description && (
+            <p className="text-xs text-zinc-400 leading-relaxed pt-3">{description}</p>
+          )}
+          {strategySnippets.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] text-zinc-600 uppercase tracking-wide font-semibold">
+                Sample Strategies ({strategies.length} total)
+              </p>
+              {strategySnippets.map((s) => (
+                <div key={s.name}>
+                  <p className="text-xs font-semibold text-zinc-300">{s.name}</p>
+                  {s.desc && <p className="text-[11px] text-zinc-600 leading-relaxed">{s.desc}</p>}
+                </div>
+              ))}
+              {strategies.length > 4 && (
+                <p className="text-[11px] text-zinc-600 italic">
+                  +{strategies.length - 4} more strategies — view in the Strategies tab
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function BotDetailPage() {
@@ -1863,96 +1922,264 @@ export default function BotDetailPage() {
       {/* Tab system */}
       <TabBar active={activeTab} onChange={setActiveTab} />
 
-      {/* Overview tab */}
+      {/* Overview tab — 4-quadrant layout */}
       {activeTab === "overview" && (
         <div className="space-y-6">
-          {/* Equity curve */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-zinc-300 mb-4">
-              Equity Curve vs {isCrypto ? "BTC" : "SPY"}
-            </h2>
-            <EquityCurve data={equityCurve} isCrypto={isCrypto} />
-            <div className="flex gap-4 mt-2">
-              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
-                Portfolio
+          {/* 2×2 grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            {/* TOP LEFT — Portfolio Summary */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+              {/* Header */}
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-white">
+                    {meta?.displayName ?? displayName(botName)}
+                  </h2>
+                  <p className="text-zinc-500 text-xs mt-0.5">
+                    {meta?.description ?? profile?.description ?? ""}
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0",
+                    isEnabled
+                      ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+                      : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                  )}
+                >
+                  {isEnabled ? "ACTIVE" : "DISABLED"}
+                </span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                <span className="w-3 h-0.5 bg-zinc-600 inline-block rounded" />
-                {isCrypto ? "BTC" : "SPY"}
+
+              {/* Stats 2×3 grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "Starting Capital", value: allocation ? `$${((allocation.capital_pct / 100) * 50000).toFixed(0)}` : "—" },
+                  { label: "Current Value", value: "—" },
+                  { label: "All-Time Return", value: "—", colored: false },
+                  {
+                    label: "30d Return",
+                    value: formatPct(stats?.return_30d_pct ?? 0),
+                    positive: (stats?.return_30d_pct ?? 0) >= 0,
+                    colored: true,
+                  },
+                  {
+                    label: "Today P&L",
+                    value: formatPnl(stats?.today_pnl ?? 0),
+                    positive: (stats?.today_pnl ?? 0) >= 0,
+                    colored: true,
+                  },
+                  {
+                    label: "Open Positions",
+                    value: String(stats?.open_positions ?? 0),
+                    colored: false,
+                  },
+                ].map((s) => (
+                  <div key={s.label} className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
+                    <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">{s.label}</p>
+                    <p
+                      className={cn(
+                        "text-sm font-bold",
+                        s.colored ? (s.positive ? "text-lime-400" : "text-red-400") : "text-white"
+                      )}
+                    >
+                      {s.value}
+                    </p>
+                  </div>
+                ))}
               </div>
+
+              {/* Allocated capital */}
+              {allocation && (
+                <p className="text-xs text-zinc-500">
+                  Allocated:{" "}
+                  <span className="text-zinc-300 font-semibold">
+                    ${((allocation.capital_pct / 100) * 50000).toLocaleString()} ({allocation.capital_pct}%)
+                  </span>
+                </p>
+              )}
+
+              {/* Enable / Disable */}
+              <button
+                onClick={() => allocateMut.mutate({ enabled: !isEnabled })}
+                disabled={allocateMut.isPending}
+                className={cn(
+                  "mt-auto px-4 py-2 rounded-lg border text-sm font-semibold transition-colors w-fit",
+                  isEnabled
+                    ? "border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-red-400"
+                    : "border-lime-600/50 text-lime-400 hover:bg-lime-500/10"
+                )}
+              >
+                {isEnabled ? "Disable Bot" : "Enable Bot"}
+              </button>
             </div>
-            {/* Strategy attribution */}
-            <StrategyAttributionChart botName={botName} totalPnl={totalPnl} />
-          </div>
 
-          {/* Paper Positions */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-zinc-300 mb-4">Paper Positions</h2>
-            {positions.length === 0 ? (
-              <p className="text-zinc-600 text-sm py-4 text-center">No open positions</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-                      <th className="text-left pb-2 font-medium">Symbol</th>
-                      <th className="text-right pb-2 font-medium">Qty</th>
-                      <th className="text-right pb-2 font-medium">Avg Cost</th>
-                      <th className="text-right pb-2 font-medium">Current Price</th>
-                      <th className="text-right pb-2 font-medium">P&L</th>
-                      <th className="text-right pb-2 font-medium">Opened</th>
-                      <th className="text-right pb-2 font-medium"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {positions.map((pos) => {
-                      const signal = signals.find((s) => s.symbol === pos.symbol) ?? null;
-                      const livePrice = livePrices[pos.symbol] ?? null;
-                      const avgCost = pos.avg_cost_cents ? pos.avg_cost_cents / 100 : null;
-                      const unrealizedPnl = livePrice && avgCost && pos.qty
-                        ? (livePrice - avgCost) * pos.qty : null;
-                      const pnlPct = livePrice && avgCost
-                        ? ((livePrice - avgCost) / avgCost) * 100 : null;
-                      return (
-                        <tr
-                          key={pos.id}
-                          className="border-b border-zinc-800/50 last:border-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
-                          onClick={() => setSelectedPosition(pos)}
-                          title="Click for position detail"
-                        >
-                          <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
-                          <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
-                          <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
-                          <td className="py-2.5 text-right text-zinc-300">
-                            {livePrice != null ? `$${livePrice.toFixed(2)}` : "—"}
-                          </td>
-                          <td className={cn("py-2.5 text-right text-sm font-medium", unrealizedPnl == null ? "text-zinc-500" : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400")}>
-                            {unrealizedPnl != null
-                              ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)} (${pnlPct! >= 0 ? "+" : ""}${pnlPct!.toFixed(2)}%)`
-                              : "—"}
-                          </td>
-                          <td className="py-2.5 text-right text-zinc-500 text-xs">{formatTime(pos.opened_at)}</td>
-                          <td className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                            {signal && (
-                              <button
-                                onClick={() => setSelectedSignal(signal)}
-                                className="text-xs text-zinc-500 hover:text-lime-400 underline underline-offset-2 transition-colors"
-                              >
-                                Why?
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {/* TOP RIGHT — Equity Curve */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
+              <h2 className="text-sm font-semibold text-zinc-300">Equity Curve</h2>
+              {equityCurve.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center min-h-[180px]">
+                  <p className="text-zinc-600 text-sm text-center px-4 leading-relaxed">
+                    Bot too new for chart — first data point appears at end of today's trading session
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={equityCurve} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={
+                            equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                              ? "#84cc16" : "#ef4444"
+                          } stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={
+                            equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                              ? "#84cc16" : "#ef4444"
+                          } stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                      <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip
+                        contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                        labelStyle={{ color: "#a1a1aa" }}
+                        formatter={(v: number) => [`$${v.toFixed(2)}`, "Portfolio"]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="portfolio"
+                        stroke={
+                          equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                            ? "#84cc16" : "#ef4444"
+                        }
+                        strokeWidth={2}
+                        fill="url(#equityGradient)"
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                  <div className="flex gap-4">
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                      <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
+                      Portfolio
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* BOTTOM LEFT — Open Positions */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+              <h2 className="text-sm font-semibold text-zinc-300 mb-4">Open Positions</h2>
+              {positions.length === 0 ? (
+                <p className="text-zinc-600 text-sm py-6 text-center">
+                  No open positions. Bot scans for entries at market open.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+                        <th className="text-left pb-2 font-medium">Symbol</th>
+                        <th className="text-right pb-2 font-medium">Qty</th>
+                        <th className="text-right pb-2 font-medium">Avg Cost</th>
+                        <th className="text-right pb-2 font-medium">Current Value</th>
+                        <th className="text-right pb-2 font-medium">P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positions.map((pos) => {
+                        const livePrice = livePrices[pos.symbol] ?? null;
+                        const avgCost = pos.avg_cost_cents ? pos.avg_cost_cents / 100 : null;
+                        const currentValue = livePrice && pos.qty ? livePrice * pos.qty : null;
+                        const unrealizedPnl = livePrice && avgCost && pos.qty
+                          ? (livePrice - avgCost) * pos.qty : null;
+                        const pnlPct = livePrice && avgCost
+                          ? ((livePrice - avgCost) / avgCost) * 100 : null;
+                        return (
+                          <tr
+                            key={pos.id}
+                            className="border-b border-zinc-800/50 last:border-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                            onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
+                            title={`View ${pos.symbol} chart`}
+                          >
+                            <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
+                            <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
+                            <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
+                            <td className="py-2.5 text-right text-zinc-300">
+                              {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
+                            </td>
+                            <td className={cn("py-2.5 text-right text-sm font-medium", unrealizedPnl == null ? "text-zinc-500" : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400")}>
+                              {unrealizedPnl != null
+                                ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)} (${pnlPct! >= 0 ? "+" : ""}${pnlPct!.toFixed(2)}%)`
+                                : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* BOTTOM RIGHT — Bot Info */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+              <h2 className="text-sm font-semibold text-zinc-300">Bot Info</h2>
+
+              {/* Description + asset class */}
+              <div className="flex items-start gap-3">
+                <span className={cn(
+                  "text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 mt-0.5",
+                  isCrypto
+                    ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                    : "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                )}>
+                  {isCrypto ? "CRYPTO" : "STOCK"}
+                </span>
+                <p className="text-sm text-zinc-400 leading-relaxed">
+                  {meta?.description ?? profile?.description ?? "No description available."}
+                </p>
               </div>
-            )}
+
+              {/* Key stats */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
+                  <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Win Rate</p>
+                  <p className={cn(
+                    "text-sm font-bold",
+                    stats?.win_rate_pct ? ((stats.win_rate_pct ?? 0) >= 50 ? "text-lime-400" : "text-red-400") : "text-zinc-500"
+                  )}>
+                    {stats?.win_rate_pct ? `${(stats.win_rate_pct ?? 0).toFixed(1)}%` : "—"}
+                  </p>
+                </div>
+                <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
+                  <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Last Signal</p>
+                  <p className="text-sm font-bold text-zinc-300">
+                    {signals.length > 0 ? formatRelativeAgo(signals[0].ts) : "—"}
+                  </p>
+                </div>
+                <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
+                  <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Cadence</p>
+                  <p className="text-sm font-bold text-zinc-300 capitalize">{profile?.cadence ?? "—"}</p>
+                </div>
+                <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
+                  <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Strategies</p>
+                  <p className="text-sm font-bold text-zinc-300">
+                    {(meta?.strategies?.length ?? 0) > 0 ? meta!.strategies.length : "—"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Why this bot? expandable */}
+              <BotWhySection botName={botName} meta={meta} profile={profile} />
+            </div>
           </div>
 
-          {/* Recent Signals */}
+          {/* Activity feed below grid */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
             <h2 className="text-sm font-semibold text-zinc-300 mb-4">Recent Signals</h2>
             {signals.length === 0 ? (
