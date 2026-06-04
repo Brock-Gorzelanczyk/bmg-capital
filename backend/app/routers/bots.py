@@ -347,27 +347,45 @@ def get_cross_bot_positions(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Return CrossBotPosition rows (aggregate exposure across all bots) for the current user."""
-    rows = (
-        db.query(CrossBotPosition)
-        .filter(CrossBotPosition.user_id == current_user.id)
-        .order_by(CrossBotPosition.symbol)
+    """Aggregate open BotPosition rows across all of the user's bot allocations."""
+    # Get all allocations for this user with their profile names
+    allocations = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == current_user.id)
         .all()
     )
-    return {
-        "positions": [
-            {
-                "id": r.id,
-                "symbol": r.symbol,
-                "total_qty": r.total_qty,
-                "by_bot": r.by_bot,
-                "net_exposure_pct": r.net_exposure_pct,
-                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-            }
-            for r in rows
-        ],
-        "count": len(rows),
-    }
+    alloc_ids = [a.id for a in allocations]
+    if not alloc_ids:
+        return []
+
+    # Load profile names once
+    profile_ids = list({a.profile_id for a in allocations})
+    profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+    profile_name_by_id = {p.id: p.name for p in profiles}
+    alloc_profile_name = {a.id: profile_name_by_id.get(a.profile_id, str(a.profile_id)) for a in allocations}
+
+    # Load all open positions across every bot
+    open_positions = (
+        db.query(BotPosition)
+        .filter(
+            BotPosition.allocation_id.in_(alloc_ids),
+            BotPosition.closed_at.is_(None),
+        )
+        .all()
+    )
+
+    # Aggregate by symbol
+    by_symbol: dict[str, dict] = {}
+    for pos in open_positions:
+        bot_name = alloc_profile_name.get(pos.allocation_id, str(pos.allocation_id))
+        sym = pos.symbol
+        if sym not in by_symbol:
+            by_symbol[sym] = {"symbol": sym, "total_qty": 0.0, "bots_holding": [], "exposure_pct": 0.0, "pnl": 0.0}
+        by_symbol[sym]["total_qty"] += pos.qty
+        if bot_name not in by_symbol[sym]["bots_holding"]:
+            by_symbol[sym]["bots_holding"].append(bot_name)
+
+    return sorted(by_symbol.values(), key=lambda x: x["symbol"])
 
 
 # ── GET /api/bots/{profile_name}/activity ────────────────────────────────────

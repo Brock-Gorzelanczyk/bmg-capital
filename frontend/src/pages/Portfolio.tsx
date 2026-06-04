@@ -389,8 +389,8 @@ function PositionDrawer({ position, onClose, onTrade }: DrawerProps) {
 
   if (!position) return null;
 
-  const pnlPct = position.unrealized_pnl_pct;
-  const dayPct = position.day_pnl_pct;
+  const pnlPct = position.unrealized_pnl_pct ?? 0;
+  const dayPct = position.day_pnl_pct ?? 0;
   const barWidth = Math.min(Math.abs(pnlPct) / 50, 1) * 100; // cap at 50% for bar
 
   return (
@@ -574,8 +574,8 @@ function HoldingsTab({
       {/* Mobile card list */}
       <div className="md:hidden divide-y divide-[#1E293B]">
         {sorted.map((pos) => {
-          const dayPct = pos.day_pnl_pct;
-          const totalPct = pos.unrealized_pnl_pct;
+          const dayPct = pos.day_pnl_pct ?? 0;
+          const totalPct = pos.unrealized_pnl_pct ?? 0;
           return (
             <div
               key={pos.id}
@@ -638,8 +638,8 @@ function HoldingsTab({
           </thead>
           <tbody>
             {sorted.map((pos) => {
-              const dayPct = pos.day_pnl_pct;
-              const totalPct = pos.unrealized_pnl_pct;
+              const dayPct = pos.day_pnl_pct ?? 0;
+              const totalPct = pos.unrealized_pnl_pct ?? 0;
               return (
                 <tr
                   key={pos.id}
@@ -1137,8 +1137,8 @@ function HeroBar({ account, loading }: { account: PaperAccount | undefined; load
 
   if (!account) return null;
 
-  const dayPct = account.day_pnl_pct;
-  const totalPct = account.total_pnl_pct;
+  const dayPct = account.day_pnl_pct ?? 0;
+  const totalPct = account.total_pnl_pct ?? 0;
 
   return (
     <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-5">

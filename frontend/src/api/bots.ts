@@ -274,7 +274,7 @@ export const getCrossBotPositions = (): Promise<CrossBotPosition[]> =>
       return raw.map((p: any): CrossBotPosition => ({
         symbol: p.symbol ?? "",
         total_qty: p.total_qty ?? 0,
-        bots_holding: p.bots_holding ?? Object.keys(p.by_bot ?? {}),
+        bots_holding: Array.isArray(p.bots_holding) ? p.bots_holding : Object.keys(p.by_bot ?? {}),
         exposure_pct: p.exposure_pct ?? p.net_exposure_pct ?? 0,
         pnl: p.pnl ?? 0,
       }));
