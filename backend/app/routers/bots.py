@@ -1379,19 +1379,32 @@ def get_bot(
         ]
         has_real_data = len(positions) > 0
 
+    from app.core.canonical import compute_bot_snapshot
+
     row = _profile_to_dict(profile, allocation)
     row["recent_signals"] = recent_signals
+    row["display_name"] = _DISPLAY_NAMES.get(profile.name, profile.name.replace("_", " ").title())
 
-    if not has_real_data:
+    if allocation is not None:
+        snap = compute_bot_snapshot(allocation, profile, db)
+        row["demo"] = False
+        row["return_30d_pct"] = snap.return_30d_pct
+        row["today_pnl_usd"] = round(snap.today_pnl_cents / 100, 2)
+        row["open_positions"] = snap.open_positions if snap.open_positions else positions
+        row["open_positions_count"] = snap.open_positions_count
+        row["portfolio_value_cents"] = snap.portfolio_value_cents
+        row["all_time_return_pct"] = snap.all_time_return_pct
+        row["today_pnl_pct"] = snap.today_pnl_pct
+        row["win_rate_pct"] = snap.sharpe_30d  # TODO: wire real win rate
+        row["equity_curve"] = snap.equity_curve
+    else:
         row["demo"] = True
         row["return_30d_pct"] = _demo_30d_return(profile.name)
         row["today_pnl_usd"] = _demo_today_pnl(profile.name)
         row["open_positions"] = _demo_positions(profile.name, profile.asset_class)
-    else:
-        row["demo"] = False
-        row["return_30d_pct"] = None
-        row["today_pnl_usd"] = None
-        row["open_positions"] = positions
+        row["open_positions_count"] = len(row["open_positions"])
+        row["portfolio_value_cents"] = None
+        row["all_time_return_pct"] = None
 
     return row
 
