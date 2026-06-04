@@ -79,6 +79,7 @@ const StakingPage = lazy(() => import("@/pages/StakingPage"));
 const DCABasketsPage = lazy(() => import("@/pages/DCABasketsPage"));
 const BotDetailPage = lazy(() => import("@/pages/BotDetailPage"));
 const AnalystPage = lazy(() => import("@/pages/AnalystPage"));
+const PortfolioDetailPage = lazy(() => import("@/pages/PortfolioDetailPage"));
 const NetPortfolio = lazy(() => import("@/pages/NetPortfolio"));
 const StrategyLibraryPage = lazy(() => import("@/pages/StrategyLibraryPage"));
 const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
@@ -201,6 +202,7 @@ function AppInner() {
         <Route path="/strategy/library" element={<StrategyLibraryPage />} />
         <Route path="/strategy/library/custom-bot" element={<CustomBotBuilderPage />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
+        <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
         <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />

@@ -469,41 +469,22 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
 
 // ─── Portfolio panel ──────────────────────────────────────────────────────────
 
-function PortfolioTab({
-  portfolio,
-  isActive,
-  onClick,
-}: {
-  portfolio: StrategyPortfolio;
-  isActive: boolean;
-  onClick: () => void;
-}) {
+function PortfolioTab({ portfolio }: { portfolio: StrategyPortfolio }) {
+  const navigate = useNavigate();
   const currentUsd = portfolio.current_value_cents / 100;
   const pnlUsd = portfolio.pnl_cents / 100;
   const isPositive = portfolio.pnl_pct >= 0;
 
   return (
     <button
-      onClick={onClick}
-      className={cn(
-        "flex-1 min-w-0 rounded-2xl border-2 p-4 text-left transition-all duration-150",
-        isActive
-          ? "bg-zinc-900 shadow-lg"
-          : "bg-zinc-950 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/50"
-      )}
-      style={isActive ? { borderColor: portfolio.color_hex } : undefined}
+      onClick={() => navigate(`/strategy/portfolio/${portfolio.asset_class}`)}
+      className="flex-1 min-w-0 rounded-2xl border-2 border-zinc-800 bg-zinc-950 p-4 text-left transition-all duration-150 hover:border-zinc-600 hover:bg-zinc-900/60 group"
+      style={{ "--accent": portfolio.color_hex } as React.CSSProperties}
     >
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xl">{portfolio.emoji}</span>
-        <span className="font-bold text-white text-sm">{portfolio.name}</span>
-        {isActive && (
-          <span
-            className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-            style={{ background: portfolio.color_hex + "30", color: portfolio.color_hex }}
-          >
-            ACTIVE
-          </span>
-        )}
+        <span className="font-bold text-white text-sm group-hover:text-white">{portfolio.name}</span>
+        <span className="ml-auto text-zinc-600 group-hover:text-zinc-400 text-xs">→</span>
       </div>
       <div className="text-lg font-bold text-white leading-tight">
         ${currentUsd.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
@@ -1212,8 +1193,6 @@ export default function StrategyLab() {
     retry: 0,
   });
   const portfolios: StrategyPortfolio[] = portfolioData?.portfolios ?? [];
-  const [selectedPortfolioIdx, setSelectedPortfolioIdx] = useState(0);
-  const activePortfolio = portfolios[selectedPortfolioIdx] ?? null;
 
   const { data: regime, isLoading: regimeLoading } = useQuery({
     queryKey: ["regime"],
@@ -1381,63 +1360,18 @@ export default function StrategyLab() {
             <RegimeBar regime={regime} isLoading={regimeLoading} />
           </div>
 
-          {/* Portfolio tabs + content */}
+          {/* Three portfolio tab cards — click opens full portfolio page */}
           {portfoliosLoading || isLoading ? (
-            <div className="space-y-4">
-              {/* Tab skeleton */}
-              <div className="grid grid-cols-3 gap-3">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-24 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
-                ))}
-              </div>
-              {/* Bot card skeleton */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-28 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
+              ))}
             </div>
           ) : portfolios.length > 0 ? (
-            <div className="space-y-4">
-              {/* Three portfolio tab cards */}
-              <div className="grid grid-cols-3 gap-3">
-                {portfolios.map((port, idx) => (
-                  <PortfolioTab
-                    key={port.id}
-                    portfolio={port}
-                    isActive={selectedPortfolioIdx === idx}
-                    onClick={() => setSelectedPortfolioIdx(idx)}
-                  />
-                ))}
-              </div>
-
-              {/* Active portfolio bot grid */}
-              {activePortfolio && (
-                <div
-                  className="rounded-2xl border p-4"
-                  style={{ borderColor: activePortfolio.color_hex + "30", background: activePortfolio.color_hex + "06" }}
-                >
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-lg">{activePortfolio.emoji}</span>
-                    <span className="font-semibold text-white text-sm">{activePortfolio.name} Portfolio</span>
-                    <span className="text-xs text-zinc-500 ml-1">— {activePortfolio.bots.length} bots · $50k paper capital</span>
-                  </div>
-                  <div className={cn(
-                    "grid gap-4",
-                    activePortfolio.bots.length === 2
-                      ? "grid-cols-1 sm:grid-cols-2"
-                      : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-                  )}>
-                    {activePortfolio.bots.map((item) => (
-                      <BotCard
-                        key={item.profile.name}
-                        item={item}
-                        onNavigate={(name) => navigate(`/strategy/${name}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+            <div className="grid grid-cols-3 gap-3">
+              {portfolios.map((port) => (
+                <PortfolioTab key={port.id} portfolio={port} />
+              ))}
             </div>
           ) : (
             <div className={cn(
