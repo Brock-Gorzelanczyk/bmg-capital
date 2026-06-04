@@ -200,7 +200,7 @@ export interface CatalystEvent {
 export const getCatalysts = (): Promise<CatalystEvent[]> =>
   client
     .get<CatalystEvent[]>("/bots/catalysts")
-    .then((r) => r.data ?? [])
+    .then((r) => Array.isArray(r.data) ? r.data : [])
     .catch(() => []);
 
 // ─── Activity ─────────────────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ export interface StrategyWeight {
 export const getStrategyWeights = (name: string): Promise<StrategyWeight[]> =>
   client
     .get<StrategyWeight[]>(`/bots/${name}/strategy-weights`)
-    .then((r) => r.data ?? [])
+    .then((r) => Array.isArray(r.data) ? r.data : [])
     .catch(() => []);
 
 export const updateStrategyWeight = (
@@ -267,7 +267,7 @@ export interface CrossBotPosition {
 export const getCrossBotPositions = (): Promise<CrossBotPosition[]> =>
   client
     .get<CrossBotPosition[]>("/bots/cross-bot-positions")
-    .then((r) => r.data ?? [])
+    .then((r) => Array.isArray(r.data) ? r.data : [])
     .catch(() => []);
 
 // ─── Pending reviews (borderline signals) ────────────────────────────────────
@@ -285,7 +285,7 @@ export interface PendingReview {
 export const getPendingReviews = (): Promise<PendingReview[]> =>
   client
     .get<PendingReview[]>("/bots/pending-reviews")
-    .then((r) => r.data ?? [])
+    .then((r) => Array.isArray(r.data) ? r.data : [])
     .catch(() => []);
 
 // ─── Strategy Lab aggregate portfolio ────────────────────────────────────────
