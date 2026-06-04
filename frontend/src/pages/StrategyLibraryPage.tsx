@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Search, Star, ExternalLink, TrendingUp, Clock, BarChart2, Zap, Filter } from "lucide-react";
+import { Search, Star, ExternalLink, TrendingUp, Clock, BarChart2, Zap, Filter, BookOpen, ChevronDown, ChevronUp } from "lucide-react";
 import client from "@/api/client";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +27,10 @@ interface StrategyEntry {
   is_top_pick: boolean;
   description_md: string | null;
   mechanics_md: string | null;
+  beginner_summary: string | null;
+  how_it_decides: string | null;
+  why_it_works: string | null;
+  when_it_fails: string | null;
 }
 
 interface LibraryResponse {
@@ -100,7 +104,10 @@ function sharpeColor(v: number | null): string {
 
 function StrategyCard({ s }: { s: StrategyEntry }) {
   const [expanded, setExpanded] = useState(false);
+  const [beginnerExpanded, setBeginnerExpanded] = useState(false);
+  const navigate = useNavigate();
   const HorizonIcon = HORIZON_ICON[s.time_horizon] ?? TrendingUp;
+  const hasBeginnerGuide = !!(s.beginner_summary || s.how_it_decides || s.why_it_works || s.when_it_fails);
 
   return (
     <div
@@ -181,6 +188,15 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
         )}>
           decay: {s.decay_risk}
         </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/screener?preset=${s.module_name}`);
+          }}
+          className="ml-auto text-[10px] font-semibold text-blue-400 hover:text-blue-300 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 px-2 py-0.5 rounded-full transition-colors flex-shrink-0"
+        >
+          Run as Screen →
+        </button>
       </div>
 
       {/* Expanded detail */}
@@ -214,6 +230,51 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
                 </a>
               ) : (
                 <p className="text-[10px] text-zinc-500">{s.paper_citation}</p>
+              )}
+            </div>
+          )}
+
+          {/* Beginner Guide section */}
+          {hasBeginnerGuide && (
+            <div className="border-t border-zinc-800 pt-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); setBeginnerExpanded((v) => !v); }}
+                className="flex items-center gap-1.5 text-[10px] font-semibold text-lime-400 hover:text-lime-300 transition-colors w-full text-left"
+              >
+                <BookOpen className="w-3 h-3 flex-shrink-0" />
+                Beginner Guide
+                {beginnerExpanded
+                  ? <ChevronUp className="w-3 h-3 ml-auto" />
+                  : <ChevronDown className="w-3 h-3 ml-auto" />
+                }
+              </button>
+              {beginnerExpanded && (
+                <div className="mt-2 space-y-2 bg-lime-500/5 border border-lime-500/15 rounded-xl p-3">
+                  {s.beginner_summary && (
+                    <div>
+                      <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">What it is</p>
+                      <p className="text-xs text-zinc-300 leading-relaxed">{s.beginner_summary}</p>
+                    </div>
+                  )}
+                  {s.how_it_decides && (
+                    <div>
+                      <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">How it decides</p>
+                      <p className="text-xs text-zinc-400 leading-relaxed">{s.how_it_decides}</p>
+                    </div>
+                  )}
+                  {s.why_it_works && (
+                    <div>
+                      <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">Why it works</p>
+                      <p className="text-xs text-zinc-400 leading-relaxed">{s.why_it_works}</p>
+                    </div>
+                  )}
+                  {s.when_it_fails && (
+                    <div>
+                      <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">When it fails</p>
+                      <p className="text-xs text-zinc-400 leading-relaxed">{s.when_it_fails}</p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}

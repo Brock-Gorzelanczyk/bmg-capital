@@ -249,6 +249,80 @@ class DarvasBoxFilter(BaseFilter):
 
 
 # ---------------------------------------------------------------------------
+# Phase 3 v2 filters
+# ---------------------------------------------------------------------------
+
+class RelativeVolumeFilter(BaseFilter):
+    """field: 'rel_volume'; value: float multiplier (e.g., 1.5 = 1.5x avg vol)"""
+
+    def apply(self, df: pd.DataFrame) -> bool:
+        avg_vol = float(df["volume"].iloc[-21:-1].mean()) if len(df) >= 22 else float(df["volume"].mean())
+        if avg_vol == 0:
+            return False
+        rel_vol = float(df["volume"].iloc[-1]) / avg_vol
+        return _compare(rel_vol, self.operator, float(self.value))
+
+
+class ChangePercentFilter(BaseFilter):
+    """field: 'change_pct'; value: float (e.g., 5.0 = 5%)"""
+
+    def apply(self, df: pd.DataFrame) -> bool:
+        if len(df) < 2:
+            return False
+        chg = (df["close"].iloc[-1] / df["close"].iloc[-2] - 1) * 100
+        return _compare(float(chg), self.operator, float(self.value))
+
+
+class ATRFilter(BaseFilter):
+    """field: 'atr'; value: float dollar amount"""
+
+    def apply(self, df: pd.DataFrame) -> bool:
+        if len(df) < 15:
+            return False
+        high, low, close = df["high"], df["low"], df["close"]
+        tr = pd.concat(
+            [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()],
+            axis=1,
+        ).max(axis=1)
+        atr = tr.rolling(14).mean().iloc[-1]
+        return _compare(float(atr), self.operator, float(self.value))
+
+
+class Near52WHighFilter(BaseFilter):
+    """field: 'near_52w_high'; value: float pct from high (e.g., 5.0 = within 5%)"""
+
+    def apply(self, df: pd.DataFrame) -> bool:
+        if len(df) < 10:
+            return False
+        high_52w = df["high"].rolling(min(252, len(df))).max().iloc[-1]
+        current = df["close"].iloc[-1]
+        pct_from_high = (high_52w - current) / high_52w * 100
+        return _compare(float(pct_from_high), self.operator, float(self.value))
+
+
+class GoldenCrossFilter(BaseFilter):
+    """field: 'golden_cross'; operator: 'eq'; value: True/'true'"""
+
+    def apply(self, df: pd.DataFrame) -> bool:
+        if len(df) < 201:
+            return False
+        fast = df["close"].rolling(50).mean()
+        slow = df["close"].rolling(200).mean()
+        return bool(fast.iloc[-2] < slow.iloc[-2] and fast.iloc[-1] >= slow.iloc[-1])
+
+
+class AboveMaFilter(BaseFilter):
+    """field: 'above_ma50' or 'above_ma200'; operator: 'is_true'; value: any"""
+
+    def apply(self, df: pd.DataFrame) -> bool:
+        window = 200 if "200" in self.field else 50
+        if len(df) < window:
+            return False
+        ma = df["close"].rolling(window).mean().iloc[-1]
+        return bool(df["close"].iloc[-1] > ma)
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -270,6 +344,14 @@ FILTER_MAP = {
     "momentum_12m": Momentum12MFilter,
     "zscore_reversion": ZScoreReversionFilter,
     "darvas_box": DarvasBoxFilter,
+    # Phase 3 v2
+    "rel_volume": RelativeVolumeFilter,
+    "change_pct": ChangePercentFilter,
+    "atr": ATRFilter,
+    "near_52w_high": Near52WHighFilter,
+    "golden_cross": GoldenCrossFilter,
+    "above_ma50": AboveMaFilter,
+    "above_ma200": AboveMaFilter,
 }
 
 # ---------------------------------------------------------------------------

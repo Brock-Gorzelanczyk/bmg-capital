@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen, parseNaturalLanguage } from "@/api/screener";
 import { getSectorPerformance } from "@/api/discovery";
@@ -7,8 +7,18 @@ import type { FilterConfig, ScreenResult } from "@/types/screener";
 import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
 import { Play, Plus, Trash2, TrendingUp, BarChart2, ArrowDownUp, Zap, Info, Bookmark, BookmarkCheck, X, Sparkles, Loader2, RefreshCw, Bot } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
+import SymbolChartDrawer from "@/components/ui/SymbolChartDrawer";
 import { TICKER_NAMES } from "@/data/tickerNames";
 import SectorPill from "@/components/ui/SectorPill";
+
+// ── Heatmap color helper ──────────────────────────────────────────────────────
+
+function heatColor(pct: number): string {
+  const intensity = Math.min(Math.abs(pct) / 5, 1); // 5% = max intensity
+  if (pct > 0) return `rgba(39, 174, 96, ${0.3 + intensity * 0.7})`;
+  if (pct < 0) return `rgba(231, 76, 60, ${0.3 + intensity * 0.7})`;
+  return "rgba(100, 100, 100, 0.3)";
+}
 
 // ── Preset categories ────────────────────────────────────────────────────────
 
@@ -147,6 +157,13 @@ const FIELDS = [
   { value: "consecutive_gains", label: "Consecutive Gains" },
   { value: "bollinger_squeeze", label: "Bollinger Squeeze" },
   { value: "relative_high", label: "Near N-Day High" },
+  { value: "rel_volume", label: "Relative Volume" },
+  { value: "change_pct", label: "1-Day Change %" },
+  { value: "atr", label: "ATR (14)" },
+  { value: "near_52w_high", label: "Near 52-Week High %" },
+  { value: "golden_cross", label: "Golden Cross (50/200)" },
+  { value: "above_ma50", label: "Price Above MA50" },
+  { value: "above_ma200", label: "Price Above MA200" },
 ];
 
 const OPERATORS = [
@@ -159,6 +176,7 @@ const OPERATORS = [
 
 export default function Screener() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
   const [filters, setFilters] = useState<FilterConfig[]>([]);
   const [results, setResults] = useState<ScreenResult[]>([]);
@@ -170,6 +188,8 @@ export default function Screener() {
   const infoRef = useRef<HTMLDivElement>(null);
   const [saveNameInput, setSaveNameInput] = useState("");
   const [showSaveForm, setShowSaveForm] = useState(false);
+  const [viewMode, setViewMode] = useState<"table" | "heatmap">("table");
+  const [chartSymbol, setChartSymbol] = useState<string | null>(null);
 
   const [nlQuery, setNlQuery] = useState("");
   const [nlParsing, setNlParsing] = useState(false);
@@ -316,6 +336,14 @@ export default function Screener() {
       setRan(true);
     }
   };
+
+  // If ?preset= is in the URL, auto-run that preset on mount
+  const presetFromUrl = searchParams.get("preset");
+  useEffect(() => {
+    if (presetFromUrl && !ran) {
+      runPresetScreen(presetFromUrl);
+    }
+  }, []); // run once on mount
 
   const activePresetMeta = PRESET_CATEGORIES.flatMap((c) => c.presets).find((p) => p.key === activePreset);
   const openInfoPreset = PRESET_CATEGORIES.flatMap((c) => c.presets).find((p) => p.key === infoOpen);
@@ -616,19 +644,67 @@ export default function Screener() {
       {!loading && ran && (
         <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
-            <div>
+            <div className="flex items-center gap-3">
               <span className="text-sm font-semibold text-[var(--text-primary)]">{results.length} results</span>
               {activePresetMeta && (
-                <span className="ml-2 text-xs text-[var(--text-tertiary)]">· {activePresetMeta.label}</span>
+                <span className="text-xs text-[var(--text-tertiary)]">· {activePresetMeta.label}</span>
               )}
             </div>
-            {activePreset && (
-              <span className="text-[11px] text-[var(--text-tertiary)]">Click a ticker to open chart with this screen's indicators</span>
-            )}
+            <div className="flex items-center gap-2">
+              {/* View mode toggle */}
+              <div className="flex rounded-lg border border-[var(--border-subtle)] overflow-hidden">
+                <button
+                  onClick={() => setViewMode("table")}
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium transition-colors",
+                    viewMode === "table"
+                      ? "bg-[var(--accent-positive)] text-black"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]",
+                  )}
+                >
+                  Table
+                </button>
+                <button
+                  onClick={() => setViewMode("heatmap")}
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium transition-colors",
+                    viewMode === "heatmap"
+                      ? "bg-[var(--accent-positive)] text-black"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]",
+                  )}
+                >
+                  Heat Map
+                </button>
+              </div>
+              {activePreset && viewMode === "table" && (
+                <span className="text-[11px] text-[var(--text-tertiary)] hidden sm:inline">
+                  Click a ticker to open chart
+                </span>
+              )}
+            </div>
           </div>
           {results.length === 0 ? (
             <div className="py-12 text-center text-[var(--text-tertiary)]">No stocks matched the criteria.</div>
+          ) : viewMode === "heatmap" ? (
+            /* ── Heat Map view ─────────────────────────────────────────────── */
+            <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+              {results.map((r) => (
+                <div
+                  key={r.symbol}
+                  onClick={() => setChartSymbol(r.symbol)}
+                  className="cursor-pointer rounded-lg p-2 flex flex-col justify-between min-h-[60px] hover:opacity-90 transition-opacity"
+                  style={{ backgroundColor: heatColor(r.change_pct) }}
+                >
+                  <span className="text-white font-bold text-sm leading-tight">{r.symbol}</span>
+                  <span className="text-white/80 text-xs">
+                    {r.change_pct >= 0 ? "+" : ""}
+                    {r.change_pct.toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
           ) : (
+            /* ── Table view ────────────────────────────────────────────────── */
             <div className="overflow-x-auto -mx-3 md:mx-0">
               <table className="w-full text-sm min-w-[480px]">
                 <thead>
@@ -645,25 +721,46 @@ export default function Screener() {
                   {results.map((r) => (
                     <tr
                       key={r.symbol}
-                      onClick={() => navigate(`/chart?symbol=${r.symbol}${activePreset ? `&preset=${activePreset}` : ""}`)}
+                      onClick={() => setChartSymbol(r.symbol)}
                       className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/50 cursor-pointer transition-colors"
                     >
                       <td className="px-4 py-3">
                         <div className="font-mono font-semibold text-[var(--text-primary)]">{r.symbol}</div>
                         {TICKER_NAMES[r.symbol] && (
-                          <div className="text-[11px] text-[var(--text-tertiary)] truncate max-w-[160px]">{TICKER_NAMES[r.symbol]}</div>
+                          <div className="text-[11px] text-[var(--text-tertiary)] truncate max-w-[160px]">
+                            {TICKER_NAMES[r.symbol]}
+                          </div>
                         )}
                         <SectorPill symbol={r.symbol} className="mt-0.5" />
                       </td>
                       <td className="px-4 py-3 text-right text-[var(--text-primary)]">{formatCurrency(r.price)}</td>
-                      <td className={cn("px-4 py-3 text-right font-medium", r.change_pct >= 0 ? "text-[#26a69a]" : "text-[#ef5350]")}>
-                        {r.change_pct >= 0 ? "+" : ""}{formatPercent(r.change_pct)}
+                      <td
+                        className={cn(
+                          "px-4 py-3 text-right font-medium",
+                          r.change_pct >= 0 ? "text-[#26a69a]" : "text-[#ef5350]",
+                        )}
+                      >
+                        {r.change_pct >= 0 ? "+" : ""}
+                        {formatPercent(r.change_pct)}
                       </td>
-                      <td className={cn("px-4 py-3 text-right font-medium hidden sm:table-cell", (r.change_5d ?? 0) >= 0 ? "text-[#26a69a]" : "text-[#ef5350]")}>
-                        {(r.change_5d ?? 0) >= 0 ? "+" : ""}{formatPercent(r.change_5d ?? 0)}
+                      <td
+                        className={cn(
+                          "px-4 py-3 text-right font-medium hidden sm:table-cell",
+                          (r.change_5d ?? 0) >= 0 ? "text-[#26a69a]" : "text-[#ef5350]",
+                        )}
+                      >
+                        {(r.change_5d ?? 0) >= 0 ? "+" : ""}
+                        {formatPercent(r.change_5d ?? 0)}
                       </td>
-                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] hidden sm:table-cell">{formatVolume(r.volume)}</td>
-                      <td className={cn("px-4 py-3 text-right font-medium", (r.rel_volume ?? 1) >= 1.5 ? "text-[#26a69a]" : "text-[var(--text-secondary)]")}>
+                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] hidden sm:table-cell">
+                        {formatVolume(r.volume)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-4 py-3 text-right font-medium",
+                          (r.rel_volume ?? 1) >= 1.5 ? "text-[#26a69a]" : "text-[var(--text-secondary)]",
+                        )}
+                      >
                         {(r.rel_volume ?? 1).toFixed(2)}×
                       </td>
                     </tr>
@@ -674,6 +771,8 @@ export default function Screener() {
           )}
         </div>
       )}
+
+      <SymbolChartDrawer symbol={chartSymbol} onClose={() => setChartSymbol(null)} />
 
       <AskAIDrawer
         open={aiOpen}
