@@ -44,7 +44,7 @@ export default function PaperAccountWidget() {
         <div className="bg-[var(--bg-base)] rounded-lg px-3 py-2">
           <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Positions</div>
           <div className="text-sm font-semibold text-[var(--text-primary)]">
-            {account.positions.length > 0 ? account.positions.length : "—"}
+            {(account.positions?.length ?? 0) > 0 ? account.positions.length : "—"}
           </div>
         </div>
       </div>
