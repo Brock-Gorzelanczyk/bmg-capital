@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Zap, ChevronRight, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -115,6 +115,7 @@ const EMPTY_SUMMARY: AutopilotSummary = {
 
 export default function AutopilotHeroCard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
 
   const { data: status = EMPTY_STATUS } = useQuery<AutopilotStatus>({
@@ -175,8 +176,14 @@ export default function AutopilotHeroCard() {
           </span>
         </div>
         <button
-          onClick={() => navigate("/autopilot")}
-          className="flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+          onClick={() => {
+            if (location.pathname === "/autopilot") {
+              document.getElementById("autopilot-activity-log")?.scrollIntoView({ behavior: "smooth" });
+            } else {
+              navigate("/autopilot");
+            }
+          }}
+          className="flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
         >
           View Activity
           <ChevronRight size={13} />
