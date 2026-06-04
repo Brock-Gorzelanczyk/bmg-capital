@@ -3,17 +3,17 @@ import type { FilterConfig, FilterChip, ScreenResult } from "@/types/screener";
 
 export async function runScreen(filters: FilterConfig[]): Promise<ScreenResult[]> {
   const { data } = await client.post<{ results: ScreenResult[]; count: number }>("/screener/run", { filters });
-  return data.results;
+  return Array.isArray(data?.results) ? data.results : [];
 }
 
 export async function runPreset(name: string): Promise<ScreenResult[]> {
   const { data } = await client.post<{ results: ScreenResult[]; count: number }>(`/screener/presets/${name}`);
-  return data.results;
+  return Array.isArray(data?.results) ? data.results : [];
 }
 
 export async function getPresets(): Promise<string[]> {
   const { data } = await client.get<{ presets: string[] }>("/screener/presets");
-  return data.presets;
+  return Array.isArray(data?.presets) ? data.presets : [];
 }
 
 export interface SavedScreen {

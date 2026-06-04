@@ -3,7 +3,7 @@ import type { AlertConfig, AlertTrigger } from "@/types/alerts";
 
 export async function getAlerts(): Promise<AlertConfig[]> {
   const { data } = await client.get<{ alerts: AlertConfig[] }>("/alerts");
-  return data.alerts;
+  return Array.isArray(data?.alerts) ? data.alerts : [];
 }
 
 export async function createAlert(symbol: string, signal_type: string, threshold?: number): Promise<AlertConfig> {
@@ -17,7 +17,7 @@ export async function deleteAlert(id: number): Promise<void> {
 
 export async function getTriggers(): Promise<AlertTrigger[]> {
   const { data } = await client.get<{ triggers: AlertTrigger[] }>("/alerts/triggers");
-  return data.triggers;
+  return Array.isArray(data?.triggers) ? data.triggers : [];
 }
 
 export async function testAlert(symbol: string, signal_type: string, message = "Test alert"): Promise<void> {

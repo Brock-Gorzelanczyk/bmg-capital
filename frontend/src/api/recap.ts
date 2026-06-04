@@ -32,7 +32,7 @@ export interface MonitorStatus {
 
 export async function getRecaps(): Promise<DailyRecap[]> {
   const { data } = await client.get<{ recaps: DailyRecap[] }>("/recap");
-  return data.recaps;
+  return Array.isArray(data?.recaps) ? data.recaps : [];
 }
 
 export async function getLatestRecap(): Promise<DailyRecap | null> {

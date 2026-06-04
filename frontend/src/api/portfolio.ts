@@ -3,7 +3,7 @@ import type { Portfolio, Position } from "@/types/portfolio";
 
 export async function getPortfolios(): Promise<Portfolio[]> {
   const { data } = await client.get<{ portfolios: Portfolio[] }>("/portfolio");
-  return data.portfolios;
+  return Array.isArray(data?.portfolios) ? data.portfolios : [];
 }
 
 export async function createPortfolio(name: string): Promise<Portfolio> {
@@ -75,7 +75,7 @@ export interface Milestone {
 
 export async function getMilestones(): Promise<Milestone[]> {
   const { data } = await client.get<{ milestones: Milestone[] }>("/portfolio/milestones");
-  return data.milestones;
+  return Array.isArray(data?.milestones) ? data.milestones : [];
 }
 
 // ── Streak ─────────────────────────────────────────────────────────────────

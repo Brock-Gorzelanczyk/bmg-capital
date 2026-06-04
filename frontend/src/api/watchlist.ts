@@ -4,7 +4,7 @@ import type { Snapshot } from "@/types/market";
 
 export async function getWatchlists(): Promise<Watchlist[]> {
   const { data } = await client.get<{ watchlists: Watchlist[] }>("/watchlists");
-  return data.watchlists;
+  return Array.isArray(data?.watchlists) ? data.watchlists : [];
 }
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
@@ -27,5 +27,5 @@ export async function removeSymbol(watchlistId: number, symbol: string): Promise
 
 export async function getSnapshot(watchlistId: number): Promise<Snapshot[]> {
   const { data } = await client.get<{ snapshots: Snapshot[] }>(`/watchlists/${watchlistId}/snapshot`);
-  return data.snapshots;
+  return Array.isArray(data?.snapshots) ? data.snapshots : [];
 }
