@@ -266,8 +266,19 @@ export interface CrossBotPosition {
 
 export const getCrossBotPositions = (): Promise<CrossBotPosition[]> =>
   client
-    .get<CrossBotPosition[]>("/bots/cross-bot-positions")
-    .then((r) => Array.isArray(r.data) ? r.data : [])
+    .get<any>("/bots/cross-bot-positions")
+    .then((r) => {
+      const raw = Array.isArray(r.data) ? r.data
+        : Array.isArray(r.data?.positions) ? r.data.positions
+        : [];
+      return raw.map((p: any): CrossBotPosition => ({
+        symbol: p.symbol ?? "",
+        total_qty: p.total_qty ?? 0,
+        bots_holding: p.bots_holding ?? Object.keys(p.by_bot ?? {}),
+        exposure_pct: p.exposure_pct ?? p.net_exposure_pct ?? 0,
+        pnl: p.pnl ?? 0,
+      }));
+    })
     .catch(() => []);
 
 // ─── Pending reviews (borderline signals) ────────────────────────────────────
