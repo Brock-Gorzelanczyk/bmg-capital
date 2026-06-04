@@ -22,6 +22,9 @@ import {
   type PortfolioData,
 } from "@/api/bots";
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
+import { getCrossBotPositions, type CrossBotPosition } from "@/api/bots";
+import { getWatchlists } from "@/api/watchlist";
+import type { Watchlist } from "@/types/watchlist";
 import { cn } from "@/lib/utils";
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
@@ -220,6 +223,7 @@ function PortfolioHeroSkeleton() {
 
 function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => void }) {
   const [period, setPeriod] = useState<EquityPeriod>("30d");
+  const [posTab, setPosTab] = useState<"positions" | "watchlist">("positions");
 
   const { data: p, isLoading } = useQuery({
     queryKey: ["strategy-lab-portfolio"],
@@ -227,6 +231,19 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
     refetchInterval: 60_000,
     staleTime: 30_000,
     retry: 0,
+  });
+
+  const { data: crossPositions = [] } = useQuery<CrossBotPosition[]>({
+    queryKey: ["cross-bot-positions"],
+    queryFn: getCrossBotPositions,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  const { data: watchlists = [] } = useQuery<Watchlist[]>({
+    queryKey: ["watchlists"],
+    queryFn: getWatchlists,
+    staleTime: 120_000,
   });
 
   if (isLoading) return <PortfolioHeroSkeleton />;
@@ -377,6 +394,75 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
             );
           })}
         </div>
+      </div>
+
+      {/* Open Positions + Watchlist tabs */}
+      <div className="pt-3 border-t border-zinc-800">
+        <div className="flex gap-1 mb-3">
+          {(["positions", "watchlist"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setPosTab(tab)}
+              className={cn(
+                "text-xs px-3 py-1 rounded-lg font-medium transition-colors",
+                posTab === tab
+                  ? "bg-lime-500/15 text-lime-400 border border-lime-500/30"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              {tab === "positions"
+                ? `Open Positions (${crossPositions.length})`
+                : `Watchlist (${watchlists.reduce((s, w) => s + w.items.length, 0)})`}
+            </button>
+          ))}
+        </div>
+
+        {posTab === "positions" && (
+          crossPositions.length === 0 ? (
+            <p className="text-zinc-600 text-xs py-3 text-center">No open positions across bots</p>
+          ) : (
+            <div className="space-y-1">
+              {crossPositions.map((pos) => {
+                const pnlPos = pos.pnl >= 0;
+                return (
+                  <div key={pos.symbol} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80">
+                    <span className="text-xs font-bold text-white w-14 flex-shrink-0">{pos.symbol}</span>
+                    <span className="text-[10px] text-zinc-500 flex-1">{pos.bots_holding.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
+                    <span className="text-[10px] text-zinc-500 w-10 text-right">{pos.total_qty} sh</span>
+                    <span className="text-[10px] text-zinc-500 w-12 text-right">{pos.exposure_pct.toFixed(1)}%</span>
+                    <span className={cn("text-xs font-semibold w-16 text-right", pnlPos ? "text-lime-400" : "text-red-400")}>
+                      {pnlPos ? "+" : "−"}${Math.abs(pos.pnl).toFixed(2)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
+        {posTab === "watchlist" && (
+          watchlists.length === 0 ? (
+            <p className="text-zinc-600 text-xs py-3 text-center">No watchlist items</p>
+          ) : (
+            <div className="space-y-3">
+              {watchlists.map((wl) => (
+                <div key={wl.id}>
+                  <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-1.5">{wl.name}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {wl.items.map((item) => (
+                      <span
+                        key={item.symbol}
+                        className="text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700"
+                      >
+                        {item.symbol}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
       </div>
     </div>
   );
