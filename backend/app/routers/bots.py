@@ -65,6 +65,65 @@ _DEMO_SYMBOLS = {
 _DEMO_SIDES = ["buy", "sell"]
 _DEMO_STRATEGIES = ["momentum_breakout", "mean_reversion", "rsi_bands", "vwap_reversion", "factor_blend", "dca"]
 
+_PORTFOLIO_DEFS = [
+    {"asset_class": "stocks",  "name": "Stocks",  "emoji": "📈", "color_hex": "#A3E635",
+     "bots": {"stock_swing": 1_666_700, "stock_day": 1_666_700, "stock_lt": 1_666_600}},
+    {"asset_class": "crypto",  "name": "Crypto",  "emoji": "🪙", "color_hex": "#F59E0B",
+     "bots": {"crypto_swing": 1_666_700, "crypto_day": 1_666_700, "crypto_lt": 1_666_600}},
+    {"asset_class": "options", "name": "Options", "emoji": "⚡", "color_hex": "#8B5CF6",
+     "bots": {"options_income": 2_500_000, "options_directional": 2_500_000}},
+]
+
+
+def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
+    """Create missing StrategyPortfolio rows and bind BotAllocations. Returns all 3 portfolios."""
+    from app.db.models.bots import StrategyPortfolio
+    now = datetime.now(timezone.utc)
+    portfolios = []
+    for defn in _PORTFOLIO_DEFS:
+        existing = (
+            db.query(StrategyPortfolio)
+            .filter(
+                StrategyPortfolio.user_id == user_id,
+                StrategyPortfolio.asset_class == defn["asset_class"],
+            )
+            .first()
+        )
+        if not existing:
+            existing = StrategyPortfolio(
+                user_id=user_id,
+                name=defn["name"],
+                asset_class=defn["asset_class"],
+                starting_capital_cents=5_000_000,
+                emoji=defn["emoji"],
+                color_hex=defn["color_hex"],
+                created_at=now,
+            )
+            db.add(existing)
+            db.flush()
+
+        # Bind allocations
+        for bot_name, capital_cents in defn["bots"].items():
+            profile = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
+            if not profile:
+                continue
+            alloc = (
+                db.query(BotAllocation)
+                .filter(
+                    BotAllocation.user_id == user_id,
+                    BotAllocation.profile_id == profile.id,
+                )
+                .first()
+            )
+            if alloc and alloc.portfolio_id is None:
+                alloc.portfolio_id = existing.id
+                alloc.capital_cents_within_portfolio = capital_cents
+                alloc.updated_at = now
+
+        portfolios.append(existing)
+    db.commit()
+    return portfolios
+
 
 def _seeded_rng(profile_name: str) -> random.Random:
     """Return a deterministic RNG seeded on the profile name."""
@@ -383,7 +442,130 @@ def activate_all_bots(
             ))
             activated += 1
     db.commit()
+    _ensure_portfolios_for_user(db, current_user.id)
     return {"ok": True, "total_profiles": len(profiles), "activated": activated}
+
+
+# ── GET /api/bots/portfolios ─────────────────────────────────────────────────
+
+@router.get("/portfolios")
+def get_portfolios(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return the 3 strategy portfolios with their bots and live P&L."""
+    from app.db.models.bots import StrategyPortfolio, BotDailyPnL
+    _ensure_portfolios_for_user(db, current_user.id)
+
+    portfolios_db = (
+        db.query(StrategyPortfolio)
+        .filter(StrategyPortfolio.user_id == current_user.id)
+        .order_by(StrategyPortfolio.id)
+        .all()
+    )
+
+    profiles = db.query(BotProfile).filter(BotProfile.enabled.is_(True)).all()
+    profile_map = {p.id: p for p in profiles}
+
+    user_allocations = {
+        a.profile_id: a
+        for a in db.query(BotAllocation).filter(
+            BotAllocation.user_id == current_user.id
+        ).all()
+    }
+
+    result = []
+    for port in portfolios_db:
+        # Get allocations for this portfolio
+        port_allocs = [
+            a for a in user_allocations.values()
+            if a.portfolio_id == port.id
+        ]
+
+        # Compute live unrealized P&L from BotPositions
+        unrealized_cents = 0
+        realized_cents = 0
+        for alloc in port_allocs:
+            open_pos = db.query(BotPosition).filter(
+                BotPosition.allocation_id == alloc.id,
+                BotPosition.closed_at.is_(None),
+            ).all()
+            for pos in open_pos:
+                entry = pos.avg_cost_cents / 100
+                # Simulate current price with small drift
+                import hashlib as _hlib
+                seed_int = int(_hlib.md5(f"{pos.symbol}-{pos.opened_at}".encode()).hexdigest()[:8], 16)
+                import random as _rand
+                rng = _rand.Random(seed_int)
+                drift_pct = rng.gauss(0.8, 3.0)
+                current = entry * (1 + drift_pct / 100)
+                unrealized_cents += int((current - entry) * pos.qty * 100)
+
+        # Sum realized from BotDailyPnL
+        for alloc in port_allocs:
+            rows = db.query(BotDailyPnL).filter(
+                BotDailyPnL.allocation_id == alloc.id
+            ).all()
+            for row in rows:
+                realized_cents += row.realized_cents
+
+        current_value_cents = port.starting_capital_cents + unrealized_cents + realized_cents
+        pnl_cents = current_value_cents - port.starting_capital_cents
+        pnl_pct = (pnl_cents / port.starting_capital_cents * 100) if port.starting_capital_cents else 0.0
+
+        # Build bot list for this portfolio
+        bots = []
+        for alloc in port_allocs:
+            profile = profile_map.get(alloc.profile_id)
+            if not profile:
+                continue
+            has_real_data = db.query(BotPosition).filter(
+                BotPosition.allocation_id == alloc.id
+            ).count() > 0
+            row = _profile_to_dict(profile, alloc)
+            if not has_real_data:
+                row["demo"] = True
+                row["return_30d_pct"] = _demo_30d_return(profile.name)
+                row["today_pnl_usd"] = _demo_today_pnl(profile.name)
+                row["open_positions"] = _demo_positions(profile.name, profile.asset_class)
+            else:
+                row["demo"] = False
+                row["return_30d_pct"] = None
+                row["today_pnl_usd"] = None
+                row["open_positions"] = []
+            bots.append(row)
+
+        result.append({
+            "id": port.id,
+            "name": port.name,
+            "asset_class": port.asset_class,
+            "emoji": port.emoji,
+            "color_hex": port.color_hex,
+            "starting_capital_cents": port.starting_capital_cents,
+            "current_value_cents": current_value_cents,
+            "pnl_cents": pnl_cents,
+            "pnl_pct": round(pnl_pct, 3),
+            "enabled": port.enabled,
+            "bots": bots,
+        })
+
+    return {"portfolios": result}
+
+
+# ── POST /api/bots/portfolios/setup ──────────────────────────────────────────
+
+@router.post("/portfolios/setup")
+def setup_portfolios(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Idempotent: create the 3 strategy portfolios for the current user if missing."""
+    from app.db.models.bots import StrategyPortfolio
+    _ensure_portfolios_for_user(db, current_user.id)
+    count = db.query(StrategyPortfolio).filter(
+        StrategyPortfolio.user_id == current_user.id
+    ).count()
+    return {"ok": True, "portfolios": count}
 
 
 # ── GET /api/bots/cross-bot-positions ────────────────────────────────────────

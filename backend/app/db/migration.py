@@ -176,9 +176,11 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "dca_basket_assets": [],
     "bot_profiles": [],
     "bot_allocations": [
-        ("paused_reason",            "VARCHAR"),
-        ("starting_capital_cents",   "INT"),
-        ("card_config",              "JSONB"),
+        ("paused_reason",                    "VARCHAR"),
+        ("starting_capital_cents",           "INT"),
+        ("card_config",                      "JSONB"),
+        ("portfolio_id",                     "INTEGER"),
+        ("capital_cents_within_portfolio",   "INTEGER"),
     ],
     "bot_signals": [],
     "bot_positions": [],
@@ -199,6 +201,8 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "cross_bot_positions": [],
     "news_events": [],
     "anomaly_events": [],
+    "strategy_portfolios": [],
+    "portfolio_daily_pnl": [],
 }
 
 
@@ -233,6 +237,67 @@ def _record_migration(conn, name: str) -> None:
     conn.commit()
 
 
+def _migrate_strategy_portfolios(conn) -> None:
+    """One-time data migration: create 3 StrategyPortfolio rows per user and
+    assign BotAllocations to their portfolio. Safe to re-run."""
+    _DEFS = [
+        {"asset_class": "stocks",  "name": "Stocks",  "emoji": "📈", "color": "#A3E635",
+         "bots": {"stock_swing": 1_666_700, "stock_day": 1_666_700, "stock_lt": 1_666_600}},
+        {"asset_class": "crypto",  "name": "Crypto",  "emoji": "🪙", "color": "#F59E0B",
+         "bots": {"crypto_swing": 1_666_700, "crypto_day": 1_666_700, "crypto_lt": 1_666_600}},
+        {"asset_class": "options", "name": "Options", "emoji": "⚡", "color": "#8B5CF6",
+         "bots": {"options_income": 2_500_000, "options_directional": 2_500_000}},
+    ]
+    try:
+        users = conn.execute(text("SELECT id FROM users")).fetchall()
+        for (user_id,) in users:
+            for defn in _DEFS:
+                # Upsert portfolio row
+                existing_portfolio = conn.execute(
+                    text("SELECT id FROM strategy_portfolios WHERE user_id=:u AND asset_class=:a"),
+                    {"u": user_id, "a": defn["asset_class"]}
+                ).fetchone()
+                if not existing_portfolio:
+                    conn.execute(
+                        text("""
+                            INSERT INTO strategy_portfolios
+                            (user_id, name, asset_class, starting_capital_cents,
+                             paper_mode, enabled, emoji, color_hex, created_at)
+                            VALUES (:u, :n, :a, 5000000, 1, 1, :e, :c,
+                                    datetime('now'))
+                        """),
+                        {"u": user_id, "n": defn["name"], "a": defn["asset_class"],
+                         "e": defn["emoji"], "c": defn["color"]}
+                    )
+                    conn.commit()
+                    existing_portfolio = conn.execute(
+                        text("SELECT id FROM strategy_portfolios WHERE user_id=:u AND asset_class=:a"),
+                        {"u": user_id, "a": defn["asset_class"]}
+                    ).fetchone()
+
+                portfolio_id = existing_portfolio[0]
+
+                # Assign BotAllocations to this portfolio
+                for bot_name, capital_cents in defn["bots"].items():
+                    conn.execute(
+                        text("""
+                            UPDATE bot_allocations
+                            SET portfolio_id = :pid,
+                                capital_cents_within_portfolio = :cap
+                            WHERE user_id = :uid
+                              AND profile_id = (
+                                  SELECT id FROM bot_profiles WHERE name = :bname
+                              )
+                              AND (portfolio_id IS NULL OR portfolio_id = :pid)
+                        """),
+                        {"pid": portfolio_id, "cap": capital_cents,
+                         "uid": user_id, "bname": bot_name}
+                    )
+                conn.commit()
+    except Exception as exc:
+        logger.warning("_migrate_strategy_portfolios: %s", exc)
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -261,3 +326,5 @@ def run_migrations(engine: Engine) -> None:
                 elif col_name in existing and not _migration_already_ran(conn, migration_name):
                     # Column already exists but wasn't tracked — record it now
                     _record_migration(conn, migration_name)
+
+        _migrate_strategy_portfolios(conn)

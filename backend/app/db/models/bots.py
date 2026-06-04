@@ -48,6 +48,8 @@ class BotAllocation(Base):
         DateTime, default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc), nullable=False
     )
+    portfolio_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("strategy_portfolios.id"), nullable=True, index=True)
+    capital_cents_within_portfolio: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
 class BotSignal(Base):
@@ -266,3 +268,33 @@ class AnomalyEvent(Base):
     ts: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     anomaly_type: Mapped[str] = mapped_column(String(50))  # flash_crash|vol_spike|halt|circuit_breaker
     snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class StrategyPortfolio(Base):
+    __tablename__ = "strategy_portfolios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)           # "Stocks" / "Crypto" / "Options"
+    asset_class: Mapped[str] = mapped_column(String, nullable=False)    # "stocks" / "crypto" / "options"
+    starting_capital_cents: Mapped[int] = mapped_column(Integer, default=5_000_000, nullable=False)
+    paper_mode: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    emoji: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    color_hex: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    __table_args__ = (UniqueConstraint("user_id", "asset_class"),)
+
+
+class PortfolioDailyPnL(Base):
+    __tablename__ = "portfolio_daily_pnl"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    portfolio_id: Mapped[int] = mapped_column(Integer, ForeignKey("strategy_portfolios.id"), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    realized_cents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    unrealized_cents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    value_eod_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    __table_args__ = (UniqueConstraint("portfolio_id", "date"),)

@@ -192,6 +192,26 @@ export const resumeAllBots = () =>
 export const activateAllBots = (): Promise<{ ok: boolean; total_profiles: number; activated: number }> =>
   client.post("/bots/activate-all").then((r) => r.data);
 
+export interface StrategyPortfolio {
+  id: number;
+  name: string;
+  asset_class: "stocks" | "crypto" | "options";
+  emoji: string;
+  color_hex: string;
+  starting_capital_cents: number;
+  current_value_cents: number;
+  pnl_cents: number;
+  pnl_pct: number;
+  enabled: boolean;
+  bots: BotListItem[];
+}
+
+export const getPortfolios = (): Promise<{ portfolios: StrategyPortfolio[] }> =>
+  client.get("/bots/portfolios").then((r) => r.data);
+
+export const setupPortfolios = (): Promise<{ ok: boolean; portfolios: number }> =>
+  client.post("/bots/portfolios/setup").then((r) => r.data);
+
 export interface CatalystEvent {
   id: string | number;
   event_type: string;
