@@ -101,8 +101,36 @@ const PageLoader = () => (
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) {
+    // Stale chunk after a new deploy — hard reload fixes it silently
+    const msg = error.message ?? "";
+    if (
+      msg.includes("Failed to fetch dynamically imported module") ||
+      msg.includes("Importing a module script failed") ||
+      msg.includes("Loading chunk") ||
+      msg.includes("ChunkLoadError")
+    ) {
+      window.location.reload();
+    }
+  }
   render() {
     if (this.state.error) {
+      const msg = (this.state.error as Error).message ?? "";
+      const isChunkError =
+        msg.includes("Failed to fetch dynamically imported module") ||
+        msg.includes("Importing a module script failed") ||
+        msg.includes("Loading chunk") ||
+        msg.includes("ChunkLoadError");
+      if (isChunkError) {
+        return (
+          <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-8">
+            <div className="text-zinc-400 text-sm text-center">
+              <div className="w-8 h-8 border-2 border-lime-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              Updating to latest version…
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-8">
           <div className="max-w-lg w-full bg-zinc-950 border border-red-900 rounded-xl p-6">
