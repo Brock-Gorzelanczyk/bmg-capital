@@ -189,6 +189,9 @@ export const pauseAllBots = () =>
 export const resumeAllBots = () =>
   client.post("/bots/resume-all").then((r) => r.data);
 
+export const activateAllBots = (): Promise<{ ok: boolean; total_profiles: number; activated: number }> =>
+  client.post("/bots/activate-all").then((r) => r.data);
+
 export interface CatalystEvent {
   id: string | number;
   event_type: string;

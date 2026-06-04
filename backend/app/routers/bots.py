@@ -1,7 +1,7 @@
 """
-Strategy Lab — six-bot automated paper trading framework router.
+Strategy Lab — eight-bot automated paper trading framework router.
 
-GET  /api/bots                          — list all 6 BotProfiles + user's allocations
+GET  /api/bots                          — list all 8 BotProfiles + user's allocations
 GET  /api/bots/{profile_name}           — single bot detail + positions + recent signals
 POST /api/bots/{profile_name}/allocate  — create/update BotAllocation for current user
 GET  /api/bots/{profile_name}/backtest  — stub: demo equity curve + metrics
@@ -59,6 +59,7 @@ class AllocateBody(BaseModel):
 _DEMO_SYMBOLS = {
     "stock": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "V", "UNH"],
     "crypto": ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "MATIC/USD"],
+    "options": ["AAPL", "MSFT", "SPY", "NVDA", "AMZN", "QQQ", "GOOGL", "META", "TSLA", "JPM"],
 }
 
 _DEMO_SIDES = ["buy", "sell"]
@@ -207,7 +208,7 @@ def list_bots(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """List all 6 BotProfiles with user's allocations and demo performance data."""
+    """List all 8 BotProfiles with user's allocations and demo performance data."""
     profiles = db.query(BotProfile).filter(BotProfile.enabled.is_(True)).all()
 
     # Index user's allocations by profile_id for quick lookup
@@ -338,6 +339,51 @@ def resume_all_bots(
         count += 1
     db.commit()
     return {"status": "resumed", "allocations_resumed": count}
+
+
+# ── POST /api/bots/activate-all ──────────────────────────────────────────────
+
+@router.post("/activate-all")
+def activate_all_bots(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Ensure every enabled BotProfile has an active allocation for this user.
+
+    Creates missing allocations and re-enables any that were disabled.
+    """
+    profiles = db.query(BotProfile).filter(BotProfile.enabled.is_(True)).all()
+    now = datetime.now(timezone.utc)
+    activated = 0
+    for p in profiles:
+        existing = (
+            db.query(BotAllocation)
+            .filter(
+                BotAllocation.user_id == current_user.id,
+                BotAllocation.profile_id == p.id,
+            )
+            .first()
+        )
+        if existing:
+            if not existing.enabled:
+                existing.enabled = True
+                existing.paused_reason = None
+                existing.updated_at = now
+                activated += 1
+        else:
+            db.add(BotAllocation(
+                user_id=current_user.id,
+                profile_id=p.id,
+                capital_pct=10.0,
+                risk_profile="standard",
+                paper_mode=True,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            ))
+            activated += 1
+    db.commit()
+    return {"ok": True, "total_profiles": len(profiles), "activated": activated}
 
 
 # ── GET /api/bots/cross-bot-positions ────────────────────────────────────────

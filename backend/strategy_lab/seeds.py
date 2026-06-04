@@ -21,6 +21,8 @@ _PROFILE_DESCRIPTIONS = {
     "crypto_swing": "4-hour cadence crypto swing trades on top 20 coins. Wide stops and targets for high-volatility assets.",
     "crypto_day": "Minute-by-minute crypto scalping using VWAP reversion and momentum. 24/7 operation.",
     "crypto_lt": "Weekly DCA accumulation into top 10 crypto assets. Long-term conviction approach, no stops.",
+    "options_income": "Wheel strategy, covered calls, cash-secured puts, iron condors — premium collection on high-IV stocks.",
+    "options_directional": "Credit spreads, debit spreads, LEAPS — directional options plays on momentum stocks.",
 }
 
 

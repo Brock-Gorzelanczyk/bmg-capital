@@ -970,3 +970,12 @@ def setup_scheduler() -> None:
         id="daily_autonomous_recap",
         replace_existing=True,
     )
+
+    # Job 4: Bot execution — 10:00 AM ET, M-F (30 min after open)
+    from app.screener.bot_executor import run_bot_execution_job
+    scheduler.add_job(
+        run_bot_execution_job,
+        CronTrigger(day_of_week="mon-fri", hour=10, minute=0, timezone=ET),
+        id="bot_execution",
+        replace_existing=True,
+    )

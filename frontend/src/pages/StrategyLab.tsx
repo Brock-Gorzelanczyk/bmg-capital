@@ -14,6 +14,7 @@ import {
   getRegime,
   pauseAllBots,
   resumeAllBots,
+  activateAllBots,
   getPendingReviews,
   getStrategyLabPortfolio,
   type BotListItem,
@@ -1186,6 +1187,15 @@ export default function StrategyLab() {
     onError: () => toast.error("Failed to resume all bots"),
   });
 
+  const activateAllMut = useMutation({
+    mutationFn: activateAllBots,
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
+      toast.success(res.activated > 0 ? `${res.activated} bot${res.activated > 1 ? "s" : ""} activated` : "All bots already active");
+    },
+    onError: () => toast.error("Failed to activate bots"),
+  });
+
   // Build the ordered bot list — fall back to hardcoded if anything goes wrong
   let bots: BotListItem[] = [];
   if (isLoading) {
@@ -1248,6 +1258,15 @@ export default function StrategyLab() {
               >
                 {railOpen ? "‹ Activity" : "Activity ›"}
               </button>
+              {bots.some((b) => !b.allocation?.enabled) && (
+                <button
+                  onClick={() => activateAllMut.mutate()}
+                  disabled={activateAllMut.isPending}
+                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50 shadow-lg shadow-lime-500/20"
+                >
+                  {activateAllMut.isPending ? "Activating…" : "Activate All 8 Bots"}
+                </button>
+              )}
               {allPaused ? (
                 <button
                   onClick={() => resumeAllMut.mutate()}
