@@ -31,7 +31,7 @@ export default function Sparkline({ symbol, width = 64, height = 28 }: Props) {
     gcTime: 48 * 3600_000,
   });
 
-  const prices = data?.bars.map((b) => b.c) ?? [];
+  const prices = data?.bars?.map((b) => b.c) ?? [];
   if (prices.length < 2) return <div style={{ width, height }} className="shrink-0" />;
 
   const isUp = prices[prices.length - 1] >= prices[0];

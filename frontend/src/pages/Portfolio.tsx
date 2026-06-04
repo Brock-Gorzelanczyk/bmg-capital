@@ -161,7 +161,7 @@ function MiniSparkline({ symbol }: { symbol: string }) {
     gcTime: 7_200_000,
   });
 
-  const closes = data?.bars.map((b) => b.c) ?? [];
+  const closes = data?.bars?.map((b) => b.c) ?? [];
   if (closes.length < 2) return <div className="w-10 h-5 shrink-0" />;
 
   const isUp = closes[closes.length - 1] >= closes[0];
@@ -799,7 +799,7 @@ function RiskTab({ positions }: { positions: PaperPosition[] }) {
 
   const barsMap: Record<string, number[]> = {};
   allSymbols.forEach((sym, i) => {
-    barsMap[sym] = results[i].data?.bars.map((b) => b.c) ?? [];
+    barsMap[sym] = results[i].data?.bars?.map((b) => b.c) ?? [];
   });
   const spyCloses = barsMap["SPY"] ?? [];
 
@@ -1250,8 +1250,8 @@ export default function Portfolio() {
     enabled: !!account,
   });
 
-  const spyCloses = spyData?.bars.map((b) => b.c) ?? [];
-  const spyDates = spyData?.bars.map((b) => b.t.slice(0, 10)) ?? [];
+  const spyCloses = spyData?.bars?.map((b) => b.c) ?? [];
+  const spyDates = spyData?.bars?.map((b) => b.t.slice(0, 10)) ?? [];
 
   const positions = account?.positions ?? [];
 
