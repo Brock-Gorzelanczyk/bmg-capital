@@ -105,7 +105,7 @@ export default function Dashboard() {
         const created = await createWorkspace(payload);
         // Update store with backend ID
         useWidgetStore.setState((s) => ({
-          workspaces: s.workspaces.map((w) =>
+          workspaces: (s.workspaces ?? []).map((w) =>
             w.id === activeWorkspace.id ? { ...w, backendId: created.id } : w
           ),
         }));
@@ -235,7 +235,7 @@ export default function Dashboard() {
               containerPadding={[0, 0] as const}
               compactor={verticalCompactor}
             >
-              {activeWorkspace.widgets.map((inst) => {
+              {(activeWorkspace.widgets ?? []).map((inst) => {
                 const def = WIDGET_REGISTRY[inst.widgetId];
                 const WidgetComp = WIDGET_COMPONENTS[inst.widgetId];
                 const title = def?.name ?? inst.widgetId;
@@ -267,7 +267,7 @@ export default function Dashboard() {
       {libraryOpen && (
         <WidgetLibraryModal
           workspaceId={activeWorkspace.id}
-          existingWidgetIds={activeWorkspace.widgets.map((w) => w.widgetId)}
+          existingWidgetIds={(activeWorkspace.widgets ?? []).map((w) => w.widgetId)}
           onAdd={handleAddWidget}
           onClose={() => setLibraryOpen(false)}
         />

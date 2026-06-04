@@ -123,6 +123,10 @@ export default function NetPortfolio() {
             <div key={i} className="flex-1 min-w-[140px] h-20 bg-zinc-900 border border-zinc-800 rounded-2xl" />
           ))}
         </div>
+      ) : positions.length === 0 ? (
+        <div className="flex items-center justify-center py-16 text-zinc-500 text-sm text-center">
+          Connect a brokerage or add positions to see your net worth.
+        </div>
       ) : (
         <div className="flex flex-wrap gap-4">
           <SummaryCard

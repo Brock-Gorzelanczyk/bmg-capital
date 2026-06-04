@@ -338,6 +338,11 @@ def add_position(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
+    if body.average_cost <= 0:
+        raise HTTPException(status_code=400, detail="average_cost must be positive")
+    if body.shares <= 0:
+        raise HTTPException(status_code=400, detail="shares must be positive")
+
     p = db.query(Portfolio).filter(
         Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id
     ).first()
@@ -421,6 +426,41 @@ def delete_position(
     db.delete(pos)
     db.commit()
     return {"ok": True}
+
+
+@router.delete("/{portfolio_id}/positions/cleanup-demo")
+def cleanup_demo_positions(
+    portfolio_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Delete any positions with average_cost == 0 or average_cost == 99.99 (demo fixtures)."""
+    p = db.query(Portfolio).filter(
+        Portfolio.id == portfolio_id, Portfolio.user_id == current_user.id
+    ).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    demo_positions = (
+        db.query(Position)
+        .filter(
+            Position.portfolio_id == portfolio_id,
+            (Position.average_cost == 0) | (Position.average_cost == 99.99),
+        )
+        .all()
+    )
+    deleted_symbols = [pos.symbol for pos in demo_positions]
+    for pos in demo_positions:
+        db.delete(pos)
+    db.commit()
+
+    logger.info(
+        "cleanup-demo: deleted %d demo position(s) from portfolio %s: %s",
+        len(deleted_symbols),
+        portfolio_id,
+        deleted_symbols,
+    )
+    return {"deleted_count": len(deleted_symbols), "deleted_symbols": deleted_symbols}
 
 
 @router.post("/kelly")
@@ -555,7 +595,7 @@ async def portfolio_summary(
     total_gain = total_value - total_cost
     total_gain_pct = (total_gain / total_cost * 100) if total_cost else 0.0
 
-    return {
+    response: Dict[str, Any] = {
         "portfolio_id": portfolio_id,
         "name": p.name,
         "positions": enriched,
@@ -564,6 +604,16 @@ async def portfolio_summary(
         "total_gain": total_gain,
         "total_gain_pct": total_gain_pct,
     }
+
+    if total_value > 10_000_000:
+        logger.warning(
+            "Portfolio %s total_value=$%.2f exceeds $10M sanity threshold — possible stale demo data",
+            portfolio_id,
+            total_value,
+        )
+        response["sanity_warning"] = "paper portfolio > $10M — possible stale demo data"
+
+    return response
 
 
 # ---------------------------------------------------------------------------

@@ -172,8 +172,28 @@ def get_status(
         guardrail_status = "paused" if guardrail.global_paused else "ok"
         health_score = _compute_health_score(actions_today, policies)
 
+        # Also count bot strategy signals from AutonomousAction (Mission Control source)
+        # so Autopilot and Mission Control always show the same total
+        bot_signals_today = 0
+        if _HAS_AUTONOMOUS and _AutonomousAction is not None:
+            try:
+                bot_signals_today = (
+                    db.query(_AutonomousAction)
+                    .filter(
+                        _AutonomousAction.user_id == user_id,
+                        _AutonomousAction.created_at >= today_start,
+                    )
+                    .count()
+                )
+            except Exception:
+                pass
+
+        total_combined = len(actions_today) + bot_signals_today
+
         return {
-            "total_actions_today": len(actions_today),
+            "total_actions_today": total_combined,
+            "autopilot_actions_today": len(actions_today),
+            "bot_signals_today": bot_signals_today,
             "categories": categories_out,
             "global_paused": guardrail.global_paused,
             "guardrail_status": guardrail_status,
@@ -183,6 +203,8 @@ def get_status(
         logger.error(f"autopilot /status error: {e}", exc_info=True)
         return {
             "total_actions_today": 0,
+            "autopilot_actions_today": 0,
+            "bot_signals_today": 0,
             "categories": [{"name": c, "enabled": True, "last_action": None, "actions_today": 0} for c in CATEGORIES],
             "global_paused": False,
             "guardrail_status": "unknown",

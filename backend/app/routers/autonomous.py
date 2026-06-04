@@ -35,6 +35,44 @@ router = APIRouter(prefix="/api/autonomous", tags=["autonomous"])
 
 TOTAL_ASSETS_MONITORED = 8212
 
+# Known crypto symbols for asset-class mismatch guard
+_KNOWN_CRYPTO = {"BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "DOT"}
+
+
+def _asset_class_matches_strategy(strategy_id: str, asset: str) -> bool:
+    """
+    Return True if the asset class implied by asset matches the strategy type.
+
+    Crypto strategies (strategy_id contains "crypto") should only operate on
+    assets ending in "-USD" or in the known crypto set.
+    Stock strategies (strategy_id contains "stock") should not operate on crypto assets.
+    All other strategy names are unrestricted.
+    """
+    sid = strategy_id.lower() if strategy_id else ""
+    asset_upper = asset.upper() if asset else ""
+
+    is_crypto_asset = asset_upper.endswith("-USD") or asset_upper in _KNOWN_CRYPTO
+    is_crypto_strategy = "crypto" in sid
+    is_stock_strategy = "stock" in sid
+
+    if is_crypto_strategy and not is_crypto_asset:
+        logger.warning(
+            "Blocked: crypto strategy %s attempted on stock ticker %s",
+            strategy_id,
+            asset,
+        )
+        return False
+
+    if is_stock_strategy and is_crypto_asset:
+        logger.warning(
+            "Blocked: stock strategy %s attempted on crypto asset %s",
+            strategy_id,
+            asset,
+        )
+        return False
+
+    return True
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

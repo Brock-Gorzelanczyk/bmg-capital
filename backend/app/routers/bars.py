@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -13,6 +14,9 @@ from app.indicators.engine import compute_indicators
 from app.services.bar_cache import get_cached, set_cache
 
 router = APIRouter(prefix="/api/bars", tags=["bars"])
+
+# Module-level price cache: sym -> (price, timestamp)
+_price_cache: dict[str, tuple[float, float]] = {}
 
 # Known crypto base tickers → yfinance format (BASE → BASE-USD)
 _CRYPTO_BASES = {
@@ -189,8 +193,8 @@ def _fetch_yf_ohlcv(ticker: yf.Ticker, start_str: str, end_str: str, interval: s
 
 class BatchBarsRequest(BaseModel):
     symbols: list[str]
-    start: str | None = None
-    end: str | None = None
+    start: Optional[str] = None
+    end: Optional[str] = None
     timeframe: str = "1Day"
 
 
@@ -260,17 +264,27 @@ async def get_latest_prices(
     """Return the latest close price for up to 30 symbols. Used for live P&L in position tables."""
     sym_list = [_normalize_symbol(s) for s in symbols.split(",") if s.strip()][:30]
     prices: dict[str, float | None] = {}
+    stale_symbols: list[str] = []
+    now = time.time()
     for sym in sym_list:
         try:
             ticker = yf.Ticker(sym)
             hist = ticker.history(period="2d")
             if not hist.empty:
-                prices[sym] = round(float(hist["Close"].iloc[-1]), 4)
+                price = round(float(hist["Close"].iloc[-1]), 4)
+                prices[sym] = price
+                _price_cache[sym] = (price, now)
             else:
                 prices[sym] = None
         except Exception:
-            prices[sym] = None
-    return {"prices": prices}
+            # Fallback: use cached price if less than 24 hours old
+            cached = _price_cache.get(sym)
+            if cached is not None and (now - cached[1]) < 86400:
+                prices[sym] = cached[0]
+                stale_symbols.append(sym)
+            else:
+                prices[sym] = None
+    return {"prices": prices, "stale_symbols": stale_symbols}
 
 
 @router.post("/batch")

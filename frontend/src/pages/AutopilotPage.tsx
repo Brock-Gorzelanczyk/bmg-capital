@@ -23,6 +23,7 @@ import {
   SkipForward,
   XCircle,
   Pencil,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -690,7 +691,10 @@ function ActivityLog({ initialCategory }: { initialCategory?: string }) {
         {isLoading ? (
           <div className="p-8 text-center text-sm text-[var(--text-tertiary)]">Loading…</div>
         ) : !Array.isArray(actions) || actions.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[var(--text-tertiary)]">No actions found</div>
+          <div className="p-8 text-center text-sm text-[var(--text-tertiary)] flex flex-col items-center gap-2">
+            <Clock size={18} className="text-[var(--text-tertiary)]" />
+            <span>Awaiting first signal — runs next at market open.</span>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -843,13 +847,19 @@ export default function AutopilotPage() {
           </div>
           <div className="flex items-center gap-2">
             {/* Health score chip */}
-            <div className="flex items-center gap-1.5 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-full px-3 py-1">
-              <span className="text-xs text-[var(--text-tertiary)]">Health</span>
-              <span className={cn(
-                "text-xs font-bold",
-                healthScore >= 80 ? "text-[#84cc16]" : healthScore >= 50 ? "text-yellow-400" : "text-red-400"
-              )}>{healthScore}</span>
-            </div>
+            {healthScore === 0 ? (
+              <div className="flex items-center gap-1.5 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-full px-3 py-1">
+                <span className="text-xs text-[var(--text-tertiary)]">System ready. First signals appear after the next market open.</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-full px-3 py-1">
+                <span className="text-xs text-[var(--text-tertiary)]">Health</span>
+                <span className={cn(
+                  "text-xs font-bold",
+                  healthScore >= 80 ? "text-[#84cc16]" : healthScore >= 50 ? "text-yellow-400" : "text-red-400"
+                )}>{healthScore}</span>
+              </div>
+            )}
             {/* Pause / Resume */}
             {globalPaused ? (
               <button
@@ -871,16 +881,22 @@ export default function AutopilotPage() {
         </div>
 
         <div className="mt-5">
-          <p className="text-2xl font-bold text-[var(--text-primary)]">
-            Today, BMG did{" "}
-            <span
-              className="text-[#84cc16] animate-pulse"
-              style={{ animationDuration: "3s" }}
-            >
-              {totalActions}
-            </span>{" "}
-            things for you
-          </p>
+          {totalActions === 0 ? (
+            <p className="text-base text-[var(--text-secondary)]">
+              No automations ran today. Bots execute at market open (9:30am ET) on weekdays.
+            </p>
+          ) : (
+            <p className="text-2xl font-bold text-[var(--text-primary)]">
+              Today, BMG did{" "}
+              <span
+                className="text-[#84cc16] animate-pulse"
+                style={{ animationDuration: "3s" }}
+              >
+                {totalActions}
+              </span>{" "}
+              things for you
+            </p>
+          )}
         </div>
 
         {highlights.length > 0 && (

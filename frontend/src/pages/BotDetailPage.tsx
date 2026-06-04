@@ -7,6 +7,8 @@ import { ArrowLeft, X, Lock, Unlock } from "lucide-react";
 import {
   LineChart,
   Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,

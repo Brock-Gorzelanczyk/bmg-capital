@@ -223,11 +223,11 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         for p in open_pos_rows
     ]
 
-    # ── Watchlist count ───────────────────────────────────────────────────────
+    # ── Watchlist count (scoped to this allocation, not whole profile) ─────────
     watchlist_count = (
         db.query(BotWatchlist)
         .filter(
-            BotWatchlist.profile_id == profile.id,
+            BotWatchlist.allocation_id == alloc.id,
             BotWatchlist.status.in_(["watching", "pending_entry", "active"]),
         )
         .count()

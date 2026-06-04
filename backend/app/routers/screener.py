@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -37,7 +37,7 @@ class FilterChip(BaseModel):
 
 class NLParseRequest(BaseModel):
     query: str
-    existing_filters: List[FilterChip] | None = None
+    existing_filters: Optional[List[FilterChip]] = None
 
 
 class NLParseResponse(BaseModel):

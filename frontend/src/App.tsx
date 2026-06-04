@@ -102,54 +102,30 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   state = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error) {
-    // Stale chunk after a new deploy — hard reload fixes it silently
     const msg = error.message ?? "";
-    if (
+    const isChunkError =
       msg.includes("Failed to fetch dynamically imported module") ||
       msg.includes("Importing a module script failed") ||
       msg.includes("Loading chunk") ||
-      msg.includes("ChunkLoadError")
-    ) {
+      msg.includes("ChunkLoadError");
+    if (isChunkError) {
+      // Stale chunk after a new deploy — hard reload fixes it silently
       window.location.reload();
     }
+    // All other errors are displayed via the render fallback below
   }
   render() {
     if (this.state.error) {
-      const msg = (this.state.error as Error).message ?? "";
-      const isChunkError =
-        msg.includes("Failed to fetch dynamically imported module") ||
-        msg.includes("Importing a module script failed") ||
-        msg.includes("Loading chunk") ||
-        msg.includes("ChunkLoadError");
-      if (isChunkError) {
-        return (
-          <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-8">
-            <div className="text-zinc-400 text-sm text-center">
-              <div className="w-8 h-8 border-2 border-lime-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              Updating to latest version…
-            </div>
-          </div>
-        );
-      }
       return (
         <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-8">
-          <div className="max-w-lg w-full bg-zinc-950 border border-red-900 rounded-xl p-6">
-            <h1 className="text-red-400 font-bold text-lg mb-2">Application Error</h1>
-            <pre className="text-zinc-400 text-xs whitespace-pre-wrap break-all bg-black rounded p-3 mb-4 overflow-auto max-h-64">
-              {(this.state.error as Error).message}
-              {"\n\n"}
-              {(this.state.error as Error).stack}
-            </pre>
+          <div className="text-center">
+            <h1 className="text-white font-bold text-xl mb-2">Something went wrong</h1>
+            <p className="text-zinc-500 text-sm mb-6">{(this.state.error as Error).message}</p>
             <button
-              onClick={() => {
-                ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4", "BMG_QUERY_CACHE_v5"].forEach(k => {
-                  try { localStorage.removeItem(k); } catch {}
-                });
-                window.location.reload();
-              }}
+              onClick={() => window.location.reload()}
               className="bg-white text-black text-sm font-semibold px-4 py-2 rounded-lg hover:bg-zinc-200"
             >
-              Clear cache &amp; reload
+              Reload
             </button>
           </div>
         </div>
@@ -220,6 +196,7 @@ function AppInner() {
   }, []);
 
   return (
+    <ErrorBoundary>
     <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route element={<AppShell />}>
@@ -305,6 +282,7 @@ function AppInner() {
       prefillQuery={coPilot.prefillQuery}
     />
     </Suspense>
+    </ErrorBoundary>
   );
 }
 
