@@ -56,6 +56,17 @@ class AllocateBody(BaseModel):
 
 # ── Demo data helpers ─────────────────────────────────────────────────────────
 
+_DISPLAY_NAMES: dict[str, str] = {
+    "stock_swing":          "Stock Swing",
+    "stock_day":            "Stock Day",
+    "stock_lt":             "Stock Long-Term",
+    "crypto_swing":         "Crypto Swing",
+    "crypto_day":           "Crypto Day",
+    "crypto_lt":            "Crypto Long-Term",
+    "options_income":       "Options Income",
+    "options_directional":  "Options Directional",
+}
+
 _DEMO_SYMBOLS = {
     "stock": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "V", "UNH"],
     "crypto": ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "MATIC/USD"],
@@ -284,26 +295,32 @@ def list_bots(
         )
         user_allocations = {a.profile_id: a for a in allocs}
 
+    from app.core.canonical import compute_bot_snapshot
+
     result = []
     for p in profiles:
         allocation = user_allocations.get(p.id)
-        has_real_data = allocation is not None and db.query(BotPosition).filter(
-            BotPosition.allocation_id == allocation.id
-        ).count() > 0
 
         row = _profile_to_dict(p, allocation)
+        row["display_name"] = _DISPLAY_NAMES.get(p.name, p.name.replace("_", " ").title())
 
-        # Inject demo data when no real positions exist
-        if not has_real_data:
+        if allocation is not None:
+            snap = compute_bot_snapshot(allocation, p, db)
+            row["demo"] = False
+            row["return_30d_pct"] = snap.return_30d_pct
+            row["today_pnl_usd"] = round(snap.today_pnl_cents / 100, 2)
+            row["open_positions"] = snap.open_positions
+            row["open_positions_count"] = snap.open_positions_count
+            row["portfolio_value_cents"] = snap.portfolio_value_cents
+            row["all_time_return_pct"] = snap.all_time_return_pct
+        else:
             row["demo"] = True
             row["return_30d_pct"] = _demo_30d_return(p.name)
             row["today_pnl_usd"] = _demo_today_pnl(p.name)
             row["open_positions"] = _demo_positions(p.name, p.asset_class)
-        else:
-            row["demo"] = False
-            row["return_30d_pct"] = None  # computed from real data in future
-            row["today_pnl_usd"] = None
-            row["open_positions"] = []
+            row["open_positions_count"] = len(row["open_positions"])
+            row["portfolio_value_cents"] = None
+            row["all_time_return_pct"] = None
 
         result.append(row)
 
@@ -453,8 +470,10 @@ def get_portfolios(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Return the 3 strategy portfolios with their bots and live P&L."""
-    from app.db.models.bots import StrategyPortfolio, BotDailyPnL
+    """Return the 3 strategy portfolios with their bots and live P&L (canonical)."""
+    from app.db.models.bots import StrategyPortfolio
+    from app.core.canonical import compute_portfolio_snapshot, DISPLAY_NAMES
+
     _ensure_portfolios_for_user(db, current_user.id)
 
     portfolios_db = (
@@ -467,72 +486,41 @@ def get_portfolios(
     profiles = db.query(BotProfile).filter(BotProfile.enabled.is_(True)).all()
     profile_map = {p.id: p for p in profiles}
 
-    user_allocations = {
-        a.profile_id: a
-        for a in db.query(BotAllocation).filter(
-            BotAllocation.user_id == current_user.id
-        ).all()
-    }
+    all_allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == current_user.id)
+        .all()
+    )
 
     result = []
     for port in portfolios_db:
-        # Get allocations for this portfolio
-        port_allocs = [
-            a for a in user_allocations.values()
-            if a.portfolio_id == port.id
-        ]
+        port_allocs = [a for a in all_allocs if a.portfolio_id == port.id]
+        pairs = [(a, profile_map[a.profile_id]) for a in port_allocs if a.profile_id in profile_map]
 
-        # Compute live unrealized P&L from BotPositions
-        unrealized_cents = 0
-        realized_cents = 0
-        for alloc in port_allocs:
-            open_pos = db.query(BotPosition).filter(
-                BotPosition.allocation_id == alloc.id,
-                BotPosition.closed_at.is_(None),
-            ).all()
-            for pos in open_pos:
-                entry = pos.avg_cost_cents / 100
-                # Simulate current price with small drift
-                import hashlib as _hlib
-                seed_int = int(_hlib.md5(f"{pos.symbol}-{pos.opened_at}".encode()).hexdigest()[:8], 16)
-                import random as _rand
-                rng = _rand.Random(seed_int)
-                drift_pct = rng.gauss(0.8, 3.0)
-                current = entry * (1 + drift_pct / 100)
-                unrealized_cents += int((current - entry) * pos.qty * 100)
+        snap = compute_portfolio_snapshot(port, pairs, db)
 
-        # Sum realized from BotDailyPnL
-        for alloc in port_allocs:
-            rows = db.query(BotDailyPnL).filter(
-                BotDailyPnL.allocation_id == alloc.id
-            ).all()
-            for row in rows:
-                realized_cents += row.realized_cents
+        pnl_cents = snap.portfolio_value_cents - snap.starting_capital_cents
 
-        current_value_cents = port.starting_capital_cents + unrealized_cents + realized_cents
-        pnl_cents = current_value_cents - port.starting_capital_cents
-        pnl_pct = (pnl_cents / port.starting_capital_cents * 100) if port.starting_capital_cents else 0.0
-
-        # Build bot list for this portfolio
         bots = []
-        for alloc in port_allocs:
-            profile = profile_map.get(alloc.profile_id)
-            if not profile:
-                continue
-            has_real_data = db.query(BotPosition).filter(
-                BotPosition.allocation_id == alloc.id
-            ).count() > 0
-            row = _profile_to_dict(profile, alloc)
-            if not has_real_data:
-                row["demo"] = True
-                row["return_30d_pct"] = _demo_30d_return(profile.name)
-                row["today_pnl_usd"] = _demo_today_pnl(profile.name)
-                row["open_positions"] = _demo_positions(profile.name, profile.asset_class)
-            else:
-                row["demo"] = False
-                row["return_30d_pct"] = None
-                row["today_pnl_usd"] = None
-                row["open_positions"] = []
+        for bot in snap.bots:
+            alloc = next((a for a in port_allocs if a.id == bot.allocation_id), None)
+            profile = next((p for _, p in pairs if p.name == bot.profile_name), None)
+
+            row = _profile_to_dict(profile, alloc) if profile and alloc else {}
+            row["name"] = bot.profile_name
+            row["display_name"] = bot.display_name
+            row["demo"] = False
+            row["return_30d_pct"] = bot.return_30d_pct
+            row["today_pnl_usd"] = round(bot.today_pnl_cents / 100, 2)
+            row["open_positions"] = bot.open_positions
+            row["open_positions_count"] = bot.open_positions_count
+            row["portfolio_value_cents"] = bot.portfolio_value_cents
+            row["all_time_return_pct"] = bot.all_time_return_pct
+            row["capital_cents_within_portfolio"] = bot.capital_cents_within_portfolio
+            row["capital_pct_within_portfolio"] = (
+                round(bot.capital_cents_within_portfolio / snap.starting_capital_cents * 100, 1)
+                if snap.starting_capital_cents else 0
+            )
             bots.append(row)
 
         result.append({
@@ -541,15 +529,105 @@ def get_portfolios(
             "asset_class": port.asset_class,
             "emoji": port.emoji,
             "color_hex": port.color_hex,
-            "starting_capital_cents": port.starting_capital_cents,
-            "current_value_cents": current_value_cents,
+            "starting_capital_cents": snap.starting_capital_cents,
+            "current_value_cents": snap.portfolio_value_cents,
             "pnl_cents": pnl_cents,
-            "pnl_pct": round(pnl_pct, 3),
+            "pnl_pct": round(snap.all_time_return_pct, 3),
+            "today_pnl_cents": snap.today_pnl_cents,
+            "today_pnl_pct": snap.today_pnl_pct,
+            "return_30d_pct": snap.return_30d_pct,
+            "realized_pnl_cents": snap.realized_pnl_cents,
+            "unrealized_pnl_cents": snap.unrealized_pnl_cents,
+            "open_positions_count": snap.open_positions_count,
+            "watchlist_count": snap.watchlist_count,
+            "bots_active": snap.bots_active,
+            "bots_total": snap.bots_total,
             "enabled": port.enabled,
             "bots": bots,
         })
 
     return {"portfolios": result}
+
+
+# ── GET /api/bots/portfolios/{portfolio_id}/activity ─────────────────────────
+
+@router.get("/portfolios/{portfolio_id}/activity")
+def get_portfolio_activity(
+    portfolio_id: int,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Recent trades across all bots in a portfolio — proves every P&L dollar."""
+    from app.db.models.bots import StrategyPortfolio
+
+    port = db.query(StrategyPortfolio).filter(
+        StrategyPortfolio.id == portfolio_id,
+        StrategyPortfolio.user_id == current_user.id,
+    ).first()
+    if not port:
+        raise HTTPException(404, "Portfolio not found")
+
+    port_allocs = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.portfolio_id == portfolio_id,
+        )
+        .all()
+    )
+    alloc_ids = [a.id for a in port_allocs]
+    if not alloc_ids:
+        return {"trades": [], "total": 0}
+
+    # Profile names for display
+    profile_ids = list({a.profile_id for a in port_allocs})
+    profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+    profile_name_by_id = {p.id: p.name for p in profiles}
+    alloc_profile = {a.id: profile_name_by_id.get(a.profile_id, "") for a in port_allocs}
+
+    trades = (
+        db.query(BotTrade)
+        .filter(BotTrade.allocation_id.in_(alloc_ids))
+        .order_by(BotTrade.ts.desc())
+        .limit(limit)
+        .all()
+    )
+
+    # For sell trades, look up the position to compute realized PnL
+    position_ids = [t.position_id for t in trades if t.position_id and t.side == "sell"]
+    position_map = {}
+    if position_ids:
+        pos_rows = db.query(BotPosition).filter(BotPosition.id.in_(position_ids)).all()
+        position_map = {p.id: p for p in pos_rows}
+
+    result = []
+    for t in trades:
+        bot_name = alloc_profile.get(t.allocation_id, "")
+        from app.core.canonical import DISPLAY_NAMES
+        display = DISPLAY_NAMES.get(bot_name, bot_name.replace("_", " ").title())
+        fill_price = round(t.fill_price_cents / 100, 2)
+
+        realized_pnl = None
+        if t.side == "sell" and t.position_id and t.position_id in position_map:
+            pos = position_map[t.position_id]
+            realized_pnl = round((fill_price - pos.avg_cost_cents / 100) * t.qty, 2)
+
+        result.append({
+            "id": t.id,
+            "ts": t.ts.isoformat() if t.ts else None,
+            "bot_name": bot_name,
+            "bot_display_name": display,
+            "symbol": t.symbol,
+            "side": t.side,
+            "qty": t.qty,
+            "fill_price": fill_price,
+            "fill_price_cents": t.fill_price_cents,
+            "realized_pnl": realized_pnl,
+            "is_paper": t.is_paper,
+        })
+
+    return {"trades": result, "total": len(result)}
 
 
 # ── POST /api/bots/portfolios/setup ──────────────────────────────────────────
