@@ -385,6 +385,61 @@ export interface PortfolioData {
   worst_performer: { profile: string; return_30d_pct: number } | null;
 }
 
+// ─── Dashboard-specific types + fetchers ─────────────────────────────────────
+
+export interface DashboardHealth {
+  status: "ok" | "warn" | "critical";
+  message: string;
+  bots_active: number;
+  bots_paused: number;
+  bots_total: number;
+  paused_bots: Array<{ name: string; reason: string }>;
+}
+
+export const getDashboardHealth = (): Promise<DashboardHealth> =>
+  client
+    .get<DashboardHealth>("/bots/dashboard-health")
+    .then((r) => r.data)
+    .catch((): DashboardHealth => ({
+      status: "warn",
+      message: "Could not load health",
+      bots_active: 0,
+      bots_paused: 0,
+      bots_total: 0,
+      paused_bots: [],
+    }));
+
+export interface RecentSignal {
+  ts: string;
+  bot_name: string;
+  display_name: string;
+  symbol: string;
+  side: "buy" | "sell" | "hold";
+  confidence: number;
+  reason: string;
+  strategy: string;
+}
+
+export const getRecentSignals = (limit = 20): Promise<{ signals: RecentSignal[] }> =>
+  client
+    .get<{ signals: RecentSignal[] }>("/bots/signals/recent", { params: { limit } })
+    .then((r) => r.data)
+    .catch(() => ({ signals: [] }));
+
+export interface WatchlistMover {
+  symbol: string;
+  change_pct: number;
+  portfolio: string;
+  status: string;
+  score: number;
+}
+
+export const getWatchlistMovers = (limit = 4): Promise<{ movers: WatchlistMover[] }> =>
+  client
+    .get<{ movers: WatchlistMover[] }>("/bots/watchlist/movers", { params: { limit } })
+    .then((r) => r.data)
+    .catch(() => ({ movers: [] }));
+
 export const getStrategyLabPortfolio = (): Promise<PortfolioData> =>
   client
     .get<PortfolioData>("/strategy-lab/portfolio")
