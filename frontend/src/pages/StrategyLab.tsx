@@ -23,6 +23,7 @@ import {
 } from "@/api/bots";
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
 import { getCrossBotPositions, getCrossBotWatchlist, type CrossBotPosition, type CrossBotWatchlistItem } from "@/api/bots";
+import { getAnalystSummary, type AnalystSummaryItem } from "@/api/analyst";
 import { cn } from "@/lib/utils";
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
@@ -1005,6 +1006,86 @@ interface BottomNavProps {
   onOpenCoPilot: () => void;
 }
 
+function ConvictionStars({ score }: { score: number | null }) {
+  if (score == null) return <span className="text-zinc-600 text-xs">—</span>;
+  const filled = Math.round(score);
+  return (
+    <span className={score >= 4 ? "text-lime-400" : score >= 3 ? "text-yellow-400" : "text-zinc-500"}>
+      {"★".repeat(filled)}{"☆".repeat(5 - filled)}
+    </span>
+  );
+}
+
+function AnalystHighlights() {
+  const { data: summary, isLoading } = useQuery({
+    queryKey: ["analyst-summary"],
+    queryFn: getAnalystSummary,
+    staleTime: 300_000,
+    retry: 0,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 animate-pulse">
+        <div className="h-4 w-40 bg-zinc-800 rounded mb-4" />
+        <div className="grid grid-cols-3 gap-3">
+          {[0, 1, 2].map(i => <div key={i} className="h-16 bg-zinc-800 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
+
+  const picks = summary?.top_picks ?? [];
+  const concerns = summary?.concerns ?? [];
+  const hasData = picks.length > 0 || concerns.length > 0;
+
+  if (!hasData) return null;
+
+  function SummaryCard({ item, flag }: { item: AnalystSummaryItem; flag?: boolean }) {
+    return (
+      <Link to="/strategy/analyst" className="block bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3 hover:border-zinc-600 transition-colors">
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-semibold text-white text-sm">{item.symbol}</span>
+          {flag
+            ? <span className="text-xs text-red-400 font-semibold">⚑ Flagged</span>
+            : <ConvictionStars score={item.conviction_score} />}
+        </div>
+        <p className="text-[11px] text-zinc-500 leading-tight line-clamp-2">{item.thesis_preview}</p>
+        <p className="text-[10px] text-zinc-600 mt-1">{item.bot_name.replace(/_/g, " ")} · {item.suggested_hold}</p>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-zinc-300">AI Analyst Highlights</h3>
+        <Link to="/strategy/analyst" className="text-xs text-lime-400 hover:text-lime-300 underline underline-offset-2">
+          Full report →
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {picks.length > 0 && (
+          <div>
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wide font-semibold mb-2">Top Picks</p>
+            <div className="space-y-2">
+              {picks.slice(0, 3).map(p => <SummaryCard key={p.id} item={p} />)}
+            </div>
+          </div>
+        )}
+        {concerns.length > 0 && (
+          <div>
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wide font-semibold mb-2">Concerns</p>
+            <div className="space-y-2">
+              {concerns.slice(0, 3).map(c => <SummaryCard key={c.id} item={c} flag />)}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BottomNav({ onOpenActivity, onOpenCoPilot }: BottomNavProps) {
   const navigate = useNavigate();
   return (
@@ -1142,7 +1223,7 @@ export default function StrategyLab() {
             <div>
               <h1 className="text-2xl font-bold text-white">Strategy Lab</h1>
               <p className="text-zinc-500 text-sm mt-1">
-                Six autonomous paper-trading bots. Each runs its own strategy, tracks P&L, and signals entries.
+                Eight autonomous paper-trading bots. Each runs its own strategy, tracks P&L, and signals entries.
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -1237,6 +1318,9 @@ export default function StrategyLab() {
 
           {/* Comparison table */}
           {!isLoading && bots.length > 0 && <ComparisonTable bots={bots} />}
+
+          {/* AI Analyst highlights */}
+          <AnalystHighlights />
 
           {/* Today's Questions */}
           <TodaysQuestions

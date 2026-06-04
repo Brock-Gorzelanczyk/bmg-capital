@@ -188,6 +188,26 @@ async def _fetch_bars_for_symbol(
     return {"bars": bars_list}
 
 
+@router.get("/latest")
+async def get_latest_prices(
+    symbols: str = Query(..., description="Comma-separated symbols e.g. NVDA,AAPL,BTC-USD"),
+):
+    """Return the latest close price for up to 30 symbols. Used for live P&L in position tables."""
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()][:30]
+    prices: dict[str, float | None] = {}
+    for sym in sym_list:
+        try:
+            ticker = yf.Ticker(sym)
+            hist = ticker.history(period="2d")
+            if not hist.empty:
+                prices[sym] = round(float(hist["Close"].iloc[-1]), 4)
+            else:
+                prices[sym] = None
+        except Exception:
+            prices[sym] = None
+    return {"prices": prices}
+
+
 @router.post("/batch")
 async def get_bars_batch(body: BatchBarsRequest):
     """Fetch OHLCV bars for multiple symbols in a single request (capped at 20 symbols)."""

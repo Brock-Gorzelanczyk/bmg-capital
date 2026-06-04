@@ -223,6 +223,39 @@ class NewsEvent(Base):
     source: Mapped[str] = mapped_column(String(100))
 
 
+class WatchlistAnalysis(Base):
+    """AI Analyst thesis for a watchlisted symbol."""
+    __tablename__ = "watchlist_analyses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bot_profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("bot_profiles.id"), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    thesis_md: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    conviction_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-5
+    reasons_to_own: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    risks: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    suggested_hold: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    concerns_flag: Mapped[bool] = mapped_column(Boolean, default=False)
+    inputs_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    model_used: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
+class AnalystDailyRun(Base):
+    """Summary of an analyst run for a bot."""
+    __tablename__ = "analyst_daily_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_date: Mapped[date] = mapped_column(Date, nullable=False)
+    bot_profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("bot_profiles.id"), nullable=False, index=True)
+    num_analyzed: Mapped[int] = mapped_column(Integer, default=0)
+    num_high_conviction: Mapped[int] = mapped_column(Integer, default=0)
+    num_flagged_concerns: Mapped[int] = mapped_column(Integer, default=0)
+    total_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class AnomalyEvent(Base):
     """Market anomalies detected by anomaly_detector.py."""
     __tablename__ = "anomaly_events"

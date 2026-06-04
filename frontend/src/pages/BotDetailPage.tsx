@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +38,8 @@ import {
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
 import { CoachmarkOverlay } from "@/pages/CustomBotBuilderPage";
+import { getWatchlistAnalyses, type WatchlistAnalysis } from "@/api/analyst";
+import { getLatestPrices } from "@/api/bars";
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
 
@@ -558,9 +560,98 @@ function WhyModal({ signal, onClose }: WhyModalProps) {
   );
 }
 
+// ─── Analyst helpers ──────────────────────────────────────────────────────────
+
+function ConvictionStars({ score }: { score: number | null }) {
+  if (score == null) return <span className="text-zinc-600 text-xs">—</span>;
+  const filled = Math.round(score);
+  return (
+    <span className={cn("text-sm font-medium", score >= 4 ? "text-lime-400" : score >= 3 ? "text-yellow-400" : "text-zinc-500")}>
+      {"★".repeat(filled)}{"☆".repeat(5 - filled)}
+    </span>
+  );
+}
+
+function AnalystDrawer({ analysis, onClose }: { analysis: WatchlistAnalysis; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div
+        className="relative h-full w-full max-w-md bg-zinc-950 border-l border-zinc-800 shadow-2xl overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-zinc-950 border-b border-zinc-800 px-5 py-4 flex items-center justify-between">
+          <div>
+            <span className="font-bold text-white text-lg mr-2">{analysis.symbol}</span>
+            <ConvictionStars score={analysis.conviction_score} />
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5 space-y-5">
+          <div>
+            <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold mb-2">Thesis</p>
+            <p className="text-sm text-zinc-300 leading-relaxed">{analysis.thesis_md}</p>
+          </div>
+          {analysis.reasons_to_own?.length > 0 && (
+            <div>
+              <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold mb-2">Reasons to Own</p>
+              <ul className="space-y-1.5">
+                {analysis.reasons_to_own.map((r, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-zinc-300">
+                    <span className="text-lime-400 mt-0.5">✓</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {analysis.risks?.length > 0 && (
+            <div>
+              <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold mb-2">Risks</p>
+              <ul className="space-y-1.5">
+                {analysis.risks.map((r, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-zinc-300">
+                    <span className="text-red-400 mt-0.5">⚠</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex gap-4">
+            <div>
+              <p className="text-[11px] text-zinc-600">Suggested Hold</p>
+              <p className="text-sm text-zinc-300 font-medium">{analysis.suggested_hold || "—"}</p>
+            </div>
+            {analysis.concerns_flag && (
+              <div>
+                <p className="text-[11px] text-zinc-600">Flag</p>
+                <p className="text-sm text-red-400 font-medium">⚑ Concerns flagged</p>
+              </div>
+            )}
+          </div>
+          <p className="text-[10px] text-zinc-700 border-t border-zinc-800 pt-3">
+            Model: {analysis.model_used ?? "claude-haiku"} · {analysis.ts ? new Date(analysis.ts).toLocaleString() : ""}
+            {analysis.cost_usd != null ? ` · $${analysis.cost_usd.toFixed(4)}` : ""}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Watchlist table ──────────────────────────────────────────────────────────
 
-function WatchlistTable({ botName }: { botName: string }) {
+function WatchlistTable({
+  botName,
+  analysisBySymbol = {},
+  onSelectAnalysis,
+}: {
+  botName: string;
+  analysisBySymbol?: Record<string, WatchlistAnalysis>;
+  onSelectAnalysis?: (a: WatchlistAnalysis) => void;
+}) {
   const [showAll, setShowAll] = useState(false);
 
   const { data: watchlist = [], isLoading } = useQuery({
@@ -615,38 +706,54 @@ function WatchlistTable({ botName }: { botName: string }) {
               <th className="text-left pb-2 font-medium w-8">#</th>
               <th className="text-left pb-2 font-medium">Symbol</th>
               <th className="text-left pb-2 font-medium w-32">Score</th>
-              <th className="text-left pb-2 font-medium">Top Reason</th>
+              <th className="text-left pb-2 font-medium">AI Conviction</th>
               <th className="text-left pb-2 font-medium">Status</th>
               <th className="text-right pb-2 font-medium">Last Evaluated</th>
             </tr>
           </thead>
           <tbody>
-            {displayed.map((item, idx) => (
-              <tr key={item.symbol} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
-                <td className="py-2.5 text-xs text-zinc-600">{item.rank ?? idx + 1}</td>
-                <td className="py-2.5 font-semibold text-white text-sm">{item.symbol}</td>
-                <td className="py-2.5 pr-4">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[60px]">
-                      <div
-                        className={cn("h-1.5 rounded-full", item.score >= 70 ? "bg-lime-500" : item.score >= 40 ? "bg-yellow-500" : "bg-red-500")}
-                        style={{ width: `${Math.min(100, Math.max(0, item.score))}%` }}
-                      />
+            {displayed.map((item, idx) => {
+              const analysis = analysisBySymbol[item.symbol];
+              return (
+                <tr key={item.symbol} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
+                  <td className="py-2.5 text-xs text-zinc-600">{item.rank ?? idx + 1}</td>
+                  <td className="py-2.5 font-semibold text-white text-sm">{item.symbol}</td>
+                  <td className="py-2.5 pr-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[60px]">
+                        <div
+                          className={cn("h-1.5 rounded-full", item.score >= 70 ? "bg-lime-500" : item.score >= 40 ? "bg-yellow-500" : "bg-red-500")}
+                          style={{ width: `${Math.min(100, Math.max(0, item.score))}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-zinc-400 w-6 text-right">{item.score}</span>
                     </div>
-                    <span className="text-xs text-zinc-400 w-6 text-right">{item.score}</span>
-                  </div>
-                </td>
-                <td className="py-2.5 text-xs text-zinc-400 capitalize">{getTopReason(item.reasons)}</td>
-                <td className="py-2.5">
-                  <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded-full border", statusBadgeClass(item.status))}>
-                    {item.status}
-                  </span>
-                </td>
-                <td className="py-2.5 text-right text-xs text-zinc-500">
-                  {formatRelativeAgo(item.last_evaluated_at)}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="py-2.5">
+                    {analysis ? (
+                      <button
+                        onClick={() => onSelectAnalysis?.(analysis)}
+                        className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                        title="View AI thesis"
+                      >
+                        <ConvictionStars score={analysis.conviction_score} />
+                        {analysis.concerns_flag && <span className="text-red-400 text-xs">⚑</span>}
+                      </button>
+                    ) : (
+                      <span className="text-zinc-700 text-xs">Not analyzed</span>
+                    )}
+                  </td>
+                  <td className="py-2.5">
+                    <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded-full border", statusBadgeClass(item.status))}>
+                      {item.status}
+                    </span>
+                  </td>
+                  <td className="py-2.5 text-right text-xs text-zinc-500">
+                    {formatRelativeAgo(item.last_evaluated_at)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1462,6 +1569,7 @@ export default function BotDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [selectedSignal, setSelectedSignal] = useState<BotSignal | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<BotPosition | null>(null);
+  const [analystPanel, setAnalystPanel] = useState<WatchlistAnalysis | null>(null);
   const activitySearchRef = useRef<HTMLInputElement | null>(null);
 
   const meta = BOT_META[botName];
@@ -1502,6 +1610,32 @@ export default function BotDetailPage() {
   const allocation = data?.allocation;
   const positions: BotPosition[] = Array.isArray(data?.positions) ? data!.positions : [];
   const signals: BotSignal[] = Array.isArray(data?.signals) ? data!.signals : [];
+
+  // Analyst data for watchlist tab
+  const { data: rawAnalyses } = useQuery({
+    queryKey: ["watchlist-analyses", profile?.id],
+    queryFn: () => getWatchlistAnalyses(profile!.id),
+    enabled: !!profile?.id && activeTab === "watchlist",
+    staleTime: 300_000,
+    retry: 0,
+  });
+  const analysisBySymbol = useMemo(() => {
+    const map: Record<string, WatchlistAnalysis> = {};
+    if (Array.isArray(rawAnalyses)) {
+      for (const a of rawAnalyses) map[a.symbol] = a;
+    }
+    return map;
+  }, [rawAnalyses]);
+
+  // Live prices for open positions
+  const positionSymbols = useMemo(() => positions.map(p => p.symbol), [positions]);
+  const { data: livePrices = {} } = useQuery({
+    queryKey: ["live-prices", positionSymbols],
+    queryFn: () => getLatestPrices(positionSymbols),
+    enabled: positionSymbols.length > 0 && activeTab === "overview",
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
   const stats = (data?.stats ?? {}) as {
     return_30d_pct?: number;
     today_pnl?: number;
@@ -1772,6 +1906,12 @@ export default function BotDetailPage() {
                   <tbody>
                     {positions.map((pos) => {
                       const signal = signals.find((s) => s.symbol === pos.symbol) ?? null;
+                      const livePrice = livePrices[pos.symbol] ?? null;
+                      const avgCost = pos.avg_cost_cents ? pos.avg_cost_cents / 100 : null;
+                      const unrealizedPnl = livePrice && avgCost && pos.qty
+                        ? (livePrice - avgCost) * pos.qty : null;
+                      const pnlPct = livePrice && avgCost
+                        ? ((livePrice - avgCost) / avgCost) * 100 : null;
                       return (
                         <tr
                           key={pos.id}
@@ -1782,8 +1922,14 @@ export default function BotDetailPage() {
                           <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
                           <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
                           <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
-                          <td className="py-2.5 text-right text-zinc-500">—</td>
-                          <td className="py-2.5 text-right text-zinc-500">—</td>
+                          <td className="py-2.5 text-right text-zinc-300">
+                            {livePrice != null ? `$${livePrice.toFixed(2)}` : "—"}
+                          </td>
+                          <td className={cn("py-2.5 text-right text-sm font-medium", unrealizedPnl == null ? "text-zinc-500" : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400")}>
+                            {unrealizedPnl != null
+                              ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)} (${pnlPct! >= 0 ? "+" : ""}${pnlPct!.toFixed(2)}%)`
+                              : "—"}
+                          </td>
                           <td className="py-2.5 text-right text-zinc-500 text-xs">{formatTime(pos.opened_at)}</td>
                           <td className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                             {signal && (
@@ -1854,8 +2000,15 @@ export default function BotDetailPage() {
       {activeTab === "watchlist" && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
           <h2 className="text-sm font-semibold text-zinc-300 mb-4">Watchlist</h2>
-          <WatchlistTable botName={botName} />
+          <WatchlistTable
+            botName={botName}
+            analysisBySymbol={analysisBySymbol}
+            onSelectAnalysis={setAnalystPanel}
+          />
         </div>
+      )}
+      {analystPanel && (
+        <AnalystDrawer analysis={analystPanel} onClose={() => setAnalystPanel(null)} />
       )}
 
       {/* Backtest tab */}

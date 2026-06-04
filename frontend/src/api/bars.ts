@@ -1,6 +1,11 @@
 import client from "./client";
 import type { Bar } from "@/types/market";
 
+export const getLatestPrices = (symbols: string[]): Promise<Record<string, number | null>> =>
+  client.get<{ prices: Record<string, number | null> }>(`/bars/latest`, { params: { symbols: symbols.join(",") } })
+    .then(r => r.data.prices)
+    .catch(() => ({}));
+
 export interface BarsResponse {
   symbol: string;
   bars: Bar[];

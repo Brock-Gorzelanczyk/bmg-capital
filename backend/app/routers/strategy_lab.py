@@ -310,7 +310,24 @@ def get_portfolio(
     return_30d_value_cents: int = total_value_cents - value_30d_ago
 
     # ── 6. All-time return ────────────────────────────────────────────────────
-    total_starting: int = sum(int(a.starting_capital_cents or 0) for a in allocations)
+    def _starting_capital(alloc: BotAllocation) -> int:
+        if alloc.starting_capital_cents:
+            return int(alloc.starting_capital_cents)
+        # Fall back to earliest portfolio_value_eod_cents
+        earliest = db.execute(
+            select(BotDailyPnL.portfolio_value_eod_cents)
+            .where(
+                BotDailyPnL.allocation_id == alloc.id,
+                BotDailyPnL.portfolio_value_eod_cents.is_not(None),
+            )
+            .order_by(BotDailyPnL.date)
+            .limit(1)
+        ).scalar()
+        if earliest:
+            return int(earliest)
+        return 1_000_000  # $10,000 default
+
+    total_starting: int = sum(_starting_capital(a) for a in allocations)
     try:
         return_all_time_pct: float = round((total_value_cents - total_starting) / total_starting * 100, 2) if total_starting else 0.0
     except ZeroDivisionError:
