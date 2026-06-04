@@ -55,33 +55,9 @@ export interface BotPosition {
 }
 
 export const getBots = () =>
-  client.get<{ bots: any[] }>("/bots").then((r) => {
-    const raw: any[] = r.data?.bots ?? [];
-    return {
-      bots: raw.map((b): BotListItem => ({
-        profile: {
-          id: b.id,
-          name: b.name,
-          description: b.description ?? "",
-          asset_class: b.asset_class ?? "stock",
-          position_cap: b.config?.position_cap ?? 10,
-          cadence: b.config?.cadence ?? "daily",
-          stop_loss_pct: b.config?.stop_loss_pct ?? null,
-          take_profit_pct: b.config?.take_profit_pct ?? null,
-          paper_only: true,
-          enabled: b.enabled ?? true,
-        },
-        allocation: b.allocation ?? null,
-        stats: {
-          return_30d_pct: b.return_30d_pct ?? 0,
-          today_pnl: b.today_pnl_usd ?? 0,
-          open_positions: Array.isArray(b.open_positions) ? b.open_positions.length : 0,
-          total_trades: b.total_trades ?? 0,
-          win_rate_pct: b.win_rate_pct ?? 0,
-        },
-      })),
-    };
-  });
+  client.get<{ bots: any[] }>("/bots").then((r) => ({
+    bots: (r.data?.bots ?? []).filter((b: any) => !!b?.name).map(_rawBotToListItem),
+  }));
 
 export const getBot = (name: string) =>
   client.get<any>(`/bots/${name}`).then((r) => {
@@ -206,8 +182,41 @@ export interface StrategyPortfolio {
   bots: BotListItem[];
 }
 
+function _rawBotToListItem(b: any): BotListItem {
+  return {
+    profile: {
+      id: b.id,
+      name: b.name,
+      description: b.description ?? "",
+      asset_class: b.asset_class ?? "stock",
+      position_cap: b.config?.position_cap ?? 10,
+      cadence: b.config?.cadence ?? "daily",
+      stop_loss_pct: b.config?.stop_loss_pct ?? null,
+      take_profit_pct: b.config?.take_profit_pct ?? null,
+      paper_only: true,
+      enabled: b.enabled ?? true,
+    },
+    allocation: b.allocation ?? null,
+    stats: {
+      return_30d_pct: b.return_30d_pct ?? 0,
+      today_pnl: b.today_pnl_usd ?? 0,
+      open_positions: Array.isArray(b.open_positions) ? b.open_positions.length : 0,
+      total_trades: b.total_trades ?? 0,
+      win_rate_pct: b.win_rate_pct ?? 0,
+    },
+  };
+}
+
 export const getPortfolios = (): Promise<{ portfolios: StrategyPortfolio[] }> =>
-  client.get("/bots/portfolios").then((r) => r.data);
+  client.get("/bots/portfolios").then((r) => {
+    const raw = r.data as { portfolios: any[] };
+    return {
+      portfolios: (raw.portfolios ?? []).map((p: any) => ({
+        ...p,
+        bots: (p.bots ?? []).filter((b: any) => !!b?.name).map(_rawBotToListItem),
+      })),
+    };
+  });
 
 export const setupPortfolios = (): Promise<{ ok: boolean; portfolios: number }> =>
   client.post("/bots/portfolios/setup").then((r) => r.data);
