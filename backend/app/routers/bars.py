@@ -14,6 +14,71 @@ from app.services.bar_cache import get_cached, set_cache
 
 router = APIRouter(prefix="/api/bars", tags=["bars"])
 
+# Known crypto base tickers → yfinance format (BASE → BASE-USD)
+_CRYPTO_BASES = {
+    "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "DOT", "MATIC",
+    "LINK", "UNI", "ATOM", "LTC", "ETC", "BCH", "NEAR", "APT", "OP", "ARB",
+    "SUI", "SEI", "TIA", "INJ", "PYTH", "JUP", "BONK", "WIF", "PEPE",
+    "FET", "RENDER", "IMX", "GRT", "SAND", "MANA", "AXS", "ENJ", "CHZ",
+    "SHIB", "FLOKI", "VET", "ALGO", "XLM", "TRX", "FIL", "AAVE", "MKR",
+    "SNX", "COMP", "CRV", "1INCH", "SUSHI", "YFI", "BAL", "LDO", "RPL",
+    "CAKE", "RUNE", "LUNA", "USTC", "EOS", "ZEC", "DASH", "XMR", "QTUM",
+    "WAVES", "ZIL", "NEO", "ONT", "ICX", "IOTA", "HBAR", "EGLD",
+}
+
+# Extended crypto identifiers people might type
+_CRYPTO_ALIASES = {
+    "BITCOIN": "BTC-USD",
+    "ETHEREUM": "ETH-USD",
+    "SOLANA": "SOL-USD",
+    "RIPPLE": "XRP-USD",
+    "CARDANO": "ADA-USD",
+    "DOGECOIN": "DOGE-USD",
+    "LITECOIN": "LTC-USD",
+    "BINANCE": "BNB-USD",
+    "POLYGON": "MATIC-USD",
+    "CHAINLINK": "LINK-USD",
+    "UNISWAP": "UNI-USD",
+    "POLKADOT": "DOT-USD",
+    "AVALANCHE": "AVAX-USD",
+    "COSMOS": "ATOM-USD",
+    "NEAR PROTOCOL": "NEAR-USD",
+    "SHIBA INU": "SHIB-USD",
+    # Also handle slash-pair formats: BTC/USD → BTC-USD
+    "BTC/USD": "BTC-USD",
+    "ETH/USD": "ETH-USD",
+    "SOL/USD": "SOL-USD",
+    "AVAX/USD": "AVAX-USD",
+    "MATIC/USD": "MATIC-USD",
+    "LINK/USD": "LINK-USD",
+    "DOT/USD": "DOT-USD",
+    "BNB/USD": "BNB-USD",
+    "ADA/USD": "ADA-USD",
+    "XRP/USD": "XRP-USD",
+    "DOGE/USD": "DOGE-USD",
+}
+
+
+def _normalize_symbol(raw: str) -> str:
+    """
+    Convert user-entered symbol to yfinance format.
+    BTC → BTC-USD  |  BTC/USD → BTC-USD  |  AAPL → AAPL (unchanged)
+    """
+    upper = raw.upper().strip()
+    # Alias table first (catches BTC/USD, BITCOIN, etc.)
+    if upper in _CRYPTO_ALIASES:
+        return _CRYPTO_ALIASES[upper]
+    # Slash → hyphen (BTC/USDT → BTC-USDT handled by _fetch_ccxt_ohlcv)
+    if "/" in upper:
+        base, quote = upper.split("/", 1)
+        quote = "USD" if quote in ("USDT", "BUSD", "USDC") else quote
+        return f"{base}-{quote}"
+    # Plain base like BTC/ETH/SOL with no suffix → add -USD
+    if upper in _CRYPTO_BASES:
+        return f"{upper}-USD"
+    return upper
+
+
 YF_INTERVAL_MAP = {
     "1Min": "1m",
     "5Min": "5m",
@@ -193,7 +258,7 @@ async def get_latest_prices(
     symbols: str = Query(..., description="Comma-separated symbols e.g. NVDA,AAPL,BTC-USD"),
 ):
     """Return the latest close price for up to 30 symbols. Used for live P&L in position tables."""
-    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()][:30]
+    sym_list = [_normalize_symbol(s) for s in symbols.split(",") if s.strip()][:30]
     prices: dict[str, float | None] = {}
     for sym in sym_list:
         try:
@@ -232,6 +297,7 @@ async def get_bars(
     ),
 ):
     """Fetch OHLCV bars for a symbol with optional technical indicators."""
+    symbol = _normalize_symbol(symbol)
     interval = YF_INTERVAL_MAP.get(timeframe, "1d")
     end_dt = datetime.utcnow() if not end else datetime.fromisoformat(end)
 

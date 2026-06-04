@@ -165,6 +165,23 @@ function getStoredSymbol() {
   try { return localStorage.getItem("bmg_symbol") ?? "AAPL"; } catch { return "AAPL"; }
 }
 
+const _CRYPTO_BASES = new Set([
+  "BTC","ETH","SOL","BNB","XRP","ADA","AVAX","DOGE","DOT","MATIC","LINK","UNI",
+  "ATOM","LTC","ETC","BCH","NEAR","APT","OP","ARB","SUI","SHIB","TRX","TON",
+  "HBAR","ALGO","VET","ICP","FIL","SAND","MANA","THETA","EOS","XTZ","AAVE",
+  "MKR","SNX","COMP","YFI","SUSHI","CRV","BAL","ZRX","ENJ","CHZ","FLOW","KSM",
+]);
+
+function normalizeCryptoSymbol(s: string): string {
+  const upper = s.toUpperCase().trim();
+  if (upper.includes("/")) {
+    const [base, quote] = upper.split("/");
+    return `${base}-${["USDT","BUSD","USDC"].includes(quote) ? "USD" : quote}`;
+  }
+  if (_CRYPTO_BASES.has(upper)) return `${upper}-USD`;
+  return upper;
+}
+
 // ── Debounce helper ────────────────────────────────────────────────────────────
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -177,7 +194,7 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export default function ChartPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [symbol, setSymbol] = useState(() => searchParams.get("symbol") ?? getStoredSymbol());
+  const [symbol, setSymbol] = useState(() => normalizeCryptoSymbol(searchParams.get("symbol") ?? getStoredSymbol()));
   const [period, setPeriod] = useState<Period>("1Y");
   const [userPickedPeriod, setUserPickedPeriod] = useState(false);
   const [chartType, setChartType] = useState<ChartType>("candle");
@@ -376,9 +393,10 @@ export default function ChartPage() {
   };
 
   const handleSymbolChange = (s: string) => {
-    setSymbol(s);
-    setSearchParams({ symbol: s });
-    try { localStorage.setItem("bmg_symbol", s); } catch (err) { console.error("Chart error:", err); }
+    const normalized = normalizeCryptoSymbol(s);
+    setSymbol(normalized);
+    setSearchParams({ symbol: normalized });
+    try { localStorage.setItem("bmg_symbol", normalized); } catch (err) { console.error("Chart error:", err); }
     // Clear local drawings; new ones load via useEffect
     setDrawings([]);
     setPendingTrendStart(null);
