@@ -273,7 +273,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
             {todayPos ? "+" : "−"}${Math.abs(todayPnl).toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </p>
           <p className="text-xs text-zinc-500 mt-1">Today's P&L</p>
-          <p className="text-[11px] text-zinc-600 mt-0.5">across {p?.leaderboard.length ?? 6} bots</p>
+          <p className="text-[11px] text-zinc-600 mt-0.5">across {p?.leaderboard?.length ?? 6} bots</p>
         </div>
         <div>
           <p className={cn("text-3xl font-bold tabular-nums", ret30Pos ? "text-lime-400" : "text-red-400")}>
