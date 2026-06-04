@@ -54,6 +54,13 @@ class AllocateBody(BaseModel):
     enabled: bool = True
 
 
+class CustomBotAllocateBody(BaseModel):
+    name: str
+    description: str = ""
+    riskProfile: str = "standard"
+    capitalPct: float = 10.0
+
+
 # ── Demo data helpers ─────────────────────────────────────────────────────────
 
 _DISPLAY_NAMES: dict[str, str] = {
@@ -1407,6 +1414,72 @@ def get_bot(
         row["all_time_return_pct"] = None
 
     return row
+
+
+# ── POST /api/bots/allocate — flat endpoint for custom-bot wizard ─────────────
+
+@router.post("/allocate")
+def allocate_custom_bot(
+    body: CustomBotAllocateBody,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Create or update a BotAllocation for a custom bot by name.
+    Called by the Custom Bot Builder wizard after the user clicks Deploy.
+    Creates a BotProfile stub if one doesn't exist yet.
+    """
+    now = datetime.now(timezone.utc)
+
+    # Normalise profile name: lowercase, underscores
+    profile_name = body.name.lower().replace(" ", "_").replace("-", "_")[:50]
+
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        profile = BotProfile(
+            name=profile_name,
+            asset_class="stocks",
+            config_json={
+                "description": body.description,
+                "risk_profile": body.riskProfile,
+                "capital_pct": body.capitalPct,
+                "custom": True,
+            },
+        )
+        db.add(profile)
+        db.flush()
+
+    existing = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.profile_id == profile.id,
+        )
+        .first()
+    )
+
+    if existing:
+        existing.capital_pct = body.capitalPct
+        existing.risk_profile = body.riskProfile
+        existing.updated_at = now
+        db.commit()
+        db.refresh(existing)
+        return {"allocation_id": existing.id, "bot_name": profile_name, "created": False}
+    else:
+        alloc = BotAllocation(
+            user_id=current_user.id,
+            profile_id=profile.id,
+            capital_pct=body.capitalPct,
+            risk_profile=body.riskProfile,
+            paper_mode=True,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(alloc)
+        db.commit()
+        db.refresh(alloc)
+        return {"allocation_id": alloc.id, "bot_name": profile_name, "created": True}
 
 
 # ── POST /api/bots/{profile_name}/allocate ────────────────────────────────────

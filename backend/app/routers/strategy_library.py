@@ -2678,6 +2678,20 @@ def get_strategy_library(
         cat = s.get("category") or "Uncategorized"
         category_counts[cat] = category_counts.get(cat, 0) + 1
 
+    # ── Populate beginner-guide fields from existing data ─────────────────────
+    def _enrich_beginner(s: dict) -> dict:
+        if s.get("difficulty") != "beginner":
+            return {**s, "beginner_summary": None, "how_it_decides": None, "why_it_works": None, "when_it_fails": None}
+        return {
+            **s,
+            "beginner_summary": s.get("description_md"),
+            "how_it_decides": s.get("mechanics_md"),
+            "why_it_works": s.get("when_works_md"),
+            "when_it_fails": s.get("when_fails_md"),
+        }
+
+    results = [_enrich_beginner(s) for s in results]
+
     return {
         "strategies": results,
         "total": len(results),

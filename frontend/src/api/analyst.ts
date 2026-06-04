@@ -1,5 +1,14 @@
 import client from "./client";
 
+export interface ThesisCard {
+  symbol: string;
+  thesis: string;
+  bullish_points: string[];
+  bearish_points: string[];
+  verdict: "BULLISH" | "BEARISH" | "NEUTRAL";
+  cached_at: string;
+}
+
 export interface WatchlistAnalysis {
   id: number;
   bot_profile_id: number;
@@ -77,3 +86,7 @@ export const getAnalystRuns = (bot_profile_id?: number): Promise<AnalystDailyRun
   client.get<AnalystDailyRun[]>("/analyst/runs", { params: bot_profile_id ? { bot_profile_id } : undefined })
     .then(r => Array.isArray(r.data) ? r.data : [])
     .catch(() => []);
+
+export const getThesis = (symbol: string): Promise<ThesisCard> =>
+  client.get<ThesisCard>(`/analyst/thesis/${encodeURIComponent(symbol)}`)
+    .then(r => r.data);

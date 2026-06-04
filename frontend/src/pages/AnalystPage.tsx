@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Brain, AlertTriangle, Star, RefreshCw, TrendingUp, ChevronRight, X } from "lucide-react";
+import { Brain, AlertTriangle, Star, RefreshCw, TrendingUp, ChevronRight, X, TrendingDown, Minus } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAnalystSummary,
   getAnalystRuns,
   analyzeSymbol,
+  getThesis,
   type WatchlistAnalysis,
   type AnalystSummaryItem,
+  type ThesisCard,
 } from "@/api/analyst";
 import { getBots } from "@/api/bots";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,121 @@ function ConvictionStars({ score, size = "sm" }: { score: number | null; size?: 
     <span className={cn("tracking-tight font-bold", sz, score >= 4 ? "text-lime-400" : score === 3 ? "text-yellow-400" : "text-zinc-500")}>
       {"★".repeat(score)}{"☆".repeat(5 - score)}
     </span>
+  );
+}
+
+// ─── Verdict badge ────────────────────────────────────────────────────────────
+
+type Verdict = "BULLISH" | "BEARISH" | "NEUTRAL";
+
+function VerdictBadge({ verdict }: { verdict: Verdict }) {
+  if (verdict === "BULLISH") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/30 text-green-400">
+        <TrendingUp size={9} />
+        BULLISH
+      </span>
+    );
+  }
+  if (verdict === "BEARISH") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-400">
+        <TrendingDown size={9} />
+        BEARISH
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/15 border border-yellow-500/30 text-yellow-400">
+      <Minus size={9} />
+      NEUTRAL
+    </span>
+  );
+}
+
+function verdictFromConviction(score: number | null): Verdict {
+  if (score === null) return "NEUTRAL";
+  if (score >= 4) return "BULLISH";
+  if (score <= 2) return "BEARISH";
+  return "NEUTRAL";
+}
+
+// ─── Thesis card widget (lazy-loaded per symbol) ──────────────────────────────
+
+function ThesisCardWidget({ symbol }: { symbol: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["thesis", symbol],
+    queryFn: () => getThesis(symbol),
+    staleTime: 1000 * 60 * 60 * 6, // 6h
+    enabled: expanded,
+  });
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/40 transition-colors"
+      >
+        <span className="text-sm font-bold text-white">{symbol}</span>
+        <div className="flex items-center gap-2">
+          {data && <VerdictBadge verdict={data.verdict} />}
+          <ChevronRight
+            size={14}
+            className={cn("text-zinc-600 transition-transform", expanded ? "rotate-90" : "")}
+          />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 border-t border-zinc-800 pt-3 space-y-3">
+          {isLoading && (
+            <p className="text-xs text-zinc-500 animate-pulse">Analyzing {symbol}…</p>
+          )}
+          {isError && (
+            <p className="text-xs text-red-400">Analysis unavailable — check API key</p>
+          )}
+          {data && (
+            <>
+              <div className="flex items-center gap-2">
+                <VerdictBadge verdict={data.verdict} />
+                <span className="text-[10px] text-zinc-600">
+                  {data.cached_at ? new Date(data.cached_at).toLocaleString() : ""}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">{data.thesis}</p>
+              {data.bullish_points.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-green-400 uppercase tracking-wider mb-1.5">Bullish</p>
+                  <ul className="space-y-1">
+                    {data.bullish_points.map((pt, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-xs text-zinc-300">
+                        <span className="text-green-400 mt-0.5 flex-shrink-0">↑</span>
+                        {pt}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.bearish_points.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wider mb-1.5">Bearish</p>
+                  <ul className="space-y-1">
+                    {data.bearish_points.map((pt, i) => (
+                      <li key={i} className="flex items-start gap-1.5 text-xs text-zinc-300">
+                        <span className="text-red-400 mt-0.5 flex-shrink-0">↓</span>
+                        {pt}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -50,8 +167,9 @@ function ThesisPanel({ item, onClose }: { item: WatchlistAnalysis | AnalystSumma
           </button>
         </div>
 
-        {/* Conviction */}
-        <div className="flex items-center gap-3">
+        {/* Conviction + Verdict */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <VerdictBadge verdict={verdictFromConviction(item.conviction_score)} />
           <ConvictionStars score={item.conviction_score} size="md" />
           <span className="text-sm text-zinc-400">Conviction {item.conviction_score ?? "—"} / 5</span>
           {item.concerns_flag && (
@@ -140,7 +258,10 @@ function SummaryCard({
             <AlertTriangle size={12} className="text-amber-400 flex-shrink-0" />
           )}
         </div>
-        <ConvictionStars score={item.conviction_score} />
+        <div className="flex items-center gap-2">
+          <VerdictBadge verdict={verdictFromConviction(item.conviction_score)} />
+          <ConvictionStars score={item.conviction_score} />
+        </div>
       </div>
       <p className="text-xs text-zinc-500 mb-1 capitalize">{item.bot_name?.replace(/_/g, " ")}</p>
       {item.thesis_preview && (
@@ -235,7 +356,7 @@ export default function AnalystPage() {
   const navigate = useNavigate();
   const [selectedItem, setSelectedItem] = useState<AnalystSummaryItem | null>(null);
   const [filterConviction, setFilterConviction] = useState<number | null>(null);
-  const [tab, setTab] = useState<"top" | "concerns" | "runs">("top");
+  const [tab, setTab] = useState<"top" | "concerns" | "watchlist" | "runs">("top");
 
   const { data: summary, isLoading, refetch } = useQuery({
     queryKey: ["analyst-summary"],
@@ -255,6 +376,10 @@ export default function AnalystPage() {
     p => filterConviction === null || p.conviction_score === filterConviction
   );
   const concerns = summary?.concerns ?? [];
+  // Deduplicated symbol list from all top picks + concerns for the watchlist thesis tab
+  const watchlistSymbols = Array.from(
+    new Set([...(summary?.top_picks ?? []), ...(summary?.concerns ?? [])].map(p => p.symbol))
+  );
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -308,8 +433,8 @@ export default function AnalystPage() {
       <QuickAnalyze />
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
-        {([["top", "Top Picks"], ["concerns", "Concerns"], ["runs", "Run History"]] as const).map(([key, label]) => (
+      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 flex-wrap">
+        {([["top", "Top Picks"], ["concerns", "Concerns"], ["watchlist", "Watchlist Thesis"], ["runs", "Run History"]] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -381,6 +506,25 @@ export default function AnalystPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {concerns.map(item => (
               <SummaryCard key={`${item.bot_profile_id}-${item.symbol}`} item={item} onClick={() => setSelectedItem(item)} />
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === "watchlist" && (
+        watchlistSymbols.length === 0 ? (
+          <div className="text-center py-16 text-zinc-500">
+            <Brain size={32} className="mx-auto mb-3 text-zinc-700" />
+            <p className="text-sm">No symbols on watchlists yet.</p>
+            <p className="text-xs text-zinc-600 mt-1">Run an analysis above to populate thesis cards.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs text-zinc-500 mb-3">
+              Click any symbol to load its AI thesis. Results are cached for 6 hours.
+            </p>
+            {watchlistSymbols.map(sym => (
+              <ThesisCardWidget key={sym} symbol={sym} />
             ))}
           </div>
         )

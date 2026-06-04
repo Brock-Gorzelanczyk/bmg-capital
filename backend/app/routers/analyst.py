@@ -4,6 +4,7 @@ AI Analyst — generates Claude-powered theses for every bot watchlist symbol.
 POST /api/analyst/analyze           — analyze a single symbol for a bot
 GET  /api/analyst/watchlist/:bot_id — latest analyses for all symbols on a bot's watchlist
 GET  /api/analyst/symbol/:symbol    — cross-bot view of a symbol
+GET  /api/analyst/thesis/:symbol    — lightweight thesis card (6h module-level cache)
 POST /api/analyst/refresh/:bot_id   — re-analyze all symbols (background)
 GET  /api/analyst/runs              — AnalystDailyRun history
 GET  /api/analyst/summary           — today's aggregate summary across all bots
@@ -32,6 +33,11 @@ from app.db.models.bots import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/analyst", tags=["analyst"])
+
+# ── Module-level thesis cache (6-hour TTL) ─────────────────────────────────────
+# { symbol.upper(): {"data": {...}, "cached_at": datetime} }
+_THESIS_CACHE: dict[str, dict] = {}
+_THESIS_TTL_HOURS = 6
 
 # ── System prompt ──────────────────────────────────────────────────────────────
 
@@ -459,6 +465,107 @@ def get_symbol_analysis(
             "concerns_flagged": sum(1 for r in seen.values() if r.concerns_flag),
         },
     }
+
+
+@router.get("/thesis/{symbol}")
+def get_thesis(
+    symbol: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Lightweight thesis card for a symbol. Uses a module-level 6-hour cache.
+    Returns: { symbol, thesis, bullish_points, bearish_points, verdict, cached_at }
+    Verdict is one of: BULLISH, BEARISH, NEUTRAL
+    """
+    sym = symbol.upper()
+    now = datetime.now(timezone.utc)
+
+    # Check module-level cache
+    cached = _THESIS_CACHE.get(sym)
+    if cached:
+        age = (now - cached["cached_at"]).total_seconds() / 3600
+        if age < _THESIS_TTL_HOURS:
+            return cached["data"]
+
+    # Check DB for a recent analysis (within 6h)
+    cutoff = now - timedelta(hours=_THESIS_TTL_HOURS)
+    db_row = db.execute(
+        select(WatchlistAnalysis)
+        .where(
+            WatchlistAnalysis.symbol == sym,
+            WatchlistAnalysis.ts >= cutoff,
+        )
+        .order_by(WatchlistAnalysis.ts.desc())
+        .limit(1)
+    ).scalar()
+
+    if db_row and db_row.thesis_md:
+        conviction = db_row.conviction_score or 3
+        if conviction >= 4:
+            verdict = "BULLISH"
+        elif conviction <= 2:
+            verdict = "BEARISH"
+        else:
+            verdict = "NEUTRAL"
+
+        result = {
+            "symbol": sym,
+            "thesis": db_row.thesis_md,
+            "bullish_points": db_row.reasons_to_own or [],
+            "bearish_points": db_row.risks or [],
+            "verdict": verdict,
+            "cached_at": db_row.ts.isoformat(),
+        }
+        _THESIS_CACHE[sym] = {"data": result, "cached_at": now}
+        return result
+
+    # Generate fresh via Claude
+    api_key = getattr(settings, "anthropic_api_key", None) or os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "Analysis unavailable — check API key")
+
+    try:
+        system = "You are a quantitative analyst. Analyze the given stock symbol and provide a concise investment thesis. Be specific, factual, and balanced."
+        user = (
+            f'Provide an investment thesis for {sym}. Include: 3 bullish points, 3 bearish points, '
+            f'and a one-sentence verdict. Format as JSON: {{"thesis": str, "bullish": [str], "bearish": [str], "verdict": str}}'
+        )
+        import anthropic as _anthropic
+        _client = _anthropic.Anthropic(api_key=api_key)
+        msg = _client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=800,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        raw = msg.content[0].text
+        parsed = _parse_claude_response(raw)
+
+        # Derive verdict from parsed response or default
+        raw_verdict = parsed.get("verdict", "")
+        verdict_upper = raw_verdict.upper() if raw_verdict else ""
+        if "BULLISH" in verdict_upper:
+            verdict = "BULLISH"
+        elif "BEARISH" in verdict_upper:
+            verdict = "BEARISH"
+        else:
+            verdict = "NEUTRAL"
+
+        result = {
+            "symbol": sym,
+            "thesis": parsed.get("thesis", raw[:400] if raw else "Analysis unavailable."),
+            "bullish_points": parsed.get("bullish", parsed.get("reasons_to_own", [])),
+            "bearish_points": parsed.get("bearish", parsed.get("risks", [])),
+            "verdict": verdict,
+            "cached_at": now.isoformat(),
+        }
+        _THESIS_CACHE[sym] = {"data": result, "cached_at": now}
+        return result
+
+    except Exception as e:
+        logger.error(f"Thesis generation failed for {sym}: {e}", exc_info=True)
+        raise HTTPException(503, f"Analysis unavailable — check API key")
 
 
 @router.post("/refresh/{bot_profile_id}")

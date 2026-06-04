@@ -139,6 +139,9 @@ function BotCard({
         <div>
           <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Open Positions</p>
           <p className="text-sm font-semibold text-white">{openPositions}</p>
+          {openPositions === 0 && (
+            <p className="text-[9px] text-zinc-600 mt-0.5 leading-tight">Bot is scanning — positions appear after entry signals</p>
+          )}
         </div>
         <div>
           <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Allocated</p>
@@ -257,7 +260,7 @@ function RecentActivity({ portfolioId, colorHex }: { portfolioId: number; colorH
   if (trades.length === 0) {
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center">
-        <p className="text-zinc-500 text-sm">No trades yet. The execution engine runs daily at 10 AM ET.</p>
+        <p className="text-zinc-500 text-sm">No trades yet. The execution engine runs daily at 10 AM ET on weekdays.</p>
       </div>
     );
   }

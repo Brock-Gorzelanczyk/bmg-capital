@@ -677,7 +677,7 @@ function WatchlistTable({
   if (safeWatchlist.length === 0) {
     return (
       <p className="text-zinc-600 text-sm py-6 text-center">
-        Watchlist rebuilds at next scheduled cadence
+        Watchlist rebuilds at 8:30am ET. Check back after market open.
       </p>
     );
   }
@@ -1121,7 +1121,7 @@ function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: Reac
             {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded-lg" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-zinc-600 text-sm py-6 text-center">No activity found</p>
+          <p className="text-zinc-600 text-sm py-6 text-center">No activity found. The execution engine runs daily at 10 AM ET on weekdays.</p>
         ) : (
           <div className="space-y-0">
             {filtered.map((item) => {
@@ -2076,7 +2076,7 @@ export default function BotDetailPage() {
               <h2 className="text-sm font-semibold text-zinc-300 mb-4">Open Positions</h2>
               {positions.length === 0 ? (
                 <p className="text-zinc-600 text-sm py-6 text-center">
-                  No open positions. Bot scans for entries at market open.
+                  No open positions. Bot scans for entries at market open (9:30am ET).
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -2183,7 +2183,7 @@ export default function BotDetailPage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
             <h2 className="text-sm font-semibold text-zinc-300 mb-4">Recent Signals</h2>
             {signals.length === 0 ? (
-              <p className="text-zinc-600 text-sm py-4 text-center">No recent signals</p>
+              <p className="text-zinc-600 text-sm py-4 text-center">No signals fired today. Next scan at market open (9:30am ET).</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

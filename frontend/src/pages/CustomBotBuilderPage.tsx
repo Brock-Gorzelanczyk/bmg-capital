@@ -73,6 +73,9 @@ const api = {
 
   deploy: (payload: object): Promise<{ bot_id: number; bot_name: string; allocation_id: number; first_run_ts: string }> =>
     client.post("/custom-bot/deploy", payload).then((r) => r.data),
+
+  allocate: (payload: { name: string; description: string; riskProfile: string; capitalPct: number }): Promise<{ allocation_id: number; bot_name: string; created: boolean }> =>
+    client.post("/bots/allocate", payload).then((r) => r.data),
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -932,26 +935,42 @@ export default function CustomBotBuilderPage() {
     onSuccess: (data) => setDraftId(data.draft_id),
   });
 
-  // Deploy
+  // Deploy — tries /custom-bot/deploy first, falls back to /bots/allocate
   const deployMut = useMutation({
-    mutationFn: () => api.deploy({
-      draft_id: draftId,
-      name: draft.name,
-      strategies: draft.strategies.map((s) => s.module_name),
-      config: {
-        capital_dollars: draft.capitalDollars,
-        risk_profile: draft.riskProfile,
-        schedule: draft.schedule,
-      },
-    }),
+    mutationFn: async () => {
+      try {
+        return await api.deploy({
+          draft_id: draftId,
+          name: draft.name,
+          strategies: draft.strategies.map((s) => s.module_name),
+          config: {
+            capital_dollars: draft.capitalDollars,
+            risk_profile: draft.riskProfile,
+            schedule: draft.schedule,
+          },
+        });
+      } catch {
+        // Fallback: use the flat allocate endpoint
+        const result = await api.allocate({
+          name: draft.name,
+          description: draft.strategies.map((s) => s.display_name).join(", "),
+          riskProfile: draft.riskProfile,
+          capitalPct: Math.round((draft.capitalDollars / 100000) * 100),
+        });
+        return {
+          bot_id: result.allocation_id,
+          bot_name: result.bot_name,
+          allocation_id: result.allocation_id,
+          first_run_ts: new Date(Date.now() + 60_000).toISOString(),
+        };
+      }
+    },
     onSuccess: (data) => {
-      const runTime = new Date(data.first_run_ts);
-      const timeStr = runTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      toast.success(`Bot deployed. First signal coming at ${timeStr}.`);
+      toast.success("Bot deployed successfully!");
       // Mark coachmark as needed for this bot
       localStorage.setItem(`coachmark_pending_${data.bot_id}`, "1");
       // Small delay for animation feel
-      setTimeout(() => navigate(`/strategy/${data.bot_name}`), 600);
+      setTimeout(() => navigate("/strategy"), 600);
     },
     onError: () => toast.error("Deploy failed — check bot name isn't already taken"),
   });

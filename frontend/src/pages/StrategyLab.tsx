@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
+import SymbolChartDrawer from "@/components/ui/SymbolChartDrawer";
 import { toast } from "sonner";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -227,6 +228,7 @@ function PortfolioHeroSkeleton() {
 function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => void }) {
   const [period, setPeriod] = useState<EquityPeriod>("30d");
   const [posTab, setPosTab] = useState<"positions" | "watchlist">("positions");
+  const [chartSymbol, setChartSymbol] = useState<string | null>(null);
 
   const { data: p, isLoading } = useQuery({
     queryKey: ["strategy-lab-portfolio"],
@@ -269,6 +271,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
   }));
 
   return (
+    <>
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -425,7 +428,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
 
         {posTab === "positions" && (
           crossPositions.length === 0 ? (
-            <p className="text-zinc-600 text-xs py-3 text-center">No open positions across bots</p>
+            <p className="text-zinc-600 text-xs py-3 text-center">No open positions. Bot scans for entries at market open (9:30am ET).</p>
           ) : (
             <div className="space-y-1">
               {crossPositions.map((pos) => {
@@ -433,7 +436,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
                 return (
                   <div
                     key={pos.symbol}
-                    onClick={() => navigate(`/chart?symbol=${encodeURIComponent(pos.symbol)}`)}
+                    onClick={() => setChartSymbol(pos.symbol)}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80 cursor-pointer hover:bg-zinc-700/50 hover:border-zinc-600 transition-colors"
                   >
                     <span className="text-xs font-bold text-white w-14 flex-shrink-0">{pos.symbol}</span>
@@ -452,13 +455,13 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
 
         {posTab === "watchlist" && (
           watchlistItems.length === 0 ? (
-            <p className="text-zinc-600 text-xs py-3 text-center">No watchlist items</p>
+            <p className="text-zinc-600 text-xs py-3 text-center">Watchlist rebuilds at 8:30am ET. Check back after market open.</p>
           ) : (
             <div className="space-y-1">
               {watchlistItems.map((item) => (
                 <div
                   key={item.symbol}
-                  onClick={() => navigate(`/chart?symbol=${encodeURIComponent(item.symbol)}`)}
+                  onClick={() => setChartSymbol(item.symbol)}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80 cursor-pointer hover:bg-zinc-700/50 hover:border-zinc-600 transition-colors"
                 >
                   <span className="text-xs font-bold text-white w-14 flex-shrink-0">{item.symbol}</span>
@@ -472,6 +475,8 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
         )}
       </div>
     </div>
+    <SymbolChartDrawer symbol={chartSymbol} onClose={() => setChartSymbol(null)} />
+    </>
   );
 }
 
@@ -920,7 +925,7 @@ function ActivityRail({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       ) : feed.length === 0 ? (
-        <p className="text-zinc-600 text-xs text-center py-6">No activity yet</p>
+        <p className="text-zinc-600 text-xs text-center py-6">No activity yet. The execution engine runs daily at 10 AM ET on weekdays.</p>
       ) : (
         <div className="space-y-1 overflow-y-auto flex-1">
           {feed.slice(0, 20).map((item: AutopilotAction) => (
