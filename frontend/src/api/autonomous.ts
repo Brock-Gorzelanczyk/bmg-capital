@@ -66,7 +66,11 @@ export const getStatus = () =>
   client.get<AutonomousStatus>("/autonomous/status").then(r => r.data);
 
 export const getActionsFeed = () =>
-  client.get<{ actions: AutonomousAction[] }>("/autonomous/actions/feed").then(r => r.data);
+  client.get<any>("/autonomous/actions/feed").then(r => {
+    const raw = r.data;
+    if (Array.isArray(raw)) return { actions: raw as AutonomousAction[] };
+    return raw as { actions: AutonomousAction[] };
+  });
 
 export const getStats24h = () =>
   client.get<AutonomousStats>("/autonomous/stats/24h").then(r => r.data);

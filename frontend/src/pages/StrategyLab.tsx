@@ -22,9 +22,7 @@ import {
   type PortfolioData,
 } from "@/api/bots";
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
-import { getCrossBotPositions, type CrossBotPosition } from "@/api/bots";
-import { getWatchlists } from "@/api/watchlist";
-import type { Watchlist } from "@/types/watchlist";
+import { getCrossBotPositions, getCrossBotWatchlist, type CrossBotPosition, type CrossBotWatchlistItem } from "@/api/bots";
 import { cn } from "@/lib/utils";
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
@@ -241,12 +239,13 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
   });
   const crossPositions: CrossBotPosition[] = Array.isArray(rawCrossPositions) ? rawCrossPositions : [];
 
-  const { data: rawWatchlists } = useQuery<Watchlist[]>({
-    queryKey: ["watchlists"],
-    queryFn: getWatchlists,
-    staleTime: 120_000,
+  const { data: rawWatchlists } = useQuery<CrossBotWatchlistItem[]>({
+    queryKey: ["cross-bot-watchlist"],
+    queryFn: getCrossBotWatchlist,
+    refetchInterval: 120_000,
+    staleTime: 60_000,
   });
-  const watchlists: Watchlist[] = Array.isArray(rawWatchlists) ? rawWatchlists : [];
+  const watchlistItems: CrossBotWatchlistItem[] = Array.isArray(rawWatchlists) ? rawWatchlists : [];
 
   if (isLoading) return <PortfolioHeroSkeleton />;
 
@@ -414,7 +413,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
             >
               {tab === "positions"
                 ? `Open Positions (${crossPositions.length})`
-                : `Watchlist (${watchlists.reduce((s, w) => s + w.items.length, 0)})`}
+                : `Watchlist (${watchlistItems.length})`}
             </button>
           ))}
         </div>
@@ -443,23 +442,16 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
         )}
 
         {posTab === "watchlist" && (
-          watchlists.length === 0 ? (
+          watchlistItems.length === 0 ? (
             <p className="text-zinc-600 text-xs py-3 text-center">No watchlist items</p>
           ) : (
-            <div className="space-y-3">
-              {watchlists.map((wl) => (
-                <div key={wl.id}>
-                  <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-1.5">{wl.name}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {wl.items.map((item) => (
-                      <span
-                        key={item.symbol}
-                        className="text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300 border border-zinc-700"
-                      >
-                        {item.symbol}
-                      </span>
-                    ))}
-                  </div>
+            <div className="space-y-1">
+              {watchlistItems.map((item) => (
+                <div key={item.symbol} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80">
+                  <span className="text-xs font-bold text-white w-14 flex-shrink-0">{item.symbol}</span>
+                  <span className="text-[10px] text-zinc-500 flex-1">{item.bots_watching.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
+                  <span className="text-[10px] text-zinc-500 w-16 text-right capitalize">{item.status}</span>
+                  <span className="text-[10px] text-zinc-500 w-14 text-right">score {item.score.toFixed(2)}</span>
                 </div>
               ))}
             </div>

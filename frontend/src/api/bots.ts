@@ -281,6 +281,31 @@ export const getCrossBotPositions = (): Promise<CrossBotPosition[]> =>
     })
     .catch(() => []);
 
+export interface CrossBotWatchlistItem {
+  symbol: string;
+  bots_watching: string[];
+  score: number;
+  status: string;
+  reasons: string[];
+  added_at: string | null;
+}
+
+export const getCrossBotWatchlist = (): Promise<CrossBotWatchlistItem[]> =>
+  client
+    .get<any>("/bots/cross-bot-watchlist")
+    .then((r) => {
+      const raw = Array.isArray(r.data) ? r.data : [];
+      return raw.map((w: any): CrossBotWatchlistItem => ({
+        symbol: w.symbol ?? "",
+        bots_watching: Array.isArray(w.bots_watching) ? w.bots_watching : [],
+        score: w.score ?? 0,
+        status: w.status ?? "active",
+        reasons: Array.isArray(w.reasons) ? w.reasons : [],
+        added_at: w.added_at ?? null,
+      }));
+    })
+    .catch(() => []);
+
 // ─── Pending reviews (borderline signals) ────────────────────────────────────
 
 export interface PendingReview {

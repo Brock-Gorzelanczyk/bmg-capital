@@ -388,6 +388,61 @@ def get_cross_bot_positions(
     return sorted(by_symbol.values(), key=lambda x: x["symbol"])
 
 
+# ── GET /api/bots/cross-bot-watchlist ────────────────────────────────────────
+
+@router.get("/cross-bot-watchlist")
+def get_cross_bot_watchlist(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Aggregate BotWatchlist rows across all of the user's bot allocations."""
+    allocations = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == current_user.id)
+        .all()
+    )
+    if not allocations:
+        return []
+
+    profile_ids = list({a.profile_id for a in allocations})
+    profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+    profile_name_by_id = {p.id: p.name for p in profiles}
+
+    rows = (
+        db.query(BotWatchlist)
+        .filter(
+            BotWatchlist.profile_id.in_(profile_ids),
+            BotWatchlist.status.in_(["active", "watching", "pending_entry"]),
+        )
+        .order_by(BotWatchlist.score.desc())
+        .all()
+    )
+
+    # Aggregate by symbol — track which bots are watching each
+    by_symbol: dict[str, dict] = {}
+    for row in rows:
+        sym = row.symbol
+        bot_name = profile_name_by_id.get(row.profile_id, str(row.profile_id))
+        if sym not in by_symbol:
+            by_symbol[sym] = {
+                "symbol": sym,
+                "bots_watching": [],
+                "score": row.score or 0,
+                "status": row.status,
+                "reasons": row.reasons or [],
+                "added_at": row.added_at.isoformat() if row.added_at else None,
+            }
+        else:
+            # Keep highest score
+            if (row.score or 0) > by_symbol[sym]["score"]:
+                by_symbol[sym]["score"] = row.score or 0
+                by_symbol[sym]["reasons"] = row.reasons or []
+        if bot_name not in by_symbol[sym]["bots_watching"]:
+            by_symbol[sym]["bots_watching"].append(bot_name)
+
+    return sorted(by_symbol.values(), key=lambda x: -x["score"])
+
+
 # ── GET /api/bots/{profile_name}/activity ────────────────────────────────────
 
 @router.get("/{profile_name}/activity")
