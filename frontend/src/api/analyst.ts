@@ -90,3 +90,14 @@ export const getAnalystRuns = (bot_profile_id?: number): Promise<AnalystDailyRun
 export const getThesis = (symbol: string): Promise<ThesisCard> =>
   client.get<ThesisCard>(`/analyst/thesis/${encodeURIComponent(symbol)}`)
     .then(r => r.data);
+
+export interface AnalystHighlight {
+  symbol: string;
+  conviction: "HIGH" | "MED" | "LOW";
+  thesis: string;
+}
+
+export const getAnalystHighlights = (): Promise<{ highlights: AnalystHighlight[] }> =>
+  client.get("/analyst/highlights")
+    .then(r => r.data)
+    .catch(() => ({ highlights: [] }));

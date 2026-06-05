@@ -1,4 +1,4 @@
-import { Component, type ReactNode, useEffect, useState, lazy, Suspense } from "react";
+import { Component, type ReactNode, type ComponentType, useEffect, useState, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -137,6 +137,40 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
+// ─── Per-route error boundary ─────────────────────────────────────────────────
+
+class RouteErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch() {
+    // Non-chunk errors are shown inline; chunk errors are handled by the outer boundary
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex items-center justify-center p-8 min-h-[40vh]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 max-w-md w-full text-center">
+            <p className="text-white font-semibold mb-1">Something went wrong on this page</p>
+            <p className="text-zinc-500 text-sm mb-4">{(this.state.error as Error).message}</p>
+            <button
+              onClick={() => this.setState({ error: null })}
+              className="bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              Reload page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/** Wraps a page component in a per-route error boundary. */
+function Page({ component: C }: { component: ComponentType }) {
+  return <RouteErrorBoundary><C /></RouteErrorBoundary>;
+}
+
 // Clean up old cache keys from previous versions
 ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
@@ -202,10 +236,10 @@ function AppInner() {
     <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route element={<AppShell />}>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Page component={Dashboard} />} />
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/screener" element={<Screener />} />
-        <Route path="/strategy" element={<StrategyLab />} />
+        <Route path="/strategy" element={<Page component={StrategyLab} />} />
         <Route path="/strategy/library" element={<StrategyLibraryPage />} />
         <Route path="/strategy/library/custom-bot" element={<CustomBotBuilderPage />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
@@ -213,12 +247,12 @@ function AppInner() {
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
         <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
-        <Route path="/portfolio" element={<Portfolio />} />
+        <Route path="/portfolio" element={<Page component={Portfolio} />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/news" element={<News />} />
         <Route path="/earnings" element={<Earnings />} />
         <Route path="/research" element={<Research />} />
-        <Route path="/paper" element={<PaperTrading />} />
+        <Route path="/paper" element={<Page component={PaperTrading} />} />
         <Route path="/options" element={<OptionsLab />} />
         <Route path="/crypto" element={<CryptoLab />} />
         <Route path="/notifications" element={<NotificationsPage />} />
@@ -230,7 +264,7 @@ function AppInner() {
         <Route path="/learn/:trackId" element={<LearnCourse />} />
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/workshop" element={<WorkshopPage />} />
+        <Route path="/workshop" element={<Page component={WorkshopPage} />} />
         <Route path="/admin/monitoring"  element={<MonitoringPage />} />
         <Route path="/admin/heatmap"     element={<HeatMapPage />} />
         <Route path="/admin/flow"        element={<OptionsFlowPage />} />
@@ -242,7 +276,7 @@ function AppInner() {
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/tax-xray" element={<TaxXRayPage />} />
-        <Route path="/pods" element={<PodsPage />} />
+        <Route path="/pods" element={<Page component={PodsPage} />} />
         <Route path="/risk-parity" element={<RiskParityPage />} />
         <Route path="/rules" element={<RulesPage />} />
         <Route path="/estate" element={<EstatePage />} />
@@ -257,8 +291,8 @@ function AppInner() {
         <Route path="/robo/quiz" element={<RiskQuizPage />} />
         <Route path="/robo/goals" element={<GoalsPage />} />
         <Route path="/robo/direct-index" element={<DirectIndexingPage />} />
-        <Route path="/mission-control" element={<MissionControlPage />} />
-        <Route path="/autopilot" element={<AutopilotPage />} />
+        <Route path="/mission-control" element={<Page component={MissionControlPage} />} />
+        <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
         <Route path="/autopilot/promise" element={<AutopilotPromisePage />} />
         <Route path="/settings/pitch/playbook" element={<PlaybookPage />} />
@@ -275,7 +309,7 @@ function AppInner() {
         <Route path="/staking" element={<StakingPage />} />
         <Route path="/dca-baskets" element={<DCABasketsPage />} />
         {/* Friendly URL aliases */}
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Page component={Dashboard} />} />
         <Route path="/net-worth" element={<NetWorthPage />} />
         <Route path="/capital-pods" element={<Navigate to="/pods" replace />} />
         <Route path="/ta-workshop" element={<Navigate to="/workshop" replace />} />

@@ -1307,7 +1307,18 @@ export default function Portfolio() {
   const spyCloses = spyData?.bars?.map((b) => b.c) ?? [];
   const spyDates = spyData?.bars?.map((b) => b.t.slice(0, 10)) ?? [];
 
-  const positions = account?.positions ?? [];
+  // ── Sanity filter: skip positions with bad seed data ──────────────────────
+  // avg_cost <= 0 means corrupt cost basis; current_price > 99990 is a sentinel
+  // value (e.g. crypto qty stored in satoshis inflating the price).
+  const rawPositions = account?.positions ?? [];
+  const positions = rawPositions.filter(
+    (p) => p.avg_cost > 0 && p.current_price <= 99990
+  );
+
+  // Guard: if total portfolio value is absurdly large (> $10M) the account
+  // likely still has bad data that slipped past the filter — show a warning.
+  const rawPortfolioValue = rawPositions.reduce((a, p) => a + p.market_value, 0);
+  const portfolioDataSuspect = rawPortfolioValue > 10_000_000;
 
   const seedMut = {
     isPending: false,
@@ -1344,6 +1355,16 @@ export default function Portfolio() {
           <Bot size={12} /> Ask AI
         </button>
       </div>
+
+      {/* Sanity warning — shown when raw data looks corrupted */}
+      {portfolioDataSuspect && (
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
+          <AlertTriangle size={16} className="text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-300">
+            Portfolio data is being refreshed — some positions were filtered out due to inconsistent pricing data. Values shown below are based on valid positions only.
+          </p>
+        </div>
+      )}
 
       {/* Section 1: Hero P&L Bar */}
       <HeroBar account={account} loading={accountLoading} />

@@ -12,9 +12,9 @@ import {
   deleteNWAccount,
   getNWSummary,
   getNWHistory,
-  takeNWSnapshot,
 } from "@/api/networth";
-import type { NWAccount } from "@/api/networth";
+import type { NWAccount, NWSnapshot } from "@/api/networth";
+import { getStrategyLabPortfolio } from "@/api/bots";
 
 // ── formatting helpers ───────────────────────────────────────────────────────
 
@@ -144,6 +144,193 @@ function AssetBar({ assets, liabilities }: { assets: number; liabilities: number
         <span>{assetPct}% assets</span>
         <span>{liabPct}% liabilities</span>
       </div>
+    </div>
+  );
+}
+
+// ── history line chart ────────────────────────────────────────────────────────
+
+type TimeRange = "1M" | "3M" | "6M" | "1Y" | "All";
+
+const TIME_RANGE_DAYS: Record<TimeRange, number | null> = {
+  "1M": 30,
+  "3M": 90,
+  "6M": 180,
+  "1Y": 365,
+  "All": null,
+};
+
+function NWHistoryChart({ history }: { history: NWSnapshot[] }) {
+  const [range, setRange] = useState<TimeRange>("1Y");
+
+  const filtered = useMemo(() => {
+    const days = TIME_RANGE_DAYS[range];
+    if (!days) return history;
+    const cutoff = new Date(Date.now() - days * 86_400_000);
+    return history.filter((s) => new Date(s.snapshot_date) >= cutoff);
+  }, [history, range]);
+
+  const hasData = filtered.length >= 2;
+
+  const W = 1000;
+  const H = 140;
+  const PAD_X = 8;
+  const PAD_Y = 12;
+
+  const chartPts = useMemo(() => {
+    if (!hasData) return [];
+    const values = filtered.map((s) => s.net_worth);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const rangeV = max - min || 1;
+    return filtered.map((s, i) => {
+      const x = PAD_X + (i / (filtered.length - 1)) * (W - PAD_X * 2);
+      const y = PAD_Y + ((max - s.net_worth) / rangeV) * (H - PAD_Y * 2);
+      return { x, y, v: s.net_worth, date: s.snapshot_date };
+    });
+  }, [filtered, hasData]);
+
+  const positive = hasData && filtered[filtered.length - 1].net_worth >= filtered[0].net_worth;
+  const lineColor = positive ? "#34d399" : "#f87171";
+  const pathD = hasData ? `M ${chartPts.map((p) => `${p.x},${p.y}`).join(" L ")}` : "";
+  const fillD = hasData
+    ? `M ${chartPts[0].x},${chartPts[0].y} L ${chartPts.map((p) => `${p.x},${p.y}`).join(" L ")} L ${chartPts[chartPts.length - 1].x},${H} L ${chartPts[0].x},${H} Z`
+    : "";
+
+  // X-axis labels: show first and last dates
+  const labelFirst = filtered.length > 0 ? new Date(filtered[0].snapshot_date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+  const labelLast = filtered.length > 0 ? new Date(filtered[filtered.length - 1].snapshot_date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+
+  return (
+    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">Net Worth History</h3>
+        <div className="flex gap-1">
+          {(["1M", "3M", "6M", "1Y", "All"] as TimeRange[]).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={cn(
+                "px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer",
+                range === r
+                  ? "bg-[var(--accent-positive)]/20 text-emerald-400 border border-emerald-500/30"
+                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated-2)]"
+              )}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {!hasData ? (
+        <div className="h-36 flex flex-col items-center justify-center text-center gap-2">
+          <TrendingUp size={24} className="text-[var(--text-tertiary)]" />
+          <p className="text-sm text-[var(--text-secondary)]">Tracking net worth over time — check back soon</p>
+          <p className="text-xs text-[var(--text-tertiary)]">A data point is saved each time you update your accounts</p>
+        </div>
+      ) : (
+        <div>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-36" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="nwh-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={lineColor} stopOpacity="0.2" />
+                <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={fillD} fill="url(#nwh-fill)" />
+            <path d={pathD} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+            {/* start/end dots */}
+            <circle cx={chartPts[0].x} cy={chartPts[0].y} r="4" fill={lineColor} opacity="0.6" />
+            <circle cx={chartPts[chartPts.length - 1].x} cy={chartPts[chartPts.length - 1].y} r="5" fill={lineColor} />
+          </svg>
+          <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] mt-1 px-1">
+            <span>{labelFirst}</span>
+            <span className={cn("font-semibold text-xs", positive ? "text-emerald-400" : "text-red-400")}>
+              {fmtUSD(filtered[filtered.length - 1].net_worth, true)}
+            </span>
+            <span>{labelLast}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── financial health metrics ──────────────────────────────────────────────────
+
+interface HealthMetricsProps {
+  totalAssets: number;
+  totalLiabilities: number;
+  bmgValueCents: number;
+  onAddAccount: () => void;
+  hasAccounts: boolean;
+}
+
+function HealthMetrics({ totalAssets, totalLiabilities, bmgValueCents, onAddAccount, hasAccounts }: HealthMetricsProps) {
+  if (!hasAccounts) {
+    return (
+      <div className="bg-[var(--bg-elevated)] border border-dashed border-[var(--border-subtle)] rounded-2xl p-8 text-center space-y-3">
+        <div className="text-3xl">💰</div>
+        <p className="text-sm font-medium text-[var(--text-secondary)]">No accounts linked</p>
+        <p className="text-xs text-[var(--text-tertiary)]">Connect your first account to track your net worth</p>
+        <button
+          onClick={onAddAccount}
+          className="mt-1 inline-flex items-center gap-1.5 bg-[var(--accent-positive)] text-white text-sm font-semibold px-4 py-2 rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
+        >
+          <Plus size={14} /> Add Account
+        </button>
+      </div>
+    );
+  }
+
+  const investmentPct = totalAssets > 0
+    ? Math.round(((totalAssets - totalLiabilities) / totalAssets) * 100)
+    : 0;
+  const debtToAsset = totalAssets > 0
+    ? (totalLiabilities / totalAssets * 100).toFixed(1)
+    : "0.0";
+  const bmgValue = bmgValueCents / 100;
+  const bmgPct = totalAssets > 0
+    ? Math.round((bmgValue / totalAssets) * 100)
+    : 0;
+
+  const metrics = [
+    {
+      icon: "💰",
+      label: "Investment %",
+      value: `${investmentPct}%`,
+      sub: "Net equity vs total assets",
+      color: investmentPct >= 60 ? "text-emerald-400" : investmentPct >= 30 ? "text-amber-400" : "text-red-400",
+    },
+    {
+      icon: "💳",
+      label: "Debt-to-Asset",
+      value: `${debtToAsset}%`,
+      sub: "Total liabilities ÷ total assets",
+      color: parseFloat(debtToAsset) <= 30 ? "text-emerald-400" : parseFloat(debtToAsset) <= 60 ? "text-amber-400" : "text-red-400",
+    },
+    {
+      icon: "🎯",
+      label: "BMG Portfolio %",
+      value: `${bmgPct}%`,
+      sub: "Strategy Lab value vs total assets",
+      color: "text-[var(--text-primary)]",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {metrics.map((m) => (
+        <div key={m.label} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{m.icon}</span>
+            <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide">{m.label}</span>
+          </div>
+          <p className={cn("text-2xl font-bold", m.color)}>{m.value}</p>
+          <p className="text-[11px] text-[var(--text-tertiary)]">{m.sub}</p>
+        </div>
+      ))}
     </div>
   );
 }

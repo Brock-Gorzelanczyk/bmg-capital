@@ -483,8 +483,45 @@ export default function MissionControlPage() {
       ? "PRE-MARKET"
       : "MARKET CLOSED";
 
-  const actions = extendedActions ?? (feedData?.actions ?? []).slice(0, 20);
-  const tickerActions = (feedData?.actions ?? []).slice(0, 10);
+  // ── Cross-contamination filter ────────────────────────────────────────────
+  // Prevents crypto strategies firing on stock tickers and vice-versa.
+  function isCryptoSymbol(symbol: string): boolean {
+    return (
+      symbol.includes("-USD") ||
+      symbol.includes("-USDT") ||
+      symbol.includes("/USD") ||
+      symbol.toUpperCase() === "BTC" ||
+      symbol.toUpperCase() === "ETH"
+    );
+  }
+  function isCryptoStrategy(strategyId: string, lab: string): boolean {
+    const s = (strategyId + " " + lab).toLowerCase();
+    return s.includes("crypto") || s.includes("btc") || s.includes("eth");
+  }
+  function isStockStrategy(strategyId: string, lab: string): boolean {
+    const s = (strategyId + " " + lab).toLowerCase();
+    return (
+      !isCryptoStrategy(strategyId, lab) &&
+      (s.includes("stock") || s.includes("equity") || lab === "strategy")
+    );
+  }
+  function filterAction(a: AutonomousAction): boolean {
+    const cryptoSymbol = isCryptoSymbol(a.asset ?? "");
+    const cryptoStrategy = isCryptoStrategy(a.strategy_id ?? "", a.lab ?? "");
+    const stockStrategy = isStockStrategy(a.strategy_id ?? "", a.lab ?? "");
+    // Block: crypto strategy on non-crypto ticker
+    if (cryptoStrategy && !cryptoSymbol) return false;
+    // Block: stock strategy on crypto ticker
+    if (stockStrategy && cryptoSymbol) return false;
+    return true;
+  }
+
+  const allFeedActions = feedData?.actions ?? [];
+  const filteredFeedActions = allFeedActions.filter(filterAction);
+  const filteredExtended = extendedActions ? extendedActions.filter(filterAction) : null;
+
+  const actions = filteredExtended ?? filteredFeedActions.slice(0, 20);
+  const tickerActions = filteredFeedActions.slice(0, 10);
 
   // ── "Coming up" ──────────────────────────────────────────────────────────
 
@@ -495,9 +532,9 @@ export default function MissionControlPage() {
       ? "Tonight at 4:15 PM ET market close"
       : "Tomorrow at 7:30 AM ET";
 
-  // Strategies forming: signal_fired in last hour
+  // Strategies forming: signal_fired in last hour (use already-filtered feed)
   const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  const forming = (feedData?.actions ?? [])
+  const forming = filteredFeedActions
     .filter(
       a =>
         a.action_type === "signal_fired" &&

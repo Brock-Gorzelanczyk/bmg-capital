@@ -40,6 +40,7 @@ import {
   type AutopilotPolicy,
   type AutopilotGuardrail,
 } from "@/api/autopilot";
+import { getRecentSignals } from "@/api/bots";
 import { cn } from "@/lib/utils";
 
 // ─── Category metadata ─────────────────────────────────────────────────────────
@@ -786,6 +787,15 @@ export default function AutopilotPage() {
     staleTime: 60_000,
   });
 
+  // Pull bot signals so the "today" count aligns with Mission Control.
+  // The autopilot status endpoint only counts autopilot actions; bots fire
+  // signals via a separate pipeline that Mission Control shows.
+  const { data: recentSignalsData } = useQuery({
+    queryKey: ["bots-signals-recent", 500],
+    queryFn: () => getRecentSignals(500),
+    staleTime: 60_000,
+  });
+
   const pauseMut = useMutation({
     mutationFn: pauseAll,
     onSuccess: () => {
@@ -806,7 +816,23 @@ export default function AutopilotPage() {
   });
 
   const globalPaused = status?.global_paused ?? false;
-  const totalActions = status?.total_actions_today ?? summary?.total_actions ?? 0;
+
+  // Count today's bot signals (same data source as Mission Control's "signals fired").
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todaySignalsCount = (recentSignalsData?.signals ?? []).filter(
+    (s) => new Date(s.ts).getTime() >= todayStart.getTime()
+  ).length;
+
+  // Use whichever source gives the highest count — all are additive views of
+  // the same activity. Prefer the combined view so Autopilot matches Mission Control.
+  const totalActions =
+    Math.max(
+      status?.total_actions_today ?? 0,
+      summary?.total_actions ?? 0,
+      todaySignalsCount
+    ) || 0;
+
   const healthScore = status?.health_score ?? 0;
 
   // Build policy map keyed by category
