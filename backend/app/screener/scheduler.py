@@ -659,7 +659,7 @@ async def run_morning_brief_job() -> None:
                         reading_level="investor",
                     )
 
-                    now = datetime.utcnow()
+                    now = datetime.now(timezone.utc)
                     brief = DailyBrief(
                         user_id=user.id,
                         brief_date=today,

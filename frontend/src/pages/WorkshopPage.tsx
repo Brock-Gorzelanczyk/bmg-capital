@@ -1,1671 +1,295 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Plus, Trash2, Sparkles, ChevronDown, Save, BookOpen, X, Check, Loader2, AlertTriangle, TrendingUp, TrendingDown, Minus as MinusIcon, Upload, Image as ImageIcon } from "lucide-react";
-import AskAIDrawer from "@/components/ui/AskAIDrawer";
-import CandlestickChart, { type ChartHandle } from "@/components/chart/CandlestickChart";
-import RsiChart from "@/components/chart/RsiChart";
-import MacdChart from "@/components/chart/MacdChart";
-import TvTopBar from "@/components/chart/TvTopBar";
-import TvBottomBar, { type Period, PERIOD_CONFIGS } from "@/components/chart/TvBottomBar";
-import DrawingToolbar from "@/components/chart/DrawingToolbar";
-import IndicatorsModal from "@/components/chart/IndicatorsModal";
-import { useBars } from "@/hooks/useBars";
-import { useMarketStore } from "@/store";
-import { formatVolume, cn } from "@/lib/utils";
-import type { ChartType, DrawingTool, HoveredBar, Drawing } from "@/types/chart";
-import {
-  listAnalyses,
-  createAnalysis,
-  updateAnalysis,
-  deleteAnalysis,
-  analyzeAndSave,
-  analyzeChart,
-  analyzeImage,
-  type ChartAnalysis,
-  type AIAnalysis,
-  type ImageAnalysis,
-  type ImageKeyLevel,
-} from "@/api/workshop";
+import { useState, useEffect, useRef } from "react";
+import { CheckSquare, Square, Lock, ChevronDown, ChevronUp, Upload, Flame, BookOpen, X, Trophy } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-const OVERLAY_COLORS: Record<string, string> = {
-  SMA_20: "#f59e0b", SMA_50: "#3b82f6", SMA_200: "#8b5cf6",
-  EMA_20: "#fbbf24", EMA_50: "#60a5fa", EMA_200: "#a78bfa",
-  DEMA_20: "#f472b6",
-  VWAP: "#06b6d4",
-  BB_20_upper: "#64748b", BB_20_middle: "#94a3b8", BB_20_lower: "#64748b",
-  ICHI_tenkan: "#26a69a", ICHI_kijun: "#ef5350",
-  PSAR: "#9c27b0",
-  DONCHIAN_upper: "#607d8b", DONCHIAN_mid: "#90a4ae", DONCHIAN_lower: "#607d8b",
-  KELTNER_upper: "#ff9800", KELTNER_mid: "#ffb74d", KELTNER_lower: "#ff9800",
-};
+interface Lesson { id: string; name: string; difficulty: "Beginner" | "Intermediate" | "Advanced"; description: string; }
+interface Section { id: string; emoji: string; title: string; lessons: Lesson[]; defaultExpanded?: boolean; showCount?: number; }
+interface TAProgress { completed: string[]; streak: number; lastDate: string; }
+interface DailyQuiz { question: string; options: string[]; correctIndex: number; explanation: string; }
 
-function isOverlayKey(key: string): boolean {
-  return key.startsWith("SMA_") || key.startsWith("EMA_") || key.startsWith("DEMA_")
-    || key === "VWAP" || key === "PSAR"
-    || key.startsWith("ICHI_") || key.startsWith("DONCHIAN_") || key.startsWith("KELTNER_")
-    || key.endsWith("_upper") || key.endsWith("_middle") || key.endsWith("_lower");
-}
+// ── Data ──────────────────────────────────────────────────────────────────────
 
-function indicatorLabel(key: string): string {
-  if (key === "VWAP") return "VWAP";
-  return key.replace(/_/g, " ");
-}
+const TOTAL_LESSONS = 38;
 
-const toUnix = (t: string) => Math.floor(new Date(t).getTime() / 1000);
-
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
-}
-
-function getStoredSymbol() {
-  try { return localStorage.getItem("bmg_symbol") ?? "AAPL"; } catch { return "AAPL"; }
-}
-
-function drawingTypeLabel(type: Drawing["type"]): string {
-  const map: Record<string, string> = {
-    hline: "H-Line", trendline: "Trend", rect: "Rectangle",
-    fib: "Fibonacci", text: "Text", vline: "V-Line",
-    channel: "Channel", longpos: "Long", shortpos: "Short", arrow: "Arrow",
-  };
-  return map[type] ?? type;
-}
-
-function DrawingTypeIcon({ type }: { type: Drawing["type"] }) {
-  if (type === "longpos") return <TrendingUp size={11} className="text-[#22c55e]" />;
-  if (type === "shortpos") return <TrendingDown size={11} className="text-[#ef4444]" />;
-  if (type === "hline" || type === "vline") return <MinusIcon size={11} className="text-[#787b86]" />;
-  return <div className="w-2.5 h-2.5 rounded-sm border border-current opacity-70" />;
-}
-
-const QUALITY_COLORS = {
-  strong: "#22c55e",
-  moderate: "#f59e0b",
-  weak: "#ef4444",
-} as const;
-
-// ── Workshop Panel (right sidebar) ─────────────────────────────────────────────
-
-interface WorkshopPanelProps {
-  symbol: string;
-  timeframe: string;
-  currentPrice?: number;
-  drawings: Drawing[];
-  indicators: string[];
-  onDeleteDrawing: (id: string) => void;
-  onLoadDrawings: (drawings: Drawing[]) => void;
-}
-
-function WorkshopPanel({
-  symbol, timeframe, currentPrice, drawings, indicators, onDeleteDrawing, onLoadDrawings,
-}: WorkshopPanelProps) {
-  const [analyses, setAnalyses] = useState<ChartAnalysis[]>([]);
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [thesis, setThesis] = useState("");
-  const [name, setName] = useState("");
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [aiResult, setAiResult] = useState<AIAnalysis | null>(null);
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-
-  // Image upload state
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [imageAnalyzing, setImageAnalyzing] = useState(false);
-  const [imageAnalysis, setImageAnalysis] = useState<ImageAnalysis | null>(null);
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [showImagePanel, setShowImagePanel] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const symbolUpper = symbol.toUpperCase();
-
-  // Load analyses for this symbol
-  useEffect(() => {
-    listAnalyses(symbolUpper)
-      .then((list) => {
-        setAnalyses(list);
-        if (list.length > 0 && !activeId) {
-          const first = list[0];
-          setActiveId(first.id);
-          setName(first.name);
-          setThesis(first.thesis);
-          onLoadDrawings(Array.isArray(first.drawings) ? first.drawings : []);
-          if (first.ai_analysis && "thesis_summary" in first.ai_analysis) {
-            setAiResult(first.ai_analysis as AIAnalysis);
-          } else {
-            setAiResult(null);
-          }
-        }
-      })
-      .catch(console.error);
-  }, [symbolUpper]); // eslint-disable-line
-
-  const safeAnalyses = Array.isArray(analyses) ? analyses : [];
-  const activeAnalysis = safeAnalyses.find((a) => a.id === activeId);
-
-  function switchTo(analysis: ChartAnalysis) {
-    // Auto-save current before switching
-    if (activeId && activeId !== analysis.id) {
-      updateAnalysis(activeId, { thesis, drawings }).catch(console.error);
-    }
-    setActiveId(analysis.id);
-    setName(analysis.name);
-    setThesis(analysis.thesis);
-    onLoadDrawings(Array.isArray(analysis.drawings) ? analysis.drawings : []);
-    setAiResult(analysis.ai_analysis && "thesis_summary" in analysis.ai_analysis ? analysis.ai_analysis as AIAnalysis : null);
-    setAiError(null);
-    setShowDropdown(false);
-  }
-
-  async function handleSave() {
-    if (!activeId) return;
-    setSaving(true);
-    try {
-      await updateAnalysis(activeId, { name, thesis, drawings });
-      setAnalyses((prev) => prev.map((a) => a.id === activeId ? { ...a, name, thesis, drawings } : a));
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 1500);
-    } catch {
-      // ignore
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleCreateNew() {
-    if (!newName.trim()) return;
-    setSaving(true);
-    try {
-      const result = await createAnalysis({
-        symbol: symbolUpper,
-        timeframe,
-        name: newName.trim(),
-        thesis: "",
-        drawings: [],
-      });
-      const newAnalysis: ChartAnalysis = {
-        id: result.id,
-        symbol: symbolUpper,
-        timeframe,
-        name: newName.trim(),
-        thesis: "",
-        drawings: [],
-        ai_analysis: {},
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      setAnalyses((prev) => [newAnalysis, ...prev]);
-      setActiveId(result.id);
-      setName(newName.trim());
-      setThesis("");
-      onLoadDrawings([]);
-      setAiResult(null);
-      setNewName("");
-      setShowNewForm(false);
-    } catch {
-      // ignore
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(id: number) {
-    if (!confirm("Delete this analysis?")) return;
-    await deleteAnalysis(id);
-    const remaining = analyses.filter((a) => a.id !== id);
-    setAnalyses(remaining);
-    if (activeId === id) {
-      if (remaining.length > 0) {
-        switchTo(remaining[0]);
-      } else {
-        setActiveId(null);
-        setName("");
-        setThesis("");
-        onLoadDrawings([]);
-        setAiResult(null);
-      }
-    }
-  }
-
-  async function handleAnalyze() {
-    setAnalyzing(true);
-    setAiError(null);
-    try {
-      const result = await (activeId
-        ? analyzeAndSave(activeId, { symbol: symbolUpper, timeframe, current_price: currentPrice, drawings, indicators, thesis })
-        : analyzeChart({ symbol: symbolUpper, timeframe, current_price: currentPrice, drawings, indicators, thesis }));
-      setAiResult(result.analysis);
-      if (activeId) {
-        setAnalyses((prev) => prev.map((a) =>
-          a.id === activeId ? { ...a, ai_analysis: result.analysis } : a
-        ));
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "AI analysis failed";
-      setAiError(msg);
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Show preview
-    const url = URL.createObjectURL(file);
-    setUploadedImage(url);
-    setImageAnalysis(null);
-    setImageError(null);
-    setShowImagePanel(true);
-    setImageAnalyzing(true);
-    try {
-      const result = await analyzeImage(file);
-      setImageAnalysis(result.analysis);
-    } catch (err: unknown) {
-      setImageError(err instanceof Error ? err.message : "Image analysis failed");
-    } finally {
-      setImageAnalyzing(false);
-      // Reset file input so same file can be re-uploaded
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  function importKeyLevels(levels: ImageKeyLevel[]) {
-    const newDrawings: Drawing[] = levels
-      .filter((l) => l.price != null)
-      .map((l) => ({
-        id: crypto.randomUUID(),
-        type: "hline" as const,
-        price: l.price,
-        color: "#787b86",
-        label: l.label,
-      }));
-    if (newDrawings.length > 0) onLoadDrawings([...drawings, ...newDrawings]);
-  }
-
-  return (
-    <div className="w-72 shrink-0 flex flex-col border-l border-[var(--border-subtle)] bg-[var(--bg-elevated)] overflow-hidden">
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        className="hidden"
-        onChange={handleImageUpload}
-      />
-
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
-        <span className="text-[11px] font-semibold text-[var(--text-secondary)] tracking-wider uppercase">TA Workshop</span>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--accent-primary)] transition-colors"
-            title="Upload TA screenshot for AI reading"
-          >
-            <Upload size={11} />
-            Import
-          </button>
-          <button
-            onClick={() => setShowNewForm((s) => !s)}
-            className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--accent-primary)] transition-colors"
-            title="New analysis"
-          >
-            <Plus size={12} />
-            New
-          </button>
-        </div>
-      </div>
-
-      {/* New analysis form */}
-      {showNewForm && (
-        <div className="px-3 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-base)] shrink-0">
-          <input
-            autoFocus
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreateNew();
-              if (e.key === "Escape") setShowNewForm(false);
-            }}
-            placeholder="Analysis name…"
-            className="w-full bg-transparent text-[var(--text-secondary)] text-xs outline-none border border-[var(--border-emphasis)] rounded px-2 py-1 placeholder:text-[var(--text-tertiary)]"
-          />
-          <div className="flex gap-1.5 mt-1.5">
-            <button
-              onClick={handleCreateNew}
-              disabled={!newName.trim() || saving}
-              className="flex-1 text-[10px] py-1 rounded bg-[var(--accent-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
-            >
-              Create
-            </button>
-            <button
-              onClick={() => setShowNewForm(false)}
-              className="flex-1 text-[10px] py-1 rounded border border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Analysis selector */}
-      {safeAnalyses.length > 0 && (
-        <div className="px-3 py-2 border-b border-[var(--border-subtle)] shrink-0 relative">
-          <button
-            onClick={() => setShowDropdown((s) => !s)}
-            className="w-full flex items-center justify-between text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors group"
-          >
-            <span className="truncate font-medium">{name || activeAnalysis?.name || "Select analysis"}</span>
-            <ChevronDown size={12} className={cn("shrink-0 ml-1 transition-transform", showDropdown && "rotate-180")} />
-          </button>
-          {showDropdown && (
-            <div className="absolute left-0 right-0 top-full z-50 bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] rounded-b shadow-xl overflow-hidden">
-              {safeAnalyses.map((a) => (
-                <div
-                  key={a.id}
-                  className={cn(
-                    "flex items-center justify-between px-3 py-2 text-xs cursor-pointer hover:bg-[var(--bg-elevated)] transition-colors",
-                    a.id === activeId && "text-[var(--accent-primary)] bg-[var(--accent-primary)]/5"
-                  )}
-                >
-                  <span className="truncate flex-1" onClick={() => switchTo(a)}>{a.name}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(a.id); }}
-                    className="shrink-0 ml-2 text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors"
-                  >
-                    <Trash2 size={10} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Empty state */}
-      {safeAnalyses.length === 0 && !showNewForm && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center">
-          <BookOpen size={28} className="text-[var(--text-tertiary)] opacity-40" />
-          <p className="text-[11px] text-[var(--text-tertiary)]">
-            Save named analyses for {symbol}.<br />Draw on the chart, name your thesis, let AI weigh in.
-          </p>
-          <button
-            onClick={() => setShowNewForm(true)}
-            className="text-[11px] px-3 py-1.5 rounded bg-[var(--accent-primary)] text-white hover:opacity-90 transition-opacity flex items-center gap-1"
-          >
-            <Plus size={12} />
-            New Analysis
-          </button>
-        </div>
-      )}
-
-      {/* Analysis content */}
-      {activeId && (
-        <div className="flex-1 overflow-y-auto flex flex-col gap-0">
-          {/* Name edit */}
-          <div className="px-3 pt-3 pb-2 shrink-0">
-            <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full mt-1 bg-transparent text-[var(--text-secondary)] text-xs outline-none border-b border-[var(--border-emphasis)] pb-0.5 placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-primary)] transition-colors"
-              placeholder="Analysis name…"
-            />
-          </div>
-
-          {/* Thesis */}
-          <div className="px-3 pb-2 shrink-0">
-            <label className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Thesis</label>
-            <textarea
-              value={thesis}
-              onChange={(e) => setThesis(e.target.value)}
-              rows={3}
-              placeholder="Write your thesis here…"
-              className="w-full mt-1 bg-[var(--bg-base)] text-[var(--text-secondary)] text-[11px] outline-none border border-[var(--border-subtle)] rounded px-2 py-1.5 placeholder:text-[var(--text-tertiary)] resize-none focus:border-[var(--accent-primary)] transition-colors"
-            />
-          </div>
-
-          {/* Save button */}
-          <div className="px-3 pb-3 shrink-0">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className={cn(
-                "w-full flex items-center justify-center gap-1.5 text-[11px] py-1.5 rounded transition-all",
-                savedFlash
-                  ? "bg-[var(--accent-positive)]/15 text-[var(--accent-positive)] border border-[var(--accent-positive)]/30"
-                  : "bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-secondary)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)]"
-              )}
-            >
-              {saving ? <Loader2 size={11} className="animate-spin" /> : savedFlash ? <Check size={11} /> : <Save size={11} />}
-              {savedFlash ? "Saved" : saving ? "Saving…" : "Save Analysis"}
-            </button>
-          </div>
-
-          {/* Drawings list */}
-          {drawings.length > 0 && (
-            <div className="px-3 pb-3 shrink-0">
-              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1.5">
-                Drawings ({drawings.length})
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {drawings.map((d) => (
-                  <div
-                    key={d.id}
-                    className="flex items-center justify-between px-2 py-1 rounded hover:bg-[var(--bg-base)] group transition-colors"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <DrawingTypeIcon type={d.type} />
-                      <span className="text-[11px] text-[var(--text-secondary)]">{drawingTypeLabel(d.type)}</span>
-                      {d.price != null && (
-                        <span className="text-[10px] text-[var(--text-tertiary)]">${d.price.toFixed(2)}</span>
-                      )}
-                      {d.p1?.price != null && d.type !== "hline" && (
-                        <span className="text-[10px] text-[var(--text-tertiary)]">${d.p1.price.toFixed(2)}</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => onDeleteDrawing(d.id)}
-                      className="opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-all"
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* AI Analyze button */}
-          <div className="px-3 pb-3 shrink-0 border-t border-[var(--border-subtle)] pt-3">
-            <button
-              onClick={handleAnalyze}
-              disabled={analyzing}
-              className="w-full flex items-center justify-center gap-1.5 text-[11px] py-2 rounded bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
-            >
-              {analyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-              {analyzing ? "Analyzing…" : "Analyze with AI"}
-            </button>
-            {aiError && (
-              <p className="mt-2 text-[10px] text-[var(--accent-negative)] flex items-center gap-1">
-                <AlertTriangle size={10} /> {aiError}
-              </p>
-            )}
-          </div>
-
-          {/* AI Result */}
-          {aiResult && (
-            <div className="px-3 pb-4 flex flex-col gap-3">
-              {/* Quality badge */}
-              <div className="flex items-center gap-2">
-                <span
-                  className="text-[10px] font-bold uppercase px-2 py-0.5 rounded"
-                  style={{ color: QUALITY_COLORS[aiResult.setup_quality], background: `${QUALITY_COLORS[aiResult.setup_quality]}18` }}
-                >
-                  {aiResult.setup_quality} setup
-                </span>
-                <span className="text-[10px] text-[var(--text-tertiary)]">{aiResult.setup_quality_reason}</span>
-              </div>
-
-              {/* Thesis summary */}
-              <div>
-                <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">Thesis read</div>
-                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{aiResult.thesis_summary}</p>
-              </div>
-
-              {/* Supporting */}
-              {(aiResult.supporting ?? []).length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#22c55e] uppercase tracking-wider mb-1">Supporting</div>
-                  <ul className="space-y-1">
-                    {(aiResult.supporting ?? []).map((s, i) => (
-                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
-                        <span className="text-[#22c55e] shrink-0 mt-0.5">+</span>
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Counterarguments */}
-              {(aiResult.counterarguments ?? []).length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#f59e0b] uppercase tracking-wider mb-1">Counter</div>
-                  <ul className="space-y-1">
-                    {(aiResult.counterarguments ?? []).map((c, i) => (
-                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
-                        <span className="text-[#f59e0b] shrink-0 mt-0.5">−</span>
-                        {c}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Invalidation */}
-              <div>
-                <div className="text-[10px] text-[#ef4444] uppercase tracking-wider mb-1">Invalidation</div>
-                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{aiResult.invalidation}</p>
-              </div>
-
-              {/* Suggestions */}
-              {(aiResult.suggested_additions ?? []).length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#6366f1] uppercase tracking-wider mb-1">Add to chart</div>
-                  <ul className="space-y-1">
-                    {(aiResult.suggested_additions ?? []).map((s, i) => (
-                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
-                        <span className="text-[#6366f1] shrink-0 mt-0.5">→</span>
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Image Upload Analysis Panel ──────────────────────────────────────── */}
-      {showImagePanel && (
-        <div className="border-t border-[var(--border-subtle)] flex flex-col shrink-0">
-          {/* Panel header */}
-          <div className="px-3 py-2 flex items-center justify-between bg-[var(--bg-base)]">
-            <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider flex items-center gap-1.5">
-              <ImageIcon size={11} />
-              TA Image Read
-            </span>
-            <button
-              onClick={() => { setShowImagePanel(false); setUploadedImage(null); setImageAnalysis(null); }}
-              className="text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
-            >
-              <X size={12} />
-            </button>
-          </div>
-
-          {/* Preview thumbnail */}
-          {uploadedImage && (
-            <div className="px-3 pb-2">
-              <img
-                src={uploadedImage}
-                alt="Uploaded TA"
-                className="w-full rounded border border-[var(--border-subtle)] object-cover max-h-32"
-              />
-            </div>
-          )}
-
-          {/* Loading */}
-          {imageAnalyzing && (
-            <div className="px-3 pb-3 flex items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
-              <Loader2 size={13} className="animate-spin" />
-              AI is reading your chart…
-            </div>
-          )}
-
-          {/* Error */}
-          {imageError && (
-            <div className="px-3 pb-3 text-[10px] text-[var(--accent-negative)] flex items-center gap-1">
-              <AlertTriangle size={10} /> {imageError}
-            </div>
-          )}
-
-          {/* Results */}
-          {imageAnalysis && (
-            <div className="px-3 pb-4 flex flex-col gap-3 overflow-y-auto max-h-96">
-              {/* Detected asset / timeframe */}
-              {(imageAnalysis.asset || imageAnalysis.timeframe) && (
-                <div className="flex gap-2">
-                  {imageAnalysis.asset && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] font-mono">
-                      {imageAnalysis.asset}
-                    </span>
-                  )}
-                  {imageAnalysis.timeframe && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)]">
-                      {imageAnalysis.timeframe}
-                    </span>
-                  )}
-                  <span
-                    className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ml-auto"
-                    style={{
-                      color: QUALITY_COLORS[imageAnalysis.setup_quality],
-                      background: `${QUALITY_COLORS[imageAnalysis.setup_quality]}18`,
-                    }}
-                  >
-                    {imageAnalysis.setup_quality}
-                  </span>
-                </div>
-              )}
-
-              {/* Thesis */}
-              <div>
-                <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">AI reads your setup as</div>
-                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{imageAnalysis.thesis_summary}</p>
-              </div>
-
-              {/* Detected drawings */}
-              {(imageAnalysis.drawings_detected ?? []).length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
-                    Drawings detected ({(imageAnalysis.drawings_detected ?? []).length})
-                  </div>
-                  <ul className="space-y-1">
-                    {(imageAnalysis.drawings_detected ?? []).map((d, i) => (
-                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
-                        <span className="text-[var(--accent-primary)] shrink-0 mt-0.5">·</span>
-                        <span>
-                          <span className="text-[var(--text-tertiary)] font-mono">{d.type}</span>
-                          {" — "}
-                          {d.description}
-                          {d.price_level != null && (
-                            <span className="text-[var(--text-tertiary)]"> @ ${d.price_level.toLocaleString()}</span>
-                          )}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Key levels + import button */}
-              {(imageAnalysis.key_levels ?? []).length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider">Key levels</div>
-                    <button
-                      onClick={() => importKeyLevels(imageAnalysis.key_levels ?? [])}
-                      className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/15 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/25 transition-colors"
-                    >
-                      + Add to chart
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    {(imageAnalysis.key_levels ?? []).map((l, i) => (
-                      <div key={i} className="flex items-center justify-between text-[11px]">
-                        <span className="text-[var(--text-tertiary)]">{l.label}</span>
-                        <span className="font-mono text-[var(--text-secondary)]">${l.price.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Supporting */}
-              {(imageAnalysis.supporting ?? []).length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#22c55e] uppercase tracking-wider mb-1">Strengths</div>
-                  <ul className="space-y-1">
-                    {(imageAnalysis.supporting ?? []).map((s, i) => (
-                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
-                        <span className="text-[#22c55e] shrink-0">+</span>{s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Counter */}
-              {(imageAnalysis.counterarguments ?? []).length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#f59e0b] uppercase tracking-wider mb-1">Risks</div>
-                  <ul className="space-y-1">
-                    {(imageAnalysis.counterarguments ?? []).map((c, i) => (
-                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
-                        <span className="text-[#f59e0b] shrink-0">−</span>{c}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Invalidation */}
-              <div>
-                <div className="text-[10px] text-[#ef4444] uppercase tracking-wider mb-1">Invalidation</div>
-                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{imageAnalysis.invalidation}</p>
-              </div>
-
-              {/* Suggested additions */}
-              {(imageAnalysis.suggested_additions ?? []).length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#6366f1] uppercase tracking-wider mb-1">Suggested additions</div>
-                  <ul className="space-y-1">
-                    {(imageAnalysis.suggested_additions ?? []).map((s, i) => (
-                      <li key={i} className="text-[11px] text-[var(--text-secondary)] flex gap-1.5">
-                        <span className="text-[#6366f1] shrink-0">→</span>{s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Upload another */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center justify-center gap-1.5 text-[10px] py-1.5 rounded border border-dashed border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] transition-colors"
-              >
-                <Upload size={11} />
-                Upload another image
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Upload drop zone (shown when no image yet and panel is closed) */}
-      {!showImagePanel && (
-        <div className="px-3 py-3 border-t border-[var(--border-subtle)] shrink-0">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded border border-dashed border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] transition-colors text-[11px]"
-          >
-            <Upload size={13} />
-            Upload TA screenshot → AI reads it
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── TA Learning Section ────────────────────────────────────────────────────────
-
-interface TASetup {
-  name: string;
-  emoji: string;
-  type: string;
-  typeColor: string;
-  timeframe: string;
-  difficulty: "Beginner" | "Intermediate" | "Advanced";
-  description: string;
-  entry: string;
-  stop: string;
-  target: string;
-  watchFor: string[];
-  avoid: string[];
-  indicators: string[];
-}
-
-const TA_SETUPS: TASetup[] = [
+const SECTIONS: Section[] = [
   {
-    name: "Bull Flag",
-    emoji: "🚩",
-    type: "Continuation",
-    typeColor: "text-emerald-400 bg-emerald-900/30 border-emerald-800/50",
-    timeframe: "1H / 4H / Daily",
-    difficulty: "Beginner",
-    description: "A sharp upward move (the flagpole) followed by a tight consolidation channel sloping slightly down. Signals institutional distribution is low — just a rest before continuation.",
-    entry: "Buy the breakout above the upper flag trendline, ideally with a volume surge",
-    stop: "Below the lower flag trendline or 50% of the flag body",
-    target: "Project the flagpole length from the breakout point",
-    watchFor: ["Tight price action in the flag (small candles)", "Volume drying up in consolidation", "Flag duration: 3–20 candles ideal", "Clear parallel channel structure"],
-    avoid: ["Flags that retrace more than 50% of the pole", "Flags lasting too long (base building instead)", "Breakout without volume"],
-    indicators: ["Volume", "ATR (flag should have lower ATR than pole)", "VWAP as dynamic support"],
+    id: "basics", emoji: "📊", title: "Chart Basics", defaultExpanded: true,
+    lessons: [
+      { id: "candle-anatomy", name: "Candlestick anatomy", difficulty: "Beginner", description: "Learn the body, wick, and shadow. Open, high, low, and close tell the story of every session." },
+      { id: "trend-lines", name: "Trend lines", difficulty: "Beginner", description: "Higher highs/lows define uptrends; lower highs/lows define downtrends. Trend lines frame the market's bias." },
+      { id: "support-resistance", name: "Support and resistance", difficulty: "Beginner", description: "Levels where buying or selling has historically reversed price. Old resistance becomes new support after a breakout." },
+      { id: "volume-basics", name: "Volume basics", difficulty: "Beginner", description: "Volume confirms moves. A breakout on heavy volume is far more reliable than one on thin, indifferent volume." },
+      { id: "time-frames", name: "Time frames", difficulty: "Beginner", description: "Daily shows the trend, 5-minute shows noise. Always know which time frame you are trading and which frame sets context." },
+      { id: "gaps", name: "Gaps and breakaways", difficulty: "Intermediate", description: "Breakaway gaps launch new trends; exhaustion gaps end them. Gap direction and volume determine which type you have." },
+      { id: "multi-tf", name: "Multi-time-frame analysis", difficulty: "Intermediate", description: "Align weekly, daily, and intraday before entering. Trades with all frames in agreement have the highest probability." },
+      { id: "log-linear", name: "Log vs linear scales", difficulty: "Intermediate", description: "Log scale makes equal percentage moves look equal. Use it for long-term charts to avoid misleading size distortions." },
+    ],
   },
   {
-    name: "Cup & Handle",
-    emoji: "☕",
-    type: "Continuation",
-    typeColor: "text-emerald-400 bg-emerald-900/30 border-emerald-800/50",
-    timeframe: "Daily / Weekly",
-    difficulty: "Intermediate",
-    description: "A bullish continuation pattern shaped like a teacup. The 'cup' forms via a rounded bottom decline and recovery; the 'handle' is a slight pullback before the breakout.",
-    entry: "Buy the breakout above the handle's resistance with volume confirmation",
-    stop: "Below the handle's low (typically 3–8% risk)",
-    target: "Measure the depth of the cup and project that distance above the breakout point",
-    watchFor: ["Volume expansion on breakout candle", "Handle depth < 50% of cup depth", "Cup forms over 7+ weeks for higher reliability", "Breakout from a base near prior highs"],
-    avoid: ["V-shaped cup (no rounded base = weaker)", "Handle that drifts too far down (>50% retrace)", "Breakout on declining volume"],
-    indicators: ["Volume", "RSI (should reset to ~50 in handle)", "50-day EMA as support"],
+    id: "indicators", emoji: "📈", title: "Indicators", showCount: 4,
+    lessons: [
+      { id: "ma", name: "Moving averages (SMA, EMA)", difficulty: "Beginner", description: "SMAs weight all bars equally; EMAs emphasize recent price. The 21, 50, and 200 EMAs are watched by institutions." },
+      { id: "rsi", name: "RSI", difficulty: "Beginner", description: "Momentum oscillator on a 0–100 scale. Over 70 = overbought; under 30 = oversold — but extremes can persist in trends." },
+      { id: "macd", name: "MACD", difficulty: "Intermediate", description: "Trend and momentum in one. Histogram crossovers above/below the signal line signal entries and exits." },
+      { id: "bollinger", name: "Bollinger Bands", difficulty: "Intermediate", description: "Bands widen in volatility, narrow in consolidation. Upper-band touch in an uptrend is continuation, not reversal." },
+      { id: "vwap", name: "VWAP", difficulty: "Intermediate", description: "The institutional day-trading benchmark. Above = bullish bias; below = bearish. Reclaims and failures are key events." },
+      { id: "atr", name: "ATR", difficulty: "Intermediate", description: "Average True Range in dollars. Use it to calibrate stop distances and position sizes to current volatility." },
+      { id: "adx", name: "ADX / DMI", difficulty: "Advanced", description: "ADX > 25 means trending; < 20 means chop. Filter range and trend regimes before applying your strategy." },
+      { id: "stoch", name: "Stochastics", difficulty: "Intermediate", description: "Compares close to range over N bars. Best for overbought/oversold signals in non-trending, range-bound markets." },
+      { id: "obv", name: "OBV / Accumulation", difficulty: "Advanced", description: "On-Balance Volume tracks cumulative buying power. OBV diverging from price often leads reversals by weeks." },
+      { id: "ichimoku", name: "Ichimoku cloud", difficulty: "Advanced", description: "A complete system in one chart. Price above the cloud is bullish; the cloud acts as dynamic support/resistance." },
+      { id: "fib", name: "Fibonacci retracements", difficulty: "Intermediate", description: "38.2%, 50%, and 61.8% are magnetic pullback targets. Combine with volume confirmation for high-probability entries." },
+      { id: "pivots", name: "Pivot points", difficulty: "Intermediate", description: "Mathematical support/resistance watched by floor traders and algos. Daily and weekly pivots define intraday range." },
+    ],
   },
   {
-    name: "Double Bottom",
-    emoji: "W",
-    type: "Reversal",
-    typeColor: "text-blue-400 bg-blue-900/30 border-blue-800/50",
-    timeframe: "1H / 4H / Daily",
-    difficulty: "Beginner",
-    description: "A bearish-to-bullish reversal forming a 'W' shape. Two tests of the same support level, with the second bottom holding at or above the first, followed by a break above the neckline.",
-    entry: "Buy the breakout above the neckline (the high between the two bottoms) with volume",
-    stop: "Below the second bottom (structure break = pattern fails)",
-    target: "Measure the depth from bottoms to neckline; project that distance above the neckline",
-    watchFor: ["Second bottom forms on lower volume than first (sellers exhausted)", "RSI positive divergence (higher low vs. price lower low)", "Strong rejection candle at the second bottom", "Neckline at a clear prior resistance level"],
-    avoid: ["Neckline too close to bottoms (poor R:R)", "Second bottom significantly lower than first", "Pattern at random levels with no prior significance"],
-    indicators: ["RSI divergence", "Volume", "MACD crossover"],
+    id: "patterns", emoji: "🔥", title: "Chart Patterns", showCount: 4,
+    lessons: [
+      { id: "cup-handle", name: "Cup and handle", difficulty: "Intermediate", description: "U-shaped base + tight handle. Breakout above the handle on heavy volume is the classic buy trigger per O'Neil." },
+      { id: "head-shoulders", name: "Head and shoulders", difficulty: "Intermediate", description: "Three peaks; the middle is highest. Neckline break = trend reversal. The inverse version signals a bottoming." },
+      { id: "flags", name: "Bull/bear flags", difficulty: "Beginner", description: "Tight pullback after a sharp pole. Represents pause before continuation — buy the break above the flag's upper line." },
+      { id: "triangles", name: "Triangles and wedges", difficulty: "Intermediate", description: "Ascending triangles favor upside; descending favor downside. Wedges typically break opposite to the wedge slope." },
+      { id: "double-bottom", name: "Double top / double bottom", difficulty: "Beginner", description: "Two tests of the same level that hold. W-shaped bottoms and M-shaped tops are among the most reliable reversals." },
+      { id: "vcp", name: "Volatility Contraction Pattern", difficulty: "Advanced", description: "Series of contracting swings in a base — each pullback smaller than the last. Pivot buy on the final tight breakout." },
+      { id: "flat-base", name: "Flat base", difficulty: "Intermediate", description: "5–15% range over 5+ weeks after a prior uptrend. One of the most reliable continuation bases in a healthy market." },
+      { id: "rounding-bottom", name: "Rounding bottom", difficulty: "Intermediate", description: "Slow, gradual reversal over months. Gentle curve from institutional accumulation; high win rate on the breakout." },
+      { id: "ascending-base", name: "Ascending base", difficulty: "Advanced", description: "Three pullbacks each with a higher low — a staircase. Shows persistent demand as weak hands exit at each pullback." },
+      { id: "high-tight", name: "High tight flag", difficulty: "Advanced", description: "Stock doubles in 8 weeks, then pulls back just 10–25%. Rarest and most powerful continuation pattern per O'Neil." },
+    ],
   },
   {
-    name: "Head & Shoulders",
-    emoji: "👤",
-    type: "Reversal (Bearish)",
-    typeColor: "text-red-400 bg-red-900/30 border-red-800/50",
-    timeframe: "4H / Daily / Weekly",
-    difficulty: "Intermediate",
-    description: "A three-peak topping pattern — left shoulder, higher head, right shoulder — signaling trend exhaustion. The neckline breakdown is the entry. Inverse H&S is the bullish mirror.",
-    entry: "Short (or reduce longs) on neckline breakdown; cover at measured target",
-    stop: "Above the right shoulder high (pattern invalidation)",
-    target: "Measure from head to neckline; project downward from breakdown point",
-    watchFor: ["Right shoulder lower than head (bearish pressure)", "Volume declining into the head, low on right shoulder", "Neckline sloping slightly downward = stronger bear signal", "Failed neckline retests after breakdown"],
-    avoid: ["Very asymmetric shoulders (different timing)", "Low volume on breakdown (weak confirmation)", "Playing against a strong macro uptrend"],
-    indicators: ["Volume (must confirm breakdown)", "RSI showing lower highs into head/right shoulder", "200-day EMA overhead as resistance"],
-  },
-  {
-    name: "Ascending Triangle",
-    emoji: "△",
-    type: "Continuation / Reversal",
-    typeColor: "text-amber-400 bg-amber-900/30 border-amber-800/50",
-    timeframe: "1H / 4H / Daily",
-    difficulty: "Beginner",
-    description: "A flat upper resistance line with higher lows creating a rising lower trendline. Buyers are becoming more aggressive with each pullback — pressure building for a breakout.",
-    entry: "Buy the breakout above flat resistance with volume, or buy the rising trendline for anticipatory entry",
-    stop: "Below the last higher low (or 1 ATR below the breakout level)",
-    target: "Measure triangle height at widest point; project from breakout",
-    watchFor: ["Each pullback holding higher than the last", "Volume contraction through the triangle", "Breakout candle closes decisively above flat resistance", "5+ touches of the flat resistance level"],
-    avoid: ["Breakouts that immediately reverse (bull trap)", "Triangles with fewer than 4 total touches", "Very wide triangles (longer = less reliable)"],
-    indicators: ["Volume", "RSI resets to mid-levels between tests", "VWAP inside triangle"],
-  },
-  {
-    name: "Falling Wedge",
-    emoji: "📐",
-    type: "Reversal (Bullish)",
-    typeColor: "text-blue-400 bg-blue-900/30 border-blue-800/50",
-    timeframe: "1H / 4H / Daily",
-    difficulty: "Intermediate",
-    description: "Converging downward-sloping trendlines with lower highs and lower lows — but highs are falling faster than lows. Signals decreasing selling pressure. Resolves bullishly ~70% of the time.",
-    entry: "Buy the breakout above the upper trendline, confirmed by close above it and volume surge",
-    stop: "Below the last lower low within the wedge",
-    target: "Return to the origin of the wedge (start of the pattern at the top)",
-    watchFor: ["Volume declining through the wedge (sellers exhausted)", "RSI positive divergence (price lower low, RSI higher low)", "Wedge forming after a significant prior downtrend", "Consolidation wedge in an uptrend (continuation context)"],
-    avoid: ["Too-steep wedge angle (more likely to break down)", "Breakout on thin volume", "Pattern spanning fewer than 5 candles"],
-    indicators: ["RSI divergence", "Volume", "Fibonacci retracements for target extension"],
-  },
-  {
-    name: "VWAP Reclaim",
-    emoji: "⚡",
-    type: "Intraday",
-    typeColor: "text-violet-400 bg-violet-900/30 border-violet-800/50",
-    timeframe: "5m / 15m / 1H",
-    difficulty: "Intermediate",
-    description: "Price dips below VWAP then reclaims it with conviction. One of the cleanest intraday setups — institutions use VWAP as a benchmark, so reclaims carry institutional backing.",
-    entry: "Buy when price closes back above VWAP on above-average volume (candle close, not wick)",
-    stop: "Close back below VWAP (failed reclaim)",
-    target: "Previous VWAP highs of the session or overnight highs",
-    watchFor: ["Sharp VWAP dip on low volume (weak selling = fast recovery)", "Reclaim happens in the first 1–2 hours of the session", "SPY/QQQ also above their VWAPs (macro alignment)", "Sector ETF confirming the move"],
-    avoid: ["Extended time below VWAP (trend change, not deviation)", "Playing against strong macro downtrends", "Chasing well above VWAP after a big reclaim move"],
-    indicators: ["VWAP (primary)", "Volume profile", "1-minute RSI for momentum confirmation"],
-  },
-  {
-    name: "Golden Cross",
-    emoji: "✨",
-    type: "Trend Confirmation",
-    typeColor: "text-amber-400 bg-amber-900/30 border-amber-800/50",
-    timeframe: "Daily / Weekly",
-    difficulty: "Beginner",
-    description: "The 50-day SMA crosses above the 200-day SMA. A macro bullish signal used by institutional trend followers. Confirms trend rather than predicting tops/bottoms.",
-    entry: "Enter on the cross day, or wait for a pullback to the 50 SMA after the cross for better R:R",
-    stop: "Below the 200 SMA (major structure break)",
-    target: "No fixed target — trail stop using the 50 SMA",
-    watchFor: ["Both MAs trending upward at the time of cross (stronger signal)", "Price already above both MAs before the cross", "Volume expansion around the cross", "Cross occurring after a period of basing (not a V-shape recovery)"],
-    avoid: ["Chasing price far above both MAs at cross time", "Golden crosses in macro bear markets (tend to fail faster)", "Taking the cross as a standalone entry without price context"],
-    indicators: ["SMA 50 and SMA 200 (primary)", "Volume", "ADX > 25 confirms trend strength"],
-  },
-  {
-    name: "RSI Divergence",
-    emoji: "📊",
-    type: "Reversal Signal",
-    typeColor: "text-blue-400 bg-blue-900/30 border-blue-800/50",
-    timeframe: "4H / Daily",
-    difficulty: "Advanced",
-    description: "When price makes a new high/low but RSI makes a lower high/higher low — momentum is diverging from price. Most reliable when combined with key structure levels.",
-    entry: "Bullish: buy when price tests the prior low and RSI holds a higher low. Bearish: short when price rejects key resistance with RSI lower high",
-    stop: "Below the price low in a bullish divergence (above the high for bearish)",
-    target: "Previous swing high for bullish divergence reversal",
-    watchFor: ["Hidden divergence (RSI higher low + price higher low in uptrend = continuation)", "Multiple-candle divergence (more reliable)", "Divergence at major support/resistance levels", "Bearish divergence at all-time highs"],
-    avoid: ["Divergence in strongly trending markets (can persist)", "Trading divergence without price structure confirmation", "Sub-15m timeframes — too noisy"],
-    indicators: ["RSI 14 (primary)", "MACD convergence for confirmation", "Volume pattern at divergence points"],
+    id: "systems", emoji: "⚡", title: "Practitioner Systems", showCount: 4,
+    lessons: [
+      { id: "canslim", name: "CAN SLIM (O'Neil)", difficulty: "Advanced", description: "Seven-factor system: Current earnings, Annual earnings, New catalysts, Supply/demand, Leaders, Institutional sponsorship, Market direction." },
+      { id: "minervini", name: "Minervini VCP", difficulty: "Advanced", description: "Stage 2 stocks forming tight, low-volume VCP bases before a volume-driven pivot breakout — Minervini's core methodology." },
+      { id: "weinstein", name: "Weinstein Stage 2", difficulty: "Advanced", description: "Four-stage stock cycle. Buy in Stage 2 (advancing above rising 30-week MA). Avoid Stages 3–4 entirely." },
+      { id: "turtle", name: "Turtle Donchian", difficulty: "Advanced", description: "Richard Dennis's system: buy 20/55-day channel breakouts, ATR stops, add to winners. Pure trend-following at scale." },
+      { id: "darvas", name: "Darvas Box", difficulty: "Intermediate", description: "Buy breakouts from box-shaped bases defined by natural swing highs and lows. Simple, mechanical, and time-tested." },
+      { id: "momentum", name: "52-week high momentum", difficulty: "Intermediate", description: "Stocks near 52-week highs tend to outperform 6–12 months forward. 'Nearness to high' is one of finance's most robust factors." },
+      { id: "wyckoff", name: "Wyckoff accumulation / distribution", difficulty: "Advanced", description: "Identifies institutional accumulation (spring/test) and distribution (upthrust) phases to project future price targets." },
+      { id: "market-breadth", name: "Market breadth reading", difficulty: "Advanced", description: "A/D line, new highs vs. lows, and % above 50-day MA reveal rally health. Breadth divergences precede index tops." },
+    ],
   },
 ];
 
-const DIFFICULTY_STYLE: Record<string, string> = {
-  Beginner:     "text-emerald-400 bg-emerald-900/20 border-emerald-800/40",
-  Intermediate: "text-amber-400 bg-amber-900/20 border-amber-800/40",
-  Advanced:     "text-red-400 bg-red-900/20 border-red-800/40",
-};
+const DAILY_QUIZZES: DailyQuiz[] = [
+  { question: "BTC forms a higher low after -30%. Volume is declining on each pullback. What pattern is forming?", options: ["A) Falling wedge", "B) Cup and handle", "C) Bear flag", "D) Rounding bottom"], correctIndex: 0, explanation: "Declining volume in a falling wedge = diminishing sell pressure. Price breaks above the upper line — often sharply." },
+  { question: "NVDA breaks out of a 6-week flat base on 200% above-average volume. What's the signal?", options: ["A) Sell the news", "B) Momentum entry", "C) Wait for pullback", "D) Short it"], correctIndex: 1, explanation: "2x+ volume breakouts are institutional buying — the CAN SLIM momentum entry. Waiting for a pullback often costs you the best gains." },
+  { question: "Rising price but RSI is making lower highs. What is this?", options: ["A) RSI confirmation", "B) Bearish divergence", "C) Oversold condition", "D) Breakout signal"], correctIndex: 1, explanation: "Bearish divergence: momentum failing to confirm new price highs signals weakening buying pressure and often precedes a reversal." },
+  { question: "Stock consolidates 8 weeks in a tight range after a 3-month uptrend. Volume dries up. What pattern?", options: ["A) Head and shoulders", "B) Distribution", "C) Flat base", "D) Double top"], correctIndex: 2, explanation: "Flat base + volume contraction = institutional quiet accumulation. Buy trigger is a break above the base high on heavy volume." },
+  { question: "When is the ideal time to buy according to Weinstein's stage analysis?", options: ["A) Stage 1 (basing)", "B) Stage 2 (advancing)", "C) Stage 3 (topping)", "D) Stage 4 (declining)"], correctIndex: 1, explanation: "Stage 2 — rising above the rising 30-week MA on expanding volume. Stage 1 you wait; Stages 3–4 you sell or short." },
+  { question: "Which volume pattern is most bullish during a multi-week base?", options: ["A) Heavy up weeks, light down weeks", "B) Consistent volume throughout", "C) Light up weeks, heavy down weeks", "D) Volume doesn't matter"], correctIndex: 0, explanation: "Heavy volume on up bars, light on down bars = accumulation signature. Institutions are absorbing supply rather than distributing." },
+  { question: "A cup and handle formed over 15 weeks. The handle retraces 35%. Valid setup?", options: ["A) Yes — depth doesn't matter", "B) No — handle too deep", "C) Only if RSI is oversold", "D) Yes if volume dried up"], correctIndex: 1, explanation: "A proper handle retraces ≤12–15%. A 35% handle suggests a failed base or distribution — not a controlled consolidation." },
+];
 
-// ── SVG pattern chart illustrations ───────────────────────────────────────────
-const G = "#26a69a"; // bullish green
-const R = "#ef5350"; // bearish red
-const A = "#f59e0b"; // amber (levels/channels)
-const B = "#3b82f6"; // blue (targets/MA)
-const DIM = "#2a2a38"; // grid
+// ── localStorage ──────────────────────────────────────────────────────────────
 
-function PatternChart({ name }: { name: string }) {
-  const bg = "#0f0f14";
-  const charts: Record<string, React.ReactNode> = {
-    "Bull Flag": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {/* grid */}
-        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* flagpole bars */}
-        {[[20,110,85],[35,95,70],[50,72,48],[65,50,28],[80,32,14],[95,20,8]].map(([x,b,t],i) => (
-          <g key={i}><rect x={x-4} y={t} width="8" height={b-t} fill={G} rx="1" /><line x1={x} y1={b} x2={x} y2={b+4} stroke={G} strokeWidth="1" /></g>
-        ))}
-        {/* flag channel lines */}
-        <line x1="100" y1="8" x2="175" y2="22" stroke={A} strokeWidth="1.2" strokeDasharray="4,3" />
-        <line x1="100" y1="26" x2="175" y2="40" stroke={A} strokeWidth="1.2" strokeDasharray="4,3" />
-        {/* flag bars */}
-        {[[110,10,22],[125,14,26],[140,17,30],[158,20,34]].map(([x,t,b],i) => (
-          <rect key={i} x={x-4} y={t} width="8" height={b-t} fill={i%2===0?R:G} rx="1" />
-        ))}
-        {/* breakout marker */}
-        <circle cx="178" cy="32" r="3.5" fill={G} />
-        {/* breakout bars */}
-        {[[185,22,10],[200,12,3],[215,5,0]].map(([x,b,t],i) => (
-          <rect key={i} x={x-4} y={t} width="8" height={b-t} fill={G} rx="1" />
-        ))}
-        {/* labels */}
-        <text x="48" y="125" fontSize="8" fill="#6b7280" textAnchor="middle">Flagpole</text>
-        <text x="138" y="50" fontSize="8" fill={A} textAnchor="middle">Flag</text>
-        <text x="200" y="125" fontSize="8" fill={G} textAnchor="middle">Breakout</text>
-        <line x1="178" y1="32" x2="178" y2="120" stroke={G} strokeWidth="0.8" strokeDasharray="3,3" />
-      </svg>
-    ),
-    "Cup & Handle": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* resistance line (neckline/prior high) */}
-        <line x1="10" y1="18" x2="260" y2="18" stroke={A} strokeWidth="1" strokeDasharray="4,3" />
-        {/* cup shape - quadratic bezier */}
-        <path d="M 15,18 Q 30,80 80,105 Q 130,125 175,105 Q 215,80 235,18" stroke={G} strokeWidth="2" fill="none" />
-        {/* handle - small pullback */}
-        <polyline points="235,18 242,28 250,23 258,30 268,18" stroke={G} strokeWidth="2" fill="none" />
-        {/* breakout */}
-        <circle cx="268" cy="18" r="3.5" fill={G} />
-        <polyline points="268,18 278,10 290,4" stroke={G} strokeWidth="2" fill="none" />
-        {/* labels */}
-        <text x="125" y="127" fontSize="8" fill="#6b7280" textAnchor="middle">Cup</text>
-        <text x="252" y="42" fontSize="8" fill={A} textAnchor="middle">Handle</text>
-        <text x="270" y="14" fontSize="7" fill={G}>Break</text>
-        <text x="255" y="15" fontSize="7" fill={A}>—</text>
-      </svg>
-    ),
-    "Double Bottom": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* neckline */}
-        <line x1="10" y1="42" x2="290" y2="42" stroke={A} strokeWidth="1" strokeDasharray="4,3" />
-        {/* W shape */}
-        <polyline points="20,30 40,30 55,95 80,95 95,42 110,42 130,95 155,95 170,42 185,20 200,5 215,5" stroke={G} strokeWidth="2" fill="none" />
-        {/* bottom labels */}
-        <text x="67" y="125" fontSize="8" fill="#6b7280" textAnchor="middle">Bottom 1</text>
-        <text x="143" y="125" fontSize="8" fill="#6b7280" textAnchor="middle">Bottom 2</text>
-        <text x="240" y="39" fontSize="8" fill={A}>Neckline</text>
-        <circle cx="170" cy="42" r="3" fill={G} />
-        <text x="165" y="15" fontSize="7" fill={G}>Break↑</text>
-      </svg>
-    ),
-    "Head & Shoulders": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* neckline */}
-        <line x1="10" y1="72" x2="290" y2="72" stroke={A} strokeWidth="1" strokeDasharray="4,3" />
-        {/* H&S shape: LS, Head, RS, breakdown */}
-        <polyline points="20,72 35,72 50,40 65,40 78,72 92,72 110,12 128,12 145,72 158,72 175,40 190,40 205,72 220,85 235,100 250,110" stroke={R} strokeWidth="2" fill="none" />
-        {/* labels */}
-        <text x="57" y="36" fontSize="8" fill="#6b7280" textAnchor="middle">LS</text>
-        <text x="119" y="8" fontSize="8" fill="#6b7280" textAnchor="middle">Head</text>
-        <text x="182" y="36" fontSize="8" fill="#6b7280" textAnchor="middle">RS</text>
-        <text x="240" y="70" fontSize="8" fill={A}>Neckline</text>
-        <circle cx="205" cy="72" r="3" fill={R} />
-        <text x="208" y="90" fontSize="7" fill={R}>Break↓</text>
-      </svg>
-    ),
-    "Ascending Triangle": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* flat resistance */}
-        <line x1="10" y1="28" x2="250" y2="28" stroke={A} strokeWidth="1.2" strokeDasharray="4,3" />
-        {/* rising support */}
-        <line x1="10" y1="108" x2="210" y2="38" stroke={G} strokeWidth="1.2" strokeDasharray="4,3" />
-        {/* price bouncing inside */}
-        <polyline points="15,105 35,28 55,80 75,28 95,65 120,28 145,50 170,28 190,38 210,38" stroke={G} strokeWidth="2" fill="none" />
-        {/* breakout */}
-        <circle cx="210" cy="28" r="3.5" fill={G} />
-        <polyline points="210,28 230,16 250,8 270,5" stroke={G} strokeWidth="2" fill="none" />
-        <text x="250" y="24" fontSize="7" fill={A}>Resistance</text>
-        <text x="5" y="124" fontSize="7" fill={G}>Support (rising)</text>
-        <text x="240" y="16" fontSize="7" fill={G}>Break↑</text>
-      </svg>
-    ),
-    "Falling Wedge": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* upper falling trendline */}
-        <line x1="10" y1="15" x2="195" y2="68" stroke={R} strokeWidth="1.2" strokeDasharray="4,3" />
-        {/* lower falling trendline (less steep) */}
-        <line x1="10" y1="50" x2="195" y2="82" stroke={R} strokeWidth="1.2" strokeDasharray="4,3" />
-        {/* price oscillating inside wedge */}
-        <polyline points="15,15 40,50 65,30 95,55 130,44 160,60 195,72" stroke={G} strokeWidth="2" fill="none" />
-        {/* breakout */}
-        <circle cx="195" cy="68" r="3.5" fill={G} />
-        <polyline points="195,68 218,50 238,30 258,15" stroke={G} strokeWidth="2" fill="none" />
-        <text x="100" y="12" fontSize="8" fill={R} textAnchor="middle">Falling Wedge</text>
-        <text x="240" y="30" fontSize="7" fill={G}>Break↑</text>
-      </svg>
-    ),
-    "VWAP Reclaim": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* VWAP line */}
-        <line x1="10" y1="55" x2="290" y2="55" stroke="#06b6d4" strokeWidth="1.5" />
-        <text x="264" y="52" fontSize="7" fill="#06b6d4">VWAP</text>
-        {/* price above VWAP, dips below, reclaims */}
-        <polyline points="15,35 40,30 65,38 85,55 100,70 115,82 130,78 140,60 150,48 165,35 185,28 205,22 225,18" stroke={G} strokeWidth="2" fill="none" />
-        {/* dip-below zone */}
-        <rect x="83" y="55" width="60" height="32" fill={R} fillOpacity="0.08" />
-        {/* reclaim marker */}
-        <circle cx="140" cy="60" r="3.5" fill={G} />
-        <line x1="140" y1="60" x2="140" y2="115" stroke={G} strokeWidth="0.8" strokeDasharray="3,3" />
-        <text x="108" y="100" fontSize="7.5" fill={R} textAnchor="middle">Below VWAP</text>
-        <text x="185" y="42" fontSize="7.5" fill={G} textAnchor="middle">Reclaim↑</text>
-        {/* volume bars at bottom */}
-        {[20,35,50,65,80,95,110,125,140,155,170,185,200,215,230].map((x,i)=>(
-          <rect key={i} x={x-4} y={118-[6,8,5,7,6,9,12,10,18,8,6,7,5,4,5][i]} width="7" height={[6,8,5,7,6,9,12,10,18,8,6,7,5,4,5][i]} fill={i===8?G:i>5&&i<9?R:"#2a2a38"} rx="1" />
-        ))}
-      </svg>
-    ),
-    "Golden Cross": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {[30,60,90].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* price bars */}
-        {[10,25,40,55,70,85,100,115,130,145,160,175,190,205,220,235,250,265].map((x,i)=>{
-          const pricePath = [90,85,80,78,72,68,60,55,48,42,38,32,28,22,18,15,12,10];
-          const h = pricePath[i];
-          return <rect key={i} x={x-4} y={h} width="8" height={8} fill={i>9?G:G} rx="1" fillOpacity={i>9?1:0.5} />;
-        })}
-        {/* 200 SMA - slow moving, starts above 50 */}
-        <polyline points="10,78 40,76 70,73 100,70 130,67 160,65 190,60 220,55 250,50 280,46" stroke={B} strokeWidth="2" fill="none" />
-        {/* 50 SMA - faster, crosses above 200 */}
-        <polyline points="10,95 40,88 70,80 100,72 130,64 160,57 165,65 190,52 220,42 250,34 280,26" stroke={A} strokeWidth="2" fill="none" />
-        {/* cross point */}
-        <circle cx="163" cy="63" r="5" fill="none" stroke="#fff" strokeWidth="1.5" />
-        <text x="170" y="78" fontSize="7.5" fill="#fff">Cross</text>
-        <text x="12" y="108" fontSize="7" fill={B}>—— SMA 200</text>
-        <text x="12" y="120" fontSize="7" fill={A}>—— SMA 50</text>
-      </svg>
-    ),
-    "RSI Divergence": (
-      <svg viewBox="0 0 300 130" className="w-full h-28">
-        <rect width="300" height="130" fill={bg} rx="6" />
-        {/* price pane */}
-        <text x="8" y="10" fontSize="7" fill="#6b7280">PRICE</text>
-        {[20,40].map(y => <line key={y} x1="0" y1={y} x2="300" y2={y} stroke={DIM} strokeWidth="0.5" />)}
-        {/* price: lower lows */}
-        <polyline points="20,18 50,35 80,22 120,42 150,28 190,48 220,35 260,55" stroke={R} strokeWidth="2" fill="none" />
-        {/* bearish divergence arrows on price */}
-        <line x1="80" y1="22" x2="260" y2="55" stroke={R} strokeWidth="1" strokeDasharray="3,2" />
-        <text x="150" y="20" fontSize="7" fill={R}>Lower highs</text>
-        {/* RSI pane divider */}
-        <line x1="0" y1="70" x2="300" y2="70" stroke="#3a3a4a" strokeWidth="1" />
-        <text x="8" y="80" fontSize="7" fill="#6b7280">RSI</text>
-        {/* RSI levels */}
-        <line x1="0" y1="85" x2="300" y2="85" stroke={DIM} strokeWidth="0.5" />
-        <line x1="0" y1="100" x2="300" y2="100" stroke={DIM} strokeWidth="0.5" />
-        <text x="266" y="88" fontSize="6" fill="#6b7280">50</text>
-        <text x="266" y="103" fontSize="6" fill="#6b7280">30</text>
-        {/* RSI: higher lows (bullish divergence) */}
-        <polyline points="20,98 50,88 80,105 120,88 150,100 190,86 220,97 260,82" stroke={G} strokeWidth="2" fill="none" />
-        {/* bullish divergence line on RSI */}
-        <line x1="80" y1="105" x2="260" y2="82" stroke={G} strokeWidth="1" strokeDasharray="3,2" />
-        <text x="145" y="128" fontSize="7" fill={G}>Higher lows → Divergence</text>
-      </svg>
-    ),
-  };
+function loadProgress(): TAProgress {
+  try { const r = localStorage.getItem("bmg_ta_progress"); if (r) return JSON.parse(r); } catch { /* */ }
+  return { completed: ["candle-anatomy", "trend-lines"], streak: 1, lastDate: "" };
+}
+function saveProgress(p: TAProgress) { try { localStorage.setItem("bmg_ta_progress", JSON.stringify(p)); } catch { /* */ } }
+function updateStreak(p: TAProgress): TAProgress {
+  const today = new Date().toISOString().slice(0, 10);
+  if (p.lastDate === today) return p;
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  return { ...p, streak: p.lastDate === yesterday ? p.streak + 1 : 1, lastDate: today };
+}
 
-  const chart = charts[name];
-  if (!chart) return null;
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function DiffBadge({ level }: { level: Lesson["difficulty"] }) {
+  const cls = level === "Beginner" ? "bg-emerald-900/40 text-emerald-400" : level === "Intermediate" ? "bg-yellow-900/40 text-yellow-400" : "bg-purple-900/40 text-purple-400";
+  return <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full", cls)}>{level}</span>;
+}
+
+function LessonModal({ lesson, completed, onToggle, onClose }: { lesson: Lesson; completed: boolean; onToggle: () => void; onClose: () => void }) {
   return (
-    <div className="bg-[#0f0f14] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
-      {chart}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(2,6,23,0.75)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md animate-in zoom-in-95 duration-150">
+        <div className="flex items-start justify-between mb-3">
+          <div><h3 className="font-bold text-white mb-1.5">{lesson.name}</h3><DiffBadge level={lesson.difficulty} /></div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors"><X size={16} /></button>
+        </div>
+        <p className="text-sm text-zinc-300 leading-relaxed mb-5">{lesson.description}</p>
+        <button onClick={() => { onToggle(); onClose(); }} className={cn("w-full py-2.5 rounded-xl text-sm font-semibold transition-colors", completed ? "bg-zinc-700 hover:bg-zinc-600 text-zinc-300" : "bg-[#84cc16] hover:bg-[#a3e635] text-zinc-900")}>
+          {completed ? "Mark incomplete" : "Mark complete"}
+        </button>
+      </div>
     </div>
   );
 }
 
-function SetupCard({ setup }: { setup: TASetup }) {
+function SkillSection({ section, completed, onOpenLesson }: { section: Section; completed: Set<string>; onOpenLesson: (l: Lesson) => void }) {
+  const [open, setOpen] = useState(section.defaultExpanded ?? false);
   const [expanded, setExpanded] = useState(false);
+  const showCount = section.showCount ?? section.lessons.length;
+  const visible = expanded ? section.lessons : section.lessons.slice(0, showCount);
+  const doneCount = section.lessons.filter((l) => completed.has(l.id)).length;
   return (
-    <div
-      className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden transition-all duration-200 hover:border-[var(--border-emphasis)]"
-    >
-      {/* Header — always visible */}
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full text-left p-4 flex items-start gap-3 cursor-pointer"
-      >
-        <span className="text-2xl leading-none mt-0.5 select-none">{setup.emoji}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className="font-bold text-[var(--text-primary)] text-sm">{setup.name}</span>
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${setup.typeColor}`}>{setup.type}</span>
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${DIFFICULTY_STYLE[setup.difficulty]}`}>{setup.difficulty}</span>
-          </div>
-          <div className="text-[10px] text-[var(--text-tertiary)] font-mono mb-1.5">{setup.timeframe}</div>
-          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed line-clamp-2">{setup.description}</p>
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4">
+      <button className="w-full flex items-center justify-between group" onClick={() => setOpen((v) => !v)}>
+        <div className="flex items-center gap-3">
+          <span className="text-xl">{section.emoji}</span>
+          <span className="font-bold text-white">{section.title}</span>
+          <span className="text-xs text-zinc-500">{doneCount}/{section.lessons.length}</span>
         </div>
-        <span className="text-[var(--text-tertiary)] text-xs mt-1 shrink-0">{expanded ? "▲" : "▼"}</span>
+        <div className="flex items-center gap-2">
+          {doneCount > 0 && <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-[#84cc16] rounded-full" style={{ width: `${(doneCount / section.lessons.length) * 100}%` }} /></div>}
+          {open ? <ChevronUp size={16} className="text-zinc-500" /> : <ChevronDown size={16} className="text-zinc-500" />}
+        </div>
       </button>
-
-      {/* Expanded detail */}
-      {expanded && (
-        <div className="px-4 pb-4 space-y-4 border-t border-[var(--border-subtle)] pt-3">
-          {/* Pattern chart */}
-          <PatternChart name={setup.name} />
-          {/* Entry / Stop / Target */}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">
-              <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-positive)] mb-1.5">Entry</div>
-              <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{setup.entry}</p>
-            </div>
-            <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">
-              <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-negative)] mb-1.5">Stop</div>
-              <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{setup.stop}</p>
-            </div>
-            <div className="bg-[var(--bg-elevated-2)] rounded-xl p-3">
-              <div className="text-[9px] font-bold uppercase tracking-wider text-blue-400 mb-1.5">Target</div>
-              <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed">{setup.target}</p>
-            </div>
-          </div>
-
-          {/* Watch for + Avoid */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-positive)] mb-2">Watch for</div>
-              <ul className="space-y-1.5">
-                {setup.watchFor.map((w, i) => (
-                  <li key={i} className="flex gap-1.5 text-[10px] text-[var(--text-secondary)]">
-                    <span className="text-[var(--accent-positive)] shrink-0 font-bold">+</span>
-                    <span className="leading-relaxed">{w}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--accent-negative)] mb-2">Avoid</div>
-              <ul className="space-y-1.5">
-                {setup.avoid.map((a, i) => (
-                  <li key={i} className="flex gap-1.5 text-[10px] text-[var(--text-secondary)]">
-                    <span className="text-[var(--accent-negative)] shrink-0 font-bold">–</span>
-                    <span className="leading-relaxed">{a}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Indicators */}
-          <div>
-            <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-tertiary)] mb-2">Indicators to pair</div>
-            <div className="flex flex-wrap gap-1.5">
-              {setup.indicators.map((ind, i) => (
-                <span key={i} className="text-[9px] px-2 py-1 rounded-lg bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] font-mono border border-[var(--border-subtle)]">
-                  {ind}
-                </span>
-              ))}
-            </div>
-          </div>
+      {open && (
+        <div className="mt-4 space-y-1">
+          {visible.map((lesson) => {
+            const done = completed.has(lesson.id);
+            return (
+              <button key={lesson.id} onClick={() => onOpenLesson(lesson)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800/60 transition-colors text-left">
+                {done ? <CheckSquare size={15} className="text-emerald-400 flex-shrink-0" /> : <Square size={15} className="text-zinc-600 flex-shrink-0" />}
+                <span className={cn("flex-1 text-sm", done ? "text-emerald-400" : "text-zinc-300")}>{lesson.name}</span>
+                <DiffBadge level={lesson.difficulty} />
+              </button>
+            );
+          })}
+          {section.showCount && section.lessons.length > showCount && (
+            <button onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }} className="w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors py-2 text-center">
+              {expanded ? "Show less" : `See all ${section.lessons.length} lessons`}
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function TALearnSection() {
-  const [filter, setFilter] = useState<"all" | "Continuation" | "Reversal" | "Intraday" | "Trend Confirmation" | "Reversal Signal">("all");
-
-  const filters = [
-    { id: "all", label: "All" },
-    { id: "Continuation", label: "Continuation" },
-    { id: "Reversal", label: "Reversal" },
-    { id: "Intraday", label: "Intraday" },
-    { id: "Trend Confirmation", label: "Trend" },
-    { id: "Reversal Signal", label: "Signals" },
-  ] as const;
-
-  const filtered = filter === "all"
-    ? TA_SETUPS
-    : TA_SETUPS.filter((s) => s.type.includes(filter as string));
-
+function DailyChallenge() {
+  const quiz = DAILY_QUIZZES[new Date().getDay() % DAILY_QUIZZES.length];
+  const [selected, setSelected] = useState<number | null>(null);
+  const revealed = selected !== null;
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      {/* Section header */}
-      <div className="mb-6">
-        <h2 className="text-lg font-bold text-[var(--text-primary)] tracking-tight font-display">Learn TA Setups</h2>
-        <p className="text-sm text-[var(--text-tertiary)] mt-1">
-          9 high-probability patterns with entry, stop, target, and common mistakes. Click any card to expand.
-        </p>
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Trophy size={15} className="text-yellow-400" />
+        <h2 className="font-bold text-white">Daily Setup Quiz</h2>
+        <span className="ml-auto text-xs text-zinc-500">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()]}</span>
       </div>
-
-      {/* Filter tabs */}
-      <div className="flex gap-1.5 flex-wrap mb-5">
-        {filters.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => setFilter(f.id as typeof filter)}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
-              filter === f.id
-                ? "bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-emphasis)] shadow-sm"
-                : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] border border-transparent hover:border-[var(--border-subtle)]"
-            )}
-          >
-            {f.label}
-            {f.id !== "all" && (
-              <span className="ml-1 opacity-50 font-mono text-[9px]">
-                {TA_SETUPS.filter((s) => s.type.includes(f.id)).length}
-              </span>
-            )}
-          </button>
-        ))}
+      <p className="text-sm text-zinc-200 mb-4 leading-relaxed">{quiz.question}</p>
+      <div className="space-y-2 mb-4">
+        {quiz.options.map((opt, i) => {
+          const isCorrect = i === quiz.correctIndex;
+          let cls = "border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white";
+          if (revealed) cls = isCorrect ? "border border-emerald-500 bg-emerald-900/30 text-emerald-300" : i === selected ? "border border-red-500 bg-red-900/20 text-red-400" : "border border-zinc-800 text-zinc-600";
+          return <button key={i} disabled={revealed} onClick={() => setSelected(i)} className={cn("w-full text-left px-4 py-3 rounded-xl text-sm transition-colors", cls, !revealed && "cursor-pointer")}>{opt}</button>;
+        })}
       </div>
+      {revealed ? (
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 text-sm text-zinc-300 leading-relaxed">
+          <span className={cn("font-semibold mr-2", selected === quiz.correctIndex ? "text-emerald-400" : "text-red-400")}>{selected === quiz.correctIndex ? "Correct!" : "Not quite."}</span>
+          {quiz.explanation}
+        </div>
+      ) : <p className="text-xs text-zinc-600 text-center">Select an answer to reveal the explanation</p>}
+    </div>
+  );
+}
 
-      {/* Setup cards */}
-      <div className="space-y-3">
-        {filtered.map((setup) => (
-          <SetupCard key={setup.name} setup={setup} />
-        ))}
+function LockedFeature() {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4 relative overflow-hidden">
+      <div className="flex items-center gap-2 mb-3">
+        <Lock size={15} className="text-zinc-500" />
+        <h2 className="font-bold text-zinc-400">TA Image Read</h2>
+        <span className="ml-auto text-[10px] font-bold bg-purple-900/40 text-purple-400 px-2 py-0.5 rounded-full border border-purple-800/40">Pro+</span>
       </div>
-
-      {/* Footer note */}
-      <div className="mt-8 p-4 bg-[var(--bg-elevated-2)] rounded-xl border border-[var(--border-subtle)]">
-        <p className="text-xs text-[var(--text-tertiary)] leading-relaxed">
-          <strong className="text-[var(--text-secondary)]">Pro tip:</strong> Switch to Workshop mode and practice drawing these patterns directly on live charts. Use the AI analysis tool to get feedback on your setups.
-        </p>
+      <p className="text-sm text-zinc-500 mb-5 leading-relaxed">Upload a chart screenshot and our AI will identify the pattern, support/resistance levels, and entry signals.</p>
+      <div className="relative rounded-xl border-2 border-dashed border-zinc-800 bg-zinc-950/50 p-8 flex flex-col items-center gap-3 opacity-40 pointer-events-none select-none">
+        <Upload size={28} className="text-zinc-700" />
+        <p className="text-xs text-zinc-600 font-medium">Drop a chart image here</p>
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="bg-zinc-900/90 border border-zinc-700 rounded-2xl px-5 py-3 flex items-center gap-2 shadow-xl">
+          <Lock size={13} className="text-purple-400" />
+          <span className="text-sm font-semibold text-zinc-300">Available with Pro+ subscription</span>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Main WorkshopPage ──────────────────────────────────────────────────────────
+function ProgressSummary({ completed, streak, onScroll }: { completed: Set<string>; streak: number; onScroll: () => void }) {
+  const count = completed.size;
+  const pct = Math.round((count / TOTAL_LESSONS) * 100);
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4">
+      <h2 className="font-bold text-white mb-4 flex items-center gap-2"><BookOpen size={15} className="text-[#84cc16]" />Your Progress</h2>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-zinc-950/60 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-[#84cc16]">{streak}</div>
+          <div className="text-xs text-zinc-500 mt-0.5 flex items-center justify-center gap-1"><Flame size={10} className="text-orange-400" />day streak</div>
+        </div>
+        <div className="bg-zinc-950/60 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-white">{count}<span className="text-zinc-500 text-base font-normal">/{TOTAL_LESSONS}</span></div>
+          <div className="text-xs text-zinc-500 mt-0.5">lessons done</div>
+        </div>
+      </div>
+      <div className="mb-4">
+        <div className="flex justify-between text-xs text-zinc-500 mb-1"><span>Overall completion</span><span>{pct}%</span></div>
+        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-[#84cc16] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} /></div>
+      </div>
+      <button onClick={onScroll} className="w-full py-2.5 bg-[#84cc16] hover:bg-[#a3e635] text-zinc-900 font-bold text-sm rounded-xl transition-colors">Continue training</button>
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function WorkshopPage() {
-  const [workshopView, setWorkshopView] = useState<"chart" | "learn">("chart");
-  const [symbol, setSymbol] = useState(getStoredSymbol);
-  const [period, setPeriod] = useState<Period>("1Y");
-  const [chartType, setChartType] = useState<ChartType>("candle");
-  const [activeIndicators, setActiveIndicators] = useState<Set<string>>(
-    () => new Set(["SMA_20", "SMA_50", "SMA_200"])
-  );
-  const [activeTool, setActiveTool] = useState<DrawingTool>("cursor");
-  const [drawings, setDrawings] = useState<Drawing[]>([]);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [pendingTrendStart, setPendingTrendStart] = useState<{ time: number; price: number } | null>(null);
-  const [pendingRectStart, setPendingRectStart] = useState<{ time: number; price: number } | null>(null);
-  const [pendingFibStart, setPendingFibStart] = useState<{ time: number; price: number } | null>(null);
-  const [pendingTextPoint, setPendingTextPoint] = useState<{ time: number; price: number } | null>(null);
-  const [textInputValue, setTextInputValue] = useState("");
-  const [pendingChannelPoints, setPendingChannelPoints] = useState<{ time: number; price: number }[]>([]);
-  const [pendingPosPoints, setPendingPosPoints] = useState<{ time: number; price: number }[]>([]);
-  const [pendingArrowPoint, setPendingArrowPoint] = useState<{ time: number; price: number } | null>(null);
-  const [arrowInputValue, setArrowInputValue] = useState("");
-  const [hoveredBar, setHoveredBar] = useState<HoveredBar | null>(null);
-  const [showIndicatorsModal, setShowIndicatorsModal] = useState(false);
-
-  const chartRef = useRef<ChartHandle>(null);
-  const liveBar = useMarketStore((s) => s.liveBars[symbol]);
-
-  const { timeframe, start } = useMemo(() => {
-    const cfg = PERIOD_CONFIGS[period];
-    return { timeframe: cfg.timeframe, start: cfg.getStart() };
-  }, [period]);
-
-  const indicatorsParam = Array.from(activeIndicators).join(",");
-  const { data, isLoading } = useBars(symbol, timeframe, indicatorsParam || undefined, start);
-  const bars = data?.bars ?? [];
-  const indicators = data?.indicators ?? {};
+  const [progress, setProgress] = useState<TAProgress>(loadProgress);
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (liveBar && chartRef.current) {
-      chartRef.current.updateBar({
-        t: liveBar.timestamp, o: liveBar.open, h: liveBar.high,
-        l: liveBar.low, c: liveBar.close, v: liveBar.volume,
-      });
-    }
-  }, [liveBar]);
-
-  const handleSymbolChange = (s: string) => {
-    setSymbol(s);
-    try { localStorage.setItem("bmg_symbol", s); } catch { /* ignore */ }
-    setDrawings([]);
-    setPendingTrendStart(null);
-    setPendingChannelPoints([]);
-    setPendingPosPoints([]);
-    setPendingArrowPoint(null);
-  };
-
-  const handleAddDrawing = useCallback((partial: Omit<Drawing, "id">) => {
-    if (partial.type === "trendline") {
-      if (!pendingTrendStart) {
-        setPendingTrendStart(partial.p1!);
-      } else {
-        setDrawings((prev) => [...prev, { id: crypto.randomUUID(), type: "trendline", p1: pendingTrendStart, p2: partial.p1!, color: "#2196f3" }]);
-        setPendingTrendStart(null);
-      }
-    } else if (partial.type === "rect") {
-      if (!pendingRectStart) {
-        setPendingRectStart(partial.p1!);
-      } else {
-        setDrawings((prev) => [...prev, { id: crypto.randomUUID(), type: "rect", p1: pendingRectStart, p2: partial.p1!, color: "#f59e0b" }]);
-        setPendingRectStart(null);
-      }
-    } else if (partial.type === "fib") {
-      if (!pendingFibStart) {
-        setPendingFibStart(partial.p1!);
-      } else {
-        setDrawings((prev) => [...prev, { id: crypto.randomUUID(), type: "fib", p1: pendingFibStart, p2: partial.p1!, color: "#9c27b0" }]);
-        setPendingFibStart(null);
-      }
-    } else if (partial.type === "text") {
-      setPendingTextPoint(partial.p1!);
-      setTextInputValue("");
-    } else if (partial.type === "channel") {
-      setPendingChannelPoints((prev) => {
-        const pts = [...prev, partial.p1!];
-        if (pts.length < 3) return pts;
-        setDrawings((d) => [...d, { id: crypto.randomUUID(), type: "channel", p1: pts[0], p2: pts[1], p3: pts[2], color: "#2196f3" }]);
-        return [];
-      });
-    } else if (partial.type === "longpos" || partial.type === "shortpos") {
-      const posType = partial.type;
-      setPendingPosPoints((prev) => {
-        const pts = [...prev, partial.p1!];
-        if (pts.length < 3) return pts;
-        setDrawings((d) => [...d, { id: crypto.randomUUID(), type: posType, p1: pts[0], p2: pts[1], p3: pts[2], color: "#2196f3" }]);
-        return [];
-      });
-    } else if (partial.type === "arrow") {
-      setPendingArrowPoint(partial.p1!);
-      setArrowInputValue("");
-    } else {
-      setDrawings((prev) => [...prev, { id: crypto.randomUUID(), ...partial }]);
-    }
-  }, [pendingTrendStart, pendingRectStart, pendingFibStart]);
-
-  const handleDeleteDrawing = useCallback((id: string) => {
-    setDrawings((prev) => prev.filter((d) => d.id !== id));
+    setProgress((prev) => { const u = updateStreak(prev); saveProgress(u); return u; });
   }, []);
 
-  const handleClearDrawings = () => {
-    setDrawings([]);
-    setPendingTrendStart(null);
-    setPendingRectStart(null);
-    setPendingFibStart(null);
-    setPendingTextPoint(null);
-    setPendingChannelPoints([]);
-    setPendingPosPoints([]);
-    setPendingArrowPoint(null);
-    setActiveTool("cursor");
-  };
+  const completedSet = new Set(progress.completed);
 
-  const displayBar = hoveredBar ?? (bars.length > 0 ? {
-    time: 0, open: bars.at(-1)!.o, high: bars.at(-1)!.h,
-    low: bars.at(-1)!.l, close: bars.at(-1)!.c, volume: bars.at(-1)!.v,
-  } : null);
-
-  const isUp = displayBar ? displayBar.close >= displayBar.open : true;
-  const priceColor = isUp ? "#26a69a" : "#ef5350";
-
-  const hoveredIdx = useMemo(() => {
-    if (!hoveredBar) return bars.length - 1;
-    const idx = bars.findIndex((b) => toUnix(b.t) === hoveredBar.time);
-    return idx >= 0 ? idx : bars.length - 1;
-  }, [hoveredBar, bars]);
-
-  const overlayIndicators = useMemo(() =>
-    Object.entries(indicators).filter(([k]) => isOverlayKey(k)),
-    [indicators]
-  );
-
-  const hasRsi = "RSI_14" in indicators;
-  const hasMacd = "MACD_line" in indicators;
-
-  const currentPrice = displayBar?.close;
+  function toggleLesson(id: string) {
+    setProgress((prev) => {
+      const set = new Set(prev.completed);
+      set.has(id) ? set.delete(id) : set.add(id);
+      const updated = { ...prev, completed: Array.from(set) };
+      saveProgress(updated);
+      return updated;
+    });
+  }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-[var(--bg-base)] text-[var(--text-secondary)]">
-      {/* View switcher */}
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)] shrink-0">
-        <button
-          onClick={() => setWorkshopView("chart")}
-          className={cn(
-            "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
-            workshopView === "chart"
-              ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)] shadow-sm"
-              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-          )}
-        >
-          Workshop
-        </button>
-        <button
-          onClick={() => setWorkshopView("learn")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
-            workshopView === "learn"
-              ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)] shadow-sm"
-              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-          )}
-        >
-          <BookOpen size={11} /> Learn TA
+    <div className="max-w-3xl mx-auto pb-24 px-4 md:px-0">
+      {/* Header */}
+      <div className="pt-6 pb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">TA Workshop</h1>
+          <p className="text-sm text-zinc-400 mt-1">Learn to read charts. Practice with real historical setups.</p>
+        </div>
+        <button onClick={() => treeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="flex-shrink-0 bg-[#84cc16] hover:bg-[#a3e635] text-zinc-900 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors">
+          Start Training
         </button>
       </div>
 
-      {workshopView === "learn" ? (
-        <div className="flex-1 overflow-y-auto bg-[var(--bg-base)]">
-          <TALearnSection />
-        </div>
-      ) : (
-        <>
-      {/* Top bar */}
-      <TvTopBar
-        symbol={symbol}
-        chartType={chartType}
-        onSymbolChange={handleSymbolChange}
-        onChartTypeChange={setChartType}
-        onIndicatorsClick={() => setShowIndicatorsModal(true)}
-        onWatchlistToggle={() => {}}
-        showWatchlist={false}
-        proMode={true}
-        onProModeToggle={() => {}}
-        onTradeClick={() => {}}
-        onAnalyzeClick={() => setAiOpen(true)}
-      />
+      <ProgressSummary completed={completedSet} streak={progress.streak} onScroll={() => treeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+      <DailyChallenge />
 
-      {/* Main area */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left drawing toolbar — always visible in Workshop */}
-        <DrawingToolbar
-          activeTool={activeTool}
-          onChange={setActiveTool}
-          onClearAll={handleClearDrawings}
-        />
-
-        {/* Chart area */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* OHLCV info overlay */}
-          <div className="absolute top-0 left-0 z-10 pointer-events-none flex items-center gap-0 px-2 pt-1.5 flex-wrap">
-            <span className="text-[var(--text-secondary)] font-semibold text-xs mr-2">{symbol}</span>
-            {displayBar && (
-              <>
-                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">O</span>
-                <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.open.toFixed(2)}</span>
-                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">H</span>
-                <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.high.toFixed(2)}</span>
-                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">L</span>
-                <span className="text-[11px] mr-2" style={{ color: priceColor }}>{displayBar.low.toFixed(2)}</span>
-                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">C</span>
-                <span className="text-[11px] font-semibold mr-2" style={{ color: priceColor }}>{displayBar.close.toFixed(2)}</span>
-                <span className="text-[var(--text-tertiary)] text-[11px] mr-1.5">V</span>
-                <span className="text-[var(--text-tertiary)] text-[11px] mr-3">{formatVolume(displayBar.volume)}</span>
-              </>
-            )}
-            {overlayIndicators.map(([key, vals]) => {
-              const val = vals[hoveredIdx];
-              if (val == null) return null;
-              const color = OVERLAY_COLORS[key] ?? "#94a3b8";
-              return (
-                <span key={key} className="flex items-center gap-0.5 mr-2">
-                  <span style={{ color }} className="text-[9px] leading-none">●</span>
-                  <span style={{ color }} className="text-[11px]">{indicatorLabel(key)} {val.toFixed(2)}</span>
-                </span>
-              );
-            })}
-            {/* Drawing instruction hints */}
-            {pendingTrendStart && <span className="ml-3 text-[11px] text-[var(--text-secondary)]">Click second point to complete trend line</span>}
-            {pendingRectStart && <span className="ml-3 text-[11px] text-[#F59E0B]">Click opposite corner to complete rectangle</span>}
-            {pendingFibStart && <span className="ml-3 text-[11px] text-[#A78BFA]">Click second point to complete Fibonacci</span>}
-            {pendingTextPoint && <span className="ml-3 text-[11px] text-[var(--text-secondary)]">Type label and press Enter</span>}
-            {pendingChannelPoints.length === 1 && <span className="ml-3 text-[11px] text-[#2196f3]">Click second point for channel direction</span>}
-            {pendingChannelPoints.length === 2 && <span className="ml-3 text-[11px] text-[#2196f3]">Click to offset second channel line</span>}
-            {pendingPosPoints.length === 1 && <span className="ml-3 text-[11px] text-[#ef4444]">Click stop loss level</span>}
-            {pendingPosPoints.length === 2 && <span className="ml-3 text-[11px] text-[#22c55e]">Click target level</span>}
-            {pendingArrowPoint && <span className="ml-3 text-[11px] text-[var(--text-secondary)]">Type arrow label and press Enter</span>}
-          </div>
-
-          {/* Text input overlay */}
-          {pendingTextPoint && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-              <div className="pointer-events-auto bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 flex items-center gap-2 shadow-xl">
-                <input
-                  autoFocus type="text" value={textInputValue}
-                  onChange={(e) => setTextInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && textInputValue.trim()) {
-                      setDrawings((prev) => [...prev, { id: crypto.randomUUID(), type: "text", p1: pendingTextPoint, color: "#d1d4dc", label: textInputValue.trim() }]);
-                      setPendingTextPoint(null); setTextInputValue("");
-                    } else if (e.key === "Escape") { setPendingTextPoint(null); setTextInputValue(""); }
-                  }}
-                  placeholder="Label text…"
-                  className="bg-transparent text-[var(--text-secondary)] text-sm outline-none w-40 placeholder:text-[var(--text-tertiary)]"
-                />
-                <span className="text-[var(--text-tertiary)] text-[10px]">Enter ↵</span>
-              </div>
-            </div>
-          )}
-
-          {/* Arrow input overlay */}
-          {pendingArrowPoint && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-              <div className="pointer-events-auto bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 flex items-center gap-2 shadow-xl">
-                <input
-                  autoFocus type="text" value={arrowInputValue}
-                  onChange={(e) => setArrowInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && arrowInputValue.trim()) {
-                      setDrawings((prev) => [...prev, { id: crypto.randomUUID(), type: "arrow", p1: pendingArrowPoint, color: "#d1d4dc", metadata: { label: arrowInputValue.trim() } }]);
-                      setPendingArrowPoint(null); setArrowInputValue("");
-                    } else if (e.key === "Escape") { setPendingArrowPoint(null); setArrowInputValue(""); }
-                  }}
-                  placeholder="Arrow label…"
-                  className="bg-transparent text-[var(--text-secondary)] text-sm outline-none w-40 placeholder:text-[var(--text-tertiary)]"
-                />
-                <span className="text-[var(--text-tertiary)] text-[10px]">Enter ↵</span>
-              </div>
-            </div>
-          )}
-
-          {/* Chart */}
-          <div className="flex-1 overflow-hidden relative">
-            {isLoading ? (
-              <div className="w-full h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-                Loading {symbol}…
-              </div>
-            ) : (
-              <CandlestickChart
-                ref={chartRef}
-                bars={bars}
-                indicators={indicators}
-                chartType={chartType}
-                activeTool={activeTool}
-                drawings={drawings}
-                onCrosshairMove={setHoveredBar}
-                onAddDrawing={handleAddDrawing}
-              />
-            )}
-          </div>
-
-          {/* Sub-panes */}
-          {hasRsi && !isLoading && <RsiChart bars={bars} values={indicators.RSI_14} height={100} />}
-          {hasMacd && !isLoading && (
-            <MacdChart
-              bars={bars}
-              macdLine={indicators.MACD_line}
-              macdSignal={indicators.MACD_signal ?? []}
-              macdHist={indicators.MACD_hist ?? []}
-              height={100}
-            />
-          )}
-        </div>
-
-        {/* Right panel: Workshop analyses + AI */}
-        <WorkshopPanel
-          symbol={symbol}
-          timeframe={timeframe}
-          currentPrice={currentPrice}
-          drawings={drawings}
-          indicators={Array.from(activeIndicators)}
-          onDeleteDrawing={handleDeleteDrawing}
-          onLoadDrawings={setDrawings}
-        />
+      <div ref={treeRef} className="scroll-mt-4">
+        {SECTIONS.map((s) => <SkillSection key={s.id} section={s} completed={completedSet} onOpenLesson={setActiveLesson} />)}
       </div>
 
-      {/* Bottom bar */}
-      <TvBottomBar
-        period={period}
-        onPeriodChange={setPeriod}
-        symbol={symbol}
-        displayPrice={displayBar?.close}
-        displayVolume={displayBar?.volume}
-        drawingCount={drawings.length}
-      />
+      <LockedFeature />
 
-      {showIndicatorsModal && (
-        <IndicatorsModal
-          active={activeIndicators}
-          onChange={setActiveIndicators}
-          onClose={() => setShowIndicatorsModal(false)}
-        />
+      {activeLesson && (
+        <LessonModal lesson={activeLesson} completed={completedSet.has(activeLesson.id)} onToggle={() => toggleLesson(activeLesson.id)} onClose={() => setActiveLesson(null)} />
       )}
-        </>
-      )}
-
-      <AskAIDrawer
-        open={aiOpen}
-        onClose={() => setAiOpen(false)}
-        title={`BMG Analysis — ${symbol}`}
-        context={`TA Workshop — technical analysis for ${symbol}`}
-        suggestedQuestions={[
-          `What's the current trend for ${symbol}?`,
-          "What are the key support and resistance levels here?",
-          "How do I read a descending triangle pattern?",
-          "When is RSI divergence a reliable signal?",
-          "Explain the significance of the 200-day moving average",
-        ]}
-      />
     </div>
   );
 }

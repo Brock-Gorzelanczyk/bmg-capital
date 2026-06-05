@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -115,6 +115,7 @@ const PLACEHOLDER_CATALYSTS = [
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const qc = useQueryClient();
   const { data: overview } = useQuery({ queryKey: ["strategy-lab-portfolio"], queryFn: getStrategyLabPortfolio, staleTime: 60_000, retry: 0 });
   const { data: portfoliosData } = useQuery({ queryKey: ["portfolios"], queryFn: getPortfolios, staleTime: 60_000, retry: 0 });
   const { data: signalsData } = useQuery({ queryKey: ["recent-signals", 20], queryFn: () => getRecentSignals(20), staleTime: 30_000, retry: 0 });
@@ -123,8 +124,13 @@ export default function Dashboard() {
   const { data: regimeRaw } = useQuery({ queryKey: ["strategy-regime"], queryFn: getRegime, staleTime: 120_000, retry: 0 });
   const { data: highlightsData } = useQuery({ queryKey: ["analyst-highlights"], queryFn: getAnalystHighlights, staleTime: 120_000, retry: 0 });
 
-  const pauseMut = useMutation({ mutationFn: pauseAllBots });
-  const activateMut = useMutation({ mutationFn: activateAllBots });
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ["strategy-lab-portfolio"] });
+    qc.invalidateQueries({ queryKey: ["portfolios"] });
+    qc.invalidateQueries({ queryKey: ["bots-v2"] });
+  };
+  const pauseMut = useMutation({ mutationFn: pauseAllBots, onSuccess: invalidateAll });
+  const activateMut = useMutation({ mutationFn: activateAllBots, onSuccess: invalidateAll });
 
   const portfolios = portfoliosData?.portfolios ?? [];
   const signals = signalsData?.signals ?? [];

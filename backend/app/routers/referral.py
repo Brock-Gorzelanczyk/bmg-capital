@@ -1,6 +1,6 @@
 from __future__ import annotations
 import random
-from datetime import datetime, timedelta
+from datetime import timezone, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -71,7 +71,7 @@ def validate_referral(body: ValidateBody, current_user: User = Depends(get_curre
         status="pending",
         reward_amount=amount,
         reward_symbol=symbol,
-        expires_at=datetime.utcnow() + timedelta(days=60),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=60),
     )
     db.add(reward)
     code_row.total_referrals = (code_row.total_referrals or 0) + 1

@@ -225,7 +225,7 @@ async def ido_calendar(_user: User = Depends(get_current_user)):
     """Curated IDO/IEO/token-sale calendar."""
     from datetime import datetime, timedelta
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
 
     # Manually curated list — kept fresh via code updates
     IDO_LIST = [

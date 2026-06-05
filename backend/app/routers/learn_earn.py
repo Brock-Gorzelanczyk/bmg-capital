@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import timezone, datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -242,7 +242,7 @@ def complete_lesson(lesson_id: str, body: CompleteBody, current_user: User = Dep
         reward_amount=reward_amount,
         reward_symbol=reward_symbol,
         status="pending" if passed else "expired",
-        expires_at=datetime.utcnow() + timedelta(days=30) if passed else None,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30) if passed else None,
     )
     db.add(reward)
     if passed:

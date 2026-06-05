@@ -3,7 +3,7 @@ GDPR data export endpoint.
 GET /api/gdpr/export — returns all data for the authenticated user as JSON.
 """
 from __future__ import annotations
-from datetime import datetime
+from datetime import timezone, datetime
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -43,7 +43,7 @@ async def export_my_data(
 
     export = {
         "user_id": uid,
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "paper_account": safe_list(PaperAccount, "user_id", uid),
         "paper_positions": safe_list(PaperPosition, "user_id", uid),
         "paper_orders": safe_list(PaperOrder, "user_id", uid),

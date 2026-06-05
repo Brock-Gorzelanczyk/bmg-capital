@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import timezone, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -62,8 +62,8 @@ def complete_onboarding(
         profile.risk_tolerance = body.risk_tolerance
         profile.time_horizon = body.time_horizon
         profile.onboarding_complete = True
-        profile.onboarding_completed_at = datetime.utcnow()
-        profile.updated_at = datetime.utcnow()
+        profile.onboarding_completed_at = datetime.now(timezone.utc)
+        profile.updated_at = datetime.now(timezone.utc)
     else:
         profile = UserProfile(
             user_id=current_user.id,
@@ -72,7 +72,7 @@ def complete_onboarding(
             risk_tolerance=body.risk_tolerance,
             time_horizon=body.time_horizon,
             onboarding_complete=True,
-            onboarding_completed_at=datetime.utcnow(),
+            onboarding_completed_at=datetime.now(timezone.utc),
         )
         db.add(profile)
 

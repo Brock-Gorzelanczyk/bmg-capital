@@ -6,7 +6,7 @@ Admin-only: all endpoints require current_user.email == "demo@bmgcapital.com"
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import timezone, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -646,7 +646,7 @@ def get_status(
     started_at = start.started_at if start else None
 
     if started_at:
-        delta = (datetime.utcnow() - started_at).days + 1
+        delta = (datetime.now(timezone.utc) - started_at).days + 1
         day_number = min(delta, 90)
     else:
         day_number = 1
@@ -757,7 +757,7 @@ def patch_task(
     if body.status is not None:
         task.status = body.status
         if body.status == "complete" and task.completed_at is None:
-            task.completed_at = datetime.utcnow()
+            task.completed_at = datetime.now(timezone.utc)
         elif body.status != "complete":
             task.completed_at = None
 

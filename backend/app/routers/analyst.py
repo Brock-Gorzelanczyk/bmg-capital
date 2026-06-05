@@ -712,6 +712,45 @@ def get_today_summary(
     }
 
 
+@router.get("/highlights")
+def get_highlights(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Top high-conviction picks for the Dashboard analyst highlights row."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    rows = db.execute(
+        select(WatchlistAnalysis)
+        .where(WatchlistAnalysis.ts >= cutoff)
+        .order_by(WatchlistAnalysis.conviction_score.desc(), WatchlistAnalysis.ts.desc())
+    ).scalars().all()
+
+    # Deduplicate to latest per symbol
+    seen: dict[str, WatchlistAnalysis] = {}
+    for r in rows:
+        if r.symbol not in seen:
+            seen[r.symbol] = r
+
+    def _conviction_label(score: int | None) -> str:
+        if score is None:
+            return "LOW"
+        if score >= 4:
+            return "HIGH"
+        if score >= 3:
+            return "MED"
+        return "LOW"
+
+    highlights = [
+        {
+            "symbol": r.symbol,
+            "conviction": _conviction_label(r.conviction_score),
+            "thesis": (r.thesis_md or "")[:120],
+        }
+        for r in list(seen.values())[:10]
+    ]
+    return {"highlights": highlights}
+
+
 # ── Serialiser ──────────────────────────────────────────────────────────────────
 
 def _analysis_to_dict(r: WatchlistAnalysis) -> dict:

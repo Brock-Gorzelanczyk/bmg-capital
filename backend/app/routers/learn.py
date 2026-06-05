@@ -178,7 +178,7 @@ def complete_lesson(
     new_badges = []
     if dc and not dc.completed:
         dc.completed = True
-        dc.completed_at = datetime.utcnow()
+        dc.completed_at = datetime.now(timezone.utc)
         if _award_badge("daily_challenge", p, db):
             new_badges.append("daily_challenge")
 

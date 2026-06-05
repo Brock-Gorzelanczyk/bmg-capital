@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import random
-from datetime import date, datetime, timedelta
+from datetime import timezone, date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -313,7 +313,7 @@ async def generate_brief(
     )
 
     content = {"sections": sections}
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Upsert: one brief per user per day
     existing = (
@@ -364,7 +364,7 @@ async def get_latest_brief(
     # Regenerate if no brief, > 4h old, or reading level changed
     needs_regen = True
     if brief and brief.generated_at:
-        age = datetime.utcnow() - brief.generated_at
+        age = datetime.now(timezone.utc) - brief.generated_at
         if age < timedelta(hours=4) and brief.reading_level == reading_level:
             needs_regen = False
 
@@ -387,7 +387,7 @@ async def get_latest_brief(
     return {
         "date": today.strftime("%A, %B %d, %Y"),
         "reading_level": result.get("reading_level", reading_level),
-        "generated_at": result.get("generated_at") or datetime.utcnow().isoformat(),
+        "generated_at": result.get("generated_at") or datetime.now(timezone.utc).isoformat(),
         "sections": result.get("sections", []),
         "watchlist_symbols": all_symbols,
     }

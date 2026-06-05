@@ -184,7 +184,7 @@ def effective_tier(row: UserTier | None) -> str:
 
     # AUM override: if still valid, use whichever is higher
     aum = "free"
-    if row.aum_override and row.aum_override_until and row.aum_override_until > datetime.utcnow():
+    if row.aum_override and row.aum_override_until and row.aum_override_until > datetime.now(timezone.utc):
         aum = row.aum_override
 
     return max(base, aum, key=lambda t: tier_order.get(t, 0))

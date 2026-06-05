@@ -8,7 +8,7 @@ import asyncio
 import logging
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import timezone, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -150,7 +150,7 @@ _NASDAQ_IPO_HEADERS = {
 }
 
 async def get_ipo_calendar(days_ahead: int = 90) -> List[Dict[str, Any]]:
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     results: List[Dict[str, Any]] = []
     seen: set = set()
 
@@ -256,10 +256,10 @@ async def get_insider_trades(limit: int = 50) -> List[Dict[str, Any]]:
     """
     global _insider_cache
     cached_at, cached_data = _insider_cache
-    if cached_at and (datetime.utcnow() - cached_at).total_seconds() < 300:
+    if cached_at and (datetime.now(timezone.utc) - cached_at).total_seconds() < 300:
         return cached_data
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     start_date = (today - timedelta(days=30)).isoformat()
     results: List[Dict[str, Any]] = []
     sem = asyncio.Semaphore(10)
@@ -390,5 +390,5 @@ async def get_insider_trades(limit: int = 50) -> List[Dict[str, Any]]:
     results.sort(key=lambda x: (x["transaction"] != "buy", -x["value"]))
     results = results[:limit]
 
-    _insider_cache = (datetime.utcnow(), results)
+    _insider_cache = (datetime.now(timezone.utc), results)
     return results

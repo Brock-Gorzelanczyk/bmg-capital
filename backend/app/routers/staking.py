@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import timezone, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -20,7 +20,7 @@ STAKING_CONFIG = {
 def _accrue_rewards(position: StakingPosition) -> float:
     if position.status != "active":
         return position.rewards_earned
-    days = (datetime.utcnow() - position.staked_at).total_seconds() / 86400
+    days = (datetime.now(timezone.utc) - position.staked_at).total_seconds() / 86400
     return position.amount_staked * position.apy / 100 / 365 * days
 
 @router.get("/assets")
@@ -80,7 +80,7 @@ def unstake(position_id: int, current_user: User = Depends(get_current_user), db
         raise HTTPException(400, "Position is not active")
     cfg = STAKING_CONFIG.get(p.asset, {})
     p.status = "unstaking"
-    p.unstake_requested_at = datetime.utcnow()
-    p.estimated_unstake_at = datetime.utcnow() + timedelta(days=cfg.get("unstake_days", 7))
+    p.unstake_requested_at = datetime.now(timezone.utc)
+    p.estimated_unstake_at = datetime.now(timezone.utc) + timedelta(days=cfg.get("unstake_days", 7))
     db.commit()
     return {"status": "unstaking", "estimated_unstake_at": p.estimated_unstake_at.isoformat()}

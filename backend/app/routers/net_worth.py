@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import timezone, date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -175,7 +175,7 @@ def update_account(
         setattr(account, field, val)
 
     # Manually bump last_updated since SQLAlchemy onupdate only fires on flush
-    account.last_updated = datetime.utcnow()
+    account.last_updated = datetime.now(timezone.utc)
     db.commit()
     db.refresh(account)
     _take_snapshot(current_user.id, db)

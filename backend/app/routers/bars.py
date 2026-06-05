@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import time
-from datetime import datetime, timedelta
+from datetime import timezone, datetime, timedelta
 from typing import Optional
 
 import pandas as pd
@@ -206,7 +206,7 @@ async def _fetch_bars_for_symbol(
 ) -> dict:
     """Fetch OHLCV bars for a single symbol. Returns same shape as GET /{symbol} (without indicators)."""
     interval = YF_INTERVAL_MAP.get(timeframe, "1d")
-    end_dt = datetime.utcnow() if not end else datetime.fromisoformat(end)
+    end_dt = datetime.now(timezone.utc) if not end else datetime.fromisoformat(end)
 
     if not start:
         if timeframe == "1Month":
@@ -313,7 +313,7 @@ async def get_bars(
     """Fetch OHLCV bars for a symbol with optional technical indicators."""
     symbol = _normalize_symbol(symbol)
     interval = YF_INTERVAL_MAP.get(timeframe, "1d")
-    end_dt = datetime.utcnow() if not end else datetime.fromisoformat(end)
+    end_dt = datetime.now(timezone.utc) if not end else datetime.fromisoformat(end)
 
     if not start:
         if timeframe == "1Month":

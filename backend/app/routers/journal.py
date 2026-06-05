@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, date as date_type
+from datetime import timezone, datetime, date as date_type
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -178,7 +178,7 @@ def update_entry(
         raise HTTPException(status_code=404, detail="Entry not found")
     for field, val in body.model_dump(exclude_unset=True).items():
         setattr(entry, field, val)
-    entry.updated_at = datetime.utcnow()
+    entry.updated_at = datetime.now(timezone.utc)
     db.commit()
     return _ser(entry)
 

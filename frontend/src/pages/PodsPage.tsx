@@ -4,13 +4,12 @@ import {
   getPods,
   getPodSummary,
   createPod,
-  updatePod,
   deletePod,
   addPodPosition,
   removePodPosition,
   deriskPod,
 } from "@/api/pods";
-import type { Pod, PodSummary, DeriskResult } from "@/api/pods";
+import type { Pod, DeriskResult } from "@/api/pods";
 import { cn } from "@/lib/utils";
 import {
   Layers,
@@ -178,6 +177,7 @@ function PodCard({
     queryKey: ["pod-summary", pod.id],
     queryFn: () => getPodSummary(pod.id),
     enabled: expanded,
+    staleTime: 55_000,
     refetchInterval: 60_000,
   });
 
@@ -641,6 +641,7 @@ export default function PodsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["pods"],
     queryFn: getPods,
+    staleTime: 55_000,
     refetchInterval: 60_000,
   });
 

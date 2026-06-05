@@ -10,7 +10,7 @@ import io
 import logging
 import secrets
 import string
-from datetime import datetime, timedelta
+from datetime import timezone, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -332,7 +332,7 @@ def get_follow_up_due(
     _admin: User = Depends(_require_admin),
 ) -> list[dict]:
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         results = []
 
         # 7+ days since email_sent with no reply → follow_up_due
@@ -631,7 +631,7 @@ def waitlist_stats(
     _admin: User = Depends(_require_admin),
 ) -> dict:
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = today_start - timedelta(days=today_start.weekday())
 
@@ -698,7 +698,7 @@ def waitlist_growth(
     _admin: User = Depends(_require_admin),
 ) -> list[dict]:
     try:
-        cutoff = datetime.utcnow() - timedelta(days=30)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
         rows = (
             db.query(
                 sa_func.date(WaitlistSignup.created_at).label("date"),
@@ -779,7 +779,7 @@ def daily_summary(
     _admin: User = Depends(_require_admin),
 ) -> dict:
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = today_start - timedelta(days=today_start.weekday())
 

@@ -142,7 +142,7 @@ def _demo_price(symbol: str, user_id: int) -> dict:
     giving realistic-looking movement without per-request randomness.
     """
     base = _DEMO_BASE_PRICES.get(symbol.upper(), 100.0)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     minute_of_day = now.hour * 60 + now.minute
     drift = 1.0 + 0.001 * math.sin(user_id * 7 + minute_of_day)
     last = round(base * drift, 2)

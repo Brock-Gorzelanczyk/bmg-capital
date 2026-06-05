@@ -182,13 +182,13 @@ async def voice_chat(
     ai_response, citations = await _call_ai(system_prompt, body.message, body.context)
 
     # Append messages
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     msgs = list(session.messages or [])
     msgs.append({"role": "user", "content": body.message, "timestamp": now_iso})
     msgs.append({"role": "assistant", "content": ai_response, "timestamp": now_iso})
     session.messages = msgs
     session.duration_seconds = (session.duration_seconds or 0) + 10
-    session.updated_at = datetime.utcnow()
+    session.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(session)

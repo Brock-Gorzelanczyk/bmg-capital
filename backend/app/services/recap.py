@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import timezone, date, datetime
 from typing import Optional
 
 import yfinance as yf
@@ -299,7 +299,7 @@ async def generate_daily_recap(user_id: int, target_date: Optional[date] = None)
                 strategy_summary=strategy_summary,
                 top_setups=top_setups,
                 narrative=narrative,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             db.add(recap)
             db.commit()

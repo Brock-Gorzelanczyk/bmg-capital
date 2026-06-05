@@ -22,7 +22,7 @@ import logging
 import math
 import os
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import timezone, date, datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -530,7 +530,7 @@ def run_backtest(period_years: int = 3) -> dict:
     """
     logger.info("Backtest starting — downloading %d symbols…", len(BACKTEST_UNIVERSE))
 
-    end_dt   = datetime.utcnow()
+    end_dt   = datetime.now(timezone.utc)
     # Extra lookback for indicator warmup (200 days)
     start_dt = end_dt - timedelta(days=period_years * 365 + 250)
 
@@ -626,7 +626,7 @@ def run_backtest(period_years: int = 3) -> dict:
 
     payload = {
         "status": "complete",
-        "run_date": datetime.utcnow().isoformat(),
+        "run_date": datetime.now(timezone.utc).isoformat(),
         "period_years": period_years,
         "results": results,
         "equity_curves": equity_curves,

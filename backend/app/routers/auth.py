@@ -68,7 +68,7 @@ def _verify_password(plain: str, hashed: str) -> bool:
 
 
 def _create_token(user: User) -> str:
-    expire = datetime.utcnow() + timedelta(days=settings.jwt_expire_days)
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.jwt_expire_days)
     payload = {
         "sub": str(user.id),
         "email": user.email,

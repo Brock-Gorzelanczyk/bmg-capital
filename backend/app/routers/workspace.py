@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import timezone, datetime
 from typing import List, Optional
 
 import httpx
@@ -243,7 +243,7 @@ def update_workspace(
         w.is_default = body.is_default
     if body.sort_order is not None:
         w.sort_order = body.sort_order
-    w.updated_at = datetime.utcnow()
+    w.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(w)
     return _serialize(w)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import timezone, datetime
 from typing import Any, Optional
 
 import httpx
@@ -112,7 +112,7 @@ def update_analysis(
         row.thesis = body.thesis
     if body.drawings is not None:
         row.drawings_json = json.dumps(body.drawings)
-    row.updated_at = datetime.utcnow()
+    row.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}
 

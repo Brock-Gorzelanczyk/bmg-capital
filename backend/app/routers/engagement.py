@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import hashlib
-from datetime import datetime, date, timedelta
+from datetime import timezone, datetime, date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -72,7 +72,7 @@ def _add_league_points(
             week_iso=week_iso,
             points=0,
             breakdown=json.dumps({"lessons": 0, "challenges": 0, "journal": 0, "backtests": 0}),
-            last_updated=datetime.utcnow(),
+            last_updated=datetime.now(timezone.utc),
         )
         db.add(lp)
         db.flush()
@@ -81,7 +81,7 @@ def _add_league_points(
     breakdown = json.loads(lp.breakdown or "{}")
     breakdown[category] = breakdown.get(category, 0) + amount
     lp.breakdown = json.dumps(breakdown)
-    lp.last_updated = datetime.utcnow()
+    lp.last_updated = datetime.now(timezone.utc)
     db.commit()
     return lp.points
 
@@ -248,7 +248,7 @@ def submit_challenge_attempt(
         choice_idx=body.choice_idx,
         correct=correct,
         time_ms=body.time_ms,
-        attempted_at=datetime.utcnow(),
+        attempted_at=datetime.now(timezone.utc),
     )
     db.add(attempt)
     db.commit()
@@ -514,7 +514,7 @@ def get_my_league(
             tier=tier,
             user_ids=json.dumps([current_user.id]),
             finalized=False,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         db.add(cohort)
         db.commit()

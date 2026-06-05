@@ -171,7 +171,7 @@ def update_settings(
     row = db.query(NotificationPrefs).filter_by(user_id=current_user.id).first()
     if row:
         row.prefs = body.prefs
-        row.updated_at = datetime.utcnow()
+        row.updated_at = datetime.now(timezone.utc)
     else:
         row = NotificationPrefs(user_id=current_user.id, prefs=body.prefs)
         db.add(row)

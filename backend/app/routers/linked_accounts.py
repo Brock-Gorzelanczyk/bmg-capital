@@ -7,7 +7,7 @@ Prefix: /api/linked-accounts
 
 import random
 from collections import defaultdict
-from datetime import datetime
+from datetime import timezone, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -60,11 +60,11 @@ def _sync_holdings(brokerage: LinkedBrokerage, db: Session) -> None:
             cost_basis=item.get("cost_basis"),
             current_value=item.get("current_value"),
             security_type=item.get("type", "equity"),
-            synced_at=datetime.utcnow(),
+            synced_at=datetime.now(timezone.utc),
         )
         db.add(holding)
 
-    brokerage.last_synced_at = datetime.utcnow()
+    brokerage.last_synced_at = datetime.now(timezone.utc)
     db.commit()
 
 

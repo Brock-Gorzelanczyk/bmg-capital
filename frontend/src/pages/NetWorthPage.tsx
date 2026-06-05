@@ -93,7 +93,6 @@ function Sparkline({ data }: { data: number[] }) {
 
   const positive = data[data.length - 1] >= data[0];
   const lineColor = positive ? "#14b8a6" : "#f87171";
-  const fillColor = positive ? "rgba(20,184,166,0.12)" : "rgba(248,113,113,0.12)";
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-20" preserveAspectRatio="none">
@@ -160,13 +159,16 @@ const TIME_RANGE_DAYS: Record<TimeRange, number | null> = {
   "All": null,
 };
 
+// Stable "now" for use in pure render calculations (captured once on mount)
+const NOW_MS = Date.now();
+
 function NWHistoryChart({ history }: { history: NWSnapshot[] }) {
   const [range, setRange] = useState<TimeRange>("1Y");
 
   const filtered = useMemo(() => {
     const days = TIME_RANGE_DAYS[range];
     if (!days) return history;
-    const cutoff = new Date(Date.now() - days * 86_400_000);
+    const cutoff = new Date(NOW_MS - days * 86_400_000);
     return history.filter((s) => new Date(s.snapshot_date) >= cutoff);
   }, [history, range]);
 
@@ -511,14 +513,22 @@ export default function NetWorthPage() {
     queryKey: ["nw-history"],
     queryFn: getNWHistory,
     staleTime: 60_000,
+    retry: 0,
+  });
+
+  const { data: strategyPortfolio } = useQuery({
+    queryKey: ["strategy-lab-portfolio"],
+    queryFn: getStrategyLabPortfolio,
+    staleTime: 60_000,
+    retry: 0,
   });
 
   const accounts = accountsData?.accounts ?? [];
-  const history = historyData?.history ?? [];
+  const history = useMemo(() => historyData?.history ?? [], [historyData]);
 
   // Last 90 days of data for sparkline
   const sparkData = useMemo(() => {
-    const cutoff = new Date(Date.now() - 90 * 86_400_000);
+    const cutoff = new Date(NOW_MS - 90 * 86_400_000);
     return history
       .filter((s) => new Date(s.snapshot_date) >= cutoff)
       .map((s) => s.net_worth);
@@ -751,6 +761,21 @@ export default function NetWorthPage() {
             })}
           </div>
         )}
+      </div>
+
+      {/* ── History chart ─────────────────────────────────────────────────────── */}
+      <NWHistoryChart history={history} />
+
+      {/* ── Financial health metrics ──────────────────────────────────────────── */}
+      <div>
+        <h3 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wide mb-3 px-1">Financial Health</h3>
+        <HealthMetrics
+          totalAssets={summary?.total_assets ?? 0}
+          totalLiabilities={summary?.total_liabilities ?? 0}
+          bmgValueCents={strategyPortfolio?.total_value_cents ?? 0}
+          onAddAccount={() => { setEditTarget(null); setShowModal(true); }}
+          hasAccounts={accounts.length > 0}
+        />
       </div>
 
       {/* ── Add/Edit modal ────────────────────────────────────────────────────── */}

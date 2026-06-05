@@ -5,7 +5,7 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import timezone, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import yfinance as yf
@@ -70,7 +70,7 @@ async def get_earnings_calendar(days_ahead: int = 14) -> List[Dict[str, Any]]:
         if cached and (time.time() - cached["ts"]) < _CACHE_TTL:
             return cached["data"]
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     end = now + timedelta(days=days_ahead)
 
     loop = asyncio.get_running_loop()

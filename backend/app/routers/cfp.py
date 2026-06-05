@@ -1,6 +1,6 @@
 from __future__ import annotations
 import secrets
-from datetime import datetime, date, timedelta
+from datetime import timezone, datetime, date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -37,7 +37,7 @@ def book_session(body: BookBody, current_user: User = Depends(get_current_user),
     if cfp_limit == 0:
         raise HTTPException(403, "CFP sessions require Plus or Premium tier")
     if cfp_limit != -1:
-        year_start = datetime(datetime.utcnow().year, 1, 1)
+        year_start = datetime(datetime.now(timezone.utc).year, 1, 1)
         used = db.query(CFPBooking).filter(CFPBooking.user_id == current_user.id, CFPBooking.created_at >= year_start).count()
         if used >= cfp_limit:
             raise HTTPException(403, f"You've used your {cfp_limit} CFP session(s) for this year. Upgrade to Premium for unlimited.")
