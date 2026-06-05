@@ -94,7 +94,7 @@ _PORTFOLIO_DEFS = [
 
 
 def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
-    """Create missing StrategyPortfolio rows and bind BotAllocations. Returns all 3 portfolios."""
+    """Create missing StrategyPortfolio rows, create/activate BotAllocations, bind them."""
     from app.db.models.bots import StrategyPortfolio
     now = datetime.now(timezone.utc)
     portfolios = []
@@ -120,7 +120,7 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
             db.add(existing)
             db.flush()
 
-        # Bind allocations
+        # Create or bind allocations for each bot in this portfolio
         for bot_name, capital_cents in defn["bots"].items():
             profile = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
             if not profile:
@@ -133,9 +133,31 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
                 )
                 .first()
             )
-            if alloc and alloc.portfolio_id is None:
+            if not alloc:
+                # Create a fresh enabled allocation for this user + bot
+                alloc = BotAllocation(
+                    user_id=user_id,
+                    profile_id=profile.id,
+                    capital_pct=10.0,
+                    risk_profile="standard",
+                    paper_mode=True,
+                    enabled=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(alloc)
+                db.flush()
+
+            # Assign portfolio and capital (idempotent)
+            if alloc.portfolio_id is None:
                 alloc.portfolio_id = existing.id
                 alloc.capital_cents_within_portfolio = capital_cents
+                alloc.updated_at = now
+
+            # Re-enable if accidentally paused (paper trading should always be active)
+            if not alloc.enabled and alloc.paused_reason in (None, "user_pause"):
+                alloc.enabled = True
+                alloc.paused_reason = None
                 alloc.updated_at = now
 
         portfolios.append(existing)
@@ -484,6 +506,7 @@ def get_portfolios(
     try:
         _ensure_portfolios_for_user(db, current_user.id)
     except Exception as exc:
+        db.rollback()
         logger.warning("_ensure_portfolios_for_user failed: %s", exc)
 
     try:
