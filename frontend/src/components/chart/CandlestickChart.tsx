@@ -165,6 +165,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         layout: { background: { type: ColorType.Solid, color: TV.bg }, textColor: TV.text },
         grid: { vertLines: { color: TV.grid }, horzLines: { color: TV.grid } },
         crosshair: { mode: 1 },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+        handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
         rightPriceScale: {
           borderColor: TV.border,
           // TradingView-style margins: 5% top breathing room, 12% bottom reserved for volume bars
@@ -727,7 +729,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
 
     return (
       <div className="w-full h-full relative">
-        <div ref={containerRef} className="absolute inset-0" style={{ cursor }} />
+        <div ref={containerRef} className="absolute inset-0" style={{ cursor, touchAction: "none" }} />
         {hasSvgOverlays && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
             {rectOverlays.map((r) => (

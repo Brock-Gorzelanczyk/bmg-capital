@@ -159,7 +159,7 @@ def start_trial(
     if row.trial_ends_at:
         raise HTTPException(400, "Free trial already used")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     row.tier = "plus"
     row.status = "trialing"
     row.trial_ends_at = now + timedelta(days=7)

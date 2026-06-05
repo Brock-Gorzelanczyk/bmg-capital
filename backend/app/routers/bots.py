@@ -1349,6 +1349,166 @@ def bulk_update_card_config(
     return {"status": "saved", "updated": len(allocations)}
 
 
+# ── GET /api/bots/dashboard-health ──────────────────────────────────────────
+# NOTE: Must be registered BEFORE /{profile_name} to avoid shadowing.
+
+@router.get("/dashboard-health")
+def get_dashboard_health(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """System health summary: active vs paused allocations for the current user."""
+    allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == current_user.id)
+        .all()
+    )
+
+    active_ids = [a.profile_id for a in allocs if a.enabled]
+    paused_ids = [a for a in allocs if not a.enabled]
+
+    paused_bots: list[dict] = []
+    if paused_ids:
+        paused_profiles = (
+            db.query(BotProfile)
+            .filter(BotProfile.id.in_([a.profile_id for a in paused_ids]))
+            .all()
+        )
+        profile_name_map = {p.id: p for p in paused_profiles}
+        for a in paused_ids:
+            p = profile_name_map.get(a.profile_id)
+            if p:
+                paused_bots.append({
+                    "name": _DISPLAY_NAMES.get(p.name, p.name.replace("_", " ").title()),
+                    "reason": a.paused_reason or "manually paused",
+                })
+
+    bots_total = len(allocs)
+    bots_active = len(active_ids)
+    bots_paused = len(paused_ids)
+
+    if bots_paused > 0:
+        status = "warn"
+        message = f"{bots_paused} bot{'s' if bots_paused > 1 else ''} paused"
+    elif bots_total == 0:
+        status = "warn"
+        message = "No bots allocated yet"
+    else:
+        status = "ok"
+        message = "All systems normal"
+
+    return {
+        "status": status,
+        "message": message,
+        "bots_active": bots_active,
+        "bots_paused": bots_paused,
+        "bots_total": bots_total,
+        "paused_bots": paused_bots,
+    }
+
+
+# ── GET /api/bots/catalysts ──────────────────────────────────────────────────
+# NOTE: Must be registered BEFORE /{profile_name} to avoid shadowing.
+
+@router.get("/catalysts")
+def get_catalysts(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return upcoming catalyst events for symbols on the user's watchlists."""
+    allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == current_user.id)
+        .all()
+    )
+    if not allocs:
+        return []
+
+    profile_ids = list({a.profile_id for a in allocs})
+    wl_rows = (
+        db.query(BotWatchlist)
+        .filter(
+            BotWatchlist.profile_id.in_(profile_ids),
+            BotWatchlist.status.in_(["active", "watching", "pending_entry"]),
+        )
+        .order_by(BotWatchlist.score.desc())
+        .limit(30)
+        .all()
+    )
+
+    now = datetime.now(timezone.utc)
+    events: list[dict] = []
+    seen_syms: set[str] = set()
+    for row in wl_rows:
+        sym = row.symbol
+        if sym in seen_syms:
+            continue
+        seen_syms.add(sym)
+        event_ts = row.last_evaluated_at or row.added_at or now
+        events.append({
+            "id": row.id,
+            "event_type": "watchlist",
+            "symbol": sym,
+            "event_ts": event_ts.isoformat() if event_ts else now.isoformat(),
+            "description": f"{sym} on watchlist (score {row.score:.2f})" if row.score else f"{sym} on watchlist",
+        })
+
+    return events
+
+
+# ── GET /api/bots/pending-reviews ────────────────────────────────────────────
+# NOTE: Must be registered BEFORE /{profile_name} to avoid shadowing.
+
+@router.get("/pending-reviews")
+def get_pending_reviews(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return borderline signals (confidence 0.5-0.7) pending user review."""
+    allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == current_user.id)
+        .all()
+    )
+    if not allocs:
+        return []
+
+    alloc_ids = [a.id for a in allocs]
+    profile_ids = list({a.profile_id for a in allocs})
+    profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+    profile_map = {p.id: p for p in profiles}
+    alloc_profile_name: dict[int, str] = {
+        a.id: profile_map[a.profile_id].name
+        for a in allocs
+        if a.profile_id in profile_map
+    }
+
+    signals = (
+        db.query(BotSignal)
+        .filter(
+            BotSignal.allocation_id.in_(alloc_ids),
+            BotSignal.confidence >= 0.5,
+            BotSignal.confidence < 0.75,
+        )
+        .order_by(BotSignal.ts.desc())
+        .limit(10)
+        .all()
+    )
+
+    return [
+        {
+            "id": s.id,
+            "bot_name": alloc_profile_name.get(s.allocation_id, "unknown"),
+            "symbol": s.symbol,
+            "ts": s.ts.isoformat() if s.ts else None,
+            "confidence": s.confidence,
+            "side": s.side,
+            "reason": s.reason or "",
+        }
+        for s in signals
+    ]
+
+
 # ── GET /api/bots/{profile_name} ─────────────────────────────────────────────
 
 @router.get("/{profile_name}")
@@ -2008,64 +2168,6 @@ def migrate_legacy_positions(
     }
 
 
-# ── GET /api/bots/dashboard-health ───────────────────────────────────────────
-
-@router.get("/dashboard-health")
-def get_dashboard_health(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """System health summary: active vs paused allocations for the current user."""
-    allocs = (
-        db.query(BotAllocation)
-        .filter(BotAllocation.user_id == current_user.id)
-        .all()
-    )
-
-    active_ids = [a.profile_id for a in allocs if a.enabled]
-    paused_ids = [a for a in allocs if not a.enabled]
-
-    # Resolve paused bot names
-    paused_bots: list[dict] = []
-    if paused_ids:
-        paused_profiles = (
-            db.query(BotProfile)
-            .filter(BotProfile.id.in_([a.profile_id for a in paused_ids]))
-            .all()
-        )
-        profile_name_map = {p.id: p for p in paused_profiles}
-        for a in paused_ids:
-            p = profile_name_map.get(a.profile_id)
-            if p:
-                paused_bots.append({
-                    "name": _DISPLAY_NAMES.get(p.name, p.name.replace("_", " ").title()),
-                    "reason": a.paused_reason or "manually paused",
-                })
-
-    bots_total = len(allocs)
-    bots_active = len(active_ids)
-    bots_paused = len(paused_ids)
-
-    if bots_paused > 0:
-        status = "warn"
-        message = f"{bots_paused} bot{'s' if bots_paused > 1 else ''} paused"
-    elif bots_total == 0:
-        status = "warn"
-        message = "No bots allocated yet"
-    else:
-        status = "ok"
-        message = "All systems normal"
-
-    return {
-        "status": status,
-        "message": message,
-        "bots_active": bots_active,
-        "bots_paused": bots_paused,
-        "bots_total": bots_total,
-        "paused_bots": paused_bots,
-    }
-
-
 # ── GET /api/bots/signals/recent ─────────────────────────────────────────────
 
 @router.get("/signals/recent")
@@ -2185,107 +2287,3 @@ def get_watchlist_movers(
 
     movers = sorted(seen.values(), key=lambda x: -x["score"])[: max(1, min(limit, 20))]
     return {"movers": movers}
-
-
-# ── GET /api/bots/catalysts ───────────────────────────────────────────────────
-
-@router.get("/catalysts")
-def get_catalysts(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Return upcoming catalyst events for symbols on the user's watchlists."""
-    allocs = (
-        db.query(BotAllocation)
-        .filter(BotAllocation.user_id == current_user.id)
-        .all()
-    )
-    if not allocs:
-        return []
-
-    profile_ids = list({a.profile_id for a in allocs})
-    wl_rows = (
-        db.query(BotWatchlist)
-        .filter(
-            BotWatchlist.profile_id.in_(profile_ids),
-            BotWatchlist.status.in_(["active", "watching", "pending_entry"]),
-        )
-        .order_by(BotWatchlist.score.desc())
-        .limit(30)
-        .all()
-    )
-
-    # Build lightweight catalyst stubs from watchlist — real earnings data would
-    # come from a market-data feed; here we surface what we know from signals.
-    now = datetime.now(timezone.utc)
-    events: list[dict] = []
-    seen_syms: set[str] = set()
-    for row in wl_rows:
-        sym = row.symbol
-        if sym in seen_syms:
-            continue
-        seen_syms.add(sym)
-        # Use last_evaluated_at as a proxy event date if available
-        event_ts = row.last_evaluated_at or row.added_at or now
-        events.append({
-            "id": row.id,
-            "event_type": "watchlist",
-            "symbol": sym,
-            "event_ts": event_ts.isoformat() if event_ts else now.isoformat(),
-            "description": f"{sym} on watchlist (score {row.score:.2f})" if row.score else f"{sym} on watchlist",
-        })
-
-    return events
-
-
-# ── GET /api/bots/pending-reviews ─────────────────────────────────────────────
-
-@router.get("/pending-reviews")
-def get_pending_reviews(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """Return borderline signals (confidence 0.5-0.7) pending user review."""
-    allocs = (
-        db.query(BotAllocation)
-        .filter(BotAllocation.user_id == current_user.id)
-        .all()
-    )
-    if not allocs:
-        return []
-
-    alloc_ids = [a.id for a in allocs]
-    profile_ids = list({a.profile_id for a in allocs})
-    profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
-    profile_map = {p.id: p for p in profiles}
-    alloc_profile_name: dict[int, str] = {
-        a.id: profile_map[a.profile_id].name
-        for a in allocs
-        if a.profile_id in profile_map
-    }
-
-    # Borderline signals: confidence in [0.5, 0.75)
-    signals = (
-        db.query(BotSignal)
-        .filter(
-            BotSignal.allocation_id.in_(alloc_ids),
-            BotSignal.confidence >= 0.5,
-            BotSignal.confidence < 0.75,
-        )
-        .order_by(BotSignal.ts.desc())
-        .limit(10)
-        .all()
-    )
-
-    return [
-        {
-            "id": s.id,
-            "bot_name": alloc_profile_name.get(s.allocation_id, "unknown"),
-            "symbol": s.symbol,
-            "ts": s.ts.isoformat() if s.ts else None,
-            "confidence": s.confidence,
-            "side": s.side,
-            "reason": s.reason or "",
-        }
-        for s in signals
-    ]
