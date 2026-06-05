@@ -1,5 +1,5 @@
 import { Component, type ReactNode, useEffect, useState, lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
@@ -82,6 +82,7 @@ const BotDetailPage = lazy(() => import("@/pages/BotDetailPage"));
 const AnalystPage = lazy(() => import("@/pages/AnalystPage"));
 const PortfolioDetailPage = lazy(() => import("@/pages/PortfolioDetailPage"));
 const NetPortfolio = lazy(() => import("@/pages/NetPortfolio"));
+const NetWorthPage = lazy(() => import("@/pages/NetWorthPage"));
 const StrategyLibraryPage = lazy(() => import("@/pages/StrategyLibraryPage"));
 const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -273,6 +274,12 @@ function AppInner() {
         <Route path="/settings/cfp" element={<CFPBookingPage />} />
         <Route path="/staking" element={<StakingPage />} />
         <Route path="/dca-baskets" element={<DCABasketsPage />} />
+        {/* Friendly URL aliases */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/net-worth" element={<NetWorthPage />} />
+        <Route path="/capital-pods" element={<Navigate to="/pods" replace />} />
+        <Route path="/ta-workshop" element={<Navigate to="/workshop" replace />} />
+        <Route path="/paper-trading" element={<Navigate to="/paper" replace />} />
       </Route>
     </Routes>
     <VoiceAIButton onClick={() => setVoiceOpen(true)} />
