@@ -1,10 +1,11 @@
 import React, { useMemo, useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu, Clock, TrendingUp, TrendingDown, BarChart2, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useWsStore, useAlertStore, useUiStore, useNotificationStore, useMarketStore } from "@/store";
 import { getNotifications } from "@/api/notifications";
 import { getRegime } from "@/api/strategy";
+import { getMyTier } from "@/api/tiers";
 import SymbolSearch from "@/components/ui/SymbolSearch";
 import { DEMO_MODE } from "@/lib/demoMode";
 import DemoPill from "@/components/demo/DemoPill";
@@ -68,6 +69,17 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   });
   const regime: string = regimeData?.regime ?? "unknown";
 
+  const { data: tierData } = useQuery({
+    queryKey: ["tier-me"],
+    queryFn: getMyTier,
+    staleTime: 300_000,
+    retry: 0,
+  });
+  const trialDaysLeft = tierData?.trial_ends_at
+    ? Math.max(0, Math.ceil((new Date(tierData.trial_ends_at).getTime() - Date.now()) / 86_400_000))
+    : 0;
+  const showTrialBadge = tierData?.status === "trialing" && trialDaysLeft > 0;
+
   const REGIME_MAP: Record<string, { label: string; abbr: string; cls: string; icon: React.ReactNode }> = {
     "Trend-Up":   { label: "Trend-Up",   abbr: "TU", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
     "Trend-Down": { label: "Trend-Down", abbr: "TD", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
@@ -106,6 +118,16 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
           <span className="sm:hidden">{regimeChip.abbr}</span>
           <span className="hidden sm:inline">{regimeChip.label}</span>
         </div>
+        {/* Trial countdown badge */}
+        {showTrialBadge && (
+          <Link
+            to="/pricing"
+            className="hidden sm:flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-medium px-3 py-1.5 rounded-full hover:bg-blue-500/20 transition-colors whitespace-nowrap"
+          >
+            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+            Pro+ trial · {trialDaysLeft}d left
+          </Link>
+        )}
         {/* Stale data indicator */}
         {isStale && (
           <span className="text-[9px] text-[#F59E0B] px-1.5 py-0.5 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/20">Data delayed</span>

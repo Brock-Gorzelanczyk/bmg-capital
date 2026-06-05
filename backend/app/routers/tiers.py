@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
@@ -13,15 +14,31 @@ from app.db.models.users import User
 from app.db.models.tier import UserTier
 from app.services.entitlements import ENTITLEMENTS, PRICING, get_entitlements, effective_tier
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/tiers", tags=["tiers"])
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+def _send_trial_email(user_id: int, email: str, kind: str, days_left: int) -> None:
+    """Stub — replace with real email service when available."""
+    logger.info(
+        "TRIAL EMAIL STUB — user=%s kind=%s days_left=%d", user_id, kind, days_left
+    )
+
+
 def _get_or_create_tier(db: Session, user_id: int) -> UserTier:
     row = db.query(UserTier).filter_by(user_id=user_id).first()
     if not row:
-        row = UserTier(user_id=user_id, tier="free", status="active")
+        # Legacy user (signed up before auto-trial) — start them on Pro+ trial
+        trial_end = datetime.now(timezone.utc) + timedelta(days=14)
+        row = UserTier(
+            user_id=user_id,
+            tier="premium",
+            status="trialing",
+            trial_ends_at=trial_end,
+        )
         db.add(row)
         db.commit()
         db.refresh(row)

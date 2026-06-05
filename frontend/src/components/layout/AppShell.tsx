@@ -32,6 +32,9 @@ export default function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [paperBannerDismissed, setPaperBannerDismissed] = useState(
+    () => sessionStorage.getItem("paper_banner_dismissed") === "1"
+  );
 
   const { data: challengeData } = useQuery({
     queryKey: ["engagement-challenge-today"],
@@ -117,6 +120,22 @@ export default function AppShell() {
 
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+        {/* Paper-trading banner — dismissible per session */}
+        {!paperBannerDismissed && (
+          <div className="flex items-center justify-between bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs text-amber-400 shrink-0">
+            <span className="flex items-center gap-2">
+              <span>📄</span>
+              <span className="font-medium">Paper trading only — no real money is invested or at risk. Live trading unlocks Q3 2026.</span>
+            </span>
+            <button
+              onClick={() => { sessionStorage.setItem("paper_banner_dismissed", "1"); setPaperBannerDismissed(true); }}
+              className="text-amber-500/60 hover:text-amber-400 transition-colors ml-4 shrink-0"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {!isChart && <TopBar onMenuToggle={() => setSidebarOpen((o) => !o)} />}
         <main
           className={

@@ -52,6 +52,7 @@ const BacktestLabPage = lazy(() => import("@/pages/BacktestLabPage"));
 const ScannersPage = lazy(() => import("@/pages/ScannersPage"));
 const AlertBuilderPage = lazy(() => import("@/pages/AlertBuilderPage"));
 const PitchPage = lazy(() => import("@/pages/PitchPage"));
+const PricingPage = lazy(() => import("@/pages/PricingPage"));
 const PitchDeckPage = lazy(() => import("@/pages/PitchDeckPage"));
 const DailyChallengePage = lazy(() => import("@/pages/DailyChallengePage"));
 const MorningBriefPage = lazy(() => import("@/pages/MorningBriefPage"));
@@ -298,6 +299,7 @@ export default function App() {
             <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
               <Route path="/pitch" element={<PitchPage />} />
               <Route path="/pitch/deck" element={<PitchDeckPage />} />
               <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />

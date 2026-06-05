@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.models.users import User
+from app.db.models.tier import UserTier
 from app.dependencies import get_db
 
 _RATE_STORE: dict[str, list[float]] = defaultdict(list)
@@ -105,6 +106,21 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Auto-start Pro+ (premium) trial for 14 days — no card required
+    try:
+        trial_end = datetime.now(timezone.utc) + timedelta(days=14)
+        tier_row = UserTier(
+            user_id=user.id,
+            tier="premium",
+            status="trialing",
+            trial_ends_at=trial_end,
+            billing_interval=None,
+        )
+        db.add(tier_row)
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return TokenResponse(access_token=_create_token(user), user=_user_dict(user))
 
