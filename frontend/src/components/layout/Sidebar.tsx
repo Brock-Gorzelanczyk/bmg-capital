@@ -442,19 +442,29 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
       expanded ? "w-56" : "w-14 lg:w-56"
     )}>
       {/* Logo */}
-      <div className="px-2 mb-4">
-        {/* Full logo — shown when expanded or on lg+ */}
+      {/* Fixed-height crop box removes the dark padding built into the PNG */}
+      <div
+        className={cn("relative overflow-hidden mb-3 px-2", show(expanded))}
+        style={{ height: 44 }}
+      >
         <img
           src="/logo.png"
           alt="BMG Capital"
-          className={cn("w-full h-auto object-contain", show(expanded))}
+          style={{
+            position: "absolute",
+            width: "100%",
+            top: "50%",
+            transform: "translateY(-50%)",
+          }}
         />
-        {/* Icon mark — shown on tablet collapsed (md to lg, not expanded) */}
+      </div>
+      {/* Icon mark — shown on tablet collapsed (md to lg, not expanded) */}
+      <div className={cn("px-2 mb-3", expanded ? "hidden" : "block lg:hidden")}>
         <svg
           viewBox="0 0 32 32"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className={cn("w-8 h-8 shrink-0", expanded ? "hidden" : "block lg:hidden")}
+          className="w-8 h-8 shrink-0"
         >
           <polyline points="3,25 9,17 14,21 22,8" stroke="#3ECF8E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           <circle cx="22" cy="8" r="3" fill="#3ECF8E" />
