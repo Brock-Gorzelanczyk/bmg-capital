@@ -1287,12 +1287,12 @@ export default function StrategyLab() {
     onError: () => toast.error("Failed to activate bots"),
   });
 
-  // Auto-activate all bots on first load when no allocations exist yet
+  // Auto-activate: whenever any bot has no active allocation, call activate-all.
+  // Uses isSuccess to prevent repeat calls within the same page session.
   useEffect(() => {
-    if (!data?.bots || isLoading || activateAllMut.isPending) return;
-    const hasAnyAllocation = data.bots.some((b: BotListItem) => b.allocation !== null);
-    if (!hasAnyAllocation && !localStorage.getItem("bmg_auto_activated")) {
-      localStorage.setItem("bmg_auto_activated", "true");
+    if (!data?.bots || isLoading || activateAllMut.isPending || activateAllMut.isSuccess) return;
+    const anyDisabled = data.bots.some((b: BotListItem) => !b.allocation?.enabled);
+    if (anyDisabled) {
       activateAllMut.mutate();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
