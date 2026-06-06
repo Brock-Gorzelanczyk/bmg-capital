@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import TickerTape from "@/components/ui/TickerTape";
 import {
   getStrategyLabPortfolio,
   getPortfolios,
@@ -176,6 +177,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
+
+      {/* S&P 500 Live Ticker Tape */}
+      <TickerTape />
 
       {/* Row 1 – Health Bar */}
       <div className="sticky top-0 z-10 bg-zinc-900/80 backdrop-blur border-b border-zinc-800 px-6 py-2 flex items-center justify-between text-xs">
