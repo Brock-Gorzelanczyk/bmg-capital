@@ -64,6 +64,10 @@ class BotSignal(Base):
     size_hint: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     strategy: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    entry_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    stop_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    discord_posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class BotPosition(Base):

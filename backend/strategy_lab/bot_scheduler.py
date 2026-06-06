@@ -234,6 +234,59 @@ def setup_bot_scheduler(scheduler) -> None:
         replace_existing=True,
     )
 
+    # ------------------------------------------------------------------
+    # Monthly recap: 1st of month, 9:00 AM ET
+    # ------------------------------------------------------------------
+    def _discord_monthly_recap():
+        try:
+            from app.services.discord_public import post_monthly_recap
+            from app.db.session import SessionLocal
+            from app.db.models.bots import BotSignal, BotDailyPnL
+            from datetime import date
+            import calendar
+
+            db = SessionLocal()
+            try:
+                today      = date.today()
+                # Previous month bounds
+                first_prev = date(today.year, today.month - 1 if today.month > 1 else 12, 1)
+                if today.month == 1:
+                    first_prev = date(today.year - 1, 12, 1)
+                else:
+                    first_prev = date(today.year, today.month - 1, 1)
+                last_prev  = date(first_prev.year, first_prev.month,
+                                  calendar.monthrange(first_prev.year, first_prev.month)[1])
+                from sqlalchemy import func
+                signals = db.query(BotSignal).filter(
+                    func.date(BotSignal.ts) >= first_prev,
+                    func.date(BotSignal.ts) <= last_prev,
+                ).count()
+                pnl_rows = db.query(BotDailyPnL).filter(
+                    BotDailyPnL.date >= first_prev,
+                    BotDailyPnL.date <= last_prev,
+                ).all()
+                pnl_cents = sum(
+                    (r.realized_cents or 0) + (r.unrealized_cents or 0)
+                    for r in pnl_rows
+                )
+                post_monthly_recap({
+                    "month_name": first_prev.strftime("%B %Y"),
+                    "signals":    signals,
+                    "trades":     0,  # TODO: wire bot_trades table
+                    "pnl_cents":  pnl_cents,
+                })
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("discord monthly recap failed: %s", exc)
+
+    scheduler.add_job(
+        _discord_monthly_recap,
+        CronTrigger(day=1, hour=9, minute=0, timezone=ET),
+        id="discord_monthly_recap",
+        replace_existing=True,
+    )
+
     logger.info(
         "strategy_lab: bot scheduler registered (stock_swing, stock_day, stock_lt, "
         "crypto_swing, crypto_day, crypto_lt, crypto_onchain, "

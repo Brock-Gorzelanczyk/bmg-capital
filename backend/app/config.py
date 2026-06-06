@@ -85,6 +85,18 @@ class Settings(BaseSettings):
 
     # ── Public Discord Bot (signal feed server) ────────────────────────────────
     discord_bot_token: str = ""
+    discord_guild_id: str = ""
+    # Channel IDs — accepts both DISCORD_CH_* and legacy DISCORD_CHANNEL_* names.
+    discord_ch_all_signals: str = ""
+    discord_ch_stocks_signals: str = ""
+    discord_ch_crypto_signals: str = ""
+    discord_ch_options_signals: str = ""
+    discord_ch_daily_digest: str = ""
+    discord_ch_weekly_leaderboard: str = ""
+    discord_ch_monthly_recap: str = ""
+    discord_ch_announcements: str = ""
+    discord_ch_dev_log: str = ""
+    # Legacy aliases (kept for backward compat — prefer DISCORD_CH_* above).
     discord_channel_all_signals: str = ""
     discord_channel_stocks: str = ""
     discord_channel_crypto: str = ""
