@@ -10,8 +10,15 @@ import {
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
   Grid3X3, Zap, Globe, Eye, TestTube2, Cpu,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { getStatus as getAutonomousStatus, getLatestDigest } from "@/api/autonomous";
+import { getBots, getStrategyLabPortfolio } from "@/api/bots";
+import { getWatchlists } from "@/api/watchlist";
+import { getPortfolios } from "@/api/portfolio";
+import { getNews } from "@/api/market";
+import { getEntries as getJournalEntries, getStats as getJournalStats } from "@/api/journal";
+import { chunkPrefetch } from "@/lib/chunkPrefetch";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useLearnStore } from "@/store/learnStore";
@@ -19,6 +26,28 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { useTierStore } from "@/store/tierStore";
 import { useUiStore } from "@/store/uiStore";
 import StreakBadge from "@/components/learn/StreakBadge";
+
+// ─── Hover prefetch map ───────────────────────────────────────────────────────
+
+const PREFETCH_MAP: Record<string, (qc: QueryClient) => void> = {
+  "/strategy": (qc) => {
+    qc.prefetchQuery({ queryKey: ["bots-v2"], queryFn: getBots, staleTime: 30_000 });
+    qc.prefetchQuery({ queryKey: ["strategy-lab-portfolio"], queryFn: getStrategyLabPortfolio, staleTime: 30_000 });
+  },
+  "/watchlist": (qc) => {
+    qc.prefetchQuery({ queryKey: ["watchlists"], queryFn: getWatchlists, staleTime: 30_000 });
+  },
+  "/portfolio": (qc) => {
+    qc.prefetchQuery({ queryKey: ["portfolios"], queryFn: getPortfolios, staleTime: 30_000 });
+  },
+  "/news": (qc) => {
+    qc.prefetchQuery({ queryKey: ["news"], queryFn: () => getNews(), staleTime: 30_000 });
+  },
+  "/journal": (qc) => {
+    qc.prefetchQuery({ queryKey: ["journal-entries"], queryFn: () => getJournalEntries(), staleTime: 30_000 });
+    qc.prefetchQuery({ queryKey: ["journal-stats"], queryFn: getJournalStats, staleTime: 30_000 });
+  },
+};
 
 // ─── Nav item definitions ─────────────────────────────────────────────────────
 
@@ -104,6 +133,7 @@ function NavItem({
   end: endProp,
   pulseDot,
   staticDot,
+  prefetchFn,
 }: {
   to: string;
   label: string;
@@ -115,11 +145,14 @@ function NavItem({
   pulseDot?: boolean;
   /** If true, show a static lime dot (digest available) */
   staticDot?: boolean;
+  /** Called on hover — fires chunk + data prefetch for this route */
+  prefetchFn?: () => void;
 }) {
   return (
     <NavLink
       to={to}
       end={endProp ?? to === "/"}
+      onMouseEnter={prefetchFn}
       className={({ isActive }) =>
         cn(
           "relative flex items-center gap-3 py-2 pl-3 pr-3 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
@@ -175,6 +208,7 @@ function NavSection({
   headerRight?: React.ReactNode;
   itemDots?: Record<string, { pulse?: boolean; static?: boolean }>;
 }) {
+  const qc = useQueryClient();
   return (
     <div>
       <div className={cn("px-3 mb-1 flex items-center justify-between", show(expanded))}>
@@ -193,6 +227,10 @@ function NavSection({
             expanded={expanded}
             pulseDot={itemDots?.[to]?.pulse}
             staticDot={itemDots?.[to]?.static}
+            prefetchFn={() => {
+              chunkPrefetch[to]?.();
+              PREFETCH_MAP[to]?.(qc);
+            }}
           />
         ))}
       </div>

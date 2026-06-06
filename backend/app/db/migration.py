@@ -229,6 +229,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("color_hex",   "VARCHAR"),
     ],
     "portfolio_daily_pnl": [],
+    "v2_shadow_runs": [],   # created via CREATE TABLE IF NOT EXISTS in _ensure_v2_tables
 }
 
 
@@ -324,6 +325,30 @@ def _migrate_strategy_portfolios(conn) -> None:
         logger.warning("_migrate_strategy_portfolios: %s", exc)
 
 
+def _ensure_v2_tables(conn) -> None:
+    """Create tables for the v2 LEAN-style runner framework (idempotent)."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS v2_shadow_runs (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            bot_id        VARCHAR NOT NULL,
+            run_ts        DATETIME DEFAULT CURRENT_TIMESTAMP,
+            universe_size INTEGER DEFAULT 0,
+            insights_count INTEGER DEFAULT 0,
+            targets_count  INTEGER DEFAULT 0,
+            orders_count   INTEGER DEFAULT 0,
+            shadow_mode    BOOLEAN DEFAULT 1,
+            duration_ms    INTEGER DEFAULT 0,
+            insights_json  TEXT,
+            targets_json   TEXT,
+            orders_json    TEXT,
+            events_json    TEXT,
+            error          TEXT
+        )
+    """))
+    conn.commit()
+    logger.info("Migration: v2_shadow_runs table ensured")
+
+
 def _fix_bots_enabled(conn) -> None:
     """One-time fix: re-enable all bot_allocations that were reset to enabled=0
     by the 3-portfolio split migration, and clear any stale paused_reason so
@@ -374,3 +399,4 @@ def run_migrations(engine: Engine) -> None:
 
         _migrate_strategy_portfolios(conn)
         _fix_bots_enabled(conn)
+        _ensure_v2_tables(conn)

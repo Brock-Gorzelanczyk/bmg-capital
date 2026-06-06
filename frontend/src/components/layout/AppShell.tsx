@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { Outlet, useLocation, NavLink, Link } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { House, BarChart2, Bot, Newspaper, User } from "lucide-react";
@@ -16,6 +16,21 @@ import { getTodayChallenge } from "@/api/engagement";
 import { getStatus as getAutonomousStatus, getLatestDigest } from "@/api/autonomous";
 import { useTierStore } from "@/store/tierStore";
 import { cn } from "@/lib/utils";
+
+function ContentSkeleton() {
+  return (
+    <div className="p-4 md:p-6 space-y-4 animate-pulse">
+      <div className="h-8 w-64 bg-zinc-800 rounded-lg" />
+      <div className="h-4 w-96 bg-zinc-800/60 rounded" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+        {[0, 1, 2].map(i => <div key={i} className="h-32 bg-zinc-800 rounded-xl" />)}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {[0, 1, 2, 3].map(i => <div key={i} className="h-24 bg-zinc-800 rounded-xl" />)}
+      </div>
+    </div>
+  );
+}
 
 const BOTTOM_NAV = [
   { to: "/",              label: "Home",       Icon: House },
@@ -143,7 +158,9 @@ export default function AppShell() {
               : "flex-1 overflow-auto p-3 md:p-4 pb-16 md:pb-4"
           }
         >
-          <Outlet />
+          <Suspense fallback={<ContentSkeleton />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

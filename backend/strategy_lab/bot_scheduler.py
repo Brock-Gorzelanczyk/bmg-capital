@@ -90,6 +90,18 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
+    # v2 LEAN framework — crypto_lt shadow runner (same schedule as v1)
+    # Runs side-by-side: writes to v2_shadow_runs, no trade execution.
+    # Compare output with v1 bot_signals to validate parity before cutover.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: __import__("strategy_lab.v2.shadow_runner", fromlist=["run_v2_shadow"]).run_v2_shadow("crypto_lt"),
+        CronTrigger(day_of_week="mon", hour=10, minute=1, timezone=UTC),  # 1 min after v1
+        id="bot_crypto_lt_v2_shadow",
+        replace_existing=True,
+    )
+
+    # ------------------------------------------------------------------
     # Daily briefing email: 8:00 AM ET, Mon-Fri
     # ------------------------------------------------------------------
     def _run_daily_briefing():
