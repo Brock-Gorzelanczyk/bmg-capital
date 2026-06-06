@@ -185,10 +185,9 @@ function AdminRoute({ children }: { children: ReactNode }) {
 }
 
 // Clean up old cache keys from previous versions
-["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4"].forEach(k => {
+["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4", "BMG_QUERY_CACHE_v5"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
 });
-// Note: v5 is the active key — only cleared on error boundary, not on startup
 
 // Apply saved appearance preferences before first render so there's no flash
 try {
@@ -210,7 +209,7 @@ const queryClient = new QueryClient({
 
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
-  key: "BMG_QUERY_CACHE_v5",
+  key: "BMG_QUERY_CACHE_v6",
   throttleTime: 1000,
 });
 
@@ -246,7 +245,6 @@ function AppInner() {
 
   return (
     <ErrorBoundary>
-    <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -337,7 +335,6 @@ function AppInner() {
       onClose={coPilot.close}
       prefillQuery={coPilot.prefillQuery}
     />
-    </Suspense>
     </ErrorBoundary>
   );
 }

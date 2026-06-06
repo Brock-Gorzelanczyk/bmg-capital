@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -1852,23 +1852,31 @@ export default function CryptoLab() {
   const [aiOpen, setAiOpen] = useState(false);
   const [infoStrategy, setInfoStrategy] = useState<StrategyDefinition | null>(null);
 
-  const { data: market, isLoading: marketLoading } = useQuery({
+  const { data: market, isLoading: marketLoading, dataUpdatedAt: marketUpdatedAt } = useQuery({
     queryKey: ["crypto-market-v2"],
     queryFn: getCryptoMarket,
-    staleTime: Infinity,
+    staleTime: 55_000,
+    refetchInterval: 60_000,
   });
 
   const { data: overview } = useQuery({
     queryKey: ["crypto-overview-v1"],
     queryFn: getCryptoOverview,
-    staleTime: Infinity,
+    staleTime: 55_000,
+    refetchInterval: 60_000,
   });
 
   const { data: trending, isLoading: trendingLoading } = useQuery({
     queryKey: ["crypto-trending-v1"],
     queryFn: getCryptoTrending,
-    staleTime: Infinity,
+    staleTime: 55_000,
+    refetchInterval: 60_000,
   });
+
+  // Keep "Updated Xs ago" in sync with auto-refetches
+  useEffect(() => {
+    if (marketUpdatedAt > 0) setLastRefreshed(marketUpdatedAt);
+  }, [marketUpdatedAt]);
 
   const { data: account } = useQuery({
     queryKey: ["paper-account"],

@@ -9,7 +9,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_TTL = 300.0  # 5-minute cache
+_TTL = 60.0  # 1-minute cache for live price updates
 
 _caches: dict[str, dict[str, Any]] = {
     "top_coins":    {"data": None, "ts": 0.0},
