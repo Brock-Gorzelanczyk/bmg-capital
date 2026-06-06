@@ -217,23 +217,21 @@ def get_portfolio(
     from app.db.models.bots import StrategyPortfolio
     from app.routers.bots import _ensure_portfolios_for_user
 
-    # Ensure the user has StrategyPortfolio rows (idempotent — creates them if missing).
-    # This is the same setup that /api/bots/portfolios/setup calls, so calling it here
-    # guarantees the canonical aggregate always has portfolios to read from.
-    port_count = db.execute(
-        select(func.count()).select_from(StrategyPortfolio).where(
-            StrategyPortfolio.user_id == current_user.id
-        )
-    ).scalar() or 0
-
-    if port_count == 0:
-        try:
-            # Create StrategyPortfolio rows and link allocations (canonical setup).
-            _ensure_portfolios_for_user(db, current_user.id)
-            # Seed 35 days of demo BotDailyPnL history so the headline has real values.
+    # Always ensure portfolios exist and capitals are synced (idempotent).
+    # This propagates any capital updates (e.g. $100k per bot) to existing rows
+    # so the headline numbers stay correct without needing a manual migration.
+    try:
+        port_count = db.execute(
+            select(func.count()).select_from(StrategyPortfolio).where(
+                StrategyPortfolio.user_id == current_user.id
+            )
+        ).scalar() or 0
+        _ensure_portfolios_for_user(db, current_user.id)
+        if port_count == 0:
+            # First visit — seed 35 days of demo history so the page isn't empty.
             _seed_demo_allocations(db, current_user.id)
-        except Exception:
-            logger.exception("Failed to auto-setup portfolios for user %d", current_user.id)
+    except Exception:
+        logger.exception("Failed to auto-setup portfolios for user %d", current_user.id)
 
     result = compute_strategy_lab_aggregate(current_user.id, db)
 

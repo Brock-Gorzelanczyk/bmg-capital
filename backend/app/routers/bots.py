@@ -158,10 +158,14 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
                 db.add(alloc)
                 db.flush()
 
-            # Assign portfolio and capital (idempotent)
+            # Assign portfolio and capital — always sync so capital updates propagate
             if alloc.portfolio_id is None:
                 alloc.portfolio_id = existing.id
+            if (alloc.capital_cents_within_portfolio or 0) != capital_cents:
                 alloc.capital_cents_within_portfolio = capital_cents
+                alloc.updated_at = now
+            if (alloc.starting_capital_cents or 0) != capital_cents:
+                alloc.starting_capital_cents = capital_cents
                 alloc.updated_at = now
 
             # Re-enable if accidentally disabled — paper bots should always be active
