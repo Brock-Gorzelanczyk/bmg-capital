@@ -9,7 +9,6 @@ import {
   getCatalysts,
   getWatchlistMovers,
   pauseAllBots,
-  activateAllBots,
   type StrategyPortfolio,
   type RecentSignal,
 } from "@/api/bots";
@@ -131,7 +130,6 @@ export default function Dashboard() {
     qc.invalidateQueries({ queryKey: ["bots-v2"] });
   };
   const pauseMut = useMutation({ mutationFn: pauseAllBots, onSuccess: invalidateAll });
-  const activateMut = useMutation({ mutationFn: activateAllBots, onSuccess: invalidateAll });
 
   const portfolios = portfoliosData?.portfolios ?? [];
   const signals = signalsData?.signals ?? [];
@@ -198,9 +196,8 @@ export default function Dashboard() {
             Pause All
           </button>
           <button
-            onClick={() => activateMut.mutate()}
-            disabled={activateMut.isPending}
-            className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 transition-colors disabled:opacity-50"
+            onClick={() => window.dispatchEvent(new CustomEvent("copilot:open", { detail: { query: "Brief me on what's happening with my bots today." } }))}
+            className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 transition-colors"
           >
             Brief me
           </button>
