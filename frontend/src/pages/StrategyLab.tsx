@@ -1415,16 +1415,13 @@ export default function StrategyLab() {
             </button>
           </div>
 
-          {/* Aggregate portfolio hero */}
-          <PortfolioHero onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
-
           {/* Regime status bar */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
             <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-2">Market Regime</p>
             <RegimeBar regime={regime} isLoading={regimeLoading} />
           </div>
 
-          {/* Three portfolio tab cards — click opens full portfolio page */}
+          {/* Three portfolio tab cards / Bot cards — above the portfolio hero */}
           {portfoliosLoading || isLoading ? (
             <div className="grid grid-cols-3 gap-3">
               {[0, 1, 2].map((i) => (
@@ -1453,6 +1450,9 @@ export default function StrategyLab() {
               ))}
             </div>
           )}
+
+          {/* Aggregate portfolio hero */}
+          <PortfolioHero onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
 
           {/* Comparison table */}
           {!isLoading && bots.length > 0 && <ComparisonTable bots={bots} />}
