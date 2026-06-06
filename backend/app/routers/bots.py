@@ -154,8 +154,10 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
                 alloc.capital_cents_within_portfolio = capital_cents
                 alloc.updated_at = now
 
-            # Re-enable if accidentally paused (paper trading should always be active)
-            if not alloc.enabled and alloc.paused_reason in (None, "user_pause"):
+            # Re-enable if accidentally disabled — paper bots should always be active
+            # unless explicitly halted by the health monitor (paused_reason="health_halt")
+            HARD_PAUSE_REASONS = {"health_halt", "admin_lock"}
+            if not alloc.enabled and alloc.paused_reason not in HARD_PAUSE_REASONS:
                 alloc.enabled = True
                 alloc.paused_reason = None
                 alloc.updated_at = now

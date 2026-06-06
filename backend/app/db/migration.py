@@ -324,6 +324,25 @@ def _migrate_strategy_portfolios(conn) -> None:
         logger.warning("_migrate_strategy_portfolios: %s", exc)
 
 
+def _fix_bots_enabled(conn) -> None:
+    """One-time fix: re-enable all bot_allocations that were reset to enabled=0
+    by the 3-portfolio split migration, and clear any stale paused_reason so
+    the page-load auto-reenable guard doesn't block them.
+    Runs once, tracked in schema_migrations."""
+    MIGRATION_NAME = "bot_allocations.fix_enabled_reset_2024"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        result = conn.execute(text(
+            "UPDATE bot_allocations SET enabled = 1, paused_reason = NULL WHERE enabled = 0"
+        ))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info(f"Migration {MIGRATION_NAME}: re-enabled {result.rowcount} bot_allocation rows")
+    except Exception as exc:
+        logger.warning(f"Migration {MIGRATION_NAME} failed: {exc}")
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -354,3 +373,4 @@ def run_migrations(engine: Engine) -> None:
                     _record_migration(conn, migration_name)
 
         _migrate_strategy_portfolios(conn)
+        _fix_bots_enabled(conn)
