@@ -86,11 +86,34 @@ def _tier_from_price(price_id: str) -> tuple[str, str]:
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
 
+_ADMIN_EMAILS = {"32bgorzelanczyk@gmail.com", "demo@bmgcapital.com"}
+
+
+def _is_admin(user: User) -> bool:
+    return getattr(user, "is_admin", False) or user.email in _ADMIN_EMAILS
+
+
 @router.get("/me")
 def get_my_tier(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Admin accounts always get full premium — no trial, no expiry, no gates.
+    if _is_admin(current_user):
+        ents = {**ENTITLEMENTS["premium"], "_tier": "premium", "_status": "active"}
+        return {
+            "tier": "premium",
+            "status": "active",
+            "entitlements": ents,
+            "billing_interval": "annual",
+            "trial_ends_at": None,
+            "current_period_end": None,
+            "cancel_at_period_end": False,
+            "aum_override": "premium",
+            "has_stripe": False,
+            "is_admin": True,
+        }
+
     try:
         row = _get_or_create_tier(db, current_user.id)
         ents = get_entitlements(row)
