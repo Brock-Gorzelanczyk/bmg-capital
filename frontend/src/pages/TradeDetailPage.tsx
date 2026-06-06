@@ -93,9 +93,11 @@ function TradeChartSection({ symbol, entryPrice, entryTime, side, qty, stopLoss,
   livePrice: number | null;
   status: "open" | "closed";
 }) {
+  // BTC/USD → BTC-USD so the slash doesn't break the URL path
+  const barsSymbol = symbol.replace("/", "-");
   const { data: barsData, isLoading } = useQuery({
-    queryKey: ["trade-price-bars", symbol],
-    queryFn: () => fetchBars(symbol, "1Day"),
+    queryKey: ["trade-price-bars", barsSymbol],
+    queryFn: () => fetchBars(barsSymbol, "1Day"),
     staleTime: 300_000,
   });
 
@@ -268,15 +270,16 @@ export default function TradeDetailPage() {
     retry: 1,
   });
 
-  // Live price — shared between hero and chart
+  // Live price — BTC/USD → BTC-USD for both fetch and lookup (backend normalizes slash→hyphen)
+  const priceSymbol = trade?.symbol?.replace("/", "-") ?? "";
   const { data: prices } = useQuery({
-    queryKey: ["latest-prices", trade?.symbol],
-    queryFn: () => getLatestPrices([trade!.symbol]),
+    queryKey: ["latest-prices", priceSymbol],
+    queryFn: () => getLatestPrices([priceSymbol]),
     refetchInterval: 5_000,
     staleTime: 0,
-    enabled: !!trade?.symbol && trade?.status === "open",
+    enabled: !!priceSymbol && trade?.status === "open",
   });
-  const livePrice = (trade?.status === "open" ? (prices?.[trade.symbol] ?? null) : null);
+  const livePrice = (trade?.status === "open" ? (prices?.[priceSymbol] ?? null) : null);
 
   if (isLoading) {
     return (
