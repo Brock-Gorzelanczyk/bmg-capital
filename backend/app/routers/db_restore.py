@@ -18,6 +18,7 @@ class RestoreRequest(BaseModel):
 
 
 _SECRET = os.environ.get("RESTORE_SECRET", "")
+_ADMIN_EMAILS = {"32bgorzelanczyk@gmail.com", "demo@bmgcapital.com"}
 
 # In-memory cooldown: only one restore allowed every 5 minutes
 _LAST_RESTORE: float = 0.0
@@ -26,6 +27,9 @@ _RESTORE_COOLDOWN_SECONDS = 300
 
 @router.post("/restore-db")
 def restore_db(body: RestoreRequest, current_user=Depends(get_current_user)):
+    if not getattr(current_user, "is_admin", False) and current_user.email not in _ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
     global _LAST_RESTORE
     now = time.monotonic()
     if now - _LAST_RESTORE < _RESTORE_COOLDOWN_SECONDS:

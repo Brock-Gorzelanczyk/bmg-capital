@@ -175,7 +175,7 @@ STRIPE_PRICES = {
 
 def effective_tier(row: UserTier | None) -> str:
     """Returns the highest applicable tier considering subscription + AUM override."""
-    from datetime import datetime
+    from datetime import datetime, timezone
     if row is None:
         return "free"
 

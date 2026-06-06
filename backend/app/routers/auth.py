@@ -92,7 +92,7 @@ def _user_dict(user: User) -> dict:
 @router.post("/register", response_model=TokenResponse)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
     _check_rate_limit(body.email.lower().strip())
-    if db.query(User).filter(User.email == body.email).first():
+    if db.query(User).filter(User.email == body.email.lower().strip()).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")

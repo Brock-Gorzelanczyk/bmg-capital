@@ -17,7 +17,7 @@ from collections import deque
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
@@ -25,6 +25,14 @@ from app.dependencies import get_db, get_current_user
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+
+_ADMIN_EMAILS = {"32bgorzelanczyk@gmail.com", "demo@bmgcapital.com"}
+
+
+def _admin_required(current_user=Depends(get_current_user)):
+    if not getattr(current_user, "is_admin", False) and current_user.email not in _ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
 
 # Legacy in-memory ring buffer (kept for /history backward compat)
 _health_history: deque[dict] = deque(maxlen=48)
@@ -175,12 +183,12 @@ async def get_health():
 
 
 @router.get("/history")
-async def get_history(_user=Depends(get_current_user)):
+async def get_history(_user=Depends(_admin_required)):
     return {"history": list(_health_history)}
 
 
 @router.get("/integrity")
-async def get_integrity(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+async def get_integrity(db: Session = Depends(get_db), _user=Depends(_admin_required)):
     global _latest_integrity
     try:
         from app.services.monitoring import check_financial_integrity
@@ -193,7 +201,7 @@ async def get_integrity(db: Session = Depends(get_db), _user=Depends(get_current
 
 
 @router.post("/sentinel")
-async def trigger_sentinel(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+async def trigger_sentinel(db: Session = Depends(get_db), _user=Depends(_admin_required)):
     global _latest_sentinel
     try:
         from app.services.monitoring import run_ai_sentinel
@@ -208,7 +216,7 @@ async def trigger_sentinel(db: Session = Depends(get_db), _user=Depends(get_curr
 
 
 @router.get("/sentinel/latest")
-async def get_sentinel_latest(_user=Depends(get_current_user)):
+async def get_sentinel_latest(_user=Depends(_admin_required)):
     if _latest_sentinel is None:
         return {"findings": [], "generated_at": None,
                 "message": "No sentinel run yet. POST /api/monitoring/sentinel to trigger."}
@@ -216,7 +224,7 @@ async def get_sentinel_latest(_user=Depends(get_current_user)):
 
 
 @router.get("/checks")
-async def list_checks(_user=Depends(get_current_user)):
+async def list_checks(_user=Depends(_admin_required)):
     """Return the full check registry — id, category, frequency, severity, runbook."""
     from app.monitoring.registry import get_registry
     registry = get_registry()
@@ -245,7 +253,7 @@ async def get_results(
     hours: int = Query(24, ge=1, le=24 * 90),
     passed: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
+    _user=Depends(_admin_required),
 ):
     """Recent check results from DB. Filter by check_id, category, hours, passed."""
     from app.db.models.monitoring import MonitoringResult
@@ -281,7 +289,7 @@ async def get_results(
 @router.get("/status")
 async def get_status(
     db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
+    _user=Depends(_admin_required),
 ):
     """
     Category-level green/yellow/red rollup.

@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
+import { useAuthStore } from "@/store/authStore";
 import { Bot, BarChart2, TrendingUp, Briefcase, BookOpen, Map, ArrowRight } from "lucide-react";
 
 // ─── Feature grid data ────────────────────────────────────────────────────────
@@ -131,6 +132,8 @@ function DashboardMockup() {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { token } = useAuthStore();
+  if (token) return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="min-h-screen bg-[#09090b] text-white overflow-x-hidden">

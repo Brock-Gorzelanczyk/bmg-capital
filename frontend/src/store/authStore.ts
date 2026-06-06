@@ -5,6 +5,7 @@ interface AuthUser {
   id: number;
   email: string;
   username: string;
+  is_admin?: boolean;
 }
 
 interface AuthState {
@@ -61,7 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Set a placeholder so ProtectedRoute stops showing the spinner.
         // API calls will still carry the JWT; they'll surface real errors if needed.
         if (!get().user) {
-          set({ user: { id: 0, email: "", username: "—" } });
+          set({ user: { id: 0, email: "", username: "—", is_admin: false } });
         }
         // Schedule one retry for cold-start situations
         setTimeout(() => {

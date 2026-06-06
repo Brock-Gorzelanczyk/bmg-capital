@@ -199,7 +199,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "bot_allocations": [
         ("paused_reason",                    "VARCHAR"),
         ("starting_capital_cents",           "INT"),
-        ("card_config",                      "JSONB"),
+        ("card_config",                      "TEXT"),
         ("portfolio_id",                     "INTEGER"),
         ("capital_cents_within_portfolio",   "INTEGER"),
     ],

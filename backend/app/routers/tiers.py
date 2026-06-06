@@ -310,9 +310,9 @@ def _upsert_subscription(db: Session, sub: dict):
     row.cancel_at_period_end = sub.get("cancel_at_period_end", False)
 
     if sub.get("current_period_end"):
-        row.current_period_end = datetime.fromtimestamp(sub["current_period_end"])
+        row.current_period_end = datetime.fromtimestamp(sub["current_period_end"], tz=timezone.utc)
     if sub.get("trial_end"):
-        row.trial_ends_at = datetime.fromtimestamp(sub["trial_end"])
+        row.trial_ends_at = datetime.fromtimestamp(sub["trial_end"], tz=timezone.utc)
 
     db.commit()
 
