@@ -237,5 +237,9 @@ if _STATIC_DIR.exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
-        index = _STATIC_DIR / "index.html"
-        return FileResponse(str(index))
+        # Serve real static files (logo.png, favicon.ico, manifest.json, etc.)
+        candidate = _STATIC_DIR / full_path
+        if candidate.exists() and candidate.is_file():
+            return FileResponse(str(candidate))
+        # Everything else → SPA index
+        return FileResponse(str(_STATIC_DIR / "index.html"))
