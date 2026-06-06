@@ -75,8 +75,28 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ── Monitoring / Alerting ─────────────────────────────────────────────────
-    alert_webhook_url: str = ""   # Slack/Discord webhook URL
-    alert_email: str = ""          # email to send alerts to
+    alert_webhook_url: str = ""           # Slack/Discord webhook URL (system alerts)
+    discord_signal_webhook_url: str = "" # Discord webhook for bot trade signals
+    alert_email: str = ""                # email to send alerts to
+
+    # ── Notifications ─────────────────────────────────────────────────────────
+    telegram_bot_token: str = ""         # @BMGCapitalBot token from @BotFather
+    resend_api_key: str = ""             # Resend for email notifications
+
+    # ── Public Discord Bot (signal feed server) ────────────────────────────────
+    discord_bot_token: str = ""
+    discord_channel_all_signals: str = ""
+    discord_channel_stocks: str = ""
+    discord_channel_crypto: str = ""
+    discord_channel_options: str = ""
+    discord_channel_daily_digest: str = ""
+    discord_channel_weekly_leaderboard: str = ""
+    discord_channel_monthly_recap: str = ""
+
+    # ── On-Chain Data ─────────────────────────────────────────────────────────
+    glassnode_api_key: str = ""
+    coinglass_api_key: str = ""
+    lunarcrush_api_key: str = ""
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),

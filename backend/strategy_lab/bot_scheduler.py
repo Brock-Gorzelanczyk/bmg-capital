@@ -146,7 +146,96 @@ def setup_bot_scheduler(scheduler) -> None:
         replace_existing=True,
     )
 
+    # ------------------------------------------------------------------
+    # crypto_onchain: every 4 hours, 24/7 (same cadence as crypto_swing)
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: run_bot_profile("crypto_onchain"),
+        CronTrigger(hour="*/4", minute=30),
+        id="bot_crypto_onchain",
+        replace_existing=True,
+    )
+
+    # ------------------------------------------------------------------
+    # Public Discord daily digest: 4:30 PM ET weekdays + midnight UTC (crypto)
+    # ------------------------------------------------------------------
+    def _discord_daily_digest():
+        try:
+            from app.services.discord_public import post_daily_digest
+            from app.db.session import SessionLocal
+            from app.db.models.bots import BotSignal, BotDailyPnL
+            from datetime import date
+            db = SessionLocal()
+            try:
+                today = date.today()
+                from sqlalchemy import func
+                sigs = db.query(BotSignal).filter(
+                    func.date(BotSignal.ts) == today
+                ).all()
+                by_bot: dict = {}
+                for s in sigs:
+                    from app.db.models.bots import BotAllocation, BotProfile
+                    alloc = db.get(BotAllocation, s.allocation_id)
+                    if alloc:
+                        prof = db.get(BotProfile, alloc.profile_id)
+                        if prof:
+                            by_bot[prof.name] = by_bot.get(prof.name, 0) + 1
+                top_syms = list({s.symbol for s in sigs})[:5]
+                pnl_rows = db.query(BotDailyPnL).filter(BotDailyPnL.date == today).all()
+                realized = sum(r.realized_cents for r in pnl_rows)
+                post_daily_digest({
+                    "total_signals": len(sigs),
+                    "by_bot": by_bot,
+                    "top_symbols": top_syms,
+                    "realized_pnl_cents": realized,
+                })
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("discord daily digest failed: %s", exc)
+
+    scheduler.add_job(
+        _discord_daily_digest,
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=ET),
+        id="discord_daily_digest",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _discord_daily_digest,
+        CronTrigger(hour=0, minute=5, timezone=UTC),  # midnight UTC for crypto
+        id="discord_daily_digest_crypto",
+        replace_existing=True,
+    )
+
+    # ------------------------------------------------------------------
+    # Weekly leaderboard: Sundays 6 PM ET
+    # ------------------------------------------------------------------
+    def _discord_weekly_leaderboard():
+        try:
+            from app.services.discord_public import post_weekly_leaderboard
+            from app.db.session import SessionLocal
+            db = SessionLocal()
+            try:
+                from app.core.canonical import compute_strategy_lab_aggregate
+                from app.db.models.users import User
+                users = db.query(User).filter(User.is_active.is_(True)).limit(1).all()
+                if users:
+                    result = compute_strategy_lab_aggregate(users[0].id, db)
+                    post_weekly_leaderboard(result.get("leaderboard", []))
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("discord weekly leaderboard failed: %s", exc)
+
+    scheduler.add_job(
+        _discord_weekly_leaderboard,
+        CronTrigger(day_of_week="sun", hour=18, minute=0, timezone=ET),
+        id="discord_weekly_leaderboard",
+        replace_existing=True,
+    )
+
     logger.info(
         "strategy_lab: bot scheduler registered (stock_swing, stock_day, stock_lt, "
-        "crypto_swing, crypto_day, crypto_lt, daily_briefing_email, dead_mans_switch)"
+        "crypto_swing, crypto_day, crypto_lt, crypto_onchain, "
+        "discord_digest, discord_leaderboard, daily_briefing_email, dead_mans_switch)"
     )

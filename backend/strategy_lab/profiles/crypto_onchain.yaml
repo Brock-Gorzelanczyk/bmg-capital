@@ -1,0 +1,32 @@
+name: crypto_onchain
+asset_class: crypto
+broker: alpaca_paper_crypto
+universe:
+  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, LINK/USD]
+cadence: "0 */4 * * *"
+strategies:
+  - mvrv_zscore_accumulation
+  - sopr_capitulation_buy
+  - exchange_outflow_signal
+  - funding_rate_contrarian
+  - liquidation_cascade_fade
+  - social_sentiment_extreme_fade
+ensemble: weighted_vote
+position_cap: 3
+position_size_pct: 10.0
+stop_loss_pct: 20.0
+take_profit_pct: 40.0
+hold_max_days: 60
+risk_overlay:
+  daily_loss_limit_pct: 5.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 20
+regime_filters: []
+execution:
+  order_type: limit
+  limit_offset_bps: 10
+  reprice_after_seconds: 60
+  fallback_to_market: true
+  use_brackets: true
+paper_only: true

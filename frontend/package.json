@@ -12,6 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@hookform/resolvers": "^5.4.0",
+    "@ixjb94/indicators": "^1.2.4",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-select": "^2.2.6",
@@ -46,6 +47,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "talib.js": "^0.1.0",
     "technicalindicators": "^3.1.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"

@@ -8,6 +8,9 @@ backend/.env
 
 # Node
 frontend/node_modules/
+
+# Reference repos (large, not part of the project)
+references/
 frontend/dist/
 
 # Misc

@@ -472,6 +472,49 @@ def run_bot_profile(profile_name: str) -> dict:
                         final_size_pct, stop_info.get("stop_price", "n/a"),
                     )
 
+                    # Build signal dict for notification dispatch
+                    _entry_price = None
+                    if bars.get(sig.symbol):
+                        _last = bars[sig.symbol][-1]
+                        _entry_price = float(_last.get("c") or _last.get("close") or 0) or None
+                    _signal_dict = {
+                        "bot": profile_name,
+                        "symbol": sig.symbol,
+                        "side": sig.side,
+                        "strategy": sig.strategy or profile_name,
+                        "reason": sig.reason or "",
+                        "confidence": sig.confidence,
+                        "price": _entry_price,
+                        "size_pct": final_size_pct,
+                        "stop": stop_info.get("stop_price"),
+                        "target": stop_info.get("target_price"),
+                    }
+
+                    # Private per-user notifications (Discord webhook, Telegram, Slack, Email)
+                    try:
+                        from app.services.notify import dispatch_signal
+                        dispatch_signal(_signal_dict, db)
+                    except Exception as _exc:
+                        logger.debug("[runner:%s] private notify skipped: %s", profile_name, _exc)
+
+                    # Public Discord signal feed (bot token + channel IDs)
+                    try:
+                        from app.services.discord_public import post_signal
+                        post_signal(_signal_dict)
+                    except Exception as _exc:
+                        logger.debug("[runner:%s] public discord skipped: %s", profile_name, _exc)
+
+                    # Legacy single-webhook Discord (DISCORD_SIGNAL_WEBHOOK_URL)
+                    try:
+                        from app.services.discord import send_signal
+                        send_signal(
+                            bot=profile_name, symbol=sig.symbol, side=sig.side,
+                            strategy=sig.strategy or profile_name, reason=sig.reason or "",
+                            confidence=sig.confidence, price=_entry_price, size_pct=final_size_pct,
+                        )
+                    except Exception as _exc:
+                        logger.debug("[runner:%s] webhook discord skipped: %s", profile_name, _exc)
+
             # Also audit hold signals per allocation (non-expert path)
             hold_signals = [s for s in signals if s.side == "hold"]
             for alloc in allocations:

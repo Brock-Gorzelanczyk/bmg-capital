@@ -17,13 +17,17 @@ from app.config import settings
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
 from app.db.models import *  # noqa: F401,F403 — registers all models with Base.metadata
-from app.db.models.monitoring import MonitoringResult, AuditLog, LoginAttempt  # noqa: F401 — ensure monitoring tables are registered
+from app.db.models.monitoring import MonitoringResult, AuditLog, LoginAttempt  # noqa: F401
+from app.db.models.notification_channels import NotificationChannel, NotificationSubscription, NotificationLog  # noqa: F401
+from app.db.models.onchain import OnChainMetric  # noqa: F401
+from app.db.models.discord_posts import DiscordSignalPost  # noqa: F401
 from app.db.migration import run_migrations
 from app.alpaca.stream import stream_manager
 from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
 from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow
+from app.routers import notification_channels as notification_channels_router
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -104,6 +108,8 @@ async def lifespan(app: FastAPI):
     setup_monitoring_scheduler(scheduler)
     from strategy_lab.bot_scheduler import setup_bot_scheduler
     setup_bot_scheduler(scheduler)
+    from app.services.onchain_ingest import setup_onchain_scheduler
+    setup_onchain_scheduler(scheduler)
     scheduler.start()
 
     # Kick off strategy scan in background — won't block server startup
@@ -218,6 +224,7 @@ app.include_router(staking.router)
 app.include_router(dca_baskets.router)
 app.include_router(bots.router)
 app.include_router(strategy_lab.router)
+app.include_router(notification_channels_router.router)
 app.include_router(strategy_library.router)
 app.include_router(custom_bot.router)
 app.include_router(analyst.router)
