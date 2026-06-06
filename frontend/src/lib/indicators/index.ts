@@ -5,29 +5,30 @@
  *
  * Usage:
  *   import { RSI, MACD, BBANDS, CDLHAMMER } from '@/lib/indicators'
- *   const result = await RSI({ inReal: closes, timePeriod: 14 })
+ *   const rsi = await RSI(closes, 14)
  */
 
-// ── talib.js (WASM) ──────────────────────────────────────────────────────────
-// talib.js is async-initialized; we lazily load it to avoid blocking the app.
-let _talib: any = null;
-let _talibReady: Promise<any> | null = null;
+// ── talib.js lazy init ────────────────────────────────────────────────────────
+import type { TALib as TALibType } from "talib.js";
 
-async function getTA(): Promise<any> {
-  if (_talib) return _talib;
-  if (!_talibReady) {
-    _talibReady = import("talib.js").then((m) => {
-      _talib = m.default ?? m;
-      return _talib;
+let _TALib: typeof TALibType | null = null;
+let _init: Promise<typeof TALibType> | null = null;
+
+async function getTA(): Promise<typeof TALibType> {
+  if (_TALib) return _TALib;
+  if (!_init) {
+    _init = import("talib.js").then((m) => {
+      _TALib = m.TALib;
+      return _TALib;
     });
   }
-  return _talibReady;
+  return _init;
 }
 
 // ── @ixjb94/indicators (pure TS fallback) ───────────────────────────────────
-import * as PureIndicators from "@ixjb94/indicators";
+import * as Pure from "@ixjb94/indicators";
 
-// ── Shared input types ───────────────────────────────────────────────────────
+// ── Shared types ─────────────────────────────────────────────────────────────
 export interface OHLCVBars {
   open: number[];
   high: number[];
@@ -40,44 +41,53 @@ export interface OHLCVBars {
 
 export async function SMA(inReal: number[], timePeriod = 14): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.SMA) return ta.SMA({ inReal, timePeriod });
-  return PureIndicators.SMA.calculate({ period: timePeriod, values: inReal });
+  if (ta) {
+    const r = await ta.SMA({ inReal, optInTimePeriod: timePeriod });
+    return r.outReal;
+  }
+  return Pure.SMA.calculate({ period: timePeriod, values: inReal });
 }
 
 export async function EMA(inReal: number[], timePeriod = 14): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.EMA) return ta.EMA({ inReal, timePeriod });
-  return PureIndicators.EMA.calculate({ period: timePeriod, values: inReal });
+  if (ta) {
+    const r = await ta.EMA({ inReal, optInTimePeriod: timePeriod });
+    return r.outReal;
+  }
+  return Pure.EMA.calculate({ period: timePeriod, values: inReal });
 }
 
 export async function WMA(inReal: number[], timePeriod = 14): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.WMA) return ta.WMA({ inReal, timePeriod });
-  return PureIndicators.WMA.calculate({ period: timePeriod, values: inReal });
+  if (ta) {
+    const r = await ta.WMA({ inReal, optInTimePeriod: timePeriod });
+    return r.outReal;
+  }
+  return Pure.WMA.calculate({ period: timePeriod, values: inReal });
 }
 
 export async function DEMA(inReal: number[], timePeriod = 30): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.DEMA) return ta.DEMA({ inReal, timePeriod });
-  throw new Error("DEMA not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.DEMA({ inReal, optInTimePeriod: timePeriod });
+  return r.outReal;
 }
 
 export async function TEMA(inReal: number[], timePeriod = 30): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.TEMA) return ta.TEMA({ inReal, timePeriod });
-  throw new Error("TEMA not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.TEMA({ inReal, optInTimePeriod: timePeriod });
+  return r.outReal;
 }
 
 export async function TRIMA(inReal: number[], timePeriod = 30): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.TRIMA) return ta.TRIMA({ inReal, timePeriod });
-  throw new Error("TRIMA not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.TRIMA({ inReal, optInTimePeriod: timePeriod });
+  return r.outReal;
 }
 
 export async function KAMA(inReal: number[], timePeriod = 30): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.KAMA) return ta.KAMA({ inReal, timePeriod });
-  throw new Error("KAMA not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.KAMA({ inReal, optInTimePeriod: timePeriod });
+  return r.outReal;
 }
 
 export async function BBANDS(
@@ -87,9 +97,21 @@ export async function BBANDS(
   nbDevDn = 2,
 ): Promise<{ upperBand: number[]; middleBand: number[]; lowerBand: number[] }> {
   const ta = await getTA().catch(() => null);
-  if (ta?.BBANDS)
-    return ta.BBANDS({ inReal, timePeriod, nbDevUp, nbDevDn, MAType: 0 });
-  const result = PureIndicators.BollingerBands.calculate({
+  if (ta) {
+    const r = await ta.BBANDS({
+      inReal,
+      optInTimePeriod: timePeriod,
+      optInNbDevUp: nbDevUp,
+      optInNbDevDn: nbDevDn,
+      optInMAType: 0,
+    });
+    return {
+      upperBand: r.outRealUpperBand,
+      middleBand: r.outRealMiddleBand,
+      lowerBand: r.outRealLowerBand,
+    };
+  }
+  const result = Pure.BollingerBands.calculate({
     period: timePeriod,
     values: inReal,
     stdDev: nbDevUp,
@@ -107,23 +129,31 @@ export async function SAR(
   acceleration = 0.02,
   maximum = 0.2,
 ): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.SAR) return ta.SAR({ inHigh: high, inLow: low, acceleration, maximum });
-  throw new Error("SAR not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.SAR({
+    inHigh: high,
+    inLow: low,
+    optInAcceleration: acceleration,
+    optInMaximum: maximum,
+  });
+  return r.outReal;
 }
 
 export async function HT_TRENDLINE(inReal: number[]): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.HT_TRENDLINE) return ta.HT_TRENDLINE({ inReal });
-  throw new Error("HT_TRENDLINE not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.HT_TRENDLINE({ inReal });
+  return r.outReal;
 }
 
 // ── Momentum Indicators ──────────────────────────────────────────────────────
 
 export async function RSI(inReal: number[], timePeriod = 14): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.RSI) return ta.RSI({ inReal, timePeriod });
-  return PureIndicators.RSI.calculate({ period: timePeriod, values: inReal });
+  if (ta) {
+    const r = await ta.RSI({ inReal, optInTimePeriod: timePeriod });
+    return r.outReal;
+  }
+  return Pure.RSI.calculate({ period: timePeriod, values: inReal });
 }
 
 export async function MACD(
@@ -133,9 +163,20 @@ export async function MACD(
   signalPeriod = 9,
 ): Promise<{ macd: number[]; signal: number[]; histogram: number[] }> {
   const ta = await getTA().catch(() => null);
-  if (ta?.MACD)
-    return ta.MACD({ inReal, fastPeriod, slowPeriod, signalPeriod });
-  const result = PureIndicators.MACD.calculate({
+  if (ta) {
+    const r = await ta.MACD({
+      inReal,
+      optInFastPeriod: fastPeriod,
+      optInSlowPeriod: slowPeriod,
+      optInSignalPeriod: signalPeriod,
+    });
+    return {
+      macd: r.outMACD,
+      signal: r.outMACDSignal,
+      histogram: r.outMACDHist,
+    };
+  }
+  const result = Pure.MACD.calculate({
     values: inReal,
     fastPeriod,
     slowPeriod,
@@ -159,13 +200,23 @@ export async function STOCH(
   slowDPeriod = 3,
 ): Promise<{ slowK: number[]; slowD: number[] }> {
   const ta = await getTA().catch(() => null);
-  if (ta?.STOCH)
-    return ta.STOCH({
-      inHigh: high, inLow: low, inClose: close,
-      fastKPeriod, slowKPeriod, slowKMAType: 0, slowDPeriod, slowDMAType: 0,
+  if (ta) {
+    const r = await ta.STOCH({
+      inHigh: high,
+      inLow: low,
+      inClose: close,
+      optInFastKPeriod: fastKPeriod,
+      optInSlowKPeriod: slowKPeriod,
+      optInSlowKMAType: 0,
+      optInSlowDPeriod: slowDPeriod,
+      optInSlowDMAType: 0,
     });
-  const result = PureIndicators.Stochastic.calculate({
-    high, low, close,
+    return { slowK: r.outSlowK, slowD: r.outSlowD };
+  }
+  const result = Pure.Stochastic.calculate({
+    high,
+    low,
+    close,
     period: fastKPeriod,
     signalPeriod: slowDPeriod,
   });
@@ -181,12 +232,15 @@ export async function STOCHRSI(
   fastKPeriod = 5,
   fastDPeriod = 3,
 ): Promise<{ fastK: number[]; fastD: number[] }> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.STOCHRSI)
-    return ta.STOCHRSI({
-      inReal, timePeriod, fastKPeriod, fastDPeriod, fastDMAType: 0,
-    });
-  throw new Error("STOCHRSI not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.STOCHRSI({
+    inReal,
+    optInTimePeriod: timePeriod,
+    optInFastKPeriod: fastKPeriod,
+    optInFastDPeriod: fastDPeriod,
+    optInFastDMAType: 0,
+  });
+  return { fastK: r.outFastK, fastD: r.outFastD };
 }
 
 export async function ADX(
@@ -196,9 +250,16 @@ export async function ADX(
   timePeriod = 14,
 ): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.ADX)
-    return ta.ADX({ inHigh: high, inLow: low, inClose: close, timePeriod });
-  return PureIndicators.ADX.calculate({ high, low, close, period: timePeriod }).map(
+  if (ta) {
+    const r = await ta.ADX({
+      inHigh: high,
+      inLow: low,
+      inClose: close,
+      optInTimePeriod: timePeriod,
+    });
+    return r.outReal;
+  }
+  return Pure.ADX.calculate({ high, low, close, period: timePeriod }).map(
     (r: any) => r.adx,
   );
 }
@@ -208,9 +269,9 @@ export async function AROON(
   low: number[],
   timePeriod = 14,
 ): Promise<{ aroonDown: number[]; aroonUp: number[] }> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.AROON) return ta.AROON({ inHigh: high, inLow: low, timePeriod });
-  throw new Error("AROON not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.AROON({ inHigh: high, inLow: low, optInTimePeriod: timePeriod });
+  return { aroonDown: r.outAroonDown, aroonUp: r.outAroonUp };
 }
 
 export async function AROONOSC(
@@ -218,9 +279,9 @@ export async function AROONOSC(
   low: number[],
   timePeriod = 14,
 ): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.AROONOSC) return ta.AROONOSC({ inHigh: high, inLow: low, timePeriod });
-  throw new Error("AROONOSC not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.AROONOSC({ inHigh: high, inLow: low, optInTimePeriod: timePeriod });
+  return r.outReal;
 }
 
 export async function CCI(
@@ -230,21 +291,31 @@ export async function CCI(
   timePeriod = 14,
 ): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.CCI)
-    return ta.CCI({ inHigh: high, inLow: low, inClose: close, timePeriod });
-  return PureIndicators.CCI.calculate({ high, low, close, period: timePeriod });
+  if (ta) {
+    const r = await ta.CCI({
+      inHigh: high,
+      inLow: low,
+      inClose: close,
+      optInTimePeriod: timePeriod,
+    });
+    return r.outReal;
+  }
+  return Pure.CCI.calculate({ high, low, close, period: timePeriod });
 }
 
 export async function MOM(inReal: number[], timePeriod = 10): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.MOM) return ta.MOM({ inReal, timePeriod });
-  throw new Error("MOM not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.MOM({ inReal, optInTimePeriod: timePeriod });
+  return r.outReal;
 }
 
 export async function ROC(inReal: number[], timePeriod = 10): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.ROC) return ta.ROC({ inReal, timePeriod });
-  return PureIndicators.ROC.calculate({ period: timePeriod, values: inReal });
+  if (ta) {
+    const r = await ta.ROC({ inReal, optInTimePeriod: timePeriod });
+    return r.outReal;
+  }
+  return Pure.ROC.calculate({ period: timePeriod, values: inReal });
 }
 
 export async function WILLR(
@@ -254,9 +325,16 @@ export async function WILLR(
   timePeriod = 14,
 ): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.WILLR)
-    return ta.WILLR({ inHigh: high, inLow: low, inClose: close, timePeriod });
-  return PureIndicators.WilliamsR.calculate({ high, low, close, period: timePeriod });
+  if (ta) {
+    const r = await ta.WILLR({
+      inHigh: high,
+      inLow: low,
+      inClose: close,
+      optInTimePeriod: timePeriod,
+    });
+    return r.outReal;
+  }
+  return Pure.WilliamsR.calculate({ high, low, close, period: timePeriod });
 }
 
 export async function ULTOSC(
@@ -267,21 +345,27 @@ export async function ULTOSC(
   timePeriod2 = 14,
   timePeriod3 = 28,
 ): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.ULTOSC)
-    return ta.ULTOSC({
-      inHigh: high, inLow: low, inClose: close,
-      timePeriod1, timePeriod2, timePeriod3,
-    });
-  throw new Error("ULTOSC not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.ULTOSC({
+    inHigh: high,
+    inLow: low,
+    inClose: close,
+    optInTimePeriod1: timePeriod1,
+    optInTimePeriod2: timePeriod2,
+    optInTimePeriod3: timePeriod3,
+  });
+  return r.outReal;
 }
 
 // ── Volume Indicators ────────────────────────────────────────────────────────
 
 export async function OBV(close: number[], volume: number[]): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.OBV) return ta.OBV({ inReal: close, inVolume: volume });
-  return PureIndicators.OBV.calculate({ close, volume });
+  if (ta) {
+    const r = await ta.OBV({ inReal: close, inVolume: volume });
+    return r.outReal;
+  }
+  return Pure.OBV.calculate({ close, volume });
 }
 
 export async function AD(
@@ -290,10 +374,9 @@ export async function AD(
   close: number[],
   volume: number[],
 ): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.AD)
-    return ta.AD({ inHigh: high, inLow: low, inClose: close, inVolume: volume });
-  throw new Error("AD not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.AD({ inHigh: high, inLow: low, inClose: close, inVolume: volume });
+  return r.outReal;
 }
 
 export async function ADOSC(
@@ -304,13 +387,16 @@ export async function ADOSC(
   fastPeriod = 3,
   slowPeriod = 10,
 ): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.ADOSC)
-    return ta.ADOSC({
-      inHigh: high, inLow: low, inClose: close, inVolume: volume,
-      fastPeriod, slowPeriod,
-    });
-  throw new Error("ADOSC not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.ADOSC({
+    inHigh: high,
+    inLow: low,
+    inClose: close,
+    inVolume: volume,
+    optInFastPeriod: fastPeriod,
+    optInSlowPeriod: slowPeriod,
+  });
+  return r.outReal;
 }
 
 export async function MFI(
@@ -321,20 +407,27 @@ export async function MFI(
   timePeriod = 14,
 ): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.MFI)
-    return ta.MFI({ inHigh: high, inLow: low, inClose: close, inVolume: volume, timePeriod });
-  return PureIndicators.MFI.calculate({ high, low, close, volume, period: timePeriod });
+  if (ta) {
+    const r = await ta.MFI({
+      inHigh: high,
+      inLow: low,
+      inClose: close,
+      inVolume: volume,
+      optInTimePeriod: timePeriod,
+    });
+    return r.outReal;
+  }
+  return Pure.MFI.calculate({ high, low, close, volume, period: timePeriod });
 }
 
-// Chaikin Money Flow — composite: AD oscillator normalized by volume
-export async function CMF(
+/** Chaikin Money Flow — not in TA-Lib, implemented in pure TS. */
+export function CMF(
   high: number[],
   low: number[],
   close: number[],
   volume: number[],
   period = 20,
-): Promise<number[]> {
-  // Pure implementation — talib doesn't have CMF directly
+): number[] {
   const results: number[] = [];
   for (let i = period - 1; i < close.length; i++) {
     let mfvSum = 0;
@@ -359,9 +452,16 @@ export async function ATR(
   timePeriod = 14,
 ): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.ATR)
-    return ta.ATR({ inHigh: high, inLow: low, inClose: close, timePeriod });
-  return PureIndicators.ATR.calculate({ high, low, close, period: timePeriod });
+  if (ta) {
+    const r = await ta.ATR({
+      inHigh: high,
+      inLow: low,
+      inClose: close,
+      optInTimePeriod: timePeriod,
+    });
+    return r.outReal;
+  }
+  return Pure.ATR.calculate({ high, low, close, period: timePeriod });
 }
 
 export async function NATR(
@@ -370,10 +470,14 @@ export async function NATR(
   close: number[],
   timePeriod = 14,
 ): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.NATR)
-    return ta.NATR({ inHigh: high, inLow: low, inClose: close, timePeriod });
-  throw new Error("NATR not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.NATR({
+    inHigh: high,
+    inLow: low,
+    inClose: close,
+    optInTimePeriod: timePeriod,
+  });
+  return r.outReal;
 }
 
 export async function TRANGE(
@@ -381,40 +485,39 @@ export async function TRANGE(
   low: number[],
   close: number[],
 ): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.TRANGE)
-    return ta.TRANGE({ inHigh: high, inLow: low, inClose: close });
-  throw new Error("TRANGE not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.TRANGE({ inHigh: high, inLow: low, inClose: close });
+  return r.outReal;
 }
 
 // ── Cycle Indicators ─────────────────────────────────────────────────────────
 
 export async function HT_DCPERIOD(inReal: number[]): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.HT_DCPERIOD) return ta.HT_DCPERIOD({ inReal });
-  throw new Error("HT_DCPERIOD not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.HT_DCPERIOD({ inReal });
+  return r.outReal;
 }
 
 export async function HT_SINE(
   inReal: number[],
 ): Promise<{ sine: number[]; leadSine: number[] }> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.HT_SINE) return ta.HT_SINE({ inReal });
-  throw new Error("HT_SINE not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.HT_SINE({ inReal });
+  return { sine: r.outSine, leadSine: r.outLeadSine };
 }
 
 export async function HT_TRENDMODE(inReal: number[]): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.HT_TRENDMODE) return ta.HT_TRENDMODE({ inReal });
-  throw new Error("HT_TRENDMODE not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.HT_TRENDMODE({ inReal });
+  return r.outInteger;
 }
 
 // ── Statistic Functions ───────────────────────────────────────────────────────
 
 export async function LINEARREG(inReal: number[], timePeriod = 14): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.LINEARREG) return ta.LINEARREG({ inReal, timePeriod });
-  throw new Error("LINEARREG not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.LINEARREG({ inReal, optInTimePeriod: timePeriod });
+  return r.outReal;
 }
 
 export async function STDDEV(
@@ -422,132 +525,161 @@ export async function STDDEV(
   timePeriod = 5,
   nbDev = 1,
 ): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.STDDEV) return ta.STDDEV({ inReal, timePeriod, nbDev });
-  throw new Error("STDDEV not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.STDDEV({ inReal, optInTimePeriod: timePeriod, optInNbDev: nbDev });
+  return r.outReal;
 }
 
 export async function VAR(inReal: number[], timePeriod = 5): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.VAR) return ta.VAR({ inReal, timePeriod, nbDev: 1 });
-  throw new Error("VAR not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.VAR({ inReal, optInTimePeriod: timePeriod, optInNbDev: 1 });
+  return r.outReal;
 }
 
 // ── Math Transform ───────────────────────────────────────────────────────────
 
 export async function SQRT(inReal: number[]): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.SQRT) return ta.SQRT({ inReal });
+  if (ta) {
+    const r = await ta.SQRT({ inReal });
+    return r.outReal;
+  }
   return inReal.map(Math.sqrt);
 }
 
 export async function LN(inReal: number[]): Promise<number[]> {
   const ta = await getTA().catch(() => null);
-  if (ta?.LN) return ta.LN({ inReal });
+  if (ta) {
+    const r = await ta.LN({ inReal });
+    return r.outReal;
+  }
   return inReal.map(Math.log);
 }
 
 // ── Pattern Recognition ───────────────────────────────────────────────────────
-// Return 100 (bullish), -100 (bearish), 0 (none) for each bar.
+// Returns 100 (bullish), -100 (bearish), 0 (none) per bar.
 
 export async function CDLHAMMER(bars: OHLCVBars): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDLHAMMER)
-    return ta.CDLHAMMER({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-    });
-  throw new Error("CDLHAMMER not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.CDLHAMMER({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+  });
+  return r.outInteger;
 }
 
 export async function CDLDOJI(bars: OHLCVBars): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDLDOJI)
-    return ta.CDLDOJI({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-    });
-  throw new Error("CDLDOJI not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.CDLDOJI({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+  });
+  return r.outInteger;
 }
 
 export async function CDLENGULFING(bars: OHLCVBars): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDLENGULFING)
-    return ta.CDLENGULFING({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-    });
-  throw new Error("CDLENGULFING not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.CDLENGULFING({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+  });
+  return r.outInteger;
 }
 
 export async function CDL3WHITESOLDIERS(bars: OHLCVBars): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDL3WHITESOLDIERS)
-    return ta.CDL3WHITESOLDIERS({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-    });
-  throw new Error("CDL3WHITESOLDIERS not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.CDL3WHITESOLDIERS({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+  });
+  return r.outInteger;
 }
 
 export async function CDL3BLACKCROWS(bars: OHLCVBars): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDL3BLACKCROWS)
-    return ta.CDL3BLACKCROWS({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-    });
-  throw new Error("CDL3BLACKCROWS not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.CDL3BLACKCROWS({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+  });
+  return r.outInteger;
 }
 
 export async function CDLSHOOTINGSTAR(bars: OHLCVBars): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDLSHOOTINGSTAR)
-    return ta.CDLSHOOTINGSTAR({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-    });
-  throw new Error("CDLSHOOTINGSTAR not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.CDLSHOOTINGSTAR({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+  });
+  return r.outInteger;
 }
 
-export async function CDLMORNINGSTAR(bars: OHLCVBars, penetration = 0): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDLMORNINGSTAR)
-    return ta.CDLMORNINGSTAR({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-      optInPenetration: penetration,
-    });
-  throw new Error("CDLMORNINGSTAR not available without talib.js WASM");
+export async function CDLMORNINGSTAR(
+  bars: OHLCVBars,
+  penetration = 0,
+): Promise<number[]> {
+  const ta = await getTA();
+  const r = await ta.CDLMORNINGSTAR({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+    optInPenetration: penetration,
+  });
+  return r.outInteger;
 }
 
-export async function CDLEVENINGSTAR(bars: OHLCVBars, penetration = 0): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDLEVENINGSTAR)
-    return ta.CDLEVENINGSTAR({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-      optInPenetration: penetration,
-    });
-  throw new Error("CDLEVENINGSTAR not available without talib.js WASM");
+export async function CDLEVENINGSTAR(
+  bars: OHLCVBars,
+  penetration = 0,
+): Promise<number[]> {
+  const ta = await getTA();
+  const r = await ta.CDLEVENINGSTAR({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+    optInPenetration: penetration,
+  });
+  return r.outInteger;
 }
 
 export async function CDLHARAMI(bars: OHLCVBars): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDLHARAMI)
-    return ta.CDLHARAMI({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-    });
-  throw new Error("CDLHARAMI not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.CDLHARAMI({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+  });
+  return r.outInteger;
 }
 
 export async function CDLPIERCING(bars: OHLCVBars): Promise<number[]> {
-  const ta = await getTA().catch(() => null);
-  if (ta?.CDLPIERCING)
-    return ta.CDLPIERCING({
-      inOpen: bars.open, inHigh: bars.high, inLow: bars.low, inClose: bars.close,
-    });
-  throw new Error("CDLPIERCING not available without talib.js WASM");
+  const ta = await getTA();
+  const r = await ta.CDLPIERCING({
+    inOpen: bars.open,
+    inHigh: bars.high,
+    inLow: bars.low,
+    inClose: bars.close,
+  });
+  return r.outInteger;
 }
 
-// ── Convenience re-exports for common combos ─────────────────────────────────
+// ── Convenience combo ─────────────────────────────────────────────────────────
 
-/** Compute RSI + MACD + BBANDS in one call (common chart overlay set). */
-export async function standardOverlays(
-  bars: OHLCVBars,
-): Promise<{
+export async function standardOverlays(bars: OHLCVBars): Promise<{
   rsi: number[];
   macd: Awaited<ReturnType<typeof MACD>>;
   bbands: Awaited<ReturnType<typeof BBANDS>>;
