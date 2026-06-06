@@ -15,7 +15,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { getStatus as getAutonomousStatus, getLatestDigest } from "@/api/autonomous";
 import { getBots, getStrategyLabPortfolio } from "@/api/bots";
 import { getWatchlists } from "@/api/watchlist";
-import { getPortfolios } from "@/api/portfolio";
+import { getPortfolios } from "@/api/bots";
 import { getNews } from "@/api/market";
 import { getEntries as getJournalEntries, getStats as getJournalStats } from "@/api/journal";
 import { chunkPrefetch } from "@/lib/chunkPrefetch";
@@ -68,7 +68,6 @@ const NAV_LABS = [
   { to: "/options",  label: "Options Lab",   Icon: Layers },
   { to: "/crypto",   label: "Crypto Lab",    Icon: Bitcoin },
   { to: "/workshop", label: "TA Workshop",   Icon: PenTool },
-  { to: "/paper",    label: "Paper Trading", Icon: Wallet },
 ];
 
 const NAV_MARKETS = [

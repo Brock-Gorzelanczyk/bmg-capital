@@ -20,7 +20,7 @@ const StrategyLab = lazy(() => import("@/pages/StrategyLab"));
 const News = lazy(() => import("@/pages/News"));
 const Earnings = lazy(() => import("@/pages/Earnings"));
 const Research = lazy(() => import("@/pages/Research"));
-const PaperTrading = lazy(() => import("@/pages/PaperTrading"));
+// PaperTrading removed — paper tables archived 2026-06-06
 const LearnHome = lazy(() => import("@/pages/LearnHome"));
 const LearnCourse = lazy(() => import("@/pages/LearnCourse"));
 const LearnLesson = lazy(() => import("@/pages/LearnLesson"));
@@ -301,7 +301,7 @@ function AppInner() {
         <Route path="/news" element={<News />} />
         <Route path="/earnings" element={<Earnings />} />
         <Route path="/research" element={<Research />} />
-        <Route path="/paper" element={<Page component={PaperTrading} />} />
+        <Route path="/paper" element={<Navigate to="/portfolio" replace />} />
         <Route path="/options" element={<OptionsLab />} />
         <Route path="/crypto" element={<CryptoLab />} />
         <Route path="/notifications" element={<NotificationsPage />} />
@@ -362,7 +362,7 @@ function AppInner() {
         <Route path="/net-worth" element={<NetWorthPage />} />
         <Route path="/capital-pods" element={<Navigate to="/pods" replace />} />
         <Route path="/ta-workshop" element={<Navigate to="/workshop" replace />} />
-        <Route path="/paper-trading" element={<Navigate to="/paper" replace />} />
+        <Route path="/paper-trading" element={<Navigate to="/portfolio" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

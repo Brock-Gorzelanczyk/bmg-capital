@@ -405,3 +405,34 @@ def run_migrations(engine: Engine) -> None:
         _migrate_strategy_portfolios(conn)
         _fix_bots_enabled(conn)
         _ensure_v2_tables(conn)
+        _archive_legacy_tables(conn)
+
+
+def _archive_legacy_tables(conn) -> None:
+    """Rename legacy personal-portfolio and paper-trading tables to *_archived.
+
+    Idempotent — skips tables that don't exist or are already renamed.
+    2026-06-06: consolidated to single bot-aggregate portfolio.
+    """
+    renames = [
+        ("portfolios",            "portfolios_archived"),
+        ("positions",             "positions_archived"),
+        ("paper_accounts",        "paper_accounts_archived"),
+        ("paper_positions",       "paper_positions_archived"),
+        ("paper_orders",          "paper_orders_archived"),
+        ("paper_transactions",    "paper_transactions_archived"),
+        ("paper_daily_snapshots", "paper_daily_snapshots_archived"),
+    ]
+    for src, dst in renames:
+        try:
+            exists = conn.execute(
+                text("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:n"),
+                {"n": src},
+            ).fetchone()
+            if not exists:
+                continue
+            conn.execute(text(f'ALTER TABLE "{src}" RENAME TO "{dst}"'))
+            conn.commit()
+            logger.info("Archived legacy table: %s → %s", src, dst)
+        except Exception as exc:
+            logger.warning("archive_legacy_tables: %s → %s failed: %s", src, dst, exc)

@@ -9,7 +9,7 @@ from app.db.base import Base
 STARTING_BALANCE = 100_000.0
 
 class PaperAccount(Base):
-    __tablename__ = "paper_accounts"
+    __tablename__ = "paper_accounts_archived"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True, unique=True)
     cash: Mapped[float] = mapped_column(Float, nullable=False, default=STARTING_BALANCE)
@@ -17,7 +17,7 @@ class PaperAccount(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())
 
 class PaperPosition(Base):
-    __tablename__ = "paper_positions"
+    __tablename__ = "paper_positions_archived"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String, nullable=False)
@@ -27,7 +27,7 @@ class PaperPosition(Base):
     opened_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), server_default=func.now())
 
 class PaperOrder(Base):
-    __tablename__ = "paper_orders"
+    __tablename__ = "paper_orders_archived"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String, nullable=False)
@@ -55,7 +55,7 @@ class PaperOrder(Base):
 
 class PaperTransaction(Base):
     """Realized P&L ledger — one row per fill that closes or reduces a position."""
-    __tablename__ = "paper_transactions"
+    __tablename__ = "paper_transactions_archived"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     order_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -70,7 +70,7 @@ class PaperTransaction(Base):
 
 class PaperDailySnapshot(Base):
     """End-of-day equity snapshot for performance chart."""
-    __tablename__ = "paper_daily_snapshots"
+    __tablename__ = "paper_daily_snapshots_archived"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     date: Mapped[str] = mapped_column(String, nullable=False)  # YYYY-MM-DD

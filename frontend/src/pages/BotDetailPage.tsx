@@ -1559,18 +1559,6 @@ function SettingsTab({
         )}
       </div>
 
-      {/* Reset paper balance */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-zinc-300">Reset Paper Balance</h2>
-        <p className="text-xs text-zinc-500">
-          Resets this bot's paper trading balance to the starting capital. Use to test fresh strategies.
-        </p>
-        <button
-          className="text-xs font-semibold px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-        >
-          Reset paper balance
-        </button>
-      </div>
     </div>
   );
 }

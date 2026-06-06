@@ -10,7 +10,7 @@ from app.db.base import Base
 
 
 class Portfolio(Base):
-    __tablename__ = "portfolios"
+    __tablename__ = "portfolios_archived"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -25,13 +25,13 @@ class Portfolio(Base):
 
 
 class Position(Base):
-    __tablename__ = "positions"
+    __tablename__ = "positions_archived"
 
     __table_args__ = (UniqueConstraint("portfolio_id", "symbol"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     portfolio_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("portfolios_archived.id", ondelete="CASCADE"), nullable=False
     )
     symbol: Mapped[str] = mapped_column(String, nullable=False)
     shares: Mapped[float] = mapped_column(Float, nullable=False)

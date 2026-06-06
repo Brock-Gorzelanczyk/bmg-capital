@@ -318,7 +318,6 @@ const RISK_OPTIONS = ["0.5", "1", "1.5", "2", "2.5", "3", "5"];
 
 function TradingSection() {
   const prefs = loadPrefs();
-  const [paperSize, setPaperSize]    = useState<string>(prefs.paperDefaultSize ?? "100000");
   const [riskPct, setRiskPct]        = useState<string>(prefs.riskPerTrade     ?? "1");
   const [orderType, setOrderType]    = useState<string>(prefs.defaultOrder     ?? "market");
   const [confirmOrders, setConfirm]  = useState<boolean>(prefs.confirmOrders   ?? true);
@@ -332,23 +331,12 @@ function TradingSection() {
 
   return (
     <div className="space-y-4">
-      <SectionHeader title="Trading" subtitle="Defaults for orders and paper trading" />
+      <SectionHeader title="Trading" subtitle="Defaults for orders" />
 
       <Card>
         <div className="px-4 py-2.5 border-b border-[var(--border-subtle)]/60">
-          <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Paper Trading</span>
+          <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Risk Management</span>
         </div>
-        <SettingRow label="Starting balance" sublabel="Used when resetting paper account">
-          <select
-            value={paperSize}
-            onChange={(e) => { setPaperSize(e.target.value); persist({ paperDefaultSize: e.target.value }); }}
-            className="bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-xs rounded-lg px-2 py-1.5 focus:outline-none"
-          >
-            {["10000","25000","50000","100000","250000","500000"].map((v) => (
-              <option key={v} value={v}>${Number(v).toLocaleString()}</option>
-            ))}
-          </select>
-        </SettingRow>
         <SettingRow label="Risk per trade" sublabel="% of account risked per position" last>
           <select
             value={riskPct}

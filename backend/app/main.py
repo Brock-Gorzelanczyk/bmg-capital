@@ -172,7 +172,7 @@ app.include_router(earnings.router)
 app.include_router(strategy.router)
 app.include_router(backtest.router)
 app.include_router(research.router)
-app.include_router(paper.router)
+# paper.router removed — tables archived 2026-06-06
 app.include_router(screens.router)
 app.include_router(learn.router)
 app.include_router(explain.router)

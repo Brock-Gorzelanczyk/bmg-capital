@@ -209,3 +209,22 @@ ANTHROPIC_API_KEY   # AI features: CoPilot, chart analysis, NL screener
 ```
 
 Full list in `backend/app/config.py`. All default to empty strings (features degrade gracefully when missing).
+
+## Archive Notice
+
+**2026-06-06**: Personal-portfolio and paper-trading tables were archived (renamed with `_archived` suffix).
+
+Tables renamed (data intact):
+- `portfolios` → `portfolios_archived`
+- `positions` → `positions_archived`
+- `paper_accounts` → `paper_accounts_archived`
+- `paper_positions` → `paper_positions_archived`
+- `paper_orders` → `paper_orders_archived`
+- `paper_transactions` → `paper_transactions_archived`
+- `paper_daily_snapshots` → `paper_daily_snapshots_archived`
+
+To restore: rename back with `ALTER TABLE "portfolios_archived" RENAME TO "portfolios"` etc.
+
+`/api/portfolio` now reads from the bot-aggregate (`BotAllocation` + `BotDailyPnL` + `BotPosition`) — same data source as `/api/strategy-lab/portfolio`.
+
+SQLAlchemy models in `app/db/models/portfolio.py` and `app/db/models/paper.py` now point to the `*_archived` table names so existing service imports continue to compile.
