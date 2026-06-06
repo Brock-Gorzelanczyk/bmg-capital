@@ -8,6 +8,9 @@ from sqlalchemy.engine import Engine
 logger = logging.getLogger(__name__)
 
 _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
+    "users": [
+        ("is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
+    ],
     "user_tiers": [
         ("billing_interval",       "VARCHAR"),
         ("trial_ends_at",          "DATETIME"),

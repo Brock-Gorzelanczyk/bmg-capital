@@ -11,6 +11,7 @@ import Dashboard from "@/pages/Dashboard";
 import ChartPage from "@/pages/ChartPage";
 import Screener from "@/pages/Screener";
 import LoginPage from "@/pages/LoginPage";
+import NotFoundPage from "@/pages/NotFoundPage";
 // Heavy/non-critical pages — lazy-loaded for code splitting
 const WatchlistPage = lazy(() => import("@/pages/WatchlistPage"));
 const Portfolio = lazy(() => import("@/pages/Portfolio"));
@@ -52,6 +53,7 @@ const BacktestLabPage = lazy(() => import("@/pages/BacktestLabPage"));
 const ScannersPage = lazy(() => import("@/pages/ScannersPage"));
 const AlertBuilderPage = lazy(() => import("@/pages/AlertBuilderPage"));
 const PitchPage = lazy(() => import("@/pages/PitchPage"));
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const PricingPage = lazy(() => import("@/pages/PricingPage"));
 const PitchDeckPage = lazy(() => import("@/pages/PitchDeckPage"));
 const DailyChallengePage = lazy(() => import("@/pages/DailyChallengePage"));
@@ -85,6 +87,9 @@ const NetPortfolio = lazy(() => import("@/pages/NetPortfolio"));
 const NetWorthPage = lazy(() => import("@/pages/NetWorthPage"));
 const StrategyLibraryPage = lazy(() => import("@/pages/StrategyLibraryPage"));
 const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
+const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage"));
+const TermsPage = lazy(() => import("@/pages/TermsPage"));
+const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore } from "@/store/authStore";
@@ -171,6 +176,14 @@ function Page({ component: C }: { component: ComponentType }) {
   return <RouteErrorBoundary><C /></RouteErrorBoundary>;
 }
 
+/** Guards admin-only routes — redirects non-admins to /dashboard. */
+function AdminRoute({ children }: { children: ReactNode }) {
+  const { user } = useAuthStore();
+  const isAdmin = (user as any)?.is_admin === true;
+  if (!isAdmin) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
 // Clean up old cache keys from previous versions
 ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
@@ -236,7 +249,7 @@ function AppInner() {
     <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route element={<AppShell />}>
-        <Route path="/" element={<Page component={Dashboard} />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<Page component={StrategyLab} />} />
@@ -265,13 +278,13 @@ function AppInner() {
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/workshop" element={<Page component={WorkshopPage} />} />
-        <Route path="/admin/monitoring"  element={<MonitoringPage />} />
-        <Route path="/admin/heatmap"     element={<HeatMapPage />} />
-        <Route path="/admin/flow"        element={<OptionsFlowPage />} />
-        <Route path="/admin/macro"       element={<MacroDashboardPage />} />
-        <Route path="/admin/smart-money" element={<SmartMoneyPage />} />
-        <Route path="/admin/backtest"    element={<BacktestLabPage />} />
-        <Route path="/admin/scanners"    element={<ScannersPage />} />
+        <Route path="/admin/monitoring"  element={<AdminRoute><MonitoringPage /></AdminRoute>} />
+        <Route path="/admin/heatmap"     element={<AdminRoute><HeatMapPage /></AdminRoute>} />
+        <Route path="/admin/flow"        element={<AdminRoute><OptionsFlowPage /></AdminRoute>} />
+        <Route path="/admin/macro"       element={<AdminRoute><MacroDashboardPage /></AdminRoute>} />
+        <Route path="/admin/smart-money" element={<AdminRoute><SmartMoneyPage /></AdminRoute>} />
+        <Route path="/admin/backtest"    element={<AdminRoute><BacktestLabPage /></AdminRoute>} />
+        <Route path="/admin/scanners"    element={<AdminRoute><ScannersPage /></AdminRoute>} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
@@ -314,6 +327,7 @@ function AppInner() {
         <Route path="/capital-pods" element={<Navigate to="/pods" replace />} />
         <Route path="/ta-workshop" element={<Navigate to="/workshop" replace />} />
         <Route path="/paper-trading" element={<Navigate to="/paper" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
     <VoiceAIButton onClick={() => setVoiceOpen(true)} />
@@ -339,10 +353,14 @@ export default function App() {
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
             <Routes>
+              <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signin" element={<Navigate to="/login" replace />} />
               <Route path="/signup" element={<Navigate to="/login" replace />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/pitch" element={<PitchPage />} />
               <Route path="/pitch/deck" element={<PitchDeckPage />} />
               <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
@@ -354,6 +372,7 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
             </Suspense>
             <Toaster position="bottom-right" theme="dark" richColors />

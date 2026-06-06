@@ -79,7 +79,12 @@ def _create_token(user: User) -> str:
 
 
 def _user_dict(user: User) -> dict:
-    return {"id": user.id, "email": user.email, "username": user.username}
+    return {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "is_admin": getattr(user, "is_admin", False),
+    }
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────

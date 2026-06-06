@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Mic, TrendingUp, Shield, Zap } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/demoMode";
@@ -220,10 +220,11 @@ function LoginForm() {
     try {
       if (mode === "login") {
         await login(email, password);
+        navigate("/");
       } else {
         await register(email, username, password);
+        navigate("/onboarding");
       }
-      navigate("/");
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
       setError(detail ?? "Something went wrong. Please try again.");
@@ -308,6 +309,17 @@ function LoginForm() {
               className="w-full bg-[#020617] border border-[#1e293b] text-white text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-slate-600 transition-colors"
             />
           </div>
+
+          {mode === "login" && (
+            <div className="flex justify-end -mt-2">
+              <Link
+                to="/forgot-password"
+                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          )}
 
           {mode === "register" && (
             <div>

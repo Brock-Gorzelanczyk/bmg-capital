@@ -2,8 +2,9 @@ from __future__ import annotations
 import os
 import warnings
 from pathlib import Path
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from typing import List, Optional
 
 _ENV_FILE = Path(__file__).parent.parent / ".env"
 
@@ -19,6 +20,8 @@ class Settings(BaseSettings):
     # ── Core ──────────────────────────────────────────────────────────────────
     environment: str = "development"   # development | staging | production
     app_url: str = "http://localhost:5173"
+    # FRONTEND_URL is an alias for app_url — either env var works
+    frontend_url: Optional[str] = None
     host: str = "0.0.0.0"
     port: int = 8000
 
@@ -32,6 +35,18 @@ class Settings(BaseSettings):
 
     # ── CORS — comma-separated origins can be set via env var ─────────────────
     cors_origins: List[str] = _DEFAULT_CORS
+
+    @model_validator(mode="after")
+    def add_app_url_to_cors(self) -> "Settings":
+        # FRONTEND_URL env var is an alias for app_url
+        effective_url = self.frontend_url or self.app_url
+        if self.frontend_url:
+            self.app_url = self.frontend_url
+        origins = list(self.cors_origins)
+        if effective_url and effective_url not in origins:
+            origins.append(effective_url)
+        self.cors_origins = origins
+        return self
 
     # ── Trading APIs ──────────────────────────────────────────────────────────
     alpaca_api_key: str = ""
