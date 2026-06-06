@@ -443,12 +443,12 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
       expanded ? "w-56" : "w-14 lg:w-56"
     )}>
       {/* Logo */}
-      <div className="px-3 mb-5 flex items-center">
+      <div className="px-2 mb-4">
         {/* Full logo — shown when expanded or on lg+ */}
         <img
           src="/logo.png"
           alt="BMG Capital"
-          className={cn("h-7 w-auto object-contain", show(expanded))}
+          className={cn("w-full h-auto object-contain", show(expanded))}
         />
         {/* Icon mark — shown on tablet collapsed (md to lg, not expanded) */}
         <svg

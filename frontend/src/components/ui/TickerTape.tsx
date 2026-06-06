@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useTickerTape, type TickerData } from "@/hooks/useTickerTape";
 import { TICKER_NAMES } from "@/data/tickerNames";
@@ -55,11 +56,14 @@ function Logo({ symbol }: { symbol: string }) {
     );
   }
 
+  // Google's favicon service — reliable, no API key, no CORS
+  const src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+
   return (
     <img
-      src={`https://logo.clearbit.com/${domain}`}
+      src={src}
       alt={symbol}
-      className="w-5 h-5 rounded-full object-contain bg-white shrink-0"
+      className="w-5 h-5 rounded-full object-contain shrink-0"
       onError={() => setErr(true)}
       loading="lazy"
     />
@@ -68,12 +72,15 @@ function Logo({ symbol }: { symbol: string }) {
 
 // ── Single ticker item ─────────────────────────────────────────────────────────
 
-function TickerItem({ t }: { t: TickerData }) {
+function TickerItem({ t, onClick }: { t: TickerData; onClick: () => void }) {
   const isUp = t.changePct >= 0;
   const sign = isUp ? "+" : "";
 
   return (
-    <div className="flex items-center gap-2 px-3 shrink-0">
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 px-3 shrink-0 hover:bg-white/5 rounded-md transition-colors cursor-pointer h-full"
+    >
       <Logo symbol={t.symbol} />
       <span className="text-xs font-bold text-zinc-200">{t.symbol}</span>
       <span className="text-xs font-mono text-zinc-300">
@@ -83,7 +90,7 @@ function TickerItem({ t }: { t: TickerData }) {
         {sign}{t.changePct.toFixed(2)}%
       </span>
       <span className="text-zinc-700 text-xs select-none">·</span>
-    </div>
+    </button>
   );
 }
 
@@ -119,6 +126,7 @@ export default function TickerTape() {
   const tickers = liveData.length > 0 ? liveData : STATIC_FALLBACK;
   const [paused, setPaused] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   // Duplicate for seamless loop
   const doubled = [...tickers, ...tickers];
@@ -153,7 +161,11 @@ export default function TickerTape() {
         }}
       >
         {doubled.map((t, i) => (
-          <TickerItem key={`${t.symbol}-${i}`} t={t} />
+          <TickerItem
+            key={`${t.symbol}-${i}`}
+            t={t}
+            onClick={() => navigate(`/chart?symbol=${t.symbol}`)}
+          />
         ))}
       </div>
     </div>
