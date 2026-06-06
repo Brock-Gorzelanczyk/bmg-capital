@@ -2416,3 +2416,193 @@ def run_bot_now(
         raise HTTPException(500, "Execution failed — check logs")
 
     return {"ok": True, "bot": profile_name, "message": "Execution cycle complete"}
+
+
+# ── End-to-end pipeline smoke test ────────────────────────────────────────────
+
+@router.post("/debug/force-trade")
+def debug_force_trade(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Inject a real BTC/USD paper trade through the full pipeline and report each step.
+    a. Find crypto_swing allocation
+    b. Fetch live BTC/USD price (Kraken public API)
+    c. Try Alpaca paper trade submission
+    d. Insert bot_signal row
+    e. Insert bot_position row
+    f. Insert bot_trade row
+    g. Post Discord signal embed
+    """
+    import httpx as _httpx
+
+    steps: dict = {}
+
+    # a. Find allocation
+    profile = db.query(BotProfile).filter(BotProfile.name == "crypto_swing").first()
+    alloc = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.profile_id == profile.id,
+        )
+        .first()
+    ) if profile else None
+    steps["a_allocation"] = {
+        "ok": bool(alloc),
+        "allocation_id": alloc.id if alloc else None,
+        "profile_found": bool(profile),
+    }
+    if not alloc:
+        return {"steps": steps, "error": "No crypto_swing allocation — enable the bot first"}
+
+    # b. Fetch live BTC price
+    btc_price: float = 97_000.0
+    try:
+        r = _httpx.get("https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=5.0)
+        data = r.json()
+        btc_price = float(data["result"]["XXBTZUSD"]["c"][0])
+        steps["b_btc_price"] = {"ok": True, "price_usd": round(btc_price, 2), "source": "kraken"}
+    except Exception as exc:
+        steps["b_btc_price"] = {"ok": False, "error": str(exc), "fallback_usd": btc_price}
+
+    # c. Alpaca paper trade
+    alpaca_order_id: str | None = None
+    try:
+        from app.config import settings as _cfg
+        if _cfg.alpaca_api_key and _cfg.alpaca_secret_key:
+            resp = _httpx.post(
+                "https://paper-api.alpaca.markets/v2/orders",
+                headers={
+                    "APCA-API-KEY-ID": _cfg.alpaca_api_key,
+                    "APCA-API-SECRET-KEY": _cfg.alpaca_secret_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "symbol": "BTC/USD",
+                    "qty": "0.01",
+                    "side": "buy",
+                    "type": "market",
+                    "time_in_force": "ioc",
+                },
+                timeout=10.0,
+            )
+            if resp.status_code in (200, 201):
+                order = resp.json()
+                alpaca_order_id = order.get("id")
+                steps["c_alpaca"] = {
+                    "ok": True,
+                    "order_id": alpaca_order_id,
+                    "status": order.get("status"),
+                    "filled_qty": order.get("filled_qty"),
+                    "filled_avg_price": order.get("filled_avg_price"),
+                }
+                if order.get("filled_avg_price"):
+                    btc_price = float(order["filled_avg_price"])
+            else:
+                steps["c_alpaca"] = {
+                    "ok": False,
+                    "http_status": resp.status_code,
+                    "body": resp.text[:300],
+                }
+        else:
+            steps["c_alpaca"] = {"ok": False, "reason": "ALPACA_API_KEY not configured — using Kraken price"}
+    except Exception as exc:
+        steps["c_alpaca"] = {"ok": False, "error": str(exc)}
+
+    now = datetime.now(timezone.utc)
+    qty = 0.01
+    fill_price_cents = int(round(btc_price * 100))
+
+    # d. Insert bot_signal
+    sig_row = BotSignal(
+        allocation_id=alloc.id,
+        ts=now,
+        symbol="BTC/USD",
+        side="buy",
+        confidence=0.85,
+        size_hint=0.05,
+        reason="End-to-end pipeline smoke test",
+        strategy="manual_test",
+        entry_price=btc_price,
+    )
+    db.add(sig_row)
+    db.flush()
+    steps["d_bot_signal"] = {"ok": True, "signal_id": sig_row.id, "symbol": "BTC/USD", "side": "buy"}
+
+    # e. Insert bot_position
+    pos_row = BotPosition(
+        allocation_id=alloc.id,
+        symbol="BTC/USD",
+        qty=qty,
+        avg_cost_cents=fill_price_cents,
+        opened_at=now,
+        closed_at=None,
+        is_paper=True,
+    )
+    db.add(pos_row)
+    db.flush()
+    steps["e_position"] = {"ok": True, "position_id": pos_row.id, "qty": qty, "avg_cost_usd": btc_price}
+
+    # f. Insert bot_trade
+    trade_row = BotTrade(
+        allocation_id=alloc.id,
+        symbol="BTC/USD",
+        side="buy",
+        qty=qty,
+        fill_price_cents=fill_price_cents,
+        fees_cents=0,
+        ts=now,
+        position_id=pos_row.id,
+        is_paper=True,
+        alpaca_order_id=alpaca_order_id,
+        expected_fill_cents=fill_price_cents,
+        slippage_bps=0.0,
+    )
+    db.add(trade_row)
+    db.commit()
+    steps["f_trade"] = {
+        "ok": True,
+        "trade_id": trade_row.id,
+        "fill_price_usd": round(btc_price, 2),
+        "notional_usd": round(btc_price * qty, 2),
+        "alpaca_order_id": alpaca_order_id,
+    }
+
+    # g. Post Discord signal
+    signal_dict = {
+        "bot": "crypto_swing",
+        "symbol": "BTC/USD",
+        "side": "buy",
+        "strategy": "manual_test",
+        "reason": "End-to-end pipeline smoke test",
+        "confidence": 0.85,
+        "price": btc_price,
+        "size_pct": 5.0,
+    }
+    try:
+        from app.services.discord_public import post_signal as _post_signal
+        _post_signal(signal_dict, db=None, signal_id=sig_row.id)
+        steps["g_discord"] = {"ok": True, "channels": ["#crypto-signals", "#all-signals"]}
+    except Exception as exc:
+        steps["g_discord"] = {"ok": False, "error": str(exc)}
+
+    # Portfolio value
+    portfolio_value_cents = 0
+    try:
+        from app.core.canonical import compute_strategy_lab_aggregate
+        agg = compute_strategy_lab_aggregate(current_user.id, db)
+        portfolio_value_cents = agg.get("total_value_cents", 0)
+    except Exception as exc:
+        logger.warning("force-trade: canonical failed: %s", exc)
+
+    return {
+        "steps": steps,
+        "summary": (
+            f"BTC/USD buy 0.01 @ ${btc_price:,.2f} | "
+            f"trade_id={trade_row.id} pos_id={pos_row.id} signal_id={sig_row.id}"
+        ),
+        "portfolio_value_usd": round(portfolio_value_cents / 100, 2),
+        "next": "Reload /strategy/portfolio/crypto — Recent Trades should show this BTC buy.",
+    }
