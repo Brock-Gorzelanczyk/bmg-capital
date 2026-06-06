@@ -4,7 +4,7 @@ export interface BotProfile {
   id: number;
   name: string;           // stock_swing, stock_day, etc.
   description: string;
-  asset_class: "stock" | "crypto";
+  asset_class: "stock" | "crypto" | "options";
   position_cap: number;
   cadence: string;
   stop_loss_pct: number | null;
@@ -198,7 +198,7 @@ function _rawBotToListItem(b: any): BotListItem {
     },
     allocation: b.allocation ?? null,
     stats: {
-      return_30d_pct: b.return_30d_pct ?? 0,
+      return_30d_pct: b.return_30d_pct ?? b.metrics?.return_30d ?? 0,
       today_pnl: b.today_pnl_usd ?? 0,
       open_positions: Array.isArray(b.open_positions) ? b.open_positions.length : 0,
       total_trades: b.total_trades ?? 0,

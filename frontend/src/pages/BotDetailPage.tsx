@@ -1670,7 +1670,9 @@ export default function BotDetailPage() {
   const profile = data?.profile;
   const allocation = data?.allocation;
   const positions: BotPosition[] = Array.isArray(data?.positions) ? data!.positions : [];
-  const signals: BotSignal[] = Array.isArray(data?.signals) ? data!.signals : [];
+  const signals: BotSignal[] = (Array.isArray(data?.signals) ? data!.signals : []).filter(
+    (s) => !s.reason?.toLowerCase().includes("stub") && !s.strategy?.toLowerCase().includes("stub")
+  );
 
   // Analyst data for watchlist tab
   const { data: rawAnalyses } = useQuery({
@@ -2132,14 +2134,22 @@ export default function BotDetailPage() {
 
               {/* Description + asset class */}
               <div className="flex items-start gap-3">
-                <span className={cn(
-                  "text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 mt-0.5",
-                  isCrypto
-                    ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
-                    : "bg-blue-500/15 text-blue-400 border-blue-500/30"
-                )}>
-                  {isCrypto ? "CRYPTO" : "STOCK"}
-                </span>
+                {(() => {
+                  const ac = profile?.asset_class ?? (botName.includes("options") ? "options" : isCrypto ? "crypto" : "stock");
+                  const isOptions = ac === "options" || botName.includes("options");
+                  return (
+                    <span className={cn(
+                      "text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 mt-0.5",
+                      isOptions
+                        ? "bg-purple-500/15 text-purple-400 border-purple-500/30"
+                        : isCrypto
+                          ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                          : "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                    )}>
+                      {isOptions ? "OPTIONS" : isCrypto ? "CRYPTO" : "STOCK"}
+                    </span>
+                  );
+                })()}
                 <p className="text-sm text-zinc-400 leading-relaxed">
                   {meta?.description ?? profile?.description ?? "No description available."}
                 </p>

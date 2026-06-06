@@ -1584,6 +1584,21 @@ def get_bot(
     row["recent_signals"] = recent_signals
     row["display_name"] = _DISPLAY_NAMES.get(profile.name, profile.name.replace("_", " ").title())
 
+    # BUG E fix: derive display_asset_class from name when profile.asset_class is missing/wrong
+    if "options" in profile.name.lower():
+        display_asset_class = "options"
+    else:
+        display_asset_class = profile.asset_class or "stock"
+    row["asset_class"] = display_asset_class
+
+    # BUG E fix: description fallback
+    if not row.get("description"):
+        row["description"] = profile.description or f"Automated {display_asset_class} trading strategy"
+
+    # BUG E fix: enabled should reflect the user's allocation state, not the global profile flag
+    if allocation is not None:
+        row["enabled"] = allocation.enabled
+
     if allocation is not None:
         snap = compute_bot_snapshot(allocation, profile, db)
         row["demo"] = False
@@ -1594,8 +1609,23 @@ def get_bot(
         row["portfolio_value_cents"] = snap.portfolio_value_cents
         row["all_time_return_pct"] = snap.all_time_return_pct
         row["today_pnl_pct"] = snap.today_pnl_pct
-        row["win_rate_pct"] = snap.sharpe_30d  # TODO: wire real win rate
         row["equity_curve"] = snap.equity_curve
+
+        # win_rate_pct fix: compute actual win rate from closed positions
+        closed_positions = db.query(BotPosition).filter(
+            BotPosition.allocation_id == allocation.id,
+            BotPosition.closed_at.isnot(None),
+        ).all()
+        wins = 0
+        losses = 0
+        for pos in closed_positions:
+            exit_r = pos.exit_reason or ""
+            if "target" in exit_r or "profit" in exit_r:
+                wins += 1
+            else:
+                losses += 1
+        total_closed = wins + losses
+        row["win_rate_pct"] = round(wins / total_closed * 100, 1) if total_closed > 0 else None
     else:
         row["demo"] = True
         row["return_30d_pct"] = _demo_30d_return(profile.name)
@@ -1604,6 +1634,7 @@ def get_bot(
         row["open_positions_count"] = len(row["open_positions"])
         row["portfolio_value_cents"] = None
         row["all_time_return_pct"] = None
+        row["win_rate_pct"] = None
 
     return row
 
