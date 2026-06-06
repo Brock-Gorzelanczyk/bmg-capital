@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.auth import get_current_user
+from app.dependencies import get_current_user
 
 _ADMIN_EMAILS = {"32bgorzelanczyk@gmail.com"}
 
