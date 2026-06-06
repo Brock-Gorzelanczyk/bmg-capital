@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/workshop", tags=["workshop"])
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_MODEL = "claude-sonnet-4-5"
+ANTHROPIC_MODEL = "claude-sonnet-4-6"
 
 
 # ── Pydantic models ────────────────────────────────────────────────────────────

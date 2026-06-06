@@ -15,12 +15,11 @@ Runs every weekday at 4:05 PM ET (after market close):
 
 import asyncio
 import logging
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timedelta, timezone
 from typing import Any, Dict, List, Set
 
 import pandas as pd
 import ta
-import yfinance as yf
 from sqlalchemy.orm import Session
 
 from app.db.models.strategy import DailyEquitySnapshot, DailyLog, StrategyTrade
@@ -91,82 +90,77 @@ def _compute_atr(df: pd.DataFrame, period: int = 14) -> float:
 
 
 def _get_prices_sync(symbols: List[str]) -> Dict[str, float]:
+    """Fetch latest prices via Alpaca IEX; falls back to most-recent daily bar."""
     if not symbols:
         return {}
+    from alpaca.data.enums import DataFeed
+    from alpaca.data.requests import StockBarsRequest, StockLatestTradeRequest
+    from alpaca.data.timeframe import TimeFrame
+    from app.alpaca.client import get_historical_client
+
     prices: Dict[str, float] = {}
-    missing: List[str] = []
+    client = get_historical_client()
 
-    # Real-time prices when market is open
     try:
-        tickers = yf.Tickers(" ".join(symbols))
-        for sym in symbols:
-            try:
-                p = tickers.tickers[sym].fast_info.last_price
-                if p and p > 0:
-                    prices[sym] = float(p)
-                else:
-                    missing.append(sym)
-            except Exception:
-                missing.append(sym)
+        trades = client.get_stock_latest_trade(
+            StockLatestTradeRequest(symbol_or_symbols=symbols, feed=DataFeed.IEX)
+        )
+        for sym, trade in trades.items():
+            if trade and trade.price and trade.price > 0:
+                prices[sym] = float(trade.price)
     except Exception as e:
-        logger.error(f"Price fetch error: {e}", exc_info=True)
-        missing = list(symbols)
+        logger.warning("Alpaca latest-trade fetch failed: %s", e)
 
-    # Fallback for market-closed / missing: last close from recent history
+    missing = [s for s in symbols if s not in prices]
     if missing:
         try:
-            data = yf.download(missing, period="5d", progress=False, auto_adjust=True)
-            if not data.empty:
-                closes = data["Close"]
-                if len(missing) == 1:
-                    col = closes.dropna()
-                    if not col.empty:
-                        last = col.iloc[-1]
-                        if last and last > 0:
-                            prices[missing[0]] = float(last)
-                else:
-                    for sym in missing:
-                        try:
-                            col = closes[sym].dropna()
-                            if not col.empty:
-                                last = col.iloc[-1]
-                                if last and last > 0:
-                                    prices[sym] = float(last)
-                        except Exception:
-                            pass
+            bars_data = client.get_stock_bars(
+                StockBarsRequest(
+                    symbol_or_symbols=missing,
+                    timeframe=TimeFrame.Day,
+                    start=date.today() - timedelta(days=7),
+                    feed=DataFeed.IEX,
+                )
+            )
+            for sym in missing:
+                sym_bars = bars_data.data.get(sym, [])
+                if sym_bars:
+                    last_close = float(sym_bars[-1].close)
+                    if last_close > 0:
+                        prices[sym] = last_close
         except Exception as e:
-            logger.warning(f"Price history fallback error: {e}", exc_info=True)
+            logger.warning("Alpaca bars fallback failed: %s", e)
 
     return prices
 
 
 def _get_prev_closes_sync(symbols: List[str]) -> Dict[str, float]:
-    """Return the previous session's closing price for each symbol."""
+    """Return previous session's closing price via Alpaca IEX daily bars."""
     if not symbols:
         return {}
+    from alpaca.data.enums import DataFeed
+    from alpaca.data.requests import StockBarsRequest
+    from alpaca.data.timeframe import TimeFrame
+    from app.alpaca.client import get_historical_client
+
     prev: Dict[str, float] = {}
     try:
-        data = yf.download(symbols, period="5d", progress=False, auto_adjust=True)
-        if not data.empty:
-            closes = data["Close"]
-            if len(symbols) == 1:
-                col = closes.dropna()
-                if len(col) >= 2:
-                    prev[symbols[0]] = float(col.iloc[-2])
-                elif len(col) == 1:
-                    prev[symbols[0]] = float(col.iloc[-1])
-            else:
-                for sym in symbols:
-                    try:
-                        col = closes[sym].dropna()
-                        if len(col) >= 2:
-                            prev[sym] = float(col.iloc[-2])
-                        elif len(col) == 1:
-                            prev[sym] = float(col.iloc[-1])
-                    except Exception:
-                        pass
+        bars_data = get_historical_client().get_stock_bars(
+            StockBarsRequest(
+                symbol_or_symbols=symbols,
+                timeframe=TimeFrame.Day,
+                start=date.today() - timedelta(days=7),
+                feed=DataFeed.IEX,
+            )
+        )
+        for sym in symbols:
+            sym_bars = bars_data.data.get(sym, [])
+            if len(sym_bars) >= 2:
+                prev[sym] = float(sym_bars[-2].close)
+            elif len(sym_bars) == 1:
+                prev[sym] = float(sym_bars[-1].close)
     except Exception as e:
-        logger.warning(f"Prev-close fetch error: {e}", exc_info=True)
+        logger.warning("Alpaca prev-close fetch failed: %s", e)
     return prev
 
 

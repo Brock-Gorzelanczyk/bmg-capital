@@ -6,7 +6,6 @@ import time
 from datetime import datetime, timezone, date
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
-import yfinance as yf
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -201,16 +200,31 @@ async def get_candidates(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    candidates = db.execute(
-        select(StrategyTrade)
-        .where(StrategyTrade.status == "candidate")
-        .where(StrategyTrade.user_id == current_user.id)
-        .order_by(StrategyTrade.candidate_since.desc())
-    ).scalars().all()
+    try:
+        candidates = db.execute(
+            select(StrategyTrade)
+            .where(StrategyTrade.status == "candidate")
+            .where(StrategyTrade.user_id == current_user.id)
+            .order_by(StrategyTrade.candidate_since.desc())
+        ).scalars().all()
+    except Exception as exc:
+        logger.error("strategy/candidates: DB query failed: %s", exc)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"error": "internal", "code": "candidates_failure", "detail": str(exc)})
 
     syms = [t.symbol for t in candidates]
     loop = asyncio.get_running_loop()
-    prices = await loop.run_in_executor(None, lambda: _get_prices_cached(syms))
+    try:
+        prices = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: _get_prices_cached(syms)),
+            timeout=8.0,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("strategy/candidates: price fetch timed out for %d symbols — returning without prices", len(syms))
+        prices = {}
+    except Exception as exc:
+        logger.warning("strategy/candidates: price fetch failed: %s", exc)
+        prices = {}
 
     return {"candidates": [_enrich_trade(t, prices) for t in candidates]}
 

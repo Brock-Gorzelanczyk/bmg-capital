@@ -11,12 +11,6 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "users": [
         ("is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
     ],
-    "bot_signals": [
-        ("entry_price",        "FLOAT"),
-        ("stop_price",         "FLOAT"),
-        ("target_price",       "FLOAT"),
-        ("discord_posted_at",  "DATETIME"),
-    ],
     "user_tiers": [
         ("billing_interval",       "VARCHAR"),
         ("trial_ends_at",          "DATETIME"),
@@ -209,7 +203,12 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("portfolio_id",                     "INTEGER"),
         ("capital_cents_within_portfolio",   "INTEGER"),
     ],
-    "bot_signals": [],
+    "bot_signals": [
+        ("entry_price",        "FLOAT"),
+        ("stop_price",         "FLOAT"),
+        ("target_price",       "FLOAT"),
+        ("discord_posted_at",  "DATETIME"),
+    ],
     "bot_positions": [],
     "bot_trades": [
         ("expected_fill_cents", "INTEGER"),

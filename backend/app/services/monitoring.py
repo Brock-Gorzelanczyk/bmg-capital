@@ -259,7 +259,7 @@ async def run_ai_sentinel(db: Session, anthropic_api_key: str) -> dict:
         import anthropic
         client = anthropic.Anthropic(api_key=anthropic_api_key)
         message = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=500,
             messages=[{"role": "user", "content": prompt}],
         )

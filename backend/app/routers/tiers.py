@@ -117,8 +117,8 @@ def get_my_tier(
     try:
         row = _get_or_create_tier(db, current_user.id)
         ents = get_entitlements(row)
-    except Exception:
-        from app.services.entitlements import ENTITLEMENTS
+    except Exception as exc:
+        logger.error("tiers/me: failed to load tier for user %s: %s", current_user.id, exc)
         ents = {**ENTITLEMENTS["free"], "_tier": "free", "_status": "active"}
         return {
             "tier": "free", "status": "active", "entitlements": ents,
