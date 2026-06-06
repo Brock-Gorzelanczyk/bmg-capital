@@ -810,10 +810,16 @@ def get_cross_bot_watchlist(
 def get_bot_activity(
     profile_name: str,
     limit: int = 50,
+    page: int = 1,
+    category: str = "all",
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Return recent signals/fills for the activity tab of a bot profile."""
+    """Return signals + fills for the activity tab.
+
+    Every fill in bot_trade is included so all P&L is auditable.
+    Returns {items, total} matching the frontend ActivityEvent shape.
+    """
     profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
     if not profile:
         raise HTTPException(404, f"Bot profile '{profile_name}' not found")
@@ -827,57 +833,70 @@ def get_bot_activity(
         .first()
     )
     if not allocation:
-        return {"activity": [], "demo": True}
+        return {"items": [], "total": 0}
 
-    signals = (
-        db.query(BotSignal)
-        .filter(BotSignal.allocation_id == allocation.id)
-        .order_by(BotSignal.ts.desc())
-        .limit(limit)
-        .all()
-    )
+    items = []
 
-    # Build a lookup: symbol → most recent trade to enrich signals with result
-    recent_trades_by_symbol: dict[str, BotTrade] = {}
-    if signals:
-        symbols = list({s.symbol for s in signals})
+    # ── Signals (category: "signal") ─────────────────────────────────────────
+    if category in ("all", "signal"):
+        signals = (
+            db.query(BotSignal)
+            .filter(BotSignal.allocation_id == allocation.id)
+            .order_by(BotSignal.ts.desc())
+            .limit(200)
+            .all()
+        )
+        for s in signals:
+            items.append({
+                "id": f"sig-{s.id}",
+                "ts": s.ts.isoformat() if s.ts else None,
+                "category": "signal",
+                "symbol": s.symbol,
+                "side": s.side,
+                "confidence": s.confidence,
+                "reason": s.reason or "",
+                "strategy": s.strategy or "",
+                "result": "filled" if s.discord_posted_at else None,
+            })
+
+    # ── Fills (category: "fill") — every bot_trade row ───────────────────────
+    if category in ("all", "fill"):
+        # Build position avg_cost map for PnL display
+        positions = db.query(BotPosition).filter(BotPosition.allocation_id == allocation.id).all()
+        pos_cost: dict[int, int] = {p.id: p.avg_cost_cents for p in positions}
+
         trades = (
             db.query(BotTrade)
-            .filter(
-                BotTrade.allocation_id == allocation.id,
-                BotTrade.symbol.in_(symbols),
-            )
+            .filter(BotTrade.allocation_id == allocation.id)
             .order_by(BotTrade.ts.desc())
+            .limit(400)
             .all()
         )
         for t in trades:
-            if t.symbol not in recent_trades_by_symbol:
-                recent_trades_by_symbol[t.symbol] = t
+            fill_price = round(t.fill_price_cents / 100, 2)
+            pnl_usd: float | None = None
+            if t.side.lower() in ("sell", "close") and t.position_id and t.position_id in pos_cost:
+                avg = pos_cost[t.position_id]
+                pnl_usd = round((t.fill_price_cents - avg) * t.qty / 100, 2)
+            items.append({
+                "id": f"fill-{t.id}",
+                "ts": t.ts.isoformat() if t.ts else None,
+                "category": "fill",
+                "symbol": t.symbol,
+                "side": t.side,
+                "qty": round(t.qty, 4),
+                "fill_price": fill_price,
+                "pnl_usd": pnl_usd,
+                "result": "filled",
+            })
 
-    activity = []
-    for s in signals:
-        trade = recent_trades_by_symbol.get(s.symbol)
-        result = None
-        if trade and trade.ts >= s.ts:
-            result = {
-                "fill_price": round(trade.fill_price_cents / 100, 2),
-                "qty": trade.qty,
-                "side": trade.side,
-                "ts": trade.ts.isoformat() if trade.ts else None,
-            }
-        activity.append({
-            "id": s.id,
-            "ts": s.ts.isoformat() if s.ts else None,
-            "symbol": s.symbol,
-            "side": s.side,
-            "confidence": s.confidence,
-            "size_hint": s.size_hint,
-            "reason": s.reason,
-            "strategy": s.strategy,
-            "result": result,
-        })
+    # Sort all items by ts descending, paginate
+    items.sort(key=lambda x: x.get("ts") or "", reverse=True)
+    total = len(items)
+    offset = (page - 1) * limit
+    page_items = items[offset: offset + limit]
 
-    return {"activity": activity, "demo": False, "count": len(activity)}
+    return {"items": page_items, "total": total}
 
 
 # ── GET /api/bots/{profile_name}/strategy-weights ────────────────────────────

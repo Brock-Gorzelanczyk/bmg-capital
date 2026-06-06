@@ -1134,7 +1134,7 @@ function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: Reac
             {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded-lg" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-zinc-600 text-sm py-6 text-center">No activity found. The execution engine runs daily at 10 AM ET on weekdays.</p>
+          <p className="text-zinc-600 text-sm py-6 text-center">No trades yet. Portfolio is at starting capital.</p>
         ) : (
           <div className="space-y-0">
             {filtered.map((item) => {
@@ -1167,6 +1167,11 @@ function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: Reac
                   )}
                   {item.reason && (
                     <span className="text-xs text-zinc-500 flex-1 truncate min-w-0">{item.reason}</span>
+                  )}
+                  {(item as any).pnl_usd != null && (
+                    <span className={cn("text-xs font-semibold tabular-nums", (item as any).pnl_usd >= 0 ? "text-emerald-400" : "text-red-400")}>
+                      {(item as any).pnl_usd >= 0 ? "+" : ""}${(item as any).pnl_usd.toFixed(2)}
+                    </span>
                   )}
                   <span className="ml-auto flex-shrink-0">{resultIcon(item.result)}</span>
                 </div>

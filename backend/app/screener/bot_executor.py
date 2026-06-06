@@ -238,25 +238,17 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
         .first()
     )
 
-    # Compute unrealized on open positions
-    refreshed_open = db.query(BotPosition).filter(
-        BotPosition.allocation_id == alloc.id,
-        BotPosition.closed_at.is_(None),
-    ).all()
-    unrealized_cents = 0
-    for p in refreshed_open:
-        entry = p.avg_cost_cents / 100
-        sim_current = _sim_exit_price(entry, _rng(f"{p.symbol}-{today}"), bot_name)
-        unrealized_cents += int((sim_current - entry) * p.qty * 100)
-
+    # Record actual realized PnL in BotDailyPnL (audit log only).
+    # unrealized_cents is left at 0 — canonical.py computes portfolio value
+    # from bot_trade + bot_position directly, not from BotDailyPnL.
     if existing_pnl:
         existing_pnl.realized_cents += realized_cents
-        existing_pnl.unrealized_cents = unrealized_cents
+        existing_pnl.unrealized_cents = 0
     else:
         db.add(BotDailyPnL(
             allocation_id=alloc.id,
             date=today,
             realized_cents=realized_cents,
-            unrealized_cents=unrealized_cents,
+            unrealized_cents=0,
             fees_cents=0,
         ))

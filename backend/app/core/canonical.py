@@ -4,14 +4,23 @@ Canonical computation layer for Strategy Lab.
 Every endpoint that shows portfolio value, P&L, or position counts
 calls these functions — no inline computation allowed.
 
-Data sources (in priority order):
-  1. BotDailyPnL.portfolio_value_eod_cents  — EOD snapshots from demo seed / executor
-  2. BotDailyPnL.realized_cents + unrealized_cents  — daily P&L components
-  3. BotAllocation.starting_capital_cents  — baseline
+INVARIANT (enforced by runtime assertion):
+  portfolio_value = starting_capital + realized_pnl + unrealized_pnl
 
-Current price for open positions: we use BotDailyPnL.unrealized_cents as written
-by bot_executor (deterministic simulation seeded per symbol+date), NOT a new
-random draw. This makes all surfaces read the same number.
+  realized_pnl  = SUM(qty × (exit_fill_price - entry_avg_cost) - fees)
+                  from bot_trade JOIN bot_position (sell-side trades only)
+
+  unrealized_pnl = SUM(qty × (current_market_price - entry_avg_cost))
+                   from bot_position WHERE closed_at IS NULL
+                   — uses 0 when live prices are not available
+
+ZERO-TRADE RULE:
+  If bot_trade has no rows AND bot_position has no open rows for a bot:
+    portfolio_value = starting_capital (exactly)
+    today_pnl = 0, return_30d_pct = 0, all_time_return_pct = 0
+
+BotDailyPnL is NOT used for portfolio value or return calculations.
+It exists for the audit log and cron digests only.
 """
 from __future__ import annotations
 
@@ -106,71 +115,76 @@ class PortfolioSnapshot:
 def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     """
     Single canonical computation for one bot allocation.
-    Reads: BotDailyPnL, BotPosition, BotWatchlist.
+
+    INVARIANT: portfolio_value = starting_capital + realized_pnl + unrealized_pnl
+      realized_pnl  — from bot_trade (sell-side fills vs position avg_cost)
+      unrealized_pnl — from bot_position open rows (0 if no live price)
+
+    BotDailyPnL is NOT read here. Zero trades → exactly starting_capital.
     """
-    from app.db.models.bots import BotDailyPnL, BotPosition, BotWatchlist
+    from app.db.models.bots import BotTrade, BotPosition, BotWatchlist
 
     today = date.today()
     thirty_days_ago = today - timedelta(days=30)
 
-    # All daily PnL rows for this allocation, sorted oldest→newest
-    pnl_rows = (
-        db.query(BotDailyPnL)
-        .filter(BotDailyPnL.allocation_id == alloc.id)
-        .order_by(BotDailyPnL.date)
+    # ── Starting capital ──────────────────────────────────────────────────────
+    starting_capital_cents = int(alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 0)
+
+    # ── All positions (open + closed) for avg_cost lookup ────────────────────
+    all_positions = (
+        db.query(BotPosition)
+        .filter(BotPosition.allocation_id == alloc.id)
+        .all()
+    )
+    pos_cost_map: dict[int, int] = {p.id: p.avg_cost_cents for p in all_positions}
+
+    # ── All trades ───────────────────────────────────────────────────────────
+    all_trades = (
+        db.query(BotTrade)
+        .filter(BotTrade.allocation_id == alloc.id)
+        .order_by(BotTrade.ts)
         .all()
     )
 
-    pnl_by_date = {r.date: r for r in pnl_rows}
-    today_row = pnl_by_date.get(today)
-    rows_30d = [r for r in pnl_rows if r.date >= thirty_days_ago]
+    # ── Realized PnL — sell fills only ───────────────────────────────────────
+    # PnL per fill = (sell_price - avg_cost) × qty - fees
+    realized_pnl_cents = 0
+    today_realized_cents = 0
+    realized_30d_cents = 0
 
-    # ── Starting capital ──────────────────────────────────────────────────────
-    starting_capital_cents = int(alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 0)
-    if not starting_capital_cents and pnl_rows:
-        for r in pnl_rows:
-            if r.portfolio_value_eod_cents:
-                starting_capital_cents = int(r.portfolio_value_eod_cents)
-                break
+    for t in all_trades:
+        if t.side.lower() not in ("sell", "close"):
+            continue
+        avg_cost = pos_cost_map.get(t.position_id or -1, t.fill_price_cents)
+        fill_pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
+        realized_pnl_cents += fill_pnl
+        trade_date = t.ts.date() if hasattr(t.ts, "date") else t.ts
+        if trade_date == today:
+            today_realized_cents += fill_pnl
+        if trade_date >= thirty_days_ago:
+            realized_30d_cents += fill_pnl
 
-    # ── Cumulative realized (all-time) ────────────────────────────────────────
-    realized_pnl_cents = sum(int(r.realized_cents or 0) for r in pnl_rows)
+    # ── Open positions ────────────────────────────────────────────────────────
+    open_pos_rows = [p for p in all_positions if p.closed_at is None]
 
-    # ── Latest unrealized (from most recent PnL row) ──────────────────────────
+    # Unrealized PnL: 0 until live prices are integrated
+    # (satisfies zero-trade rule: no phantom gains from simulation)
     unrealized_pnl_cents = 0
-    if today_row:
-        unrealized_pnl_cents = int(today_row.unrealized_cents or 0)
-    elif pnl_rows:
-        unrealized_pnl_cents = int(pnl_rows[-1].unrealized_cents or 0)
 
-    # ── Portfolio value ───────────────────────────────────────────────────────
-    # Prefer portfolio_value_eod_cents from latest row with a value;
-    # fall back to starting + cumulative
-    latest_eod: Optional[int] = None
-    for r in reversed(pnl_rows):
-        if r.portfolio_value_eod_cents is not None:
-            latest_eod = int(r.portfolio_value_eod_cents)
-            break
+    # ── Portfolio value (the invariant) ──────────────────────────────────────
+    portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
 
-    if latest_eod is not None:
-        # Guard against stale EOD rows from before a capital upgrade:
-        # if latest_eod is less than 30% of current starting capital it reflects
-        # an old seeded amount, not real trading losses — fall back to computed value.
-        eod_is_stale = starting_capital_cents > 0 and latest_eod < starting_capital_cents * 0.3
-        if eod_is_stale:
-            portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
-        else:
-            portfolio_value_cents = latest_eod
-            if today_row and today_row.portfolio_value_eod_cents is None:
-                portfolio_value_cents += int(today_row.realized_cents or 0)
-    else:
-        portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
+    # Runtime assertion — log error and fall back if violated
+    expected = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
+    if abs(portfolio_value_cents - expected) > 1:
+        logger.error(
+            "Invariant violation bot %s: computed=%d expected=%d",
+            profile.name, portfolio_value_cents, expected,
+        )
+        portfolio_value_cents = expected
 
     # ── Today P&L ────────────────────────────────────────────────────────────
-    today_pnl_cents = 0
-    if today_row:
-        today_pnl_cents = int(today_row.realized_cents or 0) + int(today_row.unrealized_cents or 0)
-
+    today_pnl_cents = today_realized_cents
     yesterday_value = portfolio_value_cents - today_pnl_cents
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
@@ -181,41 +195,15 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
             (portfolio_value_cents - starting_capital_cents) / starting_capital_cents * 100, 2
         )
 
-    # ── 30-day return ─────────────────────────────────────────────────────────
+    # ── 30-day return (realized trades in last 30d / starting capital) ────────
     return_30d_pct = 0.0
-    if rows_30d:
-        value_30d_ago: Optional[int] = None
-        if rows_30d[0].portfolio_value_eod_cents is not None:
-            value_30d_ago = int(rows_30d[0].portfolio_value_eod_cents)
-        if value_30d_ago and value_30d_ago > 0:
-            return_30d_pct = round((portfolio_value_cents - value_30d_ago) / value_30d_ago * 100, 2)
-        elif starting_capital_cents:
-            pnl_30d = sum(
-                int(r.realized_cents or 0) + int(r.unrealized_cents or 0)
-                for r in rows_30d
-            )
-            return_30d_pct = round(pnl_30d / starting_capital_cents * 100, 2)
+    if starting_capital_cents:
+        return_30d_pct = round(realized_30d_cents / starting_capital_cents * 100, 2)
 
-    # ── Sharpe 30d ────────────────────────────────────────────────────────────
+    # ── Sharpe: not computable without daily return series ───────────────────
     sharpe_30d: Optional[float] = None
-    if rows_30d and starting_capital_cents:
-        daily_returns = [
-            (int(r.realized_cents or 0) + int(r.unrealized_cents or 0)) / starting_capital_cents
-            for r in rows_30d
-        ]
-        if len(daily_returns) >= 5:
-            mean_r = sum(daily_returns) / len(daily_returns)
-            variance = sum((r - mean_r) ** 2 for r in daily_returns) / len(daily_returns)
-            std_r = math.sqrt(variance) if variance > 0 else 0.0
-            if std_r > 0:
-                sharpe_30d = round((mean_r / std_r) * math.sqrt(252), 2)
 
-    # ── Open positions ────────────────────────────────────────────────────────
-    open_pos_rows = (
-        db.query(BotPosition)
-        .filter(BotPosition.allocation_id == alloc.id, BotPosition.closed_at.is_(None))
-        .all()
-    )
+    # ── Open position details ────────────────────────────────────────────────
     open_positions = [
         {
             "id": p.id,
@@ -229,7 +217,7 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         for p in open_pos_rows
     ]
 
-    # ── Watchlist count (scoped to this bot's profile) ───────────────────────
+    # ── Watchlist count ──────────────────────────────────────────────────────
     watchlist_count = (
         db.query(BotWatchlist)
         .filter(
@@ -239,12 +227,8 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         .count()
     )
 
-    # ── Equity curve (30d) ────────────────────────────────────────────────────
-    equity_curve = [
-        {"date": r.date.isoformat(), "value_cents": int(r.portfolio_value_eod_cents)}
-        for r in rows_30d
-        if r.portfolio_value_eod_cents is not None
-    ]
+    # Equity curve: no longer sourced from BotDailyPnL simulation rows
+    equity_curve: list = []
 
     capital_within = int(alloc.capital_cents_within_portfolio or 0)
 
