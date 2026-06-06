@@ -400,7 +400,7 @@ export default function LoginPage() {
           <span className="text-white font-bold tracking-tight">BMG Capital</span>
         </div>
         <span className="text-xs text-slate-600 hidden sm:block">
-          Live trading Q3 2026 · join waitlist →
+          Live trading coming soon · join waitlist →
         </span>
       </nav>
 

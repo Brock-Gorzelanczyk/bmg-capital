@@ -84,7 +84,7 @@ async def _call_ai(system_prompt: str, user_message: str, context: str) -> tuple
     """Call Anthropic Claude Haiku and return (response_text, citations)."""
     if not settings.anthropic_api_key:
         return (
-            "AI service not configured. Please set ANTHROPIC_API_KEY.",
+            "Voice briefing temporarily unavailable. Try again in a moment.",
             [],
         )
     try:

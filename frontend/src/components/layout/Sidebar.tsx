@@ -367,10 +367,11 @@ interface Props {
 }
 
 export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Props) {
-  const { logout } = useAuthStore();
+  const { logout, user } = useAuthStore();
   const navigate = useNavigate();
   const streak = useLearnStore((s) => s.progress?.streak ?? 0);
   const tier = useTierStore((s) => s.tier);
+  const isAdmin = user?.is_admin === true;
 
   const { data: autoStatus } = useQuery({
     queryKey: ["autonomous-status"],
@@ -453,7 +454,7 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
 
         <NavSection label="Community" items={NAV_COMMUNITY} expanded={expanded} />
 
-        <NavSection label="Admin" items={NAV_ADMIN} expanded={expanded} />
+        {isAdmin && <NavSection label="Admin" items={NAV_ADMIN} expanded={expanded} />}
       </nav>
 
       {/* Bottom: Upgrade + Avatar */}

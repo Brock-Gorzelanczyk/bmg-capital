@@ -134,11 +134,11 @@ const FAQ_ITEMS = [
   },
   {
     q: "Is this real money or paper?",
-    a: "Paper only. BMG is a simulation platform — no real capital is deployed. Live trading is targeted for Q3 2026 pending Wisconsin RIA registration.",
+    a: "Paper only. BMG is a simulation platform — no real capital is deployed. Live trading is coming soon, pending RIA registration.",
   },
   {
     q: "When does live trading unlock?",
-    a: "Live trading is expected Q3 2026 when BMG completes RIA registration. Pro+ subscribers get first access.",
+    a: "Live trading is coming soon when BMG completes RIA registration. Pro+ subscribers get first access.",
   },
   {
     q: "What if my bot loses money?",
@@ -507,7 +507,7 @@ export default function PricingPage() {
               Past performance does not guarantee future results. BMG Capital is not a registered
               investment adviser. All content is for informational purposes only. All performance
               figures are hypothetical backtested or paper-trading results. No real money is traded.
-              Live trading subject to Wisconsin RIA registration expected Q3 2026.
+              Live trading coming soon, subject to Wisconsin RIA registration.
             </p>
           </div>
         </div>

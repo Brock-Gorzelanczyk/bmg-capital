@@ -444,19 +444,22 @@ export const getStrategyLabPortfolio = (): Promise<PortfolioData> =>
   client
     .get<PortfolioData>("/strategy-lab/portfolio")
     .then((r) => r.data)
-    .catch((): PortfolioData => ({
-      total_value_cents: 0,
-      yesterday_value_cents: 0,
-      today_pnl_cents: 0,
-      today_pnl_pct: 0,
-      return_30d_pct: 0,
-      return_30d_value_cents: 0,
-      return_all_time_pct: 0,
-      sharpe_30d: 0,
-      total_open_positions: 0,
-      total_watchlist_count: 0,
-      equity_curve: [],
-      leaderboard: [],
-      best_performer: null,
-      worst_performer: null,
-    }));
+    .catch((err): PortfolioData => {
+      console.error("[strategy-lab/portfolio] failed to load aggregate:", err);
+      return {
+        total_value_cents: 0,
+        yesterday_value_cents: 0,
+        today_pnl_cents: 0,
+        today_pnl_pct: 0,
+        return_30d_pct: 0,
+        return_30d_value_cents: 0,
+        return_all_time_pct: 0,
+        sharpe_30d: 0,
+        total_open_positions: 0,
+        total_watchlist_count: 0,
+        equity_curve: [],
+        leaderboard: [],
+        best_performer: null,
+        worst_performer: null,
+      };
+    });

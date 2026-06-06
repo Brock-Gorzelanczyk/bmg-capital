@@ -158,7 +158,7 @@ export default function LandingPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-zinc-500 hidden sm:block">
-            Live trading Q3 2026 · join waitlist →
+            Live trading coming soon · join waitlist →
           </span>
           <button
             onClick={() => navigate("/login")}

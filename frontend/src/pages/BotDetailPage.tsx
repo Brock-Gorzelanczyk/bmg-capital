@@ -132,6 +132,19 @@ function displayName(name: string): string {
   );
 }
 
+const CADENCE_MAP: Record<string, string> = {
+  "* 9-15 * * 1-5": "Trades intraday, Mon–Fri",
+  "5 16 * * 1-5":   "Runs at 4:05 PM ET, Mon–Fri",
+  "0 10 1-7 * 2":   "Rebalances 1st Tuesday/month",
+  "* * * * *":      "Trades 24/7",
+  "intraday":       "Trades intraday, Mon–Fri",
+  "weekly":         "Rebalances weekly",
+  "daily":          "Runs daily",
+};
+function formatCadence(c: string): string {
+  return CADENCE_MAP[c] ?? c.replace(/_/g, " ");
+}
+
 function formatPnl(val: number): string {
   const abs = Math.abs(val);
   const sign = val >= 0 ? "+" : "-";
@@ -1522,13 +1535,13 @@ function SettingsTab({
             <button
               disabled
               className="relative inline-flex h-6 w-11 items-center rounded-full bg-zinc-700 cursor-not-allowed opacity-50"
-              title="Live trading unlocks Q3 2026 after WI DFI RIA approval"
+              title="Live trading coming soon — paper trading only"
             >
               <span className="translate-x-1 inline-block h-4 w-4 rounded-full bg-white" />
             </button>
           </div>
           <span className="text-xs text-zinc-500">
-            Live trading unlocks Q3 2026 after WI DFI RIA approval
+            Live trading coming soon — paper trading only
           </span>
         </div>
         {notified ? (
@@ -1778,7 +1791,7 @@ export default function BotDetailPage() {
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
         <span className="text-amber-400 text-sm font-semibold">📄 Paper trading only.</span>
         <span className="text-amber-300 text-xs">
-          Live trading unlocks Q3 2026 when BMG completes RIA registration.
+          Live trading coming soon — paper trading only until RIA registration.
         </span>
         <button
           onClick={() => waitlistMut.mutate(!isOnWaitlist)}
@@ -2174,7 +2187,7 @@ export default function BotDetailPage() {
                 </div>
                 <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
                   <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Cadence</p>
-                  <p className="text-sm font-bold text-zinc-300 capitalize">{profile?.cadence ?? "—"}</p>
+                  <p className="text-sm font-bold text-zinc-300 capitalize">{profile?.cadence ? formatCadence(profile.cadence) : "—"}</p>
                 </div>
                 <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
                   <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Strategies</p>

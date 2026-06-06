@@ -111,7 +111,16 @@ function displayName(name: string): string {
 }
 
 function formatCadence(cadence: string): string {
-  return cadence.toUpperCase();
+  const MAP: Record<string, string> = {
+    "* 9-15 * * 1-5":  "Trades intraday, Mon–Fri",
+    "5 16 * * 1-5":    "Runs at 4:05 PM ET, Mon–Fri",
+    "0 10 1-7 * 2":    "Rebalances 1st Tuesday/month",
+    "* * * * *":       "Trades 24/7",
+    "intraday":        "Trades intraday, Mon–Fri",
+    "weekly":          "Rebalances weekly",
+    "daily":           "Runs daily",
+  };
+  return MAP[cadence] ?? cadence.replace(/_/g, " ");
 }
 
 // ─── Regime status bar ────────────────────────────────────────────────────────
@@ -1353,7 +1362,7 @@ export default function StrategyLab() {
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
             <span className="text-amber-400 text-sm font-semibold">📄 Paper trading only.</span>
             <span className="text-amber-300 text-xs">
-              Live trading unlocks Q3 2026 when BMG completes RIA registration.
+              Live trading coming soon — paper trading only until RIA registration.
             </span>
             <button
               onClick={() => globalWaitlistMut.mutate()}

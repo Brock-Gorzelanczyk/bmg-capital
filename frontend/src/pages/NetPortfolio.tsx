@@ -112,7 +112,7 @@ export default function NetPortfolio() {
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
         <span className="text-amber-400 text-sm font-semibold">Paper trading only.</span>
         <span className="text-amber-300 text-xs">
-          Live trading unlocks Q3 2026 after WI DFI RIA approval.
+          Live trading coming soon — paper trading only until RIA registration.
         </span>
       </div>
 

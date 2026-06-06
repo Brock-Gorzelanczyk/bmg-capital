@@ -90,17 +90,12 @@ export default function VoiceAIModal({ open, onClose }: Props) {
     };
   }, [open]);
 
-  // Auto-prime on open (once per open lifecycle)
+  // Reset hasAutoOpened when modal closes
   useEffect(() => {
-    if (open && messages.length === 0 && !hasAutoOpened.current) {
-      hasAutoOpened.current = true;
-      const t = setTimeout(() => sendMessage("Hello, I'm ready to discuss my portfolio."), 500);
-      return () => clearTimeout(t);
-    }
     if (!open) {
       hasAutoOpened.current = false;
     }
-  }, [open, messages.length, sendMessage]);
+  }, [open]);
 
   // Focus input on open
   useEffect(() => {
