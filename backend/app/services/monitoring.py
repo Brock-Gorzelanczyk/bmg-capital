@@ -182,7 +182,7 @@ async def check_financial_integrity(db: Session) -> dict:
 async def run_ai_sentinel(db: Session, anthropic_api_key: str) -> dict:
     """
     Nightly LLM review. Sample recent anomalies and get a structured digest from
-    Claude claude-sonnet-4-5.
+    Claude claude-sonnet-4-6.
 
     Returns::
         {findings: [{priority, title, description, action}], generated_at: str}
