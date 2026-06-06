@@ -2343,3 +2343,43 @@ def get_watchlist_movers(
 
     movers = sorted(seen.values(), key=lambda x: -x["score"])[: max(1, min(limit, 20))]
     return {"movers": movers}
+
+
+# ── POST /api/bots/{profile_name}/run-now ─────────────────────────────────────
+
+@router.post("/{profile_name}/run-now")
+def run_bot_now(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Manually trigger a paper-trade execution cycle for a single bot."""
+    profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not profile:
+        raise HTTPException(404, f"Bot '{profile_name}' not found")
+
+    alloc = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not alloc:
+        raise HTTPException(404, "No allocation found — enable this bot first")
+    if not alloc.enabled:
+        raise HTTPException(400, "Bot is disabled — enable it before running")
+
+    try:
+        from app.screener.bot_executor import _execute_bot
+        from datetime import date
+        today = date.today()
+        now = datetime.now(timezone.utc)
+        _execute_bot(db, current_user.id, alloc, profile, today, now)
+        db.commit()
+    except Exception as exc:
+        logger.error("run-now failed for %s: %s", profile_name, exc)
+        raise HTTPException(500, "Execution failed — check logs")
+
+    return {"ok": True, "bot": profile_name, "message": "Execution cycle complete"}

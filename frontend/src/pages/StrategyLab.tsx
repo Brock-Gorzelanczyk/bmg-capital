@@ -20,6 +20,7 @@ import {
   setupPortfolios,
   getPendingReviews,
   getStrategyLabPortfolio,
+  runBotNow,
   type BotListItem,
   type RegimeData,
   type PendingReview,
@@ -594,6 +595,15 @@ function BotCard({ item, onNavigate }: BotCardProps) {
     onError: () => toast.error("Failed to update waitlist"),
   });
 
+  const runNowMut = useMutation({
+    mutationFn: () => runBotNow(profile.name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bots-v2"] });
+      toast.success(`${displayName(profile.name)} executed a trade cycle`);
+    },
+    onError: () => toast.error("Run failed — check that the bot is enabled"),
+  });
+
   const isEnabled = allocation?.enabled ?? false;
   const isOnWaitlist = allocation?.go_live_requested ?? false;
 
@@ -706,6 +716,16 @@ function BotCard({ item, onNavigate }: BotCardProps) {
         >
           {allocateMut.isPending ? "…" : isEnabled ? "Disable" : "Enable"}
         </button>
+        {isEnabled && (
+          <button
+            onClick={() => runNowMut.mutate()}
+            disabled={runNowMut.isPending}
+            className="text-xs font-semibold py-2 px-3 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+            title="Manually trigger a trade cycle"
+          >
+            {runNowMut.isPending ? "…" : "▶ Run"}
+          </button>
+        )}
         <button
           onClick={() => waitlistMut.mutate(!isOnWaitlist)}
           disabled={waitlistMut.isPending}

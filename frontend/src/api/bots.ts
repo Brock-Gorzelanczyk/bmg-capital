@@ -440,6 +440,9 @@ export const getWatchlistMovers = (limit = 4): Promise<{ movers: WatchlistMover[
     .then((r) => r.data)
     .catch(() => ({ movers: [] }));
 
+export const runBotNow = (profileName: string): Promise<{ ok: boolean; message: string }> =>
+  client.post(`/bots/${profileName}/run-now`).then((r) => r.data);
+
 export const getStrategyLabPortfolio = (): Promise<PortfolioData> =>
   client
     .get<PortfolioData>("/strategy-lab/portfolio")
