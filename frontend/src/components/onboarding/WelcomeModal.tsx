@@ -1,5 +1,29 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import client from "@/api/client";
+
+// ── Map quiz answers to API fields ─────────────────────────────────────────────
+
+function mapExperience(val: string): string {
+  if (val === "Active trader") return "advanced";
+  if (val === "1–3 years") return "intermediate";
+  return "beginner";
+}
+function mapGoal(val: string): string {
+  if (val === "Learn the basics") return "learn";
+  if (val === "Practice day trading") return "trade";
+  return "invest";
+}
+function mapRisk(val: string): string {
+  if (val === "Aggressive") return "aggressive";
+  if (val === "Conservative") return "conservative";
+  return "moderate";
+}
+function mapTime(val: string): string {
+  if (val === "15+ hours") return "long";
+  if (val === "5–15 hours") return "medium";
+  return "short";
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -162,9 +186,21 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
     }
   }
 
-  function handleFinish() {
+  async function handleFinish() {
     localStorage.setItem("bmg_onboarded", "true");
     localStorage.setItem("bmg_quiz_answers", JSON.stringify(answers));
+    // Save to backend (best-effort — don't block close on failure)
+    try {
+      await client.post("/api/onboarding/complete", {
+        experience:     mapExperience(answers.experience ?? ""),
+        goal:           mapGoal(answers.goal ?? ""),
+        risk_tolerance: mapRisk(answers.risk ?? ""),
+        time_horizon:   mapTime(answers.time ?? ""),
+        asset_classes:  answers.asset ? [answers.asset.toLowerCase()] : [],
+      });
+    } catch {
+      // silently ignore — localStorage is the fallback
+    }
     onClose();
   }
 

@@ -99,9 +99,47 @@ import CoPilot from "@/components/CoPilot";
 import { useCoPilot } from "@/hooks/useCoPilot";
 
 const PageLoader = () => (
-  <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
-    <div style={{ width: 32, height: 32, border: "2px solid #84cc16", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  <div style={{ minHeight: "100vh", background: "#0a0a0a", padding: "24px" }}>
+    <style>{`
+      @keyframes shimmer { 0% { background-position: -600px 0; } 100% { background-position: 600px 0; } }
+      .sk { background: linear-gradient(90deg,#1c1c1e 25%,#2a2a2e 50%,#1c1c1e 75%); background-size: 600px 100%; animation: shimmer 1.4s infinite linear; border-radius: 8px; }
+    `}</style>
+    {/* Sidebar skeleton */}
+    <div style={{ display: "flex", gap: 24, height: "calc(100vh - 48px)" }}>
+      <div style={{ width: 220, flexShrink: 0, background: "#111113", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="sk" style={{ height: 32, width: "70%", marginBottom: 8 }} />
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="sk" style={{ height: 32, width: i % 3 === 2 ? "60%" : "85%" }} />
+        ))}
+      </div>
+      {/* Content skeleton */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Header bar */}
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div className="sk" style={{ height: 28, width: 180 }} />
+          <div style={{ flex: 1 }} />
+          <div className="sk" style={{ height: 28, width: 80 }} />
+          <div className="sk" style={{ height: 28, width: 80 }} />
+        </div>
+        {/* Card row */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{ background: "#111113", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="sk" style={{ height: 12, width: "50%" }} />
+              <div className="sk" style={{ height: 28, width: "70%" }} />
+              <div className="sk" style={{ height: 10, width: "40%" }} />
+            </div>
+          ))}
+        </div>
+        {/* Main content block */}
+        <div style={{ background: "#111113", borderRadius: 16, padding: 20, flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="sk" style={{ height: 16, width: 140 }} />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="sk" style={{ height: 40, width: i % 2 === 0 ? "100%" : "80%" }} />
+          ))}
+        </div>
+      </div>
+    </div>
   </div>
 );
 
