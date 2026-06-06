@@ -1,6 +1,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { Outlet, useLocation, NavLink, Link } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useIsAdmin } from "@/store/authStore";
 import { House, BarChart2, Bot, Newspaper, User } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
@@ -42,6 +43,7 @@ const BOTTOM_NAV = [
 
 export default function AppShell() {
   const { pathname } = useLocation();
+  const isAdmin = useIsAdmin();
   const isChart = pathname === "/chart";
   const qc = useQueryClient();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -135,6 +137,16 @@ export default function AppShell() {
 
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+        {/* Admin lockdown banner — non-admin users only */}
+        {!isAdmin && (
+          <div className="flex items-center gap-2 bg-orange-500/10 border-b border-orange-500/20 px-4 py-2 text-xs text-orange-400 shrink-0">
+            <span>🔒</span>
+            <span>
+              <span className="font-semibold text-orange-300">BMG Capital is in research mode.</span>
+              {" Admin lockdown active. You can view all data but cannot make changes."}
+            </span>
+          </div>
+        )}
         {/* Paper-trading banner — permanent */}
         <div className="flex items-center bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs text-amber-400 shrink-0">
           <span className="flex items-center gap-2 flex-wrap">

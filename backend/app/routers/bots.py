@@ -24,7 +24,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_db, get_current_user, require_admin
 from app.db.models.bots import (
     BotProfile,
     BotAllocation,
@@ -413,7 +413,7 @@ def get_regime(
 @router.post("/pause-all")
 def pause_all_bots(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Pause all of the current user's BotAllocations."""
     allocs = (
@@ -440,7 +440,7 @@ def pause_all_bots(
 @router.post("/resume-all")
 def resume_all_bots(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Resume all of the current user's BotAllocations (clears paused_reason)."""
     allocs = (
@@ -467,7 +467,7 @@ def resume_all_bots(
 @router.post("/activate-all")
 def activate_all_bots(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Ensure every enabled BotProfile has an active allocation for this user.
 
@@ -690,7 +690,7 @@ def get_portfolio_activity(
 @router.post("/portfolios/setup")
 def setup_portfolios(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Idempotent: create the 3 strategy portfolios for the current user if missing."""
     from app.db.models.bots import StrategyPortfolio
@@ -947,7 +947,7 @@ def update_strategy_weight(
     strategy: str,
     data: dict = Body(...),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Lock or unlock a strategy weight for a bot profile.
 
@@ -991,7 +991,7 @@ def ask_bot_question(
     profile_name: str,
     data: dict = Body(...),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Co-Pilot Q&A endpoint for a bot profile.
 
@@ -1361,7 +1361,7 @@ def update_card_config(
     profile_name: str,
     data: dict = Body(...),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Save per-card customization to BotAllocation.card_config"""
     profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
@@ -1392,7 +1392,7 @@ def update_card_config(
 def bulk_update_card_config(
     data: dict = Body(...),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Apply same card config to all user's allocations"""
     allocations = db.query(BotAllocation).filter(
@@ -1680,7 +1680,7 @@ def get_bot(
 def allocate_custom_bot(
     body: CustomBotAllocateBody,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """
     Create or update a BotAllocation for a custom bot by name.
@@ -1747,7 +1747,7 @@ def allocate_bot(
     profile_name: str,
     body: AllocateBody,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Create or update a BotAllocation for the current user."""
     # Paper mode gate
@@ -2056,7 +2056,7 @@ def get_health(
 def join_waitlist(
     profile_name: str,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Add the current user to the GoLive waitlist for a bot profile."""
     profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
@@ -2097,7 +2097,7 @@ def join_waitlist(
 def leave_waitlist(
     profile_name: str,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Opt the current user out of the GoLive waitlist."""
     profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
@@ -2126,7 +2126,7 @@ def leave_waitlist(
 @router.post("/migrate-legacy")
 def migrate_legacy_positions(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """
     One-shot migration: copies open positions and candidates from the old
@@ -2384,7 +2384,7 @@ def get_watchlist_movers(
 def run_bot_now(
     profile_name: str,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Manually trigger a paper-trade execution cycle for a single bot."""
     profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
@@ -2427,7 +2427,7 @@ _FORCE_TRADE_COOLDOWN_SECS = 60
 @router.post("/debug/force-trade")
 def debug_force_trade(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """
     Inject a real BTC/USD paper trade through the full pipeline and report each step.

@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import client from "@/api/client";
 
+export function useIsAdmin(): boolean {
+  return useAuthStore((s) => s.user?.is_admin ?? false);
+}
+
 interface AuthUser {
   id: number;
   email: string;

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_db, get_current_user, require_admin
 from app.db.models.users import User
 from app.db.models.notifications import Notification, NotificationPrefs
 
@@ -101,7 +101,7 @@ def unread_count(
 @router.post("/{notif_id}/read")
 def mark_read(
     notif_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     n = db.query(Notification).filter_by(id=notif_id, user_id=current_user.id).first()
@@ -114,7 +114,7 @@ def mark_read(
 
 @router.post("/read-all")
 def mark_all_read(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     db.query(Notification).filter_by(user_id=current_user.id, is_read=False).update({"is_read": True})
@@ -125,7 +125,7 @@ def mark_all_read(
 @router.delete("/{notif_id}")
 def delete_notification(
     notif_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     n = db.query(Notification).filter_by(id=notif_id, user_id=current_user.id).first()
@@ -138,7 +138,7 @@ def delete_notification(
 
 @router.delete("")
 def clear_all(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     db.query(Notification).filter_by(user_id=current_user.id).delete()
@@ -165,7 +165,7 @@ class PrefsUpdate(BaseModel):
 @router.put("/settings")
 def update_settings(
     body: PrefsUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     row = db.query(NotificationPrefs).filter_by(user_id=current_user.id).first()
@@ -253,7 +253,7 @@ class PolicyUpdate(BaseModel):
 @router.patch("/policy")
 def update_notification_policy(
     body: PolicyUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
@@ -371,7 +371,7 @@ def get_bot_alert_preferences(
 @router.patch("/bot-alerts/preferences")
 def update_bot_alert_preferences(
     body: BotAlertPrefsUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Update configurable bot-alert preferences (daily_summary, per_trade_fill).

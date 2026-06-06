@@ -91,6 +91,11 @@ def _user_dict(user: User) -> dict:
 
 @router.post("/register", response_model=TokenResponse)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    # Admin lockdown 2026-06-06: signups closed for paper-trading research period.
+    raise HTTPException(
+        status_code=403,
+        detail="Signups are closed for the paper-trading research period. If you have an account, log in above.",
+    )
     _check_rate_limit(body.email.lower().strip())
     if db.query(User).filter(User.email == body.email.lower().strip()).first():
         raise HTTPException(status_code=400, detail="Email already registered")

@@ -228,3 +228,20 @@ To restore: rename back with `ALTER TABLE "portfolios_archived" RENAME TO "portf
 `/api/portfolio` now reads from the bot-aggregate (`BotAllocation` + `BotDailyPnL` + `BotPosition`) — same data source as `/api/strategy-lab/portfolio`.
 
 SQLAlchemy models in `app/db/models/portfolio.py` and `app/db/models/paper.py` now point to the `*_archived` table names so existing service imports continue to compile.
+
+## Admin Lockdown (enabled 2026-06-06)
+
+**Status:** Active — read-only for non-admin users.
+
+**What's locked:**
+- `POST /api/auth/register` → 403 (signups closed)
+- All mutations on `/api/bots/*`, `/api/watchlist/*`, `/api/journal/*`, `/api/notifications/*` (write ops) require `is_admin=true`
+- `require_admin` dependency in `app/dependencies.py`
+- Admin email: `32bgorzelanczyk@gmail.com` (granted at startup via `migration.py::_grant_admin`)
+- Frontend: orange lockdown banner for non-admin, "Pause All" button hidden
+
+**To restore multi-user write access:**
+1. Re-enable `/api/auth/register` — remove the early `raise HTTPException(403, ...)` in `auth.py`
+2. Remove `require_admin` from mutation routes — search for `Depends(require_admin)` and replace with `Depends(get_current_user)`
+3. Remove `useIsAdmin` gating from `TopBar.tsx` and `AppShell.tsx`
+4. Remove the orange banner block from `AppShell.tsx`

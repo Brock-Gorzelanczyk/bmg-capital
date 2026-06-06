@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu, Clock, TrendingUp, TrendingDown, BarChart2, AlertTriangle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWsStore, useAlertStore, useUiStore, useNotificationStore, useMarketStore } from "@/store";
+import { useIsAdmin } from "@/store/authStore";
 import { getNotifications } from "@/api/notifications";
 import { getRegime } from "@/api/strategy";
 import { getMyTier } from "@/api/tiers";
@@ -45,6 +46,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
       qc.invalidateQueries({ queryKey: ["strategy-lab-portfolio"] });
     },
   });
+  const isAdmin = useIsAdmin();
   const wsStatus = useWsStore((s) => s.status);
   const equityStatus = useEquityMarketStatus();
   const isCryptoRoute = ALWAYS_LIVE_PREFIXES.some((p) => pathname.startsWith(p));
@@ -119,14 +121,16 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
       />
 
       <div className="flex items-center gap-2 md:gap-3 ml-auto">
-        {/* Pause All Bots */}
-        <button
-          onClick={() => pauseMut.mutate()}
-          disabled={pauseMut.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg transition-colors"
-        >
-          {pauseMut.isPending ? "Pausing..." : "⏸ Pause All"}
-        </button>
+        {/* Pause All Bots — admin only */}
+        {isAdmin && (
+          <button
+            onClick={() => pauseMut.mutate()}
+            disabled={pauseMut.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg transition-colors"
+          >
+            {pauseMut.isPending ? "Pausing..." : "⏸ Pause All"}
+          </button>
+        )}
         {/* Demo mode pill */}
         {DEMO_MODE && <DemoPill />}
         {/* Regime chip */}

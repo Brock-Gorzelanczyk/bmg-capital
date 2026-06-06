@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.alpaca.client import get_historical_client
 from app.db.models.users import User
 from app.db.models.watchlist import Watchlist, WatchlistItem
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_db, get_current_user, require_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/watchlists", tags=["watchlists"])
@@ -57,7 +57,7 @@ def list_watchlists(
 def create_watchlist(
     body: WatchlistCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     wl = Watchlist(name=body.name, user_id=current_user.id)
     db.add(wl)
@@ -84,7 +84,7 @@ def get_watchlist(
 def delete_watchlist(
     watchlist_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     wl = db.query(Watchlist).filter(
         Watchlist.id == watchlist_id, Watchlist.user_id == current_user.id
@@ -101,7 +101,7 @@ def add_symbol(
     watchlist_id: int,
     body: SymbolAdd,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     wl = db.query(Watchlist).filter(
         Watchlist.id == watchlist_id, Watchlist.user_id == current_user.id
@@ -132,7 +132,7 @@ def remove_symbol(
     watchlist_id: int,
     symbol: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     symbol = symbol.upper()
     wl = db.query(Watchlist).filter(

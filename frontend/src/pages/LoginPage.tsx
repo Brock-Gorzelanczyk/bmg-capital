@@ -251,22 +251,12 @@ function LoginForm() {
   return (
     <div className="w-full max-w-sm">
       <div className="bg-[#0a0f1e] border border-[#1e293b] rounded-2xl p-6">
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-[#020617] rounded-lg p-1">
-          {(["login", "register"] as const).map(m => (
-            <button
-              key={m}
-              onClick={() => { setMode(m); setError(""); }}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                mode === m
-                  ? "bg-[#0f172a] text-white"
-                  : "text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              {m === "login" ? "Sign in" : "Create account"}
-            </button>
-          ))}
-        </div>
+        {/* Login header — signups closed */}
+        <h2 className="text-base font-semibold text-white mb-1">Sign in to BMG Capital</h2>
+        <p className="text-xs text-slate-500 mb-6">
+          Signups are temporarily closed for the paper-trading research period.
+          {" "}If you have an account, log in below.
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

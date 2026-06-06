@@ -406,6 +406,7 @@ def run_migrations(engine: Engine) -> None:
         _fix_bots_enabled(conn)
         _ensure_v2_tables(conn)
         _archive_legacy_tables(conn)
+        _grant_admin(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -436,3 +437,28 @@ def _archive_legacy_tables(conn) -> None:
             logger.info("Archived legacy table: %s → %s", src, dst)
         except Exception as exc:
             logger.warning("archive_legacy_tables: %s → %s failed: %s", src, dst, exc)
+
+
+_ADMIN_EMAIL = "32bgorzelanczyk@gmail.com"
+
+
+def _grant_admin(conn) -> None:
+    """Idempotent: ensure the designated admin email has is_admin=1."""
+    try:
+        row = conn.execute(
+            text("SELECT id, email, is_admin FROM users WHERE email = :email"),
+            {"email": _ADMIN_EMAIL},
+        ).fetchone()
+        if row is None:
+            logger.info("grant_admin: user %s not found yet — will set on first login", _ADMIN_EMAIL)
+            return
+        if row[2]:  # already admin
+            return
+        conn.execute(
+            text("UPDATE users SET is_admin = 1 WHERE email = :email"),
+            {"email": _ADMIN_EMAIL},
+        )
+        conn.commit()
+        logger.info("grant_admin: %s (id=%s) promoted to admin", _ADMIN_EMAIL, row[0])
+    except Exception as exc:
+        logger.warning("grant_admin failed: %s", exc)

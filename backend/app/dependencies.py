@@ -36,3 +36,17 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+
+def require_admin(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Authenticate + assert is_admin. Use instead of get_current_user on mutation routes."""
+    user = get_current_user(token, db)
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "admin_only",
+                "detail": "This action is disabled. Only the admin can modify portfolios and bots right now.",
+            },
+        )
+    return user
