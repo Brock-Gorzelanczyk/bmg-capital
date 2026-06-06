@@ -53,7 +53,6 @@ const PREFETCH_MAP: Record<string, (qc: QueryClient) => void> = {
 
 const NAV_TRADE = [
   { to: "/",                 label: "Dashboard",       Icon: LayoutDashboard },
-  { to: "/net-worth",        label: "Net Worth",       Icon: Globe },
   { to: "/mission-control",  label: "Mission Control", Icon: Cpu },
   { to: "/autopilot",        label: "Autopilot",       Icon: Zap },
   { to: "/chart",            label: "Chart",           Icon: LineChart },
