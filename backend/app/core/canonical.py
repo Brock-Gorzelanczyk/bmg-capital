@@ -153,10 +153,16 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
             break
 
     if latest_eod is not None:
-        portfolio_value_cents = latest_eod
-        # Add today's realized if today's row doesn't have its own EOD snapshot
-        if today_row and today_row.portfolio_value_eod_cents is None:
-            portfolio_value_cents += int(today_row.realized_cents or 0)
+        # Guard against stale EOD rows from before a capital upgrade:
+        # if latest_eod is less than 30% of current starting capital it reflects
+        # an old seeded amount, not real trading losses — fall back to computed value.
+        eod_is_stale = starting_capital_cents > 0 and latest_eod < starting_capital_cents * 0.3
+        if eod_is_stale:
+            portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
+        else:
+            portfolio_value_cents = latest_eod
+            if today_row and today_row.portfolio_value_eod_cents is None:
+                portfolio_value_cents += int(today_row.realized_cents or 0)
     else:
         portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
 

@@ -90,77 +90,140 @@ def _compute_atr(df: pd.DataFrame, period: int = 14) -> float:
 
 
 def _get_prices_sync(symbols: List[str]) -> Dict[str, float]:
-    """Fetch latest prices via Alpaca IEX; falls back to most-recent daily bar."""
+    """Fetch latest prices via Alpaca.
+
+    Stocks (no '/') → StockHistoricalDataClient, IEX feed.
+    Crypto ('SYMBOL/QUOTE') → CryptoHistoricalDataClient, normalized to SYMBOL/USD.
+    """
     if not symbols:
         return {}
-    from alpaca.data.enums import DataFeed
-    from alpaca.data.requests import StockBarsRequest, StockLatestTradeRequest
-    from alpaca.data.timeframe import TimeFrame
-    from app.alpaca.client import get_historical_client
 
+    stock_syms = [s for s in symbols if "/" not in s]
+    crypto_syms = [s for s in symbols if "/" in s]
     prices: Dict[str, float] = {}
-    client = get_historical_client()
 
-    try:
-        trades = client.get_stock_latest_trade(
-            StockLatestTradeRequest(symbol_or_symbols=symbols, feed=DataFeed.IEX)
-        )
-        for sym, trade in trades.items():
-            if trade and trade.price and trade.price > 0:
-                prices[sym] = float(trade.price)
-    except Exception as e:
-        logger.warning("Alpaca latest-trade fetch failed: %s", e)
+    # ── Stocks ────────────────────────────────────────────────────────────────
+    if stock_syms:
+        from alpaca.data.enums import DataFeed
+        from alpaca.data.requests import StockBarsRequest, StockLatestTradeRequest
+        from alpaca.data.timeframe import TimeFrame
+        from app.alpaca.client import get_historical_client
 
-    missing = [s for s in symbols if s not in prices]
-    if missing:
+        client = get_historical_client()
         try:
-            bars_data = client.get_stock_bars(
-                StockBarsRequest(
-                    symbol_or_symbols=missing,
-                    timeframe=TimeFrame.Day,
-                    start=date.today() - timedelta(days=7),
-                    feed=DataFeed.IEX,
-                )
+            trades = client.get_stock_latest_trade(
+                StockLatestTradeRequest(symbol_or_symbols=stock_syms, feed=DataFeed.IEX)
             )
-            for sym in missing:
-                sym_bars = bars_data.data.get(sym, [])
-                if sym_bars:
-                    last_close = float(sym_bars[-1].close)
-                    if last_close > 0:
-                        prices[sym] = last_close
+            for sym, trade in trades.items():
+                if trade and trade.price and trade.price > 0:
+                    prices[sym] = float(trade.price)
         except Exception as e:
-            logger.warning("Alpaca bars fallback failed: %s", e)
+            logger.warning("Alpaca stock latest-trade failed: %s", e)
+
+        missing_stocks = [s for s in stock_syms if s not in prices]
+        if missing_stocks:
+            try:
+                bars_data = client.get_stock_bars(
+                    StockBarsRequest(
+                        symbol_or_symbols=missing_stocks,
+                        timeframe=TimeFrame.Day,
+                        start=date.today() - timedelta(days=7),
+                        feed=DataFeed.IEX,
+                    )
+                )
+                for sym in missing_stocks:
+                    sym_bars = bars_data.data.get(sym, [])
+                    if sym_bars:
+                        last_close = float(sym_bars[-1].close)
+                        if last_close > 0:
+                            prices[sym] = last_close
+            except Exception as e:
+                logger.warning("Alpaca stock bars fallback failed: %s", e)
+
+    # ── Crypto (SYMBOL/QUOTE format) ──────────────────────────────────────────
+    if crypto_syms:
+        from alpaca.data.historical.crypto import CryptoHistoricalDataClient
+        from alpaca.data.requests import CryptoLatestTradeRequest
+
+        # Normalize to SYMBOL/USD (Alpaca doesn't use USDT)
+        alpaca_map: Dict[str, str] = {}  # original_sym → alpaca_sym
+        for s in crypto_syms:
+            base = s.split("/")[0]
+            alpaca_sym = f"{base}/USD"
+            alpaca_map[s] = alpaca_sym
+
+        alpaca_syms = list(set(alpaca_map.values()))
+        try:
+            crypto_client = CryptoHistoricalDataClient()
+            trades = crypto_client.get_crypto_latest_trade(
+                CryptoLatestTradeRequest(symbol_or_symbols=alpaca_syms)
+            )
+            alpaca_to_price = {sym: float(t.price) for sym, t in trades.items() if t and t.price > 0}
+            for orig, alpaca_sym in alpaca_map.items():
+                if alpaca_sym in alpaca_to_price:
+                    prices[orig] = alpaca_to_price[alpaca_sym]
+        except Exception as e:
+            logger.warning("Alpaca crypto latest-trade failed: %s", e)
 
     return prices
 
 
 def _get_prev_closes_sync(symbols: List[str]) -> Dict[str, float]:
-    """Return previous session's closing price via Alpaca IEX daily bars."""
+    """Return previous session's closing price. Stocks via Alpaca IEX bars; crypto via Alpaca crypto bars."""
     if not symbols:
         return {}
-    from alpaca.data.enums import DataFeed
-    from alpaca.data.requests import StockBarsRequest
-    from alpaca.data.timeframe import TimeFrame
-    from app.alpaca.client import get_historical_client
 
+    stock_syms = [s for s in symbols if "/" not in s]
+    crypto_syms = [s for s in symbols if "/" in s]
     prev: Dict[str, float] = {}
-    try:
-        bars_data = get_historical_client().get_stock_bars(
-            StockBarsRequest(
-                symbol_or_symbols=symbols,
-                timeframe=TimeFrame.Day,
-                start=date.today() - timedelta(days=7),
-                feed=DataFeed.IEX,
+
+    if stock_syms:
+        from alpaca.data.enums import DataFeed
+        from alpaca.data.requests import StockBarsRequest
+        from alpaca.data.timeframe import TimeFrame
+        from app.alpaca.client import get_historical_client
+
+        try:
+            bars_data = get_historical_client().get_stock_bars(
+                StockBarsRequest(
+                    symbol_or_symbols=stock_syms,
+                    timeframe=TimeFrame.Day,
+                    start=date.today() - timedelta(days=7),
+                    feed=DataFeed.IEX,
+                )
             )
-        )
-        for sym in symbols:
-            sym_bars = bars_data.data.get(sym, [])
-            if len(sym_bars) >= 2:
-                prev[sym] = float(sym_bars[-2].close)
-            elif len(sym_bars) == 1:
-                prev[sym] = float(sym_bars[-1].close)
-    except Exception as e:
-        logger.warning("Alpaca prev-close fetch failed: %s", e)
+            for sym in stock_syms:
+                sym_bars = bars_data.data.get(sym, [])
+                if len(sym_bars) >= 2:
+                    prev[sym] = float(sym_bars[-2].close)
+                elif len(sym_bars) == 1:
+                    prev[sym] = float(sym_bars[-1].close)
+        except Exception as e:
+            logger.warning("Alpaca stock prev-close failed: %s", e)
+
+    if crypto_syms:
+        from alpaca.data.historical.crypto import CryptoHistoricalDataClient
+        from alpaca.data.requests import CryptoBarsRequest
+        from alpaca.data.timeframe import TimeFrame
+
+        alpaca_map: Dict[str, str] = {s: f"{s.split('/')[0]}/USD" for s in crypto_syms}
+        try:
+            bars_data = CryptoHistoricalDataClient().get_crypto_bars(
+                CryptoBarsRequest(
+                    symbol_or_symbols=list(set(alpaca_map.values())),
+                    timeframe=TimeFrame.Day,
+                    start=date.today() - timedelta(days=7),
+                )
+            )
+            for orig, alpaca_sym in alpaca_map.items():
+                sym_bars = bars_data.data.get(alpaca_sym, [])
+                if len(sym_bars) >= 2:
+                    prev[orig] = float(sym_bars[-2].close)
+                elif len(sym_bars) == 1:
+                    prev[orig] = float(sym_bars[-1].close)
+        except Exception as e:
+            logger.warning("Alpaca crypto prev-close failed: %s", e)
+
     return prev
 
 
