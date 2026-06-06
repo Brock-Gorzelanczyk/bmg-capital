@@ -180,7 +180,10 @@ function TradeMiniChart({ symbol, entryPrice, stopLoss, takeProfit, strategy }: 
           bars={bars}
           indicators={overlayIndicators}
           drawings={drawings}
-          height={256}
+          chartType="candle"
+          activeTool="cursor"
+          onCrosshairMove={() => {}}
+          onAddDrawing={() => {}}
         />
       </div>
     </div>

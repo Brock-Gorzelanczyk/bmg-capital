@@ -244,6 +244,7 @@ function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<
 // ── Recent Activity ───────────────────────────────────────────────────────────
 
 function RecentActivity({ portfolioId, colorHex }: { portfolioId: number; colorHex: string }) {
+  const navigate = useNavigate();
   const { data, isLoading } = usePortfolioActivity(portfolioId);
   const trades = data?.trades ?? [];
 
