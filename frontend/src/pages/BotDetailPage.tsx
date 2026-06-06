@@ -1021,7 +1021,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
     { key: "overview", label: "Overview" },
     { key: "watchlist", label: "Watchlist" },
     { key: "backtest", label: "Backtest" },
-    { key: "activity", label: "Activity" },
+    { key: "activity", label: "Recent Trades" },
     { key: "strategies", label: "Strategies" },
     { key: "settings", label: "Settings" },
   ];
@@ -1128,13 +1128,18 @@ function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: Reac
       </div>
 
       {/* Timeline */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
+          <p className="text-sm font-semibold text-white">Recent Trades</p>
+          <p className="text-xs text-zinc-600">every P&amp;L dollar backed by a trade</p>
+        </div>
+        <div className="p-5">
         {isLoading ? (
           <div className="animate-pulse space-y-3">
             {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded-lg" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-zinc-600 text-sm py-6 text-center">No trades yet. Portfolio is at starting capital.</p>
+          <p className="text-zinc-600 text-sm py-6 text-center">No trades yet. The execution engine runs daily at 10 AM ET on weekdays.</p>
         ) : (
           <div className="space-y-0">
             {filtered.map((item) => {
@@ -1179,6 +1184,7 @@ function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: Reac
             })}
           </div>
         )}
+        </div>
       </div>
 
       {/* Pagination */}
