@@ -265,16 +265,16 @@ async def stripe_webhook(
 
     payload = await request.body()
 
+    if not settings.stripe_webhook_secret:
+        raise HTTPException(400, "Webhook secret not configured")
+    if not stripe_signature:
+        raise HTTPException(400, "Missing stripe-signature header")
     try:
-        if settings.stripe_webhook_secret and stripe_signature:
-            event = s.Webhook.construct_event(
-                payload, stripe_signature, settings.stripe_webhook_secret
-            )
-        else:
-            import json
-            event = json.loads(payload)
+        event = s.Webhook.construct_event(
+            payload, stripe_signature, settings.stripe_webhook_secret
+        )
     except Exception:
-        raise HTTPException(400, "Invalid webhook")
+        raise HTTPException(400, "Invalid webhook signature")
 
     event_type = event["type"]
     obj = event["data"]["object"]

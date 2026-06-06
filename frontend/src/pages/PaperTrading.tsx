@@ -633,6 +633,7 @@ export default function PaperTrading() {
 
   // Summary stats from account
   const equity = account?.equity ?? 0;
+  const totalEquity = equity; // alias used by corruption guard
   const cash = account?.cash ?? 0;
   const dayPnl = account?.day_pnl ?? 0;
   const dayPnlPct = account?.day_pnl_pct ?? 0;
@@ -713,6 +714,13 @@ export default function PaperTrading() {
           </div>
         </div>
       )}
+
+      {/* ── Corruption warning banner ───────────────────────────────────────── */}
+      {(account as { data_corrupted?: boolean } | undefined)?.data_corrupted || totalEquity > 1_000_000 ? (
+        <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm">
+          ⚠️ Account data appears corrupted. Contact support or reset your paper account.
+        </div>
+      ) : null}
 
       {/* ── Account summary bar ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-3">

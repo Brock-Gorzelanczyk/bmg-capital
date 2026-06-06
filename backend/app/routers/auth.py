@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db.models.users import User
 from app.db.models.tier import UserTier
-from app.dependencies import get_db
+from app.dependencies import get_db, get_current_user
 
 _RATE_STORE: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT = 10   # max attempts
@@ -166,15 +166,5 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me")
-def me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-        user_id = int(payload["sub"])
-    except (JWTError, KeyError, ValueError):
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    user = db.get(User, user_id)
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    return _user_dict(user)
+def me(current_user=Depends(get_current_user)):
+    return _user_dict(current_user)

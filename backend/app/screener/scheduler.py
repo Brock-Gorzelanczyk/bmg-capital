@@ -824,6 +824,8 @@ def setup_scheduler() -> None:
         ),
         id="market_scan",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
 
     # premarket_scan: every 30 min, M-F, 4:00 AM – 9:30 AM ET
@@ -839,6 +841,8 @@ def setup_scheduler() -> None:
         ),
         id="premarket_scan",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
 
     # offhours_check: every 2 hours, every day (weekends included)
@@ -978,4 +982,14 @@ def setup_scheduler() -> None:
         CronTrigger(day_of_week="mon-fri", hour=10, minute=0, timezone=ET),
         id="bot_execution",
         replace_existing=True,
+    )
+
+    # Bar cache eviction — every 30 minutes to prevent unbounded memory growth
+    from app.services.bar_cache import evict_expired
+    scheduler.add_job(
+        evict_expired,
+        CronTrigger(minute="*/30"),
+        id="bar_cache_evict",
+        replace_existing=True,
+        max_instances=1,
     )

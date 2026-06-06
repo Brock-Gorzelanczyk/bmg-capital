@@ -51,7 +51,7 @@ async def _call_anthropic(prompt: str, term: str) -> str:
                 "content-type": "application/json",
             },
             json={
-                "model": "claude-haiku-4-5-20251001",
+                "model": "claude-haiku-4-5",
                 "max_tokens": 300,
                 "system": SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": prompt}],

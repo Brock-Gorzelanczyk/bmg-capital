@@ -278,7 +278,7 @@ async def _stream_copilot(messages: list, page: str, token: str) -> AsyncGenerat
             r = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers=hdrs,
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1024, "system": sys, "tools": TOOLS, "messages": messages},
+                json={"model": "claude-haiku-4-5", "max_tokens": 1024, "system": sys, "tools": TOOLS, "messages": messages},
             )
             r.raise_for_status()
             p1 = r.json()
@@ -307,7 +307,7 @@ async def _stream_copilot(messages: list, page: str, token: str) -> AsyncGenerat
                 async with client.stream(
                     "POST", "https://api.anthropic.com/v1/messages",
                     headers=hdrs,
-                    json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1024, "system": sys, "messages": final_msgs, "stream": True},
+                    json={"model": "claude-haiku-4-5", "max_tokens": 1024, "system": sys, "messages": final_msgs, "stream": True},
                 ) as resp:
                     async for line in resp.aiter_lines():
                         if not line.startswith("data:"):
@@ -409,7 +409,7 @@ async def rewrite_level(
                 "https://api.anthropic.com/v1/messages",
                 headers=hdrs,
                 json={
-                    "model": "claude-haiku-4-5-20251001",
+                    "model": "claude-haiku-4-5",
                     "max_tokens": 1024,
                     "system": _REWRITE_SYSTEM,
                     "messages": [{"role": "user", "content": user_msg}],

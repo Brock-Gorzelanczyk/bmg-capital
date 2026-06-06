@@ -3,12 +3,12 @@ import base64
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+from app.dependencies import get_current_user
 
-_SECRET = "bmg-restore-2026-xK9q"
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 class RestoreRequest(BaseModel):
@@ -16,9 +16,12 @@ class RestoreRequest(BaseModel):
     db_b64: str
 
 
+_SECRET = os.environ.get("RESTORE_SECRET", "")
+
+
 @router.post("/restore-db")
-def restore_db(body: RestoreRequest):
-    if body.secret != _SECRET:
+def restore_db(body: RestoreRequest, current_user=Depends(get_current_user)):
+    if not _SECRET or body.secret != _SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     db_url = os.environ.get("DATABASE_URL", "")

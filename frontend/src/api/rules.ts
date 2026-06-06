@@ -49,16 +49,16 @@ export const createRule = async (data: RuleCreate): Promise<UserRule> => {
 };
 
 export const updateRule = async (id: number, data: Partial<RuleCreate>): Promise<UserRule> => {
-  const res = await client.put(`/api/rules/${id}`, data);
+  const res = await client.put(`/${id}`, data);
   return res.data;
 };
 
 export const deleteRule = async (id: number): Promise<void> => {
-  await client.delete(`/api/rules/${id}`);
+  await client.delete(`/${id}`);
 };
 
 export const testRule = async (id: number): Promise<TestResult> => {
-  const res = await client.post(`/api/rules/${id}/test`);
+  const res = await client.post(`/${id}/test`);
   return res.data;
 };
 

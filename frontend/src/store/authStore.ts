@@ -63,6 +63,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (!get().user) {
           set({ user: { id: 0, email: "", username: "—" } });
         }
+        // Schedule one retry for cold-start situations
+        setTimeout(() => {
+          if (get().user?.id === 0) {
+            get().hydrate();
+          }
+        }, 3000);
       }
     } finally {
       set({ isLoading: false });

@@ -326,7 +326,16 @@ def _apply_fill_to_position(
 async def get_account(db: Session = Depends(get_db), user=Depends(get_current_user)):
     """Return account summary with live market values for all positions."""
     acct = _get_or_create_account(db, user.id)
-    positions = db.query(PaperPosition).filter_by(user_id=user.id).all()
+    # Hard filter at query level: exclude obviously corrupt positions before any processing.
+    # - qty > 1,000,000: satoshi/wei unit errors, seed data bugs
+    # - qty * avg_cost > 500,000: single position exceeds $500k notional (impossible on $100k account)
+    positions = (
+        db.query(PaperPosition)
+        .filter(PaperPosition.user_id == user.id)
+        .filter(PaperPosition.qty <= 1_000_000)
+        .filter(PaperPosition.qty * PaperPosition.avg_cost <= 500_000)
+        .all()
+    )
 
     # For demo accounts, use deterministic pricing instead of live quotes so
     # that Portfolio Value, Day's P&L, and Total Return are stable across refreshes.
@@ -457,6 +466,27 @@ async def get_account(db: Session = Depends(get_db), user=Depends(get_current_us
     total_pnl_pct = _money(d_total_pnl / _d(acct.starting_balance) * _d(100)) if acct.starting_balance else 0.0
     d_baseline = d_equity - _d(day_pnl_total)
     day_pnl_pct = _money(_d(day_pnl_total) / d_baseline * _d(100)) if float(d_baseline) > 0 else 0.0
+
+    # Corruption sentinel: if equity is still absurdly high after filtering, surface the flag.
+    # Callers (frontend) should show a warning banner and offer a reset.
+    if equity > 1_000_000:
+        logger.error(
+            f"get_account: user={user.id} computed equity=${equity:,.0f} exceeds $1M after "
+            f"position filtering — returning data_corrupted flag"
+        )
+        return {
+            "data_corrupted": True,
+            "equity": float(acct.starting_balance or 100_000.0),
+            "cash": float(acct.starting_balance or 100_000.0),
+            "starting_balance": float(acct.starting_balance or 100_000.0),
+            "day_pnl": 0.0,
+            "day_pnl_pct": 0.0,
+            "total_pnl": 0.0,
+            "total_pnl_pct": 0.0,
+            "created_at": acct.created_at.isoformat(),
+            "positions": [],
+            "message": "Account data was reset due to corruption. Use the Reset button to start fresh.",
+        }
 
     return {
         "cash": round(acct.cash, 2),
@@ -878,6 +908,7 @@ def reset_account(db: Session = Depends(get_db), user=Depends(get_current_user))
         # Add a reset marker transaction instead.
         reset_txn = PaperTransaction(
             user_id=user.id,
+            order_id=0,
             symbol="RESET",
             side="reset",
             qty=0,

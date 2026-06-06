@@ -222,10 +222,10 @@ def get_actions_feed(
             .limit(20)
             .all()
         )
-        return [_action_to_dict(a) for a in actions]
+        return {"actions": [_action_to_dict(a) for a in actions]}
     except Exception as e:
         logger.error(f"autonomous /actions/feed error: {e}", exc_info=True)
-        return []
+        return {"actions": []}
 
 
 @router.get("/actions")

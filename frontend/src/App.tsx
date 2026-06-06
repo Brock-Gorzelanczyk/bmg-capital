@@ -340,6 +340,8 @@ export default function App() {
             <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/signin" element={<Navigate to="/login" replace />} />
+              <Route path="/signup" element={<Navigate to="/login" replace />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/pitch" element={<PitchPage />} />
               <Route path="/pitch/deck" element={<PitchDeckPage />} />
