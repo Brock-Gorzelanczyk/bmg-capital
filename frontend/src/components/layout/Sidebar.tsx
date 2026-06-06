@@ -443,11 +443,23 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
       expanded ? "w-56" : "w-14 lg:w-56"
     )}>
       {/* Logo */}
-      <div className="px-3 mb-5 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#2563EB] to-[#7C3AED] flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-lg shadow-blue-900/30">
-          B
-        </div>
-        <span className={cn("text-[#F1F5F9] font-bold tracking-tight text-sm", show(expanded))}>BMG Capital</span>
+      <div className="px-3 mb-5 flex items-center">
+        {/* Full logo — shown when expanded or on lg+ */}
+        <img
+          src="/logo.png"
+          alt="BMG Capital"
+          className={cn("h-7 w-auto object-contain", show(expanded))}
+        />
+        {/* Icon mark — shown on tablet collapsed (md to lg, not expanded) */}
+        <svg
+          viewBox="0 0 32 32"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className={cn("w-8 h-8 shrink-0", expanded ? "hidden" : "block lg:hidden")}
+        >
+          <polyline points="3,25 9,17 14,21 22,8" stroke="#3ECF8E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="22" cy="8" r="3" fill="#3ECF8E" />
+        </svg>
       </div>
 
       {/* Search / ⌘K */}

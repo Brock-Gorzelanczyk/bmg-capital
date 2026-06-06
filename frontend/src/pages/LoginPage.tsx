@@ -415,12 +415,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#020617] flex flex-col">
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-4 border-b border-[#0f172a]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] flex items-center justify-center font-bold text-white text-sm">
-            B
-          </div>
-          <span className="text-white font-bold tracking-tight">BMG Capital</span>
-        </div>
+        <img src="/logo.png" alt="BMG Capital" className="h-8 w-auto object-contain" />
         <span className="text-xs text-slate-600 hidden sm:block">
           Live trading coming soon · join waitlist →
         </span>
