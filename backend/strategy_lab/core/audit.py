@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime, date, timezone
 from typing import Optional
 
@@ -12,9 +13,27 @@ from strategy_lab.core.signals import Signal
 logger = logging.getLogger(__name__)
 
 
+def _post_signal_to_discord(signal_id: int, signal_dict: dict) -> None:
+    """Background thread: post to Discord and stamp discord_posted_at.
+
+    Creates its own DB session so it never blocks or shares state with
+    the caller's session.  Discord failures are logged and swallowed.
+    """
+    try:
+        from app.services.discord_public import post_signal
+        from app.db.session import SessionLocal
+        db = SessionLocal()
+        try:
+            post_signal(signal_dict, db=db, signal_id=signal_id)
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.debug("Discord signal post skipped: %s", exc)
+
+
 def log_signal(db: Session, allocation_id: int, signal: Signal) -> None:
-    """Persist a Signal to bot_signals."""
-    from app.db.models.bots import BotSignal
+    """Persist a Signal to bot_signals, then fire Discord embed in background."""
+    from app.db.models.bots import BotSignal, BotAllocation, BotProfile
 
     row = BotSignal(
         allocation_id=allocation_id,
@@ -29,10 +48,42 @@ def log_signal(db: Session, allocation_id: int, signal: Signal) -> None:
     db.add(row)
     try:
         db.commit()
+        db.refresh(row)
         logger.debug("Logged signal: %s %s %.0f%%", signal.side, signal.symbol, signal.confidence * 100)
     except Exception as exc:
         db.rollback()
         logger.error("Failed to log signal: %s", exc)
+        return
+
+    # Resolve bot profile name for embed routing (session-cached, no extra queries)
+    profile_name = ""
+    try:
+        alloc = db.get(BotAllocation, allocation_id)
+        if alloc:
+            prof = db.get(BotProfile, alloc.profile_id)
+            if prof:
+                profile_name = prof.name
+    except Exception:
+        pass
+
+    signal_dict = {
+        "bot":        profile_name,
+        "symbol":     signal.symbol,
+        "side":       signal.side,
+        "confidence": signal.confidence,
+        "reason":     signal.reason or "",
+        "strategy":   signal.strategy or "",
+        "size_pct":   round(signal.size_hint * 100, 1) if signal.size_hint else None,
+        "price":      None,
+        "stop":       None,
+        "target":     None,
+    }
+
+    threading.Thread(
+        target=_post_signal_to_discord,
+        args=(row.id, signal_dict),
+        daemon=True,
+    ).start()
 
 
 def log_fill(
