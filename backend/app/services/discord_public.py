@@ -102,7 +102,7 @@ def _build_signal_embed(signal: dict) -> dict:
     }
 
 
-def _post_to_channel(channel_id: str, embed: dict, token: str) -> None:
+def _post_to_channel(channel_id: str, embed: dict, token: str) -> Optional[str]:
     url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
     with httpx.Client(timeout=8) as client:
         resp = client.post(
@@ -112,9 +112,15 @@ def _post_to_channel(channel_id: str, embed: dict, token: str) -> None:
         )
         if resp.status_code == 429:
             logger.warning("Discord rate limited on channel %s", channel_id)
+            return None
         elif not resp.is_success:
             logger.warning("Discord post failed channel=%s status=%s: %s",
                            channel_id, resp.status_code, resp.text[:200])
+            return None
+        try:
+            return str(resp.json().get("id", ""))
+        except Exception:
+            return None
 
 
 def post_signal(signal: dict, db=None, signal_id: Optional[int] = None) -> None:
@@ -140,21 +146,26 @@ def post_signal(signal: dict, db=None, signal_id: Optional[int] = None) -> None:
         return
 
     embed = _build_signal_embed(signal)
+    message_id: Optional[str] = None
     posted = False
     for cid in channel_ids:
         try:
-            _post_to_channel(cid, embed, cfg.discord_bot_token)
+            mid = _post_to_channel(cid, embed, cfg.discord_bot_token)
+            if mid and not message_id:
+                message_id = mid
             posted = True
         except Exception as exc:
             logger.debug("discord signal post skipped channel=%s: %s", cid, exc)
 
-    # Mark as posted so the Node.js worker won't double-post.
+    # Mark as posted + store message_id so the Node.js worker won't double-post.
     if posted and db is not None and signal_id is not None:
         try:
             from app.db.models.bots import BotSignal
             row = db.get(BotSignal, signal_id)
             if row:
                 row.discord_posted_at = datetime.now(timezone.utc)
+                if message_id:
+                    row.discord_message_id = message_id
                 db.commit()
         except Exception as exc:
             logger.debug("discord_posted_at update failed: %s", exc)

@@ -466,3 +466,29 @@ export const getStrategyLabPortfolio = (): Promise<PortfolioData> =>
         worst_performer: null,
       };
     });
+
+export interface TradeDetail {
+  trade_id: number;
+  position_id: number | null;
+  symbol: string;
+  side: string;
+  qty: number;
+  entry_price_usd: number;
+  entry_time: string | null;
+  status: "open" | "closed";
+  stop_loss_usd: number | null;
+  take_profit_usd: number | null;
+  bot_profile: string | null;
+  bot_display_name: string | null;
+  strategy: string | null;
+  reason: string | null;
+  confidence: number | null;
+  alpaca_order_id: string | null;
+  discord_message_url: string | null;
+  close_time: string | null;
+  exit_price_usd: number | null;
+  realized_pnl_usd: number | null;
+}
+
+export const getTradeDetail = (tradeId: number): Promise<TradeDetail> =>
+  client.get<TradeDetail>(`/bots/trade/${tradeId}`).then((r) => r.data);

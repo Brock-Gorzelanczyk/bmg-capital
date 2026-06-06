@@ -1053,6 +1053,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 type ActivityCategory = "all" | "signal" | "fill" | "skip";
 
 function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCrypto: boolean; searchRef?: React.RefObject<HTMLInputElement | null> }) {
+  const navigate = useNavigate();
   const [category, setCategory] = useState<ActivityCategory>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -1150,10 +1151,16 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
               const ts = (() => {
                 try { return new Date(item.ts).toLocaleString(); } catch { return item.ts; }
               })();
+              const isFill = item.category === "fill";
+              const fillTradeId = isFill ? String(item.id).replace("fill-", "") : null;
               return (
                 <div
                   key={item.id}
-                  className="flex items-center gap-3 py-3 border-b border-zinc-800/60 last:border-0 flex-wrap"
+                  onClick={fillTradeId ? () => navigate(`/strategy/trade/${fillTradeId}`) : undefined}
+                  className={cn(
+                    "flex items-center gap-3 py-3 border-b border-zinc-800/60 last:border-0 flex-wrap",
+                    fillTradeId && "cursor-pointer hover:bg-zinc-800/40 -mx-5 px-5 rounded-lg transition-colors"
+                  )}
                 >
                   <span className="text-xs text-zinc-600 w-32 flex-shrink-0">{ts}</span>
                   <span className="font-semibold text-white text-sm">{item.symbol}</span>

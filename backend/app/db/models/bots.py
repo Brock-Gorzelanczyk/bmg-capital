@@ -68,6 +68,7 @@ class BotSignal(Base):
     stop_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     discord_posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    discord_message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class BotPosition(Base):

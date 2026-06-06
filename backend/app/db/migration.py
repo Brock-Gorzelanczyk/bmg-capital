@@ -204,10 +204,11 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("capital_cents_within_portfolio",   "INTEGER"),
     ],
     "bot_signals": [
-        ("entry_price",        "FLOAT"),
-        ("stop_price",         "FLOAT"),
-        ("target_price",       "FLOAT"),
-        ("discord_posted_at",  "DATETIME"),
+        ("entry_price",          "FLOAT"),
+        ("stop_price",           "FLOAT"),
+        ("target_price",         "FLOAT"),
+        ("discord_posted_at",    "DATETIME"),
+        ("discord_message_id",   "TEXT"),
     ],
     "bot_positions": [],
     "bot_trades": [

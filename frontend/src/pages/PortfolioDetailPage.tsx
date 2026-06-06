@@ -274,7 +274,7 @@ function RecentActivity({ portfolioId, colorHex }: { portfolioId: number; colorH
           const pnlPositive = (t.realized_pnl ?? 0) >= 0;
           const ts = new Date(t.ts);
           return (
-            <div key={t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-800/50 transition-colors">
+            <div key={t.id} onClick={() => navigate(`/strategy/trade/${t.id}`)} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-800/50 transition-colors cursor-pointer">
               <div className={cn(
                 "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
                 isBuy ? "bg-lime-500/15" : "bg-orange-500/15"

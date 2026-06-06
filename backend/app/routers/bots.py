@@ -2619,3 +2619,119 @@ def debug_force_trade(
         "portfolio_value_usd": round(portfolio_value_cents / 100, 2),
         "next": "Reload /strategy/portfolio/crypto — Recent Trades should show this BTC buy.",
     }
+
+
+# ── Trade detail ──────────────────────────────────────────────────────────────
+
+_BOT_DISPLAY_NAMES = {
+    "stock_swing": "Stock Swing",
+    "stock_day": "Stock Day",
+    "stock_lt": "Stock L-T",
+    "crypto_swing": "Crypto Swing",
+    "crypto_day": "Crypto Day",
+    "crypto_lt": "Crypto L-T DCA",
+    "options_income": "Options Income",
+    "options_directional": "Options Directional",
+}
+
+
+@router.get("/trade/{trade_id}")
+def get_trade_detail(
+    trade_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return full trade detail: metadata, signal context, P&L, Discord URL."""
+    from datetime import timedelta
+    from sqlalchemy import func as sql_func
+
+    trade = db.get(BotTrade, trade_id)
+    if not trade:
+        raise HTTPException(404, "Trade not found")
+
+    alloc = db.get(BotAllocation, trade.allocation_id)
+    if not alloc or alloc.user_id != current_user.id:
+        raise HTTPException(404, "Trade not found")
+
+    profile = db.get(BotProfile, alloc.profile_id)
+    position = db.get(BotPosition, trade.position_id) if trade.position_id else None
+
+    # Find the signal closest in time to this trade (within ±5 min)
+    signal = None
+    try:
+        signal = (
+            db.query(BotSignal)
+            .filter(
+                BotSignal.allocation_id == trade.allocation_id,
+                BotSignal.symbol == trade.symbol,
+                BotSignal.ts >= trade.ts - timedelta(minutes=5),
+                BotSignal.ts <= trade.ts + timedelta(minutes=5),
+            )
+            .order_by(BotSignal.ts)
+            .first()
+        )
+    except Exception:
+        pass
+
+    entry_price = trade.fill_price_cents / 100
+    status = "open" if (position and position.closed_at is None) else "closed"
+
+    # For closed positions, find the exit trade
+    exit_price = None
+    realized_pnl = None
+    close_time = None
+    if position and position.closed_at:
+        close_time = position.closed_at.isoformat()
+        exit_trade = (
+            db.query(BotTrade)
+            .filter(
+                BotTrade.position_id == position.id,
+                BotTrade.side.in_(["sell", "close"]),
+            )
+            .order_by(BotTrade.ts.desc())
+            .first()
+        )
+        if exit_trade:
+            exit_price = exit_trade.fill_price_cents / 100
+            realized_pnl = round((exit_price - entry_price) * trade.qty, 2)
+
+    # Build Discord message URL
+    discord_url = None
+    if signal and getattr(signal, "discord_message_id", None):
+        try:
+            from app.config import settings as _cfg
+            from app.services.discord_public import _channel_ids_for_bot
+            bot_name = profile.name if profile else ""
+            channels = _channel_ids_for_bot(bot_name)
+            if channels and _cfg.discord_guild_id:
+                discord_url = (
+                    f"https://discord.com/channels/{_cfg.discord_guild_id}"
+                    f"/{channels[0]}/{signal.discord_message_id}"
+                )
+        except Exception:
+            pass
+
+    bot_profile_name = profile.name if profile else None
+
+    return {
+        "trade_id": trade.id,
+        "position_id": trade.position_id,
+        "symbol": trade.symbol,
+        "side": trade.side,
+        "qty": trade.qty,
+        "entry_price_usd": entry_price,
+        "entry_time": trade.ts.isoformat() if trade.ts else None,
+        "status": status,
+        "stop_loss_usd": signal.stop_price if signal else None,
+        "take_profit_usd": signal.target_price if signal else None,
+        "bot_profile": bot_profile_name,
+        "bot_display_name": _BOT_DISPLAY_NAMES.get(bot_profile_name, bot_profile_name) if bot_profile_name else None,
+        "strategy": signal.strategy if signal else None,
+        "reason": signal.reason if signal else None,
+        "confidence": signal.confidence if signal else None,
+        "alpaca_order_id": trade.alpaca_order_id,
+        "discord_message_url": discord_url,
+        "close_time": close_time,
+        "exit_price_usd": exit_price,
+        "realized_pnl_usd": realized_pnl,
+    }
