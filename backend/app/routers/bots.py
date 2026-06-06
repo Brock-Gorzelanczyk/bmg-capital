@@ -83,13 +83,18 @@ _DEMO_SYMBOLS = {
 _DEMO_SIDES = ["buy", "sell"]
 _DEMO_STRATEGIES = ["momentum_breakout", "mean_reversion", "rsi_bands", "vwap_reversion", "factor_blend", "dca"]
 
+_BOT_CAPITAL = 10_000_000  # $100,000 per bot in cents
+
 _PORTFOLIO_DEFS = [
     {"asset_class": "stocks",  "name": "Stocks",  "emoji": "📈", "color_hex": "#A3E635",
-     "bots": {"stock_swing": 1_666_700, "stock_day": 1_666_700, "stock_lt": 1_666_600}},
+     "starting_capital_cents": 30_000_000,
+     "bots": {"stock_swing": _BOT_CAPITAL, "stock_day": _BOT_CAPITAL, "stock_lt": _BOT_CAPITAL}},
     {"asset_class": "crypto",  "name": "Crypto",  "emoji": "🪙", "color_hex": "#F59E0B",
-     "bots": {"crypto_swing": 1_666_700, "crypto_day": 1_666_700, "crypto_lt": 1_666_600}},
+     "starting_capital_cents": 30_000_000,
+     "bots": {"crypto_swing": _BOT_CAPITAL, "crypto_day": _BOT_CAPITAL, "crypto_lt": _BOT_CAPITAL}},
     {"asset_class": "options", "name": "Options", "emoji": "⚡", "color_hex": "#8B5CF6",
-     "bots": {"options_income": 2_500_000, "options_directional": 2_500_000}},
+     "starting_capital_cents": 20_000_000,
+     "bots": {"options_income": _BOT_CAPITAL, "options_directional": _BOT_CAPITAL}},
 ]
 
 
@@ -107,18 +112,23 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
             )
             .first()
         )
+        target_capital = defn.get("starting_capital_cents", sum(defn["bots"].values()))
         if not existing:
             existing = StrategyPortfolio(
                 user_id=user_id,
                 name=defn["name"],
                 asset_class=defn["asset_class"],
-                starting_capital_cents=5_000_000,
+                starting_capital_cents=target_capital,
                 emoji=defn["emoji"],
                 color_hex=defn["color_hex"],
                 created_at=now,
             )
             db.add(existing)
             db.flush()
+        else:
+            # Sync capital to current target (idempotent upgrade)
+            if existing.starting_capital_cents != target_capital:
+                existing.starting_capital_cents = target_capital
 
         # Create or bind allocations for each bot in this portfolio
         for bot_name, capital_cents in defn["bots"].items():
