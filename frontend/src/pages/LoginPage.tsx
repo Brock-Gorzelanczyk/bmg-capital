@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Mic, TrendingUp, Shield, Zap } from "lucide-react";
+import { Mic, TrendingUp, Shield, Zap, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/demoMode";
 
@@ -205,6 +205,8 @@ function LoginForm() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const { login, register } = useAuthStore();
   const navigate = useNavigate();
@@ -299,15 +301,25 @@ function LoginForm() {
 
           <div>
             <label className="block text-xs text-slate-500 mb-1.5 font-medium">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              placeholder="••••••••"
-              className="w-full bg-[#020617] border border-[#1e293b] text-white text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-slate-600 transition-colors"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                placeholder="••••••••"
+                className="w-full bg-[#020617] border border-[#1e293b] text-white text-sm rounded-lg px-3 py-2.5 pr-10 outline-none focus:border-[#3B82F6] placeholder-slate-600 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
 
           {mode === "login" && (
@@ -324,15 +336,25 @@ function LoginForm() {
           {mode === "register" && (
             <div>
               <label className="block text-xs text-slate-500 mb-1.5 font-medium">Confirm password</label>
-              <input
-                type="password"
-                value={confirm}
-                onChange={e => setConfirm(e.target.value)}
-                required
-                autoComplete="new-password"
-                placeholder="••••••••"
-                className="w-full bg-[#020617] border border-[#1e293b] text-white text-sm rounded-lg px-3 py-2.5 outline-none focus:border-[#3B82F6] placeholder-slate-600 transition-colors"
-              />
+              <div className="relative">
+                <input
+                  type={showConfirm ? "text" : "password"}
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  className="w-full bg-[#020617] border border-[#1e293b] text-white text-sm rounded-lg px-3 py-2.5 pr-10 outline-none focus:border-[#3B82F6] placeholder-slate-600 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
           )}
 

@@ -17,6 +17,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useLearnStore } from "@/store/learnStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useTierStore } from "@/store/tierStore";
+import { useUiStore } from "@/store/uiStore";
 import StreakBadge from "@/components/learn/StreakBadge";
 
 // ─── Nav item definitions ─────────────────────────────────────────────────────
@@ -372,6 +373,7 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
   const streak = useLearnStore((s) => s.progress?.streak ?? 0);
   const tier = useTierStore((s) => s.tier);
   const isAdmin = user?.is_admin === true;
+  const mode = useUiStore((s) => s.mode);
 
   const { data: autoStatus } = useQuery({
     queryKey: ["autonomous-status"],
@@ -450,9 +452,9 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
           headerRight={streak > 0 ? <StreakBadge streak={streak} size="sm" /> : undefined}
         />
 
-        <NavSection label="Tools" items={NAV_TOOLS} expanded={expanded} />
+        {mode === "pro" && <NavSection label="Tools" items={NAV_TOOLS} expanded={expanded} />}
 
-        <NavSection label="Community" items={NAV_COMMUNITY} expanded={expanded} />
+        {mode === "pro" && <NavSection label="Community" items={NAV_COMMUNITY} expanded={expanded} />}
 
         {isAdmin && <NavSection label="Admin" items={NAV_ADMIN} expanded={expanded} />}
       </nav>

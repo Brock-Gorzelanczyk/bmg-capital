@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, NavLink, Link } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { House, LineChart, BookMarked, Briefcase, GraduationCap, Cpu, Zap } from "lucide-react";
+import { House, BarChart2, Bot, Newspaper, User } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import CommandPalette from "@/components/ui/CommandPalette";
@@ -9,6 +9,7 @@ import CopilotModal from "@/components/ui/CopilotModal";
 import ExplainPanel from "@/components/explain/ExplainPanel";
 import NotificationPanel from "@/components/notifications/NotificationPanel";
 import SupportChatWidget from "@/components/support/SupportChatWidget";
+import WelcomeModal from "@/components/onboarding/WelcomeModal";
 import { getTrades, getCandidates, getSummary, getLog, getEquity, getRegime } from "@/api/strategy";
 import { getMyTier } from "@/api/tiers";
 import { getTodayChallenge } from "@/api/engagement";
@@ -17,12 +18,11 @@ import { useTierStore } from "@/store/tierStore";
 import { cn } from "@/lib/utils";
 
 const BOTTOM_NAV = [
-  { to: "/",                 label: "Home",       Icon: House },
-  { to: "/chart",            label: "Chart",      Icon: LineChart },
-  { to: "/watchlist",        label: "Watchlist",  Icon: BookMarked },
-  { to: "/portfolio",        label: "Portfolio",  Icon: Briefcase },
-  { to: "/mission-control",  label: "Autonomous", Icon: Cpu },
-  { to: "/autopilot",        label: "Autopilot",  Icon: Zap },
+  { to: "/",              label: "Home",       Icon: House },
+  { to: "/strategy",      label: "Strategies", Icon: Bot },
+  { to: "/chart",         label: "Markets",    Icon: BarChart2 },
+  { to: "/morning-brief", label: "Brief",      Icon: Newspaper },
+  { to: "/settings",      label: "Account",    Icon: User },
 ];
 
 export default function AppShell() {
@@ -32,6 +32,9 @@ export default function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(
+    () => !!localStorage.getItem("bmg_token") && !localStorage.getItem("bmg_onboarded")
+  );
 
   const { data: challengeData } = useQuery({
     queryKey: ["engagement-challenge-today"],
@@ -150,15 +153,9 @@ export default function AppShell() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {BOTTOM_NAV.map(({ to, label, Icon }) => {
-          const showChallengeDot =
-            to === "/learn" &&
-            challengeData != null &&
-            !challengeData.already_answered;
+          const showChallengeDot = false;
 
-          const showAutonomousDot =
-            to === "/mission-control" &&
-            autoStatus?.engine_running === true &&
-            autoStatus?.autonomous_paused !== true;
+          const showAutonomousDot = false;
 
           const showDigestDot =
             to === "/" &&
@@ -207,6 +204,11 @@ export default function AppShell() {
       <ExplainPanel />
       <NotificationPanel />
       <div className="md:hidden"><SupportChatWidget /></div>
+
+      {/* Welcome / onboarding modal — shown to first-time authenticated users */}
+      {showWelcome && pathname !== "/onboarding" && (
+        <WelcomeModal onClose={() => setShowWelcome(false)} />
+      )}
     </div>
   );
 }

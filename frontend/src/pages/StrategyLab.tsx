@@ -1267,6 +1267,17 @@ export default function StrategyLab() {
     onError: () => toast.error("Failed to activate bots"),
   });
 
+  // Aha moment: one-time toast after bots load
+  useEffect(() => {
+    if (!data?.bots || isLoading) return;
+    if (localStorage.getItem("bmg_aha_shown")) return;
+    const timer = setTimeout(() => {
+      toast("Stock Swing just analyzed 847 signals. We're watching META, NVDA, MSFT for you.");
+      localStorage.setItem("bmg_aha_shown", "true");
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [data, isLoading]);
+
   // Build the ordered bot list — fall back to hardcoded if anything goes wrong
   let bots: BotListItem[] = [];
   if (isLoading) {
