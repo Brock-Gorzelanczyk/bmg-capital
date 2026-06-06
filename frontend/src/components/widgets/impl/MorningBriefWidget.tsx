@@ -166,7 +166,7 @@ export default function MorningBriefWidget() {
     setAiText(
       `• Markets opened ${spDir} ${today} — S&P 500 ${spPct}, NASDAQ ${nqPct}. ${spLeading}.\n` +
       `• ${smCap ? smCap.charAt(0).toUpperCase() + smCap.slice(1) + ". " : ""}Watch for sector rotation into close — tech ${(qqq?.change_pct ?? 0) >= 0 ? "momentum intact" : "under pressure"}.\n` +
-      `• AI brief available once ANTHROPIC_API_KEY is set in Railway — market data updates live in real time.`
+      `• AI market brief temporarily unavailable — market data updates live in real time.`
     );
     setIsGenerating(false);
     setGeneratedAt(new Date());

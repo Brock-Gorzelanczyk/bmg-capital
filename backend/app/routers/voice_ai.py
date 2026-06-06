@@ -92,7 +92,7 @@ async def _call_ai(system_prompt: str, user_message: str, context: str) -> tuple
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         message = client.messages.create(
-            model="claude-haiku-4-5",
+            model="claude-haiku-4-5-20251001",
             max_tokens=400,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
@@ -111,7 +111,7 @@ async def _call_ai(system_prompt: str, user_message: str, context: str) -> tuple
         return response_text, citations
     except Exception as e:
         logger.error(f"Anthropic call failed: {e}", exc_info=True)
-        return f"AI temporarily unavailable: {str(e)[:100]}", []
+        return "Voice briefing temporarily unavailable. Try again in a moment.", []
 
 
 # ── Request/Response models ───────────────────────────────────────────────────

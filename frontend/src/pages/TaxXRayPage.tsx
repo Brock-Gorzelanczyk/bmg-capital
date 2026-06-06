@@ -453,7 +453,7 @@ export default function TaxXRayPage() {
             {sortedOpps.length === 0 && (
               <div className="bg-[var(--bg-elevated)] rounded-xl border border-[var(--border-subtle)] p-6 text-center">
                 <p className="text-[var(--text-tertiary)] text-sm">
-                  No AI-powered opportunities available — ensure ANTHROPIC_API_KEY is configured.
+                  No AI-powered opportunities available — check back later.
                 </p>
               </div>
             )}

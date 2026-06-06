@@ -200,7 +200,7 @@ Each value should be a string (the section prose).
 
             client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
             msg = client.messages.create(
-                model="claude-haiku-4-5",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=1000,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
