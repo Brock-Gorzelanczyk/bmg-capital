@@ -295,7 +295,7 @@ function RecentActivity({ portfolioId, colorHex }: { portfolioId: number; colorH
                   <span className="text-zinc-600 text-xs">{t.bot_display_name}</span>
                 </div>
                 <p className="text-zinc-500 text-xs mt-0.5">
-                  {t.qty.toFixed(4)} shares @ ${t.fill_price.toFixed(2)}
+                  {t.qty.toFixed(4)} {t.symbol.includes("/") ? t.symbol.split("/")[0] : "shares"} @ ${t.fill_price.toFixed(2)}
                   {hasPnl && (
                     <span className={cn("ml-2 font-semibold", pnlPositive ? "text-lime-400" : "text-red-400")}>
                       · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized

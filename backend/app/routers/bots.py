@@ -2420,6 +2420,10 @@ def run_bot_now(
 
 # ── End-to-end pipeline smoke test ────────────────────────────────────────────
 
+_FORCE_TRADE_COOLDOWNS: dict[int, float] = {}  # user_id → last call epoch
+_FORCE_TRADE_COOLDOWN_SECS = 60
+
+
 @router.post("/debug/force-trade")
 def debug_force_trade(
     db: Session = Depends(get_db),
@@ -2436,6 +2440,15 @@ def debug_force_trade(
     g. Post Discord signal embed
     """
     import httpx as _httpx
+    import time as _time
+
+    # Rate limit: 1 call per 60s per user
+    last = _FORCE_TRADE_COOLDOWNS.get(current_user.id, 0.0)
+    since = _time.time() - last
+    if since < _FORCE_TRADE_COOLDOWN_SECS:
+        wait = int(_FORCE_TRADE_COOLDOWN_SECS - since)
+        raise HTTPException(429, f"Rate limited — wait {wait}s before calling force-trade again")
+    _FORCE_TRADE_COOLDOWNS[current_user.id] = _time.time()
 
     steps: dict = {}
 

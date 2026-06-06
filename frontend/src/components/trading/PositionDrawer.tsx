@@ -171,7 +171,7 @@ export default function PositionDrawer({ position, onClose, onTrade }: PositionD
             onClick={() => { onTrade(position.symbol, "sell"); onClose(); }}
             className="w-full py-2.5 rounded-xl text-sm font-semibold bg-[var(--bg-elevated-2)] text-[var(--accent-negative)] border border-red-900/40 hover:bg-red-950/30 transition-colors"
           >
-            Close Position ({position.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} shares)
+            Close Position ({position.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} {position.symbol.includes("/") ? position.symbol.split("/")[0] : "shares"})
           </button>
         </div>
       </div>

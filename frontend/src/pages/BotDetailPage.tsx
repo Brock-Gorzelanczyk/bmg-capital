@@ -1052,7 +1052,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 
 type ActivityCategory = "all" | "signal" | "fill" | "skip";
 
-function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: React.RefObject<HTMLInputElement | null> }) {
+function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCrypto: boolean; searchRef?: React.RefObject<HTMLInputElement | null> }) {
   const [category, setCategory] = useState<ActivityCategory>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -1139,7 +1139,11 @@ function ActivityTab({ botName, searchRef }: { botName: string; searchRef?: Reac
             {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded-lg" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-zinc-600 text-sm py-6 text-center">No trades yet. The execution engine runs daily at 10 AM ET on weekdays.</p>
+          <p className="text-zinc-600 text-sm py-6 text-center">
+            {isCrypto
+              ? "No trades yet. Crypto bots scan continuously — next scan within 1 min."
+              : "No trades yet. The execution engine runs during market hours (Mon–Fri 9:30am–4pm ET)."}
+          </p>
         ) : (
           <div className="space-y-0">
             {filtered.map((item) => {
@@ -2090,7 +2094,9 @@ export default function BotDetailPage() {
               <h2 className="text-sm font-semibold text-zinc-300 mb-4">Open Positions</h2>
               {positions.length === 0 ? (
                 <p className="text-zinc-600 text-sm py-6 text-center">
-                  No open positions. Bot scans for entries at market open (9:30am ET).
+                  {isCrypto
+                    ? "No open positions. Crypto bot scans continuously — next scan within 1 min."
+                    : "No open positions. Bot scans for entries at market open (9:30am ET)."}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -2267,7 +2273,7 @@ export default function BotDetailPage() {
 
       {/* Activity tab */}
       {activeTab === "activity" && (
-        <ActivityTab botName={botName} searchRef={activitySearchRef} />
+        <ActivityTab botName={botName} isCrypto={isCrypto} searchRef={activitySearchRef} />
       )}
 
       {/* Strategies tab */}

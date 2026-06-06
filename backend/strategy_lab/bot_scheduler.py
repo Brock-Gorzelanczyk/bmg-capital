@@ -6,6 +6,7 @@ after setup_monitoring_scheduler, using the same AsyncIOScheduler instance.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 import pytz
 from apscheduler.triggers.cron import CronTrigger
@@ -60,23 +61,25 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
-    # crypto_swing: every 4 hours, 24/7
+    # crypto_swing: every 4 hours, 24/7 — fire immediately on startup
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: run_bot_profile("crypto_swing"),
         CronTrigger(hour="*/4", minute=0),
         id="bot_crypto_swing",
         replace_existing=True,
+        next_run_time=datetime.now(UTC),
     )
 
     # ------------------------------------------------------------------
-    # crypto_day: every 15 min, 24/7
+    # crypto_day: every 1 min, 24/7 — crypto has no market-hours gate
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: run_bot_profile("crypto_day"),
-        CronTrigger(minute="*/15"),
+        CronTrigger(minute="*/1"),
         id="bot_crypto_day",
         replace_existing=True,
+        next_run_time=datetime.now(UTC),  # fire immediately on startup
     )
 
     # ------------------------------------------------------------------
