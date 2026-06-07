@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.screener.filters import PRESET_SCREENS
-from app.screener.runner import run_screen
+from app.screener.runner import run_screen, run_screen_sync, get_cached_bars, get_cache_info
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/screener", tags=["screener"])
@@ -153,9 +153,86 @@ async def run_screener(req: ScreenRequest):
     try:
         filter_dicts = [f.dict() for f in req.filters]
         results = await run_screen(filter_dicts)
-        return {"results": results, "count": len(results)}
+        meta = get_cache_info()
+        return {
+            "results": results,
+            "count": len(results),
+            "universe_count": meta["universe_count"],
+            "data_as_of": meta["data_as_of"],
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+_OP_LABEL = {"gt": ">", "lt": "<", "gte": ">=", "lte": "<=", "eq": "="}
+
+
+def _relax_filter(f: FilterConfig) -> Optional[Dict[str, Any]]:
+    """Return a relaxed variant of a numeric filter, or None if not applicable."""
+    val = f.value
+    if not isinstance(val, (int, float)):
+        return None
+    if f.operator in ("lt", "lte") and val != 0:
+        new_val = round(val * 1.4, 2)
+    elif f.operator in ("gt", "gte") and val != 0:
+        new_val = round(val * 0.6, 2)
+    else:
+        return None
+    return {"field": f.field, "operator": f.operator, "value": new_val}
+
+
+@router.post("/suggest")
+async def suggest_alternatives(req: ScreenRequest):
+    """Suggest relaxed filter variants when a screen returns 0 results."""
+    if not req.filters:
+        return {"suggestions": []}
+
+    all_bars = await get_cached_bars()
+    candidates: List[Dict[str, Any]] = []
+
+    # Strategy 1: drop one filter at a time
+    for i, dropped in enumerate(req.filters):
+        remaining = [f.dict() for j, f in enumerate(req.filters) if j != i]
+        if not remaining:
+            continue
+        results = run_screen_sync(remaining, all_bars)
+        if results:
+            op_str = _OP_LABEL.get(dropped.operator, dropped.operator)
+            candidates.append({
+                "label": f"Remove: {dropped.field} {op_str} {dropped.value}",
+                "count": len(results),
+                "filters": remaining,
+            })
+
+    # Strategy 2: relax each numeric filter by ~40%
+    for i, f in enumerate(req.filters):
+        relaxed = _relax_filter(f)
+        if relaxed is None:
+            continue
+        test_filters = [
+            relaxed if idx == i else rf.dict()
+            for idx, rf in enumerate(req.filters)
+        ]
+        results = run_screen_sync(test_filters, all_bars)
+        if results:
+            op_str = _OP_LABEL.get(f.operator, f.operator)
+            candidates.append({
+                "label": f"Relax: {f.field} {op_str} {relaxed['value']} (was {f.value})",
+                "count": len(results),
+                "filters": test_filters,
+            })
+
+    # Deduplicate by label, sort by count desc, take top 3
+    seen: set = set()
+    unique: List[Dict[str, Any]] = []
+    for c in sorted(candidates, key=lambda x: x["count"], reverse=True):
+        if c["label"] not in seen:
+            seen.add(c["label"])
+            unique.append(c)
+        if len(unique) == 3:
+            break
+
+    return {"suggestions": unique}
 
 
 @router.get("/presets")
@@ -170,4 +247,11 @@ async def run_preset(name: str):
     if name not in PRESET_SCREENS:
         raise HTTPException(status_code=404, detail="Preset not found")
     results = await run_screen(PRESET_SCREENS[name])
-    return {"results": results, "count": len(results), "preset": name}
+    meta = get_cache_info()
+    return {
+        "results": results,
+        "count": len(results),
+        "preset": name,
+        "universe_count": meta["universe_count"],
+        "data_as_of": meta["data_as_of"],
+    }

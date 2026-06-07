@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen, parseNaturalLanguage } from "@/api/screener";
+import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen, parseNaturalLanguage, suggestAlternatives } from "@/api/screener";
 import { getSectorPerformance } from "@/api/discovery";
-import type { FilterConfig, ScreenResult } from "@/types/screener";
+import type { FilterConfig, ScreenResult, Suggestion } from "@/types/screener";
 import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
 import { Play, Plus, Trash2, TrendingUp, BarChart2, ArrowDownUp, Zap, Info, Bookmark, BookmarkCheck, X, Sparkles, Loader2, RefreshCw, Bot } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
@@ -180,6 +180,10 @@ export default function Screener() {
   const qc = useQueryClient();
   const [filters, setFilters] = useState<FilterConfig[]>([]);
   const [results, setResults] = useState<ScreenResult[]>([]);
+  const [universeCount, setUniverseCount] = useState<number | null>(null);
+  const [dataAsOf, setDataAsOf] = useState<number | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [ran, setRan] = useState(false);
@@ -260,6 +264,7 @@ export default function Screener() {
     setNlFollowUpMode(false);
     setRan(false);
     setResults([]);
+    setSuggestions([]);
     setActivePreset(null);
   };
 
@@ -314,10 +319,20 @@ export default function Screener() {
   const run = async (filterList = filters) => {
     setLoading(true);
     setRan(false);
+    setSuggestions([]);
     setActivePreset(null);
     try {
       const res = await runScreen(filterList);
-      setResults(res);
+      setResults(res.results);
+      setUniverseCount(res.universe_count || null);
+      setDataAsOf(res.data_as_of);
+      if (res.results.length === 0 && filterList.length > 0) {
+        setLoadingSuggestions(true);
+        suggestAlternatives(filterList)
+          .then(setSuggestions)
+          .catch(() => {})
+          .finally(() => setLoadingSuggestions(false));
+      }
     } finally {
       setLoading(false);
       setRan(true);
@@ -327,10 +342,13 @@ export default function Screener() {
   const runPresetScreen = async (key: string) => {
     setLoading(true);
     setRan(false);
+    setSuggestions([]);
     setActivePreset(key);
     try {
       const res = await runPreset(key);
-      setResults(res);
+      setResults(res.results);
+      setUniverseCount(res.universe_count || null);
+      setDataAsOf(res.data_as_of);
     } finally {
       setLoading(false);
       setRan(true);
@@ -353,7 +371,16 @@ export default function Screener() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-[var(--text-primary)]">Stock Screener</h2>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-[var(--text-tertiary)]">Universe: 500+ stocks</span>
+          <div className="text-right">
+            <div className="text-xs text-[var(--text-tertiary)]">
+              Universe: {universeCount ? `${universeCount.toLocaleString()} stocks` : "500+ stocks"}
+            </div>
+            {dataAsOf && (
+              <div className="text-[10px] text-[var(--text-tertiary)] opacity-70">
+                Data as of {new Date(dataAsOf * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => setAiOpen(true)}
             className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
@@ -684,7 +711,39 @@ export default function Screener() {
             </div>
           </div>
           {results.length === 0 ? (
-            <div className="py-12 text-center text-[var(--text-tertiary)]">No stocks matched the criteria.</div>
+            <div className="py-10 px-6 space-y-5">
+              <p className="text-center text-[var(--text-tertiary)] text-sm">No stocks matched the criteria.</p>
+              {(loadingSuggestions || suggestions.length > 0) && (
+                <div className="border border-[var(--border-subtle)] rounded-lg overflow-hidden">
+                  <div className="px-4 py-2.5 bg-[var(--bg-elevated-2)] border-b border-[var(--border-subtle)]">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+                      Try these instead
+                    </span>
+                  </div>
+                  {loadingSuggestions ? (
+                    <div className="flex items-center gap-2 px-4 py-3 text-xs text-[var(--text-tertiary)]">
+                      <Loader2 size={12} className="animate-spin" />
+                      Finding alternatives…
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[var(--border-subtle)]">
+                      {suggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          onClick={() => run(s.filters as FilterConfig[])}
+                          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[var(--bg-elevated-2)] transition-colors text-left"
+                        >
+                          <span className="text-xs text-[var(--text-secondary)]">{s.label}</span>
+                          <span className="text-xs font-semibold text-[var(--accent-positive)] shrink-0 ml-4">
+                            {s.count} match{s.count !== 1 ? "es" : ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ) : viewMode === "heatmap" ? (
             /* ── Heat Map view ─────────────────────────────────────────────── */
             <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">

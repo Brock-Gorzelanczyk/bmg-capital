@@ -87,6 +87,20 @@ async def fetch_bars_batch(symbols: List[str], period: str = "1y") -> Dict[str, 
     return await loop.run_in_executor(None, lambda: _fetch_bars_sync(symbols, period))
 
 
+async def get_cached_bars() -> Dict[str, pd.DataFrame]:
+    """Public accessor for the bar cache (fetches if stale)."""
+    return await _get_cached_bars()
+
+
+def get_cache_info() -> Dict[str, Any]:
+    """Return metadata about the current bar cache."""
+    universe = get_universe()
+    return {
+        "universe_count": len(universe),
+        "data_as_of": _bar_cache_ts if _bar_cache is not None else None,
+    }
+
+
 def run_screen_sync(filter_configs: List[dict], all_bars: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
     """Apply filters to pre-fetched bars. Used by daily automation to avoid re-downloading."""
     filters = build_filters(filter_configs)

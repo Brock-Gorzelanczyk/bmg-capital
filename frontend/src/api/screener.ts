@@ -1,14 +1,29 @@
 import client from "./client";
-import type { FilterConfig, FilterChip, ScreenResult } from "@/types/screener";
+import type { FilterConfig, FilterChip, ScreenResult, ScreenResponse, Suggestion } from "@/types/screener";
 
-export async function runScreen(filters: FilterConfig[]): Promise<ScreenResult[]> {
-  const { data } = await client.post<{ results: ScreenResult[]; count: number }>("/screener/run", { filters });
-  return Array.isArray(data?.results) ? data.results : [];
+export async function runScreen(filters: FilterConfig[]): Promise<ScreenResponse> {
+  const { data } = await client.post<ScreenResponse>("/screener/run", { filters });
+  return {
+    results: Array.isArray(data?.results) ? data.results : [],
+    count: data?.count ?? 0,
+    universe_count: data?.universe_count ?? 0,
+    data_as_of: data?.data_as_of ?? null,
+  };
 }
 
-export async function runPreset(name: string): Promise<ScreenResult[]> {
-  const { data } = await client.post<{ results: ScreenResult[]; count: number }>(`/screener/presets/${name}`);
-  return Array.isArray(data?.results) ? data.results : [];
+export async function runPreset(name: string): Promise<ScreenResponse> {
+  const { data } = await client.post<ScreenResponse>(`/screener/presets/${name}`);
+  return {
+    results: Array.isArray(data?.results) ? data.results : [],
+    count: data?.count ?? 0,
+    universe_count: data?.universe_count ?? 0,
+    data_as_of: data?.data_as_of ?? null,
+  };
+}
+
+export async function suggestAlternatives(filters: FilterConfig[]): Promise<Suggestion[]> {
+  const { data } = await client.post<{ suggestions: Suggestion[] }>("/screener/suggest", { filters });
+  return Array.isArray(data?.suggestions) ? data.suggestions : [];
 }
 
 export async function getPresets(): Promise<string[]> {
