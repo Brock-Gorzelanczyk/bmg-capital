@@ -31,11 +31,12 @@ CREATE TABLE IF NOT EXISTS bot_paper_accounts (
 """
 
 INSERT_CQA_SQL = """
-INSERT OR IGNORE INTO bot_paper_accounts
+INSERT INTO bot_paper_accounts
     (bot_id, starting_balance_cents, current_balance_cents,
      realized_pnl_cents, unrealized_pnl_cents)
 VALUES
     ('crypto_quant_aggressive', 10000000, 10000000, 0, 0)
+ON CONFLICT (bot_id) DO NOTHING
 """
 
 
