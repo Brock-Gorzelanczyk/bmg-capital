@@ -19,8 +19,6 @@ strategies:
   - crypto_momentum_breakout
   - crypto_ema_cross
   - crypto_macd_swing
-  - crypto_donchian_breakout
-  - crypto_higher_low_pattern
   - crypto_relative_strength
 ensemble: weighted_vote
 confidence_threshold: 0.55

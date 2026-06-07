@@ -80,57 +80,115 @@ def _ccxt_sym_to_yf(sym: str) -> str:
     return f"{base}-{yf_quote}"
 
 
-def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1d", limit: int = 500) -> Dict[str, pd.DataFrame]:
-    """
-    Fetch daily OHLCV bars for each symbol from Binance via CCXT.
-    Returns {symbol: DataFrame(open, high, low, close, volume)}.
-    Falls back to yfinance on failure.
+def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1h", limit: int = 500) -> Dict[str, pd.DataFrame]:
+    """Fetch OHLCV bars. Source priority:
+      1. Kraken public OHLC REST (no auth, not geo-blocked) — PRIMARY
+      2. Binance via CCXT — fallback for any symbol Kraken misses
+      3. yfinance — last resort
 
-    Each coin failure is non-fatal — a bad coin is logged and skipped.
+    Returns {symbol: DataFrame(open, high, low, close, volume)}.
     """
     bars: Dict[str, pd.DataFrame] = {}
-    ccxt_ok = False
 
-    try:
-        import ccxt
-        exchange = ccxt.binance({"enableRateLimit": True, "timeout": 10000})
-        ccxt_ok = True
-        logger.info(f"[crypto] CCXT Binance initialised — fetching {len(symbols)} symbols via CCXT")
-        ccxt_geo_blocked = False
-        for sym in symbols:
-            if ccxt_geo_blocked:
-                break
-            try:
-                ohlcv = exchange.fetch_ohlcv(sym, timeframe=timeframe, limit=limit)
-                if not ohlcv:
-                    logger.debug(f"[crypto] CCXT returned empty data for {sym}")
-                    continue
-                df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
-                df["ts"] = pd.to_datetime(df["ts"], unit="ms")
-                df.set_index("ts", inplace=True)
-                bars[sym] = df
-                logger.debug(f"[crypto] CCXT fetched {len(df)} bars for {sym}")
-            except Exception as e:
-                err_str = str(e)
-                # 451 = geo-blocked region — bail out immediately, use yfinance for all
-                if "451" in err_str or "restricted location" in err_str.lower():
-                    logger.warning(
-                        f"[crypto] Binance geo-blocked (451) for {sym} — switching all symbols to yfinance"
-                    )
-                    ccxt_geo_blocked = True
-                    break
-                logger.warning(f"[crypto] CCXT fetch failed for {sym}: {e}")
-    except Exception as e:
-        logger.warning(f"[crypto] CCXT not available or exchange init failed: {e}")
+    # ── 1. Kraken public OHLC ─────────────────────────────────────────────────
+    # Proven to work from Railway. No auth required.
+    # endpoint: /0/public/OHLC?pair=XBTUSD&interval=60
+    # Response: {"result": {"XXBTZUSD": [[ts, o, h, l, c, vwap, vol, cnt], ...], "last": N}}
+    _KRAKEN_INTERVAL: Dict[str, int] = {
+        "1m": 1, "5m": 5, "15m": 15, "30m": 30,
+        "1h": 60, "4h": 240, "1d": 1440, "1w": 10080,
+    }
+    kraken_interval = _KRAKEN_INTERVAL.get(timeframe, 60)
 
-    # yfinance fallback for any symbol not yet fetched
+    # Reuse the pair map that live_prices.py already maintains
+    from app.services.live_prices import _TO_KRAKEN_PAIR, _KRAKEN_RESPONSE_KEY
+
+    import json as _json
+    import urllib.request as _urllib_req
+
+    for sym in symbols:
+        pair = _TO_KRAKEN_PAIR.get(sym)
+        if not pair:
+            if "/" in sym:
+                base = sym.split("/")[0]
+                if base == "BTC":
+                    base = "XBT"
+                pair = f"{base}USD"
+            else:
+                continue
+
+        url = f"https://api.kraken.com/0/public/OHLC?pair={pair}&interval={kraken_interval}"
+        try:
+            req = _urllib_req.Request(url, headers={"User-Agent": "bmg-capital/1.0"})
+            with _urllib_req.urlopen(req, timeout=12) as resp:
+                data = _json.loads(resp.read())
+
+            if data.get("error"):
+                logger.debug(f"[crypto] Kraken OHLC error for {sym}: {data['error']}")
+                continue
+
+            result = data.get("result", {})
+            # Try normalised key first, then raw pair name, then any list value
+            response_key = _KRAKEN_RESPONSE_KEY.get(pair, pair)
+            ohlc = result.get(response_key) or result.get(pair)
+            if not ohlc:
+                for k, v in result.items():
+                    if k != "last" and isinstance(v, list):
+                        ohlc = v
+                        break
+
+            if not ohlc:
+                logger.debug(f"[crypto] Kraken OHLC: no rows for {sym} (pair={pair})")
+                continue
+
+            # Each row: [time, open, high, low, close, vwap, volume, count]
+            rows = ohlc[-limit:]
+            df = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "vwap", "volume", "count"])
+            df["ts"] = pd.to_datetime(df["ts"].astype(int), unit="s")
+            df.set_index("ts", inplace=True)
+            for col in ("open", "high", "low", "close", "volume"):
+                df[col] = df[col].astype(float)
+
+            bars[sym] = df
+            logger.info(f"[crypto] Kraken OHLC: {len(df)} bars for {sym}")
+
+        except Exception as e:
+            logger.debug(f"[crypto] Kraken OHLC failed for {sym}: {e}")
+
+    # ── 2. Binance / CCXT fallback ────────────────────────────────────────────
     missing = [s for s in symbols if s not in bars]
     if missing:
-        logger.info(f"[crypto] yfinance fallback for {len(missing)} symbols (CCXT ok={ccxt_ok}): {missing[:5]}{'...' if len(missing) > 5 else ''}")
+        try:
+            import ccxt
+            exchange = ccxt.binance({"enableRateLimit": True, "timeout": 10000})
+            ccxt_geo_blocked = False
+            for sym in missing:
+                if ccxt_geo_blocked:
+                    break
+                try:
+                    ohlcv = exchange.fetch_ohlcv(sym, timeframe=timeframe, limit=limit)
+                    if not ohlcv:
+                        continue
+                    df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
+                    df["ts"] = pd.to_datetime(df["ts"], unit="ms")
+                    df.set_index("ts", inplace=True)
+                    bars[sym] = df
+                    logger.debug(f"[crypto] CCXT Binance: {len(df)} bars for {sym}")
+                except Exception as e:
+                    err_str = str(e)
+                    if "451" in err_str or "restricted location" in err_str.lower():
+                        logger.debug(f"[crypto] Binance geo-blocked (451) — skipping remaining CCXT symbols")
+                        ccxt_geo_blocked = True
+                        break
+                    logger.debug(f"[crypto] CCXT fetch failed for {sym}: {e}")
+        except Exception as e:
+            logger.debug(f"[crypto] CCXT unavailable: {e}")
+
+    # ── 3. yfinance last resort ───────────────────────────────────────────────
+    missing = [s for s in symbols if s not in bars]
+    if missing:
         import yfinance as yf
-        # Map CCXT timeframe → yfinance (interval, period) pair.
-        # yfinance limits: 1h max 730d, 1d unlimited.
-        _YF_TF: dict[str, tuple[str, str]] = {
+        _YF_TF: Dict[str, tuple] = {
             "1m": ("1m", "7d"), "5m": ("5m", "60d"), "15m": ("15m", "60d"),
             "30m": ("30m", "60d"), "1h": ("1h", "730d"), "4h": ("1h", "730d"),
             "1d": ("1d", "2y"), "1w": ("1wk", "5y"),
@@ -141,21 +199,18 @@ def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1d", limit: int = 5
             try:
                 df = yf.download(yf_sym, period=yf_period, interval=yf_interval, progress=False, auto_adjust=True)
                 if df.empty:
-                    logger.warning(f"[crypto] yfinance returned empty df for {sym} (as {yf_sym})")
+                    logger.debug(f"[crypto] yfinance empty for {sym} (as {yf_sym})")
                     continue
-                # yfinance ≥0.2 may return MultiIndex columns — flatten to lowercase strings
                 if hasattr(df.columns, "levels"):
-                    # MultiIndex: ('Close', 'BTC-USD') → 'close'
                     df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df.columns]
                 else:
                     df.columns = [c.lower() if isinstance(c, str) else str(c).lower() for c in df.columns]
                 if "close" not in df.columns:
-                    logger.warning(f"[crypto] yfinance df for {sym} missing 'close' column — columns: {df.columns.tolist()}")
                     continue
                 bars[sym] = df
-                logger.debug(f"[crypto] yfinance fetched {len(df)} bars for {sym} (as {yf_sym})")
+                logger.debug(f"[crypto] yfinance: {len(df)} bars for {sym}")
             except Exception as e:
-                logger.warning(f"[crypto] yfinance fallback failed for {sym} (as {yf_sym}): {e}")
+                logger.debug(f"[crypto] yfinance failed for {sym}: {e}")
 
     logger.info(f"[crypto] _fetch_crypto_bars: {len(bars)}/{len(symbols)} symbols returned data")
     return bars
