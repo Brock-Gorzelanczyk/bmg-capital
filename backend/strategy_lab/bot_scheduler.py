@@ -127,6 +127,25 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
+    # Position monitor: every 1 minute, 24/7
+    # Checks open positions against stop/target; handles trailing stop.
+    # ------------------------------------------------------------------
+    def _run_position_monitor():
+        try:
+            from strategy_lab.core.position_monitor import run_position_monitor
+            run_position_monitor()
+        except Exception as exc:
+            logger.error("position_monitor job failed: %s", exc)
+
+    scheduler.add_job(
+        _run_position_monitor,
+        CronTrigger(minute="*/1"),
+        id="position_monitor",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+    )
+
+    # ------------------------------------------------------------------
     # Dead-man's switch: every hour during market hours, Mon-Fri
     # (check_dead_mans_switch itself gates on 9:30–16:00 ET)
     # ------------------------------------------------------------------

@@ -210,7 +210,12 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("discord_posted_at",    "DATETIME"),
         ("discord_message_id",   "TEXT"),
     ],
-    "bot_positions": [],
+    "bot_positions": [
+        ("stop_price_usd",         "FLOAT"),
+        ("target_price_usd",       "FLOAT"),
+        ("trailing_stop_activated","BOOLEAN DEFAULT 0"),
+        ("trailing_stop_price_usd","FLOAT"),
+    ],
     "bot_trades": [
         ("expected_fill_cents", "INTEGER"),
         ("slippage_bps",        "FLOAT"),
@@ -408,6 +413,8 @@ def run_migrations(engine: Engine) -> None:
         _ensure_v2_tables(conn)
         _archive_legacy_tables(conn)
         _grant_admin(conn)
+        _retrofit_debug_trade_signals(conn)
+        _close_debug_test_trades(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -438,6 +445,168 @@ def _archive_legacy_tables(conn) -> None:
             logger.info("Archived legacy table: %s → %s", src, dst)
         except Exception as exc:
             logger.warning("archive_legacy_tables: %s → %s failed: %s", src, dst, exc)
+
+
+def _close_debug_test_trades(conn) -> None:
+    """One-time: close the open BotPosition rows from the two forced BTC test trades
+    (ids 18 and 19) at the current BTC price so they don't pollute the live baseline.
+    Inserts matching sell rows. Sends a Discord note if possible.
+    """
+    MIGRATION_NAME = "bot_positions.close_debug_btc_test_trades_2026"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        # Find open positions linked to trades 18/19
+        rows = conn.execute(
+            text("""
+                SELECT bp.id, bp.avg_cost_cents, bp.qty, bp.allocation_id
+                FROM bot_positions bp
+                JOIN bot_trades bt ON bt.position_id = bp.id
+                WHERE bt.id IN (18, 19)
+                  AND bp.closed_at IS NULL
+            """)
+        ).fetchall()
+
+        if not rows:
+            _record_migration(conn, MIGRATION_NAME)
+            return
+
+        # Fetch BTC price from Kraken
+        btc_price = 0.0
+        try:
+            import urllib.request, json as _json
+            with urllib.request.urlopen(
+                "https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=8
+            ) as resp:
+                data = _json.loads(resp.read())
+                btc_price = float(data["result"]["XXBTZUSD"]["c"][0])
+        except Exception as exc:
+            logger.warning("_close_debug_test_trades: kraken price failed: %s", exc)
+            btc_price = 60_000.0  # last-known fallback
+
+        fill_cents = int(btc_price * 100)
+        now_str = "datetime('now')"
+
+        for pos_id, avg_cost_cents, qty, allocation_id in rows:
+            realized_cents = int((btc_price - avg_cost_cents / 100.0) * qty * 100)
+
+            # Close position
+            conn.execute(
+                text(f"""
+                    UPDATE bot_positions
+                    SET closed_at = {now_str},
+                        exit_reason = 'manual_cleanup_test_data'
+                    WHERE id = :pid
+                """),
+                {"pid": pos_id},
+            )
+
+            # Insert sell trade
+            conn.execute(
+                text("""
+                    INSERT INTO bot_trades
+                    (allocation_id, symbol, side, qty, fill_price_cents,
+                     fees_cents, ts, position_id, is_paper, expected_fill_cents, slippage_bps)
+                    VALUES
+                    (:alloc, 'BTC/USD', 'sell', :qty, :fp,
+                     0, datetime('now'), :pid, 1, :fp, 0.0)
+                """),
+                {"alloc": allocation_id, "qty": qty, "fp": fill_cents, "pid": pos_id},
+            )
+
+            # Update daily P&L
+            conn.execute(
+                text("""
+                    INSERT INTO bot_daily_pnl (allocation_id, date, realized_cents, unrealized_cents, fees_cents)
+                    VALUES (:alloc, date('now'), :pnl, 0, 0)
+                    ON CONFLICT(allocation_id, date)
+                    DO UPDATE SET realized_cents = realized_cents + :pnl
+                """),
+                {"alloc": allocation_id, "pnl": realized_cents},
+            )
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info(
+            "_close_debug_test_trades: closed %d position(s) @ BTC=%.2f",
+            len(rows), btc_price,
+        )
+
+        # Notify Discord
+        try:
+            import urllib.request as _req
+            import json as _json, os as _os
+            webhook = _os.getenv("DISCORD_SIGNAL_WEBHOOK_URL", "")
+            if webhook:
+                msg = {
+                    "content": (
+                        f"🧹 **TEST TRADES CLOSED** — clearing baseline before live signals start\n"
+                        f"Closed {len(rows)} BTC/USD test position(s) @ ${btc_price:,.2f}\n"
+                        f"Real crypto bot signals take over from here."
+                    )
+                }
+                data = _json.dumps(msg).encode()
+                _req.urlopen(
+                    _req.Request(webhook, data=data, headers={"Content-Type": "application/json"}),
+                    timeout=5,
+                )
+        except Exception:
+            pass
+
+    except Exception as exc:
+        logger.warning("_close_debug_test_trades failed: %s", exc)
+
+
+def _retrofit_debug_trade_signals(conn) -> None:
+    """One-time: set stop_price/target_price on bot_signals matched to the 2 BTC
+    test trades (id 18 and 19) using crypto_swing profile rules (-15% / +30%).
+    Also backfills stop_price_usd/target_price_usd on their bot_positions.
+    Safe to re-run (idempotent via schema_migrations)."""
+    MIGRATION_NAME = "bot_signals.retrofit_debug_btc_stop_target"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        for trade_id in (18, 19):
+            row = conn.execute(
+                text("SELECT fill_price_cents, position_id, ts FROM bot_trades WHERE id = :tid"),
+                {"tid": trade_id},
+            ).fetchone()
+            if not row:
+                continue
+            fill_cents, position_id, trade_ts = row
+            entry = fill_cents / 100.0
+            stop = round(entry * 0.85, 4)
+            target = round(entry * 1.30, 4)
+
+            # Update matching signal (within ±10 min)
+            conn.execute(
+                text("""
+                    UPDATE bot_signals
+                    SET stop_price = :stop, target_price = :target, entry_price = :entry
+                    WHERE symbol = 'BTC/USD'
+                      AND stop_price IS NULL
+                      AND ts BETWEEN datetime(:ts, '-10 minutes')
+                                 AND datetime(:ts, '+10 minutes')
+                """),
+                {"stop": stop, "target": target, "entry": entry,
+                 "ts": trade_ts.isoformat() if hasattr(trade_ts, "isoformat") else str(trade_ts)},
+            )
+
+            # Backfill position stop/target
+            if position_id:
+                conn.execute(
+                    text("""
+                        UPDATE bot_positions
+                        SET stop_price_usd = :stop, target_price_usd = :target
+                        WHERE id = :pid AND stop_price_usd IS NULL
+                    """),
+                    {"stop": stop, "target": target, "pid": position_id},
+                )
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration %s: retrofitted BTC test trade stop/target levels", MIGRATION_NAME)
+    except Exception as exc:
+        logger.warning("_retrofit_debug_trade_signals failed: %s", exc)
 
 
 _ADMIN_EMAIL = "32bgorzelanczyk@gmail.com"

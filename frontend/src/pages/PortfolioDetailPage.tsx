@@ -14,6 +14,14 @@ import {
 import client from "@/api/client";
 import { cn } from "@/lib/utils";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getTradeUnit(symbol: string, assetClass?: string): string {
+  if (symbol.includes("/")) return symbol.split("/")[0];
+  if (assetClass === "options") return "contracts";
+  return "shares";
+}
+
 // ── Portfolio activity API ────────────────────────────────────────────────────
 
 interface TradeRecord {
@@ -243,7 +251,7 @@ function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<
 
 // ── Recent Activity ───────────────────────────────────────────────────────────
 
-function RecentActivity({ portfolioId, colorHex }: { portfolioId: number; colorHex: string }) {
+function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: number; colorHex: string; assetClass: string }) {
   const navigate = useNavigate();
   const { data, isLoading } = usePortfolioActivity(portfolioId);
   const trades = data?.trades ?? [];
@@ -261,7 +269,11 @@ function RecentActivity({ portfolioId, colorHex }: { portfolioId: number; colorH
   if (trades.length === 0) {
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center">
-        <p className="text-zinc-500 text-sm">No trades yet. The execution engine runs daily at 10 AM ET on weekdays.</p>
+        <p className="text-zinc-500 text-sm">
+          {assetClass === "crypto"
+            ? `Crypto bots scan continuously. Next scan: within 1 minute.`
+            : "No trades yet. The execution engine runs at market open (Mon–Fri 9:30 AM ET)."}
+        </p>
       </div>
     );
   }
@@ -296,7 +308,7 @@ function RecentActivity({ portfolioId, colorHex }: { portfolioId: number; colorH
                   <span className="text-zinc-600 text-xs">{t.bot_display_name}</span>
                 </div>
                 <p className="text-zinc-500 text-xs mt-0.5">
-                  {t.qty.toFixed(4)} {t.symbol.includes("/") ? t.symbol.split("/")[0] : "shares"} @ ${t.fill_price.toFixed(2)}
+                  {t.qty.toFixed(4)} {getTradeUnit(t.symbol, assetClass)} @ ${t.fill_price.toFixed(2)}
                   {hasPnl && (
                     <span className={cn("ml-2 font-semibold", pnlPositive ? "text-lime-400" : "text-red-400")}>
                       · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized
@@ -424,7 +436,7 @@ export default function PortfolioDetailPage() {
           <h2 className="text-sm font-semibold text-zinc-300">Recent Trades</h2>
           <span className="text-xs text-zinc-600 ml-1">— every P&L dollar backed by a trade</span>
         </div>
-        <RecentActivity portfolioId={portfolioAny.id} colorHex={portfolio.color_hex} />
+        <RecentActivity portfolioId={portfolioAny.id} colorHex={portfolio.color_hex} assetClass={portfolio.asset_class} />
       </div>
 
       {/* Footer */}

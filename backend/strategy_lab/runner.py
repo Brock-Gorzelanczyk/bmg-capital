@@ -459,6 +459,21 @@ def run_bot_profile(profile_name: str) -> dict:
 
                     # Audit the signal
                     log_signal(db, alloc.id, sig)
+
+                    # 10i. Execute: open position in Alpaca paper + create DB rows
+                    try:
+                        _execute_signal(
+                            db=db,
+                            alloc=alloc,
+                            sig=sig,
+                            final_size_pct=final_size_pct,
+                            profile=profile,
+                            profile_name=profile_name,
+                        )
+                    except Exception as exc:
+                        logger.warning("[runner:%s] execute_signal failed for %s: %s",
+                                       profile_name, sig.symbol, exc)
+
                     processed_signals.append({
                         "signal": sig,
                         "final_size_pct": final_size_pct,
@@ -552,6 +567,126 @@ def run_bot_profile(profile_name: str) -> dict:
     except Exception as exc:
         logger.error("Bot runner failed for %s: %s", profile_name, exc, exc_info=True)
         return {"error": str(exc)}
+
+
+# ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────
+
+def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str) -> None:
+    """Place a bracket order in Alpaca paper and persist BotPosition + BotTrade.
+
+    Steps:
+      1. Get current price from broker account/positions or fallback
+      2. Size the position (final_size_pct % of alloc capital)
+      3. Compute stop/target from profile YAML rules
+      4. Submit bracket order to Alpaca paper
+      5. Create BotPosition row (with stop_price_usd + target_price_usd)
+      6. Create BotTrade row (entry fill)
+    """
+    if sig.side not in ("buy",):
+        return  # only open long positions for now
+
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotPosition, BotTrade
+    from strategy_lab.core.execution import get_broker, compute_bracket_prices
+
+    asset_class = profile.get("asset_class", "stock")
+    now = datetime.now(timezone.utc)
+
+    # 1. Get current price
+    try:
+        broker = get_broker(asset_class)
+        account = broker.get_account()
+        equity = account.get("equity", 0.0)
+    except Exception as exc:
+        logger.warning("[execute:%s] broker.get_account failed: %s", profile_name, exc)
+        return
+
+    if equity <= 0:
+        return
+
+    # Fetch live price for this symbol via positions or small market-data call
+    entry_price = 0.0
+    try:
+        positions = broker.get_positions()
+        # Current price from any existing position with same symbol
+        for p in positions:
+            if p.get("symbol") == sig.symbol and p.get("current_price", 0) > 0:
+                entry_price = float(p["current_price"])
+                break
+    except Exception:
+        pass
+
+    if entry_price <= 0:
+        # Can't place order without price — skip silently (bars stub is empty)
+        logger.debug("[execute:%s] no price for %s, skipping order", profile_name, sig.symbol)
+        return
+
+    # 2. Size: pct of bot capital (capital_cents_within_portfolio or starting capital)
+    capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+    position_dollars = capital_usd * (final_size_pct / 100.0)
+    qty = round(position_dollars / entry_price, 6)
+    if qty <= 0:
+        return
+
+    # 3. Compute stop and target from profile rules
+    stop_price, target_price = compute_bracket_prices(entry_price, profile)
+
+    # 4. Submit bracket order
+    order_id: str | None = None
+    try:
+        result = broker.submit_bracket_order(
+            symbol=sig.symbol,
+            qty=qty,
+            side="buy",
+            stop_price=stop_price,
+            target_price=target_price,
+        )
+        order_id = result.get("order_id")
+    except Exception as exc:
+        logger.warning("[execute:%s] bracket_order failed for %s: %s", profile_name, sig.symbol, exc)
+        # Fall through — still create DB rows as simulated paper fill
+
+    fill_cents = int(entry_price * 100)
+
+    # 5. Create BotPosition
+    pos = BotPosition(
+        allocation_id=alloc.id,
+        symbol=sig.symbol,
+        qty=qty,
+        avg_cost_cents=fill_cents,
+        opened_at=now,
+        closed_at=None,
+        is_paper=True,
+        stop_price_usd=stop_price,
+        target_price_usd=target_price,
+        trailing_stop_activated=False,
+    )
+    db.add(pos)
+    db.flush()  # get pos.id
+
+    # 6. Create BotTrade (entry)
+    trade = BotTrade(
+        allocation_id=alloc.id,
+        symbol=sig.symbol,
+        side="buy",
+        qty=qty,
+        fill_price_cents=fill_cents,
+        fees_cents=0,
+        ts=now,
+        position_id=pos.id,
+        is_paper=True,
+        alpaca_order_id=order_id,
+        expected_fill_cents=fill_cents,
+        slippage_bps=0.0,
+    )
+    db.add(trade)
+    db.commit()
+
+    logger.info(
+        "[execute:%s] Opened %s qty=%.6f @ %.4f stop=%.4f target=%.4f order=%s pos=%d trade=%d",
+        profile_name, sig.symbol, qty, entry_price, stop_price, target_price,
+        order_id or "sim", pos.id, trade.id,
+    )
 
 
 # ── Regime filter evaluator ───────────────────────────────────────────────────

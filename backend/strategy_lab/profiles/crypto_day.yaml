@@ -2,38 +2,44 @@ name: crypto_day
 asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, BNB/USD, MATIC/USD, ATOM/USD, LINK/USD, DOT/USD, ADA/USD]
+  symbols: [BTC/USD, ETH/USD, SOL/USD, DOGE/USD, ADA/USD, AVAX/USD, LINK/USD, MATIC/USD, ARB/USD, OP/USD]
 cadence: "* * * * *"
 watchlist:
   rebuild_at: "0 */4 * * *"
   size: 10
-  top_n_for_signals: 5
+  top_n_for_signals: 8
   scoring:
     intraday_momentum: 0.4
     volume_ratio: 0.3
     btc_correlation: 0.3
 strategies:
   - crypto_intraday_momentum
-  - crypto_weekend_momentum
+  - crypto_vwap_reversion
+  - crypto_zscore_mean_reversion
+  - crypto_rsi_bands
+  - crypto_bollinger_touch
   - crypto_volatility_breakout
-  - crypto_news_sentiment
   - crypto_session_open
 ensemble: weighted_vote
-position_cap: 3
-position_size_pct: 15.0
-stop_loss_pct: 2.0
-take_profit_pct: 3.0
-hold_max_hours: 24
+confidence_threshold: 0.50
+position_cap: 5
+position_size_pct: 1.5
+stop_loss_pct: 1.0
+take_profit_pct: 1.5
+trailing_stop_activate_at_pct: 0.75
+trailing_stop_distance_pct: 0.25
+hold_max_hours: 8
+cooldown_minutes: 15
 risk_overlay:
-  daily_loss_limit_pct: 4.0
-  consecutive_loss_halve_at: 3
-  consecutive_loss_halt_at: 5
-  portfolio_drawdown_circuit_pct: 10
+  daily_loss_limit_pct: 3.0
+  max_position_size_pct: 6.0
+  max_gross_exposure_pct: 80.0
+  consecutive_loss_halve_at: 5
+  consecutive_loss_halt_at: 10
+  portfolio_drawdown_circuit_pct: 5.0
   pdt_enforce: false
-regime_filters:
-  - halt_if: btc_funding_rate > 0.003
 execution:
-  order_type: limit
+  order_type: market
   limit_offset_bps: 10
   reprice_after_seconds: 30
   reprice_attempts: 3

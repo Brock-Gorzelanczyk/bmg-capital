@@ -1,0 +1,223 @@
+"""Position monitor — runs every minute.
+
+Checks all open BotPosition rows against their stop_price_usd / target_price_usd.
+Closes positions that hit stop or target, records the exit trade, and handles
+trailing-stop activation (ratchets stop to entry once position is up X%).
+
+Steps 5–8 from the risk pipeline spec:
+  5. Monitor loop checks every minute: did stop hit? did target hit?
+  6. If stop hit → exit and record loss
+  7. If target hit → exit and record gain
+  8. If trailing stop activates (position up >= activate_pct) →
+       stop ratchets up to breakeven (locks in scratch at worst)
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# How many cents capital to treat as "zero" to skip sizing
+_MIN_CAPITAL_CENTS = 1_00  # $1
+
+
+def _get_current_prices(symbols: list[str], asset_class: str) -> dict[str, float]:
+    """Fetch current prices from Alpaca paper for a list of symbols."""
+    try:
+        from strategy_lab.core.execution import get_broker
+        broker = get_broker(asset_class)
+        positions = broker.get_positions()
+        prices = {p["symbol"]: p["current_price"] for p in positions if p.get("current_price")}
+        return prices
+    except Exception as exc:
+        logger.warning("[monitor] broker.get_positions failed (%s): %s", asset_class, exc)
+        return {}
+
+
+def _fetch_latest_prices_fallback(symbols: list[str]) -> dict[str, float]:
+    """Fallback: fetch prices from yfinance for symbols not found in Alpaca."""
+    prices: dict[str, float] = {}
+    try:
+        import yfinance as yf
+        for sym in symbols:
+            try:
+                ticker_sym = sym.replace("/USD", "-USD").replace("/USDT", "-USDT")
+                t = yf.Ticker(ticker_sym)
+                hist = t.history(period="1d", interval="1m")
+                if not hist.empty:
+                    prices[sym] = float(hist["Close"].iloc[-1])
+            except Exception:
+                pass
+    except ImportError:
+        pass
+    return prices
+
+
+def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime) -> None:
+    """Record exit trade and mark position closed."""
+    from app.db.models.bots import BotTrade
+
+    fill_cents = int(price_usd * 100)
+    exit_trade = BotTrade(
+        allocation_id=alloc.id,
+        symbol=pos.symbol,
+        side="sell",
+        qty=pos.qty,
+        fill_price_cents=fill_cents,
+        fees_cents=0,
+        ts=now,
+        position_id=pos.id,
+        is_paper=True,
+        expected_fill_cents=fill_cents,
+        slippage_bps=0.0,
+    )
+    db.add(exit_trade)
+
+    pos.closed_at = now
+    pos.exit_reason = reason
+    db.commit()
+
+    entry_usd = pos.avg_cost_cents / 100.0
+    pnl = (price_usd - entry_usd) * pos.qty
+    logger.info(
+        "[monitor] CLOSED %s qty=%.6f entry=%.4f exit=%.4f pnl=%.2f reason=%s pos_id=%d",
+        pos.symbol, pos.qty, entry_usd, price_usd, pnl, reason, pos.id,
+    )
+
+    # Update daily P&L snapshot
+    try:
+        from app.db.models.bots import BotDailyPnL
+        from datetime import date
+        today = date.today()
+        pnl_row = (
+            db.query(BotDailyPnL)
+            .filter(BotDailyPnL.allocation_id == alloc.id, BotDailyPnL.date == today)
+            .first()
+        )
+        pnl_cents = int(pnl * 100)
+        if pnl_row:
+            pnl_row.realized_cents = (pnl_row.realized_cents or 0) + pnl_cents
+        else:
+            db.add(BotDailyPnL(
+                allocation_id=alloc.id,
+                date=today,
+                realized_cents=pnl_cents,
+                unrealized_cents=0,
+                fees_cents=0,
+            ))
+        db.commit()
+    except Exception as exc:
+        logger.warning("[monitor] daily_pnl update failed: %s", exc)
+
+
+def run_position_monitor() -> dict:
+    """Main entry point — called by APScheduler every minute.
+
+    Returns a summary dict for logging.
+    """
+    from app.db.session import SessionLocal
+    from app.db.models.bots import BotPosition, BotAllocation, BotProfile
+
+    db = SessionLocal()
+    checked = closed_stop = closed_target = trailing_activated = 0
+
+    try:
+        # Load all open positions that have stop or target set
+        open_positions = (
+            db.query(BotPosition)
+            .filter(BotPosition.closed_at.is_(None))
+            .all()
+        )
+
+        if not open_positions:
+            return {"checked": 0, "closed": 0}
+
+        # Group by asset class to minimize broker calls
+        crypto_syms: list[str] = []
+        stock_syms: list[str] = []
+        for pos in open_positions:
+            if "/" in pos.symbol:
+                crypto_syms.append(pos.symbol)
+            else:
+                stock_syms.append(pos.symbol)
+
+        # Fetch prices
+        price_map: dict[str, float] = {}
+        if crypto_syms:
+            crypto_prices = _get_current_prices(list(set(crypto_syms)), "crypto")
+            price_map.update(crypto_prices)
+            # Fallback for any missing
+            missing = [s for s in set(crypto_syms) if s not in price_map]
+            if missing:
+                price_map.update(_fetch_latest_prices_fallback(missing))
+        if stock_syms:
+            stock_prices = _get_current_prices(list(set(stock_syms)), "stock")
+            price_map.update(stock_prices)
+
+        now = datetime.now(timezone.utc)
+
+        for pos in open_positions:
+            current_price = price_map.get(pos.symbol)
+            if current_price is None or current_price <= 0:
+                continue
+
+            checked += 1
+            entry_usd = pos.avg_cost_cents / 100.0
+            alloc = db.get(BotAllocation, pos.allocation_id)
+            if not alloc:
+                continue
+
+            profile = db.get(BotProfile, alloc.profile_id)
+            profile_cfg = profile.config_json or {} if profile else {}
+            activate_pct = float(profile_cfg.get("trailing_stop_activate_at_pct", 20.0))
+
+            # ── Trailing stop: activate when position up >= activate_pct ─────────
+            if (
+                not pos.trailing_stop_activated
+                and entry_usd > 0
+                and current_price >= entry_usd * (1 + activate_pct / 100)
+            ):
+                # Ratchet stop to entry (breakeven) — never lose money on this position
+                new_stop = entry_usd
+                if pos.stop_price_usd is None or new_stop > pos.stop_price_usd:
+                    pos.stop_price_usd = new_stop
+                    pos.trailing_stop_activated = True
+                    pos.trailing_stop_price_usd = new_stop
+                    db.commit()
+                    trailing_activated += 1
+                    logger.info(
+                        "[monitor] Trailing stop activated on %s: stop ratcheted to entry %.4f (was None)",
+                        pos.symbol, new_stop,
+                    )
+
+            # ── Stop loss check ──────────────────────────────────────────────────
+            if pos.stop_price_usd is not None and current_price <= pos.stop_price_usd:
+                _close_position(db, pos, alloc, current_price, "stop_loss", now)
+                closed_stop += 1
+                continue
+
+            # ── Take profit check ────────────────────────────────────────────────
+            if pos.target_price_usd is not None and current_price >= pos.target_price_usd:
+                _close_position(db, pos, alloc, current_price, "take_profit", now)
+                closed_target += 1
+                continue
+
+    except Exception as exc:
+        logger.error("[monitor] position_monitor error: %s", exc, exc_info=True)
+    finally:
+        db.close()
+
+    total_closed = closed_stop + closed_target
+    if total_closed or trailing_activated:
+        logger.info(
+            "[monitor] Run complete: checked=%d stop_exits=%d target_exits=%d trailing_activated=%d",
+            checked, closed_stop, closed_target, trailing_activated,
+        )
+    return {
+        "checked": checked,
+        "closed_stop": closed_stop,
+        "closed_target": closed_target,
+        "trailing_activated": trailing_activated,
+    }

@@ -83,6 +83,10 @@ class BotPosition(Base):
     closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     exit_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_paper: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    stop_price_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    target_price_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    trailing_stop_activated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    trailing_stop_price_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
 
 class BotTrade(Base):

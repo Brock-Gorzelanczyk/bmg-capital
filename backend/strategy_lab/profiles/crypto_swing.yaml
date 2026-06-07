@@ -2,12 +2,13 @@ name: crypto_swing
 asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, MATIC/USD, LINK/USD, DOT/USD, ADA/USD, ATOM/USD, FTM/USD]
+  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, MATIC/USD, LINK/USD, DOT/USD, ADA/USD, ATOM/USD, DOGE/USD,
+            ARB/USD, OP/USD, INJ/USD, FET/USD, TIA/USD, SEI/USD, JUP/USD, ONDO/USD, WIF/USD, BONK/USD]
 cadence: "0 */4 * * *"
 watchlist:
   rebuild_at: "0 0 * * *"
   size: 30
-  top_n_for_signals: 10
+  top_n_for_signals: 12
   scoring:
     momentum_7d: 0.35
     rsi_position: 0.25
@@ -16,27 +17,30 @@ watchlist:
 strategies:
   - crypto_rsi_mean_reversion
   - crypto_momentum_breakout
-  - crypto_btc_dominance_regime
-  - crypto_macd_swing
   - crypto_ema_cross
+  - crypto_macd_swing
+  - crypto_donchian_breakout
+  - crypto_higher_low_pattern
   - crypto_relative_strength
 ensemble: weighted_vote
-position_cap: 5
-position_size_pct: 20.0
-stop_loss_pct: 15.0
-take_profit_pct: 30.0
-trailing_stop_activate_at_pct: 20.0
+confidence_threshold: 0.55
+position_cap: 6
+position_size_pct: 4.0
+stop_loss_pct: 8.0
+take_profit_pct: 18.0
+trailing_stop_activate_at_pct: 10.0
+trailing_stop_distance_pct: 3.0
 hold_min_days: 1
 hold_max_days: 30
 risk_overlay:
-  daily_loss_limit_pct: 5.0
-  consecutive_loss_halve_at: 3
-  consecutive_loss_halt_at: 5
-  portfolio_drawdown_circuit_pct: 15
-regime_filters:
-  - halt_if: btc_funding_rate > 0.002
+  daily_loss_limit_pct: 3.0
+  max_position_size_pct: 6.0
+  max_gross_exposure_pct: 80.0
+  consecutive_loss_halve_at: 5
+  consecutive_loss_halt_at: 10
+  portfolio_drawdown_circuit_pct: 10.0
 execution:
-  order_type: limit
+  order_type: market
   limit_offset_bps: 10
   reprice_after_seconds: 60
   reprice_attempts: 3
