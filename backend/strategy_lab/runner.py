@@ -679,6 +679,226 @@ def run_bot_profile(profile_name: str) -> dict:
         return {"error": str(exc)}
 
 
+# ── Debug scan trace (dry-run — no DB writes, no orders) ─────────────────────
+
+def trace_bot_profile(profile_name: str, confidence_threshold_override: float | None = None) -> dict:
+    """Dry-run scan pipeline for `profile_name` and return gate-by-gate counts.
+
+    No orders are submitted and nothing is written to the database.
+    Accepts an optional confidence_threshold_override so callers can test
+    with a lower bar without editing the YAML.
+
+    Returns a dict matching the /api/bots/debug/scan-trace response schema.
+    """
+    errors: list[str] = []
+    trace: dict = {
+        "profile": profile_name,
+        "confidence_threshold_used": confidence_threshold_override,
+        "bars_fetched": "0/0",
+        "bars_per_symbol": {},
+        "raw_signals_per_strategy": {},
+        "candidates_from_strategy": 0,
+        "after_ensemble": 0,
+        "after_mtf_confluence": 0,
+        "after_apply_overlay": 0,
+        "after_check_guardrails": 0,
+        "after_position_cap": 0,
+        "after_exposure_cap": 0,
+        "signals_inserted": 0,
+        "errors": errors,
+    }
+
+    try:
+        from strategy_lab.seeds import load_profile
+        profile = load_profile(profile_name)
+
+        # Apply confidence threshold override
+        if confidence_threshold_override is not None:
+            profile = dict(profile)
+            profile["confidence_threshold"] = confidence_threshold_override
+            trace["confidence_threshold_used"] = confidence_threshold_override
+        else:
+            trace["confidence_threshold_used"] = profile.get("confidence_threshold", 0.50)
+
+        from app.db.session import SessionLocal
+        from app.db.models.bots import BotProfile as _BP, BotAllocation as _BA, BotPosition as _BPos
+
+        db = SessionLocal()
+        try:
+            bp = db.query(_BP).filter(_BP.name == profile_name).first()
+            if not bp or not bp.enabled:
+                trace["errors"].append("profile disabled or not found in DB")
+                return trace
+
+            allocations = (
+                db.query(_BA)
+                .filter(_BA.profile_id == bp.id, _BA.enabled.is_(True), _BA.paper_mode.is_(True))
+                .all()
+            )
+            if not allocations:
+                trace["errors"].append("no enabled paper allocations")
+                return trace
+
+            # ── Bars fetch ────────────────────────────────────────────────────
+            asset_class = profile.get("asset_class", "stock")
+            universe = profile.get("universe", {})
+            symbols: list[str] = (
+                universe.get("symbols", []) if isinstance(universe, dict) else list(universe or [])
+            )
+            timeframe = profile.get("scan_timeframe", "1h")
+            limit = int(profile.get("scan_lookback_bars", 200))
+
+            bars: dict[str, list[dict]] = {}
+            try:
+                if asset_class in ("crypto", "crypto_intraday"):
+                    from app.screener.crypto_runner import _fetch_crypto_bars
+                    raw = _fetch_crypto_bars(symbols, timeframe=timeframe, limit=limit)
+                else:
+                    from app.screener.runner import _fetch_bars_sync
+                    raw = _fetch_bars_sync(symbols, period="60d")
+                for sym, df in raw.items():
+                    if df is None or df.empty:
+                        continue
+                    bars[sym] = [
+                        {"c": float(r["close"]), "o": float(r["open"]),
+                         "h": float(r["high"]), "l": float(r["low"]),
+                         "v": float(r.get("volume", 0) or 0),
+                         "ts": r.name.isoformat() if hasattr(r.name, "isoformat") else str(r.name)}
+                        for _, r in df.iterrows()
+                    ]
+            except Exception as exc:
+                errors.append(f"bar_fetch: {exc}")
+
+            trace["bars_fetched"] = f"{len(bars)}/{len(symbols)}"
+            trace["bars_per_symbol"] = {s: len(b) for s, b in bars.items()}
+
+            # ── Regime (graceful) ─────────────────────────────────────────────
+            regime: dict = {}
+            try:
+                from strategy_lab.core.regime_detector import detect_regime
+                regime = detect_regime(profile_name, profile) or {}
+            except Exception:
+                pass
+
+            # ── Strategies → raw signals ──────────────────────────────────────
+            strategy_names: list[str] = profile.get("strategies", []) or [_primary_strategy(profile_name)]
+            signals_by_strategy: list[list] = []
+            strategies_loaded = 0
+
+            for strat_name in strategy_names:
+                mod = _load_strategy_module(strat_name)
+                if mod is None or not hasattr(mod, "generate_signals"):
+                    continue
+                try:
+                    sigs = mod.generate_signals(bars, profile, regime) or []
+                    signals_by_strategy.append(sigs)
+                    strategies_loaded += 1
+                    trace["raw_signals_per_strategy"][strat_name] = len(sigs)
+                    if sigs:
+                        # Show first signal's confidence for debugging
+                        trace["raw_signals_per_strategy"][f"{strat_name}_sample_conf"] = round(sigs[0].confidence, 4)
+                except Exception as exc:
+                    errors.append(f"strategy_{strat_name}: {exc}")
+                    signals_by_strategy.append([])
+
+            total_raw = sum(len(s) for s in signals_by_strategy)
+            trace["candidates_from_strategy"] = total_raw
+
+            # ── Ensemble ──────────────────────────────────────────────────────
+            ensemble = profile.get("ensemble", "weighted_vote")
+            signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded))
+            trace["after_ensemble"] = len(signals)
+
+            # ── MTF confluence ────────────────────────────────────────────────
+            bot_cadence = _cadence_for_profile(profile_name)
+            filtered: list = []
+            mtf_detail: list[str] = []
+            for sig in signals:
+                if sig.side == "hold":
+                    filtered.append(sig)
+                    continue
+                try:
+                    from strategy_lab.core.expert.multi_timeframe import check_confluence
+                    score = check_confluence(sig.symbol, sig, bars, bot_cadence)
+                    mtf_detail.append(f"{sig.symbol}/{sig.side}={score:.2f}")
+                    if score >= 0.66:
+                        filtered.append(sig)
+                except Exception:
+                    filtered.append(sig)
+            signals = filtered
+            trace["after_mtf_confluence"] = len(signals)
+            trace["mtf_scores"] = mtf_detail
+
+            # ── Risk overlay ──────────────────────────────────────────────────
+            try:
+                from strategy_lab.core.risk_overlay import apply_overlay
+                signals = apply_overlay(signals, profile, regime, db) or signals
+            except Exception:
+                pass
+            trace["after_apply_overlay"] = len(signals)
+
+            # ── Per-alloc gates (check first alloc only for simplicity) ───────
+            actionable = [s for s in signals if s.side != "hold"]
+            # Use first alloc as representative sample
+            alloc = allocations[0]
+
+            guardrail_pass = True
+            try:
+                from app.services.guardrail_checker import check_guardrails
+                ok, reason = check_guardrails(alloc.user_id, db)
+                if not ok:
+                    guardrail_pass = False
+                    errors.append(f"guardrail_block: {reason}")
+            except Exception as exc:
+                errors.append(f"guardrail_check_failed: {exc}")
+
+            trace["after_check_guardrails"] = len(actionable) if guardrail_pass else 0
+
+            open_pos_rows = (
+                db.query(_BPos)
+                .filter(_BPos.allocation_id == alloc.id, _BPos.closed_at.is_(None))
+                .all()
+            )
+            position_cap = int(profile.get("position_cap", 999))
+            positions_held = len(open_pos_rows)
+            trace["open_positions"] = positions_held
+            trace["position_cap"] = position_cap
+
+            if positions_held >= position_cap:
+                trace["after_position_cap"] = 0
+                errors.append(f"position_cap_hit: {positions_held}/{position_cap}")
+            else:
+                after_pcap = len(actionable) if guardrail_pass else 0
+                trace["after_position_cap"] = after_pcap
+
+                # Exposure cap
+                risk_overlay_cfg = profile.get("risk_overlay", {})
+                max_gross_pct = float(risk_overlay_cfg.get("max_gross_exposure_pct", 100.0))
+                cap_cents = alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 0
+                blocked_by_exposure = False
+                if cap_cents > 0 and open_pos_rows:
+                    open_notional_cents = sum(int(p.qty * p.avg_cost_cents) for p in open_pos_rows)
+                    gross_pct = (open_notional_cents / cap_cents) * 100
+                    trace["gross_exposure_pct"] = round(gross_pct, 2)
+                    if gross_pct >= max_gross_pct:
+                        blocked_by_exposure = True
+                        errors.append(f"exposure_cap_hit: {gross_pct:.1f}%/{max_gross_pct}%")
+
+                trace["after_exposure_cap"] = 0 if blocked_by_exposure else after_pcap
+
+            # signals_inserted stays 0 — this is a dry-run
+            trace["signals_inserted"] = 0
+            trace["note"] = "dry-run: no DB writes or orders submitted"
+
+        finally:
+            db.close()
+
+    except Exception as exc:
+        errors.append(f"outer: {exc}")
+
+    return trace
+
+
 # ── One-shot first-live-signal announcement ───────────────────────────────────
 
 _FIRST_SIGNAL_MIGRATION = "first_live_crypto_signal_announced"

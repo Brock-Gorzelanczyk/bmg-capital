@@ -19,7 +19,7 @@ strategies:
   - crypto_volatility_breakout
   - crypto_session_open
 ensemble: weighted_vote
-confidence_threshold: 0.50
+confidence_threshold: 0.30
 position_cap: 5
 position_size_pct: 1.5
 stop_loss_pct: 1.0

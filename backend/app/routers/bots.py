@@ -3057,6 +3057,27 @@ _BOT_DISPLAY_NAMES = {
 }
 
 
+@router.get("/debug/scan-trace")
+def debug_scan_trace(
+    profile: str = "crypto_day",
+    confidence_threshold: float | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    """Dry-run one scan cycle and return gate-by-gate signal counts.
+
+    No orders are submitted and nothing is written to the database.
+    Optional query params:
+      ?profile=crypto_day            — which bot profile to trace (default: crypto_day)
+      ?confidence_threshold=0.30     — override threshold for this run only
+
+    Example: GET /api/bots/debug/scan-trace?confidence_threshold=0.30
+    """
+    from strategy_lab.runner import trace_bot_profile
+    result = trace_bot_profile(profile, confidence_threshold_override=confidence_threshold)
+    return result
+
+
 @router.get("/trade/{trade_id}")
 def get_trade_detail(
     trade_id: int,
