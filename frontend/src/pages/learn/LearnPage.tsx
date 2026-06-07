@@ -1,6 +1,6 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Clock, BookOpen, GraduationCap, Lock } from "lucide-react";
+import { ChevronRight, Clock, BookOpen, GraduationCap, Lock, Award } from "lucide-react";
 import { getTracks } from "@/api/learning";
 import type { LearningTrack } from "@/api/learning";
 import { cn } from "@/lib/utils";
@@ -251,6 +251,28 @@ export default function LearnPage() {
             40+ hours of targeted exam prep, available independently of certification tiers.
           </p>
         </div>
+      </div>
+
+      {/* Take Final Exam CTA */}
+      <div className="bg-lime-500/5 border border-lime-500/20 rounded-2xl p-5 flex items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Award size={20} className="text-lime-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              Ready to get certified?
+            </p>
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
+              Complete all modules, then sit the Learning Center Exam — 150 questions, 4 hours, 90% to pass.
+            </p>
+          </div>
+        </div>
+        <Link
+          to="/learn/exam"
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-lime-500 hover:bg-lime-400 text-black text-xs font-semibold transition-all shrink-0"
+        >
+          Take Final Exam
+          <ChevronRight size={13} />
+        </Link>
       </div>
     </div>
   );

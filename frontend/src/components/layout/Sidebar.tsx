@@ -5,7 +5,7 @@ import {
   FlaskConical, Layers, Bitcoin, PenTool,
   Filter, Newspaper, Calendar, Microscope, Compass,
   Droplets, ShieldCheck, Activity,
-  GraduationCap, Users, ScanSearch, Scale,
+  GraduationCap, Users, ScanSearch, Scale, Award,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
   Grid3X3, Zap, Globe, Eye, TestTube2, Cpu,
@@ -86,6 +86,7 @@ const NAV_CRYPTO_PLUS = [
 
 const NAV_LEARN = [
   { to: "/learn/tracks", label: "Learning Center", Icon: GraduationCap },
+  { to: "/learn/certificates", label: "Certificates", Icon: Award },
 ];
 
 const NAV_TOOLS = [

@@ -96,6 +96,10 @@ const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
 const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage"));
 const TermsPage = lazy(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
+const ExamPage = lazy(() => import("@/pages/ExamPage"));
+const ExamResultPage = lazy(() => import("@/pages/ExamResultPage"));
+const CertificatesPage = lazy(() => import("@/pages/CertificatesPage"));
+const VerifyPage = lazy(() => import("@/pages/VerifyPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore, useIsViewer } from "@/store/authStore";
@@ -366,6 +370,9 @@ function AppInner() {
         <Route path="/external-portfolio" element={<ExternalPortfolioPage />} />
         <Route path="/referral" element={<ReferralPage />} />
         <Route path="/learn/earn" element={<LearnEarnPage />} />
+        <Route path="/learn/exam" element={<Page component={ExamPage} />} />
+        <Route path="/learn/exam/result" element={<Page component={ExamResultPage} />} />
+        <Route path="/learn/certificates" element={<Page component={CertificatesPage} />} />
         <Route path="/ipo" element={<IPOAccessPage />} />
         <Route path="/settings/cfp" element={<CFPBookingPage />} />
         <Route path="/staking" element={<StakingPage />} />
@@ -411,6 +418,7 @@ export default function App() {
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/pitch" element={<PitchPage />} />
               <Route path="/pitch/deck" element={<PitchDeckPage />} />
+              <Route path="/verify/:certId" element={<VerifyPage />} />
               <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               <Route
                 path="/*"
