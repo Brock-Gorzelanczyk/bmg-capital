@@ -2,7 +2,9 @@ name: crypto_day
 asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, DOGE/USD, ADA/USD, AVAX/USD, LINK/USD, MATIC/USD, ARB/USD, OP/USD]
+  symbols: [BTC/USD, ETH/USD, SOL/USD, DOGE/USD, ADA/USD, AVAX/USD, LINK/USD, POL/USD, ARB/USD, OP/USD]
+scan_timeframe: "1h"
+scan_lookback_bars: 500
 cadence: "* * * * *"
 watchlist:
   rebuild_at: "0 */4 * * *"
@@ -14,10 +16,6 @@ watchlist:
     btc_correlation: 0.3
 strategies:
   - crypto_intraday_momentum
-  - crypto_vwap_reversion
-  - crypto_zscore_mean_reversion
-  - crypto_rsi_bands
-  - crypto_bollinger_touch
   - crypto_volatility_breakout
   - crypto_session_open
 ensemble: weighted_vote

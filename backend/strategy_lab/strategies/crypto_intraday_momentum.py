@@ -2,8 +2,8 @@
 Crypto Intraday Momentum
 Sharpe 1.12-1.42.
 
-BTC/ETH/SOL/AVAX momentum on 5-min bars.
-Long when: 1h return > 1.5 * ATR(20, 5min), volume 2x avg, funding neutral.
+BTC/ETH/SOL/AVAX momentum on 1h bars (profile: scan_timeframe=1h).
+Long when: 1h return > 1.5 * ATR(20, 1h), volume 2x avg, funding neutral.
 Short when: 1h return < -1.5 * ATR, volume 2x avg.
 24h operation. Exit at 24h hard stop or when signal reverses.
 Regime: halve size if BTC funding rate > top 5% (hot market, crowded longs).
@@ -22,8 +22,8 @@ STRATEGY_NAME = "crypto_intraday_momentum"
 # Universe symbols this strategy targets
 UNIVERSE = ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD"]
 
-# 5-min bars per 1 hour = 12 bars
-BARS_PER_HOUR = 12
+# 1 bar = 1 hour (profile uses scan_timeframe: 1h)
+BARS_PER_HOUR = 1
 ATR_PERIOD = 20
 VOLUME_MULTIPLIER = 2.0
 SIGNAL_ATR_MULTIPLIER = 1.5

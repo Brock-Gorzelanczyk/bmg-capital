@@ -128,10 +128,18 @@ def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1d", limit: int = 5
     if missing:
         logger.info(f"[crypto] yfinance fallback for {len(missing)} symbols (CCXT ok={ccxt_ok}): {missing[:5]}{'...' if len(missing) > 5 else ''}")
         import yfinance as yf
+        # Map CCXT timeframe → yfinance (interval, period) pair.
+        # yfinance limits: 1h max 730d, 1d unlimited.
+        _YF_TF: dict[str, tuple[str, str]] = {
+            "1m": ("1m", "7d"), "5m": ("5m", "60d"), "15m": ("15m", "60d"),
+            "30m": ("30m", "60d"), "1h": ("1h", "730d"), "4h": ("1h", "730d"),
+            "1d": ("1d", "2y"), "1w": ("1wk", "5y"),
+        }
+        yf_interval, yf_period = _YF_TF.get(timeframe, ("1d", "2y"))
         for sym in missing:
             yf_sym = _ccxt_sym_to_yf(sym)
             try:
-                df = yf.download(yf_sym, period="2y", interval="1d", progress=False, auto_adjust=True)
+                df = yf.download(yf_sym, period=yf_period, interval=yf_interval, progress=False, auto_adjust=True)
                 if df.empty:
                     logger.warning(f"[crypto] yfinance returned empty df for {sym} (as {yf_sym})")
                     continue
