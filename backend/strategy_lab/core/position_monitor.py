@@ -173,7 +173,7 @@ def run_position_monitor() -> dict:
             profile_cfg = profile.config_json or {} if profile else {}
             activate_pct = float(profile_cfg.get("trailing_stop_activate_at_pct", 20.0))
 
-            # ── Hold-time limit: must run BEFORE stop/target ──────────────────────
+            # ── Hold-time checks (min and max): must run BEFORE stop/target ─────
             if pos.opened_at is not None:
                 opened_aware = (
                     pos.opened_at.replace(tzinfo=timezone.utc)
@@ -181,6 +181,19 @@ def run_position_monitor() -> dict:
                     else pos.opened_at
                 )
                 held_hours = (now - opened_aware).total_seconds() / 3_600.0
+
+                # FIX F: hold_min_days — skip ALL exits until minimum hold met
+                hold_min_days = profile_cfg.get("hold_min_days")
+                if hold_min_days is not None and float(hold_min_days) > 0:
+                    min_hours = float(hold_min_days) * 24.0
+                    if held_hours < min_hours:
+                        logger.debug(
+                            "[monitor] %s pos=%d held=%.1fh < min=%.1fh — skipping exits",
+                            pos.symbol, pos.id, held_hours, min_hours,
+                        )
+                        continue
+
+                # hold_max_hours / hold_max_days force-exit
                 max_hours: Optional[float] = None
                 if profile_cfg.get("hold_max_hours") is not None:
                     max_hours = float(profile_cfg["hold_max_hours"])

@@ -156,3 +156,53 @@ def check_signal(
         )
 
     return OverlayDecision(True, "OK", size_mult)
+
+
+def apply_overlay(signals: list, profile: dict, regime: dict, db) -> list:
+    """Called by runner.py — applies global risk overlay to a batch of signals.
+
+    Per-allocation guardrails (daily loss limit, consecutive loss halt) are
+    enforced separately in runner.py's per-allocation loop via check_guardrails().
+    This function handles: VIX panic halt, regime size adjustments, catalyst blackouts.
+    """
+    from strategy_lab.core.signals import Signal as _Signal
+
+    logger.info("[risk_overlay] apply_overlay called — %d signals", len(signals))
+
+    vix_regime = regime.get("vix_regime", "mid")
+    if vix_regime == "panic":
+        logger.warning("[risk_overlay] VIX panic regime: blocking all new entries")
+        return [s for s in signals if s.side == "hold"]
+
+    filtered = []
+    blocked = 0
+    for sig in signals:
+        if sig.side == "hold":
+            filtered.append(sig)
+            continue
+
+        decision = check_signal(
+            db=db,
+            allocation_id=0,  # global check only; no allocation-level DB queries here
+            symbol=sig.symbol,
+            side=sig.side,
+            profile_config=profile,
+            regime_snapshot=regime,
+        )
+        if decision.allowed:
+            if decision.size_multiplier != 1.0:
+                sig = _Signal(
+                    symbol=sig.symbol,
+                    side=sig.side,
+                    confidence=sig.confidence,
+                    size_hint=round(sig.size_hint * decision.size_multiplier, 4),
+                    reason=f"[overlay:x{decision.size_multiplier:.2f}] {sig.reason}",
+                    strategy=sig.strategy,
+                )
+            filtered.append(sig)
+        else:
+            logger.info("[risk_overlay] BLOCKED %s %s: %s", sig.side, sig.symbol, decision.reason)
+            blocked += 1
+
+    logger.debug("[risk_overlay] apply_overlay: %d passed, %d blocked", len(filtered), blocked)
+    return filtered

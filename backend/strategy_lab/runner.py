@@ -335,7 +335,21 @@ def run_bot_profile(profile_name: str) -> dict:
             for alloc in allocations:
                 alloc_user_id = alloc.user_id
 
-                # Gather open symbols for correlation check (graceful)
+                # ── FIX B: Daily-loss guardrail check ────────────────────────────
+                try:
+                    from app.services.guardrail_checker import check_guardrails
+                    ok, reason = check_guardrails(alloc.user_id, db)
+                    if not ok:
+                        logger.warning(
+                            "[runner:%s][guardrail] skipping alloc %d user %d: %s",
+                            profile_name, alloc.id, alloc.user_id, reason,
+                        )
+                        continue
+                except Exception as exc:
+                    logger.warning("[runner:%s] guardrail_checker failed: %s", profile_name, exc)
+
+                # Gather open positions for position_cap + exposure + correlation
+                open_pos_rows: list = []
                 open_symbols: list[str] = []
                 try:
                     from app.db.models.bots import BotPosition
@@ -350,6 +364,34 @@ def run_bot_profile(profile_name: str) -> dict:
                     open_symbols = [p.symbol for p in open_pos_rows]
                 except Exception as exc:
                     logger.warning("[runner:%s] Could not fetch open positions: %s", profile_name, exc)
+
+                # ── FIX D: position_cap enforcement ──────────────────────────────
+                position_cap = int(profile.get("position_cap", 999))
+                if len(open_pos_rows) >= position_cap:
+                    logger.info(
+                        "[runner:%s][position_cap] skipping alloc %d: %d/%d positions held",
+                        profile_name, alloc.id, len(open_pos_rows), position_cap,
+                    )
+                    continue
+
+                # ── FIX E: max_gross_exposure_pct enforcement ─────────────────────
+                try:
+                    risk_overlay_cfg = profile.get("risk_overlay", {})
+                    max_gross_pct = float(risk_overlay_cfg.get("max_gross_exposure_pct", 100.0))
+                    cap_cents = alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 0
+                    if cap_cents > 0 and open_pos_rows:
+                        open_notional_cents = sum(
+                            int(p.qty * p.avg_cost_cents) for p in open_pos_rows
+                        )
+                        gross_pct = (open_notional_cents / cap_cents) * 100
+                        if gross_pct >= max_gross_pct:
+                            logger.info(
+                                "[runner:%s][exposure_cap] skipping alloc %d: %.1f%%/%.1f%% gross exposure",
+                                profile_name, alloc.id, gross_pct, max_gross_pct,
+                            )
+                            continue
+                except Exception as exc:
+                    logger.warning("[runner:%s] exposure_cap check failed: %s", profile_name, exc)
 
                 for sig in actionable:
                     if sig.side == "hold":
