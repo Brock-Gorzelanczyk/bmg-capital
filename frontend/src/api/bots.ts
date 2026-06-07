@@ -4,7 +4,7 @@ export interface BotProfile {
   id: number;
   name: string;           // stock_swing, stock_day, etc.
   description: string;
-  asset_class: "stock" | "crypto" | "options";
+  asset_class: "stock" | "crypto" | "options" | "quant";
   position_cap: number;
   cadence: string;
   stop_loss_pct: number | null;

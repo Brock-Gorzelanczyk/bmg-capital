@@ -904,7 +904,7 @@ function makeFallbackBots(): BotListItem[] {
       id: idx + 1,
       name,
       description: BOT_META[name]?.description ?? "",
-      asset_class: (BOT_META[name]?.assetClass ?? "stock") as string,
+      asset_class: BOT_META[name]?.assetClass ?? "stock",
       position_cap: 10,
       cadence: name.includes("_day") ? "intraday" : name.includes("_lt") ? "weekly" : "daily",
       stop_loss_pct: null,
