@@ -1,52 +1,24 @@
 import { useState } from "react";
-import { Bot, Eye, TrendingUp, TrendingDown, Search } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Bot, Eye, TrendingUp, TrendingDown, Search, RefreshCw, ExternalLink } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { cn } from "@/lib/utils";
-
-// ── Data ───────────────────────────────────────────────────────────────────────
-
-const CONGRESS_TRADES = [
-  { member: "Nancy Pelosi",      party: "D", state: "CA", ticker: "NVDA", type: "Purchase", amount: "$1M–$5M",     date: "May 28, 2026", sector: "Technology" },
-  { member: "Marjorie Greene",   party: "R", state: "GA", ticker: "TSLA", type: "Purchase", amount: "$50K–$100K",  date: "May 22, 2026", sector: "Consumer Disc" },
-  { member: "Ro Khanna",         party: "D", state: "CA", ticker: "AMZN", type: "Sale",     amount: "$250K–$500K", date: "May 19, 2026", sector: "Consumer Disc" },
-  { member: "Suzan DelBene",     party: "D", state: "WA", ticker: "AMD",  type: "Purchase", amount: "$500K–$1M",   date: "May 14, 2026", sector: "Technology" },
-  { member: "Dan Crenshaw",      party: "R", state: "TX", ticker: "XOM",  type: "Purchase", amount: "$50K–$100K",  date: "May 9, 2026",  sector: "Energy" },
-  { member: "Josh Gottheimer",   party: "D", state: "NJ", ticker: "MSFT", type: "Purchase", amount: "$500K–$1M",   date: "May 5, 2026",  sector: "Technology" },
-  { member: "Tommy Tuberville",  party: "R", state: "AL", ticker: "SPY",  type: "Purchase", amount: "$100K–$250K", date: "Apr 29, 2026", sector: "ETF" },
-  { member: "Mark Warner",       party: "D", state: "VA", ticker: "GOOGL",type: "Sale",     amount: "$100K–$250K", date: "Apr 24, 2026", sector: "Communication" },
-  { member: "Shelley Capito",    party: "R", state: "WV", ticker: "CVX",  type: "Purchase", amount: "$15K–$50K",   date: "Apr 18, 2026", sector: "Energy" },
-  { member: "Pete Sessions",     party: "R", state: "TX", ticker: "JPM",  type: "Purchase", amount: "$50K–$100K",  date: "Apr 11, 2026", sector: "Financials" },
-  { member: "Marie Gluesenkamp",party: "D", state: "WA", ticker: "META", type: "Purchase", amount: "$100K–$250K", date: "Apr 4, 2026",  sector: "Communication" },
-  { member: "David Rouzer",      party: "R", state: "NC", ticker: "AAPL", type: "Sale",     amount: "$50K–$100K",  date: "Mar 28, 2026", sector: "Technology" },
-];
-
-const INSIDER_TRADES = [
-  { name: "Jensen Huang",    title: "CEO",      company: "NVIDIA",    ticker: "NVDA", shares: 310000, value: "$52.7M", type: "Sale",     date: "May 27, 2026" },
-  { name: "Mark Zuckerberg", title: "CEO",      company: "Meta",      ticker: "META", shares: 185000, value: "$142M",  type: "Sale",     date: "May 21, 2026" },
-  { name: "Andy Jassy",      title: "CEO",      company: "Amazon",    ticker: "AMZN", shares: 95000,  value: "$22.1M", type: "Sale",     date: "May 16, 2026" },
-  { name: "Jamie Dimon",     title: "CEO",      company: "JPMorgan",  ticker: "JPM",  shares: 120000, value: "$29.3M", type: "Purchase", date: "May 9, 2026"  },
-  { name: "Lisa Su",         title: "CEO",      company: "AMD",       ticker: "AMD",  shares: 140000, value: "$24.6M", type: "Sale",     date: "May 2, 2026"  },
-  { name: "Satya Nadella",   title: "CEO",      company: "Microsoft", ticker: "MSFT", shares: 55000,  value: "$26.8M", type: "Sale",     date: "Apr 25, 2026" },
-  { name: "Brian Moynihan",  title: "CEO",      company: "B of A",    ticker: "BAC",  shares: 200000, value: "$9.4M",  type: "Purchase", date: "Apr 17, 2026" },
-  { name: "Tim Cook",        title: "CEO",      company: "Apple",     ticker: "AAPL", shares: 175000, value: "$36.2M", type: "Sale",     date: "Apr 10, 2026" },
-  { name: "Sundar Pichai",   title: "CEO",      company: "Alphabet",  ticker: "GOOGL",shares: 68000,  value: "$13.9M", type: "Sale",     date: "Apr 3, 2026"  },
-  { name: "Pat Gelsinger",   title: "CEO",      company: "Intel",     ticker: "INTC", shares: 300000, value: "$6.3M",  type: "Purchase", date: "Mar 26, 2026" },
-];
-
-const HEDGE_FUNDS = [
-  { fund: "Bridgewater",      ticker: "SPY",   action: "Added",   chg: "+2.4M", pct: "8.2%",   est: "$1.38B" },
-  { fund: "Renaissance Tech", ticker: "NVDA",  action: "New",     chg: "+840K",  pct: "2.1%",   est: "$121M"  },
-  { fund: "Pershing Square",  ticker: "GOOGL", action: "Added",   chg: "+1.2M", pct: "11.4%",  est: "$220M"  },
-  { fund: "Ackman/PSQ",       ticker: "UNH",   action: "Reduced", chg: "-500K",  pct: "6.8%",   est: "$184M"  },
-  { fund: "Tiger Global",     ticker: "META",  action: "Added",   chg: "+620K",  pct: "4.3%",   est: "$358M"  },
-  { fund: "Druckenmiller",    ticker: "MSFT",  action: "New",     chg: "+380K",  pct: "3.9%",   est: "$166M"  },
-  { fund: "Baupost Group",    ticker: "AMZN",  action: "Reduced", chg: "-1.4M", pct: "5.1%",   est: "$307M"  },
-  { fund: "Appaloosa",        ticker: "TSLA",  action: "Sold",    chg: "-2.8M", pct: "0%",     est: "$0"     },
-  { fund: "Viking Global",    ticker: "AMD",   action: "Added",   chg: "+940K",  pct: "3.2%",   est: "$164M"  },
-  { fund: "Soros Fund",       ticker: "COIN",  action: "New",     chg: "+280K",  pct: "1.8%",   est: "$67M"   },
-];
+import { getCongressTrades, getSmartMoneySummary } from "@/api/smartMoney";
 
 type Tab = "congress" | "insider" | "hedge";
+type PartyFilter = "all" | "D" | "R" | "I";
+type ChamberFilter = "all" | "S" | "H";
+
+function timeAgo(isoStr: string | null | undefined): string {
+  if (!isoStr) return "never";
+  const diffMs = Date.now() - new Date(isoStr).getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 2) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  return `${Math.floor(diffHrs / 24)}d ago`;
+}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -54,6 +26,8 @@ export default function SmartMoneyPage() {
   const [tab, setTab] = useState<Tab>("congress");
   const [search, setSearch] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
+  const [partyFilter, setPartyFilter] = useState<PartyFilter>("all");
+  const [chamberFilter, setChamberFilter] = useState<ChamberFilter>("all");
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "congress", label: "Congressional Trades" },
@@ -61,20 +35,45 @@ export default function SmartMoneyPage() {
     { id: "hedge",    label: "13F Hedge Funds" },
   ];
 
-  const filteredCongress = CONGRESS_TRADES.filter((t) =>
-    !search || t.ticker.includes(search.toUpperCase()) || t.member.toLowerCase().includes(search.toLowerCase())
-  );
-  const filteredInsider = INSIDER_TRADES.filter((t) =>
-    !search || t.ticker.includes(search.toUpperCase()) || t.name.toLowerCase().includes(search.toLowerCase())
-  );
-  const filteredHedge = HEDGE_FUNDS.filter((t) =>
-    !search || t.ticker.includes(search.toUpperCase()) || t.fund.toLowerCase().includes(search.toLowerCase())
-  );
+  // ── API queries ──────────────────────────────────────────────────────────────
+  const { data: summary } = useQuery({
+    queryKey: ["smart-money-summary"],
+    queryFn: getSmartMoneySummary,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
 
-  const buyCount   = CONGRESS_TRADES.filter((t) => t.type === "Purchase").length;
-  const sellCount  = CONGRESS_TRADES.filter((t) => t.type === "Sale").length;
-  const insiderBuy = INSIDER_TRADES.filter((t) => t.type === "Purchase").length;
-  const topTicker  = "NVDA";
+  const congressParams = {
+    limit: 100,
+    days: 90,
+    ...(partyFilter !== "all" && { party: partyFilter }),
+    ...(chamberFilter !== "all" && { chamber: chamberFilter }),
+    ...(search && search.length <= 6 && /^[A-Z]+$/i.test(search) ? { ticker: search } : {}),
+  };
+
+  const { data: congressData, isLoading: congressLoading } = useQuery({
+    queryKey: ["smart-money-congress", congressParams],
+    queryFn: () => getCongressTrades(congressParams),
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  // Client-side text filter (member name / ticker)
+  const filteredCongress = (congressData?.trades ?? []).filter((t) => {
+    if (!search) return true;
+    const s = search.toLowerCase();
+    return (
+      (t.ticker ?? "").toLowerCase().includes(s) ||
+      t.member_name.toLowerCase().includes(s)
+    );
+  });
+
+  // ── Stats ─────────────────────────────────────────────────────────────────────
+  const buyCount   = summary?.congress_buys_30d ?? 0;
+  const sellCount  = summary?.congress_sells_30d ?? 0;
+  const insiderBuy = summary?.insider_buys_30d ?? 0;
+  const topTicker  = summary?.most_traded_ticker_30d ?? "—";
+  const lastUpdatedCongress = summary?.last_updated?.congress;
 
   return (
     <div className="max-w-[1600px] mx-auto pb-20 md:pb-6 space-y-5">
@@ -129,121 +128,150 @@ export default function SmartMoneyPage() {
       {/* Congressional trades */}
       {tab === "congress" && (
         <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+          <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between flex-wrap gap-2">
             <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">Senate & House Disclosures</div>
-            <span className="text-[10px] text-[var(--text-tertiary)]">STOCK Act filings · Last 60 days</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated-2)]/40">
-                  {["Member", "Party", "Ticker", "Transaction", "Amount", "Date", "Sector"].map((h) => (
-                    <th key={h} className={cn("px-4 py-2.5 font-semibold text-[var(--text-tertiary)] tracking-wider", h==="Member"?"text-left":"text-right", h==="Party"||h==="Sector"?"text-left":"")}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCongress.map((t, i) => (
-                  <tr key={i} className={i % 2 === 0 ? "" : "bg-[var(--bg-elevated-2)]/30"}>
-                    <td className="px-4 py-2.5 font-semibold text-[var(--text-primary)]">{t.member}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border", t.party==="D"?"text-blue-400 bg-blue-900/30 border-blue-800/40":"text-red-400 bg-red-900/30 border-red-800/40")}>{t.party}</span>
-                      <span className="text-[var(--text-tertiary)] ml-1.5">{t.state}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-bold font-mono text-[var(--text-primary)]">{t.ticker}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", t.type==="Purchase"?"text-[var(--accent-positive)] bg-[var(--accent-positive)]/10":"text-[var(--accent-negative)] bg-[var(--accent-negative)]/10")}>
-                        {t.type === "Purchase" ? <TrendingUp className="inline w-3 h-3 mr-0.5" /> : <TrendingDown className="inline w-3 h-3 mr-0.5" />}{t.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-[var(--text-secondary)]">{t.amount}</td>
-                    <td className="px-4 py-2.5 text-right text-[var(--text-tertiary)]">{t.date}</td>
-                    <td className="px-4 py-2.5 text-[var(--text-tertiary)]">{t.sector}</td>
-                  </tr>
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Party filter */}
+              <div className="flex gap-1">
+                {(["all", "D", "R", "I"] as PartyFilter[]).map((p) => (
+                  <button key={p} onClick={() => setPartyFilter(p)}
+                    className={cn("text-[10px] font-bold px-2 py-1 rounded border transition-colors",
+                      partyFilter === p
+                        ? "bg-[var(--bg-elevated-2)] border-[var(--border-emphasis)] text-[var(--text-primary)]"
+                        : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                    )}>{p === "all" ? "All" : p}</button>
                 ))}
-              </tbody>
-            </table>
+              </div>
+              {/* Chamber filter */}
+              <div className="flex gap-1">
+                {([["all", "Both"], ["S", "Senate"], ["H", "House"]] as [ChamberFilter, string][]).map(([val, label]) => (
+                  <button key={val} onClick={() => setChamberFilter(val)}
+                    className={cn("text-[10px] font-bold px-2 py-1 rounded border transition-colors",
+                      chamberFilter === val
+                        ? "bg-[var(--bg-elevated-2)] border-[var(--border-emphasis)] text-[var(--text-primary)]"
+                        : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                    )}>{label}</button>
+                ))}
+              </div>
+              {lastUpdatedCongress && (
+                <span className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-1">
+                  <RefreshCw size={9} /> Updated {timeAgo(lastUpdatedCongress)}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="px-5 py-2.5 border-t border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)]">
-            Data sourced from STOCK Act disclosures filed with the Clerk of the House and Secretary of the Senate.
+
+          {congressLoading ? (
+            <div className="flex items-center justify-center py-16 text-[var(--text-tertiary)] text-sm gap-2">
+              <RefreshCw size={14} className="animate-spin" /> Loading disclosures…
+            </div>
+          ) : filteredCongress.length === 0 ? (
+            <div className="py-12 text-center text-[var(--text-tertiary)] text-sm">
+              No trades found for the selected filters.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated-2)]/40">
+                    {["Member", "Party", "Ticker", "Transaction", "Amount", "Date", "Delay"].map((h) => (
+                      <th key={h} className={cn("px-4 py-2.5 font-semibold text-[var(--text-tertiary)] tracking-wider",
+                        ["Member", "Party"].includes(h) ? "text-left" : "text-right"
+                      )}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCongress.map((t, i) => (
+                    <tr key={t.id} className={i % 2 === 0 ? "" : "bg-[var(--bg-elevated-2)]/30"}>
+                      <td className="px-4 py-2.5 font-semibold text-[var(--text-primary)]">
+                        <a href={t.source_url} target="_blank" rel="noopener noreferrer"
+                          className="hover:text-violet-400 inline-flex items-center gap-1 transition-colors">
+                          {t.member_name}
+                          <ExternalLink size={9} className="opacity-50" />
+                        </a>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border",
+                          t.party === "D" ? "text-blue-400 bg-blue-900/30 border-blue-800/40"
+                          : t.party === "R" ? "text-red-400 bg-red-900/30 border-red-800/40"
+                          : "text-gray-400 bg-gray-900/30 border-gray-800/40"
+                        )}>{t.party ?? "?"}</span>
+                        <span className="text-[var(--text-tertiary)] ml-1.5">{t.state}</span>
+                        <span className="text-[var(--text-tertiary)] ml-1 opacity-60">{t.chamber === "S" ? "· Sen" : t.chamber === "H" ? "· Rep" : ""}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-bold font-mono text-[var(--text-primary)]">
+                        {t.ticker ?? <span className="text-[var(--text-tertiary)] font-normal italic">N/A</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded",
+                          t.transaction_type === "purchase"
+                            ? "text-[var(--accent-positive)] bg-[var(--accent-positive)]/10"
+                            : "text-[var(--accent-negative)] bg-[var(--accent-negative)]/10"
+                        )}>
+                          {t.transaction_type === "purchase"
+                            ? <TrendingUp className="inline w-3 h-3 mr-0.5" />
+                            : <TrendingDown className="inline w-3 h-3 mr-0.5" />}
+                          {t.transaction_type.charAt(0).toUpperCase() + t.transaction_type.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-[var(--text-secondary)]">
+                        {t.amount_range ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-[var(--text-tertiary)]">
+                        {t.transaction_date}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-[var(--text-tertiary)]">
+                        {t.disclosure_delay_days != null
+                          ? <span title={`Disclosed ${t.disclosure_delay_days} days after transaction`}>{t.disclosure_delay_days}d</span>
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="px-5 py-2.5 border-t border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)] flex items-center justify-between flex-wrap gap-1">
+            <span>Data from Senate Stock Watcher + House Stock Watcher · SEC EDGAR STOCK Act disclosures</span>
+            {congressData && (
+              <span className="opacity-70">{congressData.total.toLocaleString()} total trades · showing {filteredCongress.length}</span>
+            )}
           </div>
         </div>
       )}
 
-      {/* Insider transactions */}
+      {/* Insider transactions — coming soon */}
       {tab === "insider" && (
         <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
             <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">SEC Form 4 Filings</div>
-            <span className="text-[10px] text-[var(--text-tertiary)]">Officer & director transactions · Last 60 days</span>
+            <span className="text-[10px] text-[var(--text-tertiary)]">Officer & director transactions</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated-2)]/40">
-                  {["Insider", "Title", "Company", "Ticker", "Shares", "Value", "Type", "Date"].map((h) => (
-                    <th key={h} className={cn("px-4 py-2.5 font-semibold text-[var(--text-tertiary)] tracking-wider", ["Insider","Title","Company"].includes(h)?"text-left":"text-right")}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredInsider.map((t, i) => (
-                  <tr key={i} className={i % 2 === 0 ? "" : "bg-[var(--bg-elevated-2)]/30"}>
-                    <td className="px-4 py-2.5 font-semibold text-[var(--text-primary)]">{t.name}</td>
-                    <td className="px-4 py-2.5 text-[var(--text-tertiary)]">{t.title}</td>
-                    <td className="px-4 py-2.5 text-[var(--text-secondary)]">{t.company}</td>
-                    <td className="px-4 py-2.5 text-right font-bold font-mono text-[var(--text-primary)]">{t.ticker}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-[var(--text-secondary)]">{t.shares.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-bold text-[var(--text-primary)]">{t.value}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", t.type==="Purchase"?"text-[var(--accent-positive)] bg-[var(--accent-positive)]/10":"text-[var(--accent-negative)] bg-[var(--accent-negative)]/10")}>{t.type}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-[var(--text-tertiary)]">{t.date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="py-16 text-center space-y-2">
+            <div className="text-2xl">🔜</div>
+            <div className="text-sm font-semibold text-[var(--text-secondary)]">Coming Soon</div>
+            <div className="text-xs text-[var(--text-tertiary)] max-w-sm mx-auto">
+              Real SEC EDGAR Form 4 insider transaction data in the next release.
+            </div>
           </div>
         </div>
       )}
 
-      {/* 13F Hedge funds */}
+      {/* 13F Hedge funds — coming soon */}
       {tab === "hedge" && (
         <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
-            <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">13F Institutional Holdings — Q1 2026</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">13F Institutional Holdings</div>
             <span className="text-[10px] text-[var(--text-tertiary)]">Quarterly SEC filings · Notable position changes</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated-2)]/40">
-                  {["Fund", "Ticker", "Action", "Share Change", "% Portfolio", "Est. Value"].map((h) => (
-                    <th key={h} className={cn("px-4 py-2.5 font-semibold text-[var(--text-tertiary)] tracking-wider", ["Fund","Ticker"].includes(h)?"text-left":"text-right")}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredHedge.map((t, i) => {
-                  const actionColor = t.action==="New"?"text-violet-400 bg-violet-900/30 border-violet-800/40":t.action==="Added"?"text-[var(--accent-positive)] bg-[var(--accent-positive)]/10 border-[var(--accent-positive)]/20":t.action==="Reduced"?"text-amber-400 bg-amber-900/30 border-amber-800/40":"text-[var(--accent-negative)] bg-[var(--accent-negative)]/10 border-[var(--accent-negative)]/20";
-                  return (
-                    <tr key={i} className={i % 2 === 0 ? "" : "bg-[var(--bg-elevated-2)]/30"}>
-                      <td className="px-4 py-2.5 font-semibold text-[var(--text-primary)]">{t.fund}</td>
-                      <td className="px-4 py-2.5 font-bold font-mono text-[var(--text-primary)]">{t.ticker}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border", actionColor)}>{t.action}</span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-[var(--text-secondary)]">{t.chg}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-[var(--text-secondary)]">{t.pct}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-bold text-[var(--text-primary)]">{t.est}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-2.5 border-t border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)]">
-            13F filings are submitted 45 days after each quarter end. Holdings represent positions as of the filing date.
+          <div className="py-16 text-center space-y-2">
+            <div className="text-2xl">🔜</div>
+            <div className="text-sm font-semibold text-[var(--text-secondary)]">Coming Soon</div>
+            <div className="text-xs text-[var(--text-tertiary)] max-w-sm mx-auto">
+              Real SEC EDGAR Form 13F hedge fund filing data in the next release.
+            </div>
           </div>
         </div>
       )}

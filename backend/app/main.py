@@ -26,7 +26,8 @@ from app.alpaca.stream import stream_manager
 from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
-from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow
+from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money
+from app.routers.learning import router as learning_router
 from app.routers import notification_channels as notification_channels_router
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
 
@@ -96,6 +97,40 @@ async def lifespan(app: FastAPI):
         seed_bot_profiles(_seed_db2)
     finally:
         _seed_db2.close()
+
+    # Seed IMCP learning curriculum (no-op if tracks already exist)
+    from app.seeds.learning_seed import seed_learning_content
+    _seed_db3 = SessionLocal()
+    try:
+        seed_learning_content(_seed_db3)
+    finally:
+        _seed_db3.close()
+
+    # Seed smart_money_congress if table is empty (non-fatal — network may be down)
+    from app.db.models.smart_money import SmartMoneyCongressTrade
+    _smc_db = SessionLocal()
+    try:
+        smc_count = _smc_db.query(SmartMoneyCongressTrade).count()
+        if smc_count == 0:
+            from app.services.smart_money.congress import fetch_and_upsert_congress
+
+            async def _seed_congress():
+                _seed_smc_db = SessionLocal()
+                try:
+                    result = await fetch_and_upsert_congress(_seed_smc_db, days_back=365)
+                    logger.info("[startup] smart_money_congress seeded: %s", result)
+                except Exception as _e:
+                    logger.warning("[startup] smart_money_congress seed failed (non-fatal): %s", _e)
+                finally:
+                    _seed_smc_db.close()
+
+            asyncio.create_task(_seed_congress())
+        else:
+            logger.info("[startup] smart_money_congress already has %d rows — skipping seed", smc_count)
+    except Exception as _e:
+        logger.warning("[startup] smart_money_congress seed check failed (non-fatal): %s", _e)
+    finally:
+        _smc_db.close()
 
     # Wire Alpaca stream events to connected WebSocket clients
     stream_manager.on_quote(connection_manager.send_to_symbol_subscribers)
@@ -175,6 +210,7 @@ app.include_router(research.router)
 # paper.router removed — tables archived 2026-06-06
 app.include_router(screens.router)
 app.include_router(learn.router)
+app.include_router(learning_router)
 app.include_router(explain.router)
 app.include_router(options.router)
 app.include_router(notifications.router)
@@ -229,6 +265,7 @@ app.include_router(strategy_library.router)
 app.include_router(custom_bot.router)
 app.include_router(analyst.router)
 app.include_router(v2_shadow.router)
+app.include_router(smart_money.router)
 
 
 @app.get("/health", tags=["health"])
