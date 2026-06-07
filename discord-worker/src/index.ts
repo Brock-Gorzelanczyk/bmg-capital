@@ -17,6 +17,7 @@ import { sql } from "drizzle-orm";
 import { startDiscordSchedulers } from "./scheduler.js";
 import { postSignalToDiscord }    from "./post-signal.js";
 import { db } from "./db.js";
+import { getDiscordClient } from "./client.js";
 
 const POLL_INTERVAL_MS = 10_000; // 10 seconds
 
@@ -137,7 +138,8 @@ async function main(): Promise<void> {
     console.error("[discord] DISCORD_BOT_TOKEN not set — exiting");
     process.exit(1);
   }
-
+  // Eagerly initialize Discord client so the bot shows Online immediately.
+    await getDiscordClient();
   // Ensure tables exist (idempotent — safe to run on every boot).
   await runMigrations();
 
