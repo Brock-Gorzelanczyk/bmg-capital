@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import math
 import time
 from datetime import timezone, datetime, timedelta
@@ -259,31 +260,46 @@ async def _fetch_bars_for_symbol(
 
 @router.get("/latest")
 async def get_latest_prices(
-    symbols: str = Query(..., description="Comma-separated symbols e.g. NVDA,AAPL,BTC-USD"),
+    symbols: str = Query(..., description="Comma-separated symbols e.g. NVDA,AAPL,BTC/USD"),
 ):
-    """Return the latest close price for up to 30 symbols. Used for live P&L in position tables."""
-    sym_list = [_normalize_symbol(s) for s in symbols.split(",") if s.strip()][:30]
+    """Return live prices for up to 30 symbols via exchange-native feeds.
+
+    Crypto → Kraken, Stocks → Alpaca IEX. Falls back to module-level cache
+    (max 24h stale) if the exchange feed is unavailable.
+    """
+    # Normalize: BTC-USD → BTC/USD so live_prices routes correctly
+    raw_syms = [s.strip() for s in symbols.split(",") if s.strip()][:30]
+    sym_list = [s.replace("-USD", "/USD").upper() if s.upper().endswith("-USD") else _normalize_symbol(s)
+                for s in raw_syms]
+
+    now = time.time()
+
+    def _fetch():
+        try:
+            from app.services.live_prices import fetch_live_prices
+            return fetch_live_prices(sym_list)
+        except Exception as exc:
+            logger.warning("[bars/latest] live_prices fetch failed: %s", exc)
+            return {}
+
+    live = await asyncio.to_thread(_fetch)
+
     prices: dict[str, float | None] = {}
     stale_symbols: list[str] = []
-    now = time.time()
+
     for sym in sym_list:
-        try:
-            ticker = yf.Ticker(sym)
-            hist = ticker.history(period="2d")
-            if not hist.empty:
-                price = round(float(hist["Close"].iloc[-1]), 4)
-                prices[sym] = price
-                _price_cache[sym] = (price, now)
-            else:
-                prices[sym] = None
-        except Exception:
-            # Fallback: use cached price if less than 24 hours old
+        if sym in live and live[sym]:
+            price = round(float(live[sym]), 4)
+            prices[sym] = price
+            _price_cache[sym] = (price, now)
+        else:
             cached = _price_cache.get(sym)
             if cached is not None and (now - cached[1]) < 86400:
                 prices[sym] = cached[0]
                 stale_symbols.append(sym)
             else:
                 prices[sym] = None
+
     return {"prices": prices, "stale_symbols": stale_symbols}
 
 

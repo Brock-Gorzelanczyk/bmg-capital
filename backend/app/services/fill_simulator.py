@@ -3,7 +3,6 @@ import asyncio
 import logging
 import random
 from typing import Optional, Tuple
-import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
@@ -15,25 +14,22 @@ SLIPPAGE_RANDOM = 0.0002  # up to 0.02% random
 
 
 async def get_quote(symbol: str) -> Optional[dict]:
-    """Get bid, ask, last price for a symbol."""
+    """Get bid, ask, last price for a symbol via exchange-native feeds.
+
+    Crypto → Kraken, Stocks → Alpaca (IEX). Never yfinance for live prices.
+    """
     def _fetch():
         try:
-            t = yf.Ticker(symbol)
-            info = t.info
-            last = (info.get("currentPrice") or info.get("regularMarketPrice")
-                    or info.get("ask") or info.get("bid"))
-            hist = t.history(period="2d")
-            if not last:
-                if not hist.empty:
-                    last = float(hist["Close"].iloc[-1])
+            from app.services.live_prices import fetch_live_prices
+            prices = fetch_live_prices([symbol])
+            last = prices.get(symbol)
             if not last:
                 return None
             last = float(last)
             half_spread = last * SPREAD_PCT / 2
-            bid = round(last - half_spread, 2)
-            ask = round(last + half_spread, 2)
-            prev_close = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else last
-            return {"bid": bid, "ask": ask, "last": last, "prev_close": prev_close}
+            bid = round(last - half_spread, 4)
+            ask = round(last + half_spread, 4)
+            return {"bid": bid, "ask": ask, "last": last, "prev_close": last}
         except Exception as e:
             logger.error(f"Quote fetch error {symbol}: {e}", exc_info=True)
             return None

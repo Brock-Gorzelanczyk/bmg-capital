@@ -50,25 +50,25 @@ async def refresh_market(_user=Depends(get_current_user)):
 
 @router.get("/quote/{symbol}")
 async def get_coin_quote(symbol: str, _user=Depends(get_current_user)):
-    """Single coin real-time price via yfinance. Symbol format: BTC-USD"""
-    sym = symbol.upper()
-    if not sym.endswith("-USD"):
-        sym = f"{sym}-USD"
+    """Single coin real-time price via Kraken. Symbol format: ETH/USD or ETH or ETH-USD."""
+    # Normalize to internal BASE/USD format
+    sym = symbol.upper().replace("-USD", "/USD")
+    if "/" not in sym:
+        sym = f"{sym}/USD"
 
     def _fetch():
         try:
-            t = yf.Ticker(sym)
-            hist = t.history(period="2d", interval="1d")
-            if hist.empty:
+            from app.services.live_prices import fetch_crypto_prices_kraken
+            prices = fetch_crypto_prices_kraken([sym])
+            last = prices.get(sym)
+            if not last:
                 return None
-            last = float(hist["Close"].iloc[-1])
-            prev = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else last
-            change_pct = ((last - prev) / prev * 100) if prev else 0.0
             return {
                 "symbol": sym,
                 "last": round(last, 8),
-                "prev_close": round(prev, 8),
-                "change_pct": round(change_pct, 2),
+                "prev_close": None,   # Kraken public ticker doesn't give prev close; use bars for that
+                "change_pct": None,
+                "source": "kraken",
             }
         except Exception as e:
             logger.warning(f"Crypto quote failed {sym}: {e}")

@@ -793,19 +793,15 @@ def _close_stale_overnight_positions(conn) -> None:
             _record_migration(conn, MIGRATION_NAME)
             return
 
-        # Try to get current ETH price from yfinance
+        # Fetch current prices via Kraken (crypto) — intentionally not yfinance,
+        # which returned stale $1,596 for ETH when the real price was ~$2,500.
         current_prices: dict = {}
         try:
-            import yfinance as yf
-            symbols_needed = {r[1] for r in stale_rows}
-            for sym in symbols_needed:
-                yf_sym = sym.replace("/USD", "-USD")
-                t = yf.Ticker(yf_sym)
-                hist = t.history(period="1d", interval="1m")
-                if not hist.empty:
-                    current_prices[sym] = float(hist["Close"].iloc[-1])
+            from app.services.live_prices import fetch_live_prices
+            symbols_needed = list({r[1] for r in stale_rows})
+            current_prices = fetch_live_prices(symbols_needed)
         except Exception as exc:
-            logger.warning("_close_stale_overnight_positions: yfinance failed: %s", exc)
+            logger.warning("_close_stale_overnight_positions: live_prices failed: %s", exc)
 
         for pos_id, symbol, qty, avg_cost_cents, opened_at, alloc_id in stale_rows:
             price = current_prices.get(symbol, avg_cost_cents / 100.0)

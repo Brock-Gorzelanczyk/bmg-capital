@@ -37,22 +37,18 @@ def _get_current_prices(symbols: list[str], asset_class: str) -> dict[str, float
 
 
 def _fetch_latest_prices_fallback(symbols: list[str]) -> dict[str, float]:
-    """Fallback: fetch prices from yfinance for symbols not found in Alpaca."""
-    prices: dict[str, float] = {}
+    """Fallback: fetch live prices via Kraken (crypto) or Alpaca (stocks).
+
+    yfinance is intentionally NOT used here — it returns stale/delayed data
+    that has caused incorrect exit prices in production (e.g. ETH at $1,596
+    when the real price was $2,500+).
+    """
     try:
-        import yfinance as yf
-        for sym in symbols:
-            try:
-                ticker_sym = sym.replace("/USD", "-USD").replace("/USDT", "-USDT")
-                t = yf.Ticker(ticker_sym)
-                hist = t.history(period="1d", interval="1m")
-                if not hist.empty:
-                    prices[sym] = float(hist["Close"].iloc[-1])
-            except Exception:
-                pass
-    except ImportError:
-        pass
-    return prices
+        from app.services.live_prices import fetch_live_prices
+        return fetch_live_prices(symbols)
+    except Exception as exc:
+        logger.warning("[monitor] live_prices fallback failed: %s", exc)
+        return {}
 
 
 def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime) -> None:
