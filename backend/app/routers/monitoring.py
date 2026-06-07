@@ -346,3 +346,69 @@ async def get_status(
         }
 
     return {"categories": status_map, "as_of": datetime.now(timezone.utc).isoformat()}
+
+
+@router.post("/discord-test")
+async def discord_test_post(
+    channel: str = "quant",
+    _user=Depends(_admin_required),
+):
+    """
+    Send a test embed to a Discord channel using the live bot token + env vars.
+    channel: 'quant' | 'all' | 'crypto' | 'stocks' | 'options'
+    """
+    import os
+    import httpx
+
+    from app.config import settings
+
+    channel_map = {
+        "quant":   os.environ.get("BMG_QUANT_SIGNALS_CHANNEL_ID") or settings.discord_ch_quant_signals,
+        "all":     settings.discord_ch_all_signals or settings.discord_channel_all_signals,
+        "crypto":  settings.discord_ch_crypto_signals or settings.discord_channel_crypto,
+        "stocks":  settings.discord_ch_stocks_signals or settings.discord_channel_stocks,
+        "options": settings.discord_ch_options_signals or settings.discord_channel_options,
+    }
+
+    channel_id = channel_map.get(channel, "")
+    token = settings.discord_bot_token
+
+    if not token:
+        raise HTTPException(status_code=500, detail="DISCORD_BOT_TOKEN not set")
+    if not channel_id:
+        raise HTTPException(status_code=500, detail=f"Channel ID not set for '{channel}'")
+
+    embed = {
+        "title": "⚡ Crypto Quant Aggressive · BTC/USD",
+        "description": (
+            "**Signal:** BB_BREAKOUT (TEST)\n"
+            "**Entry:** $67,432.50  |  **Stop:** $66,750.00  |  **Target:** $68,900.00\n"
+            "**Confidence:** 0.72  |  **Size:** $5,000\n"
+            "**Reason:** Test message — wiring verification only\n"
+            "---\n"
+            "*Paper trading. Not investment advice. Not a registered investment adviser.*"
+        ),
+        "color": 0xa78bfa,
+        "footer": {"text": f"TEST via /api/monitoring/discord-test?channel={channel}"},
+    }
+
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            url,
+            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+            json={"embeds": [embed]},
+        )
+
+    if not resp.is_success:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Discord returned HTTP {resp.status_code}: {resp.text}",
+        )
+
+    return {
+        "ok": True,
+        "channel": channel,
+        "channel_id": channel_id,
+        "discord_status": resp.status_code,
+    }
