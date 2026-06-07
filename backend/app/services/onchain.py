@@ -111,7 +111,7 @@ def get_btc_onchain_metrics() -> dict:
             logger.debug(f"CoinMetrics: mvrv={mvrv:.2f} zscore={mvrv_zscore:.2f} nupl={nupl:.2f} sopr={sopr_proxy:.3f}")
             return result
         except Exception as e:
-            logger.warning(f"CoinMetrics fetch failed: {e}")
+            logger.debug(f"CoinMetrics fetch failed: {e}")
             if _btc_metrics_cache is not None:
                 return _btc_metrics_cache
             return {
@@ -234,7 +234,7 @@ def get_exchange_netflow_proxy() -> dict:
             logger.debug(f"OI netflow proxy: {oi_change:+.1f}% 7d ({signal})")
             return result
         except Exception as e:
-            logger.warning(f"Binance OI netflow fetch failed: {e}")
+            logger.debug(f"Binance OI netflow fetch failed: {e}")
             if _netflow_cache is not None:
                 return _netflow_cache
             return {"oi_change_7d_pct": 0.0, "signal": "neutral", "recent_oi": 0.0, "ok": False}

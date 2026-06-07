@@ -75,7 +75,7 @@ def get_funding_rate(symbol: str, limit: int = 8) -> dict:
             logger.debug(f"Funding {symbol}: {latest:.4%} ({result['annualized']:.1f}% ann)")
             return result
         except Exception as e:
-            logger.warning(f"Funding rate fetch failed for {symbol}: {e}")
+            logger.debug(f"Funding rate fetch failed for {symbol}: {e}")
             if symbol in _funding_cache:
                 return _funding_cache[symbol]
             return {"latest": 0.0, "recent": [], "annualized": 0.0, "ok": False}
@@ -122,7 +122,7 @@ def get_oi_history(symbol: str, period: str = "1d", limit: int = 14) -> dict:
             logger.debug(f"OI {symbol} ({period}): {change_pct:+.1f}% ({direction})")
             return result
         except Exception as e:
-            logger.warning(f"OI history fetch failed for {symbol}: {e}")
+            logger.debug(f"OI history fetch failed for {symbol}: {e}")
             if key in _oi_cache:
                 return _oi_cache[key]
             return {"current": 0.0, "prev": 0.0, "change_pct": 0.0, "direction": "neutral", "ok": False}

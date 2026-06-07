@@ -163,6 +163,7 @@ def run_bot_profile(profile_name: str) -> dict:
         On skip: {"skipped": True, "reason": str}.
         On error: {"error": str}.
     """
+    logger.info(">>> [runner:%s] scan cycle START", profile_name)
     try:
         # 1. Load profile YAML
         from strategy_lab.seeds import load_profile

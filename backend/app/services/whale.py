@@ -68,7 +68,7 @@ def get_large_holder_signal(symbol: str) -> dict:
             r.raise_for_status()
             data = r.json()
     except Exception as e:
-        logger.warning(f"CoinMetrics whale signal failed for {symbol}: {e}")
+        logger.debug(f"CoinMetrics whale signal failed for {symbol}: {e}")
         result = {"ok": False, "signal": "neutral", "large_holder_count": 0, "change_pct": 0.0}
         _set_cached(cache_key, result)
         return result
@@ -102,7 +102,7 @@ def get_large_holder_signal(symbol: str) -> dict:
             "change_pct": round(change_pct, 2),
         }
     except Exception as e:
-        logger.warning(f"CoinMetrics whale parse failed for {symbol}: {e}")
+        logger.debug(f"CoinMetrics whale parse failed for {symbol}: {e}")
         result = {"ok": False, "signal": "neutral", "large_holder_count": 0, "change_pct": 0.0}
 
     _set_cached(cache_key, result)
