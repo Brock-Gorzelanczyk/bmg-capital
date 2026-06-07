@@ -13,12 +13,66 @@
  *   DISCORD_CH_DAILY_DIGEST / WEEKLY_LEADERBOARD / MONTHLY_RECAP
  */
 
-import { isNull, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { startDiscordSchedulers } from "./scheduler.js";
 import { postSignalToDiscord }    from "./post-signal.js";
-import { db, botSignals, botAllocations, botProfiles } from "./db.js";
+import { db } from "./db.js";
 
 const POLL_INTERVAL_MS = 10_000; // 10 seconds
+
+async function runMigrations(): Promise<void> {
+  console.log("[discord] running startup migrations…");
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS bot_profiles (
+      id   SERIAL PRIMARY KEY,
+      name VARCHAR NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS bot_allocations (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL,
+      profile_id INTEGER NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS bot_signals (
+      id                 SERIAL PRIMARY KEY,
+      allocation_id      INTEGER NOT NULL,
+      ts                 TIMESTAMP NOT NULL DEFAULT NOW(),
+      symbol             VARCHAR NOT NULL,
+      side               VARCHAR NOT NULL,
+      confidence         REAL NOT NULL,
+      size_hint          REAL,
+      reason             TEXT,
+      strategy           VARCHAR,
+      entry_price        REAL,
+      stop_price         REAL,
+      target_price       REAL,
+      discord_posted_at  TIMESTAMP
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS bot_daily_pnl (
+      id                        SERIAL PRIMARY KEY,
+      allocation_id             INTEGER NOT NULL,
+      date                      DATE NOT NULL,
+      realized_cents            INTEGER NOT NULL DEFAULT 0,
+      unrealized_cents          INTEGER NOT NULL DEFAULT 0,
+      portfolio_value_eod_cents INTEGER
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS bot_positions (
+      id            SERIAL PRIMARY KEY,
+      allocation_id INTEGER NOT NULL,
+      symbol        VARCHAR NOT NULL,
+      closed_at     TIMESTAMP,
+      is_active     BOOLEAN DEFAULT TRUE
+    )
+  `);
+  console.log("[discord] migrations complete");
+}
 
 async function pollAndPost(): Promise<void> {
   try {
@@ -83,6 +137,9 @@ async function main(): Promise<void> {
     console.error("[discord] DISCORD_BOT_TOKEN not set — exiting");
     process.exit(1);
   }
+
+  // Ensure tables exist (idempotent — safe to run on every boot).
+  await runMigrations();
 
   // Start scheduled cron jobs (digest, leaderboard, recap).
   startDiscordSchedulers();
