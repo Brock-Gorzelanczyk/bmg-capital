@@ -1954,50 +1954,7 @@ export default function BotDetailPage() {
         Strategy Lab
       </button>
 
-      {/* Paper-only banner */}
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
-        <span className="text-amber-400 text-sm font-semibold">📄 Paper trading only.</span>
-        <span className="text-amber-300 text-xs">
-          Live trading coming soon — paper trading only until RIA registration.
-        </span>
-        <button
-          onClick={() => waitlistMut.mutate(!isOnWaitlist)}
-          disabled={waitlistMut.isPending}
-          className="ml-auto text-xs text-amber-400 underline whitespace-nowrap"
-        >
-          {isOnWaitlist ? "✓ On waitlist" : "Join the waitlist →"}
-        </button>
-      </div>
-
-      {/* Regime panel */}
-      <RegimePanel regime={regime} isLoading={regimeLoading} />
-
-      {/* Catalyst calendar */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Upcoming Catalysts</h3>
-        <CatalystCalendar />
-      </div>
-
-      {/* PDT removal notice for day-trading bots */}
-      {(botName === "stock_day" || botName === "crypto_day") && (
-        <div className="flex items-start gap-3 bg-teal-500/10 border border-teal-500/30 rounded-xl px-4 py-3">
-          <span className="text-teal-400 mt-0.5 text-base leading-none">⚡</span>
-          <div>
-            <p className="text-xs font-semibold text-teal-400">PDT Rule Eliminated — June 4, 2026</p>
-            <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
-              FINRA Notice 26-10 removed the Pattern Day Trader $25,000 minimum. This bot now
-              trades without account-size restrictions. <span className="text-zinc-400">Paper mode active.</span>
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile swipe hint */}
-      <p className="text-xs text-zinc-700 text-center md:hidden">
-        Swipe between bots ←
-      </p>
-
-      {/* Tab system */}
+      {/* Tab system — top of page, below back nav */}
       <TabBar active={activeTab} onChange={setActiveTab} />
 
       {/* ── Bot Header Strip — always visible regardless of tab ── */}
@@ -2169,121 +2126,145 @@ export default function BotDetailPage() {
         )}
       </div>
 
+      {/* ── Stats grid + Equity Curve — always visible ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* LEFT — Portfolio Summary */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: "Starting Capital", value: allocation?.starting_capital_cents ? `$${(allocation.starting_capital_cents / 100).toLocaleString()}` : "—" },
+              { label: "Current Value", value: "—" },
+              { label: "All-Time Return", value: "—", colored: false },
+              {
+                label: "30d Return",
+                value: formatPct(stats?.return_30d_pct ?? 0),
+                positive: (stats?.return_30d_pct ?? 0) >= 0,
+                colored: true,
+              },
+              {
+                label: "Today P&L",
+                value: formatPnl(stats?.today_pnl ?? 0),
+                positive: (stats?.today_pnl ?? 0) >= 0,
+                colored: true,
+              },
+              {
+                label: "Open Positions",
+                value: String(positions.length),
+                colored: false,
+              },
+            ].map((s) => (
+              <div key={s.label} className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
+                <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">{s.label}</p>
+                <p
+                  className={cn(
+                    "text-sm font-bold",
+                    s.colored ? (s.positive ? "text-lime-400" : "text-red-400") : "text-white"
+                  )}
+                >
+                  {s.value}
+                </p>
+              </div>
+            ))}
+          </div>
+          {allocation && (
+            <p className="text-xs text-zinc-500">
+              Allocated:{" "}
+              <span className="text-zinc-300 font-semibold">
+                ${allocation.starting_capital_cents ? (allocation.starting_capital_cents / 100).toLocaleString() : ((allocation.capital_pct / 100) * 100000).toLocaleString()} ({allocation.capital_pct}%)
+              </span>
+            </p>
+          )}
+        </div>
+
+        {/* RIGHT — Equity Curve */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
+          <h2 className="text-sm font-semibold text-zinc-300">Equity Curve</h2>
+          {equityCurve.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center min-h-[180px]">
+              <p className="text-zinc-600 text-sm text-center px-4 leading-relaxed">
+                Bot too new for chart — first data point appears at end of today&apos;s trading session
+              </p>
+            </div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={equityCurve} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={
+                        equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                          ? "#84cc16" : "#ef4444"
+                      } stopOpacity={0.3} />
+                      <stop offset="95%" stopColor={
+                        equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                          ? "#84cc16" : "#ef4444"
+                      } stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: "#a1a1aa" }}
+                    formatter={(v: number) => [`$${v.toFixed(2)}`, "Portfolio"]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="portfolio"
+                    stroke={
+                      equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                        ? "#84cc16" : "#ef4444"
+                    }
+                    strokeWidth={2}
+                    fill="url(#equityGradient)"
+                    dot={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+              <div className="flex gap-4">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
+                  Portfolio
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Current Regime — reference info, below actionable state ── */}
+      <RegimePanel regime={regime} isLoading={regimeLoading} />
+
+      {/* ── Upcoming Catalysts ── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Upcoming Catalysts</h3>
+        <CatalystCalendar />
+      </div>
+
+      {/* PDT removal notice for day-trading bots */}
+      {(botName === "stock_day" || botName === "crypto_day") && (
+        <div className="flex items-start gap-3 bg-teal-500/10 border border-teal-500/30 rounded-xl px-4 py-3">
+          <span className="text-teal-400 mt-0.5 text-base leading-none">⚡</span>
+          <div>
+            <p className="text-xs font-semibold text-teal-400">PDT Rule Eliminated — June 4, 2026</p>
+            <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+              FINRA Notice 26-10 removed the Pattern Day Trader $25,000 minimum. This bot now
+              trades without account-size restrictions. <span className="text-zinc-400">Paper mode active.</span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile swipe hint */}
+      <p className="text-xs text-zinc-700 text-center md:hidden">
+        Swipe between bots ←
+      </p>
+
       {/* Overview tab */}
       {activeTab === "overview" && (
         <div className="space-y-6">
-          {/* 2-column grid: Stats + Equity Curve */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-            {/* LEFT — Portfolio Summary */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
-              {/* Stats 2×3 grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Starting Capital", value: allocation?.starting_capital_cents ? `$${(allocation.starting_capital_cents / 100).toLocaleString()}` : "—" },
-                  { label: "Current Value", value: "—" },
-                  { label: "All-Time Return", value: "—", colored: false },
-                  {
-                    label: "30d Return",
-                    value: formatPct(stats?.return_30d_pct ?? 0),
-                    positive: (stats?.return_30d_pct ?? 0) >= 0,
-                    colored: true,
-                  },
-                  {
-                    label: "Today P&L",
-                    value: formatPnl(stats?.today_pnl ?? 0),
-                    positive: (stats?.today_pnl ?? 0) >= 0,
-                    colored: true,
-                  },
-                  {
-                    label: "Open Positions",
-                    value: String(positions.length),
-                    colored: false,
-                  },
-                ].map((s) => (
-                  <div key={s.label} className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
-                    <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">{s.label}</p>
-                    <p
-                      className={cn(
-                        "text-sm font-bold",
-                        s.colored ? (s.positive ? "text-lime-400" : "text-red-400") : "text-white"
-                      )}
-                    >
-                      {s.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Allocated capital */}
-              {allocation && (
-                <p className="text-xs text-zinc-500">
-                  Allocated:{" "}
-                  <span className="text-zinc-300 font-semibold">
-                    ${allocation.starting_capital_cents ? (allocation.starting_capital_cents / 100).toLocaleString() : ((allocation.capital_pct / 100) * 100000).toLocaleString()} ({allocation.capital_pct}%)
-                  </span>
-                </p>
-              )}
-            </div>
-
-            {/* RIGHT — Equity Curve */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
-              <h2 className="text-sm font-semibold text-zinc-300">Equity Curve</h2>
-              {equityCurve.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center min-h-[180px]">
-                  <p className="text-zinc-600 text-sm text-center px-4 leading-relaxed">
-                    Bot too new for chart — first data point appears at end of today's trading session
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart data={equityCurve} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={
-                            equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                              ? "#84cc16" : "#ef4444"
-                          } stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={
-                            equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                              ? "#84cc16" : "#ef4444"
-                          } stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                      <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip
-                        contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
-                        labelStyle={{ color: "#a1a1aa" }}
-                        formatter={(v: number) => [`$${v.toFixed(2)}`, "Portfolio"]}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="portfolio"
-                        stroke={
-                          equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                            ? "#84cc16" : "#ef4444"
-                        }
-                        strokeWidth={2}
-                        fill="url(#equityGradient)"
-                        dot={false}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                      <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
-                      Portfolio
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Bot Info — full width below stats+equity */}
+          {/* Bot Info — full width */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
               <h2 className="text-sm font-semibold text-zinc-300">Bot Info</h2>
 
