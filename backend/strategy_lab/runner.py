@@ -549,6 +549,7 @@ def run_bot_profile(profile_name: str) -> dict:
                             final_size_pct=final_size_pct,
                             profile=profile,
                             profile_name=profile_name,
+                            bars=bars,
                         )
                     except Exception as exc:
                         logger.warning("[runner:%s] execute_signal failed for %s: %s",
@@ -695,7 +696,7 @@ def _maybe_announce_first_live_signal(db, bot_name: str, strategy: str, symbol: 
 
 # ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────
 
-def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str) -> None:
+def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str, bars: dict | None = None) -> None:
     """Place a bracket order in Alpaca paper and persist BotPosition + BotTrade.
 
     Steps:
@@ -748,6 +749,16 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                     break
         except Exception:
             pass
+
+    if entry_price <= 0:
+        # Last resort: use the bar close the strategy used to generate the signal
+        symbol_bars = (bars or {}).get(sig.symbol, [])
+        if symbol_bars:
+            entry_price = float(symbol_bars[-1]["c"])
+            logger.warning(
+                "[execute:%s] live price unavailable for %s, using last bar close $%.4f",
+                profile_name, sig.symbol, entry_price,
+            )
 
     if entry_price <= 0:
         logger.warning("[execute:%s] no price for %s — skipping order", profile_name, sig.symbol)

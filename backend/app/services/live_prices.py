@@ -20,6 +20,14 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# ── Symbol aliases ────────────────────────────────────────────────────────────
+# Translate our watchlist symbols to the name the exchange actually knows.
+# Applied in fetch_live_prices() before any exchange query; results are
+# mapped back to the caller's original symbol name.
+SYMBOL_ALIASES: dict[str, str] = {
+    "MATIC/USD": "POL/USD",  # Kraken renamed MATIC → POL in late 2024
+}
+
 # ── Kraken symbol mapping ─────────────────────────────────────────────────────
 # Maps our internal "BASE/USD" format to the Kraken pair query string.
 # Kraken returns results under normalized keys (sometimes different from the pair
@@ -33,8 +41,7 @@ _TO_KRAKEN_PAIR: dict[str, str] = {
     "DOGE/USD":  "XDGUSD",
     "ADA/USD":   "ADAUSD",
     "LINK/USD":  "LINKUSD",
-    "MATIC/USD": "MATICUSD",
-    "ARB/USD":   "ARBUSD",
+    "POL/USD":   "POLUSD",   # was MATIC — use SYMBOL_ALIASES to route MATIC/USD here
     "OP/USD":    "OPUSD",
     "BNB/USD":   "BNBUSD",
     "DOT/USD":   "DOTUSD",
@@ -45,6 +52,12 @@ _TO_KRAKEN_PAIR: dict[str, str] = {
     "NEAR/USD":  "NEARUSD",
     "APT/USD":   "APTUSD",
     "SUI/USD":   "SUIUSD",
+}
+
+# Symbols that should NOT go to Kraken — price is wrong or pair doesn't exist.
+# They fall through to the Alpaca crypto fallback automatically.
+_SKIP_KRAKEN: set[str] = {
+    "ARB/USD",  # Kraken ARBUSD returns ~$0.0008 (decimal bug); Alpaca is correct
 }
 
 # Some Kraken response keys differ from the pair we requested.
@@ -59,6 +72,8 @@ _KRAKEN_RESPONSE_KEY: dict[str, str] = {
 
 def _kraken_pair(symbol: str) -> Optional[str]:
     """Return the Kraken pair string for a crypto symbol, or None if unknown."""
+    if symbol in _SKIP_KRAKEN:
+        return None
     if symbol in _TO_KRAKEN_PAIR:
         return _TO_KRAKEN_PAIR[symbol]
     # Generic fallback: BASE/USD → BASEUSD
@@ -166,19 +181,25 @@ def fetch_live_prices(symbols: list[str]) -> dict[str, float]:
         symbols: Mix of "BASE/USD" crypto and plain stock tickers.
 
     Returns:
-        Dict mapping symbol → price. Symbols with no price are omitted.
+        Dict mapping symbol → price (using the caller's original symbol names).
+        Symbols with no price are omitted.
     """
-    crypto_syms = [s for s in symbols if "/" in s]
-    stock_syms  = [s for s in symbols if "/" not in s]
+    # Apply aliases: translate before querying, reverse-map before returning.
+    # e.g. MATIC/USD → POL/USD for Kraken, then result keyed back as MATIC/USD.
+    orig_to_resolved: dict[str, str] = {s: SYMBOL_ALIASES.get(s, s) for s in symbols}
+    resolved_symbols = list(orig_to_resolved.values())
 
-    prices: dict[str, float] = {}
+    crypto_syms = [s for s in resolved_symbols if "/" in s]
+    stock_syms  = [s for s in resolved_symbols if "/" not in s]
+
+    resolved_prices: dict[str, float] = {}
 
     if crypto_syms:
         kraken_prices = fetch_crypto_prices_kraken(crypto_syms)
-        prices.update(kraken_prices)
+        resolved_prices.update(kraken_prices)
 
         # For any crypto symbols Kraken didn't cover, try Alpaca crypto feed
-        missing_crypto = [s for s in crypto_syms if s not in prices]
+        missing_crypto = [s for s in crypto_syms if s not in resolved_prices]
         if missing_crypto:
             try:
                 from alpaca.data.historical.crypto import CryptoHistoricalDataClient
@@ -193,17 +214,21 @@ def fetch_live_prices(symbols: list[str]) -> dict[str, float]:
                 )
                 for sym, trade in trades.items():
                     if trade and trade.price and float(trade.price) > 0:
-                        # Map back to original symbol
                         if sym in missing_crypto:
-                            prices[sym] = float(trade.price)
+                            resolved_prices[sym] = float(trade.price)
             except Exception as exc:
                 logger.warning("[live_prices] Alpaca crypto fallback failed: %s", exc)
 
     if stock_syms:
         alpaca_prices = fetch_stock_prices_alpaca(stock_syms)
-        prices.update(alpaca_prices)
+        resolved_prices.update(alpaca_prices)
 
-    return prices
+    # Reverse-map: return prices under the caller's original symbol names
+    return {
+        orig: resolved_prices[resolved]
+        for orig, resolved in orig_to_resolved.items()
+        if resolved in resolved_prices
+    }
 
 
 def fetch_single_crypto_price(symbol: str, fallback: float = 0.0) -> float:
