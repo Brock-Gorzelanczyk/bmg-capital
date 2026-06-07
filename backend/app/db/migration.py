@@ -421,6 +421,9 @@ def run_migrations(engine: Engine) -> None:
         _retrofit_debug_trade_signals(conn)
         _close_debug_test_trades(conn)
         _dedupe_bot_allocations(conn)
+        _close_stale_overnight_positions(conn)
+        _delete_test_pod_and_watchlist(conn)
+        _reset_consecutive_loss_state(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -759,3 +762,146 @@ def _ensure_test_account(conn) -> None:
         logger.info("_ensure_test_account: test/test viewer account ready")
     except Exception as exc:
         logger.warning("_ensure_test_account failed: %s", exc)
+
+
+def _close_stale_overnight_positions(conn) -> None:
+    """Close any bot_position rows open longer than hold_max_hours for their profile.
+
+    Targets crypto_day (hold_max_hours=8) positions older than 24h.
+    Uses yfinance for current price fallback.
+    One-shot tracked; safe to re-run (position already closed = no-op).
+    """
+    MIGRATION_NAME = "close_stale_overnight_positions_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        now = datetime.now(timezone.utc)
+        cutoff_24h_ago = now.replace(tzinfo=None) - __import__("datetime").timedelta(hours=24)
+
+        stale_rows = conn.execute(text("""
+            SELECT bp.id, bp.symbol, bp.qty, bp.avg_cost_cents, bp.opened_at, bp.allocation_id
+            FROM bot_positions bp
+            JOIN bot_allocations ba ON bp.allocation_id = ba.id
+            JOIN bot_profiles bpr ON ba.profile_id = bpr.id
+            WHERE bpr.name = 'crypto_day'
+              AND bp.closed_at IS NULL
+              AND bp.opened_at < :cutoff
+        """), {"cutoff": cutoff_24h_ago.isoformat()}).fetchall()
+
+        if not stale_rows:
+            _record_migration(conn, MIGRATION_NAME)
+            return
+
+        # Try to get current ETH price from yfinance
+        current_prices: dict = {}
+        try:
+            import yfinance as yf
+            symbols_needed = {r[1] for r in stale_rows}
+            for sym in symbols_needed:
+                yf_sym = sym.replace("/USD", "-USD")
+                t = yf.Ticker(yf_sym)
+                hist = t.history(period="1d", interval="1m")
+                if not hist.empty:
+                    current_prices[sym] = float(hist["Close"].iloc[-1])
+        except Exception as exc:
+            logger.warning("_close_stale_overnight_positions: yfinance failed: %s", exc)
+
+        for pos_id, symbol, qty, avg_cost_cents, opened_at, alloc_id in stale_rows:
+            price = current_prices.get(symbol, avg_cost_cents / 100.0)
+            fill_cents = int(price * 100)
+            close_ts = now.isoformat()
+
+            # Create exit trade
+            conn.execute(text("""
+                INSERT INTO bot_trades
+                    (allocation_id, symbol, side, qty, fill_price_cents, fees_cents,
+                     ts, position_id, is_paper, expected_fill_cents, slippage_bps)
+                VALUES
+                    (:alloc, :sym, 'sell', :qty, :fill, 0,
+                     :ts, :pos_id, 1, :fill, 0.0)
+            """), {
+                "alloc": alloc_id, "sym": symbol, "qty": qty, "fill": fill_cents,
+                "ts": close_ts, "pos_id": pos_id,
+            })
+
+            # Close the position
+            conn.execute(text("""
+                UPDATE bot_positions
+                SET closed_at = :ts, exit_reason = 'manual_cleanup_stale_overnight'
+                WHERE id = :pos_id
+            """), {"ts": close_ts, "pos_id": pos_id})
+
+            pnl = (price - avg_cost_cents / 100.0) * qty
+            logger.info(
+                "_close_stale_overnight_positions: closed pos %d %s qty=%.4f @ %.4f pnl=%.2f",
+                pos_id, symbol, qty, price, pnl,
+            )
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_close_stale_overnight_positions: closed %d stale position(s)", len(stale_rows))
+    except Exception as exc:
+        logger.warning("_close_stale_overnight_positions failed: %s", exc)
+
+
+def _delete_test_pod_and_watchlist(conn) -> None:
+    """Remove the 'Test' pod and 'Test' watchlist created during dev testing."""
+    MIGRATION_NAME = "delete_test_pod_and_watchlist_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        # Delete watchlist items first (FK), then the watchlist
+        conn.execute(text("""
+            DELETE FROM watchlist_items
+            WHERE watchlist_id IN (
+                SELECT id FROM watchlists WHERE LOWER(name) = 'test'
+            )
+        """))
+        conn.execute(text("DELETE FROM watchlists WHERE LOWER(name) = 'test'"))
+
+        # Pods: first check table exists
+        try:
+            conn.execute(text("""
+                DELETE FROM pods WHERE LOWER(name) = 'test'
+            """))
+        except Exception:
+            pass  # pods table may not exist in all envs
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_delete_test_pod_and_watchlist: test data cleaned up")
+    except Exception as exc:
+        logger.warning("_delete_test_pod_and_watchlist failed: %s", exc)
+
+
+def _reset_consecutive_loss_state(conn) -> None:
+    """Clear stale consecutive_loss_count from autopilot guardrails (pre-reset data)."""
+    MIGRATION_NAME = "reset_consecutive_loss_state_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        # Reset consecutive loss counter in autopilot guardrails if the table exists
+        try:
+            conn.execute(text("""
+                UPDATE autopilot_guardrails
+                SET consecutive_losses = 0
+                WHERE consecutive_losses > 0
+            """))
+        except Exception:
+            pass
+
+        # Also clear bot_health entries with consecutive_loss alerts
+        try:
+            conn.execute(text("""
+                UPDATE bot_health
+                SET consecutive_losses = 0
+                WHERE consecutive_losses > 0
+            """))
+        except Exception:
+            pass
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_reset_consecutive_loss_state: reset stale loss counters")
+    except Exception as exc:
+        logger.warning("_reset_consecutive_loss_state failed: %s", exc)
