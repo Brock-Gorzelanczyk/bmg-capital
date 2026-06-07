@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { CoachmarkOverlay } from "@/pages/CustomBotBuilderPage";
 import { getWatchlistAnalyses, type WatchlistAnalysis } from "@/api/analyst";
 import { getLatestPrices } from "@/api/bars";
+import { useIsViewer } from "@/store/authStore";
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
 
@@ -1868,14 +1869,14 @@ export default function BotDetailPage() {
     return map;
   }, [rawAnalyses]);
 
-  // Live prices for open positions
+  // Live prices for open positions — always fetch when positions exist, 30s refresh
   const positionSymbols = useMemo(() => positions.map(p => p.symbol), [positions]);
   const { data: livePrices = {} } = useQuery({
     queryKey: ["live-prices", positionSymbols],
     queryFn: () => getLatestPrices(positionSymbols),
-    enabled: positionSymbols.length > 0 && activeTab === "overview",
-    staleTime: 60_000,
-    refetchInterval: 120_000,
+    enabled: positionSymbols.length > 0,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
   const stats = (data?.stats ?? {}) as {
     return_30d_pct?: number;
@@ -1894,6 +1895,7 @@ export default function BotDetailPage() {
 
   const isEnabled = allocation?.enabled ?? false;
   const isOnWaitlist = allocation?.go_live_requested ?? false;
+  const isViewer = useIsViewer();
 
   const allocateMut = useMutation({
     mutationFn: (overrides: Partial<{ capital_pct: number; risk_profile: string; enabled: boolean }> | undefined) =>
@@ -1976,115 +1978,6 @@ export default function BotDetailPage() {
         <CatalystCalendar />
       </div>
 
-      {/* Hero card */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-        {isLoading ? (
-          <div className="animate-pulse space-y-4">
-            <div className="h-7 w-48 bg-zinc-800 rounded" />
-            <div className="h-4 w-64 bg-zinc-800 rounded" />
-            <div className="grid grid-cols-4 gap-4 mt-4">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-14 bg-zinc-800 rounded-xl" />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-start justify-between mb-1">
-              <div>
-                <h1 className="text-xl font-bold text-white">
-                  {meta?.displayName ?? displayName(botName)}
-                </h1>
-                <p className="text-zinc-500 text-sm mt-0.5">
-                  {meta?.description ?? profile?.description ?? ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "text-xs font-semibold px-2 py-0.5 rounded-full",
-                    isEnabled
-                      ? "bg-lime-500/15 text-lime-400 border border-lime-500/30"
-                      : "bg-zinc-800 text-zinc-500 border border-zinc-700"
-                  )}
-                >
-                  {isEnabled ? "ACTIVE" : "DISABLED"}
-                </span>
-              </div>
-            </div>
-
-            {/* Stats row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 mb-6">
-              {[
-                {
-                  label: "30d Return",
-                  value: formatPct(stats?.return_30d_pct ?? 0),
-                  positive: (stats?.return_30d_pct ?? 0) >= 0,
-                  colored: true,
-                },
-                {
-                  label: "Today P&L",
-                  value: formatPnl(stats?.today_pnl ?? 0),
-                  positive: (stats?.today_pnl ?? 0) >= 0,
-                  colored: true,
-                },
-                {
-                  label: "Open Positions",
-                  value: String(stats?.open_positions ?? 0),
-                  positive: true,
-                  colored: false,
-                },
-                {
-                  label: "Win Rate",
-                  value: stats?.win_rate_30d?.display ?? (stats?.win_rate_30d?.pct != null ? `${(stats.win_rate_30d.pct * 100).toFixed(1)}%` : "—"),
-                  positive: (stats?.win_rate_30d?.pct ?? 0) >= 0.5,
-                  colored: stats?.win_rate_30d?.pct != null,
-                },
-              ].map((s) => (
-                <div key={s.label} className="bg-zinc-950 rounded-xl px-4 py-3 border border-zinc-800">
-                  <p className="text-zinc-600 text-xs mb-1">{s.label}</p>
-                  <p
-                    className={cn(
-                      "text-lg font-bold",
-                      s.colored ? (s.positive ? "text-lime-400" : "text-red-400") : "text-white"
-                    )}
-                  >
-                    {s.value}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick actions */}
-            <div className="border-t border-zinc-800 pt-4 flex items-center gap-3">
-              <button
-                onClick={() => allocateMut.mutate({ enabled: !isEnabled })}
-                disabled={allocateMut.isPending}
-                className={cn(
-                  "px-4 py-2 rounded-lg border text-sm font-semibold transition-colors",
-                  isEnabled
-                    ? "border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-red-400"
-                    : "border-lime-600/50 text-lime-400 hover:bg-lime-500/10"
-                )}
-              >
-                {isEnabled ? "Disable Bot" : "Enable Bot"}
-              </button>
-              <button
-                onClick={() => setActiveTab("settings")}
-                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors ml-auto"
-              >
-                Allocation & settings →
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Mobile swipe hint */}
-      <p className="text-xs text-zinc-700 text-center md:hidden">
-        Swipe between bots ←
-      </p>
-
       {/* PDT removal notice for day-trading bots */}
       {(botName === "stock_day" || botName === "crypto_day") && (
         <div className="flex items-start gap-3 bg-teal-500/10 border border-teal-500/30 rounded-xl px-4 py-3">
@@ -2099,39 +1992,191 @@ export default function BotDetailPage() {
         </div>
       )}
 
+      {/* Mobile swipe hint */}
+      <p className="text-xs text-zinc-700 text-center md:hidden">
+        Swipe between bots ←
+      </p>
+
       {/* Tab system */}
       <TabBar active={activeTab} onChange={setActiveTab} />
 
-      {/* Overview tab — 4-quadrant layout */}
-      {activeTab === "overview" && (
-        <div className="space-y-6">
-          {/* 2×2 grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ── Bot Header Strip — always visible regardless of tab ── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-4">
+        {isLoading ? (
+          <div className="animate-pulse flex items-center gap-4 w-full">
+            <div className="h-6 w-40 bg-zinc-800 rounded" />
+            <div className="h-6 w-24 bg-zinc-800 rounded" />
+            <div className="h-6 w-32 bg-zinc-800 rounded ml-auto" />
+          </div>
+        ) : (
+          <>
+            {/* Name + status */}
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-base font-bold text-white truncate">
+                {meta?.displayName ?? displayName(botName)}
+              </h1>
+              <span
+                className={cn(
+                  "text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0",
+                  isEnabled
+                    ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+                    : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                )}
+              >
+                {isEnabled ? "ACTIVE" : "PAUSED"}
+              </span>
+            </div>
 
-            {/* TOP LEFT — Portfolio Summary */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
-              {/* Header */}
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-white">
-                    {meta?.displayName ?? displayName(botName)}
-                  </h2>
-                  <p className="text-zinc-500 text-xs mt-0.5">
-                    {meta?.description ?? profile?.description ?? ""}
-                  </p>
-                </div>
-                <span
+            {/* Today P&L */}
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-600 uppercase tracking-wide">Today P&L</span>
+              <span className={cn(
+                "text-lg font-bold",
+                (stats?.today_pnl ?? 0) >= 0 ? "text-lime-400" : "text-red-400"
+              )}>
+                {formatPnl(stats?.today_pnl ?? 0)}
+              </span>
+            </div>
+
+            {/* Open positions + notional */}
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-600 uppercase tracking-wide">Open Positions</span>
+              <span className="text-base font-bold text-white">
+                {positions.length}
+                {positions.length > 0 && (
+                  <span className="text-xs text-zinc-500 font-normal ml-1">
+                    / $
+                    {positions.reduce((sum, p) => {
+                      const price = livePrices[p.symbol] ?? (p.avg_cost_cents / 100);
+                      return sum + price * p.qty;
+                    }, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} notional
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {/* Admin-only action buttons */}
+            {!isViewer && (
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => allocateMut.mutate({ enabled: !isEnabled })}
+                  disabled={allocateMut.isPending}
                   className={cn(
-                    "text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0",
+                    "px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors",
                     isEnabled
-                      ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
-                      : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                      ? "border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-red-400"
+                      : "border-lime-600/50 text-lime-400 hover:bg-lime-500/10"
                   )}
                 >
-                  {isEnabled ? "ACTIVE" : "DISABLED"}
-                </span>
+                  {isEnabled ? "Disable Bot" : "Enable Bot"}
+                </button>
+                {!isOnWaitlist ? (
+                  <button
+                    onClick={() => waitlistMut.mutate(!isOnWaitlist)}
+                    disabled={waitlistMut.isPending}
+                    className="px-3 py-1.5 rounded-lg border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 transition-colors"
+                  >
+                    Notify when live
+                  </button>
+                ) : (
+                  <span className="text-xs text-lime-400 font-semibold">✓ On waitlist</span>
+                )}
               </div>
+            )}
+          </>
+        )}
+      </div>
 
+      {/* ── Open Positions — always visible, first major data section ── */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <h2 className="text-sm font-semibold text-zinc-300 mb-4">Open Positions</h2>
+        {isLoading ? (
+          <div className="animate-pulse space-y-2">
+            {[0, 1, 2].map((i) => <div key={i} className="h-10 bg-zinc-800 rounded" />)}
+          </div>
+        ) : positions.length === 0 ? (
+          <p className="text-zinc-600 text-sm py-6 text-center leading-relaxed">
+            Bot is scanning — open positions will appear here when it enters a trade.{" "}
+            Check the Watchlist tab to see what it&apos;s currently evaluating.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+                  <th className="text-left pb-2 font-medium">Symbol</th>
+                  <th className="text-left pb-2 font-medium">Side</th>
+                  <th className="text-right pb-2 font-medium">Qty</th>
+                  <th className="text-right pb-2 font-medium">Avg Cost</th>
+                  <th className="text-right pb-2 font-medium">Current Value</th>
+                  <th className="text-right pb-2 font-medium">Unrealized P&L</th>
+                  <th className="text-right pb-2 font-medium">Time Held</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((pos) => {
+                  const livePrice = livePrices[pos.symbol] ?? null;
+                  const avgCost = pos.avg_cost_cents ? pos.avg_cost_cents / 100 : null;
+                  const currentValue = livePrice && pos.qty ? livePrice * pos.qty : null;
+                  const unrealizedPnl = livePrice && avgCost && pos.qty
+                    ? (livePrice - avgCost) * pos.qty : null;
+                  const pnlPct = livePrice && avgCost
+                    ? ((livePrice - avgCost) / avgCost) * 100 : null;
+                  const timeHeld = pos.opened_at
+                    ? (() => {
+                        const ms = Date.now() - new Date(pos.opened_at).getTime();
+                        const hrs = Math.floor(ms / 3_600_000);
+                        const mins = Math.floor((ms % 3_600_000) / 60_000);
+                        return hrs >= 24
+                          ? `${Math.floor(hrs / 24)}d ${hrs % 24}h`
+                          : hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+                      })()
+                    : "—";
+                  return (
+                    <tr
+                      key={pos.id}
+                      className="border-b border-zinc-800/50 last:border-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                      onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
+                      title={`View ${pos.symbol} chart`}
+                    >
+                      <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
+                      <td className="py-2.5">
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                          LONG
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
+                      <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
+                      <td className="py-2.5 text-right text-zinc-300">
+                        {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
+                      </td>
+                      <td className={cn(
+                        "py-2.5 text-right text-sm font-medium",
+                        unrealizedPnl == null ? "text-zinc-500"
+                          : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400"
+                      )}>
+                        {unrealizedPnl != null
+                          ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)} (${pnlPct! >= 0 ? "+" : ""}${pnlPct!.toFixed(2)}%)`
+                          : "—"}
+                      </td>
+                      <td className="py-2.5 text-right text-xs text-zinc-500">{timeHeld}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Overview tab */}
+      {activeTab === "overview" && (
+        <div className="space-y-6">
+          {/* 2-column grid: Stats + Equity Curve */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            {/* LEFT — Portfolio Summary */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
               {/* Stats 2×3 grid */}
               <div className="grid grid-cols-2 gap-2">
                 {[
@@ -2152,7 +2197,7 @@ export default function BotDetailPage() {
                   },
                   {
                     label: "Open Positions",
-                    value: String(stats?.open_positions ?? 0),
+                    value: String(positions.length),
                     colored: false,
                   },
                 ].map((s) => (
@@ -2179,23 +2224,9 @@ export default function BotDetailPage() {
                   </span>
                 </p>
               )}
-
-              {/* Enable / Disable */}
-              <button
-                onClick={() => allocateMut.mutate({ enabled: !isEnabled })}
-                disabled={allocateMut.isPending}
-                className={cn(
-                  "mt-auto px-4 py-2 rounded-lg border text-sm font-semibold transition-colors w-fit",
-                  isEnabled
-                    ? "border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-red-400"
-                    : "border-lime-600/50 text-lime-400 hover:bg-lime-500/10"
-                )}
-              >
-                {isEnabled ? "Disable Bot" : "Enable Bot"}
-              </button>
             </div>
 
-            {/* TOP RIGHT — Equity Curve */}
+            {/* RIGHT — Equity Curve */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
               <h2 className="text-sm font-semibold text-zinc-300">Equity Curve</h2>
               {equityCurve.length === 0 ? (
@@ -2250,66 +2281,10 @@ export default function BotDetailPage() {
                 </>
               )}
             </div>
+          </div>
 
-            {/* BOTTOM LEFT — Open Positions */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-              <h2 className="text-sm font-semibold text-zinc-300 mb-4">Open Positions</h2>
-              {positions.length === 0 ? (
-                <p className="text-zinc-600 text-sm py-6 text-center">
-                  {isCrypto
-                    ? "No open positions. Crypto bot scans continuously — next scan within 1 min."
-                    : "No open positions. Bot scans for entries at market open (9:30am ET)."}
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-                        <th className="text-left pb-2 font-medium">Symbol</th>
-                        <th className="text-right pb-2 font-medium">Qty</th>
-                        <th className="text-right pb-2 font-medium">Avg Cost</th>
-                        <th className="text-right pb-2 font-medium">Current Value</th>
-                        <th className="text-right pb-2 font-medium">P&L</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {positions.map((pos) => {
-                        const livePrice = livePrices[pos.symbol] ?? null;
-                        const avgCost = pos.avg_cost_cents ? pos.avg_cost_cents / 100 : null;
-                        const currentValue = livePrice && pos.qty ? livePrice * pos.qty : null;
-                        const unrealizedPnl = livePrice && avgCost && pos.qty
-                          ? (livePrice - avgCost) * pos.qty : null;
-                        const pnlPct = livePrice && avgCost
-                          ? ((livePrice - avgCost) / avgCost) * 100 : null;
-                        return (
-                          <tr
-                            key={pos.id}
-                            className="border-b border-zinc-800/50 last:border-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
-                            onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
-                            title={`View ${pos.symbol} chart`}
-                          >
-                            <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
-                            <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
-                            <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
-                            <td className="py-2.5 text-right text-zinc-300">
-                              {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
-                            </td>
-                            <td className={cn("py-2.5 text-right text-sm font-medium", unrealizedPnl == null ? "text-zinc-500" : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400")}>
-                              {unrealizedPnl != null
-                                ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)} (${pnlPct! >= 0 ? "+" : ""}${pnlPct!.toFixed(2)}%)`
-                                : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* BOTTOM RIGHT — Bot Info */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+          {/* Bot Info — full width below stats+equity */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
               <h2 className="text-sm font-semibold text-zinc-300">Bot Info</h2>
 
               {/* Description + asset class */}
@@ -2366,7 +2341,6 @@ export default function BotDetailPage() {
 
               {/* Why this bot? expandable */}
               <BotWhySection botName={botName} meta={meta} profile={profile} />
-            </div>
           </div>
 
           {/* Activity feed below grid */}
