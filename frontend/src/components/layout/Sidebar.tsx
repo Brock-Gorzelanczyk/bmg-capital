@@ -107,6 +107,7 @@ const NAV_ADMIN = [
   { to: "/admin/flow",         label: "Options Flow",    Icon: Zap        },
   { to: "/admin/macro",        label: "Macro Dashboard", Icon: Globe      },
   { to: "/admin/backtest",     label: "Backtest Lab",    Icon: TestTube2  },
+  { to: "/admin/smart-money",  label: "Smart Money",     Icon: Eye        },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

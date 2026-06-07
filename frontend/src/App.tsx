@@ -50,6 +50,7 @@ const OptionsFlowPage = lazy(() => import("@/pages/OptionsFlowPage"));
 const MacroDashboardPage = lazy(() => import("@/pages/MacroDashboardPage"));
 const BacktestLabPage = lazy(() => import("@/pages/BacktestLabPage"));
 const ScannersPage = lazy(() => import("@/pages/ScannersPage"));
+const SmartMoneyPage = lazy(() => import("@/pages/SmartMoneyPage"));
 const AlertBuilderPage = lazy(() => import("@/pages/AlertBuilderPage"));
 const PitchPage = lazy(() => import("@/pages/PitchPage"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
@@ -322,6 +323,7 @@ function AppInner() {
         <Route path="/admin/macro"       element={<AdminRoute><MacroDashboardPage /></AdminRoute>} />
         <Route path="/admin/backtest"    element={<AdminRoute><BacktestLabPage /></AdminRoute>} />
         <Route path="/admin/scanners"    element={<AdminRoute><ScannersPage /></AdminRoute>} />
+        <Route path="/admin/smart-money" element={<AdminRoute><SmartMoneyPage /></AdminRoute>} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
