@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -9,8 +10,9 @@ logger = logging.getLogger(__name__)
 
 _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "users": [
-        ("is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
-        ("role",     "VARCHAR NOT NULL DEFAULT 'viewer'"),
+        ("is_admin",          "BOOLEAN NOT NULL DEFAULT 0"),
+        ("role",              "VARCHAR NOT NULL DEFAULT 'viewer'"),
+        ("is_test_account",   "BOOLEAN NOT NULL DEFAULT 0"),
     ],
     "user_tiers": [
         ("billing_interval",       "VARCHAR"),
@@ -415,6 +417,7 @@ def run_migrations(engine: Engine) -> None:
         _archive_legacy_tables(conn)
         _grant_admin(conn)
         _backfill_user_roles(conn)
+        _ensure_test_account(conn)
         _retrofit_debug_trade_signals(conn)
         _close_debug_test_trades(conn)
         _dedupe_bot_allocations(conn)
@@ -698,3 +701,61 @@ def _backfill_user_roles(conn) -> None:
         logger.info("_backfill_user_roles: roles assigned")
     except Exception as exc:
         logger.warning("_backfill_user_roles failed: %s", exc)
+
+
+_TEST_EMAIL = "test@bmgcapital.app"
+_TEST_USERNAME = "test"
+
+
+def _ensure_test_account(conn) -> None:
+    """Idempotent: create the hardcoded test/test viewer account for demos.
+
+    Password validation (length, complexity) is only enforced on the signup
+    endpoint — not here and not at login. The bcrypt hash is computed once
+    and stored directly. The account is flagged is_test_account=1 so it can
+    be excluded from analytics / multi-tenancy migrations later.
+    """
+    MIGRATION_NAME = "users.test_account_2026"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        import bcrypt as _bcrypt
+        hashed = _bcrypt.hashpw(b"test", _bcrypt.gensalt()).decode()
+
+        existing = conn.execute(
+            text("SELECT id FROM users WHERE email = :email OR username = :uname"),
+            {"email": _TEST_EMAIL, "uname": _TEST_USERNAME},
+        ).fetchone()
+
+        if existing:
+            # Account already exists (e.g. created manually) — just flag it
+            conn.execute(
+                text("""
+                    UPDATE users
+                    SET is_test_account = 1, role = 'viewer', is_admin = 0
+                    WHERE email = :email OR username = :uname
+                """),
+                {"email": _TEST_EMAIL, "uname": _TEST_USERNAME},
+            )
+        else:
+            conn.execute(
+                text("""
+                    INSERT INTO users
+                        (email, username, hashed_password, role, is_admin,
+                         is_active, is_test_account, created_at)
+                    VALUES
+                        (:email, :uname, :pw, 'viewer', 0, 1, 1, :now)
+                """),
+                {
+                    "email": _TEST_EMAIL,
+                    "uname": _TEST_USERNAME,
+                    "pw": hashed,
+                    "now": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_ensure_test_account: test/test viewer account ready")
+    except Exception as exc:
+        logger.warning("_ensure_test_account failed: %s", exc)
