@@ -675,27 +675,79 @@ function parseCadence(cron: string): string {
   return `cron: ${cron}`;
 }
 
-function DistanceBar({ pct, color }: { pct: number; color: "green" | "yellow" | "gray" }) {
-  const fill = color === "green" ? "bg-lime-500" : color === "yellow" ? "bg-yellow-500" : "bg-zinc-600";
-  const filled = Math.max(0, Math.min(100, 100 - pct));
+function GapScale({ current, target, unit, triggered }: {
+  current: number; target: number; unit: string; triggered: boolean;
+}) {
+  if (triggered) {
+    return (
+      <div className="flex items-center gap-2 mt-2">
+        <div className="flex-1 h-1 bg-lime-500/20 rounded-full overflow-hidden">
+          <div className="h-1 bg-lime-500 rounded-full w-full" />
+        </div>
+        <span className="text-[9px] text-lime-500 font-semibold shrink-0">✓ met</span>
+      </div>
+    );
+  }
+  const gap = target - current;
+  const padding = Math.max(Math.abs(gap) * 0.3, Math.abs(target) * 0.1, 0.01);
+  const scaleMin = Math.min(current, target) - padding;
+  const scaleMax = Math.max(current, target) + padding;
+  const range = scaleMax - scaleMin || 1;
+  const currentPct = ((current - scaleMin) / range) * 100;
+  const targetPct = ((target - scaleMin) / range) * 100;
+  const fmtVal = (v: number) => {
+    const abs = Math.abs(v);
+    const s = abs >= 100 ? v.toFixed(0) : abs >= 10 ? v.toFixed(1) : v.toFixed(2);
+    return (v > 0 && unit !== "" ? "+" : "") + s + unit;
+  };
+  const clamp = (v: number) => Math.min(Math.max(v, 5), 95);
   return (
-    <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-      <div className={cn("h-1 rounded-full transition-all", fill)} style={{ width: `${filled}%` }} />
+    <div className="mt-2 mb-4">
+      <div className="relative h-1.5">
+        <div className="absolute inset-0 bg-zinc-800 rounded-full" />
+        <div
+          className="absolute top-0 h-1.5 bg-zinc-600/40 rounded-full"
+          style={{
+            left: `${Math.min(currentPct, targetPct)}%`,
+            width: `${Math.abs(targetPct - currentPct)}%`,
+          }}
+        />
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-lime-500/70 rounded-full"
+          style={{ left: `${targetPct}%`, transform: "translateX(-50%)" }}
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-zinc-400 border-2 border-zinc-800"
+          style={{ left: `${currentPct}%` }}
+        />
+      </div>
+      <div className="relative h-3.5 mt-0.5">
+        <span
+          className="absolute text-[9px] text-zinc-500 -translate-x-1/2 leading-none"
+          style={{ left: `${clamp(currentPct)}%` }}
+        >
+          {fmtVal(current)}
+        </span>
+        <span
+          className="absolute text-[9px] text-lime-600 font-medium -translate-x-1/2 leading-none"
+          style={{ left: `${clamp(targetPct)}%` }}
+        >
+          {fmtVal(target)} ▲
+        </span>
+      </div>
     </div>
   );
 }
 
-function StrengthMeter({ pct }: { pct: number }) {
-  const color = pct >= 80 ? "bg-lime-500" : pct >= 50 ? "bg-yellow-500" : "bg-zinc-600";
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
-        <div className={cn("h-1 rounded-full", color)} style={{ width: `${Math.min(100, pct)}%` }} />
-      </div>
-      <span className="text-[10px] text-zinc-500 tabular-nums">{pct.toFixed(0)}%</span>
-    </div>
-  );
-}
+const TIER_ORDER = ["triggered", "about_to_enter", "close", "waiting"] as const;
+type TierKey = typeof TIER_ORDER[number];
+
+const TIER_CFG: Record<TierKey, { icon: string; label: string; headerColor: string; rowBorder: string; rowBg: string }> = {
+  triggered:      { icon: "⚡", label: "Entry Triggered", headerColor: "text-lime-400",   rowBorder: "border-lime-500/50",   rowBg: "bg-lime-500/8" },
+  about_to_enter: { icon: "🟢", label: "About to Enter",  headerColor: "text-lime-400",   rowBorder: "border-lime-500/25",   rowBg: "bg-lime-500/5" },
+  close:          { icon: "🟡", label: "Close",           headerColor: "text-yellow-400", rowBorder: "border-yellow-500/20", rowBg: "bg-zinc-900" },
+  waiting:        { icon: "⚪", label: "Waiting",         headerColor: "text-zinc-500",   rowBorder: "border-zinc-800",      rowBg: "bg-zinc-900" },
+};
 
 function EntryReadinessTable({ botName, botDisplayName, navigate }: {
   botName: string;
@@ -711,16 +763,43 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
     refetchInterval: 30_000,
   });
 
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const prevTiersRef = useRef<Record<string, string>>({});
+
   const rows = data?.rows ?? [];
   const cadence = data?.cadence ? parseCadence(data.cadence) : "scheduled";
   const noUniverse = data?.no_universe;
   const lastUpdate = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
+  // Auto-scroll to top when any symbol moves into about_to_enter
+  useEffect(() => {
+    if (!rows.length) return;
+    const prev = prevTiersRef.current;
+    const justEntered = rows.filter(
+      (r) => r.tier === "about_to_enter" && prev[r.symbol] && prev[r.symbol] !== "about_to_enter" && prev[r.symbol] !== "triggered"
+    );
+    if (justEntered.length > 0) {
+      containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    const next: Record<string, string> = {};
+    rows.forEach((r) => { next[r.symbol] = r.tier; });
+    prevTiersRef.current = next;
+  }, [rows]);
+
+  const secsSince = lastUpdate ? Math.round((Date.now() - lastUpdate.getTime()) / 1000) : 0;
+  const nextScanIn = Math.max(0, 30 - (tick >= 0 ? secsSince : 0));
+
   if (isLoading) {
     return (
       <div className="space-y-3">
         {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="animate-pulse bg-zinc-800/50 rounded-xl h-16" />
+          <div key={i} className="animate-pulse bg-zinc-800/50 rounded-xl h-20" />
         ))}
       </div>
     );
@@ -743,90 +822,112 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
     return `$${v.toFixed(v >= 10 ? 2 : 4)}`;
   };
 
+  const tierCounts = Object.fromEntries(
+    TIER_ORDER.map((t) => [t, rows.filter((r) => r.tier === t).length])
+  ) as Record<TierKey, number>;
+
+  const closest = rows[0];
+
   return (
-    <div className="space-y-1">
-      {/* Header explainer */}
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-xs text-zinc-500">
-          {rows.length} tickers monitored · scans {cadence} · sorted by distance to entry
+    <div ref={containerRef} className="space-y-1">
+      {/* Status banner */}
+      <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-xl px-4 py-3 mb-4 sticky top-0 z-10 backdrop-blur-sm">
+        <p className="text-xs text-zinc-300 leading-relaxed">
+          Watching <span className="font-semibold text-white">{rows.length}</span> symbols · {" "}
+          <span className="text-lime-400 font-semibold">{tierCounts.triggered + tierCounts.about_to_enter}</span> about to fire · {" "}
+          <span className="text-yellow-400 font-semibold">{tierCounts.close}</span> close · {" "}
+          <span className="text-zinc-500">{tierCounts.waiting}</span> waiting
+          {closest?.gap_human && (
+            <> · <span className="text-zinc-400">Closest: <span className="text-white font-medium">{closest.symbol}</span> — {closest.gap_human}</span></>
+          )}
         </p>
-        {lastUpdate && (
-          <span className="text-[10px] text-zinc-600 tabular-nums">
-            Updated {Math.round((Date.now() - lastUpdate.getTime()) / 1000)}s ago
-          </span>
-        )}
+        <p className="text-[10px] text-zinc-600 mt-0.5">
+          Scans {cadence} · next scan in {nextScanIn}s
+        </p>
       </div>
 
-      {rows.map((row) => {
-        const isAboutToEnter = row.distance_to_trigger_pct <= 5 && row.criteria_status !== "triggered";
-        const isTriggered = row.criteria_status === "triggered" || row.distance_to_trigger_pct <= 0;
-        const changePos = row.change_24h_pct >= 0;
-
+      {/* Tier sections */}
+      {TIER_ORDER.map((tier) => {
+        const cfg = TIER_CFG[tier];
+        const tierRows = rows.filter((r) => r.tier === tier);
         return (
-          <button
-            key={row.symbol}
-            onClick={() => navigate(`/chart?symbol=${row.symbol.replace("/", "-")}`)}
-            className={cn(
-              "w-full text-left rounded-xl border px-4 py-3 transition-all hover:border-zinc-600 group",
-              isTriggered
-                ? "border-lime-500/40 bg-lime-500/5 hover:bg-lime-500/10"
-                : isAboutToEnter
-                ? "border-lime-500/30 bg-lime-500/5 hover:bg-lime-500/10"
-                : row.distance_color === "yellow"
-                ? "border-yellow-500/20 bg-zinc-900"
-                : "border-zinc-800 bg-zinc-900"
-            )}
-          >
-            <div className="flex items-start gap-3">
-              {/* Left: symbol + price */}
-              <div className="min-w-[90px]">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-bold text-white text-sm">{row.symbol}</span>
-                  {(isTriggered || isAboutToEnter) && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500 text-black leading-none">
-                      {isTriggered ? "ENTRY" : "CLOSE"}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-0.5 flex items-center gap-1">
-                  <span className="text-xs text-zinc-300 tabular-nums">{fmt$(row.current_price)}</span>
-                  <span className={cn("text-[10px] tabular-nums", changePos ? "text-lime-400" : "text-red-400")}>
-                    {changePos ? "+" : ""}{row.change_24h_pct.toFixed(2)}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Middle: strategy + criteria */}
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wide truncate">
-                  {row.strategy_being_evaluated}
-                </p>
-                <p className="text-xs text-zinc-300 leading-snug mt-0.5 line-clamp-2">
-                  {row.criteria_summary}
-                </p>
-                <div className="mt-1.5 space-y-1">
-                  <DistanceBar pct={row.distance_to_trigger_pct} color={row.distance_color} />
-                  <StrengthMeter pct={row.signal_strength_pct} />
-                </div>
-              </div>
-
-              {/* Right: distance + scanned */}
-              <div className="flex-shrink-0 text-right min-w-[80px]">
-                <span className={cn(
-                  "text-xs font-semibold",
-                  row.distance_color === "green" ? "text-lime-400" :
-                  row.distance_color === "yellow" ? "text-yellow-400" : "text-zinc-500"
-                )}>
-                  {row.distance_to_trigger_label}
-                </span>
-                <p className="text-[10px] text-zinc-600 mt-1">
-                  {row.last_scanned_at
-                    ? formatRelativeAgo(row.last_scanned_at)
-                    : "—"}
-                </p>
-              </div>
+          <div key={tier}>
+            {/* Section header */}
+            <div className="flex items-center gap-2 pt-3 pb-1.5 first:pt-0">
+              <span className="text-sm leading-none">{cfg.icon}</span>
+              <span className={cn("text-xs font-semibold uppercase tracking-wide", cfg.headerColor)}>
+                {cfg.label}
+              </span>
+              <span className="text-xs text-zinc-600">({tierCounts[tier]})</span>
+              <div className="flex-1 h-px bg-zinc-800 ml-1" />
             </div>
-          </button>
+
+            {tierRows.length === 0 && (
+              <p className="text-[11px] text-zinc-700 pl-2 pb-2 italic">None</p>
+            )}
+
+            {tierRows.map((row) => {
+              const changePos = row.change_24h_pct >= 0;
+              const isTriggered = row.tier === "triggered" || row.criteria_status === "triggered";
+              return (
+                <button
+                  key={row.symbol}
+                  onClick={() => navigate(`/chart?symbol=${row.symbol.replace("/", "-")}`)}
+                  className={cn(
+                    "w-full text-left rounded-xl border px-4 py-3 mb-1 transition-all hover:brightness-110 group",
+                    cfg.rowBorder, cfg.rowBg,
+                    row.tier === "waiting" && "opacity-75"
+                  )}
+                >
+                  {/* Symbol row */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-bold text-white text-sm">{row.symbol}</span>
+                      {row.tier === "triggered" && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500 text-black leading-none">
+                          ⚡ ENTRY
+                        </span>
+                      )}
+                      {row.tier === "about_to_enter" && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 border border-lime-500/30 leading-none">
+                          ABOUT TO ENTER
+                        </span>
+                      )}
+                      <span className="text-[10px] text-zinc-600 uppercase tracking-wide">
+                        {row.strategy_being_evaluated}
+                      </span>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <span className="text-xs text-zinc-300 tabular-nums">{fmt$(row.current_price)}</span>
+                      <span className={cn("text-[10px] ml-1.5 tabular-nums", changePos ? "text-lime-400" : "text-red-400")}>
+                        {changePos ? "+" : ""}{row.change_24h_pct.toFixed(2)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Needs / Currently */}
+                  <div className="mt-1.5 space-y-0.5">
+                    <p className="text-xs text-zinc-300">
+                      <span className="text-zinc-600 font-medium">Needs: </span>
+                      {row.criteria_need || row.criteria_summary}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      <span className="text-zinc-600 font-medium">Currently: </span>
+                      {row.criteria_current || "—"}
+                    </p>
+                  </div>
+
+                  {/* Gap scale */}
+                  <GapScale
+                    current={row.axis_current ?? 0}
+                    target={row.axis_target ?? 0}
+                    unit={row.axis_unit ?? ""}
+                    triggered={isTriggered}
+                  />
+                </button>
+              );
+            })}
+          </div>
         );
       })}
     </div>
@@ -885,7 +986,7 @@ function WatchlistPreview({ botName, onViewAll }: { botName: string; onViewAll: 
       <div className="space-y-2">
         {rows.map((row) => {
           const isTriggered = row.criteria_status === "triggered" || row.distance_to_trigger_pct <= 0;
-          const isClose = row.distance_to_trigger_pct <= 5;
+          const isClose = row.tier === "about_to_enter" || row.tier === "triggered";
           return (
             <div
               key={row.symbol}
@@ -908,9 +1009,11 @@ function WatchlistPreview({ botName, onViewAll }: { botName: string; onViewAll: 
                 <span className="text-xs text-zinc-400">{fmt$(row.current_price)}</span>
                 <span className={cn(
                   "text-xs font-semibold",
-                  isTriggered ? "text-lime-400" : row.distance_color === "yellow" ? "text-yellow-400" : "text-zinc-400"
+                  row.tier === "triggered" ? "text-lime-400" :
+                  row.tier === "about_to_enter" ? "text-lime-300" :
+                  row.tier === "close" ? "text-yellow-400" : "text-zinc-500"
                 )}>
-                  {isTriggered ? "⚡ triggered" : `${row.distance_to_trigger_pct.toFixed(1)}% away`}
+                  {row.tier === "triggered" ? "⚡ triggered" : row.gap_human || `${row.distance_to_trigger_pct.toFixed(1)}% away`}
                 </span>
               </div>
             </div>

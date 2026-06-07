@@ -168,6 +168,13 @@ export interface ReadinessRow {
   last_scanned_at: string | null;
   rsi: number | null;
   zscore: number | null;
+  criteria_need: string;
+  criteria_current: string;
+  gap_human: string;
+  axis_current: number;
+  axis_target: number;
+  axis_unit: string;
+  tier: "triggered" | "about_to_enter" | "close" | "waiting";
 }
 
 export interface ReadinessResponse {

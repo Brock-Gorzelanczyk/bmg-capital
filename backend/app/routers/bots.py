@@ -2024,11 +2024,11 @@ _BOT_UNIVERSES: dict[str, list[str]] = {
     "crypto_swing": [
         "BTC/USD","ETH/USD","SOL/USD","BNB/USD","XRP/USD","ADA/USD","AVAX/USD",
         "DOGE/USD","DOT/USD","LINK/USD","MATIC/USD","UNI/USD","ATOM/USD","LTC/USD",
-        "BCH/USD","FIL/USD","NEAR/USD","APT/USD","ARB/USD","OP/USD",
+        "BCH/USD","FIL/USD","NEAR/USD","APT/USD","AAVE/USD","OP/USD",
     ],
     "crypto_day": [
         "BTC/USD","ETH/USD","SOL/USD","DOGE/USD","ADA/USD",
-        "AVAX/USD","LINK/USD","MATIC/USD","ARB/USD","OP/USD",
+        "AVAX/USD","LINK/USD","AAVE/USD","UNI/USD","OP/USD",
     ],
     "crypto_lt": [
         "BTC/USD","ETH/USD","SOL/USD","ADA/USD","AVAX/USD",
@@ -2171,6 +2171,12 @@ def _compute_symbol_readiness(
     criteria_summary = ""
     distance_pct: float | None = None
     criteria_status = "watching"
+    criteria_need = ""
+    criteria_current = ""
+    gap_human = ""
+    axis_current = 0.0
+    axis_target = 0.0
+    axis_unit = ""
 
     if indicator == "rsi" and rsi_val is not None:
         buy_thr, sell_thr = 30.0, 70.0
@@ -2178,16 +2184,32 @@ def _compute_symbol_readiness(
             criteria_summary = f"RSI {rsi_val:.1f} — below {buy_thr:.0f}, entry triggered"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = f"RSI below {buy_thr:.0f}"
+            criteria_current = f"RSI is {rsi_val:.1f}"
+            gap_human = "Entry criteria met"
+            axis_current, axis_target, axis_unit = rsi_val, buy_thr, ""
         elif rsi_val > sell_thr:
             criteria_summary = f"RSI {rsi_val:.1f} — above {sell_thr:.0f}, short triggered"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = f"RSI above {sell_thr:.0f}"
+            criteria_current = f"RSI is {rsi_val:.1f}"
+            gap_human = "Entry criteria met"
+            axis_current, axis_target, axis_unit = rsi_val, sell_thr, ""
         elif rsi_val <= 50:
             criteria_summary = f"RSI {rsi_val:.1f} — need <{buy_thr:.0f} to enter long"
             distance_pct = round((rsi_val - buy_thr) / buy_thr * 100, 1)
+            criteria_need = f"RSI to drop below {buy_thr:.0f}"
+            criteria_current = f"RSI is {rsi_val:.1f}"
+            gap_human = f"Needs {rsi_val - buy_thr:.0f} more points drop"
+            axis_current, axis_target, axis_unit = rsi_val, buy_thr, ""
         else:
             criteria_summary = f"RSI {rsi_val:.1f} — need >{sell_thr:.0f} to enter short"
             distance_pct = round((sell_thr - rsi_val) / sell_thr * 100, 1)
+            criteria_need = f"RSI to rise above {sell_thr:.0f}"
+            criteria_current = f"RSI is {rsi_val:.1f}"
+            gap_human = f"Needs {sell_thr - rsi_val:.0f} more points rise"
+            axis_current, axis_target, axis_unit = rsi_val, sell_thr, ""
 
     elif indicator == "zscore" and z_val is not None:
         buy_thr, sell_thr = -1.5, 1.5
@@ -2195,16 +2217,32 @@ def _compute_symbol_readiness(
             criteria_summary = f"Z-score {z_val:.2f} — below {buy_thr}, entry triggered"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = f"Z-score below {buy_thr}"
+            criteria_current = f"Z-score is {z_val:.2f}σ"
+            gap_human = "Entry criteria met"
+            axis_current, axis_target, axis_unit = z_val, buy_thr, "σ"
         elif z_val > sell_thr:
             criteria_summary = f"Z-score {z_val:.2f} — above +{sell_thr}, short triggered"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = f"Z-score above +{sell_thr}"
+            criteria_current = f"Z-score is {z_val:.2f}σ"
+            gap_human = "Entry criteria met"
+            axis_current, axis_target, axis_unit = z_val, sell_thr, "σ"
         elif z_val < 0:
             criteria_summary = f"Z-score {z_val:.2f} — need <{buy_thr} to enter long"
             distance_pct = round(abs(buy_thr - z_val) / abs(buy_thr) * 100, 1)
+            criteria_need = f"Z-score below {buy_thr}"
+            criteria_current = f"Z-score is {z_val:.2f}σ"
+            gap_human = f"Needs {abs(z_val - buy_thr):.1f}σ more downward move"
+            axis_current, axis_target, axis_unit = z_val, buy_thr, "σ"
         else:
             criteria_summary = f"Z-score {z_val:.2f} — need >{sell_thr} to enter short"
             distance_pct = round(abs(z_val - sell_thr) / abs(sell_thr) * 100, 1)
+            criteria_need = f"Z-score above +{sell_thr}"
+            criteria_current = f"Z-score is {z_val:.2f}σ"
+            gap_human = f"Needs {abs(z_val - sell_thr):.1f}σ more upward move"
+            axis_current, axis_target, axis_unit = z_val, sell_thr, "σ"
 
     elif indicator == "ma_cross" and sma50 is not None and sma200 is not None:
         diff_pct = (sma50 - sma200) / sma200 * 100
@@ -2212,9 +2250,17 @@ def _compute_symbol_readiness(
             criteria_summary = f"50MA ${sma50:,.0f} above 200MA ${sma200:,.0f} (+{diff_pct:.1f}%) — golden cross active"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = "50MA above 200MA"
+            criteria_current = f"50MA is {diff_pct:.1f}% above 200MA"
+            gap_human = "Golden cross active"
+            axis_current, axis_target, axis_unit = diff_pct, 0.0, "%"
         else:
             criteria_summary = f"50MA ${sma50:,.0f}, 200MA ${sma200:,.0f} — need 50MA to cross above ({abs(diff_pct):.1f}% gap)"
             distance_pct = round(abs(diff_pct), 1)
+            criteria_need = "50MA to cross above 200MA"
+            criteria_current = f"50MA is {abs(diff_pct):.1f}% below 200MA"
+            gap_human = f"{abs(diff_pct):.1f}% gap to close"
+            axis_current, axis_target, axis_unit = diff_pct, 0.0, "%"
 
     elif indicator == "macd" and macd_vals is not None:
         macd_line, sig_line = macd_vals
@@ -2223,18 +2269,34 @@ def _compute_symbol_readiness(
             criteria_summary = f"MACD {macd_line:.4f} above signal {sig_line:.4f} — bullish crossover active"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = "MACD above signal line"
+            criteria_current = f"MACD +{diff:.4f} above signal"
+            gap_human = "Bullish crossover active"
+            axis_current, axis_target, axis_unit = diff, 0.0, ""
         else:
             criteria_summary = f"MACD {macd_line:.4f} below signal {sig_line:.4f} — need crossover above"
             distance_pct = round(abs(diff) / (abs(sig_line) + 1e-9) * 100, 1)
+            criteria_need = "MACD to cross above signal"
+            criteria_current = f"MACD is {abs(diff):.4f} below signal"
+            gap_human = f"Gap of {abs(diff):.4f} to bridge"
+            axis_current, axis_target, axis_unit = diff, 0.0, ""
 
     elif indicator == "bollinger" and closes and z_val is not None:
         if z_val < -1.8:
             criteria_summary = f"Price at lower Bollinger band (z={z_val:.2f}) — squeeze entry triggered"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = "Z-score below −1.8 (lower Bollinger band)"
+            criteria_current = f"Z-score is {z_val:.2f}σ"
+            gap_human = "Lower band touch — entry triggered"
+            axis_current, axis_target, axis_unit = z_val, -1.8, "σ"
         else:
             criteria_summary = f"Z-score {z_val:.2f} — need <-1.8 for Bollinger touch entry"
             distance_pct = round(max(0.0, (z_val + 1.8) / 1.8 * 100), 1)
+            criteria_need = "Z-score to drop below −1.8"
+            criteria_current = f"Z-score is {z_val:.2f}σ"
+            gap_human = f"Needs {z_val - (-1.8):.1f}σ more downward move"
+            axis_current, axis_target, axis_unit = z_val, -1.8, "σ"
 
     elif indicator == "momentum" and len(closes) >= 5:
         ret_5d = (closes[-1] - closes[-5]) / closes[-5] * 100
@@ -2242,9 +2304,17 @@ def _compute_symbol_readiness(
             criteria_summary = f"5d return +{ret_5d:.1f}% — momentum threshold cleared"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = "5-day return above +3.0%"
+            criteria_current = f"5-day return is {ret_5d:+.1f}%"
+            gap_human = "Momentum threshold cleared"
+            axis_current, axis_target, axis_unit = ret_5d, 3.0, "%"
         else:
             criteria_summary = f"5d return {ret_5d:+.1f}% — need >+3% momentum"
             distance_pct = round(max(0.0, (3.0 - ret_5d) / 3.0 * 100), 1)
+            criteria_need = "5-day return above +3.0%"
+            criteria_current = f"5-day return is {ret_5d:+.1f}%"
+            gap_human = f"Needs {3.0 - ret_5d:.1f}pp more momentum"
+            axis_current, axis_target, axis_unit = ret_5d, 3.0, "%"
 
     # Fallback: use watchlist score as proxy
     if criteria_summary == "" or distance_pct is None:
@@ -2254,9 +2324,17 @@ def _compute_symbol_readiness(
             criteria_summary = f"Composite score {score_pct*100:.0f} — above threshold"
             distance_pct = 0.0
             criteria_status = "triggered"
+            criteria_need = f"Composite score above {thr_norm*100:.0f}"
+            criteria_current = f"Score is {score_pct*100:.0f}"
+            gap_human = "Score threshold cleared"
+            axis_current, axis_target, axis_unit = score_pct*100, thr_norm*100, "pts"
         else:
             criteria_summary = f"Composite score {score_pct*100:.0f} — need {thr_norm*100:.0f} to trigger"
             distance_pct = round((thr_norm - score_pct) / thr_norm * 100, 1) if thr_norm > 0 else 50.0
+            criteria_need = f"Composite score above {thr_norm*100:.0f}"
+            criteria_current = f"Score is {score_pct*100:.0f}"
+            gap_human = f"Needs {(thr_norm - score_pct)*100:.0f} more score points"
+            axis_current, axis_target, axis_unit = score_pct*100, thr_norm*100, "pts"
 
     # Determine primary strategy label
     if len(strategy_names) == 1:
@@ -2285,12 +2363,22 @@ def _compute_symbol_readiness(
     elif d < 10:
         distance_label = f"{d:.1f}% away"
         distance_color = "green"
-    elif d < 30:
+    elif d < 50:
         distance_label = f"{d:.1f}% away"
         distance_color = "yellow"
     else:
         distance_label = f"{d:.1f}% away"
         distance_color = "gray"
+
+    # Tier classification
+    if d <= 0:
+        tier = "triggered"
+    elif d < 10:
+        tier = "about_to_enter"
+    elif d < 50:
+        tier = "close"
+    else:
+        tier = "waiting"
 
     # last_scanned: always use now — this function computes indicators fresh
     # on every call, so the timestamp should reflect the current computation,
@@ -2313,6 +2401,13 @@ def _compute_symbol_readiness(
         "last_scanned_at": last_scanned,
         "rsi": rsi_val,
         "zscore": z_val,
+        "criteria_need": criteria_need,
+        "criteria_current": criteria_current,
+        "gap_human": gap_human,
+        "axis_current": round(axis_current, 3),
+        "axis_target": round(axis_target, 3),
+        "axis_unit": axis_unit,
+        "tier": tier,
     }
 
 
