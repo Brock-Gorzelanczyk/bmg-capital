@@ -22,6 +22,10 @@ function getTradeUnit(symbol: string, assetClass?: string): string {
   return "shares";
 }
 
+function formatNotional(qty: number, price: number): string {
+  return `($${(qty * price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+}
+
 // ── Portfolio activity API ────────────────────────────────────────────────────
 
 interface TradeRecord {
@@ -308,7 +312,7 @@ function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: nu
                   <span className="text-zinc-600 text-xs">{t.bot_display_name}</span>
                 </div>
                 <p className="text-zinc-500 text-xs mt-0.5">
-                  {t.qty.toFixed(4)} {getTradeUnit(t.symbol, assetClass)} @ ${t.fill_price.toFixed(2)}
+                  {t.qty.toFixed(4)} {getTradeUnit(t.symbol, assetClass)} <span className="text-zinc-600">{formatNotional(t.qty, t.fill_price)}</span> @ ${t.fill_price.toFixed(2)}
                   {hasPnl && (
                     <span className={cn("ml-2 font-semibold", pnlPositive ? "text-lime-400" : "text-red-400")}>
                       · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized

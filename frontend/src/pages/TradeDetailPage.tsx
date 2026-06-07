@@ -32,6 +32,11 @@ function pnlColor(n: number | null | undefined) {
   return n >= 0 ? "text-emerald-400" : "text-red-400";
 }
 
+function formatNotional(qty: number | null | undefined, price: number | null | undefined): string {
+  if (!qty || !price) return "";
+  return `($${(qty * price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+}
+
 // ─── Legend ───────────────────────────────────────────────────────────────────
 
 function ChartLegend({ entry, stop, takeProfit, exitPrice, livePrice, status }: {
@@ -302,7 +307,8 @@ export default function TradeDetailPage() {
   }
 
   const isCrypto = trade.symbol.includes("/");
-  const unitLabel = isCrypto ? trade.symbol.split("/")[0] : "shares";
+  const isOptions = (trade.bot_profile ?? "").startsWith("options");
+  const unitLabel = isCrypto ? trade.symbol.split("/")[0] : isOptions ? "contracts" : "shares";
   const backTo = trade.bot_profile ? `/strategy/${trade.bot_profile}` : "/strategy";
 
   return (
@@ -336,7 +342,8 @@ export default function TradeDetailPage() {
         <div>
           <h1 className="text-xl font-bold text-white">{trade.symbol}</h1>
           <p className="text-sm text-zinc-500">
-            {trade.side?.toUpperCase()} · {trade.qty?.toFixed(isCrypto ? 6 : 4)} {unitLabel}
+            {trade.side?.toUpperCase()} · {trade.qty?.toFixed(isCrypto ? 6 : 4)} {unitLabel}{" "}
+            <span className="text-zinc-600">{formatNotional(trade.qty, trade.entry_price_usd)}</span>
             {trade.bot_display_name && <span className="ml-2 text-zinc-600">via {trade.bot_display_name}</span>}
           </p>
         </div>
@@ -383,7 +390,12 @@ export default function TradeDetailPage() {
         <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide py-3 border-b border-zinc-800">Trade Details</p>
         <MetaRow label="Entry Price" value={fmt$(trade.entry_price_usd)} />
         <MetaRow label="Entry Time" value={fmtDate(trade.entry_time)} />
-        <MetaRow label="Quantity" value={`${trade.qty?.toFixed(isCrypto ? 6 : 4)} ${unitLabel}`} />
+        <MetaRow label="Quantity" value={
+          <span>
+            {trade.qty?.toFixed(isCrypto ? 6 : 4)} {unitLabel}{" "}
+            <span className="text-zinc-500">{formatNotional(trade.qty, trade.entry_price_usd)}</span>
+          </span>
+        } />
         <MetaRow label="Status" value={
           <span className={cn(
             "text-[10px] font-bold px-2 py-0.5 rounded-full",
@@ -399,7 +411,16 @@ export default function TradeDetailPage() {
           <MetaRow label="Take Profit" value={<span className="text-emerald-400 flex items-center gap-1"><Target size={11} /> {fmt$(trade.take_profit_usd)}</span>} />
         )}
         {trade.exit_price_usd != null && (
-          <MetaRow label="Exit Price" value={fmt$(trade.exit_price_usd)} />
+          <MetaRow label="Exit Price" value={
+            <span>
+              {fmt$(trade.exit_price_usd)}{" "}
+              {trade.qty && (
+                <span className="text-zinc-500">
+                  (exited for ${(trade.qty * trade.exit_price_usd).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                </span>
+              )}
+            </span>
+          } />
         )}
         {trade.close_time && (
           <MetaRow label="Close Time" value={fmtDate(trade.close_time)} />
