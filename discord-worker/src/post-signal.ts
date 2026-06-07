@@ -29,14 +29,16 @@ const BOT_DISPLAY: Record<string, string> = {
   crypto_swing:         "Crypto Swing",
   crypto_day:           "Crypto Day",
   crypto_lt:            "Crypto Long-Term",
-  crypto_onchain:       "Crypto On-Chain",
-  options_income:       "Options Income",
+  crypto_onchain:            "Crypto On-Chain",
+  crypto_quant_aggressive:   "Crypto Quant Aggressive",
+  options_income:            "Options Income",
   options_directional:  "Options Directional",
 };
 
 const STOCKS_BOTS  = new Set(["stock_swing", "stock_day", "stock_lt"]);
 const CRYPTO_BOTS  = new Set(["crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"]);
 const OPTIONS_BOTS = new Set(["options_income", "options_directional"]);
+const QUANT_BOTS   = new Set(["crypto_quant_aggressive"]);
 
 function channelIdsForBot(botProfile: string): string[] {
   const ids: string[] = [];
@@ -47,6 +49,10 @@ function channelIdsForBot(botProfile: string): string[] {
     ids.push(process.env.DISCORD_CH_CRYPTO_SIGNALS);
   if (OPTIONS_BOTS.has(botProfile) && process.env.DISCORD_CH_OPTIONS_SIGNALS)
     ids.push(process.env.DISCORD_CH_OPTIONS_SIGNALS);
+  if (QUANT_BOTS.has(botProfile)) {
+    const quantCh = process.env.BMG_QUANT_SIGNALS_CHANNEL_ID ?? process.env.DISCORD_CH_QUANT_SIGNALS;
+    if (quantCh) ids.push(quantCh);
+  }
   return [...new Set(ids)];
 }
 
