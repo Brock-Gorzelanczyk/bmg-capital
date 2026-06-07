@@ -64,7 +64,7 @@ const BOT_META: Record<string, { displayName: string; description: string }> = {
   stock_day:          { displayName: "Stock Day",           description: "Intraday gappers & earnings momentum, EOD flat" },
   stock_lt:           { displayName: "Stock Long-Term",     description: "S&P 500 factor model, monthly rebalance" },
   crypto_swing:       { displayName: "Crypto Swing",        description: "Top 20 crypto by mcap, 1–30 day holds" },
-  crypto_day:         { displayName: "Crypto Day",          description: "BTC/ETH/SOL intraday momentum, 24h force-close" },
+  crypto_day:         { displayName: "Crypto Day",          description: "BTC/ETH/SOL intraday momentum, 8h force-close" },
   crypto_lt:          { displayName: "Crypto L-T DCA",      description: "BTC/ETH + majors, weekly DCA & monthly rebalance" },
   options_income:     { displayName: "Options Income",      description: "Wheel, covered calls, CSPs, iron condors" },
   options_directional:{ displayName: "Options Directional", description: "Credit spreads, debit spreads, LEAPS" },

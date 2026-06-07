@@ -121,7 +121,7 @@ def run_position_monitor() -> dict:
     from app.db.models.bots import BotPosition, BotAllocation, BotProfile
 
     db = SessionLocal()
-    checked = closed_stop = closed_target = trailing_activated = 0
+    checked = closed_stop = closed_target = trailing_activated = closed_time = 0
 
     try:
         # Load all open positions that have stop or target set
@@ -173,6 +173,24 @@ def run_position_monitor() -> dict:
             profile_cfg = profile.config_json or {} if profile else {}
             activate_pct = float(profile_cfg.get("trailing_stop_activate_at_pct", 20.0))
 
+            # ── Hold-time limit: must run BEFORE stop/target ──────────────────────
+            if pos.opened_at is not None:
+                opened_aware = (
+                    pos.opened_at.replace(tzinfo=timezone.utc)
+                    if pos.opened_at.tzinfo is None
+                    else pos.opened_at
+                )
+                held_hours = (now - opened_aware).total_seconds() / 3_600.0
+                max_hours: Optional[float] = None
+                if profile_cfg.get("hold_max_hours") is not None:
+                    max_hours = float(profile_cfg["hold_max_hours"])
+                elif profile_cfg.get("hold_max_days") is not None:
+                    max_hours = float(profile_cfg["hold_max_days"]) * 24.0
+                if max_hours is not None and held_hours >= max_hours:
+                    _close_position(db, pos, alloc, current_price, "hold_max_hours_force_exit", now)
+                    closed_time += 1
+                    continue
+
             # ── Trailing stop: activate when position up >= activate_pct ─────────
             if (
                 not pos.trailing_stop_activated
@@ -209,15 +227,16 @@ def run_position_monitor() -> dict:
     finally:
         db.close()
 
-    total_closed = closed_stop + closed_target
+    total_closed = closed_stop + closed_target + closed_time
     if total_closed or trailing_activated:
         logger.info(
-            "[monitor] Run complete: checked=%d stop_exits=%d target_exits=%d trailing_activated=%d",
-            checked, closed_stop, closed_target, trailing_activated,
+            "[monitor] Run complete: checked=%d stop_exits=%d target_exits=%d time_exits=%d trailing_activated=%d",
+            checked, closed_stop, closed_target, closed_time, trailing_activated,
         )
     return {
         "checked": checked,
         "closed_stop": closed_stop,
         "closed_target": closed_target,
+        "closed_time": closed_time,
         "trailing_activated": trailing_activated,
     }

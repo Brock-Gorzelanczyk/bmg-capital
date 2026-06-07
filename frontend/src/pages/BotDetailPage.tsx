@@ -96,7 +96,7 @@ const BOT_META: Record<
   },
   crypto_day: {
     displayName: "Crypto Day",
-    description: "BTC/ETH/SOL intraday momentum, 24h force-close",
+    description: "BTC/ETH/SOL intraday momentum, 8h force-close",
     assetClass: "crypto",
     strategies: [
       "crypto_intraday_momentum", "crypto_weekend_momentum",
@@ -2180,7 +2180,7 @@ export default function BotDetailPage() {
               {/* Stats 2×3 grid */}
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: "Starting Capital", value: allocation ? `$${((allocation.capital_pct / 100) * 50000).toFixed(0)}` : "—" },
+                  { label: "Starting Capital", value: allocation?.starting_capital_cents ? `$${(allocation.starting_capital_cents / 100).toLocaleString()}` : "—" },
                   { label: "Current Value", value: "—" },
                   { label: "All-Time Return", value: "—", colored: false },
                   {
@@ -2220,7 +2220,7 @@ export default function BotDetailPage() {
                 <p className="text-xs text-zinc-500">
                   Allocated:{" "}
                   <span className="text-zinc-300 font-semibold">
-                    ${((allocation.capital_pct / 100) * 50000).toLocaleString()} ({allocation.capital_pct}%)
+                    ${allocation.starting_capital_cents ? (allocation.starting_capital_cents / 100).toLocaleString() : ((allocation.capital_pct / 100) * 100000).toLocaleString()} ({allocation.capital_pct}%)
                   </span>
                 </p>
               )}

@@ -265,6 +265,7 @@ def _allocation_to_dict(a: BotAllocation) -> dict:
         "id": a.id,
         "profile_id": a.profile_id,
         "capital_pct": a.capital_pct,
+        "starting_capital_cents": a.starting_capital_cents,
         "risk_profile": a.risk_profile,
         "paper_mode": a.paper_mode,
         "go_live_requested": a.go_live_requested,

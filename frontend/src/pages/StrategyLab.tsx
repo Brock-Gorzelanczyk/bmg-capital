@@ -61,7 +61,7 @@ const BOT_META: Record<
   },
   crypto_day: {
     displayName: "Crypto Day",
-    description: "BTC/ETH/SOL intraday momentum, 24h force-close",
+    description: "BTC/ETH/SOL intraday momentum, 8h force-close",
     assetClass: "crypto",
   },
   crypto_lt: {

@@ -17,6 +17,7 @@ export interface BotAllocation {
   id: number;
   profile_id: number;
   capital_pct: number;
+  starting_capital_cents?: number;
   risk_profile: "conservative" | "standard" | "aggressive";
   paper_mode: true;        // always true in v1
   go_live_requested: boolean;
