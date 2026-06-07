@@ -191,7 +191,7 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
-    # crypto_quant_aggressive: end-of-day summary to #crypto-signals at 23:55 UTC
+    # crypto_quant_aggressive: end-of-day summary to #quant-signals at 23:55 UTC
     # ------------------------------------------------------------------
     def _cqa_eod_summary():
         try:

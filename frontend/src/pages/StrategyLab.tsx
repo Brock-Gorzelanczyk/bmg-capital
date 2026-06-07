@@ -37,7 +37,7 @@ import { useIsViewer } from "@/store/authStore";
 
 const BOT_META: Record<
   string,
-  { displayName: string; description: string; assetClass: "stock" | "crypto" }
+  { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant" }
 > = {
   stock_swing: {
     displayName: "Stock Swing",
@@ -72,7 +72,7 @@ const BOT_META: Record<
   crypto_quant_aggressive: {
     displayName: "Crypto Quant Aggressive",
     description: "8-signal high-turnover quant · 20-coin universe · $100k paper sub-account",
-    assetClass: "crypto",
+    assetClass: "quant",
   },
   options_income: {
     displayName: "Options Income",
@@ -411,7 +411,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
                 <span className="text-[10px] font-bold text-zinc-600 w-4 flex-shrink-0">
                   #{entry.rank}
                 </span>
-                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-orange-400" : "bg-blue-400")} />
+                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-orange-400" : entry.profile.includes("quant") ? "bg-violet-400" : "bg-blue-400")} />
                 <span className="flex-1 text-xs font-semibold text-white truncate">{entry.name}</span>
                 <span className={cn("text-xs font-bold w-16 text-right", ret30 != null ? (ePos ? "text-lime-400" : "text-red-400") : "text-zinc-600")}>
                   {ret30 != null ? `${ret30 >= 0 ? "+" : ""}${ret30.toFixed(3)}%` : "—"}
@@ -627,9 +627,11 @@ function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
   // Left border color by asset class
   const leftBorderClass = profile.name.includes("options")
     ? "border-l-4 border-l-purple-500/60"
-    : assetClass === "crypto"
-      ? "border-l-4 border-l-orange-500/60"
-      : "border-l-4 border-l-blue-500/60";
+    : assetClass === "quant"
+      ? "border-l-4 border-l-violet-500/60"
+      : assetClass === "crypto"
+        ? "border-l-4 border-l-orange-500/60"
+        : "border-l-4 border-l-blue-500/60";
 
   return (
     <div
@@ -668,7 +670,9 @@ function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
             "text-xs font-semibold px-2 py-0.5 rounded-full",
             assetClass === "stock"
               ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
-              : "bg-orange-500/15 text-orange-400 border border-orange-500/30"
+              : assetClass === "quant"
+                ? "bg-violet-500/15 text-violet-400 border border-violet-500/30"
+                : "bg-orange-500/15 text-orange-400 border border-orange-500/30"
           )}
         >
           {assetClass.toUpperCase()}
@@ -859,7 +863,7 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
                 <tr key={item.profile.name} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
                   <td className="py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", item.profile.name.includes("options") ? "bg-purple-400" : assetClass === "crypto" ? "bg-orange-400" : "bg-blue-400")} />
+                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", item.profile.name.includes("options") ? "bg-purple-400" : assetClass === "quant" ? "bg-violet-400" : assetClass === "crypto" ? "bg-orange-400" : "bg-blue-400")} />
                       <span className="font-semibold text-white text-xs">{displayName(item.profile.name)}</span>
                     </div>
                   </td>
@@ -900,7 +904,7 @@ function makeFallbackBots(): BotListItem[] {
       id: idx + 1,
       name,
       description: BOT_META[name]?.description ?? "",
-      asset_class: BOT_META[name]?.assetClass ?? "stock",
+      asset_class: (BOT_META[name]?.assetClass ?? "stock") as string,
       position_cap: 10,
       cadence: name.includes("_day") ? "intraday" : name.includes("_lt") ? "weekly" : "daily",
       stop_loss_pct: null,
@@ -1360,7 +1364,7 @@ export default function StrategyLab() {
             <div>
               <h1 className="text-2xl font-bold text-white">Strategy Lab</h1>
               <p className="text-zinc-500 text-sm mt-1">
-                Three independent portfolios — Stocks, Crypto, and Options — each running dedicated bots on real market data.
+                Four independent portfolios — Stocks, Crypto, Options, and Quant — each running dedicated bots on real market data.
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -1391,7 +1395,7 @@ export default function StrategyLab() {
                   disabled={activateAllMut.isPending}
                   className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50 shadow-lg shadow-lime-500/20"
                 >
-                  {activateAllMut.isPending ? "Activating…" : "Activate All 8 Bots"}
+                  {activateAllMut.isPending ? "Activating…" : "Activate All 9 Bots"}
                 </button>
               )}
               {!isViewer && (allPaused ? (
@@ -1430,13 +1434,13 @@ export default function StrategyLab() {
 
           {/* Three portfolio tab cards / Bot cards — above the portfolio hero */}
           {portfoliosLoading || isLoading ? (
-            <div className="grid grid-cols-3 gap-3">
-              {[0, 1, 2].map((i) => (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[0, 1, 2, 3].map((i) => (
                 <div key={i} className="h-28 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
               ))}
             </div>
           ) : portfolios.length > 0 ? (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {portfolios.map((port) => (
                 <PortfolioTab key={port.id} portfolio={port} />
               ))}

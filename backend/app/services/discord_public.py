@@ -7,11 +7,13 @@ Channel routing:
   stocks       ← stock_swing | stock_day | stock_lt
   crypto       ← crypto_swing | crypto_day | crypto_lt | crypto_onchain
   options      ← options_income | options_directional
+  quant        ← crypto_quant_aggressive (dedicated channel, not crypto)
 
 Env vars (DISCORD_CH_* names match Railway config):
   DISCORD_BOT_TOKEN
   DISCORD_CH_ALL_SIGNALS, DISCORD_CH_STOCKS_SIGNALS,
-  DISCORD_CH_CRYPTO_SIGNALS, DISCORD_CH_OPTIONS_SIGNALS
+  DISCORD_CH_CRYPTO_SIGNALS, DISCORD_CH_OPTIONS_SIGNALS,
+  DISCORD_CH_QUANT_SIGNALS (BMG_QUANT_SIGNALS_CHANNEL_ID)
   DISCORD_CH_DAILY_DIGEST, DISCORD_CH_WEEKLY_LEADERBOARD,
   DISCORD_CH_MONTHLY_RECAP
 """
@@ -45,8 +47,9 @@ BOT_DISPLAY = {
 }
 
 _STOCKS_BOTS  = {"stock_swing", "stock_day", "stock_lt"}
-_CRYPTO_BOTS  = {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain", "crypto_quant_aggressive"}
+_CRYPTO_BOTS  = {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"}
 _OPTIONS_BOTS = {"options_income", "options_directional"}
+_QUANT_BOTS   = {"crypto_quant_aggressive"}
 
 
 def _cfg():
@@ -62,12 +65,20 @@ def _channel_ids_for_bot(bot_name: str) -> list[str]:
     ch_stocks  = cfg.discord_ch_stocks_signals  or cfg.discord_channel_stocks
     ch_crypto  = cfg.discord_ch_crypto_signals  or cfg.discord_channel_crypto
     ch_options = cfg.discord_ch_options_signals or cfg.discord_channel_options
+    ch_quant   = cfg.discord_ch_quant_signals
+
+    if bot_name in _QUANT_BOTS and not ch_quant:
+        logger.warning(
+            "BMG_QUANT_SIGNALS_CHANNEL_ID not set — "
+            "Crypto Quant Aggressive signals will not post to Discord"
+        )
 
     channels = []
-    if ch_all:                              channels.append(ch_all)
-    if bot_name in _STOCKS_BOTS  and ch_stocks:  channels.append(ch_stocks)
-    if bot_name in _CRYPTO_BOTS  and ch_crypto:  channels.append(ch_crypto)
-    if bot_name in _OPTIONS_BOTS and ch_options: channels.append(ch_options)
+    if ch_all:                                           channels.append(ch_all)
+    if bot_name in _STOCKS_BOTS  and ch_stocks:         channels.append(ch_stocks)
+    if bot_name in _CRYPTO_BOTS  and ch_crypto:         channels.append(ch_crypto)
+    if bot_name in _OPTIONS_BOTS and ch_options:        channels.append(ch_options)
+    if bot_name in _QUANT_BOTS   and ch_quant:          channels.append(ch_quant)
     return list(dict.fromkeys(channels))
 
 

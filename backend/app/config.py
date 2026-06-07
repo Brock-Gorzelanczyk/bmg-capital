@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     discord_ch_stocks_signals: str = ""
     discord_ch_crypto_signals: str = ""
     discord_ch_options_signals: str = ""
+    discord_ch_quant_signals: str = ""   # BMG_QUANT_SIGNALS_CHANNEL_ID
     discord_ch_daily_digest: str = ""
     discord_ch_weekly_leaderboard: str = ""
     discord_ch_monthly_recap: str = ""

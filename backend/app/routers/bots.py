@@ -95,6 +95,9 @@ _PORTFOLIO_DEFS = [
     {"asset_class": "options", "name": "Options", "emoji": "⚡", "color_hex": "#8B5CF6",
      "starting_capital_cents": 20_000_000,
      "bots": {"options_income": _BOT_CAPITAL, "options_directional": _BOT_CAPITAL}},
+    {"asset_class": "quant",   "name": "Quant",   "emoji": "∑",  "color_hex": "#a78bfa",
+     "starting_capital_cents": 10_000_000,
+     "bots": {"crypto_quant_aggressive": _BOT_CAPITAL}},
 ]
 
 

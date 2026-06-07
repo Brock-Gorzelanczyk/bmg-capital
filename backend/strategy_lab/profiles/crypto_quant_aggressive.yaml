@@ -1,5 +1,5 @@
 name: crypto_quant_aggressive
-asset_class: crypto
+asset_class: quant
 broker: alpaca_paper_crypto
 
 universe:
@@ -90,7 +90,7 @@ execution:
   use_brackets: true
 
 discord:
-  channel: "crypto-signals"
+  channel: "quant-signals"
   eod_summary_cron: "55 23 * * *"
 
 paper_only: true

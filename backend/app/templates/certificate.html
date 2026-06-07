@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  @page { size: 11in 8.5in landscape; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    width: 11in; height: 8.5in;
+    background: #0d1b2e;
+    font-family: Georgia, "Times New Roman", serif;
+    color: #f0e6cc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Outer border */
+  .outer-border {
+    width: 10.5in;
+    height: 8.1in;
+    border: 2px solid #c9a24a;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Inner border */
+  .inner-border {
+    position: absolute;
+    inset: 7px;
+    border: 1px solid rgba(201, 162, 74, 0.4);
+    pointer-events: none;
+  }
+
+  /* Corner ornaments — L-bracket style with a dot */
+  .corner {
+    position: absolute;
+    width: 52px;
+    height: 52px;
+  }
+  .corner::before, .corner::after {
+    content: '';
+    position: absolute;
+    background: #c9a24a;
+  }
+  /* Top-left */
+  .corner.tl { top: 14px; left: 14px; }
+  .corner.tl::before { top: 0; left: 0; width: 28px; height: 2px; }
+  .corner.tl::after  { top: 0; left: 0; width: 2px; height: 28px; }
+  /* Top-right */
+  .corner.tr { top: 14px; right: 14px; }
+  .corner.tr::before { top: 0; right: 0; width: 28px; height: 2px; }
+  .corner.tr::after  { top: 0; right: 0; width: 2px; height: 28px; }
+  /* Bottom-left */
+  .corner.bl { bottom: 14px; left: 14px; }
+  .corner.bl::before { bottom: 0; left: 0; width: 28px; height: 2px; }
+  .corner.bl::after  { bottom: 0; left: 0; width: 2px; height: 28px; }
+  /* Bottom-right */
+  .corner.br { bottom: 14px; right: 14px; }
+  .corner.br::before { bottom: 0; right: 0; width: 28px; height: 2px; }
+  .corner.br::after  { bottom: 0; right: 0; width: 2px; height: 28px; }
+
+  /* Corner dots */
+  .corner-dot {
+    position: absolute;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #c9a24a;
+  }
+  .corner-dot.tl { top: 22px; left: 22px; }
+  .corner-dot.tr { top: 22px; right: 22px; }
+  .corner-dot.bl { bottom: 22px; left: 22px; }
+  .corner-dot.br { bottom: 22px; right: 22px; }
+
+  /* Content */
+  .content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+    padding: 0 0.7in;
+  }
+
+  /* Logo mark at top */
+  .logo-mark {
+    margin-bottom: 16px;
+  }
+
+  .org-name {
+    font-family: Georgia, serif;
+    font-size: 22pt;
+    font-weight: bold;
+    letter-spacing: 0.55em;
+    color: #f0e6cc;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .program-name {
+    font-size: 11pt;
+    font-style: italic;
+    letter-spacing: 0.3em;
+    color: #c9a24a;
+    margin-bottom: 16px;
+  }
+
+  /* Divider with center dot */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    width: 260px;
+  }
+  .divider-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(201, 162, 74, 0.5);
+  }
+  .divider-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid #c9a24a;
+    flex-shrink: 0;
+  }
+
+  .cert-title {
+    font-size: 36pt;
+    font-style: italic;
+    color: #f0e6cc;
+    margin-bottom: 18px;
+    letter-spacing: 0.01em;
+  }
+
+  .certify-text {
+    font-size: 11pt;
+    color: #c9a24a;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+
+  .recipient-name {
+    font-family: "Brush Script MT", "Zapf Chancery", "Dancing Script", cursive;
+    font-size: 46pt;
+    color: #f0e6cc;
+    margin-bottom: 0;
+    line-height: 1.1;
+  }
+
+  .name-underline {
+    width: 480px;
+    height: 1px;
+    background: rgba(201, 162, 74, 0.5);
+    margin: 10px auto 18px;
+  }
+
+  .completed-text {
+    font-size: 11pt;
+    color: #c9a24a;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  .institution-name {
+    font-size: 14pt;
+    font-weight: bold;
+    letter-spacing: 0.35em;
+    color: #c9a24a;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .score-line {
+    font-size: 10pt;
+    font-style: italic;
+    color: #a89060;
+  }
+
+  /* Footer */
+  .footer {
+    position: absolute;
+    bottom: 0.38in;
+    left: 0.6in;
+    right: 0.6in;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .footer-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 140px;
+  }
+  .footer-col.right {
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .footer-label {
+    font-size: 7pt;
+    letter-spacing: 0.25em;
+    color: #c9a24a;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .footer-line {
+    width: 140px;
+    height: 1px;
+    background: rgba(201, 162, 74, 0.45);
+    margin-bottom: 4px;
+  }
+
+  .footer-date {
+    font-size: 11pt;
+    font-weight: bold;
+    color: #f0e6cc;
+  }
+
+  .footer-id {
+    font-size: 7pt;
+    letter-spacing: 0.12em;
+    color: #7a8a9a;
+    text-transform: uppercase;
+  }
+
+  .footer-sig {
+    font-family: "Brush Script MT", "Zapf Chancery", cursive;
+    font-size: 16pt;
+    color: #f0e6cc;
+  }
+
+  .footer-sig-sub {
+    font-size: 7pt;
+    letter-spacing: 0.15em;
+    color: #7a8a9a;
+    text-transform: uppercase;
+  }
+
+  /* Center seal */
+  .seal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .seal-circle {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    border: 2px solid #c9a24a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 27, 46, 0.9);
+    position: relative;
+  }
+
+  /* "BMG CAPITAL" text arc is approximated with a positioned label */
+  .seal-text-top {
+    position: absolute;
+    top: 8px;
+    font-size: 5pt;
+    letter-spacing: 0.18em;
+    color: #c9a24a;
+    text-transform: uppercase;
+  }
+  .seal-text-bot {
+    position: absolute;
+    bottom: 8px;
+    font-size: 5pt;
+    letter-spacing: 0.18em;
+    color: #c9a24a;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="outer-border">
+  <div class="inner-border"></div>
+
+  <!-- Corner ornaments -->
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+  <div class="corner-dot tl"></div>
+  <div class="corner-dot tr"></div>
+  <div class="corner-dot bl"></div>
+  <div class="corner-dot br"></div>
+
+  <!-- Main content -->
+  <div class="content">
+
+    <!-- Logo mark (teal chart icon) -->
+    <div class="logo-mark">
+      {% if logo_image_url %}
+      <img src="{{ logo_image_url }}" width="80" height="60" style="object-fit: contain;" />
+      {% else %}
+      <svg width="80" height="60" viewBox="0 0 80 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polyline points="8,48 28,28 46,38 68,12" stroke="#4ecdc4" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="68" cy="12" r="5" fill="#4ecdc4"/>
+      </svg>
+      {% endif %}
+    </div>
+
+    <!-- BMG Capital heading -->
+    <div class="org-name">BMG Capital</div>
+    <div class="program-name">BMG Capital Learning Center</div>
+
+    <!-- Divider -->
+    <div class="divider">
+      <div class="divider-line"></div>
+      <div class="divider-dot"></div>
+      <div class="divider-line"></div>
+    </div>
+
+    <!-- Certificate title -->
+    <div class="cert-title">Certificate of Completion</div>
+
+    <!-- Certify text -->
+    <div class="certify-text">This is to certify that</div>
+
+    <!-- Recipient name -->
+    <div class="recipient-name">{{ recipient_name }}</div>
+    <div class="name-underline"></div>
+
+    <!-- Body copy -->
+    <div class="completed-text">has completed the full curriculum of the</div>
+    <div class="institution-name">BMG Capital Learning Center</div>
+    <div class="score-line"><em>passing the comprehensive examination with a final score of {{ score_pct }}%</em></div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <!-- Left: date + cert ID -->
+    <div class="footer-col">
+      <div class="footer-label">Date Issued</div>
+      <div class="footer-line"></div>
+      <div class="footer-date">{{ issued_at_formatted }}</div>
+      <div class="footer-id">ID: {{ cert_id }}</div>
+    </div>
+
+    <!-- Center: seal -->
+    <div class="seal">
+      <div class="seal-circle">
+        <div class="seal-text-top">BMG</div>
+        <svg width="38" height="30" viewBox="0 0 80 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polyline points="8,48 28,28 46,38 68,12" stroke="#4ecdc4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="68" cy="12" r="5.5" fill="#4ecdc4"/>
+        </svg>
+        <div class="seal-text-bot">Capital</div>
+      </div>
+    </div>
+
+    <!-- Right: authorized by -->
+    <div class="footer-col right">
+      <div class="footer-label">Authorized By</div>
+      <div class="footer-line" style="margin-left: auto;"></div>
+      <div class="footer-sig">B. Gorzelancyk</div>
+      <div class="footer-sig-sub">Founder, BMG Capital</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
