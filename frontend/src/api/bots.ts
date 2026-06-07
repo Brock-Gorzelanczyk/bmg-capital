@@ -151,6 +151,36 @@ export const getBotWatchlist = (name: string): Promise<WatchlistItem[]> =>
     })
     .catch(() => []);
 
+export interface ReadinessRow {
+  symbol: string;
+  current_price: number | null;
+  change_24h_pct: number;
+  strategy_being_evaluated: string;
+  criteria_summary: string;
+  criteria_status: string; // "triggered" | "watching"
+  distance_to_trigger_pct: number;
+  distance_to_trigger_label: string;
+  distance_color: "green" | "yellow" | "gray";
+  confidence_now: number;
+  confidence_threshold: number;
+  signal_strength_pct: number;
+  last_scanned_at: string | null;
+  rsi: number | null;
+  zscore: number | null;
+}
+
+export interface ReadinessResponse {
+  profile_name: string;
+  rows: ReadinessRow[];
+  cadence: string;
+  no_universe?: boolean;
+}
+
+export const getBotWatchlistReadiness = (name: string): Promise<ReadinessResponse> =>
+  client
+    .get<ReadinessResponse>(`/bots/${name}/watchlist-readiness`)
+    .then((r) => r.data);
+
 export const runBacktest = (
   name: string,
   params: { start?: string; end?: string; capital?: number }

@@ -25,6 +25,7 @@ import {
   leaveWaitlist,
   getRegime,
   getBotWatchlist,
+  getBotWatchlistReadiness,
   runBacktest,
   getCatalysts,
   getActivity,
@@ -34,6 +35,7 @@ import {
   type BotSignal,
   type RegimeData,
   type WatchlistItem,
+  type ReadinessRow,
   type CatalystEvent,
   type ActivityEvent,
   type StrategyWeight,
@@ -656,7 +658,181 @@ function AnalystDrawer({ analysis, onClose }: { analysis: WatchlistAnalysis; onC
   );
 }
 
-// ─── Watchlist table ──────────────────────────────────────────────────────────
+// ─── Entry-readiness watchlist ────────────────────────────────────────────────
+
+function parseCadence(cron: string): string {
+  if (!cron) return "scheduled";
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length < 5) return cron;
+  const [min, hour, , , dow] = parts;
+  if (min === "*" && hour === "*" && dow === "*") return "every minute";
+  if (min === "*/5") return "every 5 min";
+  if (min === "*/15") return "every 15 min";
+  if (min === "0" && hour === "*/4") return "every 4 hours";
+  if (hour === "16") return "daily at 4 PM ET";
+  if (hour === "9" || hour === "8") return "daily at open";
+  return `cron: ${cron}`;
+}
+
+function DistanceBar({ pct, color }: { pct: number; color: "green" | "yellow" | "gray" }) {
+  const fill = color === "green" ? "bg-lime-500" : color === "yellow" ? "bg-yellow-500" : "bg-zinc-600";
+  const filled = Math.max(0, Math.min(100, 100 - pct));
+  return (
+    <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+      <div className={cn("h-1 rounded-full transition-all", fill)} style={{ width: `${filled}%` }} />
+    </div>
+  );
+}
+
+function StrengthMeter({ pct }: { pct: number }) {
+  const color = pct >= 80 ? "bg-lime-500" : pct >= 50 ? "bg-yellow-500" : "bg-zinc-600";
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
+        <div className={cn("h-1 rounded-full", color)} style={{ width: `${Math.min(100, pct)}%` }} />
+      </div>
+      <span className="text-[10px] text-zinc-500 tabular-nums">{pct.toFixed(0)}%</span>
+    </div>
+  );
+}
+
+function EntryReadinessTable({ botName, botDisplayName, navigate }: {
+  botName: string;
+  botDisplayName: string;
+  navigate: (path: string) => void;
+}) {
+  const { data, isLoading, dataUpdatedAt } = useQuery({
+    queryKey: ["watchlist-readiness", botName],
+    queryFn: () => getBotWatchlistReadiness(botName),
+    enabled: !!botName,
+    retry: 1,
+    staleTime: 25_000,
+    refetchInterval: 30_000,
+  });
+
+  const rows = data?.rows ?? [];
+  const cadence = data?.cadence ? parseCadence(data.cadence) : "scheduled";
+  const noUniverse = data?.no_universe;
+  const lastUpdate = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className="animate-pulse bg-zinc-800/50 rounded-xl h-16" />
+        ))}
+      </div>
+    );
+  }
+
+  if (noUniverse || (rows.length === 0 && !isLoading)) {
+    return (
+      <div className="py-10 text-center">
+        <p className="text-zinc-500 text-sm">No universe configured for this bot yet.</p>
+        <p className="text-zinc-600 text-xs mt-1">
+          Options bot universes are being wired up — check back after the next deploy.
+        </p>
+      </div>
+    );
+  }
+
+  const fmt$ = (v: number | null) => {
+    if (v == null) return "—";
+    if (v >= 1000) return `$${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+    return `$${v.toFixed(v >= 10 ? 2 : 4)}`;
+  };
+
+  return (
+    <div className="space-y-1">
+      {/* Header explainer */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-zinc-500">
+          {rows.length} tickers monitored · scans {cadence} · sorted by distance to entry
+        </p>
+        {lastUpdate && (
+          <span className="text-[10px] text-zinc-600 tabular-nums">
+            Updated {Math.round((Date.now() - lastUpdate.getTime()) / 1000)}s ago
+          </span>
+        )}
+      </div>
+
+      {rows.map((row) => {
+        const isAboutToEnter = row.distance_to_trigger_pct <= 5 && row.criteria_status !== "triggered";
+        const isTriggered = row.criteria_status === "triggered" || row.distance_to_trigger_pct <= 0;
+        const changePos = row.change_24h_pct >= 0;
+
+        return (
+          <button
+            key={row.symbol}
+            onClick={() => navigate(`/chart?symbol=${row.symbol.replace("/", "-")}`)}
+            className={cn(
+              "w-full text-left rounded-xl border px-4 py-3 transition-all hover:border-zinc-600 group",
+              isTriggered
+                ? "border-lime-500/40 bg-lime-500/5 hover:bg-lime-500/10"
+                : isAboutToEnter
+                ? "border-lime-500/30 bg-lime-500/5 hover:bg-lime-500/10"
+                : row.distance_color === "yellow"
+                ? "border-yellow-500/20 bg-zinc-900"
+                : "border-zinc-800 bg-zinc-900"
+            )}
+          >
+            <div className="flex items-start gap-3">
+              {/* Left: symbol + price */}
+              <div className="min-w-[90px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold text-white text-sm">{row.symbol}</span>
+                  {(isTriggered || isAboutToEnter) && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500 text-black leading-none">
+                      {isTriggered ? "ENTRY" : "CLOSE"}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 flex items-center gap-1">
+                  <span className="text-xs text-zinc-300 tabular-nums">{fmt$(row.current_price)}</span>
+                  <span className={cn("text-[10px] tabular-nums", changePos ? "text-lime-400" : "text-red-400")}>
+                    {changePos ? "+" : ""}{row.change_24h_pct.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Middle: strategy + criteria */}
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wide truncate">
+                  {row.strategy_being_evaluated}
+                </p>
+                <p className="text-xs text-zinc-300 leading-snug mt-0.5 line-clamp-2">
+                  {row.criteria_summary}
+                </p>
+                <div className="mt-1.5 space-y-1">
+                  <DistanceBar pct={row.distance_to_trigger_pct} color={row.distance_color} />
+                  <StrengthMeter pct={row.signal_strength_pct} />
+                </div>
+              </div>
+
+              {/* Right: distance + scanned */}
+              <div className="flex-shrink-0 text-right min-w-[80px]">
+                <span className={cn(
+                  "text-xs font-semibold",
+                  row.distance_color === "green" ? "text-lime-400" :
+                  row.distance_color === "yellow" ? "text-yellow-400" : "text-zinc-500"
+                )}>
+                  {row.distance_to_trigger_label}
+                </span>
+                <p className="text-[10px] text-zinc-600 mt-1">
+                  {row.last_scanned_at
+                    ? formatRelativeAgo(row.last_scanned_at)
+                    : "—"}
+                </p>
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Legacy watchlist table (kept for AI conviction column) ───────────────────
 
 function WatchlistTable({
   botName,
@@ -689,28 +865,13 @@ function WatchlistTable({
 
   if (safeWatchlist.length === 0) {
     return (
-      <p className="text-zinc-600 text-sm py-6 text-center">
-        Watchlist rebuilds at 8:30am ET. Check back after market open.
+      <p className="text-zinc-600 text-sm py-4 text-center">
+        Score data unavailable — entry-readiness shown above.
       </p>
     );
   }
 
   const displayed = showAll ? safeWatchlist : safeWatchlist.slice(0, 20);
-
-  function statusBadgeClass(status: string): string {
-    const s = status?.toLowerCase() ?? "";
-    if (s === "active") return "bg-lime-500/15 text-lime-400 border-lime-500/30";
-    if (s === "blacklisted") return "bg-red-500/15 text-red-400 border-red-500/30";
-    return "bg-zinc-800 text-zinc-400 border-zinc-700";
-  }
-
-  function getTopReason(reasons: Record<string, number> | null): string {
-    if (!reasons) return "—";
-    const entries = Object.entries(reasons);
-    if (entries.length === 0) return "—";
-    const top = entries.sort((a, b) => b[1] - a[1])[0];
-    return top[0].replace(/_/g, " ");
-  }
 
   return (
     <div>
@@ -722,7 +883,6 @@ function WatchlistTable({
               <th className="text-left pb-2 font-medium">Symbol</th>
               <th className="text-left pb-2 font-medium w-32">Score</th>
               <th className="text-left pb-2 font-medium">AI Conviction</th>
-              <th className="text-left pb-2 font-medium">Status</th>
               <th className="text-right pb-2 font-medium">Last Evaluated</th>
             </tr>
           </thead>
@@ -757,11 +917,6 @@ function WatchlistTable({
                     ) : (
                       <span className="text-zinc-700 text-xs">Not analyzed</span>
                     )}
-                  </td>
-                  <td className="py-2.5">
-                    <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded-full border", statusBadgeClass(item.status))}>
-                      {item.status}
-                    </span>
                   </td>
                   <td className="py-2.5 text-right text-xs text-zinc-500">
                     {formatRelativeAgo(item.last_evaluated_at)}
@@ -2262,13 +2417,33 @@ export default function BotDetailPage() {
 
       {/* Watchlist tab */}
       {activeTab === "watchlist" && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Watchlist</h2>
-          <WatchlistTable
-            botName={botName}
-            analysisBySymbol={analysisBySymbol}
-            onSelectAnalysis={setAnalystPanel}
-          />
+        <div className="space-y-4">
+          {/* Live entry-readiness feed */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-zinc-300">
+                {meta?.displayName ?? botName} Watchlist
+              </h2>
+              <span className="text-[10px] text-zinc-600">Refreshes every 30s</span>
+            </div>
+            <EntryReadinessTable
+              botName={botName}
+              botDisplayName={meta?.displayName ?? botName}
+              navigate={navigate}
+            />
+          </div>
+
+          {/* AI conviction scores (secondary) */}
+          {Object.keys(analysisBySymbol).length > 0 && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+              <h2 className="text-sm font-semibold text-zinc-300 mb-4">AI Conviction Scores</h2>
+              <WatchlistTable
+                botName={botName}
+                analysisBySymbol={analysisBySymbol}
+                onSelectAnalysis={setAnalystPanel}
+              />
+            </div>
+          )}
         </div>
       )}
       {analystPanel && (

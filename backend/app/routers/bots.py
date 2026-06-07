@@ -1998,6 +1998,425 @@ def get_watchlist(
     }
 
 
+# ── GET /api/bots/{profile_name}/watchlist-readiness ─────────────────────────
+
+_READINESS_CACHE: dict[str, tuple[float, list]] = {}  # profile_name → (ts, rows)
+_READINESS_TTL = 60  # seconds
+
+# Canonical universes per bot (fallback when profile YAML has no explicit list)
+_BOT_UNIVERSES: dict[str, list[str]] = {
+    "stock_swing": [
+        "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","JPM","V","UNH",
+        "XOM","LLY","AVGO","HD","PG","MA","COST","MRK","ABBV","CVX",
+        "AMD","NFLX","PEP","BAC","KO","TMO","WMT","DIS","INTC","CRM",
+        "QCOM","ADBE","ORCL","TXN","ACN","NEE","MDT","HON","INTU","AMGN",
+        "ISRG","GS","BLK","SPGI","NOW","AMAT","LRCX","MRVL","PANW","CRWD",
+    ],
+    "stock_day": [
+        "SPY","QQQ","AAPL","MSFT","NVDA","AMZN","META","TSLA","AMD","NFLX",
+        "COIN","MSTR","GME","AMC","SOFI","PLTR","HOOD","RIVN","LCID","UPST",
+    ],
+    "stock_lt": [
+        "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","JPM","V","UNH",
+        "XOM","LLY","AVGO","HD","PG","MA","COST","MRK","ABBV","CVX",
+    ],
+    "crypto_swing": [
+        "BTC/USD","ETH/USD","SOL/USD","BNB/USD","XRP/USD","ADA/USD","AVAX/USD",
+        "DOGE/USD","DOT/USD","LINK/USD","MATIC/USD","UNI/USD","ATOM/USD","LTC/USD",
+        "BCH/USD","FIL/USD","NEAR/USD","APT/USD","ARB/USD","OP/USD",
+    ],
+    "crypto_day": [
+        "BTC/USD","ETH/USD","SOL/USD","DOGE/USD","ADA/USD",
+        "AVAX/USD","LINK/USD","MATIC/USD","ARB/USD","OP/USD",
+    ],
+    "crypto_lt": [
+        "BTC/USD","ETH/USD","SOL/USD","ADA/USD","AVAX/USD",
+    ],
+    "crypto_onchain": [
+        "BTC/USD","ETH/USD","SOL/USD","MATIC/USD","LINK/USD",
+    ],
+    "options_income": [
+        "SPY","QQQ","IWM","GLD","SLV","TLT","XLE","XLF","XLK","XLV",
+    ],
+    "options_directional": [
+        "NVDA","TSLA","AAPL","META","MSFT","AMZN","AMD","GOOGL","NFLX","CRM",
+        "PLTR","COIN","MSTR","SOFI","SNAP","UBER","LYFT","SHOP","RBLX","U",
+    ],
+}
+
+# Primary indicator per strategy (used to pick criteria display)
+_STRATEGY_INDICATOR: dict[str, str] = {
+    "zscore": "zscore", "mean_reversion": "zscore", "crypto_zscore_mean_reversion": "zscore",
+    "rsi": "rsi", "rsi_bands": "rsi", "crypto_rsi_bands": "rsi", "crypto_rsi_mean_reversion": "rsi",
+    "vwap": "vwap", "crypto_vwap_reversion": "vwap",
+    "golden_cross": "ma_cross", "crypto_ema_cross": "ma_cross",
+    "macd_crossover": "macd", "crypto_macd_swing": "macd",
+    "bollinger_squeeze": "bollinger", "crypto_bollinger_touch": "bollinger",
+    "momentum_breakout": "momentum", "crypto_intraday_momentum": "momentum",
+    "crypto_volatility_breakout": "breakout",
+}
+
+
+def _yf_symbol(symbol: str, asset_class: str) -> str:
+    """Normalize a symbol for yfinance."""
+    s = symbol.replace("/", "-")
+    if asset_class == "crypto" and "-" not in s and not s.endswith("USD"):
+        s = s + "-USD"
+    # BTCUSD → BTC-USD
+    if asset_class == "crypto" and len(s) > 4 and s.endswith("USD") and "-" not in s:
+        s = s[:-3] + "-USD"
+    return s
+
+
+def _rsi(closes: list[float], period: int = 14) -> float | None:
+    if len(closes) < period + 1:
+        return None
+    gains, losses = [], []
+    for i in range(1, len(closes)):
+        d = closes[i] - closes[i - 1]
+        gains.append(max(d, 0.0))
+        losses.append(max(-d, 0.0))
+    avg_g = sum(gains[-period:]) / period
+    avg_l = sum(losses[-period:]) / period
+    if avg_l == 0:
+        return 100.0
+    rs = avg_g / avg_l
+    return round(100 - 100 / (1 + rs), 2)
+
+
+def _zscore(closes: list[float], period: int = 20) -> float | None:
+    if len(closes) < period:
+        return None
+    window = closes[-period:]
+    mean = sum(window) / period
+    std = (sum((x - mean) ** 2 for x in window) / period) ** 0.5
+    if std == 0:
+        return 0.0
+    return round((closes[-1] - mean) / std, 3)
+
+
+def _sma(closes: list[float], period: int) -> float | None:
+    if len(closes) < period:
+        return None
+    return sum(closes[-period:]) / period
+
+
+def _macd(closes: list[float]) -> tuple[float, float] | None:
+    """Returns (macd_line, signal_line) or None."""
+    def ema(data: list[float], span: int) -> list[float]:
+        k = 2 / (span + 1)
+        result = [data[0]]
+        for v in data[1:]:
+            result.append(v * k + result[-1] * (1 - k))
+        return result
+
+    if len(closes) < 35:
+        return None
+    ema12 = ema(closes, 12)
+    ema26 = ema(closes, 26)
+    macd_line = [a - b for a, b in zip(ema12[25:], ema26[25:])]
+    if len(macd_line) < 9:
+        return None
+    signal = ema(macd_line, 9)
+    return round(macd_line[-1], 4), round(signal[-1], 4)
+
+
+def _compute_symbol_readiness(
+    symbol: str,
+    asset_class: str,
+    strategy_names: list[str],
+    conf_threshold: float,
+    wl_score: float | None,
+    wl_last_scanned: str | None,
+) -> dict:
+    """Compute entry-readiness for one symbol. Returns a dict row."""
+    import time as _time
+    t0 = _time.time()
+
+    try:
+        import yfinance as yf
+        yf_sym = _yf_symbol(symbol, asset_class)
+        ticker = yf.Ticker(yf_sym)
+        hist = ticker.history(period="60d", interval="1d", timeout=8)
+        closes = hist["Close"].tolist() if not hist.empty else []
+        current_price = closes[-1] if closes else 0.0
+
+        # 24h change
+        change_24h_pct = 0.0
+        if len(closes) >= 2:
+            change_24h_pct = round((closes[-1] - closes[-2]) / closes[-2] * 100, 2)
+
+    except Exception:
+        closes = []
+        current_price = 0.0
+        change_24h_pct = 0.0
+
+    # Determine primary indicator from strategy list
+    indicator = "score"
+    for sname in strategy_names:
+        key = next((k for k in _STRATEGY_INDICATOR if k in sname.lower()), None)
+        if key:
+            indicator = _STRATEGY_INDICATOR[key]
+            break
+
+    # Compute indicators
+    rsi_val = _rsi(closes) if closes else None
+    z_val = _zscore(closes) if closes else None
+    sma50 = _sma(closes, 50) if closes else None
+    sma200 = _sma(closes, 200) if closes else None
+    macd_vals = _macd(closes) if closes else None
+
+    # Build criteria summary + distance
+    criteria_summary = ""
+    distance_pct: float | None = None
+    criteria_status = "watching"
+
+    if indicator == "rsi" and rsi_val is not None:
+        buy_thr, sell_thr = 30.0, 70.0
+        if rsi_val < buy_thr:
+            criteria_summary = f"RSI {rsi_val:.1f} — below {buy_thr:.0f}, entry triggered"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        elif rsi_val > sell_thr:
+            criteria_summary = f"RSI {rsi_val:.1f} — above {sell_thr:.0f}, short triggered"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        elif rsi_val <= 50:
+            criteria_summary = f"RSI {rsi_val:.1f} — need <{buy_thr:.0f} to enter long"
+            distance_pct = round((rsi_val - buy_thr) / buy_thr * 100, 1)
+        else:
+            criteria_summary = f"RSI {rsi_val:.1f} — need >{sell_thr:.0f} to enter short"
+            distance_pct = round((sell_thr - rsi_val) / sell_thr * 100, 1)
+
+    elif indicator == "zscore" and z_val is not None:
+        buy_thr, sell_thr = -1.5, 1.5
+        if z_val < buy_thr:
+            criteria_summary = f"Z-score {z_val:.2f} — below {buy_thr}, entry triggered"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        elif z_val > sell_thr:
+            criteria_summary = f"Z-score {z_val:.2f} — above +{sell_thr}, short triggered"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        elif z_val < 0:
+            criteria_summary = f"Z-score {z_val:.2f} — need <{buy_thr} to enter long"
+            distance_pct = round(abs(buy_thr - z_val) / abs(buy_thr) * 100, 1)
+        else:
+            criteria_summary = f"Z-score {z_val:.2f} — need >{sell_thr} to enter short"
+            distance_pct = round(abs(z_val - sell_thr) / abs(sell_thr) * 100, 1)
+
+    elif indicator == "ma_cross" and sma50 is not None and sma200 is not None:
+        diff_pct = (sma50 - sma200) / sma200 * 100
+        if diff_pct > 0:
+            criteria_summary = f"50MA ${sma50:,.0f} above 200MA ${sma200:,.0f} (+{diff_pct:.1f}%) — golden cross active"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        else:
+            criteria_summary = f"50MA ${sma50:,.0f}, 200MA ${sma200:,.0f} — need 50MA to cross above ({abs(diff_pct):.1f}% gap)"
+            distance_pct = round(abs(diff_pct), 1)
+
+    elif indicator == "macd" and macd_vals is not None:
+        macd_line, sig_line = macd_vals
+        diff = macd_line - sig_line
+        if diff > 0:
+            criteria_summary = f"MACD {macd_line:.4f} above signal {sig_line:.4f} — bullish crossover active"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        else:
+            criteria_summary = f"MACD {macd_line:.4f} below signal {sig_line:.4f} — need crossover above"
+            distance_pct = round(abs(diff) / (abs(sig_line) + 1e-9) * 100, 1)
+
+    elif indicator == "bollinger" and closes and z_val is not None:
+        if z_val < -1.8:
+            criteria_summary = f"Price at lower Bollinger band (z={z_val:.2f}) — squeeze entry triggered"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        else:
+            criteria_summary = f"Z-score {z_val:.2f} — need <-1.8 for Bollinger touch entry"
+            distance_pct = round(max(0.0, (z_val + 1.8) / 1.8 * 100), 1)
+
+    elif indicator == "momentum" and len(closes) >= 5:
+        ret_5d = (closes[-1] - closes[-5]) / closes[-5] * 100
+        if ret_5d > 3.0:
+            criteria_summary = f"5d return +{ret_5d:.1f}% — momentum threshold cleared"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        else:
+            criteria_summary = f"5d return {ret_5d:+.1f}% — need >+3% momentum"
+            distance_pct = round(max(0.0, (3.0 - ret_5d) / 3.0 * 100), 1)
+
+    # Fallback: use watchlist score as proxy
+    if criteria_summary == "" or distance_pct is None:
+        score_pct = (wl_score or 0.0) / 100.0
+        thr_norm = conf_threshold
+        if score_pct >= thr_norm:
+            criteria_summary = f"Composite score {score_pct*100:.0f} — above threshold"
+            distance_pct = 0.0
+            criteria_status = "triggered"
+        else:
+            criteria_summary = f"Composite score {score_pct*100:.0f} — need {thr_norm*100:.0f} to trigger"
+            distance_pct = round((thr_norm - score_pct) / thr_norm * 100, 1) if thr_norm > 0 else 50.0
+
+    # Determine primary strategy label
+    if len(strategy_names) == 1:
+        strategy_label = strategy_names[0].replace("_", " ").title()
+    elif len(strategy_names) == 0:
+        strategy_label = "Multi-strategy"
+    else:
+        # Show first matching strategy name
+        primary = strategy_names[0]
+        for s in strategy_names:
+            key = next((k for k in _STRATEGY_INDICATOR if k in s.lower()), None)
+            if key and _STRATEGY_INDICATOR[key] == indicator:
+                primary = s
+                break
+        strategy_label = primary.replace("_", " ").title()
+
+    # Signal strength: (wl_score/100) / conf_threshold, capped at 100%
+    confidence_now = (wl_score or 0.0) / 100.0
+    signal_strength_pct = round(min(100.0, confidence_now / conf_threshold * 100), 1) if conf_threshold > 0 else 0.0
+
+    # Distance label
+    d = distance_pct or 0.0
+    if d <= 0:
+        distance_label = "Triggered"
+        distance_color = "green"
+    elif d < 10:
+        distance_label = f"{d:.1f}% away"
+        distance_color = "green"
+    elif d < 30:
+        distance_label = f"{d:.1f}% away"
+        distance_color = "yellow"
+    else:
+        distance_label = f"{d:.1f}% away"
+        distance_color = "gray"
+
+    # last_scanned: prefer watchlist DB timestamp, fall back to now
+    last_scanned = wl_last_scanned or datetime.now(timezone.utc).isoformat()
+
+    return {
+        "symbol": symbol,
+        "current_price": round(current_price, 4) if current_price else None,
+        "change_24h_pct": change_24h_pct,
+        "strategy_being_evaluated": strategy_label,
+        "criteria_summary": criteria_summary,
+        "criteria_status": criteria_status,
+        "distance_to_trigger_pct": round(distance_pct, 1) if distance_pct is not None else 50.0,
+        "distance_to_trigger_label": distance_label,
+        "distance_color": distance_color,
+        "confidence_now": round(confidence_now, 3),
+        "confidence_threshold": conf_threshold,
+        "signal_strength_pct": signal_strength_pct,
+        "last_scanned_at": last_scanned,
+        "rsi": rsi_val,
+        "zscore": z_val,
+    }
+
+
+@router.get("/{profile_name}/watchlist-readiness")
+async def get_watchlist_readiness(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Live entry-readiness diagnostics for every symbol in a bot's universe."""
+    import asyncio
+    import time as _time
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Cache hit
+    now_ts = _time.time()
+    cached = _READINESS_CACHE.get(profile_name)
+    if cached and now_ts - cached[0] < _READINESS_TTL:
+        rows, cadence = cached[1], cached[2]
+        return {"profile_name": profile_name, "rows": rows, "cadence": cadence}
+
+    # Load profile YAML
+    try:
+        from strategy_lab.seeds import load_profile
+        profile_cfg = load_profile(profile_name)
+    except Exception:
+        profile_cfg = {}
+
+    if not profile_cfg:
+        raise HTTPException(404, f"Bot profile '{profile_name}' not found")
+
+    asset_class = profile_cfg.get("asset_class", "equities")
+    if "crypto" in asset_class or "crypto" in profile_name:
+        asset_class = "crypto"
+    else:
+        asset_class = "stock"
+
+    strategies: list[str] = profile_cfg.get("strategies", [])
+    conf_threshold: float = float(profile_cfg.get("confidence_threshold", 0.55))
+    cadence: str = str(profile_cfg.get("cadence", "5 16 * * 1-5"))
+
+    # Determine universe
+    universe_cfg = profile_cfg.get("universe", {})
+    if isinstance(universe_cfg, dict) and universe_cfg.get("symbols"):
+        symbols = [str(s) for s in universe_cfg["symbols"]]
+    else:
+        symbols = _BOT_UNIVERSES.get(profile_name, [])
+
+    if not symbols:
+        # Fall back to existing BotWatchlist entries
+        profile_db = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+        if profile_db:
+            wl_rows = (
+                db.query(BotWatchlist)
+                .filter(BotWatchlist.profile_id == profile_db.id, BotWatchlist.status == "active")
+                .order_by(BotWatchlist.score.desc())
+                .limit(50)
+                .all()
+            )
+            symbols = [r.symbol for r in wl_rows]
+
+    # Limit to 50 symbols per call
+    symbols = symbols[:50]
+
+    # Build score + last_scanned map from DB watchlist
+    profile_db = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    wl_map: dict[str, tuple[float, str | None]] = {}
+    if profile_db:
+        wl_entries = (
+            db.query(BotWatchlist)
+            .filter(BotWatchlist.profile_id == profile_db.id)
+            .all()
+        )
+        for w in wl_entries:
+            ts = w.last_evaluated_at.isoformat() if w.last_evaluated_at else None
+            wl_map[w.symbol] = (w.score or 0.0, ts)
+            # Also try normalizing (BTC/USD ↔ BTCUSD)
+            wl_map[w.symbol.replace("/", "")] = (w.score or 0.0, ts)
+
+    # Options bots — universe not configured yet
+    is_options = "options" in profile_name
+    if is_options and not symbols:
+        _READINESS_CACHE[profile_name] = (now_ts, [], cadence)
+        return {"profile_name": profile_name, "rows": [], "cadence": cadence, "no_universe": True}
+
+    # Compute readiness in parallel using a thread pool
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=min(8, len(symbols))) as pool:
+        futures = []
+        for sym in symbols:
+            score, last_scanned = wl_map.get(sym, wl_map.get(sym.replace("/", ""), (0.0, None)))
+            futures.append(
+                loop.run_in_executor(
+                    pool,
+                    _compute_symbol_readiness,
+                    sym, asset_class, strategies, conf_threshold, score, last_scanned,
+                )
+            )
+        rows = list(await asyncio.gather(*futures, return_exceptions=False))
+
+    # Sort by distance_to_trigger ascending (0 = triggered, higher = further away)
+    rows.sort(key=lambda r: r["distance_to_trigger_pct"])
+
+    _READINESS_CACHE[profile_name] = (now_ts, rows, cadence)
+    return {"profile_name": profile_name, "rows": rows, "cadence": cadence}
+
+
 # ── GET /api/bots/{profile_name}/health ───────────────────────────────────────
 
 @router.get("/{profile_name}/health")
