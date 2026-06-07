@@ -112,10 +112,42 @@ def _factor_rank(signals_by_strategy: list[list]) -> list:
     return ranked
 
 
+def _any_above_threshold(signals_by_strategy: list[list], threshold: float = 0.5) -> list:
+    """Accept any signal from any single strategy if confidence >= threshold.
+
+    No consensus required — one strategy firing is enough. Deduplicates by
+    (symbol, side), keeping the highest-confidence signal when multiple
+    strategies agree on the same pair.
+    """
+    from strategy_lab.core.signals import Signal
+
+    best: dict[tuple[str, str], Any] = {}
+    for strategy_signals in signals_by_strategy:
+        for sig in strategy_signals:
+            if sig.confidence < threshold:
+                continue
+            key = (sig.symbol, sig.side)
+            if key not in best or sig.confidence > best[key].confidence:
+                best[key] = sig
+
+    out = []
+    for sig in best.values():
+        out.append(Signal(
+            symbol=sig.symbol,
+            side=sig.side,
+            confidence=sig.confidence,
+            size_hint=sig.size_hint,
+            reason=f"[ensemble:any_above_threshold≥{threshold:.2f}] {sig.reason}",
+            strategy=sig.strategy,
+        ))
+    return out
+
+
 def _apply_ensemble(
     ensemble: str,
     signals_by_strategy: list[list],
     n_strategies: int,
+    confidence_threshold: float = 0.5,
 ) -> list:
     """Dispatch to the appropriate ensemble aggregator."""
     if ensemble == "weighted_vote":
@@ -124,6 +156,8 @@ def _apply_ensemble(
         return _majority_vote(signals_by_strategy, n_strategies)
     if ensemble == "factor_rank":
         return _factor_rank(signals_by_strategy)
+    if ensemble == "any_above_threshold":
+        return _any_above_threshold(signals_by_strategy, confidence_threshold)
     # Unknown ensemble — fall back to flat merge
     logger.warning("Unknown ensemble '%s', falling back to flat merge", ensemble)
     return [sig for strat_sigs in signals_by_strategy for sig in strat_sigs]
@@ -330,7 +364,8 @@ def run_bot_profile(profile_name: str) -> dict:
 
             # 8. Apply ensemble vote
             ensemble = profile.get("ensemble", "weighted_vote")
-            signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded))
+            conf_threshold = float(profile.get("confidence_threshold", 0.5))
+            signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded), conf_threshold)
             logger.info(
                 "[runner:%s] after ensemble (%s): %d signals",
                 profile_name, ensemble, len(signals),
@@ -806,7 +841,8 @@ def trace_bot_profile(profile_name: str, confidence_threshold_override: float | 
 
             # ── Ensemble ──────────────────────────────────────────────────────
             ensemble = profile.get("ensemble", "weighted_vote")
-            signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded))
+            conf_threshold = float(profile.get("confidence_threshold", 0.5))
+            signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded), conf_threshold)
             trace["after_ensemble"] = len(signals)
 
             # ── MTF confluence ────────────────────────────────────────────────
