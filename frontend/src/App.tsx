@@ -48,7 +48,6 @@ const SmartTransfersPage = lazy(() => import("@/pages/SmartTransfersPage"));
 const HeatMapPage = lazy(() => import("@/pages/HeatMapPage"));
 const OptionsFlowPage = lazy(() => import("@/pages/OptionsFlowPage"));
 const MacroDashboardPage = lazy(() => import("@/pages/MacroDashboardPage"));
-const SmartMoneyPage = lazy(() => import("@/pages/SmartMoneyPage"));
 const BacktestLabPage = lazy(() => import("@/pages/BacktestLabPage"));
 const ScannersPage = lazy(() => import("@/pages/ScannersPage"));
 const AlertBuilderPage = lazy(() => import("@/pages/AlertBuilderPage"));
@@ -321,7 +320,6 @@ function AppInner() {
         <Route path="/admin/heatmap"     element={<AdminRoute><HeatMapPage /></AdminRoute>} />
         <Route path="/admin/flow"        element={<AdminRoute><OptionsFlowPage /></AdminRoute>} />
         <Route path="/admin/macro"       element={<AdminRoute><MacroDashboardPage /></AdminRoute>} />
-        <Route path="/admin/smart-money" element={<AdminRoute><SmartMoneyPage /></AdminRoute>} />
         <Route path="/admin/backtest"    element={<AdminRoute><BacktestLabPage /></AdminRoute>} />
         <Route path="/admin/scanners"    element={<AdminRoute><ScannersPage /></AdminRoute>} />
         <Route path="/social" element={<Social />} />

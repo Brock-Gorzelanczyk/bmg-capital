@@ -106,7 +106,6 @@ const NAV_ADMIN = [
   { to: "/admin/heatmap",      label: "Heat Map",        Icon: Grid3X3    },
   { to: "/admin/flow",         label: "Options Flow",    Icon: Zap        },
   { to: "/admin/macro",        label: "Macro Dashboard", Icon: Globe      },
-  { to: "/admin/smart-money",  label: "Smart Money",     Icon: Eye        },
   { to: "/admin/backtest",     label: "Backtest Lab",    Icon: TestTube2  },
 ];
 
