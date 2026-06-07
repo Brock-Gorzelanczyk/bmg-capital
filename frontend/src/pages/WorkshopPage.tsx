@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from "react";
-import { CheckSquare, Square, Lock, ChevronDown, ChevronUp, Upload, Flame, BookOpen, X, Trophy } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { CheckSquare, Square, Lock, ChevronDown, ChevronUp, Upload, Flame, BookOpen, X, Trophy, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { analyzeImage, type ImageAnalysis } from "@/api/workshop";
+import { useIsAdmin } from "@/store/authStore";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -194,6 +196,163 @@ function DailyChallenge() {
   );
 }
 
+function TAImageReadUnlocked() {
+  const [isDragging, setIsDragging] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file (PNG, JPG, WebP)");
+      return;
+    }
+    setPreview(URL.createObjectURL(file));
+    setAnalysis(null);
+    setError(null);
+    setIsAnalyzing(true);
+    try {
+      const result = await analyzeImage(file);
+      setAnalysis(result.analysis);
+    } catch {
+      setError("Analysis failed — try a clearer chart image");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, []);
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
+
+  const qualityColor = analysis?.setup_quality === "strong"
+    ? "text-lime-400" : analysis?.setup_quality === "moderate"
+    ? "text-yellow-400" : "text-red-400";
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Upload size={15} className="text-lime-400" />
+        <h2 className="font-bold text-zinc-200">TA Image Read</h2>
+        <span className="ml-auto text-[10px] font-bold bg-lime-500/20 text-lime-400 px-2 py-0.5 rounded-full border border-lime-500/30">UNLOCKED</span>
+      </div>
+      <p className="text-sm text-zinc-500 mb-4 leading-relaxed">Upload a chart screenshot and AI will identify the pattern, support/resistance levels, and entry signals.</p>
+
+      <div
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={onDrop}
+        onClick={() => inputRef.current?.click()}
+        className={cn(
+          "relative rounded-xl border-2 border-dashed p-6 flex flex-col items-center gap-3 cursor-pointer transition-colors",
+          isDragging ? "border-lime-500/60 bg-lime-500/5" : "border-zinc-700 hover:border-zinc-600 bg-zinc-950/50"
+        )}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        />
+        {preview ? (
+          <img src={preview} alt="Chart preview" className="max-h-48 rounded-lg object-contain" />
+        ) : (
+          <>
+            <Upload size={28} className="text-zinc-600" />
+            <p className="text-xs text-zinc-500 font-medium">Drop a chart image here, or click to browse</p>
+          </>
+        )}
+        {isAnalyzing && (
+          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 rounded-xl">
+            <div className="flex items-center gap-2 text-zinc-300">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-sm font-medium">Analyzing chart…</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-3 flex items-center gap-2 text-red-400 text-sm">
+          <AlertCircle size={14} />
+          {error}
+        </div>
+      )}
+
+      {analysis && (
+        <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {analysis.asset && <span className="text-xs font-semibold text-zinc-300 bg-zinc-800 px-2 py-0.5 rounded">{analysis.asset}</span>}
+              {analysis.timeframe && <span className="text-xs text-zinc-500">{analysis.timeframe}</span>}
+            </div>
+            <span className={cn("text-xs font-bold capitalize", qualityColor)}>
+              {analysis.setup_quality} setup
+            </span>
+          </div>
+
+          <p className="text-sm text-zinc-300 leading-relaxed">{analysis.thesis_summary}</p>
+
+          {analysis.setup_quality_reason && (
+            <p className="text-xs text-zinc-500 italic">{analysis.setup_quality_reason}</p>
+          )}
+
+          {analysis.key_levels.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1.5">Key Levels</p>
+              <div className="flex flex-wrap gap-1.5">
+                {analysis.key_levels.map((l, i) => (
+                  <span key={i} className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">
+                    {l.label}: ${l.price}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {analysis.supporting.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-lime-600 uppercase tracking-wide mb-1">Bullish</p>
+              <ul className="space-y-0.5">
+                {analysis.supporting.map((s, i) => <li key={i} className="text-xs text-zinc-400 flex gap-1.5"><span className="text-lime-500 flex-shrink-0">+</span>{s}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {analysis.counterarguments.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">Bearish</p>
+              <ul className="space-y-0.5">
+                {analysis.counterarguments.map((s, i) => <li key={i} className="text-xs text-zinc-400 flex gap-1.5"><span className="text-red-500 flex-shrink-0">−</span>{s}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {analysis.invalidation && (
+            <div className="bg-zinc-950 rounded-xl px-3 py-2 border border-zinc-800">
+              <p className="text-xs font-semibold text-zinc-500 mb-0.5">Invalidation</p>
+              <p className="text-xs text-zinc-400">{analysis.invalidation}</p>
+            </div>
+          )}
+
+          <button
+            onClick={() => { setAnalysis(null); setPreview(null); setError(null); if (inputRef.current) inputRef.current.value = ""; }}
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2"
+          >
+            Analyze another chart
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LockedFeature() {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4 relative overflow-hidden">
@@ -248,6 +407,7 @@ export default function WorkshopPage() {
   const [progress, setProgress] = useState<TAProgress>(loadProgress);
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
+  const isAdmin = useIsAdmin();
 
   useEffect(() => {
     setProgress((prev) => { const u = updateStreak(prev); saveProgress(u); return u; });
@@ -285,7 +445,7 @@ export default function WorkshopPage() {
         {SECTIONS.map((s) => <SkillSection key={s.id} section={s} completed={completedSet} onOpenLesson={setActiveLesson} />)}
       </div>
 
-      <LockedFeature />
+      {isAdmin ? <TAImageReadUnlocked /> : <LockedFeature />}
 
       {activeLesson && (
         <LessonModal lesson={activeLesson} completed={completedSet.has(activeLesson.id)} onToggle={() => toggleLesson(activeLesson.id)} onClose={() => setActiveLesson(null)} />

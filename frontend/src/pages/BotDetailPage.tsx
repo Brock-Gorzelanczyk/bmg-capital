@@ -833,6 +833,94 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
   );
 }
 
+// ─── Top-3 watchlist preview (for Overview tab) ───────────────────────────────
+
+function WatchlistPreview({ botName, onViewAll }: { botName: string; onViewAll: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["watchlist-readiness", botName],
+    queryFn: () => getBotWatchlistReadiness(botName),
+    enabled: !!botName,
+    retry: 1,
+    staleTime: 25_000,
+    refetchInterval: 30_000,
+  });
+
+  const rows = (data?.rows ?? [])
+    .slice()
+    .sort((a, b) => a.distance_to_trigger_pct - b.distance_to_trigger_pct)
+    .slice(0, 3);
+
+  if (isLoading) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-zinc-300">Watchlist</h2>
+        </div>
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => <div key={i} className="animate-pulse h-10 bg-zinc-800 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (!rows.length) return null;
+
+  const fmt$ = (v: number | null) => {
+    if (v == null) return "—";
+    if (v >= 1000) return `$${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+    return `$${v.toFixed(v >= 10 ? 2 : 4)}`;
+  };
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-zinc-300">Watchlist — Closest to Entry</h2>
+        <button
+          onClick={onViewAll}
+          className="text-xs text-lime-400 hover:text-lime-300 transition-colors"
+        >
+          See full watchlist →
+        </button>
+      </div>
+      <div className="space-y-2">
+        {rows.map((row) => {
+          const isTriggered = row.criteria_status === "triggered" || row.distance_to_trigger_pct <= 0;
+          const isClose = row.distance_to_trigger_pct <= 5;
+          return (
+            <div
+              key={row.symbol}
+              className={cn(
+                "flex items-center justify-between rounded-xl border px-4 py-2.5",
+                isTriggered
+                  ? "border-lime-500/40 bg-lime-500/5"
+                  : isClose
+                  ? "border-lime-500/30 bg-lime-500/5"
+                  : row.distance_color === "yellow"
+                  ? "border-yellow-500/20 bg-zinc-900"
+                  : "border-zinc-800 bg-zinc-900"
+              )}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="font-semibold text-white text-sm">{row.symbol}</span>
+                <span className="text-xs text-zinc-500 truncate">{row.strategy_being_evaluated}</span>
+              </div>
+              <div className="flex items-center gap-4 flex-shrink-0">
+                <span className="text-xs text-zinc-400">{fmt$(row.current_price)}</span>
+                <span className={cn(
+                  "text-xs font-semibold",
+                  isTriggered ? "text-lime-400" : row.distance_color === "yellow" ? "text-yellow-400" : "text-zinc-400"
+                )}>
+                  {isTriggered ? "⚡ triggered" : `${row.distance_to_trigger_pct.toFixed(1)}% away`}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Legacy watchlist table (kept for AI conviction column) ───────────────────
 
 function WatchlistTable({
@@ -2044,226 +2132,224 @@ export default function BotDetailPage() {
         )}
       </div>
 
-      {/* ── Open Positions — always visible, first major data section ── */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">Open Positions</h2>
-        {isLoading ? (
-          <div className="animate-pulse space-y-2">
-            {[0, 1, 2].map((i) => <div key={i} className="h-10 bg-zinc-800 rounded" />)}
-          </div>
-        ) : positions.length === 0 ? (
-          <p className="text-zinc-600 text-sm py-6 text-center leading-relaxed">
-            Bot is scanning — open positions will appear here when it enters a trade.{" "}
-            Check the Watchlist tab to see what it&apos;s currently evaluating.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-                  <th className="text-left pb-2 font-medium">Symbol</th>
-                  <th className="text-left pb-2 font-medium">Side</th>
-                  <th className="text-right pb-2 font-medium">Qty</th>
-                  <th className="text-right pb-2 font-medium">Avg Cost</th>
-                  <th className="text-right pb-2 font-medium">Current Value</th>
-                  <th className="text-right pb-2 font-medium">Unrealized P&L</th>
-                  <th className="text-right pb-2 font-medium">Time Held</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.map((pos) => {
-                  const livePrice = livePrices[pos.symbol] ?? null;
-                  const avgCost = pos.avg_cost_cents ? pos.avg_cost_cents / 100 : null;
-                  const currentValue = livePrice && pos.qty ? livePrice * pos.qty : null;
-                  const unrealizedPnl = livePrice && avgCost && pos.qty
-                    ? (livePrice - avgCost) * pos.qty : null;
-                  const pnlPct = livePrice && avgCost
-                    ? ((livePrice - avgCost) / avgCost) * 100 : null;
-                  const timeHeld = pos.opened_at
-                    ? (() => {
-                        const ms = Date.now() - new Date(pos.opened_at).getTime();
-                        const hrs = Math.floor(ms / 3_600_000);
-                        const mins = Math.floor((ms % 3_600_000) / 60_000);
-                        return hrs >= 24
-                          ? `${Math.floor(hrs / 24)}d ${hrs % 24}h`
-                          : hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-                      })()
-                    : "—";
-                  return (
-                    <tr
-                      key={pos.id}
-                      className="border-b border-zinc-800/50 last:border-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
-                      onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
-                      title={`View ${pos.symbol} chart`}
-                    >
-                      <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
-                      <td className="py-2.5">
-                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">
-                          LONG
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
-                      <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
-                      <td className="py-2.5 text-right text-zinc-300">
-                        {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
-                      </td>
-                      <td className={cn(
-                        "py-2.5 text-right text-sm font-medium",
-                        unrealizedPnl == null ? "text-zinc-500"
-                          : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400"
-                      )}>
-                        {unrealizedPnl != null
-                          ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)} (${pnlPct! >= 0 ? "+" : ""}${pnlPct!.toFixed(2)}%)`
-                          : "—"}
-                      </td>
-                      <td className="py-2.5 text-right text-xs text-zinc-500">{timeHeld}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── Stats grid + Equity Curve — always visible ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* LEFT — Portfolio Summary */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: "Starting Capital", value: allocation?.starting_capital_cents ? `$${(allocation.starting_capital_cents / 100).toLocaleString()}` : "—" },
-              { label: "Current Value", value: "—" },
-              { label: "All-Time Return", value: "—", colored: false },
-              {
-                label: "30d Return",
-                value: formatPct(stats?.return_30d_pct ?? 0),
-                positive: (stats?.return_30d_pct ?? 0) >= 0,
-                colored: true,
-              },
-              {
-                label: "Today P&L",
-                value: formatPnl(stats?.today_pnl ?? 0),
-                positive: (stats?.today_pnl ?? 0) >= 0,
-                colored: true,
-              },
-              {
-                label: "Open Positions",
-                value: String(positions.length),
-                colored: false,
-              },
-            ].map((s) => (
-              <div key={s.label} className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
-                <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">{s.label}</p>
-                <p
-                  className={cn(
-                    "text-sm font-bold",
-                    s.colored ? (s.positive ? "text-lime-400" : "text-red-400") : "text-white"
-                  )}
-                >
-                  {s.value}
-                </p>
-              </div>
-            ))}
-          </div>
-          {allocation && (
-            <p className="text-xs text-zinc-500">
-              Allocated:{" "}
-              <span className="text-zinc-300 font-semibold">
-                ${allocation.starting_capital_cents ? (allocation.starting_capital_cents / 100).toLocaleString() : ((allocation.capital_pct / 100) * 100000).toLocaleString()} ({allocation.capital_pct}%)
-              </span>
-            </p>
-          )}
-        </div>
-
-        {/* RIGHT — Equity Curve */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-zinc-300">Equity Curve</h2>
-          {equityCurve.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center min-h-[180px]">
-              <p className="text-zinc-600 text-sm text-center px-4 leading-relaxed">
-                Bot too new for chart — first data point appears at end of today&apos;s trading session
-              </p>
-            </div>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={equityCurve} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={
-                        equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                          ? "#84cc16" : "#ef4444"
-                      } stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={
-                        equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                          ? "#84cc16" : "#ef4444"
-                      } stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip
-                    contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
-                    labelStyle={{ color: "#a1a1aa" }}
-                    formatter={(v: number) => [`$${v.toFixed(2)}`, "Portfolio"]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="portfolio"
-                    stroke={
-                      equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                        ? "#84cc16" : "#ef4444"
-                    }
-                    strokeWidth={2}
-                    fill="url(#equityGradient)"
-                    dot={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-              <div className="flex gap-4">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                  <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
-                  Portfolio
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── Current Regime — reference info, below actionable state ── */}
-      <RegimePanel regime={regime} isLoading={regimeLoading} />
-
-      {/* ── Upcoming Catalysts ── */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Upcoming Catalysts</h3>
-        <CatalystCalendar />
-      </div>
-
-      {/* PDT removal notice for day-trading bots */}
-      {(botName === "stock_day" || botName === "crypto_day") && (
-        <div className="flex items-start gap-3 bg-teal-500/10 border border-teal-500/30 rounded-xl px-4 py-3">
-          <span className="text-teal-400 mt-0.5 text-base leading-none">⚡</span>
-          <div>
-            <p className="text-xs font-semibold text-teal-400">PDT Rule Eliminated — June 4, 2026</p>
-            <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
-              FINRA Notice 26-10 removed the Pattern Day Trader $25,000 minimum. This bot now
-              trades without account-size restrictions. <span className="text-zinc-400">Paper mode active.</span>
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile swipe hint */}
-      <p className="text-xs text-zinc-700 text-center md:hidden">
-        Swipe between bots ←
-      </p>
-
       {/* Overview tab */}
       {activeTab === "overview" && (
         <div className="space-y-6">
+          {/* Open Positions */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-zinc-300 mb-4">Open Positions</h2>
+            {isLoading ? (
+              <div className="animate-pulse space-y-2">
+                {[0, 1, 2].map((i) => <div key={i} className="h-10 bg-zinc-800 rounded" />)}
+              </div>
+            ) : positions.length === 0 ? (
+              <p className="text-zinc-600 text-sm py-6 text-center leading-relaxed">
+                Bot is scanning — open positions will appear here when it enters a trade.{" "}
+                Check the Watchlist tab to see what it&apos;s currently evaluating.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+                      <th className="text-left pb-2 font-medium">Symbol</th>
+                      <th className="text-left pb-2 font-medium">Side</th>
+                      <th className="text-right pb-2 font-medium">Qty</th>
+                      <th className="text-right pb-2 font-medium">Avg Cost</th>
+                      <th className="text-right pb-2 font-medium">Current Value</th>
+                      <th className="text-right pb-2 font-medium">Unrealized P&L</th>
+                      <th className="text-right pb-2 font-medium">Time Held</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {positions.map((pos) => {
+                      const livePrice = livePrices[pos.symbol] ?? null;
+                      const avgCost = pos.avg_cost_cents ? pos.avg_cost_cents / 100 : null;
+                      const currentValue = livePrice && pos.qty ? livePrice * pos.qty : null;
+                      const unrealizedPnl = livePrice && avgCost && pos.qty
+                        ? (livePrice - avgCost) * pos.qty : null;
+                      const pnlPct = livePrice && avgCost
+                        ? ((livePrice - avgCost) / avgCost) * 100 : null;
+                      const timeHeld = pos.opened_at
+                        ? (() => {
+                            const ms = Date.now() - new Date(pos.opened_at).getTime();
+                            const hrs = Math.floor(ms / 3_600_000);
+                            const mins = Math.floor((ms % 3_600_000) / 60_000);
+                            return hrs >= 24
+                              ? `${Math.floor(hrs / 24)}d ${hrs % 24}h`
+                              : hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+                          })()
+                        : "—";
+                      return (
+                        <tr
+                          key={pos.id}
+                          className="border-b border-zinc-800/50 last:border-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                          onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
+                          title={`View ${pos.symbol} chart`}
+                        >
+                          <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
+                          <td className="py-2.5">
+                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                              LONG
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
+                          <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
+                          <td className="py-2.5 text-right text-zinc-300">
+                            {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
+                          </td>
+                          <td className={cn(
+                            "py-2.5 text-right text-sm font-medium",
+                            unrealizedPnl == null ? "text-zinc-500"
+                              : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400"
+                          )}>
+                            {unrealizedPnl != null
+                              ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)} (${pnlPct! >= 0 ? "+" : ""}${pnlPct!.toFixed(2)}%)`
+                              : "—"}
+                          </td>
+                          <td className="py-2.5 text-right text-xs text-zinc-500">{timeHeld}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Stats grid + Equity Curve */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* LEFT — Portfolio Summary */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "Starting Capital", value: allocation?.starting_capital_cents ? `$${(allocation.starting_capital_cents / 100).toLocaleString()}` : "—" },
+                  { label: "Current Value", value: "—" },
+                  { label: "All-Time Return", value: "—", colored: false },
+                  {
+                    label: "30d Return",
+                    value: formatPct(stats?.return_30d_pct ?? 0),
+                    positive: (stats?.return_30d_pct ?? 0) >= 0,
+                    colored: true,
+                  },
+                  {
+                    label: "Today P&L",
+                    value: formatPnl(stats?.today_pnl ?? 0),
+                    positive: (stats?.today_pnl ?? 0) >= 0,
+                    colored: true,
+                  },
+                  {
+                    label: "Open Positions",
+                    value: String(positions.length),
+                    colored: false,
+                  },
+                ].map((s) => (
+                  <div key={s.label} className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
+                    <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">{s.label}</p>
+                    <p
+                      className={cn(
+                        "text-sm font-bold",
+                        s.colored ? (s.positive ? "text-lime-400" : "text-red-400") : "text-white"
+                      )}
+                    >
+                      {s.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {allocation && (
+                <p className="text-xs text-zinc-500">
+                  Allocated:{" "}
+                  <span className="text-zinc-300 font-semibold">
+                    ${allocation.starting_capital_cents ? (allocation.starting_capital_cents / 100).toLocaleString() : ((allocation.capital_pct / 100) * 100000).toLocaleString()} ({allocation.capital_pct}%)
+                  </span>
+                </p>
+              )}
+            </div>
+
+            {/* RIGHT — Equity Curve */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
+              <h2 className="text-sm font-semibold text-zinc-300">Equity Curve</h2>
+              {equityCurve.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center min-h-[180px]">
+                  <p className="text-zinc-600 text-sm text-center px-4 leading-relaxed">
+                    Bot too new for chart — first data point appears at end of today&apos;s trading session
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={equityCurve} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={
+                            equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                              ? "#84cc16" : "#ef4444"
+                          } stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={
+                            equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                              ? "#84cc16" : "#ef4444"
+                          } stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                      <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip
+                        contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                        labelStyle={{ color: "#a1a1aa" }}
+                        formatter={(v: number) => [`$${v.toFixed(2)}`, "Portfolio"]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="portfolio"
+                        stroke={
+                          equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
+                            ? "#84cc16" : "#ef4444"
+                        }
+                        strokeWidth={2}
+                        fill="url(#equityGradient)"
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                  <div className="flex gap-4">
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                      <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
+                      Portfolio
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Current Regime */}
+          <RegimePanel regime={regime} isLoading={regimeLoading} />
+
+          {/* Upcoming Catalysts */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+            <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Upcoming Catalysts</h3>
+            <CatalystCalendar />
+          </div>
+
+          {/* PDT removal notice for day-trading bots */}
+          {(botName === "stock_day" || botName === "crypto_day") && (
+            <div className="flex items-start gap-3 bg-teal-500/10 border border-teal-500/30 rounded-xl px-4 py-3">
+              <span className="text-teal-400 mt-0.5 text-base leading-none">⚡</span>
+              <div>
+                <p className="text-xs font-semibold text-teal-400">PDT Rule Eliminated — June 4, 2026</p>
+                <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                  FINRA Notice 26-10 removed the Pattern Day Trader $25,000 minimum. This bot now
+                  trades without account-size restrictions. <span className="text-zinc-400">Paper mode active.</span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Top-3 watchlist preview */}
+          <WatchlistPreview botName={botName} onViewAll={() => setActiveTab("watchlist")} />
+
           {/* Bot Info — full width */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
               <h2 className="text-sm font-semibold text-zinc-300">Bot Info</h2>
