@@ -393,8 +393,17 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "today_pnl_cents": bot.today_pnl_cents,
                 "watchlist_count": bot.watchlist_count,
                 "portfolio_value_cents": bot.portfolio_value_cents,
+                "realized_pnl_cents": bot.realized_pnl_cents,
             })
-    leaderboard.sort(key=lambda x: x["return_30d_pct"], reverse=True)
+    leaderboard.sort(
+        key=lambda x: (
+            x["return_30d_pct"],
+            x["realized_pnl_cents"],
+            x["today_pnl_cents"],
+            x["watchlist_count"],
+        ),
+        reverse=True,
+    )
     for i, e in enumerate(leaderboard, 1):
         e["rank"] = i
 

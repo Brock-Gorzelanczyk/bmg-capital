@@ -12,7 +12,8 @@ import {
   type StrategyPortfolio,
   type RecentSignal,
 } from "@/api/bots";
-import { getRegime } from "@/api/strategy";
+import { getRegime } from "@/api/bots";
+import { useIsViewer } from "@/store/authStore";
 import { getAnalystHighlights, type AnalystHighlight } from "@/api/analyst";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -116,6 +117,7 @@ const PLACEHOLDER_CATALYSTS = [
 
 export default function Dashboard() {
   const qc = useQueryClient();
+  const isViewer = useIsViewer();
   const { data: overview } = useQuery({ queryKey: ["strategy-lab-portfolio"], queryFn: getStrategyLabPortfolio, staleTime: 60_000, retry: 0 });
   const { data: portfoliosData } = useQuery({ queryKey: ["portfolios"], queryFn: getPortfolios, staleTime: 60_000, retry: 0 });
   const { data: signalsData } = useQuery({ queryKey: ["recent-signals", 20], queryFn: () => getRecentSignals(20), staleTime: 30_000, retry: 0 });
@@ -188,13 +190,15 @@ export default function Dashboard() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => pauseMut.mutate()}
-            disabled={pauseMut.isPending}
-            className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors disabled:opacity-50"
-          >
-            Pause All
-          </button>
+          {!isViewer && (
+            <button
+              onClick={() => pauseMut.mutate()}
+              disabled={pauseMut.isPending}
+              className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors disabled:opacity-50"
+            >
+              Pause All
+            </button>
+          )}
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("copilot:open", { detail: { query: "Brief me on what's happening with my bots today." } }))}
             className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 transition-colors"
@@ -231,10 +235,10 @@ export default function Dashboard() {
             <>
               <div className="flex items-center gap-3 flex-wrap mb-3">
                 <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  VIX: {(regimeRaw as any).vix_level ?? (regimeRaw as any).vix_regime ?? "—"}
+                  VIX: {(regimeRaw as any).vix_regime?.toUpperCase() ?? "—"}
                 </span>
                 <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  SPY: {(regimeRaw as any).spy_trend ?? (regimeRaw as any).trend_regime ?? "—"}
+                  Trend: {(regimeRaw as any).trend_regime?.toUpperCase() ?? "—"}
                 </span>
                 <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
                   BTC.D: {typeof (regimeRaw as any).btc_dominance === "number" ? `${((regimeRaw as any).btc_dominance as number).toFixed(1)}%` : "—"}

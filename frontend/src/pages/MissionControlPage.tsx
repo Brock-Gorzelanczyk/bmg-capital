@@ -529,8 +529,8 @@ export default function MissionControlPage() {
   const hour = now.getHours();
   const nextDigestLabel =
     hour < 16
-      ? "Tonight at 4:15 PM ET market close"
-      : "Tomorrow at 7:30 AM ET";
+      ? "Today at 4:30 PM ET market close"
+      : "Tomorrow at 4:30 PM ET market close";
 
   // Strategies forming: signal_fired in last hour (use already-filtered feed)
   const oneHourAgo = Date.now() - 60 * 60 * 1000;
