@@ -93,7 +93,7 @@ const TermsPage = lazy(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthStore, useIsViewer } from "@/store/authStore";
 import VoiceAIModal from "@/components/voice/VoiceAIModal";
 import VoiceAIButton from "@/components/voice/VoiceAIButton";
 import CoPilot from "@/components/CoPilot";
@@ -256,6 +256,7 @@ function AppInner() {
   useWebSocket();
   useSignalToast();
   const navigate = useNavigate();
+  const isViewer = useIsViewer();
   const [voiceOpen, setVoiceOpen] = useState(false);
   const coPilot = useCoPilot();
 
@@ -368,7 +369,7 @@ function AppInner() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
-    <VoiceAIButton onClick={() => setVoiceOpen(true)} />
+    {!isViewer && <VoiceAIButton onClick={() => setVoiceOpen(true)} />}
     <VoiceAIModal open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     <CoPilot
       isOpen={coPilot.isOpen}

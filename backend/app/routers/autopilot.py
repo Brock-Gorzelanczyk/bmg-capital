@@ -25,7 +25,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_db, get_current_user, require_admin
 from app.db.models.autopilot import AutopilotAction, AutopilotGuardrail, AutopilotPolicy
 from app.services.autopilot_policy import (
     CATEGORIES,
@@ -265,7 +265,7 @@ def update_policy(
     category: str,
     body: PolicyUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Update enabled flag and/or config for a single category policy."""
     if category not in CATEGORIES:
@@ -304,7 +304,7 @@ def get_guardrails(
 def update_guardrails(
     body: GuardrailUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Update one or more guardrail values."""
     guardrail = get_or_create_autopilot_guardrail(current_user.id, db)
@@ -349,7 +349,7 @@ def update_guardrails(
 @router.post("/pause")
 def pause_autopilot(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Globally pause all autopilot automation for this user."""
     guardrail = get_or_create_autopilot_guardrail(current_user.id, db)
@@ -376,7 +376,7 @@ def pause_autopilot(
 @router.post("/resume")
 def resume_autopilot(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
 ):
     """Resume all autopilot automation for this user."""
     guardrail = get_or_create_autopilot_guardrail(current_user.id, db)

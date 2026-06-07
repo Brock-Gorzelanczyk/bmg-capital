@@ -3,7 +3,7 @@ from datetime import timezone, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_db, get_current_user, require_admin
 from app.db.models.users import User
 from app.db.models.staking import StakingPosition, StakingRewardLog
 
@@ -56,7 +56,7 @@ class StakeBody(BaseModel):
     amount: float
 
 @router.post("/stake")
-def stake(body: StakeBody, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def stake(body: StakeBody, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     cfg = STAKING_CONFIG.get(body.asset.upper())
     if not cfg:
         raise HTTPException(400, f"Unsupported asset: {body.asset}")
@@ -72,7 +72,7 @@ def stake(body: StakeBody, current_user: User = Depends(get_current_user), db: S
     return {"id": position.id, "asset": position.asset, "amount_staked": position.amount_staked, "apy": position.apy, "validator": cfg["validator"], "status": position.status}
 
 @router.post("/unstake/{position_id}")
-def unstake(position_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def unstake(position_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     p = db.query(StakingPosition).filter_by(id=position_id, user_id=current_user.id).first()
     if not p:
         raise HTTPException(404, "Position not found")

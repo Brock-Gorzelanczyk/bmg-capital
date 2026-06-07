@@ -5,11 +5,20 @@ export function useIsAdmin(): boolean {
   return useAuthStore((s) => s.user?.is_admin ?? false);
 }
 
+export function useIsViewer(): boolean {
+  return useAuthStore((s) => (s.user?.role ?? "viewer") === "viewer");
+}
+
+export function useUserRole(): "admin" | "viewer" {
+  return useAuthStore((s) => (s.user?.role as "admin" | "viewer") ?? "viewer");
+}
+
 interface AuthUser {
   id: number;
   email: string;
   username: string;
   is_admin?: boolean;
+  role?: "admin" | "viewer";
 }
 
 interface AuthState {

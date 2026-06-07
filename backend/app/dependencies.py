@@ -39,14 +39,15 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
 
 
 def require_admin(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Authenticate + assert is_admin. Use instead of get_current_user on mutation routes."""
+    """Authenticate + assert role='admin'. Blocks viewer accounts on all mutation routes."""
     user = get_current_user(token, db)
-    if not user.is_admin:
+    is_admin = user.is_admin or getattr(user, "role", "viewer") == "admin"
+    if not is_admin:
         raise HTTPException(
             status_code=403,
             detail={
-                "error": "admin_only",
-                "detail": "This action is disabled. Only the admin can modify portfolios and bots right now.",
+                "error": "viewer_read_only",
+                "detail": "Viewer accounts have read-only access. Contact admin to run your own bots.",
             },
         )
     return user

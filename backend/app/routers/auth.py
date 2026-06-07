@@ -79,11 +79,14 @@ def _create_token(user: User) -> str:
 
 
 def _user_dict(user: User) -> dict:
+    is_admin = getattr(user, "is_admin", False)
+    role = getattr(user, "role", "admin" if is_admin else "viewer")
     return {
         "id": user.id,
         "email": user.email,
         "username": user.username,
-        "is_admin": getattr(user, "is_admin", False),
+        "is_admin": is_admin,
+        "role": role,
     }
 
 
@@ -91,11 +94,6 @@ def _user_dict(user: User) -> dict:
 
 @router.post("/register", response_model=TokenResponse)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
-    # Admin lockdown 2026-06-06: signups closed for paper-trading research period.
-    raise HTTPException(
-        status_code=403,
-        detail="Signups are closed for the paper-trading research period. If you have an account, log in above.",
-    )
     _check_rate_limit(body.email.lower().strip())
     if db.query(User).filter(User.email == body.email.lower().strip()).first():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -112,6 +110,8 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         email=body.email.lower().strip(),
         username=body.username.strip(),
         hashed_password=_hash_password(body.password),
+        role="viewer",
+        is_admin=False,
     )
     db.add(user)
     db.commit()

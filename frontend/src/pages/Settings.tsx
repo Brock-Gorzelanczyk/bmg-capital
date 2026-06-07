@@ -152,7 +152,7 @@ function ProfileSection() {
         <SettingRow label="Email">
           <span className="text-sm text-[var(--text-secondary)]">{user?.email ?? "—"}</span>
         </SettingRow>
-        <SettingRow label="User ID" last>
+        <SettingRow label="User ID">
           <button
             onClick={copyId}
             className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors font-mono"
@@ -160,6 +160,17 @@ function ProfileSection() {
             #{user?.id}
             {copied ? <Check size={11} className="text-[var(--accent-positive)]" /> : <Copy size={11} />}
           </button>
+        </SettingRow>
+        <SettingRow label="Account role" last>
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+              user?.role === "admin"
+                ? "bg-purple-500/15 text-purple-400 border border-purple-500/30"
+                : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+            }`}
+          >
+            {user?.role === "admin" ? "Admin" : "Viewer"}
+          </span>
         </SettingRow>
       </Card>
 

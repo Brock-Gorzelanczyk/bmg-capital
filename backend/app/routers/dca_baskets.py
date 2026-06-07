@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_db, get_current_user, require_admin
 from app.db.models.users import User
 from app.db.models.dca_baskets import DCABasket, DCABasketAsset
 from starlette.responses import Response
@@ -46,7 +46,7 @@ class BasketCreate(BaseModel):
     assets: list[AssetInput]
 
 @router.post("/")
-def create_basket(body: BasketCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_basket(body: BasketCreate, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     total_pct = sum(a.allocation_pct for a in body.assets)
     if abs(total_pct - 100.0) > 0.1:
         raise HTTPException(400, f"Allocations must sum to 100% (got {total_pct:.1f}%)")
@@ -60,7 +60,7 @@ def create_basket(body: BasketCreate, current_user: User = Depends(get_current_u
     return _basket_dict(basket)
 
 @router.delete("/{basket_id}")
-def delete_basket(basket_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_basket(basket_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     b = db.query(DCABasket).filter_by(id=basket_id, user_id=current_user.id).first()
     if not b:
         raise HTTPException(404, "Not found")
@@ -69,7 +69,7 @@ def delete_basket(basket_id: int, current_user: User = Depends(get_current_user)
     return Response(status_code=204)
 
 @router.post("/{basket_id}/pause")
-def pause_basket(basket_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def pause_basket(basket_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     b = db.query(DCABasket).filter_by(id=basket_id, user_id=current_user.id).first()
     if not b:
         raise HTTPException(404, "Not found")
@@ -78,7 +78,7 @@ def pause_basket(basket_id: int, current_user: User = Depends(get_current_user),
     return {"status": "paused"}
 
 @router.post("/{basket_id}/resume")
-def resume_basket(basket_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def resume_basket(basket_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     b = db.query(DCABasket).filter_by(id=basket_id, user_id=current_user.id).first()
     if not b:
         raise HTTPException(404, "Not found")

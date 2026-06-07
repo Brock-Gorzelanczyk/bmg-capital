@@ -31,6 +31,7 @@ import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
 import { getCrossBotPositions, getCrossBotWatchlist, type CrossBotPosition, type CrossBotWatchlistItem } from "@/api/bots";
 import { getAnalystSummary, type AnalystSummaryItem } from "@/api/analyst";
 import { cn } from "@/lib/utils";
+import { useIsViewer } from "@/store/authStore";
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
 
@@ -561,9 +562,10 @@ function SkeletonCard() {
 interface BotCardProps {
   item: BotListItem;
   onNavigate: (name: string) => void;
+  isViewer?: boolean;
 }
 
-function BotCard({ item, onNavigate }: BotCardProps) {
+function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
   const { profile, allocation, stats } = item;
   const meta = BOT_META[profile.name];
   const qc = useQueryClient();
@@ -704,27 +706,31 @@ function BotCard({ item, onNavigate }: BotCardProps) {
 
       {/* Actions */}
       <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={() => allocateMut.mutate(!isEnabled)}
-          disabled={allocateMut.isPending}
-          className={cn(
-            "flex-1 text-xs font-semibold py-2 rounded-lg border transition-colors",
-            isEnabled
-              ? "bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-red-700 hover:text-red-400"
-              : "bg-lime-500/10 border-lime-500/30 text-lime-400 hover:bg-lime-500/20"
-          )}
-        >
-          {allocateMut.isPending ? "…" : isEnabled ? "Disable" : "Enable"}
-        </button>
-        {isEnabled && (
-          <button
-            onClick={() => runNowMut.mutate()}
-            disabled={runNowMut.isPending}
-            className="text-xs font-semibold py-2 px-3 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
-            title="Manually trigger a trade cycle"
-          >
-            {runNowMut.isPending ? "…" : "▶ Run"}
-          </button>
+        {!isViewer && (
+          <>
+            <button
+              onClick={() => allocateMut.mutate(!isEnabled)}
+              disabled={allocateMut.isPending}
+              className={cn(
+                "flex-1 text-xs font-semibold py-2 rounded-lg border transition-colors",
+                isEnabled
+                  ? "bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-red-700 hover:text-red-400"
+                  : "bg-lime-500/10 border-lime-500/30 text-lime-400 hover:bg-lime-500/20"
+              )}
+            >
+              {allocateMut.isPending ? "…" : isEnabled ? "Disable" : "Enable"}
+            </button>
+            {isEnabled && (
+              <button
+                onClick={() => runNowMut.mutate()}
+                disabled={runNowMut.isPending}
+                className="text-xs font-semibold py-2 px-3 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                title="Manually trigger a trade cycle"
+              >
+                {runNowMut.isPending ? "…" : "▶ Run"}
+              </button>
+            )}
+          </>
         )}
         <button
           onClick={() => waitlistMut.mutate(!isOnWaitlist)}
@@ -1208,6 +1214,7 @@ function BottomNav({ onOpenActivity, onOpenCoPilot }: BottomNavProps) {
 export default function StrategyLab() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const isViewer = useIsViewer();
   // null = unknown (first load), true = paused, false = running
   const [allPaused, setAllPaused] = useState<boolean | null>(null);
   const [railOpen, setRailOpen] = useState(false);
@@ -1380,7 +1387,7 @@ export default function StrategyLab() {
                   {activateAllMut.isPending ? "Activating…" : "Activate All 8 Bots"}
                 </button>
               )}
-              {allPaused ? (
+              {!isViewer && (allPaused ? (
                 <button
                   onClick={() => resumeAllMut.mutate()}
                   disabled={isPauseOrResumePending}
@@ -1396,7 +1403,7 @@ export default function StrategyLab() {
                 >
                   {pauseAllMut.isPending ? "Pausing…" : "Pause All Bots"}
                 </button>
-              )}
+              ))}
             </div>
           </div>
 
@@ -1404,15 +1411,8 @@ export default function StrategyLab() {
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
             <span className="text-amber-400 text-sm font-semibold">📄 Paper trading only.</span>
             <span className="text-amber-300 text-xs">
-              Live trading coming soon — paper trading only until RIA registration.
+              Currently in beta — all trades are simulated. No real money is at risk.
             </span>
-            <button
-              onClick={() => globalWaitlistMut.mutate()}
-              disabled={globalWaitlistMut.isPending}
-              className="ml-auto text-xs text-amber-400 underline whitespace-nowrap"
-            >
-              Join the waitlist →
-            </button>
           </div>
 
           {/* Regime status bar */}
@@ -1446,6 +1446,7 @@ export default function StrategyLab() {
                   key={item.profile.name}
                   item={item}
                   onNavigate={(name) => navigate(`/strategy/${name}`)}
+                  isViewer={isViewer}
                 />
               ))}
             </div>

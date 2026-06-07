@@ -20,3 +20,4 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    role: Mapped[str] = mapped_column(String, default="viewer", server_default="'viewer'")

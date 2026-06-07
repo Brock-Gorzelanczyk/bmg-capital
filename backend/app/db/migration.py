@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     "users": [
         ("is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("role",     "VARCHAR NOT NULL DEFAULT 'viewer'"),
     ],
     "user_tiers": [
         ("billing_interval",       "VARCHAR"),
@@ -413,6 +414,7 @@ def run_migrations(engine: Engine) -> None:
         _ensure_v2_tables(conn)
         _archive_legacy_tables(conn)
         _grant_admin(conn)
+        _backfill_user_roles(conn)
         _retrofit_debug_trade_signals(conn)
         _close_debug_test_trades(conn)
         _dedupe_bot_allocations(conn)
@@ -681,3 +683,18 @@ def _grant_admin(conn) -> None:
         logger.info("grant_admin: %s (id=%s) promoted to admin", _ADMIN_EMAIL, row[0])
     except Exception as exc:
         logger.warning("grant_admin failed: %s", exc)
+
+
+def _backfill_user_roles(conn) -> None:
+    """One-shot: set role='admin' for is_admin users, role='viewer' for everyone else."""
+    MIGRATION_NAME = "users.role_backfill_2026"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("UPDATE users SET role = 'admin' WHERE is_admin = 1"))
+        conn.execute(text("UPDATE users SET role = 'viewer' WHERE is_admin = 0 OR is_admin IS NULL"))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_backfill_user_roles: roles assigned")
+    except Exception as exc:
+        logger.warning("_backfill_user_roles failed: %s", exc)

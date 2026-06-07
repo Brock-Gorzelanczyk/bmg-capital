@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Edit2, TrendingUp, TrendingDown, BookOpen, BarChart2, Star, Lock, Download, Bot } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
+import { useIsViewer } from "@/store/authStore";
 import { toast } from "sonner";
 import { cn, timeAgo } from "@/lib/utils";
 import { getEntries, getStats, createEntry, updateEntry, deleteEntry } from "@/api/journal";
@@ -468,6 +469,7 @@ function EmptyState({ onOpenWithTemplate }: { onOpenWithTemplate: (notes: string
 
 export default function JournalPage() {
   const qc = useQueryClient();
+  const isViewer = useIsViewer();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<JournalEntry | null>(null);
   const [filterSymbol, setFilterSymbol] = useState("");
@@ -607,21 +609,25 @@ export default function JournalPage() {
           >
             <Bot size={13} /> Ask AI
           </button>
-          <button
-            onClick={handleAutoImport}
-            disabled={importingPaper}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
-          >
-            <Download size={13} />
-            {importingPaper ? "Importing…" : "Import last paper trade"}
-          </button>
-          <button
-            onClick={() => openNew()}
-            className="flex items-center gap-2 bg-[var(--accent-positive)] hover:brightness-110 text-[var(--text-primary)] text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
-          >
-            <Plus size={15} />
-            New Entry
-          </button>
+          {!isViewer && (
+            <>
+              <button
+                onClick={handleAutoImport}
+                disabled={importingPaper}
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
+              >
+                <Download size={13} />
+                {importingPaper ? "Importing…" : "Import last paper trade"}
+              </button>
+              <button
+                onClick={() => openNew()}
+                className="flex items-center gap-2 bg-[var(--accent-positive)] hover:brightness-110 text-[var(--text-primary)] text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+              >
+                <Plus size={15} />
+                New Entry
+              </button>
+            </>
+          )}
         </div>
       </div>
 

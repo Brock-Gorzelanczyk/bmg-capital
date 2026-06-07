@@ -1,7 +1,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { Outlet, useLocation, NavLink, Link } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { useIsAdmin } from "@/store/authStore";
+import { useIsAdmin, useIsViewer } from "@/store/authStore";
 import { House, BarChart2, Bot, Newspaper, User } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
@@ -44,6 +44,7 @@ const BOTTOM_NAV = [
 export default function AppShell() {
   const { pathname } = useLocation();
   const isAdmin = useIsAdmin();
+  const isViewer = useIsViewer();
   const isChart = pathname === "/chart";
   const qc = useQueryClient();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -137,13 +138,12 @@ export default function AppShell() {
 
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-        {/* Admin lockdown banner — non-admin users only */}
-        {!isAdmin && (
-          <div className="flex items-center gap-2 bg-orange-500/10 border-b border-orange-500/20 px-4 py-2 text-xs text-orange-400 shrink-0">
-            <span>🔒</span>
+        {/* Viewer banner — shown only to non-admin accounts */}
+        {isViewer && (
+          <div className="flex items-center gap-2 bg-blue-500/10 border-b border-blue-500/20 px-4 py-2 text-xs text-blue-300 shrink-0">
+            <span>👀</span>
             <span>
-              <span className="font-semibold text-orange-300">BMG Capital is in research mode.</span>
-              {" Admin lockdown active. You can view all data but cannot make changes."}
+              You're viewing BMG Capital in demo mode. Browse anything — you can't make changes. Like what you see? Ask the admin for full access.
             </span>
           </div>
         )}

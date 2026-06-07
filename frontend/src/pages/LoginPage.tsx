@@ -189,7 +189,7 @@ function VoiceDemo() {
         <span className="text-[#84cc16] text-xs font-bold">+0.43% today</span>
       </div>
       <div className="absolute -bottom-3 -left-3 bg-[#0a0f1e] border border-blue-500/30 rounded-xl px-3 py-1.5 shadow-lg">
-        <span className="text-blue-400 text-xs font-bold">6 bots · paper only</span>
+        <span className="text-blue-400 text-xs font-bold">8 bots · paper only</span>
       </div>
     </div>
   );
@@ -225,7 +225,7 @@ function LoginForm() {
         navigate("/");
       } else {
         await register(email, username, password);
-        navigate("/onboarding");
+        navigate("/");
       }
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
@@ -251,11 +251,13 @@ function LoginForm() {
   return (
     <div className="w-full max-w-sm">
       <div className="bg-[#0a0f1e] border border-[#1e293b] rounded-2xl p-6">
-        {/* Login header — signups closed */}
-        <h2 className="text-base font-semibold text-white mb-1">Sign in to BMG Capital</h2>
+        <h2 className="text-base font-semibold text-white mb-1">
+          {mode === "login" ? "Sign in to BMG Capital" : "Create a free account"}
+        </h2>
         <p className="text-xs text-slate-500 mb-6">
-          Signups are temporarily closed for the paper-trading research period.
-          {" "}If you have an account, log in below.
+          {mode === "register"
+            ? "Sign up to explore BMG Capital in read-only mode. Browse live paper trades, AI signals, and strategy performance. To run your own bots, contact the team."
+            : "Welcome back. Enter your credentials to continue."}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -381,6 +383,32 @@ function LoginForm() {
             </button>
           </>
         )}
+
+        <div className="mt-4 text-center">
+          {mode === "login" ? (
+            <p className="text-xs text-slate-500">
+              Don't have an account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("register"); setError(""); }}
+                className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
+              >
+                Sign up free
+              </button>
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("login"); setError(""); }}
+                className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
+              >
+                Sign in
+              </button>
+            </p>
+          )}
+        </div>
       </div>
 
       <p className="text-center text-slate-700 text-xs mt-4">
@@ -393,8 +421,8 @@ function LoginForm() {
 // ─── Feature pills ────────────────────────────────────────────────────────────
 
 const FEATURES = [
-  { icon: TrendingUp, label: "6 bots, 1 dashboard" },
-  { icon: Shield,     label: "Paper only · RIA-gated live" },
+  { icon: TrendingUp, label: "8 bots, 1 dashboard" },
+  { icon: Shield,     label: "Paper trading — currently in beta" },
   { icon: Mic,        label: "Voice AI · ask anything" },
 ];
 
@@ -407,7 +435,7 @@ export default function LoginPage() {
       <nav className="flex items-center justify-between px-6 py-4 border-b border-[#0f172a]">
         <img src="/logo.png" alt="BMG Capital" className="h-8 w-auto object-contain" />
         <span className="text-xs text-slate-600 hidden sm:block">
-          Live trading coming soon · join waitlist →
+          Paper trading only — currently in beta
         </span>
       </nav>
 
@@ -426,7 +454,7 @@ export default function LoginPage() {
           {/* Headline */}
           <div className="text-center lg:text-left">
             <h1 className="text-4xl sm:text-5xl font-black text-white leading-[1.1] tracking-tight">
-              Six algorithmic bots.<br />
+              Eight algorithmic bots.<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#3B82F6] to-[#84cc16]">
                 One voice command.
               </span>

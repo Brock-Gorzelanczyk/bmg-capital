@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { getWatchlists, createWatchlist, addSymbol, removeSymbol, getSnapshot } from "@/api/watchlist";
 import { useMarketStore } from "@/store";
+import { useIsViewer } from "@/store/authStore";
 import { formatCurrency, formatPercent, cn } from "@/lib/utils";
 import { Plus, X, TrendingUp, TrendingDown, Microscope, BookMarked, Bot } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
@@ -144,6 +145,7 @@ function TemplateGallery({ onClose }: TemplateGalleryProps) {
 function WatchlistRow({ symbol, watchlistId }: { symbol: string; watchlistId: number }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const isViewer = useIsViewer();
   const quote = useMarketStore((s) => s.quotes[symbol]);
   const { data: snapshots } = useQuery({
     queryKey: ["snapshot", watchlistId],
@@ -193,13 +195,15 @@ function WatchlistRow({ symbol, watchlistId }: { symbol: string; watchlistId: nu
           >
             <Microscope size={13} />
           </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); remove.mutate(); }}
-            className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors p-1"
-            title="Remove"
-          >
-            <X size={13} />
-          </button>
+          {!isViewer && (
+            <button
+              onClick={(e) => { e.stopPropagation(); remove.mutate(); }}
+              className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)] transition-colors p-1"
+              title="Remove"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -210,6 +214,7 @@ function WatchlistRow({ symbol, watchlistId }: { symbol: string; watchlistId: nu
 
 export default function WatchlistPage() {
   const qc = useQueryClient();
+  const isViewer = useIsViewer();
   const { data, isLoading } = useQuery({ queryKey: ["watchlists"], queryFn: getWatchlists });
   const [newName, setNewName] = useState("");
   const [addingSymbol, setAddingSymbol] = useState<number | null>(null);
@@ -345,12 +350,14 @@ export default function WatchlistPage() {
                 <span className="font-semibold text-[var(--text-primary)]">{wl.name}</span>
                 <span className="ml-2 text-xs text-[var(--text-tertiary)]">{wl.items.length} symbol{wl.items.length !== 1 ? "s" : ""}</span>
               </div>
-              <button
-                onClick={() => setAddingSymbol(addingSymbol === wl.id ? null : wl.id)}
-                className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-sm flex items-center gap-1 transition-colors"
-              >
-                <Plus size={14} /> Add symbol
-              </button>
+              {!isViewer && (
+                <button
+                  onClick={() => setAddingSymbol(addingSymbol === wl.id ? null : wl.id)}
+                  className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-sm flex items-center gap-1 transition-colors"
+                >
+                  <Plus size={14} /> Add symbol
+                </button>
+              )}
             </div>
 
             {addingSymbol === wl.id && (
