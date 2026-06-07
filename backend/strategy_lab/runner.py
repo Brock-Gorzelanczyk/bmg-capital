@@ -218,9 +218,47 @@ def run_bot_profile(profile_name: str) -> dict:
                     logger.info("[runner:%s] Regime filter halt: %s", profile_name, halt_condition)
                     return {"skipped": True, "reason": f"regime_filter: {halt_condition}"}
 
-            # 6. Fetch bars (stub: empty dict; real bar-fetch wired in data-feed phase)
-            # When the data feed is available, this will call bar_fetcher.fetch(profile)
+            # 6. Fetch OHLCV bars from exchange-native feeds
+            asset_class = profile.get("asset_class", "stock")
+            universe = profile.get("universe", {})
+            symbols: list[str] = (
+                universe.get("symbols", []) if isinstance(universe, dict)
+                else list(universe) if universe else []
+            )
+            timeframe = profile.get("scan_timeframe", "1h")
+            limit = int(profile.get("scan_lookback_bars", 200))
+
             bars: dict[str, list[dict]] = {}
+            if symbols:
+                try:
+                    if asset_class in ("crypto", "crypto_intraday"):
+                        from app.screener.crypto_runner import _fetch_crypto_bars
+                        raw_bars = _fetch_crypto_bars(symbols, timeframe=timeframe, limit=limit)
+                    else:
+                        from app.screener.runner import _fetch_bars_sync
+                        raw_bars = _fetch_bars_sync(symbols, period="60d")
+                    for sym, df in raw_bars.items():
+                        if df is None or df.empty:
+                            continue
+                        bars[sym] = [
+                            {
+                                "c": float(row["close"]),
+                                "o": float(row["open"]),
+                                "h": float(row["high"]),
+                                "l": float(row["low"]),
+                                "v": float(row.get("volume", 0) or 0),
+                                "ts": (row.name.isoformat()
+                                       if hasattr(row.name, "isoformat")
+                                       else str(row.name)),
+                            }
+                            for _, row in df.iterrows()
+                        ]
+                    logger.info(
+                        "[runner:%s] fetched bars for %d/%d symbols",
+                        profile_name, len(bars), len(symbols),
+                    )
+                except Exception as exc:
+                    logger.warning("[runner:%s] bar fetch failed: %s", profile_name, exc)
 
             # 7. Run generate_signals for each strategy module in profile
             #    Strategy signals are weighted by Thompson-sampled strategy_weights.
@@ -690,21 +728,29 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     if equity <= 0:
         return
 
-    # Fetch live price for this symbol via positions or small market-data call
+    # Fetch live price: Kraken (crypto) or Alpaca IEX (stocks) → fallback broker positions
     entry_price = 0.0
     try:
-        positions = broker.get_positions()
-        # Current price from any existing position with same symbol
-        for p in positions:
-            if p.get("symbol") == sig.symbol and p.get("current_price", 0) > 0:
-                entry_price = float(p["current_price"])
-                break
-    except Exception:
-        pass
+        from app.services.live_prices import fetch_live_prices
+        live_map = fetch_live_prices([sig.symbol])
+        entry_price = float(live_map.get(sig.symbol, 0) or 0)
+        if entry_price > 0:
+            logger.debug("[execute:%s] live price %s = %.4f", profile_name, sig.symbol, entry_price)
+    except Exception as exc:
+        logger.warning("[execute:%s] live_prices failed for %s: %s", profile_name, sig.symbol, exc)
 
     if entry_price <= 0:
-        # Can't place order without price — skip silently (bars stub is empty)
-        logger.debug("[execute:%s] no price for %s, skipping order", profile_name, sig.symbol)
+        try:
+            positions = broker.get_positions()
+            for p in positions:
+                if p.get("symbol") == sig.symbol and p.get("current_price", 0) > 0:
+                    entry_price = float(p["current_price"])
+                    break
+        except Exception:
+            pass
+
+    if entry_price <= 0:
+        logger.warning("[execute:%s] no price for %s — skipping order", profile_name, sig.symbol)
         return
 
     # 2. Size: pct of bot capital (capital_cents_within_portfolio or starting capital)

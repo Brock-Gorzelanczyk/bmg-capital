@@ -2292,8 +2292,10 @@ def _compute_symbol_readiness(
         distance_label = f"{d:.1f}% away"
         distance_color = "gray"
 
-    # last_scanned: prefer watchlist DB timestamp, fall back to now
-    last_scanned = wl_last_scanned or datetime.now(timezone.utc).isoformat()
+    # last_scanned: always use now — this function computes indicators fresh
+    # on every call, so the timestamp should reflect the current computation,
+    # not the stale bot_watchlist.last_evaluated_at from a prior rebuild.
+    last_scanned = datetime.now(timezone.utc).isoformat()
 
     return {
         "symbol": symbol,
