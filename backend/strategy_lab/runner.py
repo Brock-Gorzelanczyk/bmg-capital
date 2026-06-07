@@ -530,6 +530,18 @@ def run_bot_profile(profile_name: str) -> dict:
                     except Exception as _exc:
                         logger.debug("[runner:%s] webhook discord skipped: %s", profile_name, _exc)
 
+                    # One-shot: #announcements alert on the very first real crypto buy signal
+                    if profile_name in {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"} and sig.side == "buy":
+                        try:
+                            _maybe_announce_first_live_signal(
+                                db=db,
+                                bot_name=profile_name,
+                                strategy=sig.strategy or profile_name,
+                                symbol=sig.symbol,
+                            )
+                        except Exception as _exc:
+                            logger.debug("[runner:%s] first_live_signal_announcement skipped: %s", profile_name, _exc)
+
             # Also audit hold signals per allocation (non-expert path)
             hold_signals = [s for s in signals if s.side == "hold"]
             for alloc in allocations:
@@ -567,6 +579,38 @@ def run_bot_profile(profile_name: str) -> dict:
     except Exception as exc:
         logger.error("Bot runner failed for %s: %s", profile_name, exc, exc_info=True)
         return {"error": str(exc)}
+
+
+# ── One-shot first-live-signal announcement ───────────────────────────────────
+
+_FIRST_SIGNAL_MIGRATION = "first_live_crypto_signal_announced"
+
+
+def _maybe_announce_first_live_signal(db, bot_name: str, strategy: str, symbol: str) -> None:
+    """Post a one-shot alert to #announcements on the first real crypto buy signal.
+
+    Uses schema_migrations as the claim token — INSERT OR IGNORE + rowcount ensures
+    exactly one process fires the announcement even under concurrent runners.
+    """
+    from sqlalchemy import text
+
+    # Claim the one-shot slot: succeed only if the row doesn't exist yet
+    result = db.execute(
+        text("INSERT OR IGNORE INTO schema_migrations (migration_name) VALUES (:n)"),
+        {"n": _FIRST_SIGNAL_MIGRATION},
+    )
+    db.commit()
+
+    if result.rowcount != 1:
+        # Another runner already posted (or the row was pre-existing)
+        return
+
+    logger.info(
+        "first_live_signal: claimed slot for bot=%s strategy=%s symbol=%s — posting to #announcements",
+        bot_name, strategy, symbol,
+    )
+    from app.services.discord_public import post_first_live_signal_announcement
+    post_first_live_signal_announcement(bot_name, strategy, symbol)
 
 
 # ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────

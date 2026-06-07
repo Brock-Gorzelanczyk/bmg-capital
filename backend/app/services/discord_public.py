@@ -234,6 +234,42 @@ def post_weekly_leaderboard(leaderboard: list[dict]) -> None:
         logger.warning("weekly leaderboard Discord post failed: %s", exc)
 
 
+def post_first_live_signal_announcement(bot_name: str, strategy: str, symbol: str) -> None:
+    """One-shot plain-text alert to #announcements: first real crypto signal fired."""
+    cfg = _cfg()
+    channel_id = cfg.discord_ch_announcements
+    if not cfg.discord_bot_token or not channel_id:
+        logger.info(
+            "first_live_signal_announcement: no token/channel configured — would have posted "
+            "bot=%s strategy=%s symbol=%s", bot_name, strategy, symbol,
+        )
+        return
+
+    display = BOT_DISPLAY.get(bot_name, bot_name)
+    content = (
+        f"🎉 First live strategy signal fired! **{display}** · {strategy} · {symbol}. "
+        f"Real-time validation has begun. From here, every signal will post to "
+        f"#crypto-signals automatically."
+    )
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    try:
+        with httpx.Client(timeout=8) as http:
+            resp = http.post(
+                url,
+                headers={"Authorization": f"Bot {cfg.discord_bot_token}", "Content-Type": "application/json"},
+                json={"content": content},
+            )
+            if resp.is_success:
+                logger.info("first_live_signal_announcement posted to #announcements")
+            else:
+                logger.warning(
+                    "first_live_signal_announcement failed: status=%s body=%s",
+                    resp.status_code, resp.text[:200],
+                )
+    except Exception as exc:
+        logger.warning("first_live_signal_announcement HTTP error: %s", exc)
+
+
 def post_monthly_recap(summary: dict) -> None:
     """Post the monthly recap embed to #monthly-recap."""
     cfg = _cfg()
