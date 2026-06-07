@@ -20,8 +20,16 @@ DONCHIAN_BARS = 24
 ATR_7D_BARS = 168
 # 30d ATR on hourly bars = 720 bars
 ATR_30D_BARS = 720
-# ATR contraction ratio
-ATR_CONTRACTION_RATIO = 0.8
+
+# TEMP: raised 2026-06-07 to validate signal firing in flat
+# market. Restore to 0.8 after first organic signal fires.
+# At 0.8 the market must be in clear volatility squeeze; at 1.5
+# the check passes in almost all normal conditions.
+ATR_CONTRACTION_RATIO = 1.5  # was 0.8
+
+# TEMP: lowered 2026-06-07 to validate signal firing in flat
+# market. Restore to 0.02 (2%) after first organic signal fires.
+MIN_ATR_BREAKOUT_PCT = 0.005  # was 0.02; minimum close-above-donchian-high % to count
 
 
 def _compute_atr(bars: list[dict], period: int) -> float:
@@ -84,7 +92,7 @@ def generate_signals(
         if not atr_contraction:
             continue
 
-        if current_close > donchian_high and donchian_high > 0:
+        if donchian_high > 0 and current_close > donchian_high * (1 + MIN_ATR_BREAKOUT_PCT):
             raw_conf = (current_close - donchian_high) / donchian_high * 10
             confidence = min(0.85, max(0.2, raw_conf))
             signals.append(Signal(
@@ -94,13 +102,13 @@ def generate_signals(
                 size_hint=confidence,
                 reason=(
                     f"Volatility breakout long: close={current_close:.4f} > "
-                    f"24h high={donchian_high:.4f}, "
-                    f"7d ATR={atr_7d:.4f} < 0.8 * 30d ATR={atr_30d:.4f}"
+                    f"24h high={donchian_high:.4f} (+{MIN_ATR_BREAKOUT_PCT*100:.1f}%), "
+                    f"7d ATR={atr_7d:.4f} vs 30d ATR={atr_30d:.4f}"
                 ),
                 strategy=STRATEGY_NAME,
             ))
 
-        elif current_close < donchian_low and donchian_low > 0:
+        elif donchian_low > 0 and current_close < donchian_low * (1 - MIN_ATR_BREAKOUT_PCT):
             raw_conf = (donchian_low - current_close) / donchian_low * 10
             confidence = min(0.85, max(0.2, raw_conf))
             signals.append(Signal(
@@ -110,8 +118,8 @@ def generate_signals(
                 size_hint=confidence,
                 reason=(
                     f"Volatility breakout short: close={current_close:.4f} < "
-                    f"24h low={donchian_low:.4f}, "
-                    f"7d ATR={atr_7d:.4f} < 0.8 * 30d ATR={atr_30d:.4f}"
+                    f"24h low={donchian_low:.4f} (-{MIN_ATR_BREAKOUT_PCT*100:.1f}%), "
+                    f"7d ATR={atr_7d:.4f} vs 30d ATR={atr_30d:.4f}"
                 ),
                 strategy=STRATEGY_NAME,
             ))

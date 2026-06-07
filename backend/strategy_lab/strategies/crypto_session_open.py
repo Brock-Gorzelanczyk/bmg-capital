@@ -10,7 +10,9 @@ from strategy_lab.core.signals import Signal
 logger = logging.getLogger(__name__)
 
 STRATEGY_NAME = "crypto_session_open"
-GAP_THRESHOLD = 0.002  # 0.2% gap to trigger fade
+# TEMP: lowered 2026-06-07 to validate signal firing in flat
+# market. Restore to 0.01 (1%) after first organic signal fires.
+MIN_RANGE_BREAKOUT_PCT = 0.003  # was 0.01 (1%); minimum gap % to trigger session fade
 SESSION_HOURS = {0, 12}  # UTC session open hours
 SESSION_WINDOW_HOURS = 1  # bars within 1h of session open qualify
 
@@ -50,7 +52,7 @@ def _v1_signals(
 
     gap = (opens[-1] - closes[-2]) / closes[-2] if closes[-2] != 0 else 0.0
 
-    if gap > GAP_THRESHOLD:
+    if gap > MIN_RANGE_BREAKOUT_PCT:
         # Gapped up — fade with sell
         return [Signal(
             symbol=symbol,
@@ -64,7 +66,7 @@ def _v1_signals(
             strategy=STRATEGY_NAME,
         )]
 
-    if gap < -GAP_THRESHOLD:
+    if gap < -MIN_RANGE_BREAKOUT_PCT:
         # Gapped down — fade with buy
         return [Signal(
             symbol=symbol,

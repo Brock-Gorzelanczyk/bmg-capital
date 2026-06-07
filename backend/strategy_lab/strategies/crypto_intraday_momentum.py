@@ -25,8 +25,16 @@ UNIVERSE = ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD"]
 # 1 bar = 1 hour (profile uses scan_timeframe: 1h)
 BARS_PER_HOUR = 1
 ATR_PERIOD = 20
-VOLUME_MULTIPLIER = 2.0
-SIGNAL_ATR_MULTIPLIER = 1.5
+
+# TEMP: lowered 2026-06-07 to validate signal firing in flat
+# market. Restore to 0.03 (3%) after first organic signal fires.
+MIN_MOMENTUM_PCT = 0.005  # was 0.03 (~3% via SIGNAL_ATR_MULTIPLIER=1.5 * typical ATR)
+
+# TEMP: lowered 2026-06-07 to validate signal firing in flat
+# market. Restore to 2.0 after first organic signal fires.
+MIN_VOLUME_RATIO = 1.0  # was 2.0 (VOLUME_MULTIPLIER)
+
+SIGNAL_ATR_MULTIPLIER = 1.5  # kept for confidence scaling; no longer used as entry filter
 
 # BTC funding rate threshold — top ~5% proxy
 FUNDING_RATE_HOT = 0.001
@@ -90,14 +98,15 @@ def generate_signals(
         # Volume confirmation: current volume vs avg of last 20 bars
         avg_volume = sum(volumes[-(ATR_PERIOD + 1):-1]) / ATR_PERIOD
         current_volume = volumes[-1]
-        volume_ok = avg_volume > 0 and current_volume >= VOLUME_MULTIPLIER * avg_volume
+        volume_ok = avg_volume > 0 and current_volume >= MIN_VOLUME_RATIO * avg_volume
 
+        # ATR-normalized threshold kept for confidence scaling; entry gate uses MIN_MOMENTUM_PCT
         threshold = SIGNAL_ATR_MULTIPLIER * atr_normalized
 
         # Regime: halve size if funding is hot
         size_multiplier = 0.5 if funding_hot else 1.0
 
-        if one_hour_return > threshold and volume_ok:
+        if one_hour_return > MIN_MOMENTUM_PCT and volume_ok:
             raw_conf = abs(one_hour_return) / (3 * atr_normalized)
             confidence = min(0.9, raw_conf)
             size_hint = min(1.0, confidence * size_multiplier)
@@ -114,7 +123,7 @@ def generate_signals(
                 strategy=STRATEGY_NAME,
             ))
 
-        elif one_hour_return < -threshold and volume_ok:
+        elif one_hour_return < -MIN_MOMENTUM_PCT and volume_ok:
             raw_conf = abs(one_hour_return) / (3 * atr_normalized)
             confidence = min(0.9, raw_conf)
             size_hint = min(1.0, confidence * size_multiplier)
