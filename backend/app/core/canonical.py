@@ -426,7 +426,6 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         "return_30d_pct": return_30d_pct,
         "return_30d_value_cents": total_value - total_starting,
         "return_all_time_pct": all_time_pct,
-        "sharpe_30d": 0.0,  # TODO: aggregate daily return stream
         "total_open_positions": total_open_positions,
         "total_watchlist_count": total_watchlist,
         "equity_curve": [],  # kept for compatibility

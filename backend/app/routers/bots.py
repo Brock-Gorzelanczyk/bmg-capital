@@ -361,7 +361,7 @@ def list_bots(
             row["all_time_return_pct"] = snap.all_time_return_pct
         else:
             row["demo"] = True
-            row["return_30d_pct"] = _demo_30d_return(p.name)
+            row["return_30d_pct"] = None
             row["today_pnl_usd"] = _demo_today_pnl(p.name)
             row["open_positions"] = _demo_positions(p.name, p.asset_class)
             row["open_positions_count"] = len(row["open_positions"])
@@ -1664,7 +1664,7 @@ def get_bot(
         row["win_rate_pct"] = round(wins / total_closed * 100, 1) if total_closed > 0 else None
     else:
         row["demo"] = True
-        row["return_30d_pct"] = _demo_30d_return(profile.name)
+        row["return_30d_pct"] = None
         row["today_pnl_usd"] = _demo_today_pnl(profile.name)
         row["open_positions"] = _demo_positions(profile.name, profile.asset_class)
         row["open_positions_count"] = len(row["open_positions"])

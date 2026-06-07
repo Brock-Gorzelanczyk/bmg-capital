@@ -274,7 +274,6 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
   const ret30      = p?.return_30d_pct ?? 0;
   const ret30Pos   = ret30 >= 0;
   const retAll     = p?.return_all_time_pct ?? 0;
-  const sharpe     = p?.sharpe_30d ?? 0;
 
   const chartData = filterCurve(p?.equity_curve ?? [], period).map((pt) => ({
     date: pt.date.slice(5),   // "MM-DD"
@@ -326,10 +325,9 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
       </div>
 
       {/* Secondary metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-zinc-800">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-3 border-t border-zinc-800">
         {[
           { label: "All-time Return", val: formatPct(retAll), color: retAll >= 0 ? "text-lime-400" : "text-red-400" },
-          { label: "Sharpe (30d)",    val: sharpe.toFixed(2),  color: "text-white" },
           { label: "Open Positions",  val: String(p?.total_open_positions ?? 0), color: "text-white" },
           { label: "Watchlists",      val: `${p?.total_watchlist_count ?? 0} names`, color: "text-white" },
         ].map(({ label, val, color }) => (
@@ -385,7 +383,8 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
         <p className="text-xs font-semibold text-zinc-400 mb-3">Bot Leaderboard — ranked by 30d return</p>
         <div className="space-y-1.5">
           {(p?.leaderboard ?? []).map((entry) => {
-            const ePos = entry.return_30d_pct >= 0;
+            const ret30 = entry.return_30d_pct ?? null;
+            const ePos = (ret30 ?? 0) >= 0;
             const tPnl = entry.today_pnl_cents / 100;
             const tPos = tPnl >= 0;
             const isCrypto = entry.profile.includes("crypto");
@@ -401,8 +400,8 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
                 </span>
                 <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-orange-400" : "bg-blue-400")} />
                 <span className="flex-1 text-xs font-semibold text-white truncate">{entry.name}</span>
-                <span className={cn("text-xs font-bold w-16 text-right", ePos ? "text-lime-400" : "text-red-400")}>
-                  {entry.return_30d_pct >= 0 ? "+" : ""}{entry.return_30d_pct.toFixed(3)}%
+                <span className={cn("text-xs font-bold w-16 text-right", ret30 != null ? (ePos ? "text-lime-400" : "text-red-400") : "text-zinc-600")}>
+                  {ret30 != null ? `${ret30 >= 0 ? "+" : ""}${ret30.toFixed(3)}%` : "—"}
                 </span>
                 <span className={cn("text-xs w-20 text-right", tPos ? "text-lime-400" : "text-red-400")}>
                   {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
@@ -830,7 +829,6 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
               <SortHeader label="Bot" colKey="name" />
               <SortHeader label="Status" colKey="status" />
               <SortHeader label="30d Return" colKey="return_30d" />
-              <SortHeader label="Sharpe Est" colKey="sharpe" />
               <SortHeader label="Max DD" colKey="max_dd" />
               <SortHeader label="Uptime" colKey="uptime" />
             </tr>
@@ -839,7 +837,6 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
             {sortedBots.map((item) => {
               const isEnabled = item.allocation?.enabled ?? false;
               const ret30 = item.stats?.return_30d_pct ?? 0;
-              const sharpe = (ret30 / 8).toFixed(2);
               // Rough max DD estimate: ~2x the absolute of return if negative, else 5%
               const maxDd = ret30 < 0 ? Math.abs(ret30 * 1.5).toFixed(1) : (Math.random() * 3 + 2).toFixed(1);
               const winRate = item.stats?.win_rate_pct ?? 0;
@@ -865,9 +862,6 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
                   </td>
                   <td className={cn("py-2.5 font-semibold text-xs", ret30 >= 0 ? "text-lime-400" : "text-red-400")}>
                     {formatPct(ret30)}
-                  </td>
-                  <td className={cn("py-2.5 text-xs", Number(sharpe) >= 0 ? "text-zinc-300" : "text-red-400")}>
-                    {sharpe}
                   </td>
                   <td className="py-2.5 text-xs text-red-400">
                     -{maxDd}%

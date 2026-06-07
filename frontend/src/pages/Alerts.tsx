@@ -39,134 +39,7 @@ function hoursAgo(h: number, m = 0): string {
   return d.toISOString();
 }
 
-const MOCK_ALERTS: Alert[] = [
-  {
-    id: "1", ticker: "PORT", type: "risk_drawdown",
-    title: "Portfolio down 5.2% — drawdown threshold breached",
-    body: "Total portfolio value dropped to $94,800. Your 5% max drawdown rule was triggered at 10:14 AM. Consider reviewing open positions.",
-    importance: "Breaking", source: "Risk", timestamp: hoursAgo(0, 18),
-    is_read: false, ai_priority: 97, tags: ["risk", "drawdown"],
-  },
-  {
-    id: "2", ticker: "NVDA", type: "strategy_fires",
-    title: "Momentum Surge entered at $924.50",
-    body: "Strategy fired long on NVDA. RSI momentum crossed 60 on daily, MACD positive, volume 1.8× average. Entry at $924.50, stop $908.",
-    importance: "Breaking", source: "Strategy: Momo", timestamp: hoursAgo(0, 32),
-    is_read: false, ai_priority: 92, tags: ["strategy", "long"],
-  },
-  {
-    id: "3", ticker: "TSLA", type: "breakout",
-    title: "Closed above 52-week high on 2.1× volume",
-    body: "TSLA broke out above its $299.29 52-week high, closing at $302.15 on volume of 68M shares — 2.1× the 20-day average. Bullish continuation signal.",
-    importance: "Significant", source: "Scanner: Breakouts", timestamp: hoursAgo(1, 5),
-    is_read: false, ai_priority: 88, tags: ["breakout", "volume"],
-  },
-  {
-    id: "4", ticker: "SPY", type: "options_uoa",
-    title: "$1.8M sweep on SPY $545C Jun 20",
-    body: "Unusual options activity detected: 1,420 contracts of SPY $545 call expiring Jun 20 swept at the ask for $1.8M total premium. Bullish institutional bet.",
-    importance: "Significant", source: "Scanner: Options Flow", timestamp: hoursAgo(1, 44),
-    is_read: false, ai_priority: 85, tags: ["options", "sweep"],
-  },
-  {
-    id: "5", ticker: "AAPL", type: "earnings_reminder",
-    title: "Earnings in 7 days — implied move ±5.2%",
-    body: "Apple reports Q2 FY2025 earnings in 7 days. Options pricing a ±5.2% move. IV rank is 68th percentile. Consider positioning before the event.",
-    importance: "Routine", source: "Calendar", timestamp: hoursAgo(2, 10),
-    is_read: true, ai_priority: 62, tags: ["earnings", "iv"],
-  },
-  {
-    id: "6", ticker: "QQQ", type: "unusual_volume",
-    title: "Volume 3.4× 20-day average",
-    body: "QQQ traded 94M shares by noon — 3.4× its 20-day average of 27M. Price action flat, suggesting large rebalancing or hedging activity.",
-    importance: "Significant", source: "Scanner: Volume", timestamp: hoursAgo(2, 55),
-    is_read: false, ai_priority: 79, tags: ["volume", "etf"],
-  },
-  {
-    id: "7", ticker: "NVDA", type: "rsi_extreme",
-    title: "RSI touched 78 — approaching overbought",
-    body: "NVDA 14-day RSI reached 78.2 on the daily chart. Historically, readings above 75 precede 2-5% pullbacks within 5 sessions. Monitor for reversal.",
-    importance: "Significant", source: "Scanner: RSI", timestamp: hoursAgo(3, 20),
-    is_read: true, ai_priority: 74, tags: ["rsi", "overbought"],
-  },
-  {
-    id: "8", ticker: "BTC", type: "crypto_funding",
-    title: "Funding rate spiked to +0.08% — longs crowded",
-    body: "BTC perpetual funding rate hit +0.08% on Binance, the highest in 30 days. Crowded longs increase cascade liquidation risk. Consider reducing exposure.",
-    importance: "Significant", source: "Crypto: Funding", timestamp: hoursAgo(3, 48),
-    is_read: false, ai_priority: 82, tags: ["crypto", "funding"],
-  },
-  {
-    id: "9", ticker: "ETH", type: "crypto_liquidation",
-    title: "$42M in ETH longs liquidated in 1 hour",
-    body: "A cascade of ETH long liquidations totaling $42M occurred between 8:00-9:00 AM as price dropped 3.1% from $3,420 to $3,314. Volatility may persist.",
-    importance: "Breaking", source: "Crypto: Liquidations", timestamp: hoursAgo(4, 5),
-    is_read: true, ai_priority: 89, tags: ["crypto", "liquidation"],
-  },
-  {
-    id: "10", ticker: "NVDA", type: "dark_pool",
-    title: "Dark pool print: 250K shares @ $921",
-    body: "Large block trade of 250,000 NVDA shares printed off-exchange at $921.00, totaling ~$230M. Could indicate institutional accumulation ahead of a catalyst.",
-    importance: "Significant", source: "Scanner: Dark Pool", timestamp: hoursAgo(4, 30),
-    is_read: true, ai_priority: 77, tags: ["darkpool", "institutional"],
-  },
-  {
-    id: "11", ticker: "AAPL", type: "insider_buy",
-    title: "CFO bought $2.1M in AAPL shares",
-    body: "Luca Maestri (CFO) filed Form 4 disclosing purchase of 12,500 AAPL shares at $168.30 on May 28. Insider buying near 52-week lows is historically bullish.",
-    importance: "Significant", source: "SEC: Form 4", timestamp: hoursAgo(5, 0),
-    is_read: true, ai_priority: 72, tags: ["insider", "buy"],
-  },
-  {
-    id: "12", ticker: "SPY", type: "macro",
-    title: "Fed minutes released — 2 cuts expected in 2025",
-    body: "May FOMC minutes signal committee sees 2 rate cuts in 2025 if inflation continues trending down. 10Y yield dropped 6bps to 4.31%. Equities rallied.",
-    importance: "Breaking", source: "News: Macro", timestamp: hoursAgo(5, 22),
-    is_read: true, ai_priority: 91, tags: ["macro", "fed"],
-  },
-  {
-    id: "13", ticker: "TSLA", type: "news_breaking",
-    title: "Reuters: Tesla Robotaxi launch confirmed for Q3",
-    body: "Reuters reports Tesla confirmed commercial Robotaxi service launch in Austin TX for Q3 2025. CEO confirmed on X. Stock up 4.2% in after-hours trading.",
-    importance: "Breaking", source: "News: Reuters", timestamp: hoursAgo(5, 50),
-    is_read: false, ai_priority: 93, tags: ["news", "catalyst"],
-  },
-  {
-    id: "14", ticker: "QQQ", type: "ma_cross",
-    title: "QQQ 20-day crossed above 50-day MA",
-    body: "The 20-day moving average on QQQ crossed above the 50-day MA at $460.30, forming a bullish short-term cross. Trend momentum improving.",
-    importance: "Routine", source: "Scanner: MA", timestamp: hoursAgo(6, 15),
-    is_read: true, ai_priority: 55, tags: ["ma", "trend"],
-  },
-  {
-    id: "15", ticker: "AAPL", type: "iv_expansion",
-    title: "AAPL IV rank jumped to 72 — options premium elevated",
-    body: "Implied volatility rank on AAPL surged from 41 to 72 in one session. Premium sellers may find favorable conditions. Check near-term catalysts.",
-    importance: "Routine", source: "Scanner: IV", timestamp: hoursAgo(6, 40),
-    is_read: true, ai_priority: 58, tags: ["iv", "options"],
-  },
-  {
-    id: "16", ticker: "BTC", type: "pct_move",
-    title: "BTC up 4.8% in last 4 hours",
-    body: "Bitcoin surged 4.8% from $68,200 to $71,470 over the last 4 hours on above-average volume. Breakout above key $70K resistance with momentum indicators positive.",
-    importance: "Significant", source: "Scanner: Price", timestamp: hoursAgo(7, 0),
-    is_read: true, ai_priority: 80, tags: ["price", "breakout"],
-  },
-  {
-    id: "17", ticker: "SPY", type: "risk_concentration",
-    title: "Top 3 positions = 58% of portfolio",
-    body: "Portfolio concentration alert: NVDA (24%), TSLA (18%), and AAPL (16%) together represent 58% of total equity. Diversification risk elevated.",
-    importance: "Routine", source: "Risk", timestamp: hoursAgo(7, 30),
-    is_read: true, ai_priority: 65, tags: ["risk", "concentration"],
-  },
-  {
-    id: "18", ticker: "NVDA", type: "pattern_detected",
-    title: "Bull flag forming on 4H chart",
-    body: "NVDA has formed a textbook bull flag on the 4-hour timeframe after a strong pole from $895 to $930. Flag consolidating between $918-$928. Breakout target ~$963.",
-    importance: "Significant", source: "Scanner: Patterns", timestamp: hoursAgo(7, 55),
-    is_read: true, ai_priority: 76, tags: ["pattern", "bullish"],
-  },
-];
+const MOCK_ALERTS: Alert[] = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -742,11 +615,20 @@ export default function Alerts() {
           {filtered.length === 0 ? (
             <div className="py-16 text-center">
               <BellOff size={32} className="text-zinc-700 mx-auto mb-3" />
-              <p className="text-[var(--text-secondary)] text-sm font-medium">No alerts match your filters</p>
-              <p className="text-[var(--text-tertiary)] text-xs mt-1">Try removing filters</p>
+              {alerts.length === 0 ? (
+                <>
+                  <p className="text-[var(--text-secondary)] text-sm font-medium">No alerts yet</p>
+                  <p className="text-[var(--text-tertiary)] text-xs mt-1">Alerts fire when bots detect setups in your universe.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[var(--text-secondary)] text-sm font-medium">No alerts match your filters</p>
+                  <p className="text-[var(--text-tertiary)] text-xs mt-1">Try removing filters</p>
+                </>
+              )}
               <button
                 onClick={() => { setSearch(""); setImportanceFilter("All"); setSourceFilter("All"); setDateFilter("Today"); }}
-                className="mt-3 text-xs text-[var(--accent-positive)] hover:underline">
+                className={cn("mt-3 text-xs text-[var(--accent-positive)] hover:underline", alerts.length === 0 && "hidden")}>
                 Clear all filters
               </button>
             </div>

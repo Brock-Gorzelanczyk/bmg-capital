@@ -1141,13 +1141,9 @@ function BacktestTab({ botName }: { botName: string }) {
               className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white w-32 focus:outline-none focus:border-lime-500/50"
             />
           </div>
-          <button
-            onClick={handleRun}
-            disabled={isRunning}
-            className="px-4 py-2 rounded-lg bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50"
-          >
-            {isRunning ? "Running…" : "Run Backtest"}
-          </button>
+          <div className="px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-xs text-zinc-500">
+            Full backtesting engine coming Q3 — currently disabled to prevent misleading results.
+          </div>
         </div>
       </div>
 
@@ -1600,9 +1596,6 @@ function StrategiesTab({
       {displayList.map((w) => {
         const total = w.wins_30d + w.losses_30d;
         const winRate = total > 0 ? (w.wins_30d / total) * 100 : null;
-        const sharpeProxy = total > 0
-          ? Math.max(0, ((w.wins_30d / total) - 0.5) * Math.sqrt(total) * 1.2).toFixed(2)
-          : "—";
         const lastSignal = signals.find((s) => s.strategy === w.strategy);
         const description = STRATEGY_DESCRIPTIONS[w.strategy];
 
@@ -1647,7 +1640,7 @@ function StrategiesTab({
             </div>
 
             {/* Stats row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
                 <p className="text-[10px] text-zinc-600 uppercase tracking-wide">30d W / L</p>
                 <p className="text-xs font-semibold mt-0.5">
@@ -1664,10 +1657,6 @@ function StrategiesTab({
                 )}>
                   {winRate !== null ? `${winRate.toFixed(0)}%` : "—"}
                 </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Sharpe Est</p>
-                <p className="text-xs font-semibold text-white mt-0.5">{sharpeProxy}</p>
               </div>
               <div>
                 <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Last Signal</p>
