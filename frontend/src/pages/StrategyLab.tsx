@@ -69,6 +69,11 @@ const BOT_META: Record<
     description: "BTC/ETH + majors, weekly DCA & monthly rebalance",
     assetClass: "crypto",
   },
+  crypto_quant_aggressive: {
+    displayName: "Crypto Quant Aggressive",
+    description: "8-signal high-turnover quant · 20-coin universe · $100k paper sub-account",
+    assetClass: "crypto",
+  },
   options_income: {
     displayName: "Options Income",
     description: "Wheel, covered calls, CSPs, iron condors — premium collection",
@@ -88,6 +93,7 @@ const BOT_ORDER = [
   "crypto_day",
   "crypto_swing",
   "crypto_lt",
+  "crypto_quant_aggressive",
   "options_income",
   "options_directional",
 ];

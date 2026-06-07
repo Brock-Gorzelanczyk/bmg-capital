@@ -32,19 +32,20 @@ _COLOR_SELL      = 0xE5484D
 _COLOR_REBALANCE = 0xF59E0B
 
 BOT_DISPLAY = {
-    "stock_swing":          "Stock Swing",
-    "stock_day":            "Stock Day",
-    "stock_lt":             "Stock Long-Term",
-    "crypto_swing":         "Crypto Swing",
-    "crypto_day":           "Crypto Day",
-    "crypto_lt":            "Crypto Long-Term",
-    "crypto_onchain":       "Crypto On-Chain",
-    "options_income":       "Options Income",
-    "options_directional":  "Options Directional",
+    "stock_swing":               "Stock Swing",
+    "stock_day":                 "Stock Day",
+    "stock_lt":                  "Stock Long-Term",
+    "crypto_swing":              "Crypto Swing",
+    "crypto_day":                "Crypto Day",
+    "crypto_lt":                 "Crypto Long-Term",
+    "crypto_onchain":            "Crypto On-Chain",
+    "crypto_quant_aggressive":   "Crypto Quant Aggressive",
+    "options_income":            "Options Income",
+    "options_directional":       "Options Directional",
 }
 
 _STOCKS_BOTS  = {"stock_swing", "stock_day", "stock_lt"}
-_CRYPTO_BOTS  = {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"}
+_CRYPTO_BOTS  = {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain", "crypto_quant_aggressive"}
 _OPTIONS_BOTS = {"options_income", "options_directional"}
 
 

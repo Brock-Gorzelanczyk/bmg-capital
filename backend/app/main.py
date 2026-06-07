@@ -106,6 +106,15 @@ async def lifespan(app: FastAPI):
     finally:
         _seed_db3.close()
 
+    # Ensure bot_paper_accounts table + crypto_quant_aggressive $100k sub-account row
+    # (non-fatal — same idempotent pattern as learning_seed)
+    try:
+        from app.db.migrations.m001_bot_paper_accounts import run as _run_m001
+        with engine.connect() as _m001_conn:
+            _run_m001(_m001_conn)
+    except Exception as _m001_exc:
+        logger.warning("[startup] m001_bot_paper_accounts failed (non-fatal): %s", _m001_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()

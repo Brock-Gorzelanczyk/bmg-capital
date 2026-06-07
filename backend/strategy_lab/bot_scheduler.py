@@ -179,6 +179,76 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
+    # crypto_quant_aggressive: every 5 min, 24/7
+    # High-turnover quant bot — 20-coin universe, 5-signal stack.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: run_bot_profile("crypto_quant_aggressive"),
+        CronTrigger(minute="*/5"),
+        id="bot_crypto_quant_aggressive",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+    )
+
+    # ------------------------------------------------------------------
+    # crypto_quant_aggressive: end-of-day summary to #crypto-signals at 23:55 UTC
+    # ------------------------------------------------------------------
+    def _cqa_eod_summary():
+        try:
+            from app.services.discord_public import post_signal
+            from app.db.session import SessionLocal
+            from app.db.models.bots import BotSignal, BotAllocation, BotProfile
+            from datetime import date
+            from sqlalchemy import func
+            db = SessionLocal()
+            try:
+                prof = db.query(BotProfile).filter(BotProfile.name == "crypto_quant_aggressive").first()
+                if not prof:
+                    return
+                today = date.today()
+                sigs = (
+                    db.query(BotSignal)
+                    .join(BotAllocation, BotSignal.allocation_id == BotAllocation.id)
+                    .filter(
+                        BotAllocation.profile_id == prof.id,
+                        func.date(BotSignal.ts) == today,
+                    )
+                    .all()
+                )
+                buys = sum(1 for s in sigs if s.side == "buy")
+                sells = sum(1 for s in sigs if s.side == "sell")
+                symbols = list({s.symbol for s in sigs})[:8]
+                summary_signal = {
+                    "bot": "crypto_quant_aggressive",
+                    "symbol": "PORTFOLIO",
+                    "side": "hold",
+                    "strategy": "EOD_SUMMARY",
+                    "reason": (
+                        f"End-of-day summary — Crypto Quant Aggressive\n"
+                        f"Signals today: {len(sigs)} ({buys} long, {sells} short)\n"
+                        f"Symbols: {', '.join(symbols) or 'none'}\n"
+                        f"Paper trading. Not investment advice. Not a registered investment adviser."
+                    ),
+                    "confidence": 1.0,
+                    "price": None,
+                    "size_pct": None,
+                    "stop": None,
+                    "target": None,
+                }
+                post_signal(summary_signal)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("cqa_eod_summary failed: %s", exc)
+
+    scheduler.add_job(
+        _cqa_eod_summary,
+        CronTrigger(hour=23, minute=55, timezone=UTC),
+        id="cqa_eod_summary",
+        replace_existing=True,
+    )
+
+    # ------------------------------------------------------------------
     # Public Discord daily digest: 4:30 PM ET weekdays + midnight UTC (crypto)
     # ------------------------------------------------------------------
     def _discord_daily_digest():
@@ -311,6 +381,6 @@ def setup_bot_scheduler(scheduler) -> None:
 
     logger.info(
         "strategy_lab: bot scheduler registered (stock_swing, stock_day, stock_lt, "
-        "crypto_swing, crypto_day, crypto_lt, crypto_onchain, "
+        "crypto_swing, crypto_day, crypto_lt, crypto_onchain, crypto_quant_aggressive, "
         "discord_digest, discord_leaderboard, daily_briefing_email, dead_mans_switch)"
     )

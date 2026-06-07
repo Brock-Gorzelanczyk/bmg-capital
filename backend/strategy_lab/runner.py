@@ -664,7 +664,7 @@ def run_bot_profile(profile_name: str) -> dict:
                         logger.debug("[runner:%s] webhook discord skipped: %s", profile_name, _exc)
 
                     # One-shot: #announcements alert on the very first real crypto buy signal
-                    if profile_name in {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"} and sig.side == "buy":
+                    if profile_name in {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain", "crypto_quant_aggressive"} and sig.side == "buy":
                         try:
                             _maybe_announce_first_live_signal(
                                 db=db,

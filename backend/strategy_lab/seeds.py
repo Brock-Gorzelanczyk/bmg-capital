@@ -23,6 +23,7 @@ _PROFILE_DESCRIPTIONS = {
     "crypto_lt": "Weekly DCA accumulation into top 10 crypto assets. Long-term conviction approach, no stops.",
     "options_income": "Wheel strategy, covered calls, cash-secured puts, iron condors — premium collection on high-IV stocks.",
     "options_directional": "Credit spreads, debit spreads, LEAPS — directional options plays on momentum stocks.",
+    "crypto_quant_aggressive": "8-signal high-turnover quant on 20 coins. VWAP fade, BB breakout, momentum trigger, volume z-score, range break retest. $100k paper sub-account.",
 }
 
 

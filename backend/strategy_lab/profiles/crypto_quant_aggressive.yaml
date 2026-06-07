@@ -1,0 +1,97 @@
+name: crypto_quant_aggressive
+asset_class: crypto
+broker: alpaca_paper_crypto
+
+universe:
+  tier_a: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, ADA/USD]
+  tier_b: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD]
+  tier_c: [ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD]
+  tier_d: [DOGE/USD, SHIB/USD]
+  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, ADA/USD,
+            AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD,
+            ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD,
+            DOGE/USD, SHIB/USD]
+
+scan_timeframe: "15m"
+scan_lookback_bars: 500
+cadence: "*/5 * * * *"
+
+watchlist:
+  rebuild_at: "0 */4 * * *"
+  size: 20
+  top_n_for_signals: 16
+  scoring:
+    intraday_momentum: 0.35
+    volume_ratio: 0.35
+    btc_correlation: 0.30
+
+strategies:
+  - crypto_quant_vwap_fade
+  - crypto_quant_bb_breakout
+  - crypto_quant_momentum_trigger
+  - crypto_quant_volume_zscore_spike
+  - crypto_quant_range_break_retest
+
+ensemble: any_above_threshold
+confidence_threshold: 0.55
+
+# Anti-overfit: if 3+ signals fire same symbol same scan, require higher conf
+anti_overfit_multi_signal_conf: 0.65
+
+# Anti-correlation: no new position if top-3 correlated symbol has same-direction open
+anti_correlation_top_n: 3
+
+# Confidence-weighted size multipliers
+size_bands:
+  - min: 0.55
+    max: 0.65
+    multiplier: 0.5
+  - min: 0.65
+    max: 0.75
+    multiplier: 1.0
+  - min: 0.75
+    max: 1.0
+    multiplier: 1.5
+
+position_cap: 8
+position_size_pct: 0.5         # per-trade risk pct of sub-account
+stop_loss_pct: 1.5
+take_profit_pct: 3.0
+trailing_stop_activate_at_pct: 1.5
+trailing_stop_distance_pct: 0.75
+hold_max_hours: 8
+
+cooldown_minutes: 10
+
+# Tier-specific position limits (% of sub-account)
+tier_limits:
+  tier_a_max_pct: 25
+  tier_b_max_pct: 10
+  tier_c_max_pct: 10
+  tier_d_max_pct: 5   # DOGE/SHIB meme coins
+
+risk_overlay:
+  daily_loss_limit_pct: 3.0
+  max_position_size_pct: 25.0
+  max_gross_exposure_pct: 60.0
+  consecutive_loss_halve_at: 4
+  consecutive_loss_halt_hours: 4
+  consecutive_loss_halt_at: 8
+  portfolio_drawdown_circuit_pct: 5.0
+  pdt_enforce: false
+  weekend_confidence_boost: 0.05   # threshold +0.05 on weekends
+
+execution:
+  order_type: market
+  limit_offset_bps: 10
+  reprice_after_seconds: 30
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
+
+discord:
+  channel: "crypto-signals"
+  eod_summary_cron: "55 23 * * *"
+
+paper_only: true
+starting_balance_cents: 10000000   # $100,000
