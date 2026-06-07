@@ -136,6 +136,17 @@ TOOLS = [
             "required": ["term"],
         },
     },
+    {
+        "name": "get_technical_indicators",
+        "description": "Compute RSI-14, MACD(12,26,9), Bollinger Bands, and moving averages for a stock or crypto symbol using 1 year of daily price data. Returns overbought/oversold interpretation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Ticker e.g. AAPL, SBUX, BTC-USD, ETH-USD"},
+            },
+            "required": ["symbol"],
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """You are BMG Intelligence — the AI co-pilot built into BMG Capital, a professional trading and investing platform. You have access to live market tools and can look up real-time data.
@@ -245,6 +256,109 @@ async def execute_tool(name: str, inp: dict, token: str) -> Any:
             elif name == "explain_term":
                 term = inp["term"]
                 return await _api(c, "POST", "/api/explain", token, json={"term": term, "mode": "detailed"})
+
+            elif name == "get_technical_indicators":
+                import asyncio as _asyncio
+                import pandas as _pd
+                import yfinance as _yf
+
+                raw_sym = inp["symbol"].upper().strip()
+                # Normalize: SBUX → SBUX, BTC/USD → BTC-USD, BTC → BTC-USD
+                yf_sym = raw_sym.replace("/USD", "-USD").replace("/USDT", "-USDT")
+                if "-" not in yf_sym and not any(c.isdigit() for c in yf_sym):
+                    # Might be a bare crypto base — try with -USD suffix if it looks like one
+                    _CRYPTO_SET = {"BTC","ETH","SOL","AVAX","DOGE","ADA","BNB","XRP","MATIC","LINK"}
+                    if yf_sym in _CRYPTO_SET:
+                        yf_sym = f"{yf_sym}-USD"
+
+                def _compute_indicators_sync() -> dict:
+                    ticker = _yf.Ticker(yf_sym)
+                    hist = ticker.history(period="1y")
+                    if hist.empty or len(hist) < 30:
+                        return {"error": f"Insufficient price history for {raw_sym}"}
+                    close = hist["Close"]
+                    current = float(close.iloc[-1])
+
+                    # RSI-14
+                    delta = close.diff()
+                    gain = delta.clip(lower=0).rolling(14).mean()
+                    loss = (-delta.clip(upper=0)).rolling(14).mean()
+                    rs = gain / loss.replace(0, float("nan"))
+                    rsi_s = 100 - 100 / (1 + rs)
+                    rsi = round(float(rsi_s.iloc[-1]), 1) if not _pd.isna(rsi_s.iloc[-1]) else None
+
+                    # MACD(12,26,9)
+                    ema12 = close.ewm(span=12, adjust=False).mean()
+                    ema26 = close.ewm(span=26, adjust=False).mean()
+                    macd_line = ema12 - ema26
+                    sig_line = macd_line.ewm(span=9, adjust=False).mean()
+                    hist_line = macd_line - sig_line
+                    macd_bullish = float(hist_line.iloc[-1]) > 0
+
+                    # Bollinger Bands(20)
+                    ma20 = close.rolling(20).mean()
+                    std20 = close.rolling(20).std()
+                    bb_u = float(ma20.iloc[-1] + 2 * std20.iloc[-1])
+                    bb_l = float(ma20.iloc[-1] - 2 * std20.iloc[-1])
+                    bb_pct = (current - bb_l) / (bb_u - bb_l) if (bb_u - bb_l) > 0 else 0.5
+
+                    # Moving averages
+                    ma50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else None
+                    ma200 = float(close.rolling(200).mean().iloc[-1]) if len(close) >= 200 else None
+
+                    # 52-week
+                    high_52w = float(close.max())
+                    low_52w = float(close.min())
+
+                    rsi_label = (
+                        "oversold (<30)" if rsi is not None and rsi < 30
+                        else "overbought (>70)" if rsi is not None and rsi > 70
+                        else "neutral (30–70)"
+                    )
+
+                    return {
+                        "symbol": raw_sym,
+                        "current_price": round(current, 2),
+                        "rsi_14": rsi,
+                        "rsi_interpretation": rsi_label,
+                        "macd": {
+                            "macd": round(float(macd_line.iloc[-1]), 4),
+                            "signal": round(float(sig_line.iloc[-1]), 4),
+                            "histogram": round(float(hist_line.iloc[-1]), 4),
+                            "crossover": "bullish" if macd_bullish else "bearish",
+                        },
+                        "bollinger_bands": {
+                            "upper": round(bb_u, 2),
+                            "lower": round(bb_l, 2),
+                            "pct_b": round(bb_pct, 3),
+                            "position": (
+                                "above_upper_band" if current > bb_u
+                                else "below_lower_band" if current < bb_l
+                                else "within_bands"
+                            ),
+                        },
+                        "moving_averages": {
+                            "ma_50": round(ma50, 2) if ma50 else None,
+                            "ma_200": round(ma200, 2) if ma200 else None,
+                            "above_ma50": bool(current > ma50) if ma50 else None,
+                            "above_ma200": bool(current > ma200) if ma200 else None,
+                            "golden_cross": bool(ma50 > ma200) if (ma50 and ma200) else None,
+                        },
+                        "range_52w": {
+                            "high": round(high_52w, 2),
+                            "low": round(low_52w, 2),
+                            "pct_from_high": round((current - high_52w) / high_52w * 100, 1),
+                        },
+                    }
+
+                try:
+                    result = await _asyncio.wait_for(
+                        _asyncio.to_thread(_compute_indicators_sync),
+                        timeout=20.0,
+                    )
+                    return result
+                except _asyncio.TimeoutError:
+                    return {"error": f"Indicator computation timed out for {raw_sym}. Answer from general knowledge."}
 
             else:
                 return {"error": f"Unknown tool: {name}"}

@@ -93,6 +93,19 @@ function streamCopilot(
 ): () => void {
   const token = localStorage.getItem("bmg_token") ?? "";
   let cancelled = false;
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+  const _clearTimeout = () => { if (timeoutHandle) clearTimeout(timeoutHandle); };
+  const _resetTimeout = (reader: ReadableStreamDefaultReader<Uint8Array>) => {
+    _clearTimeout();
+    timeoutHandle = setTimeout(() => {
+      if (!cancelled) {
+        cancelled = true;
+        reader.cancel().catch(() => {});
+        onError("Response timed out after 30 s. Please try again.");
+      }
+    }, 30_000);
+  };
 
   fetch("/api/copilot/stream", {
     method: "POST",
@@ -111,10 +124,12 @@ function streamCopilot(
     const decoder = new TextDecoder();
     let buf = "";
 
+    _resetTimeout(reader);
     while (true) {
-      if (cancelled) { reader.cancel(); return; }
+      if (cancelled) { reader.cancel().catch(() => {}); _clearTimeout(); return; }
       const { done, value } = await reader.read();
       if (done) break;
+      _resetTimeout(reader);  // reset on each chunk
       buf += decoder.decode(value, { stream: true });
 
       const lines = buf.split("\n");
@@ -130,19 +145,21 @@ function streamCopilot(
           if (ev.type === "tool_start") onToolStart(ev.tool, ev.input);
           else if (ev.type === "tool_result") onToolResult(ev.tool, ev.result);
           else if (ev.type === "text_delta") onDelta(ev.delta);
-          else if (ev.type === "done") onDone();
-          else if (ev.type === "error") onError(ev.message ?? "Error");
+          else if (ev.type === "done") { _clearTimeout(); onDone(); }
+          else if (ev.type === "error") { _clearTimeout(); onError(ev.message ?? "Error"); }
         } catch {
           // skip malformed
         }
       }
     }
+    _clearTimeout();
     if (!cancelled) onDone();
   }).catch((e) => {
+    _clearTimeout();
     if (!cancelled) onError(String(e));
   });
 
-  return () => { cancelled = true; };
+  return () => { cancelled = true; _clearTimeout(); };
 }
 
 // ── Tool Call Card ────────────────────────────────────────────────────────────
