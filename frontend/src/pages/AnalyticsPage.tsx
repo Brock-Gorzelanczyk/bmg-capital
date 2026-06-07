@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useIsViewer } from "@/store/authStore";
 import {
   AreaChart,
   Area,
@@ -616,6 +617,7 @@ export default function AnalyticsPage() {
   const [accountType, setAccountType] = useState("all");
   const [demoMode, setDemoMode] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const isViewer = useIsViewer();
 
   const realQuery = useQuery({
     queryKey: ["journal-analytics", days, accountType],
@@ -657,19 +659,21 @@ export default function AnalyticsPage() {
           >
             <Bot size={12} /> Ask AI
           </button>
-          {/* Demo toggle */}
-          <button
-            onClick={() => setDemoMode(v => !v)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
-              demoMode
-                ? "bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/30"
-                : "bg-[var(--bg-elevated)] text-[var(--text-tertiary)] border-[var(--border-subtle)] hover:text-[var(--text-secondary)]"
-            )}
-          >
-            <FlaskConical size={13} />
-            {demoMode ? "Demo data — toggle off" : "Try demo data"}
-          </button>
+          {/* Demo toggle — admin only */}
+          {!isViewer && (
+            <button
+              onClick={() => setDemoMode(v => !v)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
+                demoMode
+                  ? "bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/30"
+                  : "bg-[var(--bg-elevated)] text-[var(--text-tertiary)] border-[var(--border-subtle)] hover:text-[var(--text-secondary)]"
+              )}
+            >
+              <FlaskConical size={13} />
+              {demoMode ? "Demo data — toggle off" : "Try demo data"}
+            </button>
+          )}
 
           {/* Days filter — hide in demo mode */}
           {!demoMode && (
@@ -748,12 +752,14 @@ export default function AnalyticsPage() {
               >
                 Place first trade →
               </button>
-              <button
-                onClick={() => setDemoMode(true)}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[var(--accent-positive)] text-black font-semibold hover:opacity-90 transition-opacity"
-              >
-                See demo data
-              </button>
+              {!isViewer && (
+                <button
+                  onClick={() => setDemoMode(true)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-[var(--accent-positive)] text-black font-semibold hover:opacity-90 transition-opacity"
+                >
+                  See demo data
+                </button>
+              )}
             </div>
           </div>
 

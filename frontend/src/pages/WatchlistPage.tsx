@@ -248,7 +248,7 @@ export default function WatchlistPage() {
           {/* Page header still visible so user can create via form if they want */}
           <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--border-subtle)] mb-6">
             <h2 className="text-xl font-bold text-[var(--text-primary)] font-display">Watchlists</h2>
-            {showNewForm ? (
+            {!isViewer && (showNewForm ? (
               <form
                 onSubmit={(e) => { e.preventDefault(); if (newName.trim()) createMut.mutate(newName.trim()); }}
                 className="flex gap-2"
@@ -272,7 +272,7 @@ export default function WatchlistPage() {
               >
                 <Plus size={14} /> New list
               </button>
-            )}
+            ))}
           </div>
 
           {/* Empty state hero */}
@@ -314,32 +314,36 @@ export default function WatchlistPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--border-subtle)]">
           <h2 className="text-xl font-bold text-[var(--text-primary)] font-display">Watchlists</h2>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setAiOpen(true)}
-              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-            >
-              <Bot size={12} /> Ask AI
-            </button>
+            {!isViewer && (
+              <button
+                onClick={() => setAiOpen(true)}
+                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Bot size={12} /> Ask AI
+              </button>
+            )}
             <button
               onClick={() => setShowTemplates(true)}
               className="text-[var(--text-tertiary)] text-xs hover:text-[var(--text-secondary)] transition-colors px-2 py-1 rounded-lg border border-transparent hover:border-[var(--border-subtle)]"
             >
               Browse templates
             </button>
-            <form
-              onSubmit={(e) => { e.preventDefault(); if (newName.trim()) createMut.mutate(newName.trim()); }}
-              className="flex gap-2"
-            >
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="New list name"
-                className="bg-[var(--bg-elevated-2)] text-[var(--text-primary)] text-sm px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] hover:border-[var(--border-emphasis)] focus:border-[var(--accent-positive)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-positive)]/40 w-40 placeholder:text-[var(--text-tertiary)] transition-colors"
-              />
-              <Button type="submit" variant="primary" size="sm">
-                <Plus size={14} />
-              </Button>
-            </form>
+            {!isViewer && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); if (newName.trim()) createMut.mutate(newName.trim()); }}
+                className="flex gap-2"
+              >
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="New list name"
+                  className="bg-[var(--bg-elevated-2)] text-[var(--text-primary)] text-sm px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] hover:border-[var(--border-emphasis)] focus:border-[var(--accent-positive)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-positive)]/40 w-40 placeholder:text-[var(--text-tertiary)] transition-colors"
+                />
+                <Button type="submit" variant="primary" size="sm">
+                  <Plus size={14} />
+                </Button>
+              </form>
+            )}
           </div>
         </div>
 

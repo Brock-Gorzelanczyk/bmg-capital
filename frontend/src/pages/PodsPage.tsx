@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useIsViewer } from "@/store/authStore";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getPods,
@@ -166,9 +167,11 @@ function AddPositionForm({
 function PodCard({
   pod,
   onDeriskAlert,
+  isViewer = false,
 }: {
   pod: Pod;
   onDeriskAlert: (result: DeriskResult) => void;
+  isViewer?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const qc = useQueryClient();
@@ -257,7 +260,7 @@ function PodCard({
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            {!pod.is_derisked && hitStop && (
+            {!pod.is_derisked && hitStop && !isViewer && (
               <button
                 onClick={() => deriskMut.mutate()}
                 disabled={deriskMut.isPending}
@@ -266,14 +269,16 @@ function PodCard({
                 De-risk
               </button>
             )}
-            <button
-              onClick={() => {
-                if (confirm(`Delete pod "${pod.name}"?`)) deleteMut.mutate();
-              }}
-              className="p-1.5 text-[var(--text-tertiary)] hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
-            >
-              <Trash2 size={13} />
-            </button>
+            {!isViewer && (
+              <button
+                onClick={() => {
+                  if (confirm(`Delete pod "${pod.name}"?`)) deleteMut.mutate();
+                }}
+                className="p-1.5 text-[var(--text-tertiary)] hover:text-red-400 transition-colors rounded-lg hover:bg-red-900/20"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
             <button
               onClick={() => setExpanded((v) => !v)}
               className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors rounded-lg hover:bg-[var(--bg-elevated-2)]"
@@ -637,6 +642,7 @@ export default function PodsPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [deriskResult, setDeriskResult] = useState<DeriskResult | null>(null);
   const [stopOutPod, setStopOutPod] = useState<Pod | null>(null);
+  const isViewer = useIsViewer();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["pods"],
@@ -664,13 +670,15 @@ export default function PodsPage() {
             Institutional-style sub-accounts with independent risk management.
           </p>
         </div>
-        <button
-          onClick={() => setShowNewModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[var(--accent-positive)] text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity shrink-0"
-        >
-          <Plus size={15} />
-          New Pod
-        </button>
+        {!isViewer && (
+          <button
+            onClick={() => setShowNewModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[var(--accent-positive)] text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity shrink-0"
+          >
+            <Plus size={15} />
+            New Pod
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -710,6 +718,7 @@ export default function PodsPage() {
               key={pod.id}
               pod={pod}
               onDeriskAlert={handleDeriskAlert}
+              isViewer={isViewer}
             />
           ))}
         </div>
