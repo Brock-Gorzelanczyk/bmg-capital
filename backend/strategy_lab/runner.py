@@ -266,7 +266,7 @@ def run_bot_profile(profile_name: str) -> dict:
             bars: dict[str, list[dict]] = {}
             if symbols:
                 try:
-                    if asset_class in ("crypto", "crypto_intraday"):
+                    if asset_class in ("crypto", "crypto_intraday", "quant"):
                         from app.screener.crypto_runner import _fetch_crypto_bars
                         raw_bars = _fetch_crypto_bars(symbols, timeframe=timeframe, limit=limit)
                     else:
@@ -785,7 +785,7 @@ def trace_bot_profile(profile_name: str, confidence_threshold_override: float | 
 
             bars: dict[str, list[dict]] = {}
             try:
-                if asset_class in ("crypto", "crypto_intraday"):
+                if asset_class in ("crypto", "crypto_intraday", "quant"):
                     from app.screener.crypto_runner import _fetch_crypto_bars
                     raw = _fetch_crypto_bars(symbols, timeframe=timeframe, limit=limit)
                 else:
