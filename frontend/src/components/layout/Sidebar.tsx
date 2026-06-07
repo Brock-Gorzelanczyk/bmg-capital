@@ -86,6 +86,7 @@ const NAV_CRYPTO_PLUS = [
 
 const NAV_LEARN = [
   { to: "/learn", label: "Learning Center", Icon: GraduationCap },
+  { to: "/learn/tracks", label: "IMCP Curriculum", Icon: BookOpen },
 ];
 
 const NAV_TOOLS = [

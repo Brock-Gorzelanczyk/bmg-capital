@@ -24,6 +24,11 @@ const Research = lazy(() => import("@/pages/Research"));
 const LearnHome = lazy(() => import("@/pages/LearnHome"));
 const LearnCourse = lazy(() => import("@/pages/LearnCourse"));
 const LearnLesson = lazy(() => import("@/pages/LearnLesson"));
+// IMCP Learning Center (Phase A)
+const IMCPLearnPage = lazy(() => import("@/pages/learn/LearnPage"));
+const IMCPLearnTrackPage = lazy(() => import("@/pages/learn/LearnTrackPage"));
+const IMCPLearnModulePage = lazy(() => import("@/pages/learn/LearnModulePage"));
+const IMCPLearnLessonPage = lazy(() => import("@/pages/learn/LearnLessonPage"));
 const OptionsLab = lazy(() => import("@/pages/OptionsLab"));
 const CryptoLab = lazy(() => import("@/pages/CryptoLab"));
 const NotificationsPage = lazy(() => import("@/pages/NotificationsPage"));
@@ -313,6 +318,11 @@ function AppInner() {
         <Route path="/security" element={<Security />} />
         <Route path="/learn" element={<LearnHome />} />
         <Route path="/learn/lesson/:lessonId" element={<LearnLesson />} />
+        {/* IMCP Learning Center (Phase A) — must come before /learn/:trackId */}
+        <Route path="/learn/tracks" element={<IMCPLearnPage />} />
+        <Route path="/learn/tracks/:trackSlug" element={<IMCPLearnTrackPage />} />
+        <Route path="/learn/tracks/:trackSlug/:moduleSlug" element={<IMCPLearnModulePage />} />
+        <Route path="/learn/tracks/:trackSlug/:moduleSlug/:lessonSlug" element={<IMCPLearnLessonPage />} />
         <Route path="/learn/:trackId" element={<LearnCourse />} />
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
