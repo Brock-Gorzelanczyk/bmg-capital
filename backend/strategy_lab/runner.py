@@ -306,8 +306,8 @@ def run_bot_profile(profile_name: str) -> dict:
                         ]
                     signals_by_strategy.append(strat_signals or [])
                     strategies_loaded += 1
-                    logger.debug(
-                        "[runner:%s] %s → %d signals",
+                    logger.info(
+                        "[runner:%s] strategy %s → %d signals",
                         profile_name, strat_name, len(strat_signals or []),
                     )
                 except Exception as exc:
@@ -330,6 +330,10 @@ def run_bot_profile(profile_name: str) -> dict:
             # 8. Apply ensemble vote
             ensemble = profile.get("ensemble", "weighted_vote")
             signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded))
+            logger.info(
+                "[runner:%s] after ensemble (%s): %d signals",
+                profile_name, ensemble, len(signals),
+            )
 
             # 8a. Multi-timeframe confluence filter (graceful)
             bot_cadence = _cadence_for_profile(profile_name)
@@ -343,31 +347,43 @@ def run_bot_profile(profile_name: str) -> dict:
                     score = check_confluence(sig.symbol, sig, bars, bot_cadence)
                     if score >= 0.66:
                         filtered_signals.append(sig)
-                        logger.debug(
-                            "[runner:%s] MTF confluence %s %s: score=%.2f PASS",
+                        logger.info(
+                            "[runner:%s] MTF %s %s: score=%.2f PASS",
                             profile_name, sig.symbol, sig.side, score,
                         )
                     else:
                         logger.info(
-                            "[runner:%s] MTF confluence %s %s: score=%.2f SKIP",
+                            "[runner:%s] MTF %s %s: score=%.2f SKIP",
                             profile_name, sig.symbol, sig.side, score,
                         )
                 except Exception as exc:
                     logger.warning("[runner:%s] multi_timeframe failed for %s: %s", profile_name, sig.symbol, exc)
                     filtered_signals.append(sig)  # degrade gracefully
             signals = filtered_signals
+            logger.info(
+                "[runner:%s] after MTF confluence: %d signals",
+                profile_name, len(signals),
+            )
 
             # 9. Apply risk overlay (graceful — may not be built yet)
+            pre_overlay_count = len(signals)
             try:
                 from strategy_lab.core.risk_overlay import apply_overlay  # type: ignore
                 signals = apply_overlay(signals, profile, regime, db) or signals
             except (ImportError, Exception) as exc:
                 logger.debug("[runner:%s] risk_overlay unavailable: %s", profile_name, exc)
+            logger.info(
+                "[runner:%s] after risk_overlay: %d signals (was %d)",
+                profile_name, len(signals), pre_overlay_count,
+            )
 
             # 10. Expert decision layer: per-signal processing for actionable signals
             from strategy_lab.core.audit import log_signal
 
             actionable = [s for s in signals if s.side != "hold"]
+            logger.info(
+                "[runner:%s] actionable signals: %d", profile_name, len(actionable),
+            )
             processed_signals = []
 
             for alloc in allocations:
@@ -761,8 +777,10 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             )
 
     if entry_price <= 0:
-        logger.warning("[execute:%s] no price for %s — skipping order", profile_name, sig.symbol)
+        logger.warning("[execute:%s] no price for %s — skipping order (live=0, broker=0, bars_fallback=0)", profile_name, sig.symbol)
         return
+
+    logger.info("[execute:%s] entry_price=%s=%.4f equity=%.2f", profile_name, sig.symbol, entry_price, equity)
 
     # 2. Size: pct of bot capital (capital_cents_within_portfolio or starting capital)
     capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
