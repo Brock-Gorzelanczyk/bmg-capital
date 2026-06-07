@@ -39,7 +39,7 @@ def test_hold_max_hours_force_exits_stale_position():
         closed_positions.append((p.symbol, reason))
 
     with (
-        patch("strategy_lab.core.position_monitor.SessionLocal") as mock_session,
+        patch("app.db.session.SessionLocal") as mock_session,
         patch("strategy_lab.core.position_monitor._get_current_prices", return_value={"ETH/USD": 2500.0}),
         patch("strategy_lab.core.position_monitor._close_position", side_effect=fake_close),
     ):
@@ -74,7 +74,7 @@ def test_hold_min_days_prevents_early_exit():
         closed_positions.append((p.symbol, reason))
 
     with (
-        patch("strategy_lab.core.position_monitor.SessionLocal") as mock_session,
+        patch("app.db.session.SessionLocal") as mock_session,
         patch("strategy_lab.core.position_monitor._get_current_prices", return_value={"AAPL": 174.0}),
         patch("strategy_lab.core.position_monitor._close_position", side_effect=fake_close),
     ):
@@ -106,7 +106,7 @@ def test_hold_max_days_converted_to_hours():
         closed_positions.append((p.symbol, reason))
 
     with (
-        patch("strategy_lab.core.position_monitor.SessionLocal") as mock_session,
+        patch("app.db.session.SessionLocal") as mock_session,
         patch("strategy_lab.core.position_monitor._get_current_prices", return_value={"SOL/USD": 155.0}),
         patch("strategy_lab.core.position_monitor._close_position", side_effect=fake_close),
     ):
