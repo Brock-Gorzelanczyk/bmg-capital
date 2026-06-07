@@ -19,7 +19,10 @@ strategies:
   - crypto_volatility_breakout
   - crypto_session_open
 ensemble: any_above_threshold
-confidence_threshold: 0.45
+# TEMP: lowered 2026-06-07 to validate organic signal firing
+# while pre-filters are loose. Restore to 0.45 after first
+# organic signal lands in Discord.
+confidence_threshold: 0.30
 position_cap: 5
 position_size_pct: 1.5
 stop_loss_pct: 1.0
