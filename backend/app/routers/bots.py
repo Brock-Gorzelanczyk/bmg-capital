@@ -2656,16 +2656,44 @@ def get_trade_detail(
     profile = db.get(BotProfile, alloc.profile_id)
     position = db.get(BotPosition, trade.position_id) if trade.position_id else None
 
-    # Find the signal closest in time to this trade (within ±5 min)
+    # Signal lookup is deferred — runs after entry_time is resolved below
+
+    # Determine entry price + time.
+    # If the requested trade is a sell/close, the fill_price is the EXIT price.
+    # Look up the corresponding buy trade for the real entry data.
+    entry_price = trade.fill_price_cents / 100
+    entry_time = trade.ts.isoformat() if trade.ts else None
+
+    is_close_trade = trade.side in ("sell", "close")
+    if is_close_trade and trade.position_id:
+        entry_trade = (
+            db.query(BotTrade)
+            .filter(
+                BotTrade.position_id == trade.position_id,
+                BotTrade.side == "buy",
+            )
+            .order_by(BotTrade.ts)
+            .first()
+        )
+        if entry_trade:
+            entry_price = entry_trade.fill_price_cents / 100
+            entry_time = entry_trade.ts.isoformat() if entry_trade.ts else None
+        elif position:
+            entry_price = position.avg_cost_cents / 100
+            entry_time = position.opened_at.isoformat() if position.opened_at else None
+
+    # Find the signal closest to the entry time (within ±10 min)
     signal = None
     try:
+        from datetime import datetime as _dt
+        sig_anchor = _dt.fromisoformat(entry_time) if entry_time else trade.ts
         signal = (
             db.query(BotSignal)
             .filter(
                 BotSignal.allocation_id == trade.allocation_id,
                 BotSignal.symbol == trade.symbol,
-                BotSignal.ts >= trade.ts - timedelta(minutes=5),
-                BotSignal.ts <= trade.ts + timedelta(minutes=5),
+                BotSignal.ts >= sig_anchor - timedelta(minutes=10),
+                BotSignal.ts <= sig_anchor + timedelta(minutes=10),
             )
             .order_by(BotSignal.ts)
             .first()
@@ -2673,14 +2701,18 @@ def get_trade_detail(
     except Exception:
         pass
 
-    entry_price = trade.fill_price_cents / 100
     status = "open" if (position and position.closed_at is None) else "closed"
 
-    # For closed positions, find the exit trade
+    # Determine exit price + P&L
     exit_price = None
     realized_pnl = None
     close_time = None
-    if position and position.closed_at:
+    if is_close_trade:
+        # This trade IS the exit — use it directly
+        exit_price = trade.fill_price_cents / 100
+        close_time = trade.ts.isoformat() if trade.ts else None
+        realized_pnl = round((exit_price - entry_price) * trade.qty, 2)
+    elif position and position.closed_at:
         close_time = position.closed_at.isoformat()
         exit_trade = (
             db.query(BotTrade)
@@ -2720,7 +2752,7 @@ def get_trade_detail(
         "side": trade.side,
         "qty": trade.qty,
         "entry_price_usd": entry_price,
-        "entry_time": trade.ts.isoformat() if trade.ts else None,
+        "entry_time": entry_time,
         "status": status,
         "stop_loss_usd": signal.stop_price if signal else None,
         "take_profit_usd": signal.target_price if signal else None,
