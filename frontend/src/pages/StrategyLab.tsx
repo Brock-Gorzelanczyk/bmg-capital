@@ -401,8 +401,8 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
                 </span>
                 <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-orange-400" : "bg-blue-400")} />
                 <span className="flex-1 text-xs font-semibold text-white truncate">{entry.name}</span>
-                <span className={cn("text-xs font-bold w-14 text-right", ePos ? "text-lime-400" : "text-red-400")}>
-                  {formatPct(entry.return_30d_pct)}
+                <span className={cn("text-xs font-bold w-16 text-right", ePos ? "text-lime-400" : "text-red-400")}>
+                  {entry.return_30d_pct >= 0 ? "+" : ""}{entry.return_30d_pct.toFixed(3)}%
                 </span>
                 <span className={cn("text-xs w-20 text-right", tPos ? "text-lime-400" : "text-red-400")}>
                   {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
@@ -1353,7 +1353,7 @@ export default function StrategyLab() {
             <div>
               <h1 className="text-2xl font-bold text-white">Strategy Lab</h1>
               <p className="text-zinc-500 text-sm mt-1">
-                Three independent portfolios — Stocks, Crypto, and Options — each running dedicated bots with $50,000 paper capital.
+                Three independent portfolios — Stocks, Crypto, and Options — each running dedicated bots on real market data.
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">

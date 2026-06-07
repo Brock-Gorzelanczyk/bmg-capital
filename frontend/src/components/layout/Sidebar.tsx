@@ -302,10 +302,10 @@ function AvatarDropdown({
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-[var(--text-primary)] truncate">{user?.username ?? "User"}</p>
                 <p className="text-[10px] text-[var(--text-tertiary)] truncate">{user?.email ?? ""}</p>
+                <span className={cn("inline-block mt-0.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full", tierColor)}>
+                  {tierLabel}
+                </span>
               </div>
-              <span className={cn("text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full shrink-0", tierColor)}>
-                {tierLabel}
-              </span>
             </div>
           </div>
 
