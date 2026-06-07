@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   Bell, BellOff, TrendingUp, TrendingDown, Zap, AlertTriangle, Activity,
   Filter, Search, ChevronDown, ChevronRight, X, Check, Eye, VolumeX,
-  Star, Clock, Trash2, Settings, BarChart2, ExternalLink,
+  Star, Clock, Trash2, Settings, BarChart2, ExternalLink, FlaskConical,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -198,27 +198,27 @@ function sourceCategory(source: string): string {
 
 function AIPill({ score }: { score: number }) {
   if (score >= 85) return (
-    <div className="flex flex-col items-center">
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--accent-positive)]/20 text-[var(--accent-positive)]">
+    <div className="flex flex-col items-center" title="Demo score — not computed from real data">
+      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-700/60 text-zinc-400">
         🔥 {score}
       </span>
-      <span className="text-[9px] text-[var(--text-tertiary)] mt-0.5">AI Score</span>
+      <span className="text-[9px] text-[var(--text-tertiary)] mt-0.5">Demo</span>
     </div>
   );
   if (score >= 70) return (
-    <div className="flex flex-col items-center">
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400">
-        {score}
-      </span>
-      <span className="text-[9px] text-[var(--text-tertiary)] mt-0.5">AI Score</span>
-    </div>
-  );
-  return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center" title="Demo score — not computed from real data">
       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-700/60 text-zinc-400">
         {score}
       </span>
-      <span className="text-[9px] text-[var(--text-tertiary)] mt-0.5">AI Score</span>
+      <span className="text-[9px] text-[var(--text-tertiary)] mt-0.5">Demo</span>
+    </div>
+  );
+  return (
+    <div className="flex flex-col items-center" title="Demo score — not computed from real data">
+      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-700/60 text-zinc-400">
+        {score}
+      </span>
+      <span className="text-[9px] text-[var(--text-tertiary)] mt-0.5">Demo</span>
     </div>
   );
 }
@@ -620,6 +620,14 @@ export default function Alerts() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Demo data notice */}
+          <div className="flex items-center gap-2 bg-zinc-800/60 border border-zinc-700/50 rounded-lg px-3 py-2 mb-3 text-xs">
+            <FlaskConical size={12} className="text-zinc-400 shrink-0" />
+            <span className="text-zinc-400">
+              Demo alerts — illustrative examples only. Real-time generation (RSI extremes, momentum surges, risk breaches) coming soon.
+            </span>
           </div>
 
           {/* Fatigue banner */}
