@@ -344,6 +344,7 @@ type TabId = "all" | "unread" | "critical" | "Strategies" | "Patterns" | "News" 
 
 export default function Alerts() {
   const [alerts, setAlerts] = useState<Alert[]>(MOCK_ALERTS);
+  const [dismissedCount, setDismissedCount] = useState(0);
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [importanceFilter, setImportanceFilter] = useState<Importance | "All">("All");
@@ -406,6 +407,7 @@ export default function Alerts() {
     setAlerts((prev) => prev.map((a) => a.id === id ? { ...a, is_read: true } : a));
   }
   function dismiss(id: string) {
+    setDismissedCount((c) => c + 1);
     setAlerts((prev) => prev.filter((a) => a.id !== id));
     if (selectedId === id) setSelectedId(null);
   }
@@ -458,9 +460,9 @@ export default function Alerts() {
     });
   }
 
-  const totalToday = MOCK_ALERTS.length;
-  const actedOn = 2;
-  const dismissed = totalToday - actedOn - unreadCount;
+  const received = alerts.length + dismissedCount;
+  const actedOn = alerts.filter((a) => a.is_read).length;
+  const dismissed = dismissedCount;
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
@@ -508,7 +510,7 @@ export default function Alerts() {
             <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mb-3 text-xs">
               <span className="text-amber-400">
                 <AlertTriangle size={11} className="inline mr-1" />
-                You've received {totalToday} alerts today. Acting on {actedOn}. Want to tune?
+                You've received {received} alerts today. Acting on {actedOn}. Want to tune?
               </span>
               <button onClick={() => toast.info("Alert tuning panel coming soon")}
                 className="text-amber-300 font-semibold hover:text-amber-200 transition-colors ml-3 shrink-0">
@@ -693,17 +695,19 @@ export default function Alerts() {
             <span className="text-xs text-[var(--text-tertiary)]">This week</span>
           </div>
           <div className="flex items-center gap-4 text-xs text-[var(--text-secondary)] mb-3">
-            <span><span className="font-bold text-[var(--text-primary)]">{totalToday}</span> received</span>
+            <span><span className="font-bold text-[var(--text-primary)]">{received}</span> received</span>
             <span><span className="font-bold text-[var(--accent-positive)]">{actedOn}</span> acted on</span>
-            <span><span className="font-bold text-[var(--text-tertiary)]">{Math.max(0, dismissed)}</span> dismissed</span>
+            <span><span className="font-bold text-[var(--text-tertiary)]">{dismissed}</span> dismissed</span>
           </div>
           <div className="w-full bg-[var(--bg-elevated-2)] rounded-full h-1.5 mb-3">
-            <div className="bg-[var(--accent-positive)] h-1.5 rounded-full" style={{ width: `${(actedOn / totalToday) * 100}%` }} />
+            <div className="bg-[var(--accent-positive)] h-1.5 rounded-full" style={{ width: received > 0 ? `${(actedOn / received) * 100}%` : "0%" }} />
           </div>
-          <p className="text-[10px] text-[var(--text-tertiary)]">
-            <AlertTriangle size={9} className="inline text-amber-400 mr-1" />
-            Your dismiss rate on &apos;Routine&apos; alerts is 89%. Consider quieting them.
-          </p>
+          {received > 0 && (
+            <p className="text-[10px] text-[var(--text-tertiary)]">
+              <AlertTriangle size={9} className="inline text-amber-400 mr-1" />
+              Your dismiss rate on &apos;Routine&apos; alerts is 89%. Consider quieting them.
+            </p>
+          )}
         </div>
       </div>
 
