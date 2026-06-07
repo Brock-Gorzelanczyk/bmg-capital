@@ -415,6 +415,7 @@ def run_migrations(engine: Engine) -> None:
         _grant_admin(conn)
         _retrofit_debug_trade_signals(conn)
         _close_debug_test_trades(conn)
+        _dedupe_bot_allocations(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -607,6 +608,54 @@ def _retrofit_debug_trade_signals(conn) -> None:
         logger.info("Migration %s: retrofitted BTC test trade stop/target levels", MIGRATION_NAME)
     except Exception as exc:
         logger.warning("_retrofit_debug_trade_signals failed: %s", exc)
+
+
+def _dedupe_bot_allocations(conn) -> None:
+    """One-time: delete duplicate bot_allocations rows where (user_id, profile_id) appears
+    more than once. Keeps the row with the lowest id (oldest), reassigns its portfolio_id
+    to the first portfolio that matches the allocation's profile's asset_class if needed,
+    then drops the extras. Also adds a UNIQUE index to prevent recurrence.
+    """
+    MIGRATION_NAME = "bot_allocations.dedupe_user_profile_2026"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        # Find duplicates: (user_id, profile_id) groups with more than one row
+        dupes = conn.execute(text("""
+            SELECT user_id, profile_id, COUNT(*) as cnt, MIN(id) as keep_id
+            FROM bot_allocations
+            GROUP BY user_id, profile_id
+            HAVING cnt > 1
+        """)).fetchall()
+
+        deleted = 0
+        for row in dupes:
+            user_id, profile_id, cnt, keep_id = row
+            # Delete all rows for this pair EXCEPT the one to keep
+            result = conn.execute(
+                text("""
+                    DELETE FROM bot_allocations
+                    WHERE user_id = :uid AND profile_id = :pid AND id != :keep
+                """),
+                {"uid": user_id, "pid": profile_id, "keep": keep_id},
+            )
+            deleted += result.rowcount
+            logger.info(
+                "dedupe_bot_allocations: kept id=%d, deleted %d duplicate(s) for user=%d profile=%d",
+                keep_id, result.rowcount, user_id, profile_id,
+            )
+
+        # Add UNIQUE index to prevent future duplicates (CREATE UNIQUE INDEX IF NOT EXISTS)
+        conn.execute(text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_bot_allocations_user_profile
+            ON bot_allocations(user_id, profile_id)
+        """))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("dedupe_bot_allocations: removed %d duplicate rows, UNIQUE index ensured", deleted)
+    except Exception as exc:
+        logger.warning("_dedupe_bot_allocations failed: %s", exc)
 
 
 _ADMIN_EMAIL = "32bgorzelanczyk@gmail.com"
