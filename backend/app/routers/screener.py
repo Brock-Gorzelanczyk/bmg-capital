@@ -164,6 +164,12 @@ async def run_screener(req: ScreenRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/meta")
+async def screener_meta():
+    """Return universe info and bar-cache freshness — called on page load."""
+    return get_cache_info()
+
+
 _OP_LABEL = {"gt": ">", "lt": "<", "gte": ">=", "lte": "<=", "eq": "="}
 
 

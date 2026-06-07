@@ -99,14 +99,20 @@ async def get_summary(
 async def trigger_congress_refresh(
     background_tasks: BackgroundTasks,
     days_back: int = Query(30, ge=1, le=365),
-    db: Session = Depends(get_db),
 ):
     """Admin endpoint: trigger a congress data refresh in the background."""
     from app.services.smart_money.congress import fetch_and_upsert_congress
+    from app.db.session import SessionLocal
 
     async def _refresh():
-        result = await fetch_and_upsert_congress(db, days_back=days_back)
-        logger.info("[smart-money] congress refresh done: %s", result)
+        _db = SessionLocal()
+        try:
+            result = await fetch_and_upsert_congress(_db, days_back=days_back)
+            logger.info("[smart-money] congress refresh done: %s", result)
+        except Exception as _e:
+            logger.error("[smart-money] congress refresh error: %s", _e, exc_info=True)
+        finally:
+            _db.close()
 
     background_tasks.add_task(_refresh)
     return {"status": "refresh queued", "days_back": days_back}

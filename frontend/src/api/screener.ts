@@ -26,6 +26,16 @@ export async function suggestAlternatives(filters: FilterConfig[]): Promise<Sugg
   return Array.isArray(data?.suggestions) ? data.suggestions : [];
 }
 
+export interface ScreenerMeta {
+  universe_count: number;
+  data_as_of: number | null;
+}
+
+export async function getScreenerMeta(): Promise<ScreenerMeta> {
+  const { data } = await client.get<ScreenerMeta>("/screener/meta");
+  return { universe_count: data?.universe_count ?? 0, data_as_of: data?.data_as_of ?? null };
+}
+
 export async function getPresets(): Promise<string[]> {
   const { data } = await client.get<{ presets: string[] }>("/screener/presets");
   return Array.isArray(data?.presets) ? data.presets : [];

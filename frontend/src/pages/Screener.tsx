@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen, parseNaturalLanguage, suggestAlternatives } from "@/api/screener";
+import { runScreen, runPreset, getSavedScreens, saveScreen, deleteSavedScreen, parseNaturalLanguage, suggestAlternatives, getScreenerMeta } from "@/api/screener";
 import { getSectorPerformance } from "@/api/discovery";
 import type { FilterConfig, ScreenResult, Suggestion } from "@/types/screener";
 import { formatCurrency, formatPercent, formatVolume, cn } from "@/lib/utils";
@@ -225,6 +225,7 @@ export default function Screener() {
           operator: f.operator,
           value: f.value,
         }));
+        let finalFilters: FilterConfig[];
         if (result.merge) {
           // Merge: overwrite by field, append new fields
           const merged = [...filters];
@@ -242,12 +243,16 @@ export default function Screener() {
           setFilters(merged);
           setNlRefinementChips(refinementChips);
           setNlFollowUpMode(true);
+          finalFilters = merged;
         } else {
           setFilters(incoming);
           setNlRefinementChips([]);
           setNlFollowUpMode(false);
+          finalFilters = incoming;
         }
         setNlExplanation(result.explanation);
+        // Auto-run the screen after NL parse resolves filters
+        run(finalFilters);
       }
     } catch {
       // silently ignore — user can retry
@@ -272,6 +277,14 @@ export default function Screener() {
     queryKey: ["saved-screens"],
     queryFn: getSavedScreens,
   });
+
+  const { data: screenerMeta } = useQuery({
+    queryKey: ["screener-meta"],
+    queryFn: getScreenerMeta,
+    staleTime: 60_000,
+  });
+
+  const liveUniverseCount = screenerMeta?.universe_count || universeCount;
 
   const { data: sectorData, isLoading: sectorsLoading, refetch: refetchSectors, isFetching: sectorsFetching } = useQuery({
     queryKey: ["sectors"],
@@ -373,7 +386,7 @@ export default function Screener() {
         <div className="flex items-center gap-3">
           <div className="text-right">
             <div className="text-xs text-[var(--text-tertiary)]">
-              Universe: {universeCount ? `${universeCount.toLocaleString()} stocks` : "500+ stocks"}
+              Universe: {liveUniverseCount ? `${liveUniverseCount.toLocaleString()} stocks` : "…"}
             </div>
             {dataAsOf && (
               <div className="text-[10px] text-[var(--text-tertiary)] opacity-70">

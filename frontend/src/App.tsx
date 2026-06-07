@@ -316,9 +316,9 @@ function AppInner() {
         <Route path="/discovery" element={<Discovery />} />
         <Route path="/defi" element={<DeFi />} />
         <Route path="/security" element={<Security />} />
-        <Route path="/learn" element={<LearnHome />} />
+        <Route path="/learn" element={<Navigate to="/learn/tracks" replace />} />
         <Route path="/learn/lesson/:lessonId" element={<LearnLesson />} />
-        {/* IMCP Learning Center (Phase A) — must come before /learn/:trackId */}
+        {/* IMCP Learning Center — canonical path */}
         <Route path="/learn/tracks" element={<IMCPLearnPage />} />
         <Route path="/learn/tracks/:trackSlug" element={<IMCPLearnTrackPage />} />
         <Route path="/learn/tracks/:trackSlug/:moduleSlug" element={<IMCPLearnModulePage />} />

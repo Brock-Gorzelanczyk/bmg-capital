@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Bot, Eye, TrendingUp, TrendingDown, Search, RefreshCw, ExternalLink } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Bot, Eye, TrendingUp, TrendingDown, Search, RefreshCw, ExternalLink, Loader2 } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { cn } from "@/lib/utils";
-import { getCongressTrades, getSmartMoneySummary } from "@/api/smartMoney";
+import { getCongressTrades, getSmartMoneySummary, triggerCongressRefresh } from "@/api/smartMoney";
 
-type Tab = "congress" | "insider" | "hedge";
+type Tab = "congress";
 type PartyFilter = "all" | "D" | "R" | "I";
 type ChamberFilter = "all" | "S" | "H";
 
@@ -28,11 +28,10 @@ export default function SmartMoneyPage() {
   const [aiOpen, setAiOpen] = useState(false);
   const [partyFilter, setPartyFilter] = useState<PartyFilter>("all");
   const [chamberFilter, setChamberFilter] = useState<ChamberFilter>("all");
+  const qc = useQueryClient();
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "congress", label: "Congressional Trades" },
-    { id: "insider",  label: "Insider Transactions" },
-    { id: "hedge",    label: "13F Hedge Funds" },
   ];
 
   // ── API queries ──────────────────────────────────────────────────────────────
@@ -68,6 +67,16 @@ export default function SmartMoneyPage() {
     );
   });
 
+  const refreshMut = useMutation({
+    mutationFn: () => triggerCongressRefresh(365),
+    onSuccess: () => {
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["smart-money-congress"] });
+        qc.invalidateQueries({ queryKey: ["smart-money-summary"] });
+      }, 8000);
+    },
+  });
+
   // ── Stats ─────────────────────────────────────────────────────────────────────
   const buyCount   = summary?.congress_buys_30d ?? 0;
   const sellCount  = summary?.congress_sells_30d ?? 0;
@@ -93,6 +102,17 @@ export default function SmartMoneyPage() {
               placeholder="Filter by ticker or name…"
               className="bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs rounded-lg pl-8 pr-3 py-2 w-52 outline-none focus:border-[var(--border-emphasis)]" />
           </div>
+          <button
+            onClick={() => refreshMut.mutate()}
+            disabled={refreshMut.isPending}
+            title="Refresh congressional trade data"
+            className="flex items-center gap-1.5 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] hover:border-[var(--border-emphasis)] text-[var(--text-secondary)] text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {refreshMut.isPending
+              ? <Loader2 size={12} className="animate-spin" />
+              : <RefreshCw size={12} />}
+            {refreshMut.isPending ? "Queued…" : "Refresh"}
+          </button>
           <button onClick={() => setAiOpen(true)}
             className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
             <Bot size={12} /> Ask AI
@@ -101,11 +121,10 @@ export default function SmartMoneyPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
           { label: "Congress Buys (30d)", value: buyCount, color: "text-[var(--accent-positive)]" },
           { label: "Congress Sells (30d)", value: sellCount, color: "text-[var(--accent-negative)]" },
-          { label: "Insider Buys (30d)", value: insiderBuy, color: "text-[var(--accent-positive)]" },
           { label: "Most Traded Ticker",  value: topTicker,  color: "text-[var(--text-primary)]" },
         ].map((s) => (
           <div key={s.label} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-4 py-3">
@@ -115,15 +134,6 @@ export default function SmartMoneyPage() {
         ))}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-[var(--bg-elevated-2)] p-1 rounded-xl w-fit">
-        {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={cn("px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap",
-              tab === t.id ? "bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-            )}>{t.label}</button>
-        ))}
-      </div>
 
       {/* Congressional trades */}
       {tab === "congress" && (
@@ -166,8 +176,25 @@ export default function SmartMoneyPage() {
               <RefreshCw size={14} className="animate-spin" /> Loading disclosures…
             </div>
           ) : filteredCongress.length === 0 ? (
-            <div className="py-12 text-center text-[var(--text-tertiary)] text-sm">
-              No trades found for the selected filters.
+            <div className="py-12 text-center space-y-2">
+              {congressData && congressData.last_updated_at === null ? (
+                <>
+                  <div className="text-[var(--text-secondary)] text-sm font-medium">Initial backfill in progress</div>
+                  <div className="text-[var(--text-tertiary)] text-xs max-w-sm mx-auto">
+                    Congressional trade data is being fetched for the first time. Refresh in a few minutes — or click Refresh to trigger it now.
+                  </div>
+                  <button
+                    onClick={() => refreshMut.mutate()}
+                    disabled={refreshMut.isPending}
+                    className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-600/20 border border-violet-600/30 text-violet-400 hover:bg-violet-600/30 transition-colors disabled:opacity-50"
+                  >
+                    {refreshMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                    {refreshMut.isPending ? "Queued…" : "Fetch Now"}
+                  </button>
+                </>
+              ) : (
+                <div className="text-[var(--text-tertiary)] text-sm">No trades found for the selected filters.</div>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -242,39 +269,6 @@ export default function SmartMoneyPage() {
         </div>
       )}
 
-      {/* Insider transactions — coming soon */}
-      {tab === "insider" && (
-        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
-            <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">SEC Form 4 Filings</div>
-            <span className="text-[10px] text-[var(--text-tertiary)]">Officer & director transactions</span>
-          </div>
-          <div className="py-16 text-center space-y-2">
-            <div className="text-2xl">🔜</div>
-            <div className="text-sm font-semibold text-[var(--text-secondary)]">Coming Soon</div>
-            <div className="text-xs text-[var(--text-tertiary)] max-w-sm mx-auto">
-              Real SEC EDGAR Form 4 insider transaction data in the next release.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 13F Hedge funds — coming soon */}
-      {tab === "hedge" && (
-        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
-            <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">13F Institutional Holdings</div>
-            <span className="text-[10px] text-[var(--text-tertiary)]">Quarterly SEC filings · Notable position changes</span>
-          </div>
-          <div className="py-16 text-center space-y-2">
-            <div className="text-2xl">🔜</div>
-            <div className="text-sm font-semibold text-[var(--text-secondary)]">Coming Soon</div>
-            <div className="text-xs text-[var(--text-tertiary)] max-w-sm mx-auto">
-              Real SEC EDGAR Form 13F hedge fund filing data in the next release.
-            </div>
-          </div>
-        </div>
-      )}
 
       <AskAIDrawer
         open={aiOpen}
