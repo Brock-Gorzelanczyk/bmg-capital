@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import SymbolChartDrawer from "@/components/ui/SymbolChartDrawer";
@@ -240,6 +240,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
   const [period, setPeriod] = useState<EquityPeriod>("30d");
   const [posTab, setPosTab] = useState<"positions" | "watchlist">("positions");
   const [chartSymbol, setChartSymbol] = useState<string | null>(null);
+  const tabSectionRef = useRef<HTMLDivElement>(null);
 
   const { data: p, isLoading } = useQuery({
     queryKey: ["strategy-lab-portfolio"],
@@ -327,13 +328,19 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
       {/* Secondary metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-3 border-t border-zinc-800">
         {[
-          { label: "All-time Return", val: formatPct(retAll), color: retAll >= 0 ? "text-lime-400" : "text-red-400" },
-          { label: "Open Positions",  val: String(p?.total_open_positions ?? 0), color: "text-white" },
-          { label: "Watchlists",      val: `${p?.total_watchlist_count ?? 0} names`, color: "text-white" },
-        ].map(({ label, val, color }) => (
-          <div key={label}>
+          { label: "All-time Return", val: formatPct(retAll), color: retAll >= 0 ? "text-lime-400" : "text-red-400", onClick: undefined },
+          { label: "Open Positions",  val: String(p?.total_open_positions ?? 0), color: "text-white", onClick: undefined },
+          {
+            label: "Watchlists", val: `${p?.total_watchlist_count ?? 0} names`, color: "text-lime-400",
+            onClick: () => {
+              setPosTab("watchlist");
+              setTimeout(() => tabSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+            },
+          },
+        ].map(({ label, val, color, onClick }) => (
+          <div key={label} onClick={onClick} className={onClick ? "cursor-pointer group" : ""}>
             <p className="text-[11px] text-zinc-600">{label}</p>
-            <p className={cn("text-sm font-semibold mt-0.5", color)}>{val}</p>
+            <p className={cn("text-sm font-semibold mt-0.5", color, onClick && "group-hover:underline underline-offset-2")}>{val}</p>
           </div>
         ))}
       </div>
@@ -416,7 +423,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
       </div>
 
       {/* Open Positions + Watchlist tabs */}
-      <div className="pt-3 border-t border-zinc-800">
+      <div ref={tabSectionRef} className="pt-3 border-t border-zinc-800">
         <div className="flex gap-1 mb-3">
           {(["positions", "watchlist"] as const).map((tab) => (
             <button
