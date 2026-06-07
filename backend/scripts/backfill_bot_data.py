@@ -24,6 +24,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 os.environ.setdefault("DATABASE_URL", "sqlite:////data/bmg_capital.db")
 
+# ── Production guard ──────────────────────────────────────────────────────────
+# Railway sets RAILWAY_ENVIRONMENT=production automatically.
+# To run this script in production deliberately, set FORCE_SEED=1.
+_env = os.environ.get("RAILWAY_ENVIRONMENT", "").lower()
+_force = os.environ.get("FORCE_SEED", "").lower() in ("1", "true", "yes")
+if _env == "production" and not _force:
+    raise SystemExit(
+        "ERROR: backfill_bot_data.py refused to run in production.\n"
+        "This script inserts FAKE seed data and must never run against real user data.\n"
+        "If you truly need to re-seed in production, set FORCE_SEED=1 explicitly.\n"
+        "Example: FORCE_SEED=1 railway run python backend/scripts/backfill_bot_data.py"
+    )
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 

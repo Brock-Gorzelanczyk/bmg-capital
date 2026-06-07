@@ -424,6 +424,7 @@ def run_migrations(engine: Engine) -> None:
         _close_stale_overnight_positions(conn)
         _delete_test_pod_and_watchlist(conn)
         _reset_consecutive_loss_state(conn)
+        _purge_backfill_seed_data(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -905,3 +906,63 @@ def _reset_consecutive_loss_state(conn) -> None:
         logger.info("_reset_consecutive_loss_state: reset stale loss counters")
     except Exception as exc:
         logger.warning("_reset_consecutive_loss_state failed: %s", exc)
+
+
+def _purge_backfill_seed_data(conn) -> None:
+    """One-time: delete all backfill-seeded bot history before today so we start
+    fresh with only real live data.
+
+    Deletes:
+      - bot_trades with ts < today (seeded by scripts/backfill_bot_data.py)
+      - bot_positions with opened_at < today (seeded fake open positions)
+      - bot_signals with ts < today (seeded fake signals)
+      - bot_daily_pnl rows with date < today (seeded fake P&L history)
+
+    Today's rows (ts >= date('now')) are kept so any real scan-cycle data
+    from earlier today is preserved.
+    """
+    MIGRATION_NAME = "purge_backfill_seed_data_2026_06_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        # Count before
+        trades_before = conn.execute(
+            text("SELECT COUNT(*) FROM bot_trades WHERE ts < date('now')")
+        ).scalar() or 0
+        positions_before = conn.execute(
+            text("SELECT COUNT(*) FROM bot_positions WHERE opened_at < date('now')")
+        ).scalar() or 0
+        signals_before = conn.execute(
+            text("SELECT COUNT(*) FROM bot_signals WHERE ts < date('now')")
+        ).scalar() or 0
+        pnl_before = conn.execute(
+            text("SELECT COUNT(*) FROM bot_daily_pnl WHERE date < date('now')")
+        ).scalar() or 0
+
+        # Purge
+        conn.execute(text("DELETE FROM bot_trades WHERE ts < date('now')"))
+        conn.execute(text("DELETE FROM bot_positions WHERE opened_at < date('now')"))
+        conn.execute(text("DELETE FROM bot_signals WHERE ts < date('now')"))
+        conn.execute(text("DELETE FROM bot_daily_pnl WHERE date < date('now')"))
+
+        # Reset any allocations where capital_cents_within_portfolio drifted
+        # from starting_capital_cents due to fake P&L accumulation
+        try:
+            conn.execute(text("""
+                UPDATE bot_allocations
+                SET capital_cents_within_portfolio = starting_capital_cents
+                WHERE starting_capital_cents IS NOT NULL
+                  AND capital_cents_within_portfolio IS NOT NULL
+                  AND capital_cents_within_portfolio != starting_capital_cents
+            """))
+        except Exception:
+            pass  # column may not exist in all envs
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info(
+            "_purge_backfill_seed_data: deleted trades=%d positions=%d signals=%d pnl_rows=%d",
+            trades_before, positions_before, signals_before, pnl_before,
+        )
+    except Exception as exc:
+        logger.warning("_purge_backfill_seed_data failed: %s", exc)
