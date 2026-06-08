@@ -1060,11 +1060,16 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         except Exception:
             pass
 
+    bar_close_used = False
+    bar_close_ts: float | None = None
     if entry_price <= 0:
         # Last resort: use the bar close the strategy used to generate the signal
         symbol_bars = (bars or {}).get(sig.symbol, [])
         if symbol_bars:
-            entry_price = float(symbol_bars[-1]["c"])
+            last_bar = symbol_bars[-1]
+            entry_price = float(last_bar["c"])
+            bar_close_used = True
+            bar_close_ts = float(last_bar.get("t", 0))
             logger.warning(
                 "[execute:%s] live price unavailable for %s, using last bar close $%.4f",
                 profile_name, sig.symbol, entry_price,
@@ -1073,6 +1078,44 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     if entry_price <= 0:
         logger.warning("[execute:%s] no price for %s — skipping order (live=0, broker=0, bars_fallback=0)", profile_name, sig.symbol)
         return
+
+    # Staleness guard: if bar-close is >2 hours old, the price is likely stale (yfinance fallback).
+    if bar_close_used and bar_close_ts and bar_close_ts > 0:
+        import time as _time
+        bar_age_hours = (_time.time() - bar_close_ts) / 3600
+        if bar_age_hours > 2.0:
+            logger.error(
+                "SANITY_FAIL: stale_bar_suspected for %s — bar close ts is %.1fh old, refusing trade "
+                "(price=%.4f; use live ticker to avoid bad fill)",
+                sig.symbol, bar_age_hours, entry_price,
+            )
+            return
+
+    # Sanity check: cross-validate fill_price against live Kraken ticker.
+    # Rejects trades where bar-close or other fallback is >20% off the real market price
+    # (catches yfinance returning 730-day-old historical prices).
+    try:
+        from app.services.live_prices import fetch_live_prices as _flp_sanity
+        _sanity_map = _flp_sanity([sig.symbol])
+        _ticker_price = float(_sanity_map.get(sig.symbol, 0) or 0)
+        if _ticker_price > 0:
+            _deviation = abs(entry_price - _ticker_price) / _ticker_price
+            if _deviation > 0.20:
+                logger.error(
+                    "SANITY_FAIL: stale_bar_suspected for %s — fill_price=%.4f deviates %.1f%% "
+                    "from live ticker %.4f; refusing trade",
+                    sig.symbol, entry_price, _deviation * 100, _ticker_price,
+                )
+                return
+            # If ticker is fresher and live_prices originally returned 0, upgrade to ticker price
+            if bar_close_used and _ticker_price > 0:
+                logger.info(
+                    "[execute:%s] upgrading fill price %s from bar-close %.4f to live ticker %.4f",
+                    profile_name, sig.symbol, entry_price, _ticker_price,
+                )
+                entry_price = _ticker_price
+    except Exception as _sanity_exc:
+        logger.warning("[execute:%s] sanity check fetch failed for %s: %s", profile_name, sig.symbol, _sanity_exc)
 
     logger.info("[execute:%s] entry_price=%s=%.4f equity=%.2f", profile_name, sig.symbol, entry_price, equity)
 
