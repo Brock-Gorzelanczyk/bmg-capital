@@ -1615,6 +1615,7 @@ def get_bot(
             .filter(
                 BotPosition.allocation_id == allocation.id,
                 BotPosition.closed_at.is_(None),
+                BotPosition.quarantined_at.is_(None),
             )
             .all()
         ]
@@ -1881,6 +1882,7 @@ def get_positions(
         .filter(
             BotPosition.allocation_id == allocation.id,
             BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
         )
         .all()
     )
