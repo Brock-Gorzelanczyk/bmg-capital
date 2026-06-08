@@ -103,6 +103,14 @@ function isOverlay(key: string): boolean {
 
 const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as UTCTimestamp;
 
+function precisionForPrice(price: number): { precision: number; minMove: number } {
+  if (price >= 1000)   return { precision: 2, minMove: 0.01 };
+  if (price >= 1)      return { precision: 4, minMove: 0.0001 };
+  if (price >= 0.01)   return { precision: 5, minMove: 0.00001 };
+  if (price >= 0.0001) return { precision: 6, minMove: 0.000001 };
+  return               { precision: 8, minMove: 0.00000001 };
+}
+
 function computeHA(bars: Bar[]): Bar[] {
   const out: Bar[] = [];
   for (let i = 0; i < bars.length; i++) {
@@ -122,6 +130,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
     const chartRef = useRef<IChartApi | null>(null);
     const mainSeriesRef = useRef<AnyMain | null>(null);
     const volSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+    const precisionRef = useRef<number>(2);
     const lineSeriesRef = useRef<Record<string, ISeriesApi<"Line">>>({});
     const priceLinesRef = useRef<Record<string, IPriceLine>>({});
     const tradeLevelLinesRef = useRef<Record<string, IPriceLine>>({});
@@ -358,6 +367,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         bars.map((b) => ({ time: toTime(b.t), value: b.v, color: b.c >= b.o ? TV.upVol : TV.downVol }))
       );
 
+      // Apply price-axis precision based on the instrument's price magnitude
+      const midClose = bars[Math.floor(bars.length / 2)].c;
+      const { precision: pf, minMove: mm } = precisionForPrice(midClose);
+      precisionRef.current = pf;
+      mainSeriesRef.current.applyOptions({ priceFormat: { type: "price", precision: pf, minMove: mm } });
+
       if (tradeLevels) {
         let from = Math.max(0, bars.length - 90);
         let to = bars.length + 3;
@@ -588,6 +603,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
 
       if (!tradeLevels) return;
 
+      const tlPrices = [tradeLevels.entry, tradeLevels.stop, tradeLevels.target, tradeLevels.exitPrice]
+        .filter((p): p is number => p != null && p > 0);
+      const tlPrec = tlPrices.length
+        ? precisionForPrice(Math.min(...tlPrices)).precision
+        : precisionRef.current;
+
       if (tradeLevels.entry) {
         tradeLevelLinesRef.current.entry = s.createPriceLine({
           price: tradeLevels.entry,
@@ -595,7 +616,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
           lineWidth: 2,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
-          title: `Entry  $${tradeLevels.entry.toFixed(2)}`,
+          title: `Entry  $${tradeLevels.entry.toFixed(tlPrec)}`,
         });
       }
       if (tradeLevels.stop) {
@@ -605,7 +626,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: `Stop Loss  $${tradeLevels.stop.toFixed(2)}`,
+          title: `Stop Loss  $${tradeLevels.stop.toFixed(tlPrec)}`,
         });
       }
       if (tradeLevels.target) {
@@ -615,7 +636,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: `Take Profit  $${tradeLevels.target.toFixed(2)}`,
+          title: `Take Profit  $${tradeLevels.target.toFixed(tlPrec)}`,
         });
       }
       if (tradeLevels.exitPrice) {
@@ -628,7 +649,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
           lineWidth: 2,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
-          title: `${exitLabel}  $${tradeLevels.exitPrice.toFixed(2)}`,
+          title: `${exitLabel}  $${tradeLevels.exitPrice.toFixed(tlPrec)}`,
         });
       }
     }, [tradeLevels, mainSeriesRef.current]); // eslint-disable-line react-hooks/exhaustive-deps

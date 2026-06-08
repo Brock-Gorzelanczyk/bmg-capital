@@ -17,6 +17,14 @@ import type { Bar } from "@/types/market";
 
 const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as UTCTimestamp;
 
+function precisionForPrice(price: number): { precision: number; minMove: number } {
+  if (price >= 1000)   return { precision: 2, minMove: 0.01 };
+  if (price >= 1)      return { precision: 4, minMove: 0.0001 };
+  if (price >= 0.01)   return { precision: 5, minMove: 0.00001 };
+  if (price >= 0.0001) return { precision: 6, minMove: 0.000001 };
+  return               { precision: 8, minMove: 0.00000001 };
+}
+
 export interface TradePriceChartProps {
   bars: Bar[];
   entryPrice: number;
@@ -49,6 +57,7 @@ export default function TradePriceChart({
   const candlesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const nowLineRef = useRef<IPriceLine | null>(null);
   const livePriceRef = useRef<number | null>(livePrice ?? null);
+  const precisionRef = useRef<number>(2);
 
   // ── Create chart once ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -111,6 +120,15 @@ export default function TradePriceChart({
       color: b.c >= b.o ? "#22c55e28" : "#ef444428",
     })));
 
+    // Compute precision from the smallest price in the group so the axis
+    // and pill labels show the right decimal depth for low-priced assets.
+    const allPrices = [entryPrice, stopLoss, takeProfit, exitPrice]
+      .filter((p): p is number => p != null && p > 0);
+    const refPrice = allPrices.length ? Math.min(...allPrices) : entryPrice;
+    const { precision, minMove } = precisionForPrice(refPrice);
+    precisionRef.current = precision;
+    candles.applyOptions({ priceFormat: { type: "price", precision, minMove } });
+
     // ── Price lines ─────────────────────────────────────────────────────────────
 
     // Entry — solid blue 2px
@@ -120,7 +138,7 @@ export default function TradePriceChart({
       lineWidth: 2,
       lineStyle: LineStyle.Solid,
       axisLabelVisible: true,
-      title: `ENTRY  $${entryPrice.toFixed(2)}`,
+      title: `ENTRY  $${entryPrice.toFixed(precision)}`,
     });
 
     // Stop loss — dashed red 2px
@@ -131,7 +149,7 @@ export default function TradePriceChart({
         lineWidth: 2,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `STOP  $${stopLoss.toFixed(2)}`,
+        title: `STOP  $${stopLoss.toFixed(precision)}`,
       });
     }
 
@@ -143,7 +161,7 @@ export default function TradePriceChart({
         lineWidth: 2,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `TARGET  $${takeProfit.toFixed(2)}`,
+        title: `TARGET  $${takeProfit.toFixed(precision)}`,
       });
     }
 
@@ -155,7 +173,7 @@ export default function TradePriceChart({
         lineWidth: 2,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
-        title: `EXIT  $${exitPrice.toFixed(2)}`,
+        title: `EXIT  $${exitPrice.toFixed(precision)}`,
       });
     }
 
@@ -170,7 +188,7 @@ export default function TradePriceChart({
       lineStyle: LineStyle.Solid,
       axisLabelVisible: livePriceRef.current != null,
       title: livePriceRef.current != null
-        ? `NOW  $${nowPriceInitial.toFixed(2)} (${nowPct >= 0 ? "+" : ""}${nowPct.toFixed(2)}%)`
+        ? `NOW  $${nowPriceInitial.toFixed(precision)} (${nowPct >= 0 ? "+" : ""}${nowPct.toFixed(2)}%)`
         : "",
     });
     nowLineRef.current = nowLine;
@@ -217,7 +235,7 @@ export default function TradePriceChart({
           position: "aboveBar",
           color: "#f59e0b",
           shape: "arrowDown",
-          text: `EXIT $${exitPrice.toFixed(2)}`,
+          text: `EXIT $${exitPrice.toFixed(precisionRef.current)}`,
           size: 2,
         });
       }
@@ -257,12 +275,13 @@ export default function TradePriceChart({
     if (!line || livePrice == null) return;
     const aboveEntry = livePrice >= entryPrice;
     const pct = entryPrice > 0 ? ((livePrice - entryPrice) / entryPrice) * 100 : 0;
+    const prec = precisionRef.current;
     try {
       line.applyOptions({
         price: livePrice,
         color: aboveEntry ? "#86efac" : "#fca5a5",
         axisLabelVisible: true,
-        title: `NOW  $${livePrice.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`,
+        title: `NOW  $${livePrice.toFixed(prec)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`,
       });
     } catch {}
   }, [livePrice, entryPrice]);
