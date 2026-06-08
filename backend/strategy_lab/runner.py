@@ -197,7 +197,8 @@ def run_bot_profile(profile_name: str) -> dict:
         On skip: {"skipped": True, "reason": str}.
         On error: {"error": str}.
     """
-    logger.info(">>> [runner:%s] scan cycle START", profile_name)
+    _scan_start = datetime.now(timezone.utc)
+    logger.info(">>> [runner:%s] scan cycle START %s", profile_name, _scan_start.isoformat())
     try:
         # 1. Load profile YAML
         from strategy_lab.seeds import load_profile
@@ -211,6 +212,7 @@ def run_bot_profile(profile_name: str) -> dict:
         try:
             bp = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
             if not bp or not bp.enabled:
+                logger.info("[runner:%s] SKIP profile disabled or not found in DB", profile_name)
                 return {"skipped": True, "reason": "profile disabled or not found"}
 
             allocations = (
@@ -223,7 +225,22 @@ def run_bot_profile(profile_name: str) -> dict:
                 .all()
             )
             if not allocations:
+                logger.info(
+                    "[runner:%s] SKIP no enabled paper allocations — "
+                    "profile_id=%s enabled=%s alloc_count=%s",
+                    profile_name, bp.id, bp.enabled,
+                    db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).count(),
+                )
                 return {"skipped": True, "reason": "no enabled paper allocations"}
+
+            # Write scan heartbeat immediately — confirms scanner is reaching this bot
+            try:
+                from strategy_lab.core.bot_health import record_heartbeat
+                for _alloc in allocations:
+                    record_heartbeat(_alloc.id, db)
+                logger.info("[runner:%s] scan heartbeat written for %d allocations", profile_name, len(allocations))
+            except Exception as _hb_exc:
+                logger.warning("[runner:%s] record_heartbeat failed (non-fatal): %s", profile_name, _hb_exc)
 
             # 3. Detect regime (graceful — may not be built yet)
             regime: dict = {}
@@ -695,6 +712,12 @@ def run_bot_profile(profile_name: str) -> dict:
             }
             logger.info("[runner:%s] Audit: %s", profile_name, audit_record)
 
+            _scan_ms = int((datetime.now(timezone.utc) - _scan_start).total_seconds() * 1000)
+            logger.info(
+                "<<< [runner:%s] scan cycle COMPLETE in %dms — "
+                "%d allocs, %d actionable signals, %d processed",
+                profile_name, _scan_ms, len(allocations), len(actionable), len(processed_signals),
+            )
             return {
                 "profile": profile_name,
                 "allocations": len(allocations),
@@ -710,7 +733,8 @@ def run_bot_profile(profile_name: str) -> dict:
             db.close()
 
     except Exception as exc:
-        logger.error("Bot runner failed for %s: %s", profile_name, exc, exc_info=True)
+        _scan_ms = int((datetime.now(timezone.utc) - _scan_start).total_seconds() * 1000)
+        logger.error("Bot runner FAILED for %s after %dms: %s", profile_name, _scan_ms, exc, exc_info=True)
         return {"error": str(exc)}
 
 

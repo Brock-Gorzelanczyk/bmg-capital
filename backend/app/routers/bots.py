@@ -3156,6 +3156,43 @@ _BOT_DISPLAY_NAMES = {
 }
 
 
+@router.get("/debug/scheduler-jobs")
+def debug_scheduler_jobs(
+    current_user=Depends(require_admin),
+):
+    """Return all registered APScheduler jobs with next_run_time and trigger.
+
+    Use this to verify the bot scan jobs are registered and firing.
+    A job with next_run_time=null means it will never run (misconfigured trigger).
+    """
+    from app.screener.scheduler import scheduler
+
+    jobs = []
+    for job in scheduler.get_jobs():
+        try:
+            nrt = job.next_run_time.isoformat() if job.next_run_time else None
+        except Exception:
+            nrt = None
+        jobs.append({
+            "id": job.id,
+            "name": job.name,
+            "trigger": str(job.trigger),
+            "next_run_time": nrt,
+            "func": str(job.func),
+        })
+
+    bot_jobs = [j for j in jobs if j["id"].startswith("bot_") or j["id"] in (
+        "position_monitor", "dead_mans_switch", "daily_briefing_email",
+    )]
+
+    return {
+        "scheduler_running": scheduler.running,
+        "total_jobs": len(jobs),
+        "bot_jobs": bot_jobs,
+        "all_jobs": jobs,
+    }
+
+
 @router.get("/debug/scan-trace")
 def debug_scan_trace(
     profile: str = "crypto_day",

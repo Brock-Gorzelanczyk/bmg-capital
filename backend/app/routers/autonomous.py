@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
 from app.db.models.autonomous import AutonomousAction, AutonomousGuardrail, AutonomousDigest
-from app.db.models.paper import PaperPosition
+from app.db.models.bots import BotAllocation, BotPosition, BotProfile
 from app.services.autonomous_logger import log_action
 from app.services.guardrail_checker import get_or_create_guardrail
 
@@ -33,7 +33,26 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/autonomous", tags=["autonomous"])
 
-TOTAL_ASSETS_MONITORED = 8212
+
+def _count_monitored_assets(user_id: int, db: Session) -> int:
+    """Count unique symbols across all enabled bot profiles the user has allocations for."""
+    try:
+        allocs = (
+            db.query(BotAllocation)
+            .filter(BotAllocation.user_id == user_id, BotAllocation.enabled == True)
+            .all()
+        )
+        profile_ids = {a.profile_id for a in allocs}
+        profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+        symbols: set[str] = set()
+        for p in profiles:
+            cfg = p.config_json or {}
+            universe = cfg.get("universe", {})
+            syms = universe.get("symbols", []) if isinstance(universe, dict) else list(universe or [])
+            symbols.update(syms)
+        return len(symbols) if symbols else len(profile_ids) * 20
+    except Exception:
+        return 0
 
 # Known crypto symbols for asset-class mismatch guard
 _KNOWN_CRYPTO = {"BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "DOT"}
@@ -153,8 +172,13 @@ def get_status(
             .first()
         )
 
-        # Open positions count
-        open_positions = db.query(PaperPosition).filter_by(user_id=user_id).count()
+        # Open positions count — Strategy Lab BotPosition (not legacy PaperPosition)
+        open_positions = (
+            db.query(BotPosition)
+            .join(BotAllocation, BotPosition.allocation_id == BotAllocation.id)
+            .filter(BotAllocation.user_id == user_id, BotPosition.closed_at.is_(None))
+            .count()
+        )
 
         # Active strategies: distinct strategy_ids that fired in last 30 days
         cutoff_30d = datetime.now(timezone.utc) - timedelta(days=30)
@@ -180,12 +204,16 @@ def get_status(
         last_action_summary = None
         if last_action:
             last_action_at = last_action.created_at.isoformat() if last_action.created_at else None
-            last_action_summary = last_action.rationale or f"{last_action.action_type} on {last_action.asset or 'system'}"
+            action_label = last_action.action_type.replace("_", " ").title()
+            asset_label = last_action.asset or "system"
+            last_action_summary = f"{action_label} on {asset_label}"
+
+        total_assets_monitored = _count_monitored_assets(user_id, db)
 
         return {
             "engine_running": True,
             "strategies_active": strategies_active,
-            "total_assets_monitored": TOTAL_ASSETS_MONITORED,
+            "total_assets_monitored": total_assets_monitored,
             "open_positions": open_positions,
             "last_action_at": last_action_at,
             "last_action_summary": last_action_summary,
@@ -198,7 +226,7 @@ def get_status(
         return {
             "engine_running": False,
             "strategies_active": 0,
-            "total_assets_monitored": TOTAL_ASSETS_MONITORED,
+            "total_assets_monitored": 0,
             "open_positions": 0,
             "last_action_at": None,
             "last_action_summary": None,
@@ -376,6 +404,9 @@ def _generate_mock_digest(user_id: int, db: Session) -> dict:
     worst = min(pnl_actions, key=lambda a: a.outcome_value or 0, default=None)
     total_pnl = sum(a.outcome_value or 0 for a in pnl_actions)
 
+    total_assets = _count_monitored_assets(user_id, db)
+    assets_label = f"{total_assets:,}" if total_assets else "monitored"
+
     # Most active strategy
     strategy_counts: dict[str, int] = {}
     for a in recent:
@@ -389,7 +420,7 @@ def _generate_mock_digest(user_id: int, db: Session) -> dict:
         "digest_date": date.today().isoformat(),
         "tldr": f"Engine processed {signals} signals, opened {buys} positions, closed {sells} today.",
         "highlights": json.dumps([
-            f"{signals} signals scanned across {TOTAL_ASSETS_MONITORED:,} assets",
+            f"{signals} signals scanned across {assets_label} assets",
             f"{buys} paper buys placed by autonomous engine",
             f"Net P&L: ${total_pnl:+.2f}",
         ]),
@@ -399,11 +430,11 @@ def _generate_mock_digest(user_id: int, db: Session) -> dict:
         "paper_sells": sells,
         "best_action": best.asset if best else None,
         "worst_action": worst.asset if worst else None,
-        "tomorrow_preview": "Engine will continue scanning all 19 presets at market open.",
+        "tomorrow_preview": "Engine will continue scanning all active bot profiles.",
         "market_regime_note": "Monitor SPY vs 200-day MA for regime confirmation.",
         "full_narrative": (
-            f"The autonomous engine ran its full cycle, scanning {TOTAL_ASSETS_MONITORED:,} assets "
-            f"across 19 strategy presets. {signals} signals fired, resulting in {buys} new positions opened "
+            f"The autonomous engine ran its full cycle, scanning {assets_label} assets. "
+            f"{signals} signals fired, resulting in {buys} new positions opened "
             f"and {sells} positions closed. Total realized P&L for the session: ${total_pnl:+.2f}. "
             f"The most active strategy was {spotlight}. All guardrails remained nominal."
         ),
