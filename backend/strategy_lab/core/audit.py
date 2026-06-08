@@ -13,6 +13,68 @@ from strategy_lab.core.signals import Signal
 logger = logging.getLogger(__name__)
 
 
+def _write_to_bridge_postgres(
+    signal_id: int,
+    allocation_id: int,
+    user_id: int,
+    profile_id: int,
+    profile_name: str,
+    ts: datetime,
+    symbol: str,
+    side: str,
+    confidence: float,
+    size_hint: Optional[float],
+    reason: Optional[str],
+    strategy: Optional[str],
+    entry_price: Optional[float],
+    stop_price: Optional[float],
+    target_price: Optional[float],
+) -> None:
+    """Best-effort write to discord-worker's Postgres bridge.
+
+    Mirrors the signal row (plus its referenced allocation and profile rows)
+    into the Railway Postgres that the discord-worker polls. Never blocks or
+    raises — failures are logged and swallowed.
+    """
+    import os
+    bridge_url = os.environ.get("DISCORD_BRIDGE_DATABASE_URL")
+    if not bridge_url:
+        return
+    try:
+        import psycopg2
+        with psycopg2.connect(bridge_url) as conn:
+            with conn.cursor() as cur:
+                # Mirror bot_profiles row (ON CONFLICT is idempotent)
+                cur.execute(
+                    "INSERT INTO bot_profiles (id, name) VALUES (%s, %s) "
+                    "ON CONFLICT (id) DO NOTHING",
+                    (profile_id, profile_name),
+                )
+                # Mirror bot_allocations row
+                cur.execute(
+                    "INSERT INTO bot_allocations (id, user_id, profile_id) "
+                    "VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                    (allocation_id, user_id, profile_id),
+                )
+                # Write signal row
+                cur.execute(
+                    """
+                    INSERT INTO bot_signals
+                      (allocation_id, ts, symbol, side, confidence, size_hint,
+                       reason, strategy, entry_price, stop_price, target_price,
+                       discord_posted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (allocation_id, ts, symbol, side, confidence, size_hint,
+                     reason, strategy, entry_price, stop_price, target_price),
+                )
+            conn.commit()
+        logger.debug("[bridge] signal %d (%s %s) → discord-worker Postgres", signal_id, side, symbol)
+    except Exception as exc:
+        logger.warning("[bridge] write failed for signal %d: %s", signal_id, exc)
+
+
 def _post_signal_to_discord(signal_id: int, signal_dict: dict) -> None:
     """Background thread: post to Discord and stamp discord_posted_at.
 
@@ -67,14 +129,30 @@ def log_signal(
 
     # Resolve bot profile name for embed routing (session-cached, no extra queries)
     profile_name = ""
+    _user_id = 0
+    _profile_id = 0
     try:
         alloc = db.get(BotAllocation, allocation_id)
         if alloc:
+            _user_id = alloc.user_id or 0
+            _profile_id = alloc.profile_id or 0
             prof = db.get(BotProfile, alloc.profile_id)
             if prof:
                 profile_name = prof.name
     except Exception:
         pass
+
+    # Bridge write: mirror to discord-worker's Postgres (best-effort, non-blocking)
+    threading.Thread(
+        target=_write_to_bridge_postgres,
+        args=(
+            row.id, allocation_id, _user_id, _profile_id, profile_name,
+            signal.ts, signal.symbol, signal.side, signal.confidence,
+            signal.size_hint, signal.reason, signal.strategy,
+            entry_price or None, stop_price or None, target_price or None,
+        ),
+        daemon=True,
+    ).start()
 
     signal_dict = {
         "bot":        profile_name,

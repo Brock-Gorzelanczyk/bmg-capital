@@ -78,6 +78,7 @@ async function runMigrations(): Promise<void> {
 async function pollAndPost(): Promise<void> {
   try {
     // Find unposted signals — join allocation → profile to get bot name.
+    // 48-hour window prevents stale signals from spamming on restart.
     const rows = await db.execute(sql`
       SELECT
         bs.id,
@@ -95,8 +96,9 @@ async function pollAndPost(): Promise<void> {
       JOIN bot_allocations ba ON ba.id = bs.allocation_id
       JOIN bot_profiles bp    ON bp.id = ba.profile_id
       WHERE bs.discord_posted_at IS NULL
+        AND bs.ts > NOW() - INTERVAL '48 hours'
       ORDER BY bs.ts ASC
-      LIMIT 20
+      LIMIT 50
     `) as {
       id: number;
       symbol: string;

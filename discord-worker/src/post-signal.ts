@@ -3,6 +3,17 @@ import { eq } from "drizzle-orm";
 import { getDiscordClient } from "./client.js";
 import { db, botSignals } from "./db.js";
 
+function fmtPrice(price: number): string {
+  const abs = Math.abs(price);
+  let maxDec: number;
+  if (abs >= 1000) maxDec = 2;
+  else if (abs >= 1) maxDec = 4;
+  else if (abs >= 0.01) maxDec = 5;
+  else if (abs >= 0.0001) maxDec = 6;
+  else maxDec = 8;
+  return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: maxDec });
+}
+
 const COMPLIANCE_FOOTER =
   "Paper trading. Not investment advice. Not a registered investment adviser.";
 const COLOR_BUY  = 0x2ec4a1;
@@ -101,9 +112,9 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
         { name: "Confidence", value: `${(signal.confidence * 100).toFixed(0)}%`,  inline: true },
       );
 
-    if (signal.entryPrice     != null) embed.addFields({ name: "Entry",  value: `$${signal.entryPrice.toFixed(2)}`,  inline: true });
-    if (signal.stopLoss       != null) embed.addFields({ name: "Stop",   value: `$${signal.stopLoss.toFixed(2)}`,    inline: true });
-    if (signal.takeProfit     != null) embed.addFields({ name: "Target", value: `$${signal.takeProfit.toFixed(2)}`,  inline: true });
+    if (signal.entryPrice     != null) embed.addFields({ name: "Entry",  value: `$${fmtPrice(signal.entryPrice)}`,  inline: true });
+    if (signal.stopLoss       != null) embed.addFields({ name: "Stop",   value: `$${fmtPrice(signal.stopLoss)}`,    inline: true });
+    if (signal.takeProfit     != null) embed.addFields({ name: "Target", value: `$${fmtPrice(signal.takeProfit)}`,  inline: true });
     if (signal.positionSizePct != null) embed.addFields({ name: "Size",  value: `${signal.positionSizePct.toFixed(1)}% of portfolio`, inline: true });
 
     embed.setFooter({ text: COMPLIANCE_FOOTER }).setTimestamp(new Date());

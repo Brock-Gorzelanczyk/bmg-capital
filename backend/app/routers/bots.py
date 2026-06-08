@@ -3709,3 +3709,89 @@ async def get_strategy_trace_bulk(
             traces.append(result)
 
     return {"bot": profile_name, "traces": traces}
+
+
+# ── Discord bridge backfill ───────────────────────────────────────────────────
+
+@router.post("/admin/backfill-bridge")
+async def backfill_bridge(
+    max_age_hours: int = 48,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Copy recent local signals to the discord-worker Postgres bridge.
+
+    Only owner-role users may call this. Use after deploy to backfill signals
+    that were written before the bridge integration was live.
+    """
+    import os
+    from datetime import datetime, timezone, timedelta
+    from app.db.models.bots import BotSignal, BotAllocation, BotProfile
+
+    bridge_url = os.environ.get("DISCORD_BRIDGE_DATABASE_URL")
+    if not bridge_url:
+        return {"ok": False, "error": "DISCORD_BRIDGE_DATABASE_URL not set"}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    signals = (
+        db.query(BotSignal)
+        .filter(BotSignal.ts >= cutoff)
+        .order_by(BotSignal.ts.asc())
+        .all()
+    )
+
+    written = skipped = errors = 0
+    try:
+        import psycopg2
+        with psycopg2.connect(bridge_url) as conn:
+            with conn.cursor() as cur:
+                for sig in signals:
+                    try:
+                        alloc = db.get(BotAllocation, sig.allocation_id)
+                        if not alloc:
+                            skipped += 1
+                            continue
+                        prof = db.get(BotProfile, alloc.profile_id)
+                        if not prof:
+                            skipped += 1
+                            continue
+
+                        cur.execute(
+                            "INSERT INTO bot_profiles (id, name) VALUES (%s, %s) "
+                            "ON CONFLICT (id) DO NOTHING",
+                            (prof.id, prof.name),
+                        )
+                        cur.execute(
+                            "INSERT INTO bot_allocations (id, user_id, profile_id) "
+                            "VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                            (alloc.id, alloc.user_id, alloc.profile_id),
+                        )
+                        cur.execute(
+                            """
+                            INSERT INTO bot_signals
+                              (allocation_id, ts, symbol, side, confidence, size_hint,
+                               reason, strategy, entry_price, stop_price, target_price,
+                               discord_posted_at)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL)
+                            ON CONFLICT DO NOTHING
+                            """,
+                            (sig.allocation_id, sig.ts, sig.symbol, sig.side,
+                             sig.confidence, sig.size_hint, sig.reason, sig.strategy,
+                             sig.entry_price, sig.stop_price, sig.target_price),
+                        )
+                        written += 1
+                    except Exception as row_exc:
+                        errors += 1
+                        import logging
+                        logging.getLogger(__name__).warning("backfill row error: %s", row_exc)
+            conn.commit()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "written": written}
+
+    return {
+        "ok": True,
+        "written": written,
+        "skipped": skipped,
+        "errors": errors,
+        "max_age_hours": max_age_hours,
+    }
