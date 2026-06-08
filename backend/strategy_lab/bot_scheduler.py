@@ -69,17 +69,25 @@ def setup_bot_scheduler(scheduler) -> None:
         id="bot_crypto_swing",
         replace_existing=True,
         next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
-    # crypto_day: every 1 min, 24/7 — crypto has no market-hours gate
+    # crypto_day: every 5 min, 24/7 — crypto has no market-hours gate
+    # Reduced from 1min: each scan takes 15-30s; 1min with max_instances=1
+    # meant every 10s Alpaca timeout dropped the next trigger permanently.
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: run_bot_profile("crypto_day"),
-        CronTrigger(minute="*/1"),
+        CronTrigger(minute="*/5"),
         id="bot_crypto_day",
         replace_existing=True,
         next_run_time=datetime.now(UTC),  # fire immediately on startup
+        max_instances=1,
+        misfire_grace_time=300,  # tolerate up to 5 min startup lag before skipping
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
@@ -127,7 +135,7 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
-    # Position monitor: every 1 minute, 24/7
+    # Position monitor: every 2 minutes, 24/7
     # Checks open positions against stop/target; handles trailing stop.
     # ------------------------------------------------------------------
     def _run_position_monitor():
@@ -139,10 +147,13 @@ def setup_bot_scheduler(scheduler) -> None:
 
     scheduler.add_job(
         _run_position_monitor,
-        CronTrigger(minute="*/1"),
+        CronTrigger(minute="*/2"),
         id="position_monitor",
         replace_existing=True,
         next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=120,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
@@ -188,6 +199,9 @@ def setup_bot_scheduler(scheduler) -> None:
         id="bot_crypto_quant_aggressive",
         replace_existing=True,
         next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------

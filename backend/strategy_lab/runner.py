@@ -994,39 +994,52 @@ def _maybe_announce_first_live_signal(db, bot_name: str, strategy: str, symbol: 
 # ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────
 
 def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str, bars: dict | None = None) -> None:
-    """Place a bracket order in Alpaca paper and persist BotPosition + BotTrade.
+    """Place a simulated paper trade and persist BotPosition + BotTrade.
 
     Steps:
-      1. Get current price from broker account/positions or fallback
+      1. Resolve equity — from Alpaca paper if creds available, else alloc capital
       2. Size the position (final_size_pct % of alloc capital)
       3. Compute stop/target from profile YAML rules
-      4. Submit bracket order to Alpaca paper
+      4. Submit bracket order to Alpaca paper (best-effort; simulated fill if unavailable)
       5. Create BotPosition row (with stop_price_usd + target_price_usd)
       6. Create BotTrade row (entry fill)
     """
+    import os
+
     if sig.side not in ("buy",):
         return  # only open long positions for now
 
     from datetime import datetime, timezone
     from app.db.models.bots import BotPosition, BotTrade
-    from strategy_lab.core.execution import get_broker, compute_bracket_prices
+    from strategy_lab.core.execution import compute_bracket_prices
 
     asset_class = profile.get("asset_class", "stock")
     now = datetime.now(timezone.utc)
 
-    # 1. Get current price
-    try:
-        broker = get_broker(asset_class)
-        account = broker.get_account()
-        equity = account.get("equity", 0.0)
-    except Exception as exc:
-        logger.warning("[execute:%s] broker.get_account failed: %s", profile_name, exc)
-        return
+    # 1. Resolve equity — skip Alpaca call when paper creds are absent to avoid
+    #    a 10-second network timeout on every signal (which starves the scheduler).
+    equity = 0.0
+    broker = None
+    _has_paper_creds = bool(os.getenv("ALPACA_PAPER_KEY", "").strip())
+    if _has_paper_creds:
+        try:
+            from strategy_lab.core.execution import get_broker
+            broker = get_broker(asset_class)
+            account = broker.get_account()
+            equity = float(account.get("equity", 0.0))
+        except Exception as exc:
+            logger.warning("[execute:%s] broker.get_account failed: %s", profile_name, exc)
+            broker = None
 
     if equity <= 0:
+        # Fallback: use the allocation's configured paper capital
+        equity = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+
+    if equity <= 0:
+        logger.warning("[execute:%s] no equity source for %s — skipping", profile_name, sig.symbol)
         return
 
-    # Fetch live price: Kraken (crypto) or Alpaca IEX (stocks) → fallback broker positions
+    # Fetch live price from bar cache first (already in memory); broker positions as last resort
     entry_price = 0.0
     try:
         from app.services.live_prices import fetch_live_prices
@@ -1037,7 +1050,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     except Exception as exc:
         logger.warning("[execute:%s] live_prices failed for %s: %s", profile_name, sig.symbol, exc)
 
-    if entry_price <= 0:
+    if entry_price <= 0 and broker is not None:
         try:
             positions = broker.get_positions()
             for p in positions:
@@ -1073,56 +1086,65 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     # 3. Compute stop and target from profile rules
     stop_price, target_price = compute_bracket_prices(entry_price, profile)
 
-    # 4. Submit bracket order
+    # 4. Submit bracket order to Alpaca (best-effort — sim fill if unavailable)
     order_id: str | None = None
-    try:
-        result = broker.submit_bracket_order(
-            symbol=sig.symbol,
-            qty=qty,
-            side="buy",
-            stop_price=stop_price,
-            target_price=target_price,
-        )
-        order_id = result.get("order_id")
-    except Exception as exc:
-        logger.warning("[execute:%s] bracket_order failed for %s: %s", profile_name, sig.symbol, exc)
-        # Fall through — still create DB rows as simulated paper fill
+    if broker is not None:
+        try:
+            result = broker.submit_bracket_order(
+                symbol=sig.symbol,
+                qty=qty,
+                side="buy",
+                stop_price=stop_price,
+                target_price=target_price,
+            )
+            order_id = result.get("order_id")
+        except Exception as exc:
+            logger.warning("[execute:%s] bracket_order failed for %s: %s", profile_name, sig.symbol, exc)
+            # Fall through — still create DB rows as simulated paper fill
 
     fill_cents = int(entry_price * 100)
 
-    # 5. Create BotPosition
-    pos = BotPosition(
-        allocation_id=alloc.id,
-        symbol=sig.symbol,
-        qty=qty,
-        avg_cost_cents=fill_cents,
-        opened_at=now,
-        closed_at=None,
-        is_paper=True,
-        stop_price_usd=stop_price,
-        target_price_usd=target_price,
-        trailing_stop_activated=False,
-    )
-    db.add(pos)
-    db.flush()  # get pos.id
+    # 5–6. Create BotPosition + BotTrade — wrapped so a DB error can't corrupt the
+    # session and block all subsequent signals in this scan cycle.
+    try:
+        pos = BotPosition(
+            allocation_id=alloc.id,
+            symbol=sig.symbol,
+            qty=qty,
+            avg_cost_cents=fill_cents,
+            opened_at=now,
+            closed_at=None,
+            is_paper=True,
+            stop_price_usd=stop_price,
+            target_price_usd=target_price,
+            trailing_stop_activated=False,
+        )
+        db.add(pos)
+        db.flush()  # get pos.id
 
-    # 6. Create BotTrade (entry)
-    trade = BotTrade(
-        allocation_id=alloc.id,
-        symbol=sig.symbol,
-        side="buy",
-        qty=qty,
-        fill_price_cents=fill_cents,
-        fees_cents=0,
-        ts=now,
-        position_id=pos.id,
-        is_paper=True,
-        alpaca_order_id=order_id,
-        expected_fill_cents=fill_cents,
-        slippage_bps=0.0,
-    )
-    db.add(trade)
-    db.commit()
+        trade = BotTrade(
+            allocation_id=alloc.id,
+            symbol=sig.symbol,
+            side="buy",
+            qty=qty,
+            fill_price_cents=fill_cents,
+            fees_cents=0,
+            ts=now,
+            position_id=pos.id,
+            is_paper=True,
+            alpaca_order_id=order_id,
+            expected_fill_cents=fill_cents,
+            slippage_bps=0.0,
+        )
+        db.add(trade)
+        db.commit()
+    except Exception as _db_exc:
+        logger.error("[execute:%s] DB write failed for %s: %s", profile_name, sig.symbol, _db_exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return
 
     logger.info(
         "[execute:%s] Opened %s qty=%.6f @ %.4f stop=%.4f target=%.4f order=%s pos=%d trade=%d",
