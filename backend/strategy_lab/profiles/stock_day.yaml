@@ -8,7 +8,7 @@ universe:
     - adv_gte: 50000000
     - no_earnings_within_days: 5
     - no_halt_within_days: 5
-cadence: "* 9-15 * * 1-5"
+cadence: "*/5 4-19 * * 1-5"
 watchlist:
   rebuild_at: "30 8 * * 1-5"
   size: 50
@@ -41,6 +41,9 @@ risk_overlay:
   pdt_enforce: false  # PDT minimum eliminated by FINRA Notice 26-10, effective June 4 2026
   max_sector_concentration_pct: 30
   portfolio_drawdown_circuit_pct: 10
+  extended_hours_size_multiplier: 0.5
+  extended_hours_confidence_boost: 0.10
+  min_spread_bps_extended: 25
 regime_filters:
   - require: trend_regime != 'bear'
   - halve_size_if: vix_regime == 'high'
@@ -49,13 +52,22 @@ catalyst_gates:
   - blackout_minutes_around: [FOMC, CPI, NFP, PCE]
     minutes_before: 5
     minutes_after: 5
+session_filter:
+  extended_ok_strategies:
+    - earnings_gap_continuation
+    - pead_intraday_drift
+    - gap_and_go_momentum
+    - orb_stocks_in_play
+    - intraday_momentum_noise_band
+
 execution:
   order_type: limit
   limit_offset_bps: 5
   reprice_after_seconds: 30
   reprice_attempts: 3
-  fallback_to_market: true
+  fallback_to_market: false
   use_brackets: true
+  extended_hours: true
 paper_only: true
 risk_management:
   stop_loss_pct: 7

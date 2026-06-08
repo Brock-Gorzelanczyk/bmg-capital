@@ -52,7 +52,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: run_bot_profile("stock_day"),
-        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/5", timezone=ET),
+        CronTrigger(day_of_week="mon-fri", hour="4-19", minute="*/5", timezone=ET),
         id="bot_stock_day",
         replace_existing=True,
     )
@@ -172,12 +172,12 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
-    # stock_day intraday position monitor: every 5 min, 9–15 ET, Mon-Fri
-    # Trailing ratchet, ensure_stop_exists, drawdown circuit breaker.
+    # stock_day intraday position monitor: every 5 min, 4am–7pm ET, Mon-Fri
+    # Extended to cover premarket + afterhours positions.
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: _run_bot_position_monitor("stock_day"),
-        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/5", timezone=ET),
+        CronTrigger(day_of_week="mon-fri", hour="4-19", minute="*/5", timezone=ET),
         id="bot_stock_day_position_monitor",
         replace_existing=True,
         max_instances=1,

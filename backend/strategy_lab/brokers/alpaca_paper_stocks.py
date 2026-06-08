@@ -92,14 +92,38 @@ class PaperStocksAdapter(BrokerAdapter):
         stop_price: float,
         target_price: float,
         limit_price: Optional[float] = None,
+        extended_hours: bool = False,
     ) -> dict:
         """Submit an OCO bracket order via Alpaca paper API.
 
         Uses order_class='bracket' with take_profit.limit_price and
         stop_loss.stop_price legs.  Entry is a limit order if limit_price
         is provided, otherwise market.
+
+        In extended hours Alpaca rejects bracket and market orders, so we
+        fall back to a plain limit order with extended_hours=true.
         """
-        payload: dict = {
+        if extended_hours:
+            # Alpaca only accepts simple limit orders outside RTH — no brackets,
+            # no market orders.  Use entry price as the limit (or mid of stop/target).
+            entry_limit = limit_price or round((stop_price + target_price) / 2, 4)
+            payload: dict = {
+                "symbol": symbol,
+                "qty": str(qty),
+                "side": side,
+                "type": "limit",
+                "time_in_force": "day",
+                "limit_price": str(entry_limit),
+                "extended_hours": True,
+            }
+            data = self._post("/orders", payload)
+            logger.info(
+                "[PAPER-STOCKS] Extended-hours limit order: %s %s x%.4f limit=%.4f → id=%s",
+                side, symbol, qty, entry_limit, data.get("id"),
+            )
+            return {"order_id": data.get("id"), "raw": data}
+
+        payload = {
             "symbol": symbol,
             "qty": str(qty),
             "side": side,

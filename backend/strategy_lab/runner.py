@@ -24,6 +24,31 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _current_et_session() -> str:
+    """Return the current US equity trading session based on ET clock.
+
+    Returns one of: 'premarket', 'regular', 'afterhours', 'closed'.
+    Degrades to 'regular' if timezone data is unavailable.
+    """
+    try:
+        import pytz
+        _ET = pytz.timezone("America/New_York")
+        now = datetime.now(_ET)
+        weekday = now.weekday()  # 0=Mon … 4=Fri, 5=Sat, 6=Sun
+        if weekday >= 5:
+            return "closed"
+        hour = now.hour + now.minute / 60.0
+        if 4.0 <= hour < 9.5:
+            return "premarket"
+        if 9.5 <= hour < 16.0:
+            return "regular"
+        if 16.0 <= hour < 20.0:
+            return "afterhours"
+        return "closed"
+    except Exception:
+        return "regular"
+
+
 # ── Ensemble helpers ──────────────────────────────────────────────────────────
 
 def _weighted_vote(signals_by_strategy: list[list]) -> list:
@@ -514,6 +539,29 @@ def run_bot_profile(profile_name: str) -> dict:
                     if sig.side == "hold":
                         continue
 
+                    # 10-pre. Extended-hours session filter (equities only).
+                    # Only applies when the profile has execution.extended_hours: true.
+                    _ext_hours_cfg = profile.get("execution", {})
+                    if _ext_hours_cfg.get("extended_hours"):
+                        _session = _current_et_session()
+                        if _session != "regular":
+                            _ro = profile.get("risk_overlay", {})
+                            _conf_boost = float(_ro.get("extended_hours_confidence_boost", 0.10))
+                            _required_conf = float(profile.get("confidence_threshold", 0.55)) + _conf_boost
+                            if sig.confidence < _required_conf:
+                                logger.info(
+                                    "[runner:%s] SKIP %s session=%s confidence=%.2f < required=%.2f (ext-hours boost)",
+                                    profile_name, sig.symbol, _session, sig.confidence, _required_conf,
+                                )
+                                continue
+                            _ext_ok = set(profile.get("session_filter", {}).get("extended_ok_strategies", []))
+                            if _ext_ok and (sig.strategy or "") not in _ext_ok:
+                                logger.info(
+                                    "[runner:%s] SKIP %s session=%s strategy=%s not in extended_ok_strategies",
+                                    profile_name, sig.symbol, _session, sig.strategy,
+                                )
+                                continue
+
                     symbol_bars = bars.get(sig.symbol, [])
 
                     # 10a. Anomaly detector — halt on abnormal conditions
@@ -604,6 +652,18 @@ def run_bot_profile(profile_name: str) -> dict:
                         final_size_pct = initial_size_pct(adjusted_size_pct)
                     except Exception as exc:
                         logger.warning("[runner:%s] position_pyramid failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # 10g-ext. Extended-hours size multiplier (half-size in pre/post-market)
+                    if profile.get("execution", {}).get("extended_hours"):
+                        _ext_session = _current_et_session()
+                        if _ext_session != "regular":
+                            _ro = profile.get("risk_overlay", {})
+                            _size_mult = float(_ro.get("extended_hours_size_multiplier", 0.5))
+                            final_size_pct = round(final_size_pct * _size_mult, 4)
+                            logger.info(
+                                "[runner:%s] Extended-hours size ×%.2f → %.4f%% (session=%s)",
+                                profile_name, _size_mult, final_size_pct, _ext_session,
+                            )
 
                     # 10h. Trade journal — write entry rationale
                     why_opened_json = "{}"
@@ -1227,6 +1287,11 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     stop_price, target_price = compute_bracket_prices(entry_price, profile)
 
     # 4. Submit bracket order to Alpaca (best-effort — sim fill if unavailable)
+    _in_ext_hours = (
+        asset_class not in ("crypto", "crypto_intraday", "quant")
+        and profile.get("execution", {}).get("extended_hours")
+        and _current_et_session() != "regular"
+    )
     order_id: str | None = None
     if broker is not None:
         try:
@@ -1236,6 +1301,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                 side="buy",
                 stop_price=stop_price,
                 target_price=target_price,
+                extended_hours=_in_ext_hours,
             )
             order_id = result.get("order_id")
         except Exception as exc:

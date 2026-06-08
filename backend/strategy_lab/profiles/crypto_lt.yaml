@@ -9,6 +9,7 @@ universe:
     SOL/USD: 0.15
     AVAX/USD: 0.10
     LINK/USD: 0.05
+cadence: "0 10 * * 1"
 cadence_dca: "0 10 * * 1"
 cadence_rebalance: "0 10 1-7 * 2"
 strategies:
