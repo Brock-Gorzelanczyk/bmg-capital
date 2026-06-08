@@ -1947,7 +1947,7 @@ function BotWhySection({
   profile,
 }: {
   botName: string;
-  meta: { displayName: string; description: string; assetClass: "stock" | "crypto"; strategies: string[] } | undefined;
+  meta: { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant"; strategies: string[]; ensemble?: string } | undefined;
   profile: import("@/api/bots").BotProfile | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
