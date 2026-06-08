@@ -31,6 +31,7 @@ export type SignalInput = {
   stopLoss?: number;
   takeProfit?: number;
   positionSizePct?: number;
+  isTest?: boolean;
 };
 
 const BOT_DISPLAY: Record<string, string> = {
@@ -121,10 +122,11 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     const targetPct = target != null && entry != null ? (target - entry) / entry * 100 : null;
     const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 
+    const testPrefix = signal.isTest ? "[TEST] " : "";
     const embed = new EmbedBuilder()
       .setColor(color)
       .setAuthor({ name: `${displayName} bot` })
-      .setTitle(`${sideEmoji(signal.side)} ${signal.side.toUpperCase()} ${signal.symbol}`)
+      .setTitle(`${testPrefix}${sideEmoji(signal.side)} ${signal.side.toUpperCase()} ${signal.symbol}`)
       .setDescription(signal.reason)
       .addFields(
         { name: "Strategy",    value: signal.strategy,                                                                                   inline: true },

@@ -212,6 +212,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("target_price",         "FLOAT"),
         ("discord_posted_at",    "DATETIME"),
         ("discord_message_id",   "TEXT"),
+        ("is_test",              "BOOLEAN DEFAULT 0"),
     ],
     "bot_positions": [
         ("stop_price_usd",         "FLOAT"),
@@ -435,6 +436,7 @@ def run_migrations(engine: Engine) -> None:
         _quarantine_universal_fake_trades(conn)
         _seed_quant_watchlists(conn)
         _add_trade_provenance_trigger(conn)
+        _reenable_options_bots(conn)
         _backfill_onchain_starting_capital(conn)
         _delete_zombie_signals(conn)
 
@@ -1259,6 +1261,36 @@ def _raise_guardrail_position_cap(conn) -> None:
         logger.info("_raise_guardrail_position_cap: bumped existing rows to 50")
     except Exception as exc:
         logger.warning("_raise_guardrail_position_cap failed: %s", exc)
+
+
+def _reenable_options_bots(conn) -> None:
+    """Re-enable options_directional and options_income allocations that were
+    incorrectly disabled with paused_reason='coming_soon'.
+
+    All options strategy files exist and the runner handles them — they were
+    only paused due to an overly cautious gate added on 2026-06-08.
+    """
+    MIGRATION_NAME = "reenable_options_bots_coming_soon"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        result = conn.execute(text(
+            """
+            UPDATE bot_allocations
+               SET enabled = 1,
+                   paused_reason = NULL
+             WHERE paused_reason = 'coming_soon'
+               AND profile_id IN (
+                 SELECT id FROM bot_profiles
+                  WHERE name IN ('options_income', 'options_directional')
+               )
+            """
+        ))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_reenable_options_bots: updated %d rows", result.rowcount)
+    except Exception as exc:
+        logger.warning("_reenable_options_bots failed: %s", exc)
 
 
 def _backfill_onchain_starting_capital(conn) -> None:

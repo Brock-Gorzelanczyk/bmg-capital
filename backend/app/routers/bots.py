@@ -174,7 +174,7 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
 
             # Re-enable if accidentally disabled — paper bots should always be active
             # unless explicitly halted by the health monitor or marked as not yet implemented.
-            HARD_PAUSE_REASONS = {"health_halt", "admin_lock", "coming_soon"}
+            HARD_PAUSE_REASONS = {"health_halt", "admin_lock"}
             if not alloc.enabled and alloc.paused_reason not in HARD_PAUSE_REASONS:
                 alloc.enabled = True
                 alloc.paused_reason = None
@@ -492,7 +492,7 @@ def activate_all_bots(
             .first()
         )
         if existing:
-            if not existing.enabled and existing.paused_reason != "coming_soon":
+            if not existing.enabled and existing.paused_reason not in {"health_halt", "admin_lock"}:
                 existing.enabled = True
                 existing.paused_reason = None
                 existing.updated_at = now
@@ -1960,7 +1960,10 @@ def get_signals(
 
     signals = (
         db.query(BotSignal)
-        .filter(BotSignal.allocation_id == allocation.id)
+        .filter(
+            BotSignal.allocation_id == allocation.id,
+            (BotSignal.is_test == False) | (BotSignal.is_test.is_(None)),
+        )
         .order_by(BotSignal.ts.desc())
         .limit(limit)
         .all()
@@ -2824,7 +2827,10 @@ def get_recent_signals(
 
     signals = (
         db.query(BotSignal)
-        .filter(BotSignal.allocation_id.in_(alloc_ids))
+        .filter(
+            BotSignal.allocation_id.in_(alloc_ids),
+            (BotSignal.is_test == False) | (BotSignal.is_test.is_(None)),
+        )
         .order_by(BotSignal.ts.desc())
         .limit(max(1, min(limit, 100)))
         .all()

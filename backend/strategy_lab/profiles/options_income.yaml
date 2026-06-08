@@ -48,3 +48,5 @@ execution:
   use_brackets: true
 paper_only: true
 notes: "Requires Alpaca Level 2-3 options approval. PDT eliminated FINRA Notice 26-10 June 4 2026."
+discord:
+  channel: options-signals

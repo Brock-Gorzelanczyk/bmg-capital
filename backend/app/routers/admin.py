@@ -4,8 +4,10 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone, timedelta
+from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -192,3 +194,216 @@ def set_position_cap(
     db.commit()
     logger.info("admin: set max_open_positions user=%d %d→%d by user=%d", user_id, old, value, current_user.id)
     return {"ok": True, "user_id": user_id, "old": old, "new": value}
+
+
+# ── POST /api/admin/discord/test-fire ─────────────────────────────────────────
+
+_BOT_CHANNEL_MAP: Dict[str, str] = {
+    "stock_swing":             "stocks-signals",
+    "stock_day":               "stocks-signals",
+    "stock_lt":                "stocks-signals",
+    "crypto_swing":            "crypto-signals",
+    "crypto_day":              "crypto-signals",
+    "crypto_lt":               "crypto-signals",
+    "crypto_onchain":          "crypto-signals",
+    "crypto_quant_aggressive": "quant-signals",
+    "options_income":          "options-signals",
+    "options_directional":     "options-signals",
+}
+
+@router.post("/discord/test-fire")
+def discord_test_fire(
+    bot_name: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Insert a test signal for `bot_name` so the Discord worker picks it up and
+    posts a [TEST] embed to the correct channel.
+
+    The signal is marked is_test=True so it is invisible to all /signals API
+    endpoints and aggregate stats. The Discord worker (post-signal.ts) prefixes
+    the embed title with "[TEST]" when it sees is_test=True.
+
+    Safe to call repeatedly — each call inserts one test signal per bot.
+    """
+    from app.db.models.bots import BotAllocation, BotProfile, BotSignal
+
+    profile = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
+    if not profile:
+        return {"ok": False, "error": f"Unknown bot profile: {bot_name!r}"}
+
+    allocation = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not allocation:
+        return {"ok": False, "error": f"No allocation found for bot {bot_name!r} / user {current_user.id}"}
+
+    sig = BotSignal(
+        allocation_id=allocation.id,
+        ts=datetime.now(timezone.utc),
+        symbol="TEST",
+        side="buy",
+        confidence=0.99,
+        size_hint=0.05,
+        reason="WIRING TEST — IGNORE. Fired via /api/admin/discord/test-fire.",
+        strategy="manual_test",
+        entry_price=100.00,
+        stop_price=95.00,
+        target_price=110.00,
+        is_test=True,
+    )
+    db.add(sig)
+    db.commit()
+    db.refresh(sig)
+
+    channel_slug = _BOT_CHANNEL_MAP.get(bot_name, "all-signals")
+    logger.info("admin: test-fire signal %d for bot=%s channel=#%s by user=%d",
+                sig.id, bot_name, channel_slug, current_user.id)
+    return {
+        "ok": True,
+        "signal_id": sig.id,
+        "bot": bot_name,
+        "channel": f"#{channel_slug}",
+        "note": "Discord worker will post a [TEST] embed within ~10 seconds.",
+    }
+
+
+# ── GET /api/admin/system/health ──────────────────────────────────────────────
+
+@router.get("/system/health")
+def system_health(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Live health check across all data sources and the bot scheduler."""
+    from app.db.models.bots import BotSignal, BotAllocation
+
+    result: Dict[str, Any] = {}
+
+    # ── Alpaca stocks ──────────────────────────────────────────────────────────
+    try:
+        from app.services.live_prices import fetch_live_prices
+        t0 = datetime.now(timezone.utc)
+        prices = fetch_live_prices(["AAPL"])
+        price = prices.get("AAPL")
+        result["alpaca_stocks"] = {
+            "connected": price is not None,
+            "last_quote_at": t0.isoformat(),
+            "last_quote_symbol": "AAPL",
+            "last_quote_price": price,
+        }
+    except Exception as exc:
+        result["alpaca_stocks"] = {"connected": False, "error": str(exc)}
+
+    # ── Kraken / Alpaca crypto ─────────────────────────────────────────────────
+    try:
+        from app.services.live_prices import fetch_live_prices
+        t0 = datetime.now(timezone.utc)
+        prices = fetch_live_prices(["BTC/USD"])
+        price = prices.get("BTC/USD")
+        result["alpaca_crypto"] = {
+            "connected": price is not None,
+            "last_quote_at": t0.isoformat(),
+            "last_quote_symbol": "BTC/USD",
+            "last_quote_price": price,
+        }
+    except Exception as exc:
+        result["alpaca_crypto"] = {"connected": False, "error": str(exc)}
+
+    # ── Options (Alpaca paper stocks, options chain) ───────────────────────────
+    try:
+        from app.services.live_prices import fetch_live_prices
+        t0 = datetime.now(timezone.utc)
+        prices = fetch_live_prices(["SPY"])
+        price = prices.get("SPY")
+        result["alpaca_options"] = {
+            "connected": price is not None,
+            "last_quote_at": t0.isoformat(),
+            "last_quote_symbol": "SPY",
+            "last_quote_price": price,
+            "note": "Underlying equity price check only — options chain requires market hours.",
+        }
+    except Exception as exc:
+        result["alpaca_options"] = {"connected": False, "error": str(exc)}
+
+    # ── Discord worker (last posted signal) ───────────────────────────────────
+    try:
+        last_post = (
+            db.query(BotSignal)
+            .filter(BotSignal.discord_posted_at.isnot(None))
+            .order_by(BotSignal.discord_posted_at.desc())
+            .first()
+        )
+        if last_post:
+            alloc = db.query(BotAllocation).filter(
+                BotAllocation.id == last_post.allocation_id
+            ).first()
+            from app.db.models.bots import BotProfile
+            prof_name = None
+            if alloc:
+                prof = db.query(BotProfile).filter(BotProfile.id == alloc.profile_id).first()
+                prof_name = prof.name if prof else None
+            result["discord_worker"] = {
+                "online": True,
+                "last_post_at": last_post.discord_posted_at.isoformat(),
+                "last_post_channel": f"#{_BOT_CHANNEL_MAP.get(prof_name or '', 'unknown')}",
+                "last_signal_bot": prof_name,
+                "last_signal_symbol": last_post.symbol,
+            }
+        else:
+            result["discord_worker"] = {
+                "online": None,
+                "last_post_at": None,
+                "note": "No signals have been posted yet.",
+            }
+    except Exception as exc:
+        result["discord_worker"] = {"online": False, "error": str(exc)}
+
+    # ── Scheduler ─────────────────────────────────────────────────────────────
+    try:
+        from strategy_lab.bot_scheduler import scheduler
+        jobs = scheduler.get_jobs()
+        job_names = [j.id for j in jobs]
+
+        # Last scan per bot: most recent BotSignal ts per allocation
+        allocs = db.query(BotAllocation).filter(
+            BotAllocation.user_id == current_user.id
+        ).all()
+        alloc_ids = [a.id for a in allocs]
+
+        from app.db.models.bots import BotProfile
+        last_scan: Dict[str, Any] = {}
+        if alloc_ids:
+            rows = (
+                db.query(
+                    BotAllocation.profile_id,
+                    func.max(BotSignal.ts).label("last_ts"),
+                )
+                .join(BotSignal, BotSignal.allocation_id == BotAllocation.id)
+                .filter(BotAllocation.id.in_(alloc_ids))
+                .group_by(BotAllocation.profile_id)
+                .all()
+            )
+            prof_map = {
+                p.id: p.name
+                for p in db.query(BotProfile).all()
+            }
+            last_scan = {
+                prof_map.get(r.profile_id, str(r.profile_id)): r.last_ts.isoformat() if r.last_ts else None
+                for r in rows
+            }
+
+        result["scheduler"] = {
+            "jobs_registered": len(jobs),
+            "job_ids": job_names[:20],
+            "last_scan_per_bot": last_scan,
+        }
+    except Exception as exc:
+        result["scheduler"] = {"error": str(exc)}
+
+    return result

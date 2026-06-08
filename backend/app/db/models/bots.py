@@ -69,6 +69,7 @@ class BotSignal(Base):
     target_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     discord_posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     discord_message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    is_test: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
 
 
 class BotPosition(Base):

@@ -95,3 +95,5 @@ discord:
 
 paper_only: true
 starting_balance_cents: 10000000   # $100,000
+discord:
+  channel: quant-signals

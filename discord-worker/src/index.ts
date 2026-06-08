@@ -53,6 +53,10 @@ async function runMigrations(): Promise<void> {
       discord_posted_at  TIMESTAMP
     )
   `);
+  // Add is_test column if it doesn't exist (one-time idempotent migration).
+  await db.execute(sql`
+    ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE
+  `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS bot_daily_pnl (
       id                        SERIAL PRIMARY KEY,
@@ -111,6 +115,7 @@ async function pollAndPost(): Promise<void> {
         bs.stop_price,
         bs.target_price,
         bs.size_hint,
+        bs.is_test,
         bp.name AS bot_profile
       FROM bot_signals bs
       JOIN bot_allocations ba ON ba.id = bs.allocation_id
@@ -130,6 +135,7 @@ async function pollAndPost(): Promise<void> {
       stop_price: number | null;
       target_price: number | null;
       size_hint: number | null;
+      is_test: boolean | null;
       bot_profile: string;
     }[];
 
@@ -146,6 +152,7 @@ async function pollAndPost(): Promise<void> {
         stopLoss:       row.stop_price   ?? undefined,
         takeProfit:     row.target_price ?? undefined,
         positionSizePct: row.size_hint != null ? row.size_hint * 100 : undefined,
+        isTest:         row.is_test ?? false,
       });
     }
   } catch (err) {

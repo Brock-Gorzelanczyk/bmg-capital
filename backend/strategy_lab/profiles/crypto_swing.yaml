@@ -45,3 +45,5 @@ execution:
   fallback_to_market: true
   use_brackets: true
 paper_only: true
+discord:
+  channel: crypto-signals

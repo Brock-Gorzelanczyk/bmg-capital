@@ -68,3 +68,5 @@ risk_management:
 regime_overrides:
   vix_high_position_size_multiplier: 0.5
   vix_extreme_halt_new_entries: true
+discord:
+  channel: stocks-signals
