@@ -72,6 +72,26 @@ async function runMigrations(): Promise<void> {
       is_active     BOOLEAN DEFAULT TRUE
     )
   `);
+  // One-time backfill: fill null stop_price / target_price on existing signals
+  // so the embed can always show all three levels. Idempotent — only touches NULL rows.
+  await db.execute(sql`
+    UPDATE bot_signals
+    SET
+      stop_price   = COALESCE(stop_price,   entry_price * 0.93),
+      target_price = COALESCE(target_price, entry_price * 1.10)
+    WHERE side = 'buy'
+      AND entry_price IS NOT NULL
+      AND (stop_price IS NULL OR target_price IS NULL)
+  `);
+  await db.execute(sql`
+    UPDATE bot_signals
+    SET
+      stop_price   = COALESCE(stop_price,   entry_price * 1.07),
+      target_price = COALESCE(target_price, entry_price * 0.90)
+    WHERE side IN ('sell', 'short')
+      AND entry_price IS NOT NULL
+      AND (stop_price IS NULL OR target_price IS NULL)
+  `);
   console.log("[discord] migrations complete");
 }
 

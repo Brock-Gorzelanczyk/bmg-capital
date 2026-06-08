@@ -104,6 +104,23 @@ def log_signal(
     """Persist a Signal to bot_signals, then fire Discord embed in background."""
     from app.db.models.bots import BotSignal, BotAllocation, BotProfile
 
+    # Always persist stop and target — compute defaults if caller omitted them.
+    # Discord embed and frontend both require these to show all three price levels.
+    if entry_price:
+        is_buy = signal.side in ("buy", "cover")
+        if stop_price is None:
+            stop_price = entry_price * 0.93 if is_buy else entry_price * 1.07
+            logger.warning(
+                "log_signal: stop_price missing for %s %s — defaulting to %.5f",
+                signal.side, signal.symbol, stop_price,
+            )
+        if target_price is None:
+            target_price = entry_price * 1.10 if is_buy else entry_price * 0.90
+            logger.warning(
+                "log_signal: target_price missing for %s %s — defaulting to %.5f",
+                signal.side, signal.symbol, target_price,
+            )
+
     row = BotSignal(
         allocation_id=allocation_id,
         ts=signal.ts,

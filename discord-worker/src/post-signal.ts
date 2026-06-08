@@ -102,22 +102,40 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     const color = signal.side === "buy" ? COLOR_BUY : COLOR_SELL;
     const displayName = BOT_DISPLAY[signal.botProfile] ?? signal.botProfile;
 
+    const entry = signal.entryPrice ?? null;
+    const isBuy = signal.side === "buy" || signal.side === "cover";
+
+    // Resolve stop — use DB value or compute 7% default from entry
+    let stop = signal.stopLoss ?? null;
+    if (stop == null && entry != null) {
+      stop = isBuy ? entry * 0.93 : entry * 1.07;
+    }
+
+    // Resolve target — use DB value or compute 10% default from entry
+    let target = signal.takeProfit ?? null;
+    if (target == null && entry != null) {
+      target = isBuy ? entry * 1.10 : entry * 0.90;
+    }
+
+    const stopPct   = stop   != null && entry != null ? (stop   - entry) / entry * 100 : null;
+    const targetPct = target != null && entry != null ? (target - entry) / entry * 100 : null;
+    const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+
     const embed = new EmbedBuilder()
       .setColor(color)
       .setAuthor({ name: `${displayName} bot` })
       .setTitle(`${sideEmoji(signal.side)} ${signal.side.toUpperCase()} ${signal.symbol}`)
       .setDescription(signal.reason)
       .addFields(
-        { name: "Strategy",   value: signal.strategy,                              inline: true },
-        { name: "Confidence", value: `${(signal.confidence * 100).toFixed(0)}%`,  inline: true },
-      );
-
-    if (signal.entryPrice     != null) embed.addFields({ name: "Entry",  value: `$${fmtPrice(signal.entryPrice)}`,  inline: true });
-    if (signal.stopLoss       != null) embed.addFields({ name: "Stop",   value: `$${fmtPrice(signal.stopLoss)}`,    inline: true });
-    if (signal.takeProfit     != null) embed.addFields({ name: "Target", value: `$${fmtPrice(signal.takeProfit)}`,  inline: true });
-    if (signal.positionSizePct != null) embed.addFields({ name: "Size",  value: `${signal.positionSizePct.toFixed(1)}% of portfolio`, inline: true });
-
-    embed.setFooter({ text: COMPLIANCE_FOOTER }).setTimestamp(new Date());
+        { name: "Strategy",    value: signal.strategy,                                                                                   inline: true },
+        { name: "Confidence",  value: `${(signal.confidence * 100).toFixed(1)}%`,                                                        inline: true },
+        { name: "Size",        value: signal.positionSizePct != null ? `${signal.positionSizePct.toFixed(1)}% of portfolio` : "—",        inline: true },
+        { name: "Entry",       value: entry  != null ? `$${fmtPrice(entry)}`                                                         : "—", inline: true },
+        { name: "Stop",        value: stop   != null ? `$${fmtPrice(stop)}${stopPct   != null ? ` (${fmtPct(stopPct)})`   : ""}` : "—", inline: true },
+        { name: "Take Profit", value: target != null ? `$${fmtPrice(target)}${targetPct != null ? ` (${fmtPct(targetPct)})` : ""}` : "—", inline: true },
+      )
+      .setFooter({ text: COMPLIANCE_FOOTER })
+      .setTimestamp(new Date());
 
     const channelIds = channelIdsForBot(signal.botProfile);
     for (const channelId of channelIds) {
