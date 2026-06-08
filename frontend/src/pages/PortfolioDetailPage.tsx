@@ -228,6 +228,11 @@ function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {["crypto", "quant"].includes(portfolio.asset_class) && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+              OPEN 24/7
+            </span>
+          )}
           {isPositive
             ? <TrendingUp size={20} style={{ color: portfolio.color_hex }} />
             : <TrendingDown size={20} className="text-red-400" />}
@@ -274,8 +279,8 @@ function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: nu
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center">
         <p className="text-zinc-500 text-sm">
-          {assetClass === "crypto"
-            ? `Crypto bots scan continuously. Next scan: within 1 minute.`
+          {["crypto", "quant"].includes(assetClass)
+            ? `Bots scan continuously. Next scan: within 1 minute.`
             : "No trades yet. The execution engine runs at market open (Mon–Fri 9:30 AM ET)."}
         </p>
       </div>
@@ -334,7 +339,7 @@ function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: nu
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-const ASSET_CLASS_ORDER = ["stocks", "crypto", "options"];
+const ASSET_CLASS_ORDER = ["stocks", "crypto", "options", "quant"];
 
 export default function PortfolioDetailPage() {
   const { assetClass } = useParams<{ assetClass: string }>();

@@ -85,6 +85,8 @@ export const getBot = (name: string) =>
         open_positions: Array.isArray(b.open_positions) ? b.open_positions.length : 0,
         win_rate_pct: b.win_rate_pct ?? 0,
         equity_curve: b.equity_curve ?? [],
+        all_time_return_pct: b.all_time_return_pct ?? null,
+        portfolio_value_cents: b.portfolio_value_cents ?? null,
       },
     };
   });

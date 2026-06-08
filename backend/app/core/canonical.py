@@ -152,10 +152,18 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     today_realized_cents = 0
     realized_30d_cents = 0
 
+    # Fallback avg_cost by symbol: last buy trade price for trades without position_id
+    buy_price_by_symbol: dict[str, int] = {}
+    for t in all_trades:
+        if t.side.lower() in ("buy", "open"):
+            buy_price_by_symbol[t.symbol] = t.fill_price_cents
+
     for t in all_trades:
         if t.side.lower() not in ("sell", "close"):
             continue
-        avg_cost = pos_cost_map.get(t.position_id or -1, t.fill_price_cents)
+        avg_cost = pos_cost_map.get(t.position_id) if t.position_id else None
+        if avg_cost is None:
+            avg_cost = buy_price_by_symbol.get(t.symbol, t.fill_price_cents)
         fill_pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
         realized_pnl_cents += fill_pnl
         trade_date = t.ts.date() if hasattr(t.ts, "date") else t.ts

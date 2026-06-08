@@ -71,7 +71,7 @@ const BOT_META: Record<
   },
   crypto_quant_aggressive: {
     displayName: "Crypto Quant Aggressive",
-    description: "8-signal high-turnover quant · 20-coin universe · $100k paper sub-account",
+    description: "5-signal high-turnover quant · 20-coin universe · $100k paper sub-account",
     assetClass: "quant",
   },
   options_income: {
@@ -420,7 +420,11 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
                   {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
                 </span>
                 <span className="text-[10px] text-zinc-600 w-16 text-right flex-shrink-0">
-                  {entry.watchlist_count} names
+                  {entry.watchlist_count > 0
+                    ? `${entry.watchlist_count} names`
+                    : entry.profile.includes("options")
+                    ? "setup needed"
+                    : "—"}
                 </span>
               </button>
             );
@@ -451,7 +455,11 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
 
         {posTab === "positions" && (
           crossPositions.length === 0 ? (
-            <p className="text-zinc-600 text-xs py-3 text-center">No open positions. Bot scans for entries at market open (9:30am ET).</p>
+            <p className="text-zinc-600 text-xs py-3 text-center">
+              {(p?.leaderboard ?? []).some((e) => e.profile.includes("crypto") || e.profile.includes("quant"))
+                ? "No open positions. Bots scan continuously — next scan within 5 min."
+                : "No open positions. Bot scans for entries at market open (9:30am ET)."}
+            </p>
           ) : (
             <div className="space-y-1">
               {crossPositions.map((pos) => {
@@ -530,7 +538,7 @@ function PortfolioTab({ portfolio }: { portfolio: StrategyPortfolio }) {
         {" "}({isPositive ? "+" : ""}{portfolio.pnl_pct.toFixed(2)}%)
       </div>
       <div className="text-[11px] text-zinc-600 mt-1">
-        {portfolio.bots.length} bot{portfolio.bots.length !== 1 ? "s" : ""} · $50k paper
+        {portfolio.bots.length} bot{portfolio.bots.length !== 1 ? "s" : ""} · $100k each
       </div>
     </button>
   );

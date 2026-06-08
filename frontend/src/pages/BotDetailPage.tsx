@@ -50,7 +50,7 @@ import { useIsViewer } from "@/store/authStore";
 
 const BOT_META: Record<
   string,
-  { displayName: string; description: string; assetClass: "stock" | "crypto"; strategies: string[] }
+  { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant"; strategies: string[]; ensemble?: string }
 > = {
   stock_swing: {
     displayName: "Stock Swing",
@@ -112,6 +112,19 @@ const BOT_META: Record<
       "dca_btc_eth", "monthly_rebalance_majors",
       "btc_dominance_rotation", "dollar_cost_average_dip",
       "yield_overlay",
+    ],
+  },
+  crypto_quant_aggressive: {
+    displayName: "Crypto Quant Aggressive",
+    description: "5-signal high-turnover quant · 20-coin universe · $100k paper sub-account",
+    assetClass: "quant",
+    ensemble: "any_above_threshold",
+    strategies: [
+      "crypto_quant_vwap_fade",
+      "crypto_quant_bb_breakout",
+      "crypto_quant_momentum_trigger",
+      "crypto_quant_volume_zscore_spike",
+      "crypto_quant_range_break_retest",
     ],
   },
 };
@@ -1574,13 +1587,13 @@ const STRATEGY_DESCRIPTIONS: Record<string, string> = {
   cup_and_handle: "Rounding base (15-40% depth) + handle (<8% pullback) + breakout.",
   macd_crossover: "MACD line crosses signal line on daily bars. Exit on reverse cross.",
   earnings_drift_post: "PEAD proxy: gap >3% + 2× volume surge after earnings. Hold 5-15d.",
-  orb_stocks_in_play: "5-min ORB on top-20 stocks with first-5-min relative vol > 100%. (Sharpe 2.81, SSRN 4729284)",
-  intraday_momentum_noise_band: "Noise-boundary band; long upper break, short lower, trailing stop. (Sharpe 1.33-3.0)",
+  orb_stocks_in_play: "5-min ORB on top-20 stocks with first-5-min relative vol > 100%.",
+  intraday_momentum_noise_band: "Noise-boundary band; long upper break, short lower, trailing stop.",
   heston_half_hour_continuation: "Cross-sectional half-hour return continuation at day multiples.",
   first_half_hour_predicts_last: "First 30-min SPY/QQQ direction → trade in last 30 min.",
   pead_intraday_drift: "Post-earnings drift, intraday window + NLP sentiment overlay.",
   gex_pin_reversion: "Fade extensions toward dealer pin on positive GEX days.",
-  fomc_drift: "Long SPY 24h before FOMC, exit at announcement. (Sharpe 0.6-1.07)",
+  fomc_drift: "Long SPY 24h before FOMC, exit at announcement.",
   vwap_reversion_chop: "VWAP mean reversion, gated to chop regime (ADX < 20).",
   factor_blend: "Equal-weight: value + quality + momentum + low-vol. Top 20 S&P 500.",
   dividend_growth: "5+ yr dividend growth + payout < 60%. Hold for income.",
@@ -1596,7 +1609,7 @@ const STRATEGY_DESCRIPTIONS: Record<string, string> = {
   crypto_macd_swing: "MACD cross on 4h bars. Bear regime blocks buy signals.",
   crypto_ema_cross: "9 EMA crosses 21 EMA on daily + BTC trend filter.",
   crypto_relative_strength: "Rank top-30 alts by 14d RS vs BTC. Long top tier.",
-  crypto_intraday_momentum: "Noise-band momentum on BTC/ETH/SOL 1h-4h + vol filter. (Sharpe 1.12-1.42)",
+  crypto_intraday_momentum: "Noise-band momentum on BTC/ETH/SOL 1h-4h + vol filter.",
   crypto_weekend_momentum: "Hold Fri-close direction Sat-Sun, exit Monday.",
   crypto_volatility_breakout: "Donchian breakout + ATR stops + BTC dominance gate.",
   crypto_news_sentiment: "LunarCrush sentiment overlay on momentum signals.",
@@ -1606,6 +1619,11 @@ const STRATEGY_DESCRIPTIONS: Record<string, string> = {
   btc_dominance_rotation: "Rotate BTC↔alts based on BTC.D direction.",
   dollar_cost_average_dip: "Extra DCA fires on > 10% drawdown from 30d rolling high.",
   yield_overlay: "Park idle stables in highest-yield instrument.",
+  crypto_quant_vwap_fade: "Price > 1.5σ above 15m session VWAP + RSI > 65 → fade short; below 1.5σ + RSI < 35 → fade long. 4h time-stop.",
+  crypto_quant_bb_breakout: "15m close outside Bollinger(20,2) with volume > 1.2x avg → trade the breakout direction. 6h time-stop.",
+  crypto_quant_momentum_trigger: "15m close breaks prior 4h high/low with volume > 1.3x avg → momentum entry. 2% trailing stop, 8h time-stop.",
+  crypto_quant_volume_zscore_spike: "Volume z-score > 2.0 vs 24h rolling (96 bars) → trade in bar's direction. 1.5% stop, 2h time-stop.",
+  crypto_quant_range_break_retest: "Price breaks range then retests breakout level → entry on confirmed retest hold. Tight zone filter.",
 };
 
 function strategyLabel(name: string): string {
@@ -1684,7 +1702,7 @@ function StrategiesTab({
         <p className="text-sm font-semibold text-zinc-300">
           Strategy Roster
           <span className="ml-2 text-xs font-normal text-zinc-600">
-            {displayList.length} strategies · ensemble: weighted_vote
+            {displayList.length} strategies · ensemble: {BOT_META[botName]?.ensemble ?? "weighted_vote"}
           </span>
         </p>
         <button
@@ -1993,7 +2011,7 @@ export default function BotDetailPage() {
   const activitySearchRef = useRef<HTMLInputElement | null>(null);
 
   const meta = BOT_META[botName];
-  const isCrypto = (meta?.assetClass ?? (botName.startsWith("crypto") ? "crypto" : "stock")) === "crypto";
+  const isCrypto = ["crypto", "quant"].includes(meta?.assetClass ?? (botName.startsWith("crypto") ? "crypto" : "stock"));
 
   const [showCoachmark, setShowCoachmark] = useState(false);
 
@@ -2065,6 +2083,8 @@ export default function BotDetailPage() {
     win_rate_pct?: number;
     win_rate_30d?: { pct: number | null; wins: number; losses: number; display: string };
     equity_curve?: EquityPoint[];
+    all_time_return_pct?: number | null;
+    portfolio_value_cents?: number | null;
   };
 
   // Local allocation state
@@ -2316,8 +2336,8 @@ export default function BotDetailPage() {
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: "Starting Capital", value: allocation?.starting_capital_cents ? `$${(allocation.starting_capital_cents / 100).toLocaleString()}` : "—" },
-                  { label: "Current Value", value: "—" },
-                  { label: "All-Time Return", value: "—", colored: false },
+                  { label: "Current Value", value: allocation ? `$${((stats?.portfolio_value_cents ?? allocation?.starting_capital_cents ?? 0) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—" },
+                  { label: "All-Time Return", value: allocation ? `${(stats?.all_time_return_pct ?? 0) >= 0 ? "+" : ""}${(stats?.all_time_return_pct ?? 0).toFixed(2)}%` : "—", colored: true, positive: (stats?.all_time_return_pct ?? 0) >= 0 },
                   {
                     label: "30d Return",
                     value: formatPct(stats?.return_30d_pct ?? 0),
