@@ -27,7 +27,7 @@ import {
   type OpenPosition,
 } from "@/api/bots";
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
-import { getCrossBotPositions, getCrossBotWatchlist, type CrossBotPosition, type CrossBotWatchlistItem } from "@/api/bots";
+import { getCrossBotWatchlist, type CrossBotWatchlistItem } from "@/api/bots";
 import { getAnalystSummary, type AnalystSummaryItem } from "@/api/analyst";
 import { cn } from "@/lib/utils";
 import { useIsViewer } from "@/store/authStore";
@@ -500,7 +500,6 @@ function PortfolioHeroSkeleton() {
 }
 
 function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => void }) {
-  const [posTab, setPosTab] = useState<"positions" | "watchlist">("positions");
   const [chartSymbol, setChartSymbol] = useState<string | null>(null);
   const tabSectionRef = useRef<HTMLDivElement>(null);
 
@@ -511,14 +510,6 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
     staleTime: 30_000,
     retry: 0,
   });
-
-  const { data: rawCrossPositions } = useQuery<CrossBotPosition[]>({
-    queryKey: ["cross-bot-positions"],
-    queryFn: getCrossBotPositions,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  });
-  const crossPositions: CrossBotPosition[] = Array.isArray(rawCrossPositions) ? rawCrossPositions : [];
 
   const { data: rawWatchlists } = useQuery<CrossBotWatchlistItem[]>({
     queryKey: ["cross-bot-watchlist"],
@@ -590,7 +581,6 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
           {
             label: "Watchlists", val: `${p?.total_watchlist_count ?? 0} names`, color: "text-lime-400",
             onClick: () => {
-              setPosTab("watchlist");
               setTimeout(() => tabSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
             },
           },
@@ -634,11 +624,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
                   {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
                 </span>
                 <span className="text-[10px] text-zinc-600 w-16 text-right flex-shrink-0">
-                  {entry.watchlist_count > 0
-                    ? `${entry.watchlist_count} names`
-                    : entry.profile.includes("options")
-                    ? "setup needed"
-                    : "—"}
+                  {entry.watchlist_count > 0 ? `${entry.watchlist_count} names` : "—"}
                 </span>
               </button>
             );
@@ -646,77 +632,28 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
         </div>
       </div>
 
-      {/* Open Positions + Watchlist tabs */}
+      {/* Watchlist */}
       <div ref={tabSectionRef} className="pt-3 border-t border-zinc-800">
-        <div className="flex gap-1 mb-3">
-          {(["positions", "watchlist"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setPosTab(tab)}
-              className={cn(
-                "text-xs px-3 py-1 rounded-lg font-medium transition-colors",
-                posTab === tab
-                  ? "bg-lime-500/15 text-lime-400 border border-lime-500/30"
-                  : "text-zinc-500 hover:text-zinc-300"
-              )}
-            >
-              {tab === "positions"
-                ? `Open Positions (${crossPositions.length})`
-                : `Watchlist (${watchlistItems.length})`}
-            </button>
-          ))}
-        </div>
-
-        {posTab === "positions" && (
-          crossPositions.length === 0 ? (
-            <p className="text-zinc-600 text-xs py-3 text-center">
-              {(p?.leaderboard ?? []).some((e) => e.profile.includes("crypto") || e.profile.includes("quant"))
-                ? "No open positions. Bots scan continuously — next scan within 5 min."
-                : "No open positions. Bot scans for entries at market open (9:30am ET)."}
-            </p>
-          ) : (
-            <div className="space-y-1">
-              {crossPositions.map((pos) => {
-                const pnlPos = pos.pnl >= 0;
-                return (
-                  <div
-                    key={pos.symbol}
-                    onClick={() => setChartSymbol(pos.symbol)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80 cursor-pointer hover:bg-zinc-700/50 hover:border-zinc-600 transition-colors"
-                  >
-                    <span className="text-xs font-bold text-white w-14 flex-shrink-0">{pos.symbol}</span>
-                    <span className="text-[10px] text-zinc-500 flex-1">{pos.bots_holding.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
-                    <span className="text-[10px] text-zinc-500 w-10 text-right">{pos.total_qty} sh</span>
-                    <span className="text-[10px] text-zinc-500 w-12 text-right">{pos.exposure_pct.toFixed(1)}%</span>
-                    <span className={cn("text-xs font-semibold w-16 text-right", pnlPos ? "text-lime-400" : "text-red-400")}>
-                      {pnlPos ? "+" : "−"}${Math.abs(pos.pnl).toFixed(2)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
-
-        {posTab === "watchlist" && (
-          watchlistItems.length === 0 ? (
-            <p className="text-zinc-600 text-xs py-3 text-center">Watchlist rebuilds at 8:30am ET. Check back after market open.</p>
-          ) : (
-            <div className="space-y-1">
-              {watchlistItems.map((item) => (
-                <div
-                  key={item.symbol}
-                  onClick={() => setChartSymbol(item.symbol)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80 cursor-pointer hover:bg-zinc-700/50 hover:border-zinc-600 transition-colors"
-                >
-                  <span className="text-xs font-bold text-white w-14 flex-shrink-0">{item.symbol}</span>
-                  <span className="text-[10px] text-zinc-500 flex-1">{item.bots_watching.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
-                  <span className="text-[10px] text-zinc-500 w-16 text-right capitalize">{item.status}</span>
-                  <span className="text-[10px] text-zinc-500 w-14 text-right">score {item.score.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-          )
+        <p className="text-xs font-semibold text-zinc-400 mb-3">
+          Watchlist — {watchlistItems.length} name{watchlistItems.length !== 1 ? "s" : ""}
+        </p>
+        {watchlistItems.length === 0 ? (
+          <p className="text-zinc-600 text-xs py-3 text-center">Watchlist rebuilds at 8:30am ET. Check back after market open.</p>
+        ) : (
+          <div className="space-y-1">
+            {watchlistItems.map((item) => (
+              <div
+                key={item.symbol}
+                onClick={() => setChartSymbol(item.symbol)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80 cursor-pointer hover:bg-zinc-700/50 hover:border-zinc-600 transition-colors"
+              >
+                <span className="text-xs font-bold text-white w-14 flex-shrink-0">{item.symbol}</span>
+                <span className="text-[10px] text-zinc-500 flex-1">{item.bots_watching.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
+                <span className="text-[10px] text-zinc-500 w-16 text-right capitalize">{item.status}</span>
+                <span className="text-[10px] text-zinc-500 w-14 text-right">score {item.score.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -1077,7 +1014,8 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
               const isEnabled = item.allocation?.enabled ?? false;
               const ret30 = item.stats?.return_30d_pct ?? 0;
               // Rough max DD estimate: ~2x the absolute of return if negative, else 5%
-              const maxDd = ret30 < 0 ? Math.abs(ret30 * 1.5).toFixed(1) : (Math.random() * 3 + 2).toFixed(1);
+              const rawDd = item.stats?.max_drawdown_pct;
+              const maxDd = rawDd != null ? Math.abs(rawDd).toFixed(1) : null;
               const winRate = item.stats?.win_rate_pct ?? 0;
               const assetClass = BOT_META[item.profile.name]?.assetClass ?? item.profile.asset_class;
 
@@ -1103,7 +1041,7 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
                     {formatPct(ret30)}
                   </td>
                   <td className="py-2.5 text-xs text-red-400">
-                    -{maxDd}%
+                    {maxDd != null ? `-${maxDd}%` : "—"}
                   </td>
                   <td className="py-2.5 text-xs text-zinc-300">
                     {winRate > 0 ? `${winRate.toFixed(1)}%` : "—"}
@@ -1565,9 +1503,6 @@ export default function StrategyLab() {
       bots = BOT_ORDER.map(
         (name) => byName.get(name) ?? makeFallbackBots().find((b) => b.profile.name === name)!
       ).filter((item): item is BotListItem => !!item?.profile?.name);
-      data.bots.forEach((b) => {
-        if (b?.profile?.name && !BOT_ORDER.includes(b.profile.name)) bots.push(b);
-      });
     } catch {
       bots = makeFallbackBots();
     }
