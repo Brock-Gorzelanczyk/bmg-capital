@@ -224,7 +224,7 @@ function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<
         <div>
           <h1 className="text-2xl font-bold text-white">{portfolio.name} Portfolio</h1>
           <p className="text-zinc-500 text-sm mt-0.5">
-            Paper trading · {portfolio.bots.length} dedicated bots · $50,000 starting capital
+            Paper trading · {portfolio.bots.length} dedicated bots · ${startingUsd.toLocaleString()} starting capital
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
