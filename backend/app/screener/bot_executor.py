@@ -57,6 +57,28 @@ _HOLD_DAYS: dict[str, tuple[int, int]] = {
 
 _DEFAULT_POSITION_CAP = 4
 
+# Stop loss and take profit percentages per bot type
+_STOP_PCT: dict[str, float] = {
+    "stock_swing": 0.07,
+    "stock_day": 0.02,
+    "stock_lt": 0.12,
+    "crypto_swing": 0.10,
+    "crypto_day": 0.04,
+    "crypto_lt": 0.15,
+    "options_income": 0.08,
+    "options_directional": 0.10,
+}
+_TARGET_PCT: dict[str, float] = {
+    "stock_swing": 0.15,
+    "stock_day": 0.04,
+    "stock_lt": 0.25,
+    "crypto_swing": 0.20,
+    "crypto_day": 0.08,
+    "crypto_lt": 0.40,
+    "options_income": 0.12,
+    "options_directional": 0.20,
+}
+
 
 def _rng(seed_str: str) -> random.Random:
     seed = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
@@ -227,6 +249,8 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
             if qty <= 0:
                 continue
 
+            stop_pct = _STOP_PCT.get(bot_name, 0.08)
+            target_pct = _TARGET_PCT.get(bot_name, 0.15)
             pos = BotPosition(
                 allocation_id=alloc.id,
                 symbol=sym,
@@ -235,6 +259,8 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 opened_at=now,
                 closed_at=None,
                 is_paper=True,
+                stop_price_usd=round(entry_price * (1 - stop_pct), 4),
+                target_price_usd=round(entry_price * (1 + target_pct), 4),
             )
             db.add(pos)
             db.flush()  # get pos.id
