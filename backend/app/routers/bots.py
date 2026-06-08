@@ -874,7 +874,10 @@ def get_bot_activity(
 
         trades = (
             db.query(BotTrade)
-            .filter(BotTrade.allocation_id == allocation.id)
+            .filter(
+                BotTrade.allocation_id == allocation.id,
+                BotTrade.quarantined_at.is_(None),
+            )
             .order_by(BotTrade.ts.desc())
             .limit(400)
             .all()
@@ -1199,7 +1202,8 @@ def get_bot_cards(
         if allocation:
             trades_30d = db.query(BotTrade).filter(
                 BotTrade.allocation_id == allocation.id,
-                BotTrade.ts >= thirty_days_ago
+                BotTrade.ts >= thirty_days_ago,
+                BotTrade.quarantined_at.is_(None),
             ).all()
 
         # A "win" = sell trade where fill_price > avg_cost of that position
@@ -1210,7 +1214,8 @@ def get_bot_cards(
             closed_positions_30d = db.query(BotPosition).filter(
                 BotPosition.allocation_id == allocation.id,
                 BotPosition.closed_at >= thirty_days_ago,
-                BotPosition.closed_at.isnot(None)
+                BotPosition.closed_at.isnot(None),
+                BotPosition.quarantined_at.is_(None),
             ).all()
 
         wins = 0
@@ -1919,7 +1924,10 @@ def get_trades(
 
     trades = (
         db.query(BotTrade)
-        .filter(BotTrade.allocation_id == allocation.id)
+        .filter(
+            BotTrade.allocation_id == allocation.id,
+            BotTrade.quarantined_at.is_(None),
+        )
         .order_by(BotTrade.ts.desc())
         .limit(limit)
         .all()
@@ -3357,7 +3365,7 @@ def get_trade_detail(
     from sqlalchemy import func as sql_func
 
     trade = db.get(BotTrade, trade_id)
-    if not trade:
+    if not trade or trade.quarantined_at:
         raise HTTPException(404, "Trade not found")
 
     alloc = db.get(BotAllocation, trade.allocation_id)

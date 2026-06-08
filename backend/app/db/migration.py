@@ -432,7 +432,9 @@ def run_migrations(engine: Engine) -> None:
         _raise_guardrail_position_cap(conn)
         _quarantine_options_seed_trades(conn)
         _quarantine_all_seed_trades(conn)
+        _quarantine_universal_fake_trades(conn)
         _seed_quant_watchlists(conn)
+        _add_trade_provenance_trigger(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -1078,6 +1080,94 @@ def _quarantine_all_seed_trades(conn) -> None:
         )
     except Exception as exc:
         logger.warning("_quarantine_all_seed_trades failed: %s", exc)
+
+
+def _quarantine_universal_fake_trades(conn) -> None:
+    """Quarantine ALL trades that never went through Alpaca and ALL open positions
+    that have no real Alpaca-backed entry trade.
+
+    Rationale: every real scanner entry trade sets alpaca_order_id (from the Alpaca
+    paper-trading API response). Rows without it are either:
+      (a) backfill/seed data inserted by scripts, or
+      (b) position_monitor exit trades (which do have position_id set).
+    Since (b) can only exist if (a) real entry trades exist first, and since the
+    user has confirmed zero real Alpaca-order trades exist in the DB today, this
+    migration safely wipes all synthetic data in one pass.
+
+    This migration runs ONCE (tracked). Future position_monitor exit trades
+    inserted after this date are clean and will not be touched.
+    """
+    MIGRATION_NAME = "quarantine_universal_fake_trades_2026_06_08"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Quarantine ALL trades with no Alpaca order (catches every backfill batch)
+        r_tr = conn.execute(text("""
+            UPDATE bot_trades
+            SET quarantined_at = :now,
+                quarantine_reason = 'synthetic_no_alpaca_order'
+            WHERE alpaca_order_id IS NULL
+              AND quarantined_at IS NULL
+        """), {"now": now})
+
+        # Quarantine ALL open positions that have no real (Alpaca-order) entry trade
+        r_pos = conn.execute(text("""
+            UPDATE bot_positions
+            SET quarantined_at = :now,
+                quarantine_reason = 'synthetic_no_alpaca_entry_trade'
+            WHERE closed_at IS NULL
+              AND quarantined_at IS NULL
+              AND id NOT IN (
+                SELECT DISTINCT position_id FROM bot_trades
+                WHERE alpaca_order_id IS NOT NULL AND position_id IS NOT NULL
+              )
+        """), {"now": now})
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info(
+            "_quarantine_universal_fake_trades: quarantined %d trades, %d positions",
+            r_tr.rowcount, r_pos.rowcount,
+        )
+    except Exception as exc:
+        logger.warning("_quarantine_universal_fake_trades failed: %s", exc)
+
+
+def _add_trade_provenance_trigger(conn) -> None:
+    """Add a SQLite trigger that rejects bot_trade inserts with no provenance.
+
+    A valid insert must have at least one of:
+      - alpaca_order_id  (real Alpaca fill — scanner entry trades)
+      - position_id      (exit trade from position_monitor)
+      - quarantined_at   (explicitly marked synthetic before insert — allowed for
+                          migrations that need to backfill quarantined rows)
+
+    This blocks accidental seed-script inserts that provide none of these.
+    Idempotent — CREATE TRIGGER IF NOT EXISTS.
+    """
+    MIGRATION_NAME = "bot_trades_provenance_trigger_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS bot_trades_require_provenance
+            BEFORE INSERT ON bot_trades
+            FOR EACH ROW
+            WHEN NEW.alpaca_order_id IS NULL
+              AND NEW.position_id    IS NULL
+              AND NEW.quarantined_at IS NULL
+            BEGIN
+              SELECT RAISE(ABORT,
+                'bot_trades: insert rejected — alpaca_order_id or position_id required');
+            END
+        """))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_add_trade_provenance_trigger: trigger created")
+    except Exception as exc:
+        logger.warning("_add_trade_provenance_trigger failed: %s", exc)
 
 
 def _seed_quant_watchlists(conn) -> None:
