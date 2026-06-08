@@ -352,13 +352,13 @@ function OpenPositionsPanel() {
       {/* Table header */}
       {!isLoading && positions.length > 0 && (
         <div className="grid gap-x-2 px-3 pb-1 text-[9px] font-semibold text-zinc-600 uppercase tracking-wide"
-          style={{ gridTemplateColumns: "5rem 1fr 2.5rem 4rem 4rem 4rem 6rem 3rem" }}>
+          style={{ gridTemplateColumns: "5rem 1fr 2.5rem 4rem 4rem 4.5rem 5.5rem 3rem" }}>
           <span>Symbol</span>
           <span>Bot</span>
           <span>Side</span>
           <span className="text-right">Qty</span>
           <span className="text-right">Entry</span>
-          <span className="text-right">Current</span>
+          <span className="text-right">Curr Val</span>
           <span className="text-right">Unrealized</span>
           <span className="text-right">Held</span>
         </div>
@@ -391,7 +391,7 @@ function OpenPositionsPanel() {
                 key={pos.position_id}
                 to={`/strategy/trade/${pos.trade_id}`}
                 className="grid gap-x-2 px-3 py-2 rounded-xl bg-zinc-800/40 hover:bg-zinc-800 border border-zinc-800/60 hover:border-zinc-700 transition-colors items-center"
-                style={{ gridTemplateColumns: "5rem 1fr 2.5rem 4rem 4rem 4rem 6rem 3rem" }}
+                style={{ gridTemplateColumns: "5rem 1fr 2.5rem 4rem 4rem 4.5rem 5.5rem 3rem" }}
               >
                 {/* Symbol */}
                 <span className="text-xs font-bold text-white truncate">{pos.symbol}</span>
@@ -424,18 +424,35 @@ function OpenPositionsPanel() {
                   {fmtPrice(pos.entry_price)}
                 </span>
 
-                {/* Current */}
-                <span className="text-[11px] text-white text-right tabular-nums">
-                  {fmtPrice(pos.current_price)}
+                {/* Current Value = qty × current_price */}
+                <span className="text-[11px] text-white text-right tabular-nums flex items-center justify-end gap-0.5">
+                  {pos.price_source === "stale" && (
+                    <span title="Price last updated — live ticker temporarily unavailable" className="text-[9px] text-amber-400 cursor-help">⚠</span>
+                  )}
+                  ${(pos.current_value_usd ?? pos.current_price * pos.qty).toFixed(2)}
                 </span>
 
-                {/* Unrealized */}
-                <span className={cn("text-[11px] font-semibold text-right tabular-nums", pnlPos ? "text-lime-400" : "text-red-400")}>
-                  {pnlSign}${Math.abs(pos.unrealized_pnl_usd).toFixed(2)}{" "}
-                  <span className="text-[9px] opacity-70">
-                    ({pnlSign}{Math.abs(pos.unrealized_pnl_pct).toFixed(2)}%)
-                  </span>
-                </span>
+                {/* Unrealized P&L — two stacked lines */}
+                <div className="text-right">
+                  <div className={cn(
+                    "text-[11px] font-semibold tabular-nums leading-tight",
+                    pos.unrealized_pnl_usd > 0 ? "text-[#22c55e]"
+                    : pos.unrealized_pnl_usd < 0 ? "text-[#ef4444]"
+                    : "text-zinc-500"
+                  )}>
+                    {pos.unrealized_pnl_usd > 0 ? "+" : pos.unrealized_pnl_usd < 0 ? "-" : ""}
+                    ${Math.abs(pos.unrealized_pnl_usd).toFixed(2)}
+                  </div>
+                  <div className={cn(
+                    "text-[9px] tabular-nums leading-tight",
+                    pos.unrealized_pnl_pct > 0 ? "text-[#22c55e]/70"
+                    : pos.unrealized_pnl_pct < 0 ? "text-[#ef4444]/70"
+                    : "text-zinc-600"
+                  )}>
+                    {pos.unrealized_pnl_pct > 0 ? "+" : pos.unrealized_pnl_pct < 0 ? "-" : ""}
+                    {Math.abs(pos.unrealized_pnl_pct).toFixed(2)}%
+                  </div>
+                </div>
 
                 {/* Held */}
                 <span className="text-[10px] text-zinc-600 text-right">
@@ -972,14 +989,14 @@ function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
 
 // ─── Comparison table ─────────────────────────────────────────────────────────
 
-type SortKey = "name" | "status" | "return_30d" | "sharpe" | "max_dd" | "uptime";
+type CompSortKey = "name" | "status" | "return_30d" | "sharpe" | "max_dd" | "uptime";
 type SortDir = "asc" | "desc";
 
 function ComparisonTable({ bots }: { bots: BotListItem[] }) {
-  const [sortKey, setSortKey] = useState<SortKey>("return_30d");
+  const [sortKey, setSortKey] = useState<CompSortKey>("return_30d");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  function handleSort(key: SortKey) {
+  function handleSort(key: CompSortKey) {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
@@ -1024,7 +1041,7 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
     return sortDir === "asc" ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
   });
 
-  function SortHeader({ label, colKey }: { label: string; colKey: SortKey }) {
+  function SortHeader({ label, colKey }: { label: string; colKey: CompSortKey }) {
     const active = sortKey === colKey;
     return (
       <th

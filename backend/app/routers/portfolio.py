@@ -9,6 +9,7 @@ Legacy personal-portfolio and paper-account tables were archived 2026-06-06.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
@@ -19,6 +20,40 @@ from app.db.models.users import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+# Module-level 5s TTL price cache so repeated calls within one 30s poll cycle
+# don't hammer Kraken with identical requests.
+_price_cache: dict[str, tuple[float, float, str]] = {}  # sym → (price, fetched_ts, source)
+_PRICE_TTL = 5.0  # seconds
+
+
+def _fetch_prices(symbols: list[str]) -> dict[str, tuple[float, str]]:
+    """Return {symbol: (price, source)} using a 5-second TTL module cache."""
+    now = time.time()
+    fresh: dict[str, tuple[float, float, str]] = {
+        sym: entry for sym, entry in _price_cache.items()
+        if now - entry[1] < _PRICE_TTL
+    }
+    stale = [sym for sym in symbols if sym not in fresh]
+
+    if stale:
+        try:
+            from app.services.live_prices import fetch_live_prices
+            live_map = fetch_live_prices(stale)
+            for sym in stale:
+                price = float(live_map.get(sym) or 0)
+                source = ("kraken" if "/" in sym else "alpaca") if price > 0 else "unavailable"
+                _price_cache[sym] = (price, now, source)
+                fresh[sym] = (price, now, source)
+            logger.debug("open-positions: fetched live prices for %d symbols", len(stale))
+        except Exception as exc:
+            logger.warning("open-positions: live_prices failed: %s", exc)
+            for sym in stale:
+                _price_cache[sym] = (0.0, now, "unavailable")
+                fresh[sym] = (0.0, now, "unavailable")
+
+    return {sym: (fresh[sym][0], fresh[sym][2]) if sym in fresh else (0.0, "unavailable")
+            for sym in symbols}
 
 _ASSET_CLASS_COLOR: dict[str, str] = {
     "stock":   "#22C55E",
@@ -115,14 +150,10 @@ def get_open_positions(
     if not open_positions:
         return _empty_response()
 
-    # Batch-fetch live prices for all unique symbols
+    # Batch-fetch live prices with 5s TTL cache
     all_symbols = list({pos.symbol for pos in open_positions})
-    price_map: dict[str, float] = {}
-    try:
-        from app.services.live_prices import fetch_live_prices
-        price_map = fetch_live_prices(all_symbols)
-    except Exception as exc:
-        logger.warning("open-positions: live price fetch failed: %s", exc)
+    price_result = _fetch_prices(all_symbols)   # {sym: (price, source)}
+    price_fetched_at_iso = datetime.now(timezone.utc).isoformat()
 
     # Load trade ids keyed by position_id (for click-through links)
     position_ids = [pos.id for pos in open_positions]
@@ -146,14 +177,22 @@ def get_open_positions(
         if not profile:
             continue
 
-        entry_price   = pos.avg_cost_cents / 100.0
-        current_price = float(price_map.get(pos.symbol) or 0)
-        if current_price <= 0:
-            current_price = entry_price   # show flat when price unavailable
+        entry_price          = pos.avg_cost_cents / 100.0
+        live_price, source   = price_result.get(pos.symbol, (0.0, "unavailable"))
+        live_price           = float(live_price or 0)
 
-        unrealized_usd = round((current_price - entry_price) * pos.qty, 2)
-        cost_basis     = entry_price * pos.qty
-        unrealized_pct = round((unrealized_usd / cost_basis * 100) if cost_basis > 0 else 0.0, 4)
+        if live_price > 0:
+            current_price  = live_price
+            price_source   = source
+        else:
+            # Fall back to entry price; flag as stale so the UI can show a warning
+            current_price  = entry_price
+            price_source   = "stale"
+
+        current_value_usd = round(current_price * pos.qty, 2)
+        unrealized_usd    = round((current_price - entry_price) * pos.qty, 2)
+        cost_basis        = entry_price * pos.qty
+        unrealized_pct    = round((unrealized_usd / cost_basis * 100) if cost_basis > 0 else 0.0, 4)
 
         opened_at = pos.opened_at
         if opened_at.tzinfo is None:
@@ -164,21 +203,24 @@ def get_open_positions(
         total_unrealized_usd += unrealized_usd
 
         result.append({
-            "position_id":       pos.id,
-            "trade_id":          trade_id_by_pos.get(pos.id, pos.id),
-            "bot_name":          profile.name,
-            "bot_display":       _bot_display(profile.name),
-            "bot_color":         _bot_color(profile.asset_class),
-            "asset_class":       profile.asset_class,
-            "symbol":            pos.symbol,
-            "side":              "buy",
-            "qty":               pos.qty,
-            "entry_price":       entry_price,
-            "current_price":     current_price,
+            "position_id":        pos.id,
+            "trade_id":           trade_id_by_pos.get(pos.id, pos.id),
+            "bot_name":           profile.name,
+            "bot_display":        _bot_display(profile.name),
+            "bot_color":          _bot_color(profile.asset_class),
+            "asset_class":        profile.asset_class,
+            "symbol":             pos.symbol,
+            "side":               "buy",
+            "qty":                pos.qty,
+            "entry_price":        entry_price,
+            "current_price":      current_price,
+            "current_value_usd":  current_value_usd,
             "unrealized_pnl_usd": unrealized_usd,
             "unrealized_pnl_pct": unrealized_pct,
-            "opened_at":         pos.opened_at.isoformat(),
-            "held_seconds":      max(0, held_seconds),
+            "price_source":       price_source,
+            "price_fetched_at":   price_fetched_at_iso,
+            "opened_at":          pos.opened_at.isoformat(),
+            "held_seconds":       max(0, held_seconds),
         })
 
     total_cost = sum(

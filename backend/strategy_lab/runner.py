@@ -382,10 +382,15 @@ def run_bot_profile(profile_name: str) -> dict:
             # 8. Apply ensemble vote
             ensemble = profile.get("ensemble", "weighted_vote")
             conf_threshold = float(profile.get("confidence_threshold", 0.5))
+            raw_total = sum(len(s) for s in signals_by_strategy)
+            logger.info(
+                "[runner:%s] FILTER raw_signals=%d across %d strategies (threshold=%.2f, ensemble=%s)",
+                profile_name, raw_total, strategies_loaded, conf_threshold, ensemble,
+            )
             signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded), conf_threshold)
             logger.info(
-                "[runner:%s] after ensemble (%s): %d signals",
-                profile_name, ensemble, len(signals),
+                "[runner:%s] FILTER after_ensemble=%d (dropped %d)",
+                profile_name, len(signals), raw_total - len(signals),
             )
 
             # 8a. Multi-timeframe confluence filter (graceful)
@@ -414,8 +419,9 @@ def run_bot_profile(profile_name: str) -> dict:
                     filtered_signals.append(sig)  # degrade gracefully
             signals = filtered_signals
             logger.info(
-                "[runner:%s] after MTF confluence: %d signals",
-                profile_name, len(signals),
+                "[runner:%s] FILTER after_mtf=%d cadence=%s (dropped %d)",
+                profile_name, len(signals), bot_cadence,
+                len([s for s in signals_by_strategy for _ in s]) - len(signals),  # not ideal but OK for log
             )
 
             # 9. Apply risk overlay (graceful — may not be built yet)
@@ -426,8 +432,8 @@ def run_bot_profile(profile_name: str) -> dict:
             except (ImportError, Exception) as exc:
                 logger.debug("[runner:%s] risk_overlay unavailable: %s", profile_name, exc)
             logger.info(
-                "[runner:%s] after risk_overlay: %d signals (was %d)",
-                profile_name, len(signals), pre_overlay_count,
+                "[runner:%s] FILTER after_overlay=%d (dropped %d)",
+                profile_name, len(signals), pre_overlay_count - len(signals),
             )
 
             # 10. Expert decision layer: per-signal processing for actionable signals
@@ -435,9 +441,11 @@ def run_bot_profile(profile_name: str) -> dict:
 
             actionable = [s for s in signals if s.side != "hold"]
             logger.info(
-                "[runner:%s] actionable signals: %d", profile_name, len(actionable),
+                "[runner:%s] FILTER actionable=%d hold=%d",
+                profile_name, len(actionable), len(signals) - len(actionable),
             )
             processed_signals = []
+            _alloc_skip_counts: dict[str, int] = {}
 
             for alloc in allocations:
                 alloc_user_id = alloc.user_id
@@ -476,9 +484,10 @@ def run_bot_profile(profile_name: str) -> dict:
                 position_cap = int(profile.get("position_cap", 999))
                 if len(open_pos_rows) >= position_cap:
                     logger.info(
-                        "[runner:%s][position_cap] skipping alloc %d: %d/%d positions held",
-                        profile_name, alloc.id, len(open_pos_rows), position_cap,
+                        "[runner:%s] FILTER[alloc=%d] SKIP position_cap=%d open=%d",
+                        profile_name, alloc.id, position_cap, len(open_pos_rows),
                     )
+                    _alloc_skip_counts["position_cap"] = _alloc_skip_counts.get("position_cap", 0) + 1
                     continue
 
                 # ── FIX E: max_gross_exposure_pct enforcement ─────────────────────
@@ -493,9 +502,10 @@ def run_bot_profile(profile_name: str) -> dict:
                         gross_pct = (open_notional_cents / cap_cents) * 100
                         if gross_pct >= max_gross_pct:
                             logger.info(
-                                "[runner:%s][exposure_cap] skipping alloc %d: %.1f%%/%.1f%% gross exposure",
-                                profile_name, alloc.id, gross_pct, max_gross_pct,
+                                "[runner:%s] FILTER[alloc=%d] SKIP exposure_cap=%.1f%% gross=%.1f%%",
+                                profile_name, alloc.id, max_gross_pct, gross_pct,
                             )
+                            _alloc_skip_counts["exposure_cap"] = _alloc_skip_counts.get("exposure_cap", 0) + 1
                             continue
                 except Exception as exc:
                     logger.warning("[runner:%s] exposure_cap check failed: %s", profile_name, exc)
@@ -691,6 +701,13 @@ def run_bot_profile(profile_name: str) -> dict:
                             )
                         except Exception as _exc:
                             logger.debug("[runner:%s] first_live_signal_announcement skipped: %s", profile_name, _exc)
+
+            # Alloc-loop summary
+            if _alloc_skip_counts:
+                logger.info(
+                    "[runner:%s] FILTER alloc_skips=%s (of %d allocs)",
+                    profile_name, dict(_alloc_skip_counts), len(allocations),
+                )
 
             # Also audit hold signals per allocation (non-expert path)
             hold_signals = [s for s in signals if s.side == "hold"]
@@ -1251,9 +1268,14 @@ def _primary_strategy(profile_name: str) -> str:
 
 
 def _cadence_for_profile(profile_name: str) -> str:
-    """Map profile name to bot cadence: 'day' | 'swing' | 'lt'."""
-    if "day" in profile_name:
-        return "day"
+    """Map profile name to bot cadence: 'day' | 'swing' | 'lt'.
+
+    Quant bots run on 5min/15min bars with intraday signals → 'day' cadence
+    so MTF confluence uses short-window SMA slices, not daily/weekly/monthly.
+    """
     if "lt" in profile_name:
         return "lt"
+    # Intraday bots: day-trading + quant strategies (5 min cadence, 15m bars)
+    if "day" in profile_name or "quant" in profile_name:
+        return "day"
     return "swing"

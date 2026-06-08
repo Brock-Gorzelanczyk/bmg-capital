@@ -550,8 +550,11 @@ export interface OpenPosition {
   qty: number;
   entry_price: number;
   current_price: number;
+  current_value_usd: number;
   unrealized_pnl_usd: number;
   unrealized_pnl_pct: number;
+  price_source: "kraken" | "alpaca" | "stale" | "unavailable" | string;
+  price_fetched_at: string;
   opened_at: string;
   held_seconds: number;
 }
