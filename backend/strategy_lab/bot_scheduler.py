@@ -17,6 +17,14 @@ ET = pytz.timezone("America/New_York")
 UTC = pytz.utc
 
 
+def _run_bot_position_monitor(bot_name: str) -> None:
+    try:
+        from strategy_lab.core.position_monitor import monitor_bot_positions
+        monitor_bot_positions(bot_name)
+    except Exception as exc:
+        logger.error("bot_position_monitor[%s] failed: %s", bot_name, exc)
+
+
 def setup_bot_scheduler(scheduler) -> None:
     """Register the six bot-profile cron jobs.
 
@@ -160,6 +168,33 @@ def setup_bot_scheduler(scheduler) -> None:
         next_run_time=datetime.now(UTC),
         max_instances=1,
         misfire_grace_time=120,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
+    # stock_day intraday position monitor: every 5 min, 9–15 ET, Mon-Fri
+    # Trailing ratchet, ensure_stop_exists, drawdown circuit breaker.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: _run_bot_position_monitor("stock_day"),
+        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/5", timezone=ET),
+        id="bot_stock_day_position_monitor",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
+    # stock_swing intraday position monitor: every 5 min, 9–15 ET, Mon-Fri
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: _run_bot_position_monitor("stock_swing"),
+        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/5", timezone=ET),
+        id="bot_stock_swing_position_monitor",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
         coalesce=True,
     )
 
@@ -433,5 +468,6 @@ def setup_bot_scheduler(scheduler) -> None:
         "strategy_lab: bot scheduler registered (stock_swing, stock_day, stock_lt[weekly], "
         "crypto_swing, crypto_day, crypto_lt, crypto_onchain, crypto_quant_aggressive, "
         "options_income, options_directional, "
+        "stock_day_position_monitor, stock_swing_position_monitor, "
         "discord_digest, discord_leaderboard, daily_briefing_email, dead_mans_switch)"
     )

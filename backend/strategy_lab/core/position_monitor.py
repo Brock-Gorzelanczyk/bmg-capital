@@ -249,3 +249,111 @@ def run_position_monitor() -> dict:
         "closed_time": closed_time,
         "trailing_activated": trailing_activated,
     }
+
+
+def monitor_bot_positions(bot_name: str) -> dict:
+    """Per-bot intraday monitor for stock_day and stock_swing.
+
+    Runs every 5 min during market hours. Layers on top of the global
+    run_position_monitor() to add:
+      - Trailing stop ratchet (risk_management config)
+      - ensure_stop_exists (catches any position that slipped through entry)
+      - Drawdown circuit breaker (bot-level, configurable via YAML)
+    """
+    from app.db.session import SessionLocal
+    from app.db.models.bots import BotPosition, BotAllocation, BotProfile
+    from strategy_lab.core.stop_management import ratchet_trailing_stop, ensure_stop_exists
+
+    stats: dict = {
+        "bot": bot_name, "checked": 0, "ratcheted": 0,
+        "stopped": 0, "circuit_breaker": False,
+    }
+    db = SessionLocal()
+    try:
+        profile = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
+        if not profile:
+            return stats
+        cfg = profile.config_json or {}
+        rm = cfg.get("risk_management", {})
+
+        ratchet_pct = float(rm.get("trailing_stop_ratchet_pct", 10.0))
+        min_pct = float(rm.get("trailing_stop_min_pct", 7.0))
+        stop_pct = float(rm.get("stop_loss_pct", 7.0))
+        cb_pct = float(rm.get("drawdown_circuit_breaker_pct", 30.0))
+
+        open_positions = (
+            db.query(BotPosition)
+            .join(BotAllocation, BotPosition.allocation_id == BotAllocation.id)
+            .filter(
+                BotAllocation.profile_id == profile.id,
+                BotPosition.closed_at.is_(None),
+                BotPosition.quarantined_at.is_(None),
+            )
+            .all()
+        )
+
+        if not open_positions:
+            return stats
+
+        symbols = list({p.symbol for p in open_positions})
+        price_map: dict[str, float] = _fetch_latest_prices_fallback(symbols)
+        if not price_map:
+            price_map = _get_current_prices(symbols, cfg.get("asset_class", "stock"))
+
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        # ── Drawdown circuit breaker ──────────────────────────────────────────
+        total_cost = sum((p.avg_cost_cents / 100.0) * p.qty for p in open_positions)
+        total_current = sum(
+            price_map.get(p.symbol, p.avg_cost_cents / 100.0) * p.qty
+            for p in open_positions
+        )
+        if total_cost > 0:
+            dd_pct = (total_cost - total_current) / total_cost * 100
+            if dd_pct >= cb_pct:
+                logger.warning(
+                    "[monitor:%s] CIRCUIT BREAKER triggered: drawdown=%.1f%% >= limit=%.1f%%",
+                    bot_name, dd_pct, cb_pct,
+                )
+                stats["circuit_breaker"] = True
+                for pos in open_positions:
+                    alloc = db.get(BotAllocation, pos.allocation_id)
+                    if not alloc:
+                        continue
+                    exit_price = price_map.get(pos.symbol, pos.avg_cost_cents / 100.0)
+                    _close_position(db, pos, alloc, exit_price, "drawdown_circuit_breaker", now)
+                    stats["stopped"] += 1
+                return stats
+
+        # ── Per-position: ensure stop + ratchet ──────────────────────────────
+        for pos in open_positions:
+            current_price = price_map.get(pos.symbol)
+            if not current_price or current_price <= 0:
+                continue
+
+            entry_price = pos.avg_cost_cents / 100.0
+            stats["checked"] += 1
+
+            ensure_stop_exists(db, pos.id, entry_price, stop_pct)
+
+            result = ratchet_trailing_stop(
+                db, pos.id, current_price, entry_price,
+                min_pct=min_pct, ratchet_pct=ratchet_pct,
+            )
+            if result == "ratcheted":
+                stats["ratcheted"] += 1
+
+        if stats["checked"] or stats["ratcheted"] or stats["stopped"]:
+            logger.info(
+                "[monitor:%s] checked=%d ratcheted=%d stopped=%d circuit_breaker=%s",
+                bot_name, stats["checked"], stats["ratcheted"],
+                stats["stopped"], stats["circuit_breaker"],
+            )
+
+    except Exception as exc:
+        logger.error("[monitor:%s] monitor_bot_positions error: %s", bot_name, exc, exc_info=True)
+    finally:
+        db.close()
+
+    return stats

@@ -630,6 +630,86 @@ def run_bot_profile(profile_name: str) -> dict:
                         target_price=stop_info.get("target_price"),
                     )
 
+                    # 10i-pre. Institutional risk gates (stock_day + stock_swing only)
+                    if profile_name in ("stock_day", "stock_swing") and sig.side == "buy":
+                        # Regime gate: VIX extreme halts, VIX high scales size
+                        try:
+                            from strategy_lab.core.regime_gate import regime_position_size_multiplier
+                            _rm_mult = regime_position_size_multiplier(profile, regime)
+                            if _rm_mult == 0.0:
+                                logger.warning(
+                                    "[runner:%s] HALT %s — regime_gate blocks entry",
+                                    profile_name, sig.symbol,
+                                )
+                                continue
+                            if _rm_mult != 1.0:
+                                final_size_pct = round(final_size_pct * _rm_mult, 4)
+                        except Exception as exc:
+                            logger.warning("[runner:%s] regime_gate failed for %s: %s",
+                                           profile_name, sig.symbol, exc)
+
+                        # Sector concentration cap
+                        try:
+                            from strategy_lab.core.sector_map import get_sector
+                            _rm_cfg = profile.get("risk_management", {})
+                            _sec_max = int(_rm_cfg.get("sector_concentration_max", 99))
+                            _this_sector = get_sector(sig.symbol)
+                            if _this_sector and _this_sector != "etf":
+                                _sector_count = sum(
+                                    1 for _op in open_pos_rows
+                                    if get_sector(_op.symbol) == _this_sector
+                                )
+                                if _sector_count >= _sec_max:
+                                    logger.info(
+                                        "[runner:%s] SKIP %s sector_cap: sector=%s count=%d/%d",
+                                        profile_name, sig.symbol, _this_sector,
+                                        _sector_count, _sec_max,
+                                    )
+                                    _alloc_skip_counts["sector_cap"] = (
+                                        _alloc_skip_counts.get("sector_cap", 0) + 1
+                                    )
+                                    continue
+                        except Exception as exc:
+                            logger.warning("[runner:%s] sector_cap failed for %s: %s",
+                                           profile_name, sig.symbol, exc)
+
+                        # Earnings exclusion window
+                        try:
+                            _rm_cfg = profile.get("risk_management", {})
+                            _exc_days = int(_rm_cfg.get("exclude_pending_earnings_days", 3))
+                            from strategy_lab.core.catalyst_calendar import get_upcoming_earnings  # type: ignore
+                            _earn_symbols = get_upcoming_earnings(days=_exc_days)
+                            if sig.symbol in (_earn_symbols or []):
+                                logger.info(
+                                    "[runner:%s] SKIP %s earnings_window (%d days)",
+                                    profile_name, sig.symbol, _exc_days,
+                                )
+                                continue
+                        except ImportError:
+                            pass  # earnings guard not available; universe filter still applies
+                        except Exception as exc:
+                            logger.warning("[runner:%s] earnings_guard failed for %s: %s",
+                                           profile_name, sig.symbol, exc)
+
+                        # Idempotency — suppress duplicate fills within same scan minute
+                        try:
+                            from strategy_lab.core.idempotency import (
+                                order_idempotency_key, is_duplicate, log_order_attempt,
+                            )
+                            _idem_key = order_idempotency_key(
+                                profile_name, sig.symbol, sig.side, _scan_start,
+                            )
+                            if is_duplicate(_idem_key):
+                                logger.info(
+                                    "[runner:%s] SKIP %s idempotency_dup key=%s",
+                                    profile_name, sig.symbol, _idem_key,
+                                )
+                                continue
+                            log_order_attempt(_idem_key, "pending")
+                        except Exception as exc:
+                            logger.warning("[runner:%s] idempotency check failed for %s: %s",
+                                           profile_name, sig.symbol, exc)
+
                     # 10i. Execute: open position in Alpaca paper + create DB rows
                     try:
                         _execute_signal(
@@ -1205,6 +1285,17 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         except Exception:
             pass
         return
+
+    # For institutional bots: ensure stop is set using risk_management config
+    if profile_name in ("stock_day", "stock_swing"):
+        try:
+            from strategy_lab.core.stop_management import place_initial_stop
+            _rm = profile.get("risk_management", {})
+            _stop_pct = float(_rm.get("stop_loss_pct", profile.get("stop_loss_pct", 7.0)))
+            place_initial_stop(db, pos.id, entry_price, _stop_pct)
+        except Exception as exc:
+            logger.warning("[execute:%s] place_initial_stop failed for %s: %s",
+                           profile_name, sig.symbol, exc)
 
     logger.info(
         "[execute:%s] Opened %s qty=%.6f @ %.4f stop=%.4f target=%.4f order=%s pos=%d trade=%d",

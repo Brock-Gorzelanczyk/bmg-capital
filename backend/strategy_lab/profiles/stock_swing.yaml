@@ -60,3 +60,14 @@ execution:
   fallback_to_market: true
   use_brackets: true
 paper_only: true
+risk_management:
+  stop_loss_pct: 7
+  trailing_stop_ratchet_pct: 10
+  trailing_stop_min_pct: 7
+  take_profit_pct: 25
+  sector_concentration_max: 1
+  exclude_pending_earnings_days: 3
+  drawdown_circuit_breaker_pct: 30
+regime_overrides:
+  vix_high_position_size_multiplier: 0.5
+  vix_extreme_halt_new_entries: true
