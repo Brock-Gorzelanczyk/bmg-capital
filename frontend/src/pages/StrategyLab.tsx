@@ -1013,9 +1013,7 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
             {sortedBots.map((item) => {
               const isEnabled = item.allocation?.enabled ?? false;
               const ret30 = item.stats?.return_30d_pct ?? 0;
-              // Rough max DD estimate: ~2x the absolute of return if negative, else 5%
-              const rawDd = item.stats?.max_drawdown_pct;
-              const maxDd = rawDd != null ? Math.abs(rawDd).toFixed(1) : null;
+              const maxDd: string | null = null; // populated when backend exposes max_drawdown_pct
               const winRate = item.stats?.win_rate_pct ?? 0;
               const assetClass = BOT_META[item.profile.name]?.assetClass ?? item.profile.asset_class;
 
