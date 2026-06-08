@@ -43,6 +43,8 @@ DISPLAY_NAMES: dict[str, str] = {
     "crypto_swing":         "Crypto Swing",
     "crypto_day":           "Crypto Day",
     "crypto_lt":            "Crypto Long-Term",
+    "crypto_onchain":       "Crypto Onchain",
+    "crypto_quant_aggressive": "Crypto Quant Aggressive",
     "options_income":       "Options Income",
     "options_directional":  "Options Directional",
 }
@@ -138,10 +140,13 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     )
     pos_cost_map: dict[int, int] = {p.id: p.avg_cost_cents for p in all_positions}
 
-    # ── All trades ───────────────────────────────────────────────────────────
+    # ── All trades (excluding quarantined) ───────────────────────────────────
     all_trades = (
         db.query(BotTrade)
-        .filter(BotTrade.allocation_id == alloc.id)
+        .filter(
+            BotTrade.allocation_id == alloc.id,
+            BotTrade.quarantined_at.is_(None),
+        )
         .order_by(BotTrade.ts)
         .all()
     )
@@ -172,8 +177,8 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         if trade_date >= thirty_days_ago:
             realized_30d_cents += fill_pnl
 
-    # ── Open positions ────────────────────────────────────────────────────────
-    open_pos_rows = [p for p in all_positions if p.closed_at is None]
+    # ── Open positions (excluding quarantined) ───────────────────────────────
+    open_pos_rows = [p for p in all_positions if p.closed_at is None and not p.quarantined_at]
 
     # Unrealized PnL: 0 until live prices are integrated
     # (satisfies zero-trade rule: no phantom gains from simulation)

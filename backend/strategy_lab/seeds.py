@@ -24,6 +24,7 @@ _PROFILE_DESCRIPTIONS = {
     "options_income": "Wheel strategy, covered calls, cash-secured puts, iron condors — premium collection on high-IV stocks.",
     "options_directional": "Credit spreads, debit spreads, LEAPS — directional options plays on momentum stocks.",
     "crypto_quant_aggressive": "5-signal high-turnover quant on 20 coins. VWAP fade, BB breakout, momentum trigger, volume z-score, range break retest. $100k paper sub-account.",
+    "crypto_onchain": "On-chain flow analysis — large wallet movements, DEX volume anomalies, L2 bridge activity on top 20 chains.",
 }
 
 

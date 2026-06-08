@@ -87,6 +87,8 @@ class BotPosition(Base):
     target_price_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     trailing_stop_activated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     trailing_stop_price_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    quarantined_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    quarantine_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class BotTrade(Base):
@@ -105,6 +107,8 @@ class BotTrade(Base):
     is_paper: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expected_fill_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     slippage_bps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    quarantined_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    quarantine_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class BotDailyPnL(Base):

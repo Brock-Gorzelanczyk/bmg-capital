@@ -73,6 +73,11 @@ const BOT_META: Record<
     description: "5-signal high-turnover quant · 20-coin universe · $100k paper sub-account",
     assetClass: "quant",
   },
+  crypto_onchain: {
+    displayName: "Crypto Onchain",
+    description: "On-chain flow analysis — large wallet movements, DEX volume anomalies, L2 bridge activity",
+    assetClass: "crypto",
+  },
   options_income: {
     displayName: "Options Income",
     description: "Wheel, covered calls, CSPs, iron condors — premium collection",
@@ -92,6 +97,7 @@ const BOT_ORDER = [
   "crypto_day",
   "crypto_swing",
   "crypto_lt",
+  "crypto_onchain",
   "crypto_quant_aggressive",
   "options_income",
   "options_directional",

@@ -50,12 +50,13 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
-    # stock_lt: first Tuesday of each month, 10:00 AM ET
-    # APScheduler: day='1-7' means "any day 1-7", day_of_week='tue' → first Tue
+    # stock_lt: every Tuesday 10:00 AM ET (was: first Tue of month)
+    # Weekly cadence keeps the UI alive for demo; the strategy itself
+    # still only rebalances when factor signals change significantly.
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: run_bot_profile("stock_lt"),
-        CronTrigger(day_of_week="tue", day="1-7", hour=10, minute=0, timezone=ET),
+        CronTrigger(day_of_week="tue", hour=10, minute=0, timezone=ET),
         id="bot_stock_lt",
         replace_existing=True,
     )
@@ -193,6 +194,35 @@ def setup_bot_scheduler(scheduler) -> None:
         CronTrigger(hour="*/4", minute=30),
         id="bot_crypto_onchain",
         replace_existing=True,
+    )
+
+    # ------------------------------------------------------------------
+    # options_income: every 30 min during market hours, Mon-Fri
+    # Scans high-IV stocks for wheel / covered-call / CSP entries.
+    # Starts at 10:00 AM (after opening range) through 3:30 PM.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: run_bot_profile("options_income"),
+        CronTrigger(day_of_week="mon-fri", hour="10-15", minute="0,30", timezone=ET),
+        id="bot_options_income",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
+    # options_directional: every 30 min during market hours, Mon-Fri
+    # Scans for credit/debit spreads and momentum options entries.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: run_bot_profile("options_directional"),
+        CronTrigger(day_of_week="mon-fri", hour="10-15", minute="0,30", timezone=ET),
+        id="bot_options_directional",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
@@ -400,7 +430,8 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     logger.info(
-        "strategy_lab: bot scheduler registered (stock_swing, stock_day, stock_lt, "
+        "strategy_lab: bot scheduler registered (stock_swing, stock_day, stock_lt[weekly], "
         "crypto_swing, crypto_day, crypto_lt, crypto_onchain, crypto_quant_aggressive, "
+        "options_income, options_directional, "
         "discord_digest, discord_leaderboard, daily_briefing_email, dead_mans_switch)"
     )

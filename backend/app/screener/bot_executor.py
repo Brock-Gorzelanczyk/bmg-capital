@@ -64,6 +64,18 @@ def _rng(seed_str: str) -> random.Random:
 
 
 def _sim_entry_price(symbol: str, rng: random.Random) -> float:
+    """Return a live-anchored entry price; fall back to _PRICE_RANGES only if live unavailable."""
+    try:
+        from app.services.live_prices import fetch_live_prices
+        price_map = fetch_live_prices([symbol])
+        live = float(price_map.get(symbol) or 0)
+        if live > 0:
+            # Add ±0.1% simulated slippage
+            slippage = rng.uniform(-0.001, 0.001)
+            return round(live * (1 + slippage), 4)
+    except Exception as exc:
+        logger.warning("bot_executor: live price fetch failed for %s (%s) — using range fallback", symbol, exc)
+
     lo, hi = _PRICE_RANGES.get(symbol, (50.0, 300.0))
     return round(rng.uniform(lo, hi), 2)
 
@@ -196,6 +208,19 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
 
         for sym in available[:n_enter]:
             entry_price = _sim_entry_price(sym, rng)
+            # Sanity check: reject if fill deviates >20% from live ticker
+            try:
+                from strategy_lab.core.fill_sanity import check_fill
+                ok, live_px, _ = check_fill(sym, entry_price, context=f"bot_executor/{bot_name}")
+                if not ok:
+                    logger.warning("bot_executor: skipping %s entry — fill sanity failed", sym)
+                    continue
+                # Upgrade to live price when available
+                if live_px > 0:
+                    entry_price = round(live_px * (1 + rng.uniform(-0.001, 0.001)), 4)
+            except Exception as exc:
+                logger.warning("bot_executor: fill_sanity import failed (%s) — proceeding", exc)
+
             # Size: 5-15% of notional per position
             notional = 1000.0 * rng.uniform(0.8, 1.5)
             qty = round(notional / entry_price, 4)

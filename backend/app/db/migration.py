@@ -218,10 +218,14 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("target_price_usd",       "FLOAT"),
         ("trailing_stop_activated","BOOLEAN DEFAULT 0"),
         ("trailing_stop_price_usd","FLOAT"),
+        ("quarantined_at",         "DATETIME"),
+        ("quarantine_reason",      "VARCHAR"),
     ],
     "bot_trades": [
         ("expected_fill_cents", "INTEGER"),
         ("slippage_bps",        "FLOAT"),
+        ("quarantined_at",      "DATETIME"),
+        ("quarantine_reason",   "VARCHAR"),
     ],
     "bot_daily_pnl": [
         ("peak_drawdown_pct",           "FLOAT"),

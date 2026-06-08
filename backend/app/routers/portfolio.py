@@ -141,6 +141,7 @@ def get_open_positions(
         .filter(
             BotPosition.allocation_id.in_(list(alloc_by_id.keys())),
             BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
         )
         .order_by(BotPosition.opened_at.desc())
         .limit(50)
