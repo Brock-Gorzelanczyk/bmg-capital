@@ -34,6 +34,34 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+# ── Live price cache ──────────────────────────────────────────────────────────
+import time as _time
+
+_PRICE_CACHE: dict[str, tuple[float, float]] = {}  # symbol → (price, monotonic_ts)
+_PRICE_CACHE_TTL = 60.0  # seconds — 1 quote per symbol per minute is enough
+
+
+def _cached_live_prices(symbols: list[str]) -> dict[str, float]:
+    """Fetch live prices via fetch_live_prices with a 60 s in-memory cache.
+
+    Never raises — returns an empty dict on any error so callers can fall back
+    to showing 0 unrealized P&L rather than crashing.
+    """
+    if not symbols:
+        return {}
+    try:
+        from app.services.live_prices import fetch_live_prices
+        now = _time.monotonic()
+        stale = [s for s in symbols if s not in _PRICE_CACHE or now - _PRICE_CACHE[s][1] > _PRICE_CACHE_TTL]
+        if stale:
+            fresh = fetch_live_prices(stale)
+            for sym, price in fresh.items():
+                _PRICE_CACHE[sym] = (price, now)
+        return {s: _PRICE_CACHE[s][0] for s in symbols if s in _PRICE_CACHE}
+    except Exception as exc:
+        logger.warning("[canonical] live price fetch failed (non-fatal): %s", exc)
+        return {}
+
 # ── Display names (single source of truth) ────────────────────────────────────
 
 DISPLAY_NAMES: dict[str, str] = {
@@ -180,21 +208,18 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     # ── Open positions (excluding quarantined) ───────────────────────────────
     open_pos_rows = [p for p in all_positions if p.closed_at is None and not p.quarantined_at]
 
-    # Unrealized PnL: 0 until live prices are integrated
-    # (satisfies zero-trade rule: no phantom gains from simulation)
+    # ── Unrealized PnL from live prices ──────────────────────────────────────
+    symbols_needed = list({p.symbol for p in open_pos_rows})
+    live_prices = _cached_live_prices(symbols_needed)
+
     unrealized_pnl_cents = 0
+    for p in open_pos_rows:
+        price = live_prices.get(p.symbol)
+        if price and p.avg_cost_cents and p.qty:
+            unrealized_pnl_cents += int((price * 100 - p.avg_cost_cents) * p.qty)
 
     # ── Portfolio value (the invariant) ──────────────────────────────────────
     portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
-
-    # Runtime assertion — log error and fall back if violated
-    expected = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
-    if abs(portfolio_value_cents - expected) > 1:
-        logger.error(
-            "Invariant violation bot %s: computed=%d expected=%d",
-            profile.name, portfolio_value_cents, expected,
-        )
-        portfolio_value_cents = expected
 
     # ── Today P&L ────────────────────────────────────────────────────────────
     today_pnl_cents = today_realized_cents
@@ -216,19 +241,30 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     # ── Sharpe: not computable without daily return series ───────────────────
     sharpe_30d: Optional[float] = None
 
-    # ── Open position details ────────────────────────────────────────────────
-    open_positions = [
-        {
+    # ── Open position details with live mark-to-market ───────────────────────
+    price_ts = datetime.now(timezone.utc).isoformat()
+    open_positions = []
+    for p in open_pos_rows:
+        price = live_prices.get(p.symbol)
+        cost = p.avg_cost_cents / 100 if p.avg_cost_cents else None
+        qty = p.qty or 0
+        market_val = round(price * qty, 2) if price and qty else None
+        unreal = round((price - cost) * qty, 2) if price and cost and qty else None
+        unreal_pct = round((price - cost) / cost * 100, 2) if price and cost else None
+        open_positions.append({
             "id": p.id,
             "symbol": p.symbol,
-            "qty": p.qty,
+            "qty": qty,
             "avg_cost_cents": p.avg_cost_cents,
-            "avg_cost": round(p.avg_cost_cents / 100, 2),
+            "avg_cost": round(cost, 2) if cost else None,
             "opened_at": p.opened_at.isoformat() if p.opened_at else None,
             "is_paper": p.is_paper,
-        }
-        for p in open_pos_rows
-    ]
+            "current_price": price,
+            "current_price_at": price_ts if price else None,
+            "market_value": market_val,
+            "unrealized_pnl": unreal,
+            "unrealized_pnl_pct": unreal_pct,
+        })
 
     # ── Watchlist count ──────────────────────────────────────────────────────
     watchlist_count = (

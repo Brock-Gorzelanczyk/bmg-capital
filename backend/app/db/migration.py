@@ -431,6 +431,7 @@ def run_migrations(engine: Engine) -> None:
         _purge_backfill_seed_data(conn)
         _raise_guardrail_position_cap(conn)
         _quarantine_options_seed_trades(conn)
+        _quarantine_all_seed_trades(conn)
         _seed_quant_watchlists(conn)
 
 
@@ -1031,6 +1032,52 @@ def _quarantine_options_seed_trades(conn) -> None:
         logger.info("_quarantine_options_seed_trades: quarantined seed trades + marked options bots coming_soon")
     except Exception as exc:
         logger.warning("_quarantine_options_seed_trades failed: %s", exc)
+
+
+def _quarantine_all_seed_trades(conn) -> None:
+    """Quarantine ALL seeded positions/trades with the microsecond batch fingerprint.
+
+    The seed script created positions across multiple bots at exactly
+    2026-06-08 14:00:00.001484 UTC. _quarantine_options_seed_trades handled
+    the options bots, but a META position slipped through on stock_day.
+    This catches any remaining rows across ALL bots using the timestamp fingerprint.
+
+    Condition: opened/ts matches '2026-06-08*14:00:00.*' (sub-second precision
+    at exactly 14:00:00 on that date) + not already quarantined.
+    For bot_trades: also requires alpaca_order_id IS NULL (can't be a real fill).
+    """
+    MIGRATION_NAME = "quarantine_all_seed_trades_microsecond_2026_06_08"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+
+        r_pos = conn.execute(text("""
+            UPDATE bot_positions
+            SET quarantined_at = :now,
+                quarantine_reason = 'seed_data_microsecond_batch_2026_06_08'
+            WHERE CAST(opened_at AS TEXT) LIKE '%2026-06-08%14:00:00.%'
+              AND closed_at IS NULL
+              AND quarantined_at IS NULL
+        """), {"now": now})
+
+        r_tr = conn.execute(text("""
+            UPDATE bot_trades
+            SET quarantined_at = :now,
+                quarantine_reason = 'seed_data_microsecond_batch_2026_06_08'
+            WHERE CAST(ts AS TEXT) LIKE '%2026-06-08%14:00:00.%'
+              AND alpaca_order_id IS NULL
+              AND quarantined_at IS NULL
+        """), {"now": now})
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info(
+            "_quarantine_all_seed_trades: quarantined %d positions, %d trades",
+            r_pos.rowcount, r_tr.rowcount,
+        )
+    except Exception as exc:
+        logger.warning("_quarantine_all_seed_trades failed: %s", exc)
 
 
 def _seed_quant_watchlists(conn) -> None:
