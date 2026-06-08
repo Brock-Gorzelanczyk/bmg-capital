@@ -202,6 +202,61 @@ export const runBacktest = (
 export const pauseAllBots = () =>
   client.post("/bots/pause-all").then((r) => r.data);
 
+// ── Strategy trace ─────────────────────────────────────────────────────────────
+
+export interface ConditionTrace {
+  name: string;
+  current_value: number;
+  operator: string;
+  required_value: number | number[] | null;
+  unit: string;
+  passed: boolean;
+  to_pass: string;
+  error?: string;
+}
+
+export interface StrategyTrace {
+  name: string;
+  key: string;
+  weight: number;
+  score: number;
+  fired: boolean;
+  side: "buy" | "sell" | null;
+  summary: string;
+  conditions: ConditionTrace[];
+  error?: string;
+}
+
+export interface StrategyTraceResult {
+  bot: string;
+  symbol: string;
+  scanned_at: string | null;
+  scan_age_seconds: number | null;
+  current_price: number | null;
+  composite_score: number;
+  threshold_to_fire: number;
+  strategies_firing: number;
+  total_strategies: number;
+  would_fire: boolean;
+  strategies: StrategyTrace[];
+  error?: string;
+}
+
+export const getBotStrategyTrace = (
+  botName: string,
+  symbol: string,
+): Promise<StrategyTraceResult> =>
+  client
+    .get<StrategyTraceResult>(`/bots/${botName}/strategy-trace`, { params: { symbol } })
+    .then((r) => r.data);
+
+export const getBotStrategyTraceBulk = (
+  botName: string,
+): Promise<{ bot: string; traces: StrategyTraceResult[] }> =>
+  client
+    .get<{ bot: string; traces: StrategyTraceResult[] }>(`/bots/${botName}/strategy-trace-bulk`)
+    .then((r) => r.data);
+
 export const resumeAllBots = () =>
   client.post("/bots/resume-all").then((r) => r.data);
 

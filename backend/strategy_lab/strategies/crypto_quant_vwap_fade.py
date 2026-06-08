@@ -150,3 +150,116 @@ def generate_signals(
             ))
 
     return signals
+
+
+def trace_symbol(symbol: str, symbol_bars: list[dict], profile_config: dict) -> dict:
+    """Evaluate VWAP Fade entry conditions for one symbol and return a structured trace."""
+    display_name = "VWAP Fade"
+
+    if len(symbol_bars) < RSI_PERIOD + 2:
+        return {
+            "name": display_name, "key": STRATEGY_NAME,
+            "fired": False, "side": None, "score": 0.0,
+            "summary": f"Insufficient bars ({len(symbol_bars)} available, need {RSI_PERIOD + 2})",
+            "conditions": [],
+        }
+
+    closes = [b["c"] for b in symbol_bars]
+    current_close = closes[-1]
+    if current_close <= 0:
+        return {"name": display_name, "key": STRATEGY_NAME, "fired": False, "side": None,
+                "score": 0.0, "summary": "Invalid price data", "conditions": []}
+
+    vwap, sigma = _compute_vwap_and_sigma(symbol_bars)
+    if vwap <= 0 or sigma <= 0:
+        return {"name": display_name, "key": STRATEGY_NAME, "fired": False, "side": None,
+                "score": 0.0, "summary": "Insufficient volume for VWAP calculation", "conditions": []}
+
+    rsi = _compute_rsi(closes)
+    sigma_distance = (current_close - vwap) / sigma
+    abs_sigma = abs(sigma_distance)
+    ticker = symbol.split("/")[0]
+
+    # ── Condition 1: σ-distance from VWAP ────────────────────────────────────
+    sigma_passed = abs_sigma >= VWAP_SIGMA_THRESHOLD
+    if sigma_distance >= 0:
+        price_for_trigger = vwap + VWAP_SIGMA_THRESHOLD * sigma
+        pct_away = (price_for_trigger - current_close) / current_close * 100
+        to_pass_sigma = (
+            f"Deviation met (+{abs_sigma:.2f}σ above VWAP — short fade trigger)"
+            if sigma_passed else
+            f"{ticker} needs to rise to ${price_for_trigger:,.4f} (+{pct_away:.1f}%) to hit {VWAP_SIGMA_THRESHOLD}σ threshold"
+        )
+    else:
+        price_for_trigger = vwap - VWAP_SIGMA_THRESHOLD * sigma
+        pct_away = (current_close - price_for_trigger) / current_close * 100
+        to_pass_sigma = (
+            f"Deviation met ({abs_sigma:.2f}σ below VWAP — long fade trigger)"
+            if sigma_passed else
+            f"{ticker} needs to drop to ${price_for_trigger:,.4f} (-{pct_away:.1f}%) to hit {VWAP_SIGMA_THRESHOLD}σ threshold"
+        )
+
+    cond_sigma = {
+        "name": f"Price σ-distance from session VWAP",
+        "current_value": round(abs_sigma, 3),
+        "operator": ">=",
+        "required_value": VWAP_SIGMA_THRESHOLD,
+        "unit": "σ",
+        "passed": sigma_passed,
+        "to_pass": to_pass_sigma,
+    }
+
+    # ── Condition 2: RSI extreme ───────────────────────────────────────────────
+    if sigma_distance >= 0:
+        rsi_passed = rsi > RSI_OVERBOUGHT
+        to_pass_rsi = (
+            f"RSI overbought condition met ({rsi:.1f} > {RSI_OVERBOUGHT})"
+            if rsi_passed else
+            f"RSI needs to rise from {rsi:.1f} to above {RSI_OVERBOUGHT} (currently {RSI_OVERBOUGHT - rsi:.1f} pts short)"
+        )
+        cond_rsi = {"name": f"RSI({RSI_PERIOD}) overbought", "current_value": round(rsi, 1),
+                    "operator": ">", "required_value": RSI_OVERBOUGHT, "unit": "",
+                    "passed": rsi_passed, "to_pass": to_pass_rsi}
+    else:
+        rsi_passed = rsi < RSI_OVERSOLD
+        to_pass_rsi = (
+            f"RSI oversold condition met ({rsi:.1f} < {RSI_OVERSOLD})"
+            if rsi_passed else
+            f"RSI needs to drop from {rsi:.1f} to below {RSI_OVERSOLD} (currently {rsi - RSI_OVERSOLD:.1f} pts above)"
+        )
+        cond_rsi = {"name": f"RSI({RSI_PERIOD}) oversold", "current_value": round(rsi, 1),
+                    "operator": "<", "required_value": RSI_OVERSOLD, "unit": "",
+                    "passed": rsi_passed, "to_pass": to_pass_rsi}
+
+    conditions = [cond_sigma, cond_rsi]
+
+    fired_short = sigma_distance > VWAP_SIGMA_THRESHOLD and rsi > RSI_OVERBOUGHT
+    fired_long = sigma_distance < -VWAP_SIGMA_THRESHOLD and rsi < RSI_OVERSOLD
+    fired = fired_short or fired_long
+    side = "sell" if fired_short else ("buy" if fired_long else None)
+
+    if fired:
+        rsi_extreme = abs(rsi - (RSI_OVERBOUGHT if fired_short else RSI_OVERSOLD))
+        score = round(min(0.9, 0.55 + (abs_sigma - VWAP_SIGMA_THRESHOLD) * 0.08 + rsi_extreme * 0.002), 4)
+        summary = (
+            f"{'Short' if fired_short else 'Long'} fade triggered — "
+            f"price {abs_sigma:.2f}σ from VWAP, RSI({RSI_PERIOD}) {rsi:.1f}"
+        )
+    else:
+        score = 0.0
+        if not sigma_passed:
+            summary = (
+                f"Price too close to VWAP — needs ≥{VWAP_SIGMA_THRESHOLD}σ deviation "
+                f"(currently {abs_sigma:.2f}σ, VWAP=${vwap:,.4f})"
+            )
+        else:
+            summary = (
+                f"VWAP deviation met ({abs_sigma:.2f}σ) but RSI not extreme "
+                f"(RSI {rsi:.1f}, needs {'>' + str(RSI_OVERBOUGHT) if sigma_distance > 0 else '<' + str(RSI_OVERSOLD)})"
+            )
+
+    return {
+        "name": display_name, "key": STRATEGY_NAME,
+        "fired": fired, "side": side, "score": score,
+        "summary": summary, "conditions": conditions,
+    }

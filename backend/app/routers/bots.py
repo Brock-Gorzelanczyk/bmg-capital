@@ -3309,3 +3309,243 @@ def get_trade_detail(
         "exit_price_usd": exit_price,
         "realized_pnl_usd": realized_pnl,
     }
+
+
+# ── Strategy trace ─────────────────────────────────────────────────────────────
+
+_TRACE_CACHE: dict[str, tuple[float, dict]] = {}  # f"{bot}:{symbol}" → (ts, result)
+_TRACE_TTL = 60  # seconds
+
+
+def _compute_strategy_trace(profile_name: str, symbol: str, db: Session) -> dict:
+    """Fetch bars from cache, run trace_symbol() on each strategy, return structured result."""
+    import importlib
+    import time as _time
+    from datetime import datetime, timezone
+
+    result: dict = {
+        "bot": profile_name,
+        "symbol": symbol,
+        "scanned_at": None,
+        "scan_age_seconds": None,
+        "current_price": None,
+        "composite_score": 0.0,
+        "threshold_to_fire": 0.55,
+        "strategies_firing": 0,
+        "total_strategies": 0,
+        "would_fire": False,
+        "strategies": [],
+    }
+
+    # Load profile YAML
+    try:
+        from strategy_lab.seeds import load_profile
+        profile = load_profile(profile_name)
+    except Exception as exc:
+        result["error"] = f"Profile not found: {exc}"
+        return result
+
+    conf_threshold = float(profile.get("confidence_threshold", 0.55))
+    result["threshold_to_fire"] = conf_threshold
+    strategy_names: list[str] = profile.get("strategies", [])
+    result["total_strategies"] = len(strategy_names)
+
+    # Most recent scan timestamp from DB (best-effort)
+    try:
+        bp = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+        if bp:
+            alloc_ids = [a.id for a in (bp.allocations if hasattr(bp, "allocations") else []) if a.enabled]
+            if alloc_ids:
+                from sqlalchemy import desc
+                last_sig = (
+                    db.query(BotSignal)
+                    .filter(BotSignal.allocation_id.in_(alloc_ids))
+                    .order_by(desc(BotSignal.created_at))
+                    .first()
+                )
+                if last_sig and last_sig.created_at:
+                    ts = last_sig.created_at
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    result["scanned_at"] = ts.isoformat()
+                    result["scan_age_seconds"] = int(
+                        (datetime.now(timezone.utc) - ts).total_seconds()
+                    )
+    except Exception:
+        pass
+
+    # Fetch OHLCV bars
+    asset_class = profile.get("asset_class", "stock")
+    timeframe = profile.get("scan_timeframe", "15m")
+    limit = int(profile.get("scan_lookback_bars", 200))
+    symbol_bars: list[dict] = []
+    try:
+        if asset_class in ("crypto", "quant"):
+            from app.screener.crypto_runner import _fetch_crypto_bars
+            raw = _fetch_crypto_bars([symbol], timeframe=timeframe, limit=limit)
+        else:
+            from app.screener.runner import _fetch_bars_sync
+            raw = _fetch_bars_sync([symbol], period="60d")
+        df = raw.get(symbol)
+        if df is not None and not df.empty:
+            symbol_bars = [
+                {
+                    "c": float(r["close"]), "o": float(r["open"]),
+                    "h": float(r["high"]), "l": float(r["low"]),
+                    "v": float(r.get("volume", 0) or 0),
+                    "ts": r.name.isoformat() if hasattr(r.name, "isoformat") else str(r.name),
+                }
+                for _, r in df.iterrows()
+            ]
+    except Exception as exc:
+        result["error"] = f"Bar fetch failed: {exc}"
+        return result
+
+    if not symbol_bars:
+        result["error"] = "No bar data available for symbol"
+        return result
+
+    result["current_price"] = symbol_bars[-1]["c"]
+
+    # Load Thompson-sampled strategy weights (best-effort)
+    weight_map: dict[str, float] = {}
+    default_w = round(1.0 / max(1, len(strategy_names)), 4)
+    try:
+        from strategy_lab.core.expert.strategy_weights import get_weights
+        bp2 = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+        if bp2:
+            weight_map = get_weights(bp2.id, strategy_names, db)
+    except Exception:
+        pass
+
+    # Run trace_symbol for each strategy
+    strategy_traces = []
+    strategies_firing = 0
+    for strat_name in strategy_names:
+        mod = None
+        for mod_path in (f"strategy_lab.strategies.{strat_name}", strat_name):
+            try:
+                mod = importlib.import_module(mod_path)
+                break
+            except ImportError:
+                continue
+
+        w = round(weight_map.get(strat_name, default_w), 4)
+
+        if mod is None or not hasattr(mod, "trace_symbol"):
+            strategy_traces.append({
+                "name": strat_name.replace("_", " ").replace("-", " ").title(),
+                "key": strat_name,
+                "weight": w,
+                "score": 0.0,
+                "fired": False,
+                "side": None,
+                "summary": "Detailed trace not yet implemented for this strategy",
+                "conditions": [],
+            })
+            continue
+
+        try:
+            trace = mod.trace_symbol(symbol, symbol_bars, profile)
+            trace["weight"] = w
+            strategy_traces.append(trace)
+            if trace.get("fired"):
+                strategies_firing += 1
+        except Exception as exc:
+            strategy_traces.append({
+                "name": strat_name.replace("_", " ").replace("-", " ").title(),
+                "key": strat_name,
+                "weight": w,
+                "score": 0.0,
+                "fired": False,
+                "side": None,
+                "summary": "Trace evaluation error",
+                "error": str(exc),
+                "conditions": [],
+            })
+
+    result["strategies"] = strategy_traces
+    result["strategies_firing"] = strategies_firing
+
+    # Composite score
+    ensemble = profile.get("ensemble", "any_above_threshold")
+    if ensemble == "any_above_threshold":
+        result["composite_score"] = round(
+            max((t.get("score", 0.0) for t in strategy_traces), default=0.0), 4
+        )
+        result["would_fire"] = result["composite_score"] >= conf_threshold
+    else:
+        total_w = sum(t.get("weight", 0.0) for t in strategy_traces) or 1.0
+        result["composite_score"] = round(
+            sum(t.get("score", 0.0) * t.get("weight", 0.0) for t in strategy_traces) / total_w, 4
+        )
+        result["would_fire"] = result["composite_score"] >= conf_threshold
+
+    return result
+
+
+@router.get("/{profile_name}/strategy-trace")
+async def get_strategy_trace(
+    profile_name: str,
+    symbol: str,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Per-strategy condition evaluation for one symbol on the most recent scan cycle."""
+    import time as _time
+    cache_key = f"{profile_name}:{symbol}"
+    now_ts = _time.time()
+    cached = _TRACE_CACHE.get(cache_key)
+    if cached and (now_ts - cached[0]) < _TRACE_TTL:
+        return cached[1]
+    result = _compute_strategy_trace(profile_name, symbol, db)
+    _TRACE_CACHE[cache_key] = (now_ts, result)
+    return result
+
+
+@router.get("/{profile_name}/strategy-trace-bulk")
+async def get_strategy_trace_bulk(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Return strategy traces for all active watchlist symbols in one call."""
+    import time as _time
+    bp = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    symbols: list[str] = []
+
+    if bp:
+        items = (
+            db.query(BotWatchlist)
+            .filter(BotWatchlist.profile_id == bp.id, BotWatchlist.status == "active")
+            .order_by(BotWatchlist.score.desc())
+            .limit(20)
+            .all()
+        )
+        symbols = [i.symbol for i in items]
+
+    if not symbols:
+        try:
+            from strategy_lab.seeds import load_profile
+            profile = load_profile(profile_name)
+            universe = profile.get("universe", {})
+            symbols = (
+                universe.get("symbols", [])[:20]
+                if isinstance(universe, dict) else []
+            )
+        except Exception:
+            pass
+
+    now_ts = _time.time()
+    traces = []
+    for sym in symbols:
+        cache_key = f"{profile_name}:{sym}"
+        cached = _TRACE_CACHE.get(cache_key)
+        if cached and (now_ts - cached[0]) < _TRACE_TTL:
+            traces.append(cached[1])
+        else:
+            result = _compute_strategy_trace(profile_name, sym, db)
+            _TRACE_CACHE[cache_key] = (now_ts, result)
+            traces.append(result)
+
+    return {"bot": profile_name, "traces": traces}

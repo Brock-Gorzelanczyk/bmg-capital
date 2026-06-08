@@ -129,3 +129,118 @@ def generate_signals(
             ))
 
     return signals
+
+
+def trace_symbol(symbol: str, symbol_bars: list[dict], profile_config: dict) -> dict:
+    """Evaluate Bollinger Breakout conditions for one symbol and return a structured trace."""
+    display_name = "Bollinger Breakout"
+
+    if len(symbol_bars) < BB_PERIOD + 2:
+        return {
+            "name": display_name, "key": STRATEGY_NAME,
+            "fired": False, "side": None, "score": 0.0,
+            "summary": f"Insufficient bars ({len(symbol_bars)} available, need {BB_PERIOD + 2})",
+            "conditions": [],
+        }
+
+    closes = [b["c"] for b in symbol_bars]
+    volumes = [b["v"] for b in symbol_bars]
+    current_close = closes[-1]
+    current_vol = volumes[-1]
+    if current_close <= 0:
+        return {"name": display_name, "key": STRATEGY_NAME, "fired": False, "side": None,
+                "score": 0.0, "summary": "Invalid price data", "conditions": []}
+
+    upper, middle, lower = _bollinger(closes)
+    if upper <= 0 or lower <= 0:
+        return {"name": display_name, "key": STRATEGY_NAME, "fired": False, "side": None,
+                "score": 0.0, "summary": "Insufficient data for Bollinger calculation", "conditions": []}
+
+    avg_vol = sum(volumes[-(BB_PERIOD + 1):-1]) / BB_PERIOD if BB_PERIOD > 0 else 0
+    vol_ratio = current_vol / avg_vol if avg_vol > 0 else 0
+    volume_ok = avg_vol > 0 and current_vol >= VOLUME_MULT * avg_vol
+    band_width = upper - lower
+    ticker = symbol.split("/")[0]
+
+    # ── Condition 1: Price vs Bollinger Bands ────────────────────────────────
+    above_upper = current_close > upper
+    below_lower = current_close < lower
+    price_ok = above_upper or below_lower
+
+    if above_upper:
+        to_pass_price = f"Price above upper band — breakout long condition met (${current_close:,.4f} > ${upper:,.4f})"
+    elif below_lower:
+        to_pass_price = f"Price below lower band — breakout short condition met (${current_close:,.4f} < ${lower:,.4f})"
+    else:
+        gap_to_upper = upper - current_close
+        gap_to_lower = current_close - lower
+        if gap_to_upper <= gap_to_lower:
+            pct = gap_to_upper / current_close * 100
+            to_pass_price = (
+                f"{ticker} needs to close above upper BB ${upper:,.4f} (+{pct:.1f}% from ${current_close:,.4f})"
+            )
+        else:
+            pct = gap_to_lower / current_close * 100
+            to_pass_price = (
+                f"{ticker} needs to close below lower BB ${lower:,.4f} (-{pct:.1f}% from ${current_close:,.4f})"
+            )
+
+    cond_price = {
+        "name": f"15m close outside Bollinger Band(20, {BB_STDEV}σ)",
+        "current_value": round(current_close, 4),
+        "operator": "outside_band",
+        "required_value": [round(lower, 4), round(upper, 4)],
+        "unit": "",
+        "passed": price_ok,
+        "to_pass": to_pass_price,
+    }
+
+    # ── Condition 2: Volume surge ─────────────────────────────────────────────
+    if volume_ok:
+        to_pass_vol = f"Volume surge confirmed ({vol_ratio:.2f}x ≥ {VOLUME_MULT}x required)"
+    else:
+        pct_short = ((VOLUME_MULT * avg_vol - current_vol) / (VOLUME_MULT * avg_vol) * 100) if avg_vol > 0 else 0
+        to_pass_vol = (
+            f"Volume needs to be {VOLUME_MULT}x the 20-bar avg — currently {vol_ratio:.2f}x "
+            f"(need {pct_short:.0f}% more volume on this bar)"
+        )
+
+    cond_vol = {
+        "name": "Volume vs 20-bar average",
+        "current_value": round(vol_ratio, 3),
+        "operator": ">=",
+        "required_value": VOLUME_MULT,
+        "unit": "x",
+        "passed": volume_ok,
+        "to_pass": to_pass_vol,
+    }
+
+    conditions = [cond_price, cond_vol]
+
+    fired_long = above_upper and volume_ok
+    fired_short = below_lower and volume_ok
+    fired = fired_long or fired_short
+    side = "buy" if fired_long else ("sell" if fired_short else None)
+
+    if fired:
+        excess = ((current_close - upper) / band_width) if fired_long else ((lower - current_close) / band_width)
+        score = round(min(0.9, 0.58 + excess * 1.5 + (vol_ratio - VOLUME_MULT) * 0.03), 4)
+        summary = (
+            f"BB breakout {'long' if fired_long else 'short'} triggered — "
+            f"close {'above' if fired_long else 'below'} band by {excess * 100:.1f}% of band width, "
+            f"vol {vol_ratio:.1f}x avg"
+        )
+    else:
+        score = 0.0
+        if not price_ok:
+            summary = f"Price inside Bollinger envelope (upper ${upper:,.4f}, lower ${lower:,.4f}, width ${band_width:,.4f})"
+        elif not volume_ok:
+            summary = f"Price outside BB but volume insufficient ({vol_ratio:.2f}x avg, need {VOLUME_MULT}x)"
+        else:
+            summary = "No breakout conditions met"
+
+    return {
+        "name": display_name, "key": STRATEGY_NAME,
+        "fired": fired, "side": side, "score": score,
+        "summary": summary, "conditions": conditions,
+    }

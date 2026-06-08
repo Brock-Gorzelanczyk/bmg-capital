@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, X, Lock, Unlock } from "lucide-react";
+import { ArrowLeft, X, Lock, Unlock, ChevronDown, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -26,6 +26,7 @@ import {
   getRegime,
   getBotWatchlist,
   getBotWatchlistReadiness,
+  getBotStrategyTrace,
   runBacktest,
   getCatalysts,
   getActivity,
@@ -39,6 +40,8 @@ import {
   type CatalystEvent,
   type ActivityEvent,
   type StrategyWeight,
+  type StrategyTraceResult,
+  type StrategyTrace,
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
 import { CoachmarkOverlay } from "@/pages/CustomBotBuilderPage";
@@ -762,6 +765,233 @@ const TIER_CFG: Record<TierKey, { icon: string; label: string; headerColor: stri
   waiting:        { icon: "⚪", label: "Waiting",         headerColor: "text-zinc-500",   rowBorder: "border-zinc-800",      rowBg: "bg-zinc-900" },
 };
 
+// ── Strategy condition trace row ──────────────────────────────────────────────
+
+function ConditionRow({ cond }: { cond: import("@/api/bots").ConditionTrace }) {
+  const isVerge = !cond.passed && typeof cond.current_value === "number" &&
+    typeof cond.required_value === "number" &&
+    Math.abs(cond.current_value - cond.required_value) / Math.max(1, Math.abs(cond.required_value)) <= 0.10;
+
+  const valueColor = cond.error
+    ? "text-red-400"
+    : cond.passed
+    ? "text-lime-400"
+    : isVerge
+    ? "text-yellow-400"
+    : "text-zinc-400";
+
+  const fmtVal = (v: number | number[] | null) => {
+    if (v == null) return "—";
+    if (Array.isArray(v)) return `[${v.map((x) => x >= 1000 ? x.toLocaleString("en-US", { maximumFractionDigits: 2 }) : x).join(", ")}]`;
+    return v >= 1000 ? v.toLocaleString("en-US", { maximumFractionDigits: 4 }) : String(v);
+  };
+
+  return (
+    <div className={cn("pl-2 border-l-2 mb-2", cond.passed ? "border-lime-500/40" : isVerge ? "border-yellow-500/40" : "border-zinc-700")}>
+      <div className="flex items-start gap-1.5">
+        {cond.passed
+          ? <CheckCircle2 size={11} className="text-lime-500 mt-0.5 flex-shrink-0" />
+          : <XCircle size={11} className="text-zinc-600 mt-0.5 flex-shrink-0" />}
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] text-zinc-400 leading-tight">{cond.name}</p>
+          {cond.error ? (
+            <p className="text-[10px] text-red-400 mt-0.5">{cond.error}</p>
+          ) : (
+            <p className={cn("text-[11px] font-mono mt-0.5", valueColor)}>
+              {cond.current_value}{cond.unit ? ` ${cond.unit}` : ""}
+              <span className="text-zinc-600 font-sans mx-1">{cond.operator}</span>
+              {fmtVal(cond.required_value)}{cond.unit ? ` ${cond.unit}` : ""}
+            </p>
+          )}
+          <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">{cond.to_pass}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StrategyBlock({ strat }: { strat: StrategyTrace }) {
+  const fired = strat.fired;
+  return (
+    <div className={cn(
+      "rounded-xl border px-3 py-2.5 mb-2",
+      fired ? "border-lime-500/30 bg-lime-500/5" : "border-zinc-800 bg-zinc-900/50",
+    )}>
+      <div className="flex items-start gap-2 mb-2">
+        <span className={cn("text-sm leading-none mt-0.5", fired ? "text-lime-400" : "text-zinc-600")}>
+          {fired ? "✓" : "✗"}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={cn("text-xs font-semibold", fired ? "text-lime-300" : "text-zinc-300")}>
+              {strat.name}
+            </span>
+            {strat.score > 0 && (
+              <span className="text-[10px] text-zinc-500">
+                score {(strat.score * 100).toFixed(0)}
+              </span>
+            )}
+            {strat.weight > 0 && (
+              <span className="text-[10px] text-zinc-600">
+                w={strat.weight.toFixed(2)}
+              </span>
+            )}
+            {fired && strat.side && (
+              <span className={cn(
+                "text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none",
+                strat.side === "buy"
+                  ? "bg-lime-500/20 text-lime-400 border border-lime-500/30"
+                  : "bg-orange-500/20 text-orange-400 border border-orange-500/30",
+              )}>
+                {strat.side.toUpperCase()}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-zinc-500 mt-0.5 leading-snug">{strat.summary}</p>
+        </div>
+      </div>
+      {strat.conditions.length > 0 && (
+        <div className="ml-4 mt-1.5">
+          {strat.conditions.map((c, i) => <ConditionRow key={i} cond={c} />)}
+        </div>
+      )}
+      {strat.error && !strat.conditions.length && (
+        <p className="text-[10px] text-red-400 ml-4 mt-1">{strat.error}</p>
+      )}
+    </div>
+  );
+}
+
+function TraceExpandedPanel({ botName, symbol }: { botName: string; symbol: string }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["strategy-trace", botName, symbol],
+    queryFn: () => getBotStrategyTrace(botName, symbol),
+    staleTime: 55_000,
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="mt-3 space-y-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-14 bg-zinc-800/40 rounded-xl animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <p className="mt-3 text-xs text-red-400">
+        Failed to load evaluation trace. Backend may be starting up — try again in a moment.
+      </p>
+    );
+  }
+
+  if (data.error) {
+    return <p className="mt-3 text-xs text-red-400">{data.error}</p>;
+  }
+
+  const ageStr = data.scan_age_seconds != null
+    ? data.scan_age_seconds < 60
+      ? `${data.scan_age_seconds}s ago`
+      : `${Math.round(data.scan_age_seconds / 60)}m ago`
+    : "awaiting first scan";
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] text-zinc-600">
+          {data.strategies_firing}/{data.total_strategies} strategies firing
+        </span>
+        <span className="text-[10px] text-zinc-600">evaluated {ageStr}</span>
+      </div>
+      {data.strategies.map((s) => <StrategyBlock key={s.key} strat={s} />)}
+    </div>
+  );
+}
+
+function ExpandableWatchlistRow({
+  row,
+  botName,
+  cfg,
+  navigate,
+}: {
+  row: ReadinessRow;
+  botName: string;
+  cfg: typeof TIER_CFG[TierKey];
+  navigate: (path: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const changePos = row.change_24h_pct >= 0;
+  const isTriggered = row.tier === "triggered" || row.criteria_status === "triggered";
+
+  const fmt$ = (v: number | null) => {
+    if (v == null) return "—";
+    if (v >= 1000) return `$${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+    return `$${v.toFixed(v >= 10 ? 2 : 4)}`;
+  };
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border mb-1.5 transition-all",
+        cfg.rowBorder, cfg.rowBg,
+        row.tier === "waiting" && "opacity-80",
+        expanded && "ring-1 ring-zinc-600/40",
+      )}
+    >
+      {/* Collapsed header row */}
+      <div
+        className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {expanded
+            ? <ChevronDown size={12} className="text-zinc-500 flex-shrink-0" />
+            : <ChevronRight size={12} className="text-zinc-500 flex-shrink-0" />}
+          <span className="font-mono font-bold text-white text-sm">{row.symbol}</span>
+          {isTriggered && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500 text-black leading-none">
+              ⚡ ENTRY
+            </span>
+          )}
+          {row.tier === "about_to_enter" && !isTriggered && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 border border-lime-500/30 leading-none">
+              CLOSE
+            </span>
+          )}
+          <span className="text-[10px] text-zinc-600 truncate hidden sm:block">
+            {row.gap_human || row.criteria_summary}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="text-right">
+            <span className="text-xs text-zinc-300 tabular-nums">{fmt$(row.current_price)}</span>
+            <span className={cn("text-[10px] ml-1.5 tabular-nums", changePos ? "text-lime-400" : "text-red-400")}>
+              {changePos ? "+" : ""}{row.change_24h_pct.toFixed(2)}%
+            </span>
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(`/chart?symbol=${row.symbol.replace("/", "-")}`); }}
+            className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors px-1.5 py-0.5 rounded border border-zinc-800 hover:border-zinc-600"
+          >
+            chart
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded strategy evaluation */}
+      {expanded && (
+        <div className="px-4 pb-3 border-t border-zinc-800/60">
+          <TraceExpandedPanel botName={botName} symbol={row.symbol} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EntryReadinessTable({ botName, botDisplayName, navigate }: {
   botName: string;
   botDisplayName: string;
@@ -790,7 +1020,6 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
   const noUniverse = data?.no_universe;
   const lastUpdate = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
-  // Auto-scroll to top when any symbol moves into about_to_enter
   useEffect(() => {
     if (!rows.length) return;
     const prev = prevTiersRef.current;
@@ -812,7 +1041,7 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
     return (
       <div className="space-y-3">
         {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="animate-pulse bg-zinc-800/50 rounded-xl h-20" />
+          <div key={i} className="animate-pulse bg-zinc-800/50 rounded-xl h-16" />
         ))}
       </div>
     );
@@ -829,12 +1058,6 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
     );
   }
 
-  const fmt$ = (v: number | null) => {
-    if (v == null) return "—";
-    if (v >= 1000) return `$${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
-    return `$${v.toFixed(v >= 10 ? 2 : 4)}`;
-  };
-
   const tierCounts = Object.fromEntries(
     TIER_ORDER.map((t) => [t, rows.filter((r) => r.tier === t).length])
   ) as Record<TierKey, number>;
@@ -844,18 +1067,18 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
   return (
     <div ref={containerRef} className="space-y-1">
       {/* Status banner */}
-      <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-xl px-4 py-3 mb-4 sticky top-0 z-10 backdrop-blur-sm">
+      <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-xl px-4 py-3 mb-3 sticky top-0 z-10 backdrop-blur-sm">
         <p className="text-xs text-zinc-300 leading-relaxed">
           Watching <span className="font-semibold text-white">{rows.length}</span> symbols · {" "}
-          <span className="text-lime-400 font-semibold">{tierCounts.triggered + tierCounts.about_to_enter}</span> about to fire · {" "}
-          <span className="text-yellow-400 font-semibold">{tierCounts.close}</span> close · {" "}
+          <span className="text-lime-400 font-semibold">{tierCounts.triggered + tierCounts.about_to_enter}</span> close to entry · {" "}
+          <span className="text-yellow-400 font-semibold">{tierCounts.close}</span> watching · {" "}
           <span className="text-zinc-500">{tierCounts.waiting}</span> waiting
           {closest?.gap_human && (
             <> · <span className="text-zinc-400">Closest: <span className="text-white font-medium">{closest.symbol}</span> — {closest.gap_human}</span></>
           )}
         </p>
         <p className="text-[10px] text-zinc-600 mt-0.5">
-          Scans {cadence} · next scan in {nextScanIn}s
+          Scans {cadence} · next scan in {nextScanIn}s · click any row to see why it's not firing
         </p>
       </div>
 
@@ -865,7 +1088,6 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
         const tierRows = rows.filter((r) => r.tier === tier);
         return (
           <div key={tier}>
-            {/* Section header */}
             <div className="flex items-center gap-2 pt-3 pb-1.5 first:pt-0">
               <span className="text-sm leading-none">{cfg.icon}</span>
               <span className={cn("text-xs font-semibold uppercase tracking-wide", cfg.headerColor)}>
@@ -879,67 +1101,15 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
               <p className="text-[11px] text-zinc-700 pl-2 pb-2 italic">None</p>
             )}
 
-            {tierRows.map((row) => {
-              const changePos = row.change_24h_pct >= 0;
-              const isTriggered = row.tier === "triggered" || row.criteria_status === "triggered";
-              return (
-                <button
-                  key={row.symbol}
-                  onClick={() => navigate(`/chart?symbol=${row.symbol.replace("/", "-")}`)}
-                  className={cn(
-                    "w-full text-left rounded-xl border px-4 py-3 mb-1 transition-all hover:brightness-110 group",
-                    cfg.rowBorder, cfg.rowBg,
-                    row.tier === "waiting" && "opacity-75"
-                  )}
-                >
-                  {/* Symbol row */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono font-bold text-white text-sm">{row.symbol}</span>
-                      {row.tier === "triggered" && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500 text-black leading-none">
-                          ⚡ ENTRY
-                        </span>
-                      )}
-                      {row.tier === "about_to_enter" && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 border border-lime-500/30 leading-none">
-                          ABOUT TO ENTER
-                        </span>
-                      )}
-                      <span className="text-[10px] text-zinc-600 uppercase tracking-wide">
-                        {row.strategy_being_evaluated}
-                      </span>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <span className="text-xs text-zinc-300 tabular-nums">{fmt$(row.current_price)}</span>
-                      <span className={cn("text-[10px] ml-1.5 tabular-nums", changePos ? "text-lime-400" : "text-red-400")}>
-                        {changePos ? "+" : ""}{row.change_24h_pct.toFixed(2)}%
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Needs / Currently */}
-                  <div className="mt-1.5 space-y-0.5">
-                    <p className="text-xs text-zinc-300">
-                      <span className="text-zinc-600 font-medium">Needs: </span>
-                      {row.criteria_need || row.criteria_summary}
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      <span className="text-zinc-600 font-medium">Currently: </span>
-                      {row.criteria_current || "—"}
-                    </p>
-                  </div>
-
-                  {/* Gap scale */}
-                  <GapScale
-                    current={row.axis_current ?? 0}
-                    target={row.axis_target ?? 0}
-                    unit={row.axis_unit ?? ""}
-                    triggered={isTriggered}
-                  />
-                </button>
-              );
-            })}
+            {tierRows.map((row) => (
+              <ExpandableWatchlistRow
+                key={row.symbol}
+                row={row}
+                botName={botName}
+                cfg={cfg}
+                navigate={navigate}
+              />
+            ))}
           </div>
         );
       })}

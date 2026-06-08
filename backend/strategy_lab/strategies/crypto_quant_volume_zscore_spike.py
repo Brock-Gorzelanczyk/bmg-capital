@@ -120,3 +120,97 @@ def generate_signals(
         ))
 
     return signals
+
+
+def trace_symbol(symbol: str, symbol_bars: list[dict], profile_config: dict) -> dict:
+    """Evaluate Volume Z-Score Spike conditions for one symbol and return a structured trace."""
+    display_name = "Volume Z-Score Spike"
+
+    if len(symbol_bars) < ZSCORE_PERIOD + 2:
+        return {
+            "name": display_name, "key": STRATEGY_NAME,
+            "fired": False, "side": None, "score": 0.0,
+            "summary": f"Insufficient bars ({len(symbol_bars)} available, need {ZSCORE_PERIOD + 2})",
+            "conditions": [],
+        }
+
+    volumes = [b["v"] for b in symbol_bars]
+    opens = [b["o"] for b in symbol_bars]
+    closes = [b["c"] for b in symbol_bars]
+    current_close = closes[-1]
+    current_open = opens[-1]
+    current_vol = volumes[-1]
+    if current_close <= 0:
+        return {"name": display_name, "key": STRATEGY_NAME, "fired": False, "side": None,
+                "score": 0.0, "summary": "Invalid price data", "conditions": []}
+
+    zscore = _volume_zscore(volumes)
+    window = volumes[-(ZSCORE_PERIOD + 1):-1]
+    avg_vol = sum(window) / len(window) if window else 0
+    bar_bullish = current_close > current_open
+    bar_move_pct = abs(current_close - current_open) / current_open if current_open > 0 else 0
+    ticker = symbol.split("/")[0]
+
+    # ── Condition 1: Volume z-score threshold ─────────────────────────────────
+    zscore_passed = zscore >= ZSCORE_THRESHOLD
+    if zscore_passed:
+        to_pass_z = f"Volume spike confirmed — z-score {zscore:.2f} ≥ {ZSCORE_THRESHOLD} threshold"
+    else:
+        # Compute how much more volume is needed
+        variance = sum((v - avg_vol) ** 2 for v in window) / len(window) if window else 0
+        std_v = variance ** 0.5
+        vol_needed = avg_vol + ZSCORE_THRESHOLD * std_v
+        pct_needed = ((vol_needed - current_vol) / current_vol * 100) if current_vol > 0 else 0
+        to_pass_z = (
+            f"Volume z-score is {zscore:.2f} (need ≥{ZSCORE_THRESHOLD}). "
+            f"Current bar needs ~{pct_needed:.0f}% more volume to hit threshold"
+        )
+
+    cond_z = {
+        "name": f"Volume z-score vs {ZSCORE_PERIOD}-bar rolling window (24h)",
+        "current_value": round(zscore, 3),
+        "operator": ">=",
+        "required_value": ZSCORE_THRESHOLD,
+        "unit": "σ",
+        "passed": zscore_passed,
+        "to_pass": to_pass_z,
+    }
+
+    # ── Condition 2: Bar direction (always passes — picks side) ──────────────
+    bar_dir = "bullish" if bar_bullish else "bearish"
+    cond_dir = {
+        "name": "Current bar direction",
+        "current_value": round(bar_move_pct * 100, 3),
+        "operator": "!=",
+        "required_value": 0,
+        "unit": "% body",
+        "passed": True,
+        "to_pass": (
+            f"Bar is {bar_dir} ({bar_move_pct * 100:.2f}% body) "
+            f"→ signal side = {'buy' if bar_bullish else 'sell'}"
+        ),
+    }
+
+    conditions = [cond_z, cond_dir]
+
+    fired = zscore_passed
+    side = ("buy" if bar_bullish else "sell") if fired else None
+
+    if fired:
+        score = round(min(0.9, 0.55 + (zscore - ZSCORE_THRESHOLD) * 0.04 + bar_move_pct * 2), 4)
+        summary = (
+            f"Volume spike {bar_dir} confirmed — z-score {zscore:.2f} ≥ {ZSCORE_THRESHOLD}, "
+            f"bar {'up' if bar_bullish else 'down'} {bar_move_pct * 100:.2f}%"
+        )
+    else:
+        score = 0.0
+        summary = (
+            f"Volume z-score too low — {zscore:.2f} (need ≥{ZSCORE_THRESHOLD}). "
+            f"Current vol {current_vol:,.0f} vs 24h avg {avg_vol:,.0f}"
+        )
+
+    return {
+        "name": display_name, "key": STRATEGY_NAME,
+        "fired": fired, "side": side, "score": score,
+        "summary": summary, "conditions": conditions,
+    }
