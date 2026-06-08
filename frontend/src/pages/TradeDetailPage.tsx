@@ -10,7 +10,14 @@ import { cn } from "@/lib/utils";
 
 function fmt$(n: number | null | undefined): string {
   if (n == null) return "—";
-  return `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const abs = Math.abs(n);
+  let maxDec: number;
+  if (abs >= 1000) maxDec = 2;
+  else if (abs >= 1) maxDec = 4;
+  else if (abs >= 0.01) maxDec = 5;
+  else if (abs >= 0.0001) maxDec = 6;
+  else maxDec = 8;
+  return `$${abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: maxDec })}`;
 }
 
 function fmtPct(price: number, entry: number): string {

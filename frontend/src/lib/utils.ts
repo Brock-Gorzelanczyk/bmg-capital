@@ -15,6 +15,31 @@ export function formatCurrency(value: number | null | undefined, decimals = 2): 
   }).format(value);
 }
 
+/**
+ * Tier-based price formatter — matches TradingView precision for low-priced crypto.
+ * Returns a display string without the $ sign.
+ *   >= $1000  → 2 decimals  (BTC, ETH)
+ *   >= $1     → 4 decimals  (SOL, AAPL)
+ *   >= $0.01  → 5 decimals  (DOGE, ADA)
+ *   >= $0.0001→ 6 decimals  (SHIB tier)
+ *   < $0.0001 → 8 decimals  (micro caps)
+ * minimumFractionDigits=2 so trailing zeros are natural, not forced past 2dp.
+ */
+export function formatPrice(price: number | null | undefined): string {
+  if (price == null || !isFinite(price as number)) return "—";
+  const abs = Math.abs(price as number);
+  let maxDecimals: number;
+  if (abs >= 1000) maxDecimals = 2;
+  else if (abs >= 1) maxDecimals = 4;
+  else if (abs >= 0.01) maxDecimals = 5;
+  else if (abs >= 0.0001) maxDecimals = 6;
+  else maxDecimals = 8;
+  return (price as number).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxDecimals,
+  });
+}
+
 export function formatPercent(value: number, decimals = 2): string {
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(decimals)}%`;

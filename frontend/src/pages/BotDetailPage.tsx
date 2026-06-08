@@ -164,6 +164,18 @@ function formatCadence(c: string): string {
   return CADENCE_MAP[c] ?? c.replace(/_/g, " ");
 }
 
+function fmtPrice(price: number | null | undefined): string {
+  if (price == null || !isFinite(price as number)) return "—";
+  const abs = Math.abs(price as number);
+  let maxDec: number;
+  if (abs >= 1000) maxDec = 2;
+  else if (abs >= 1) maxDec = 4;
+  else if (abs >= 0.01) maxDec = 5;
+  else if (abs >= 0.0001) maxDec = 6;
+  else maxDec = 8;
+  return `$${(price as number).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: maxDec })}`;
+}
+
 function formatPnl(val: number): string {
   const abs = Math.abs(val);
   const sign = val >= 0 ? "+" : "-";
@@ -453,12 +465,12 @@ function PositionDetailModal({
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-zinc-950 rounded-xl p-3 border border-zinc-800">
             <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Entry</p>
-            <p className="text-sm font-bold text-white mt-1">${entry.toFixed(2)}</p>
+            <p className="text-sm font-bold text-white mt-1">{fmtPrice(entry)}</p>
           </div>
           <div className="bg-zinc-950 rounded-xl p-3 border border-red-900/30">
             <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Stop Loss</p>
             <p className="text-sm font-bold text-red-400 mt-1">
-              {stopPrice != null ? `$${stopPrice.toFixed(2)}` : "—"}
+              {fmtPrice(stopPrice)}
             </p>
             {stopLossPct != null && (
               <p className="text-[10px] text-zinc-600 mt-0.5">−{stopLossPct}%</p>
@@ -467,7 +479,7 @@ function PositionDetailModal({
           <div className="bg-zinc-950 rounded-xl p-3 border border-lime-900/30">
             <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Target</p>
             <p className="text-sm font-bold text-lime-400 mt-1">
-              {targetPrice != null ? `$${targetPrice.toFixed(2)}` : "—"}
+              {fmtPrice(targetPrice)}
             </p>
             {takeProfitPct != null && (
               <p className="text-[10px] text-zinc-600 mt-0.5">+{takeProfitPct}%</p>

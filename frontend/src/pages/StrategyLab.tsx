@@ -228,10 +228,16 @@ function fmtQty(qty: number, symbol: string): string {
   return qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(2);
 }
 
-function fmtPrice(price: number): string {
-  if (price >= 1000) return `$${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  if (price >= 1) return `$${price.toFixed(2)}`;
-  return `$${price.toFixed(4)}`;
+function fmtPrice(price: number | null | undefined): string {
+  if (price == null || !isFinite(price as number)) return "—";
+  const abs = Math.abs(price as number);
+  let maxDec: number;
+  if (abs >= 1000) maxDec = 2;
+  else if (abs >= 1) maxDec = 4;
+  else if (abs >= 0.01) maxDec = 5;
+  else if (abs >= 0.0001) maxDec = 6;
+  else maxDec = 8;
+  return `$${(price as number).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: maxDec })}`;
 }
 
 function PositionRowSkeleton() {
