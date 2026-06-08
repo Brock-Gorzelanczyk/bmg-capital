@@ -435,6 +435,8 @@ def run_migrations(engine: Engine) -> None:
         _quarantine_universal_fake_trades(conn)
         _seed_quant_watchlists(conn)
         _add_trade_provenance_trigger(conn)
+        _backfill_onchain_starting_capital(conn)
+        _delete_zombie_signals(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -1257,3 +1259,46 @@ def _raise_guardrail_position_cap(conn) -> None:
         logger.info("_raise_guardrail_position_cap: bumped existing rows to 50")
     except Exception as exc:
         logger.warning("_raise_guardrail_position_cap failed: %s", exc)
+
+
+def _backfill_onchain_starting_capital(conn) -> None:
+    """Set starting_capital_cents = 10_000_000 for any enabled allocation where it is NULL.
+
+    crypto_onchain was seeded without a starting_capital_cents value, causing
+    portfolio_value_cents = 0 on every card render.
+    """
+    MIGRATION_NAME = "backfill_null_starting_capital_10k"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        result = conn.execute(text(
+            """
+            UPDATE bot_allocations
+               SET starting_capital_cents = 10000000
+             WHERE starting_capital_cents IS NULL
+               AND profile_id IN (SELECT id FROM bot_profiles WHERE enabled = 1)
+            """
+        ))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_backfill_onchain_starting_capital: updated %d rows", result.rowcount)
+    except Exception as exc:
+        logger.warning("_backfill_onchain_starting_capital failed: %s", exc)
+
+
+def _delete_zombie_signals(conn) -> None:
+    """Delete bot_signals that have no entry_price — these were synthetic seed signals
+    that never represented a real scanner trigger and cannot be executed.
+    """
+    MIGRATION_NAME = "delete_zombie_signals_no_entry_price"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        result = conn.execute(text(
+            "DELETE FROM bot_signals WHERE entry_price IS NULL"
+        ))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_delete_zombie_signals: deleted %d rows", result.rowcount)
+    except Exception as exc:
+        logger.warning("_delete_zombie_signals failed: %s", exc)

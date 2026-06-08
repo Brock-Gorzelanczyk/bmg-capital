@@ -1880,7 +1880,7 @@ def get_positions(
         .first()
     )
     if not allocation:
-        return {"positions": _demo_positions(profile.name, profile.asset_class), "demo": True}
+        return {"positions": [], "demo": False}
 
     positions = (
         db.query(BotPosition)
@@ -1891,8 +1891,6 @@ def get_positions(
         )
         .all()
     )
-    if not positions:
-        return {"positions": _demo_positions(profile.name, profile.asset_class), "demo": True}
 
     return {"positions": [_position_to_dict(p) for p in positions], "demo": False}
 
