@@ -14,8 +14,8 @@ import DemoPill from "@/components/demo/DemoPill";
 
 type MarketState = "open" | "after-hours" | "closed";
 
-// Routes where the market is always 24/7 live (crypto, DeFi)
-const ALWAYS_LIVE_PREFIXES = ["/crypto", "/defi", "/security", "/strategy/portfolio/crypto"];
+// Routes where the market is always 24/7 live (crypto, DeFi, bot strategy pages)
+const ALWAYS_LIVE_PREFIXES = ["/crypto", "/defi", "/security", "/strategy/portfolio/crypto", "/strategy"];
 
 function useEquityMarketStatus(): MarketState {
   return useMemo(() => {
@@ -159,7 +159,9 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
             <>
               <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
               <WifiOff size={12} className="text-[#F59E0B]" />
-              <span className="text-[#F59E0B] hidden sm:block font-medium">Offline</span>
+              <span className="text-[#F59E0B] hidden sm:block font-medium">
+                {isCryptoRoute ? "Feed Offline" : "Offline"}
+              </span>
             </>
           ) : marketStatus === "open" ? (
             <>

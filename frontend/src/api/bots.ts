@@ -538,6 +538,46 @@ export const getWatchlistMovers = (limit = 4): Promise<{ movers: WatchlistMover[
 export const runBotNow = (profileName: string): Promise<{ ok: boolean; message: string }> =>
   client.post(`/bots/${profileName}/run-now`).then((r) => r.data);
 
+export interface OpenPosition {
+  position_id: number;
+  trade_id: number;
+  bot_name: string;
+  bot_display: string;
+  bot_color: string;
+  asset_class: "stock" | "crypto" | "options" | "quant";
+  symbol: string;
+  side: "buy" | "sell";
+  qty: number;
+  entry_price: number;
+  current_price: number;
+  unrealized_pnl_usd: number;
+  unrealized_pnl_pct: number;
+  opened_at: string;
+  held_seconds: number;
+}
+
+export interface OpenPositionsResponse {
+  positions: OpenPosition[];
+  total_unrealized_usd: number;
+  total_unrealized_pct: number;
+  position_count: number;
+  distinct_bots: number;
+  fetched_at: string;
+}
+
+export const getOpenPositions = (): Promise<OpenPositionsResponse> =>
+  client
+    .get<OpenPositionsResponse>("/portfolio/open-positions")
+    .then((r) => r.data)
+    .catch((): OpenPositionsResponse => ({
+      positions: [],
+      total_unrealized_usd: 0,
+      total_unrealized_pct: 0,
+      position_count: 0,
+      distinct_bots: 0,
+      fetched_at: new Date().toISOString(),
+    }));
+
 export const getStrategyLabPortfolio = (): Promise<PortfolioData> =>
   client
     .get<PortfolioData>("/strategy-lab/portfolio")

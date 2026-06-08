@@ -1,11 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import SymbolChartDrawer from "@/components/ui/SymbolChartDrawer";
 import { toast } from "sonner";
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-} from "recharts";
 import {
   getBots,
   allocateBot,
@@ -20,12 +17,14 @@ import {
   setupPortfolios,
   getPendingReviews,
   getStrategyLabPortfolio,
+  getOpenPositions,
   runBotNow,
   type BotListItem,
   type RegimeData,
   type PendingReview,
   type PortfolioData,
   type StrategyPortfolio,
+  type OpenPosition,
 } from "@/api/bots";
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
 import { getCrossBotPositions, getCrossBotWatchlist, type CrossBotPosition, type CrossBotWatchlistItem } from "@/api/bots";
@@ -198,19 +197,260 @@ function RegimeBar({ regime, isLoading }: { regime: RegimeData | undefined; isLo
   );
 }
 
-// ─── Portfolio hero ────────────────────────────────────────────────────────────
+// ─── Open Positions Panel ─────────────────────────────────────────────────────
 
-type EquityPeriod = "7d" | "30d" | "90d" | "1y" | "all";
-const PERIOD_DAYS: Record<EquityPeriod, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365, "all": Infinity };
+type SortKey = "recent" | "pnl" | "bot" | "symbol";
+type AssetFilter = "all" | "stock" | "crypto" | "options" | "quant";
 
-function filterCurve(
-  curve: PortfolioData["equity_curve"],
-  period: EquityPeriod
-): PortfolioData["equity_curve"] {
-  if (period === "all") return curve;
-  const cutoff = Date.now() - PERIOD_DAYS[period] * 86_400_000;
-  return curve.filter((pt) => new Date(pt.date).getTime() >= cutoff);
+function fmtHeld(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (seconds < 86_400) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(seconds / 86_400);
+  const rh = Math.floor((seconds % 86_400) / 3600);
+  return rh > 0 ? `${d}d ${rh}h` : `${d}d`;
 }
+
+function fmtQty(qty: number, symbol: string): string {
+  if (symbol.includes("/")) {
+    if (qty < 0.001) return qty.toFixed(6);
+    if (qty < 1) return qty.toFixed(4);
+    return qty.toFixed(4);
+  }
+  return qty % 1 === 0 ? String(Math.round(qty)) : qty.toFixed(2);
+}
+
+function fmtPrice(price: number): string {
+  if (price >= 1000) return `$${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (price >= 1) return `$${price.toFixed(2)}`;
+  return `$${price.toFixed(4)}`;
+}
+
+function PositionRowSkeleton() {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5 animate-pulse">
+      <div className="w-16 h-3.5 bg-zinc-800 rounded" />
+      <div className="w-20 h-5 bg-zinc-800 rounded-full" />
+      <div className="w-10 h-5 bg-zinc-800 rounded-full" />
+      <div className="w-12 h-3 bg-zinc-800 rounded ml-auto" />
+      <div className="w-16 h-3 bg-zinc-800 rounded" />
+      <div className="w-16 h-3 bg-zinc-800 rounded" />
+      <div className="w-20 h-3 bg-zinc-800 rounded" />
+      <div className="w-10 h-3 bg-zinc-800 rounded" />
+    </div>
+  );
+}
+
+function OpenPositionsPanel() {
+  const [sortBy, setSortBy] = useState<SortKey>("recent");
+  const [filterClass, setFilterClass] = useState<AssetFilter>("all");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["open-positions"],
+    queryFn: getOpenPositions,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    retry: 0,
+  });
+
+  const positions = useMemo<OpenPosition[]>(() => {
+    let list = [...(data?.positions ?? [])];
+    if (filterClass !== "all") {
+      list = list.filter((p) => p.asset_class === filterClass);
+    }
+    switch (sortBy) {
+      case "pnl":    list.sort((a, b) => b.unrealized_pnl_usd - a.unrealized_pnl_usd); break;
+      case "bot":    list.sort((a, b) => a.bot_name.localeCompare(b.bot_name)); break;
+      case "symbol": list.sort((a, b) => a.symbol.localeCompare(b.symbol)); break;
+      default:       list.sort((a, b) => new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime());
+    }
+    return list;
+  }, [data, sortBy, filterClass]);
+
+  const totalUsd    = data?.total_unrealized_usd ?? 0;
+  const totalPos    = data?.position_count ?? 0;
+  const distinctBots = data?.distinct_bots ?? 0;
+  const totalIsPos  = totalUsd >= 0;
+
+  // Determine which filter chips are non-empty
+  const assetCounts = useMemo(() => {
+    const map: Partial<Record<AssetFilter, number>> = { all: data?.positions?.length ?? 0 };
+    for (const p of data?.positions ?? []) {
+      map[p.asset_class as AssetFilter] = (map[p.asset_class as AssetFilter] ?? 0) + 1;
+    }
+    return map;
+  }, [data]);
+
+  const FILTER_CHIPS: { key: AssetFilter; label: string }[] = [
+    { key: "all",     label: "All" },
+    { key: "stock",   label: "Stocks" },
+    { key: "crypto",  label: "Crypto" },
+    { key: "options", label: "Options" },
+    { key: "quant",   label: "Quant" },
+  ];
+
+  const SORT_OPTS: { key: SortKey; label: string }[] = [
+    { key: "recent", label: "▼ Recent" },
+    { key: "pnl",    label: "P&L" },
+    { key: "bot",    label: "Bot" },
+    { key: "symbol", label: "Symbol" },
+  ];
+
+  return (
+    <div className="pt-3 border-t border-zinc-800">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Open Positions</p>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as SortKey)}
+          className="text-[10px] bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-400 cursor-pointer focus:outline-none"
+        >
+          {SORT_OPTS.map((o) => (
+            <option key={o.key} value={o.key}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Summary line */}
+      {!isLoading && (
+        <p className="text-[11px] text-zinc-500 mb-2">
+          {totalPos} position{totalPos !== 1 ? "s" : ""} · {distinctBots} bot{distinctBots !== 1 ? "s" : ""}
+          {totalPos > 0 && (
+            <> · Total unrealized:{" "}
+              <span className={totalIsPos ? "text-lime-400" : "text-red-400"}>
+                {totalIsPos ? "+" : "−"}${Math.abs(totalUsd).toFixed(2)}
+              </span>
+            </>
+          )}
+        </p>
+      )}
+
+      {/* Filter chips */}
+      {!isLoading && (data?.positions?.length ?? 0) > 0 && (
+        <div className="flex gap-1 mb-2 flex-wrap">
+          {FILTER_CHIPS.filter((c) => c.key === "all" || (assetCounts[c.key] ?? 0) > 0).map((chip) => (
+            <button
+              key={chip.key}
+              onClick={() => setFilterClass(chip.key)}
+              className={cn(
+                "text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+                filterClass === chip.key
+                  ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+                  : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600"
+              )}
+            >
+              {chip.label}
+              {chip.key !== "all" && assetCounts[chip.key] ? ` (${assetCounts[chip.key]})` : ""}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Table header */}
+      {!isLoading && positions.length > 0 && (
+        <div className="grid gap-x-2 px-3 pb-1 text-[9px] font-semibold text-zinc-600 uppercase tracking-wide"
+          style={{ gridTemplateColumns: "5rem 1fr 2.5rem 4rem 4rem 4rem 6rem 3rem" }}>
+          <span>Symbol</span>
+          <span>Bot</span>
+          <span>Side</span>
+          <span className="text-right">Qty</span>
+          <span className="text-right">Entry</span>
+          <span className="text-right">Current</span>
+          <span className="text-right">Unrealized</span>
+          <span className="text-right">Held</span>
+        </div>
+      )}
+
+      {/* Loading skeletons */}
+      {isLoading && (
+        <div className="space-y-0.5">
+          {[0, 1, 2].map((i) => <PositionRowSkeleton key={i} />)}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!isLoading && positions.length === 0 && (
+        <p className="text-zinc-600 text-xs py-4 text-center">
+          {filterClass !== "all"
+            ? `No open ${filterClass} positions.`
+            : "No open positions. Bots scan continuously — next signal could land any minute."}
+        </p>
+      )}
+
+      {/* Position rows */}
+      {!isLoading && positions.length > 0 && (
+        <div className="space-y-0.5">
+          {positions.map((pos) => {
+            const pnlPos = pos.unrealized_pnl_usd >= 0;
+            const pnlSign = pnlPos ? "+" : "−";
+            return (
+              <Link
+                key={pos.position_id}
+                to={`/strategy/trade/${pos.trade_id}`}
+                className="grid gap-x-2 px-3 py-2 rounded-xl bg-zinc-800/40 hover:bg-zinc-800 border border-zinc-800/60 hover:border-zinc-700 transition-colors items-center"
+                style={{ gridTemplateColumns: "5rem 1fr 2.5rem 4rem 4rem 4rem 6rem 3rem" }}
+              >
+                {/* Symbol */}
+                <span className="text-xs font-bold text-white truncate">{pos.symbol}</span>
+
+                {/* Bot pill */}
+                <span
+                  className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full w-fit truncate"
+                  style={{ background: `${pos.bot_color}22`, color: pos.bot_color, border: `1px solid ${pos.bot_color}44` }}
+                >
+                  {pos.bot_display}
+                </span>
+
+                {/* Side pill */}
+                <span className={cn(
+                  "text-[9px] font-bold px-1.5 py-0.5 rounded-full w-fit",
+                  pos.side === "buy"
+                    ? "bg-lime-500/15 text-lime-400 border border-lime-500/30"
+                    : "bg-red-500/15 text-red-400 border border-red-500/30"
+                )}>
+                  {pos.side.toUpperCase()}
+                </span>
+
+                {/* Qty */}
+                <span className="text-[11px] text-zinc-400 text-right tabular-nums">
+                  {fmtQty(pos.qty, pos.symbol)}
+                </span>
+
+                {/* Entry */}
+                <span className="text-[11px] text-zinc-500 text-right tabular-nums">
+                  {fmtPrice(pos.entry_price)}
+                </span>
+
+                {/* Current */}
+                <span className="text-[11px] text-white text-right tabular-nums">
+                  {fmtPrice(pos.current_price)}
+                </span>
+
+                {/* Unrealized */}
+                <span className={cn("text-[11px] font-semibold text-right tabular-nums", pnlPos ? "text-lime-400" : "text-red-400")}>
+                  {pnlSign}${Math.abs(pos.unrealized_pnl_usd).toFixed(2)}{" "}
+                  <span className="text-[9px] opacity-70">
+                    ({pnlSign}{Math.abs(pos.unrealized_pnl_pct).toFixed(2)}%)
+                  </span>
+                </span>
+
+                {/* Held */}
+                <span className="text-[10px] text-zinc-600 text-right">
+                  {fmtHeld(pos.held_seconds)}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Portfolio hero ────────────────────────────────────────────────────────────
 
 function dollars(cents: number): string {
   const abs = Math.abs(cents / 100);
@@ -243,7 +483,6 @@ function PortfolioHeroSkeleton() {
 }
 
 function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => void }) {
-  const [period, setPeriod] = useState<EquityPeriod>("30d");
   const [posTab, setPosTab] = useState<"positions" | "watchlist">("positions");
   const [chartSymbol, setChartSymbol] = useState<string | null>(null);
   const tabSectionRef = useRef<HTMLDivElement>(null);
@@ -281,11 +520,6 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
   const ret30      = p?.return_30d_pct ?? 0;
   const ret30Pos   = ret30 >= 0;
   const retAll     = p?.return_all_time_pct ?? 0;
-
-  const chartData = filterCurve(p?.equity_curve ?? [], period).map((pt) => ({
-    date: pt.date.slice(5),   // "MM-DD"
-    value: pt.value_cents / 100,
-  }));
 
   return (
     <>
@@ -351,45 +585,8 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
         ))}
       </div>
 
-      {/* Equity curve */}
-      <div className="pt-3 border-t border-zinc-800">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-zinc-400">Aggregate Equity Curve</p>
-          <div className="flex gap-0.5">
-            {(["7d", "30d", "90d", "1y", "all"] as EquityPeriod[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={cn(
-                  "text-[10px] px-1.5 py-0.5 rounded transition-colors",
-                  period === p
-                    ? "bg-lime-500/20 text-lime-400 border border-lime-500/30"
-                    : "text-zinc-600 hover:text-zinc-400"
-                )}
-              >
-                {p.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
-        {chartData.length > 1 ? (
-          <ResponsiveContainer width="100%" height={120}>
-            <LineChart data={chartData}>
-              <YAxis domain={["auto", "auto"]} hide />
-              <XAxis dataKey="date" hide />
-              <Tooltip
-                contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 11 }}
-                formatter={(v: number) => [`$${v.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, "Portfolio"]}
-              />
-              <Line type="monotone" dataKey="value" stroke="#84cc16" dot={false} strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="h-28 flex items-center justify-center text-zinc-600 text-xs">
-            Equity history builds after the first daily run
-          </div>
-        )}
-      </div>
+      {/* Open Positions — replaces equity curve until we have multi-day history */}
+      <OpenPositionsPanel />
 
       {/* Leaderboard */}
       <div className="pt-3 border-t border-zinc-800">
