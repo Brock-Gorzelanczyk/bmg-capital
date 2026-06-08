@@ -8,16 +8,28 @@ import { cn } from "@/lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmt$(n: number | null | undefined): string {
+function priceDecimals(n: number): number {
+  const abs = Math.abs(n);
+  if (abs >= 1000) return 2;
+  if (abs >= 1) return 4;
+  if (abs >= 0.01) return 5;
+  if (abs >= 0.0001) return 6;
+  return 8;
+}
+
+/** Format a price. Pass minDec to force a minimum number of decimal places
+ *  (used to align entry/stop/target in the same group). */
+function fmt$(n: number | null | undefined, minDec = 2): string {
   if (n == null) return "—";
   const abs = Math.abs(n);
-  let maxDec: number;
-  if (abs >= 1000) maxDec = 2;
-  else if (abs >= 1) maxDec = 4;
-  else if (abs >= 0.01) maxDec = 5;
-  else if (abs >= 0.0001) maxDec = 6;
-  else maxDec = 8;
-  return `$${abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: maxDec })}`;
+  const maxDec = priceDecimals(abs);
+  const effectiveMin = Math.min(Math.max(minDec, 2), maxDec);
+  return `$${abs.toLocaleString("en-US", { minimumFractionDigits: effectiveMin, maximumFractionDigits: maxDec })}`;
+}
+
+/** Shared decimal precision for a group of related prices (entry/stop/target). */
+function groupDecimals(...prices: (number | null | undefined)[]): number {
+  return Math.max(2, ...prices.filter((p): p is number => p != null).map(priceDecimals));
 }
 
 function fmtPct(price: number, entry: number): string {
@@ -56,6 +68,8 @@ function ChartLegend({ entry, stop, takeProfit, exitPrice, livePrice, status }: 
 }) {
   const nowPrice = status === "open" ? livePrice : exitPrice;
   const nowAbove = nowPrice != null && nowPrice >= entry;
+  // All prices in this trade share the same precision floor
+  const gd = groupDecimals(entry, stop, takeProfit, exitPrice, nowPrice);
 
   const rows: { dot: string; label: string; price: number; pctClass?: string }[] = [
     { dot: "bg-blue-500", label: "Entry", price: entry },
@@ -75,7 +89,7 @@ function ChartLegend({ entry, stop, takeProfit, exitPrice, livePrice, status }: 
         <div key={r.label + r.price} className="flex items-center gap-2">
           <span className={cn("w-2 h-2 rounded-full flex-shrink-0", r.dot)} />
           <span className="text-zinc-400 w-12 flex-shrink-0">{r.label}</span>
-          <span className="text-white font-mono tabular-nums">{fmt$(r.price)}</span>
+          <span className="text-white font-mono tabular-nums">{fmt$(r.price, gd)}</span>
           {r.price !== entry && (
             <span className={cn(
               "font-medium",
@@ -114,6 +128,7 @@ function TradeChartSection({ symbol, entryPrice, entryTime, side, qty, stopLoss,
   });
 
   const bars = barsData?.bars ?? [];
+  const gd = groupDecimals(entryPrice, stopLoss, takeProfit, exitPrice, livePrice);
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
@@ -123,24 +138,24 @@ function TradeChartSection({ symbol, entryPrice, entryTime, side, qty, stopLoss,
         <div className="flex items-center gap-2 ml-auto text-[11px] flex-wrap">
           <span className="flex items-center gap-1.5 text-blue-400">
             <span className="w-3 h-0.5 bg-blue-500 rounded inline-block" />
-            Entry {fmt$(entryPrice)}
+            Entry {fmt$(entryPrice, gd)}
           </span>
           {stopLoss && (
             <span className="flex items-center gap-1.5 text-red-400">
               <span className="w-3 h-0.5 bg-red-500 rounded inline-block border-t border-dashed border-red-500" />
-              Stop {fmt$(stopLoss)}
+              Stop {fmt$(stopLoss, gd)}
             </span>
           )}
           {takeProfit && (
             <span className="flex items-center gap-1.5 text-green-400">
               <span className="w-3 h-0.5 bg-green-500 rounded inline-block" />
-              Target {fmt$(takeProfit)}
+              Target {fmt$(takeProfit, gd)}
             </span>
           )}
           {status === "open" && livePrice != null && (
             <span className={cn("flex items-center gap-1.5", livePrice >= entryPrice ? "text-green-300" : "text-red-300")}>
               <span className={cn("w-3 h-0.5 rounded inline-block", livePrice >= entryPrice ? "bg-green-300" : "bg-red-300")} />
-              Now {fmt$(livePrice)}
+              Now {fmt$(livePrice, gd)}
             </span>
           )}
         </div>
@@ -188,13 +203,14 @@ function TradeChartSection({ symbol, entryPrice, entryTime, side, qty, stopLoss,
 
 // ─── P&L Hero ─────────────────────────────────────────────────────────────────
 
-function PnlHero({ symbol, qty, entryPrice, status, realizedPnl, livePrice }: {
+function PnlHero({ symbol, qty, entryPrice, status, realizedPnl, livePrice, groupDec }: {
   symbol: string;
   qty: number;
   entryPrice: number;
   status: "open" | "closed";
   realizedPnl: number | null;
   livePrice: number | null;
+  groupDec?: number;
 }) {
   const unrealizedPnl = (status === "open" && livePrice != null)
     ? (livePrice - entryPrice) * qty
@@ -235,13 +251,13 @@ function PnlHero({ symbol, qty, entryPrice, status, realizedPnl, livePrice }: {
       <div className="flex flex-col gap-1.5 text-right min-w-[80px]">
         <div>
           <p className="text-[10px] text-zinc-500 uppercase">Entry</p>
-          <p className="text-sm font-semibold text-white">{fmt$(entryPrice)}</p>
+          <p className="text-sm font-semibold text-white">{fmt$(entryPrice, groupDec)}</p>
         </div>
         {status === "open" && (
           <div>
             <p className="text-[10px] text-zinc-500 uppercase">Live</p>
             <p className={cn("text-sm font-semibold", livePrice != null ? "text-white" : "text-zinc-600")}>
-              {livePrice != null ? fmt$(livePrice) : "…"}
+              {livePrice != null ? fmt$(livePrice, groupDec) : "…"}
             </p>
           </div>
         )}
@@ -317,6 +333,11 @@ export default function TradeDetailPage() {
   const isOptions = (trade.bot_profile ?? "").startsWith("options");
   const unitLabel = isCrypto ? trade.symbol.split("/")[0] : isOptions ? "contracts" : "shares";
   const backTo = trade.bot_profile ? `/strategy/${trade.bot_profile}` : "/strategy";
+  // Shared decimal floor for all price levels in this trade
+  const tradeDec = groupDecimals(
+    trade.entry_price_usd, trade.stop_loss_usd,
+    trade.take_profit_usd, trade.exit_price_usd, livePrice,
+  );
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5 pb-20">
@@ -375,6 +396,7 @@ export default function TradeDetailPage() {
         status={trade.status}
         realizedPnl={trade.realized_pnl_usd}
         livePrice={livePrice}
+        groupDec={tradeDec}
       />
 
       {/* Chart with price lines, markers, and legend */}
@@ -395,7 +417,7 @@ export default function TradeDetailPage() {
       {/* Trade metadata */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-1">
         <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide py-3 border-b border-zinc-800">Trade Details</p>
-        <MetaRow label="Entry Price" value={fmt$(trade.entry_price_usd)} />
+        <MetaRow label="Entry Price" value={fmt$(trade.entry_price_usd, tradeDec)} />
         <MetaRow label="Entry Time" value={fmtDate(trade.entry_time)} />
         <MetaRow label="Quantity" value={
           <span>
@@ -412,15 +434,15 @@ export default function TradeDetailPage() {
           </span>
         } />
         {trade.stop_loss_usd != null && (
-          <MetaRow label="Stop Loss" value={<span className="text-red-400 flex items-center gap-1"><Shield size={11} /> {fmt$(trade.stop_loss_usd)}</span>} />
+          <MetaRow label="Stop Loss" value={<span className="text-red-400 flex items-center gap-1"><Shield size={11} /> {fmt$(trade.stop_loss_usd, tradeDec)}</span>} />
         )}
         {trade.take_profit_usd != null && (
-          <MetaRow label="Take Profit" value={<span className="text-emerald-400 flex items-center gap-1"><Target size={11} /> {fmt$(trade.take_profit_usd)}</span>} />
+          <MetaRow label="Take Profit" value={<span className="text-emerald-400 flex items-center gap-1"><Target size={11} /> {fmt$(trade.take_profit_usd, tradeDec)}</span>} />
         )}
         {trade.exit_price_usd != null && (
           <MetaRow label="Exit Price" value={
             <span>
-              {fmt$(trade.exit_price_usd)}{" "}
+              {fmt$(trade.exit_price_usd, tradeDec)}{" "}
               {trade.qty && (
                 <span className="text-zinc-500">
                   (exited for ${(trade.qty * trade.exit_price_usd).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
