@@ -431,6 +431,7 @@ def run_migrations(engine: Engine) -> None:
         _purge_backfill_seed_data(conn)
         _raise_guardrail_position_cap(conn)
         _quarantine_options_seed_trades(conn)
+        _seed_quant_watchlists(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -1030,6 +1031,73 @@ def _quarantine_options_seed_trades(conn) -> None:
         logger.info("_quarantine_options_seed_trades: quarantined seed trades + marked options bots coming_soon")
     except Exception as exc:
         logger.warning("_quarantine_options_seed_trades failed: %s", exc)
+
+
+def _seed_quant_watchlists(conn) -> None:
+    """Seed bot_watchlist entries for crypto_quant_aggressive and crypto_onchain
+    for all profiles where zero rows exist.
+
+    These bots were added after the initial watchlist seeding round; existing
+    deployments have empty watchlists which causes the 502 crash and blocks trading.
+    Idempotent — skips profiles that already have rows.
+    """
+    MIGRATION_NAME = "bot_watchlist.seed_quant_onchain_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        _UNIVERSES = {
+            "crypto_quant_aggressive": [
+                "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD",
+                "ADA/USD", "AVAX/USD", "POL/USD", "DOT/USD", "LINK/USD",
+                "ATOM/USD", "NEAR/USD", "ARB/USD", "OP/USD", "INJ/USD",
+                "SUI/USD", "APT/USD", "TIA/USD", "DOGE/USD", "SHIB/USD",
+            ],
+            "crypto_onchain": [
+                "BTC/USD", "ETH/USD", "SOL/USD", "MATIC/USD", "LINK/USD",
+                "DOT/USD", "ATOM/USD", "AVAX/USD",
+            ],
+        }
+
+        now_str = datetime.now(timezone.utc).isoformat()
+        total_added = 0
+
+        for bot_name, symbols in _UNIVERSES.items():
+            profile_row = conn.execute(
+                text("SELECT id FROM bot_profiles WHERE name = :n"), {"n": bot_name}
+            ).fetchone()
+            if not profile_row:
+                logger.warning("_seed_quant_watchlists: profile %s not found", bot_name)
+                continue
+            profile_id = profile_row[0]
+
+            existing_count = conn.execute(
+                text("SELECT COUNT(*) FROM bot_watchlist WHERE profile_id = :pid"),
+                {"pid": profile_id},
+            ).scalar() or 0
+            if existing_count > 0:
+                continue  # already seeded
+
+            for rank, sym in enumerate(symbols, 1):
+                score = float(len(symbols) - rank + 1)
+                conn.execute(text("""
+                    INSERT OR IGNORE INTO bot_watchlist
+                        (profile_id, symbol, score, rank, reasons, status,
+                         added_at, last_evaluated_at)
+                    VALUES
+                        (:pid, :sym, :score, :rank,
+                         '{"seeded": 1.0}', 'active',
+                         :now, :now)
+                """), {
+                    "pid": profile_id, "sym": sym,
+                    "score": score, "rank": rank, "now": now_str,
+                })
+                total_added += 1
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_seed_quant_watchlists: inserted %d rows", total_added)
+    except Exception as exc:
+        logger.warning("_seed_quant_watchlists failed: %s", exc)
 
 
 def _raise_guardrail_position_cap(conn) -> None:

@@ -2042,6 +2042,12 @@ _BOT_UNIVERSES: dict[str, list[str]] = {
     "crypto_onchain": [
         "BTC/USD","ETH/USD","SOL/USD","MATIC/USD","LINK/USD",
     ],
+    "crypto_quant_aggressive": [
+        "BTC/USD","ETH/USD","SOL/USD","BNB/USD","XRP/USD","ADA/USD",
+        "AVAX/USD","DOT/USD","LINK/USD","ATOM/USD",
+        "ARB/USD","OP/USD","INJ/USD","SUI/USD",
+        "DOGE/USD","SHIB/USD","NEAR/USD","APT/USD","AAVE/USD","UNI/USD",
+    ],
     "options_income": [
         "SPY","QQQ","IWM","GLD","SLV","TLT","XLE","XLF","XLK","XLV",
     ],
@@ -2493,9 +2499,8 @@ async def get_watchlist_readiness(
             # Also try normalizing (BTC/USD ↔ BTCUSD)
             wl_map[w.symbol.replace("/", "")] = (w.score or 0.0, ts)
 
-    # Options bots — universe not configured yet
-    is_options = "options" in profile_name
-    if is_options and not symbols:
+    # Guard: return early if no symbols to avoid ThreadPoolExecutor(max_workers=0) crash
+    if not symbols:
         _READINESS_CACHE[profile_name] = (now_ts, [], cadence)
         return {"profile_name": profile_name, "rows": [], "cadence": cadence, "no_universe": True}
 

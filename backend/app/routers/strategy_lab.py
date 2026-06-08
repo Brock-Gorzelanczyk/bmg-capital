@@ -45,12 +45,14 @@ PROFILE_NAMES: Dict[str, str] = {
 # ── Demo seed config ──────────────────────────────────────────────────────────
 
 _DEMO_BOTS = [
-    {"name": "stock_swing",  "starting_cents": 2500000,  "daily_drift": 0.0024, "daily_vol": 0.008},
-    {"name": "stock_day",    "starting_cents": 1500000,  "daily_drift": 0.0041, "daily_vol": 0.012},
-    {"name": "stock_lt",     "starting_cents": 5000000,  "daily_drift": 0.0010, "daily_vol": 0.004},
-    {"name": "crypto_swing", "starting_cents": 1000000,  "daily_drift": 0.0062, "daily_vol": 0.022},
-    {"name": "crypto_day",   "starting_cents": 1000000,  "daily_drift": 0.0031, "daily_vol": 0.016},
-    {"name": "crypto_lt",    "starting_cents": 2000000,  "daily_drift": 0.0019, "daily_vol": 0.010},
+    {"name": "stock_swing",            "starting_cents": 2500000,  "daily_drift": 0.0024, "daily_vol": 0.008},
+    {"name": "stock_day",              "starting_cents": 1500000,  "daily_drift": 0.0041, "daily_vol": 0.012},
+    {"name": "stock_lt",               "starting_cents": 5000000,  "daily_drift": 0.0010, "daily_vol": 0.004},
+    {"name": "crypto_swing",           "starting_cents": 1000000,  "daily_drift": 0.0062, "daily_vol": 0.022},
+    {"name": "crypto_day",             "starting_cents": 1000000,  "daily_drift": 0.0031, "daily_vol": 0.016},
+    {"name": "crypto_lt",              "starting_cents": 2000000,  "daily_drift": 0.0019, "daily_vol": 0.010},
+    {"name": "crypto_onchain",         "starting_cents": 1000000,  "daily_drift": 0.0028, "daily_vol": 0.018},
+    {"name": "crypto_quant_aggressive","starting_cents": 1000000,  "daily_drift": 0.0051, "daily_vol": 0.025},
 ]
 
 _DEMO_WATCHLISTS = {
@@ -60,6 +62,11 @@ _DEMO_WATCHLISTS = {
     "crypto_swing": [("BTC/USD",89),("ETH/USD",85),("SOL/USD",78),("AVAX/USD",72),("LINK/USD",65)],
     "crypto_day":   [("BTC/USD",92),("ETH/USD",88),("SOL/USD",81),("BNB/USD",74),("MATIC/USD",67)],
     "crypto_lt":    [("BTC/USD",95),("ETH/USD",91),("SOL/USD",84),("AVAX/USD",77),("LINK/USD",70),("DOT/USD",63)],
+    "crypto_onchain": [("BTC/USD",88),("ETH/USD",84),("SOL/USD",76),("MATIC/USD",69),("LINK/USD",62)],
+    "crypto_quant_aggressive": [
+        ("BTC/USD",95),("ETH/USD",91),("SOL/USD",85),("BNB/USD",80),("XRP/USD",75),
+        ("ADA/USD",70),("AVAX/USD",66),("DOGE/USD",61),("LINK/USD",57),("ARB/USD",52),
+    ],
 }
 
 _DEMO_POSITIONS = {

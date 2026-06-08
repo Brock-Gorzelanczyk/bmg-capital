@@ -117,6 +117,65 @@ def get_guardrail(
     }
 
 
+@router.post("/bots/repair-watchlists")
+def repair_watchlists(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upsert bot_watchlist entries for every BotProfile from its YAML universe.
+
+    Idempotent — uses INSERT OR IGNORE (SQLite) / ON CONFLICT DO NOTHING (Postgres).
+    Run once after adding a new bot profile whose watchlist was never seeded.
+    """
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotProfile, BotWatchlist
+    from strategy_lab.seeds import load_profile
+
+    profiles = db.query(BotProfile).filter(BotProfile.enabled.is_(True)).all()
+    now = datetime.now(timezone.utc)
+    report = []
+
+    for prof in profiles:
+        cfg = load_profile(prof.name)
+        universe = cfg.get("universe", {})
+        if isinstance(universe, dict):
+            symbols = [str(s) for s in universe.get("symbols", [])]
+        elif isinstance(universe, list):
+            symbols = [str(s) for s in universe]
+        else:
+            symbols = []
+
+        if not symbols:
+            report.append({"bot": prof.name, "symbols_added": 0, "note": "no_universe"})
+            continue
+
+        added = 0
+        for rank, sym in enumerate(symbols, 1):
+            existing = (
+                db.query(BotWatchlist)
+                .filter(BotWatchlist.profile_id == prof.id, BotWatchlist.symbol == sym)
+                .first()
+            )
+            if not existing:
+                db.add(BotWatchlist(
+                    profile_id=prof.id,
+                    symbol=sym,
+                    score=float(len(symbols) - rank + 1),
+                    rank=rank,
+                    reasons={"seeded": 1.0},
+                    status="active",
+                    added_at=now,
+                    last_evaluated_at=now,
+                ))
+                added += 1
+
+        db.commit()
+        report.append({"bot": prof.name, "symbols_added": added, "total_universe": len(symbols)})
+        logger.info("repair_watchlists: %s → added %d symbols", prof.name, added)
+
+    return {"ok": True, "results": report}
+
+
 @router.post("/guardrail/{user_id}/position-cap")
 def set_position_cap(
     user_id: int,
