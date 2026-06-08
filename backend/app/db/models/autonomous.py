@@ -38,7 +38,7 @@ class AutonomousGuardrail(Base):
     max_consecutive_losses: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     max_drawdown_pct: Mapped[float] = mapped_column(Float, nullable=False, default=25.0)
     max_position_concentration: Mapped[float] = mapped_column(Float, nullable=False, default=15.0)
-    max_open_positions: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    max_open_positions: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
     autonomous_paused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     paused_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     paused_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

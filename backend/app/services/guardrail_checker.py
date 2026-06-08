@@ -5,7 +5,7 @@ from datetime import date, timedelta, datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.db.models.autonomous import AutonomousAction, AutonomousGuardrail
-from app.db.models.paper import PaperAccount, PaperPosition
+from app.db.models.paper import PaperAccount
 
 
 def get_or_create_guardrail(user_id: int, db: Session) -> AutonomousGuardrail:
@@ -66,8 +66,18 @@ def check_guardrails(user_id: int, db: Session) -> tuple[bool, str]:
     if weekly_loss_pct >= guardrail.weekly_loss_limit_pct:
         return False, f"Weekly loss limit hit ({weekly_loss_pct:.1f}% vs {guardrail.weekly_loss_limit_pct}% limit)"
 
-    # Max open positions check
-    open_positions = db.query(PaperPosition).filter_by(user_id=user_id).count()
+    # Max open positions check — count open BotPositions (not paper trading positions)
+    from app.db.models.bots import BotPosition, BotAllocation
+    open_positions = (
+        db.query(BotPosition)
+        .join(BotAllocation, BotPosition.allocation_id == BotAllocation.id)
+        .filter(
+            BotAllocation.user_id == user_id,
+            BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
+        )
+        .count()
+    )
     if open_positions >= guardrail.max_open_positions:
         return False, f"Max open positions reached ({open_positions})"
 

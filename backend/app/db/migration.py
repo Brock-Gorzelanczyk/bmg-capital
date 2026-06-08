@@ -429,6 +429,7 @@ def run_migrations(engine: Engine) -> None:
         _delete_test_pod_and_watchlist(conn)
         _reset_consecutive_loss_state(conn)
         _purge_backfill_seed_data(conn)
+        _raise_guardrail_position_cap(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -966,3 +967,25 @@ def _purge_backfill_seed_data(conn) -> None:
         )
     except Exception as exc:
         logger.warning("_purge_backfill_seed_data failed: %s", exc)
+
+
+def _raise_guardrail_position_cap(conn) -> None:
+    """Bump max_open_positions to 50 for any existing guardrail rows still at the old default (20).
+
+    This unblocks bot signal generation for users who hit the cap due to
+    paper-trading positions being counted by mistake in the previous version
+    of guardrail_checker.py.
+    """
+    MIGRATION_NAME = "raise_guardrail_position_cap_50"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text(
+            "UPDATE autonomous_guardrails SET max_open_positions = 50 "
+            "WHERE max_open_positions <= 20"
+        ))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_raise_guardrail_position_cap: bumped existing rows to 50")
+    except Exception as exc:
+        logger.warning("_raise_guardrail_position_cap failed: %s", exc)
