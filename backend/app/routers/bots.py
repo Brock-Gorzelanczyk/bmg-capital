@@ -3214,6 +3214,129 @@ def debug_scan_trace(
     return result
 
 
+class OrphanSignalRequest(BaseModel):
+    bot_name: str
+    max_age_hours: int = 48
+
+
+@router.post("/debug/process-orphan-signals")
+def debug_process_orphan_signals(
+    body: OrphanSignalRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+):
+    """Backfill trades for signals that were written but never executed.
+
+    Finds bot_signals with no matching BotPosition opened within 5 minutes of
+    the signal timestamp, then runs _execute_signal using the current live price.
+    Returns { processed, succeeded, skipped, errors }.
+    """
+    from datetime import timedelta
+    from strategy_lab.runner import _execute_signal
+    from strategy_lab.seeds import load_profile
+    from strategy_lab.core.signals import Signal
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=body.max_age_hours)
+
+    profile_row = db.query(BotProfile).filter(BotProfile.name == body.bot_name).first()
+    if not profile_row:
+        raise HTTPException(404, f"Bot profile '{body.bot_name}' not found")
+
+    allocations = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.profile_id == profile_row.id,
+            BotAllocation.enabled.is_(True),
+        )
+        .all()
+    )
+    if not allocations:
+        raise HTTPException(404, f"No enabled allocations for '{body.bot_name}'")
+
+    # Load profile config for execution params
+    try:
+        profile_cfg = load_profile(body.bot_name)
+    except Exception as exc:
+        raise HTTPException(500, f"Could not load profile YAML: {exc}")
+
+    # Find signals in the time window for this bot's allocations
+    alloc_ids = [a.id for a in allocations]
+    candidate_signals = (
+        db.query(BotSignal)
+        .filter(
+            BotSignal.allocation_id.in_(alloc_ids),
+            BotSignal.ts >= cutoff,
+            BotSignal.side == "buy",
+        )
+        .order_by(BotSignal.ts.asc())
+        .all()
+    )
+
+    processed = 0
+    succeeded = 0
+    skipped = 0
+    errors = []
+
+    for sig_row in candidate_signals:
+        # Check if a BotPosition was opened within 5 min of this signal
+        window_start = sig_row.ts - timedelta(minutes=1)
+        window_end = sig_row.ts + timedelta(minutes=5)
+        existing_pos = (
+            db.query(BotPosition)
+            .filter(
+                BotPosition.allocation_id == sig_row.allocation_id,
+                BotPosition.symbol == sig_row.symbol,
+                BotPosition.opened_at >= window_start,
+                BotPosition.opened_at <= window_end,
+            )
+            .first()
+        )
+        if existing_pos:
+            skipped += 1
+            continue
+
+        processed += 1
+
+        # Find the allocation for this signal
+        alloc = next((a for a in allocations if a.id == sig_row.allocation_id), None)
+        if not alloc:
+            errors.append(f"signal {sig_row.id}: allocation {sig_row.allocation_id} not found")
+            continue
+
+        # Reconstruct a Signal object from the DB row
+        sig_obj = Signal(
+            symbol=sig_row.symbol,
+            side=sig_row.side,
+            confidence=sig_row.confidence,
+            size_hint=sig_row.size_hint or 0.5,
+            reason=f"[backfill:signal_id={sig_row.id}] {sig_row.reason or ''}",
+            strategy=sig_row.strategy,
+        )
+
+        try:
+            _execute_signal(
+                db=db,
+                alloc=alloc,
+                sig=sig_obj,
+                final_size_pct=float(profile_cfg.get("position_size_pct", 1.5)),
+                profile=profile_cfg,
+                profile_name=body.bot_name,
+                bars=None,  # will fall through to live_prices fetch
+            )
+            succeeded += 1
+        except Exception as exc:
+            errors.append(f"signal {sig_row.id} ({sig_row.symbol}): {exc}")
+
+    return {
+        "bot_name": body.bot_name,
+        "processed": processed,
+        "succeeded": succeeded,
+        "skipped_already_have_trade": skipped,
+        "errors": errors,
+        "total_candidates": len(candidate_signals),
+    }
+
+
 @router.get("/trade/{trade_id}")
 def get_trade_detail(
     trade_id: int,

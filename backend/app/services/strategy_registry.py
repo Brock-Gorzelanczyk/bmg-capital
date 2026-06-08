@@ -749,6 +749,198 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "is_active": True,
         "sort_order": 21,
     },
+
+    # ── Phase 5: Crypto Quant Aggressive (5 quant strategies) ────────────────
+    {
+        "strategy_key": "crypto_quant_vwap_fade",
+        "name": "VWAP Fade",
+        "category": "Quant",
+        "description": (
+            "Fades price deviations from VWAP on 15-minute bars. Fires when the asset "
+            "is ≥ 1.5σ away from VWAP and RSI confirms the extreme (>65 short, <35 long). "
+            "Mean-reversion edge — expects price to snap back to VWAP within 8 hours."
+        ),
+        "source_originator": "BMG Capital Quant Research",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["kraken"],
+        "default_universe": [
+            "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "ADA/USD",
+            "AVAX/USD", "DOT/USD", "LINK/USD", "DOGE/USD",
+        ],
+        "parameters": {"vwap_sigma_threshold": 1.5, "rsi_long_max": 35, "rsi_short_min": 65, "timeframe": "15m"},
+        "entry_conditions": [
+            {"type": "vwap_deviation", "sigma": 1.5, "direction": "away"},
+            {"type": "rsi", "period": 14, "condition": "extreme"},
+        ],
+        "exit_conditions": [
+            {"type": "vwap_touch", "reversion": True},
+            {"type": "stop_loss", "pct": 1.5},
+            {"type": "time_stop", "hours": 8},
+        ],
+        "context_conditions": None,
+        "structure_type": "quant",
+        "execution_schedule": {"cron": "*/5 * * * *"},
+        "signal_duration_required": None,
+        "category_accent_from": "#8b5cf6",
+        "category_accent_to": "#06b6d4",
+        "is_active": True,
+        "sort_order": 22,
+    },
+    {
+        "strategy_key": "crypto_quant_bb_breakout",
+        "name": "BB Breakout",
+        "category": "Quant",
+        "description": (
+            "Bollinger Band breakout on 15-minute bars with volume confirmation. "
+            "Fires when close breaks outside BB(20,2) AND volume ≥ 1.2× the 20-bar average. "
+            "Momentum-following edge — trades the initial expansion out of a squeeze."
+        ),
+        "source_originator": "BMG Capital Quant Research",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["kraken"],
+        "default_universe": [
+            "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "ADA/USD",
+            "AVAX/USD", "DOT/USD", "LINK/USD", "DOGE/USD",
+        ],
+        "parameters": {"bb_period": 20, "bb_std": 2.0, "volume_multiplier": 1.2, "timeframe": "15m"},
+        "entry_conditions": [
+            {"type": "bollinger_band", "direction": "outside", "period": 20, "std": 2.0},
+            {"type": "volume_ratio", "multiplier": 1.2, "lookback": 20},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "pct": 1.5},
+            {"type": "take_profit", "pct": 3.0},
+            {"type": "time_stop", "hours": 8},
+        ],
+        "context_conditions": None,
+        "structure_type": "quant",
+        "execution_schedule": {"cron": "*/5 * * * *"},
+        "signal_duration_required": None,
+        "category_accent_from": "#8b5cf6",
+        "category_accent_to": "#06b6d4",
+        "is_active": True,
+        "sort_order": 23,
+    },
+    {
+        "strategy_key": "crypto_quant_momentum_trigger",
+        "name": "Momentum Trigger",
+        "category": "Quant",
+        "description": (
+            "4-hour high/low momentum breakout on 15-minute bars. Fires when price closes "
+            "above the prior 4h high (long) or below the prior 4h low (short) with volume ≥ 1.3× "
+            "the rolling average. Captures trending moves as they break out of recent ranges."
+        ),
+        "source_originator": "BMG Capital Quant Research",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["kraken"],
+        "default_universe": [
+            "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "ADA/USD",
+            "AVAX/USD", "DOT/USD", "LINK/USD", "DOGE/USD",
+        ],
+        "parameters": {"range_bars": 16, "volume_multiplier": 1.3, "timeframe": "15m"},
+        "entry_conditions": [
+            {"type": "range_breakout", "lookback_bars": 16},
+            {"type": "volume_ratio", "multiplier": 1.3},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "pct": 1.5},
+            {"type": "take_profit", "pct": 3.0},
+            {"type": "time_stop", "hours": 8},
+        ],
+        "context_conditions": None,
+        "structure_type": "quant",
+        "execution_schedule": {"cron": "*/5 * * * *"},
+        "signal_duration_required": None,
+        "category_accent_from": "#8b5cf6",
+        "category_accent_to": "#06b6d4",
+        "is_active": True,
+        "sort_order": 24,
+    },
+    {
+        "strategy_key": "crypto_quant_volume_zscore_spike",
+        "name": "Volume Z-Score Spike",
+        "category": "Quant",
+        "description": (
+            "Detects abnormal volume spikes using a 20-bar z-score on 15-minute bars. "
+            "Fires when volume z-score ≥ 2.0σ — indicating a significant market participant event. "
+            "Side is determined by bar direction (bullish close = long, bearish = short). "
+            "Trades the first wave of institutional interest."
+        ),
+        "source_originator": "BMG Capital Quant Research",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["kraken"],
+        "default_universe": [
+            "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "ADA/USD",
+            "AVAX/USD", "DOT/USD", "LINK/USD", "DOGE/USD",
+        ],
+        "parameters": {"zscore_threshold": 2.0, "zscore_lookback": 20, "timeframe": "15m"},
+        "entry_conditions": [
+            {"type": "volume_zscore", "sigma": 2.0, "lookback": 20},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "pct": 1.5},
+            {"type": "take_profit", "pct": 3.0},
+            {"type": "time_stop", "hours": 8},
+        ],
+        "context_conditions": None,
+        "structure_type": "quant",
+        "execution_schedule": {"cron": "*/5 * * * *"},
+        "signal_duration_required": None,
+        "category_accent_from": "#8b5cf6",
+        "category_accent_to": "#06b6d4",
+        "is_active": True,
+        "sort_order": 25,
+    },
+    {
+        "strategy_key": "crypto_quant_range_break_retest",
+        "name": "Range Break Retest",
+        "category": "Quant",
+        "description": (
+            "Identifies 4-hour consolidation ranges, detects a breakout within the last 2 hours, "
+            "then waits for a pullback to retest the broken level (±2% zone). "
+            "Fires when the retest holds (price doesn't close back through by > 0.1%). "
+            "Classic S/R flip setup — one of the highest-probability quant patterns."
+        ),
+        "source_originator": "BMG Capital Quant Research",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["kraken"],
+        "default_universe": [
+            "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "ADA/USD",
+            "AVAX/USD", "DOT/USD", "LINK/USD", "DOGE/USD",
+        ],
+        "parameters": {
+            "range_period_bars": 16, "break_lookback_bars": 8,
+            "retest_zone_pct": 2.0, "retest_tolerance_pct": 0.1, "timeframe": "15m",
+        },
+        "entry_conditions": [
+            {"type": "range_defined", "period_bars": 16},
+            {"type": "range_breakout_recent", "lookback_bars": 8},
+            {"type": "retest_held", "zone_pct": 2.0},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "pct": 1.5},
+            {"type": "take_profit", "pct": 3.0},
+            {"type": "time_stop", "hours": 8},
+        ],
+        "context_conditions": None,
+        "structure_type": "quant",
+        "execution_schedule": {"cron": "*/5 * * * *"},
+        "signal_duration_required": None,
+        "category_accent_from": "#8b5cf6",
+        "category_accent_to": "#06b6d4",
+        "is_active": True,
+        "sort_order": 26,
+    },
 ]
 
 # ── Registry cache ────────────────────────────────────────────────────────────

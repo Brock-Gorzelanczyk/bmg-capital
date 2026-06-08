@@ -92,12 +92,18 @@ def setup_bot_scheduler(scheduler) -> None:
 
     # ------------------------------------------------------------------
     # crypto_lt DCA: Monday 10:00 AM UTC
+    # next_run_time=datetime.now(UTC) fires once on startup so we get a
+    # health record immediately without waiting until next Monday.
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: run_bot_profile("crypto_lt"),
         CronTrigger(day_of_week="mon", hour=10, minute=0, timezone=UTC),
         id="bot_crypto_lt_dca",
         replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
