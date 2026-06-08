@@ -28,7 +28,7 @@ UNIVERSE = [
 
 BB_PERIOD = 20
 BB_STDEV = 2.0
-VOLUME_MULT = 1.5
+VOLUME_MULT = 1.2   # lowered from 1.5 — volume confirmation without being overly restrictive
 
 
 def _bollinger(closes: list[float], period: int = BB_PERIOD, stdev_mult: float = BB_STDEV) -> tuple[float, float, float]:

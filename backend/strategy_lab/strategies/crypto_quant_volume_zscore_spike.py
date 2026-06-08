@@ -28,7 +28,7 @@ UNIVERSE = [
 ]
 
 ZSCORE_PERIOD = 96    # 24h of 15m bars
-ZSCORE_THRESHOLD = 3.0
+ZSCORE_THRESHOLD = 2.0   # lowered from 3.0 — 3σ fires <0.1% of bars; 2σ fires ~5%
 STOP_PCT = 1.5
 HOLD_HOURS = 2
 

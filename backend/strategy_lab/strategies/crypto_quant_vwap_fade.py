@@ -28,9 +28,9 @@ UNIVERSE = [
 ]
 
 RSI_PERIOD = 14
-VWAP_SIGMA_THRESHOLD = 2.0
-RSI_OVERBOUGHT = 70.0
-RSI_OVERSOLD = 30.0
+VWAP_SIGMA_THRESHOLD = 1.5   # lowered from 2.0 — 2σ + RSI extreme simultaneously was too rare
+RSI_OVERBOUGHT = 65.0         # lowered from 70 to capture more extended moves
+RSI_OVERSOLD = 35.0           # raised from 30
 
 
 def _compute_vwap_and_sigma(bars: list[dict]) -> tuple[float, float]:

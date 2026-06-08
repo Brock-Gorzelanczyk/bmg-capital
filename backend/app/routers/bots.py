@@ -75,8 +75,9 @@ _DISPLAY_NAMES: dict[str, str] = {
 }
 
 _DEMO_SYMBOLS = {
-    "stock": ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "V", "UNH"],
-    "crypto": ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "MATIC/USD"],
+    "stock":   ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "V", "UNH"],
+    "crypto":  ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "MATIC/USD"],
+    "quant":   ["BTC/USD", "ETH/USD", "SOL/USD", "LINK/USD", "AVAX/USD"],
     "options": ["AAPL", "MSFT", "SPY", "NVDA", "AMZN", "QQQ", "GOOGL", "META", "TSLA", "JPM"],
 }
 

@@ -26,7 +26,7 @@ UNIVERSE = [
 ]
 
 LOOKBACK_BARS_4H = 16      # 16 x 15m = 4h
-VOLUME_MULT = 2.0
+VOLUME_MULT = 1.3          # lowered from 2.0 — 2x was too strict for regular crypto markets
 TRAILING_STOP_PCT = 2.0    # 2% trailing stop
 
 
