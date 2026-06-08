@@ -29,6 +29,7 @@ def _write_to_bridge_postgres(
     entry_price: Optional[float],
     stop_price: Optional[float],
     target_price: Optional[float],
+    is_test: bool = False,
 ) -> None:
     """Best-effort write to discord-worker's Postgres bridge.
 
@@ -56,18 +57,24 @@ def _write_to_bridge_postgres(
                     "VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
                     (allocation_id, user_id, profile_id),
                 )
+                # Ensure is_test column exists (idempotent — Postgres IF NOT EXISTS)
+                cur.execute(
+                    "ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS "
+                    "is_test BOOLEAN DEFAULT FALSE"
+                )
                 # Write signal row
                 cur.execute(
                     """
                     INSERT INTO bot_signals
                       (allocation_id, ts, symbol, side, confidence, size_hint,
                        reason, strategy, entry_price, stop_price, target_price,
-                       discord_posted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
+                       discord_posted_at, is_test)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s)
                     ON CONFLICT DO NOTHING
                     """,
                     (allocation_id, ts, symbol, side, confidence, size_hint,
-                     reason, strategy, entry_price, stop_price, target_price),
+                     reason, strategy, entry_price, stop_price, target_price,
+                     is_test),
                 )
             conn.commit()
         logger.debug("[bridge] signal %d (%s %s) → discord-worker Postgres", signal_id, side, symbol)

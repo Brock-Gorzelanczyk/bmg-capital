@@ -243,9 +243,10 @@ def discord_test_fire(
     if not allocation:
         return {"ok": False, "error": f"No allocation found for bot {bot_name!r} / user {current_user.id}"}
 
+    now = datetime.now(timezone.utc)
     sig = BotSignal(
         allocation_id=allocation.id,
-        ts=datetime.now(timezone.utc),
+        ts=now,
         symbol="TEST",
         side="buy",
         confidence=0.99,
@@ -261,14 +262,38 @@ def discord_test_fire(
     db.commit()
     db.refresh(sig)
 
+    # Mirror to the discord-worker's Postgres bridge — without this the worker
+    # (which reads Postgres, not SQLite) would never see the signal.
+    from strategy_lab.core.audit import _write_to_bridge_postgres
+    _write_to_bridge_postgres(
+        signal_id=sig.id,
+        allocation_id=allocation.id,
+        user_id=current_user.id,
+        profile_id=profile.id,
+        profile_name=profile.name,
+        ts=now,
+        symbol="TEST",
+        side="buy",
+        confidence=0.99,
+        size_hint=0.05,
+        reason="WIRING TEST — IGNORE. Fired via /api/admin/discord/test-fire.",
+        strategy="manual_test",
+        entry_price=100.00,
+        stop_price=95.00,
+        target_price=110.00,
+        is_test=True,
+    )
+
     channel_slug = _BOT_CHANNEL_MAP.get(bot_name, "all-signals")
-    logger.info("admin: test-fire signal %d for bot=%s channel=#%s by user=%d",
-                sig.id, bot_name, channel_slug, current_user.id)
+    bridge_url_set = bool(os.environ.get("DISCORD_BRIDGE_DATABASE_URL"))
+    logger.info("admin: test-fire signal %d for bot=%s channel=#%s bridge=%s by user=%d",
+                sig.id, bot_name, channel_slug, bridge_url_set, current_user.id)
     return {
         "ok": True,
         "signal_id": sig.id,
         "bot": bot_name,
         "channel": f"#{channel_slug}",
+        "bridge_db_reachable": bridge_url_set,
         "note": "Discord worker will post a [TEST] embed within ~10 seconds.",
     }
 
