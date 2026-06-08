@@ -790,6 +790,7 @@ function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
   });
 
   const isEnabled = allocation?.enabled ?? false;
+  const isComingSoon = allocation?.paused_reason === "coming_soon";
   const isOnWaitlist = allocation?.go_live_requested ?? false;
 
   const pnlPositive = (stats?.today_pnl ?? 0) >= 0;
@@ -825,12 +826,14 @@ function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
         <span
           className={cn(
             "text-xs font-semibold px-2 py-0.5 rounded-full",
-            isEnabled
-              ? "bg-lime-500/15 text-lime-400 border border-lime-500/30"
-              : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+            isComingSoon
+              ? "bg-purple-500/15 text-purple-400 border border-purple-500/30"
+              : isEnabled
+                ? "bg-lime-500/15 text-lime-400 border border-lime-500/30"
+                : "bg-zinc-800 text-zinc-500 border border-zinc-700"
           )}
         >
-          {isEnabled ? "ACTIVE" : "DISABLED"}
+          {isComingSoon ? "COMING SOON" : isEnabled ? "ACTIVE" : "DISABLED"}
         </span>
       </div>
 
@@ -1022,7 +1025,7 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
             </tr>
           </thead>
           <tbody>
-            {sortedBots.map((item) => {
+            {sortedBots.filter((item) => item.allocation?.paused_reason !== "coming_soon").map((item) => {
               const isEnabled = item.allocation?.enabled ?? false;
               const ret30 = item.stats?.return_30d_pct ?? 0;
               const maxDd: string | null = null; // populated when backend exposes max_drawdown_pct
@@ -1479,7 +1482,9 @@ export default function StrategyLab() {
   // Uses isSuccess to prevent repeat calls within the same page session.
   useEffect(() => {
     if (!data?.bots || isLoading || activateAllMut.isPending || activateAllMut.isSuccess) return;
-    const anyDisabled = data.bots.some((b: BotListItem) => !b.allocation?.enabled);
+    const anyDisabled = data.bots.some(
+      (b: BotListItem) => !b.allocation?.enabled && b.allocation?.paused_reason !== "coming_soon"
+    );
     if (anyDisabled) {
       activateAllMut.mutate();
     }

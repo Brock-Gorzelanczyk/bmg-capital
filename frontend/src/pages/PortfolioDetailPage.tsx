@@ -205,6 +205,9 @@ function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<
   const todayPnlUsd = ((portfolio as any).today_pnl_cents ?? 0) / 100;
   const todayPositive = todayPnlUsd >= 0;
 
+  const allComingSoon = portfolio.bots.length > 0 &&
+    portfolio.bots.every((b: any) => b.allocation?.paused_reason === "coming_soon");
+
   const stats = [
     { label: "Starting Capital", value: `$${startingUsd.toLocaleString()}` },
     { label: "Current Value",    value: `$${currentUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
@@ -239,21 +242,36 @@ function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        {stats.map((s) => (
-          <div key={s.label}>
-            <p className="text-[10px] text-zinc-600 uppercase tracking-wide mb-0.5">{s.label}</p>
-            <p className={cn(
-              "text-lg font-bold",
-              s.hasSign
-                ? s.positive ? "text-lime-400" : "text-red-400"
-                : "text-white"
-            )}>
-              {s.value}
+      {allComingSoon ? (
+        <div className="flex items-center gap-3 py-4 px-5 rounded-xl bg-purple-500/10 border border-purple-500/20">
+          <span className="text-2xl">🔧</span>
+          <div>
+            <p className="text-purple-300 font-semibold text-sm">Strategy under construction</p>
+            <p className="text-zinc-500 text-xs mt-0.5">
+              Options strategies are being developed. Live signals will appear here once the scanner ships.
             </p>
           </div>
-        ))}
-      </div>
+          <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
+            COMING SOON
+          </span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {stats.map((s) => (
+            <div key={s.label}>
+              <p className="text-[10px] text-zinc-600 uppercase tracking-wide mb-0.5">{s.label}</p>
+              <p className={cn(
+                "text-lg font-bold",
+                s.hasSign
+                  ? s.positive ? "text-lime-400" : "text-red-400"
+                  : "text-white"
+              )}>
+                {s.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

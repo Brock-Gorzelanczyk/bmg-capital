@@ -430,6 +430,7 @@ def run_migrations(engine: Engine) -> None:
         _reset_consecutive_loss_state(conn)
         _purge_backfill_seed_data(conn)
         _raise_guardrail_position_cap(conn)
+        _quarantine_options_seed_trades(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -967,6 +968,68 @@ def _purge_backfill_seed_data(conn) -> None:
         )
     except Exception as exc:
         logger.warning("_purge_backfill_seed_data failed: %s", exc)
+
+
+def _quarantine_options_seed_trades(conn) -> None:
+    """Quarantine the seeded options bot trades and mark both options allocations as coming_soon.
+
+    These trades were inserted manually (not via the signal path):
+      - microsecond-identical timestamps
+      - null alpaca_order_id
+      - stale prices (NVDA $884 pre-split, GOOGL $162 from 2024)
+    They pollute portfolio totals and should not be visible until real
+    options strategies are implemented.
+    """
+    MIGRATION_NAME = "quarantine_options_seed_trades_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Quarantine trades: options bots only, alpaca_order_id IS NULL
+        conn.execute(text("""
+            UPDATE bot_trades
+            SET quarantined_at = :now,
+                quarantine_reason = 'seed_data_no_signal_no_scheduler'
+            WHERE allocation_id IN (
+                SELECT ba.id
+                FROM bot_allocations ba
+                JOIN bot_profiles bp ON ba.profile_id = bp.id
+                WHERE bp.name IN ('options_income', 'options_directional')
+            )
+            AND alpaca_order_id IS NULL
+        """), {"now": now})
+
+        # Quarantine any lingering open positions for these bots
+        conn.execute(text("""
+            UPDATE bot_positions
+            SET quarantined_at = :now
+            WHERE allocation_id IN (
+                SELECT ba.id
+                FROM bot_allocations ba
+                JOIN bot_profiles bp ON ba.profile_id = bp.id
+                WHERE bp.name IN ('options_income', 'options_directional')
+            )
+            AND closed_at IS NULL
+        """), {"now": now})
+
+        # Mark both options allocations as coming_soon
+        conn.execute(text("""
+            UPDATE bot_allocations
+            SET enabled = 0,
+                paused_reason = 'coming_soon',
+                updated_at = :now
+            WHERE profile_id IN (
+                SELECT id FROM bot_profiles
+                WHERE name IN ('options_income', 'options_directional')
+            )
+        """), {"now": now})
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_quarantine_options_seed_trades: quarantined seed trades + marked options bots coming_soon")
+    except Exception as exc:
+        logger.warning("_quarantine_options_seed_trades failed: %s", exc)
 
 
 def _raise_guardrail_position_cap(conn) -> None:

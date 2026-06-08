@@ -22,6 +22,7 @@ export interface BotAllocation {
   paper_mode: true;        // always true in v1
   go_live_requested: boolean;
   enabled: boolean;
+  paused_reason?: string | null;
 }
 
 export interface BotListItem {

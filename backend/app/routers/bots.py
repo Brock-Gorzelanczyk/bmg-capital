@@ -173,8 +173,8 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
                 alloc.updated_at = now
 
             # Re-enable if accidentally disabled — paper bots should always be active
-            # unless explicitly halted by the health monitor (paused_reason="health_halt")
-            HARD_PAUSE_REASONS = {"health_halt", "admin_lock"}
+            # unless explicitly halted by the health monitor or marked as not yet implemented.
+            HARD_PAUSE_REASONS = {"health_halt", "admin_lock", "coming_soon"}
             if not alloc.enabled and alloc.paused_reason not in HARD_PAUSE_REASONS:
                 alloc.enabled = True
                 alloc.paused_reason = None
@@ -274,6 +274,7 @@ def _allocation_to_dict(a: BotAllocation) -> dict:
         "paper_mode": a.paper_mode,
         "go_live_requested": a.go_live_requested,
         "enabled": a.enabled,
+        "paused_reason": a.paused_reason,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
     }
@@ -491,7 +492,7 @@ def activate_all_bots(
             .first()
         )
         if existing:
-            if not existing.enabled:
+            if not existing.enabled and existing.paused_reason != "coming_soon":
                 existing.enabled = True
                 existing.paused_reason = None
                 existing.updated_at = now
@@ -649,6 +650,7 @@ def get_portfolio_activity(
     trades = (
         db.query(BotTrade)
         .filter(BotTrade.allocation_id.in_(alloc_ids))
+        .filter(BotTrade.quarantined_at.is_(None))
         .order_by(BotTrade.ts.desc())
         .limit(limit)
         .all()
