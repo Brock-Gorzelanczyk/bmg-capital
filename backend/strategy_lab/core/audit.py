@@ -31,7 +31,14 @@ def _post_signal_to_discord(signal_id: int, signal_dict: dict) -> None:
         logger.debug("Discord signal post skipped: %s", exc)
 
 
-def log_signal(db: Session, allocation_id: int, signal: Signal) -> None:
+def log_signal(
+    db: Session,
+    allocation_id: int,
+    signal: Signal,
+    entry_price: Optional[float] = None,
+    stop_price: Optional[float] = None,
+    target_price: Optional[float] = None,
+) -> None:
     """Persist a Signal to bot_signals, then fire Discord embed in background."""
     from app.db.models.bots import BotSignal, BotAllocation, BotProfile
 
@@ -44,6 +51,9 @@ def log_signal(db: Session, allocation_id: int, signal: Signal) -> None:
         size_hint=signal.size_hint,
         reason=signal.reason,
         strategy=signal.strategy,
+        entry_price=entry_price or None,
+        stop_price=stop_price or None,
+        target_price=target_price or None,
     )
     db.add(row)
     try:
@@ -74,9 +84,9 @@ def log_signal(db: Session, allocation_id: int, signal: Signal) -> None:
         "reason":     signal.reason or "",
         "strategy":   signal.strategy or "",
         "size_pct":   round(signal.size_hint * 100, 1) if signal.size_hint else None,
-        "price":      None,
-        "stop":       None,
-        "target":     None,
+        "price":      entry_price or None,
+        "stop":       stop_price or None,
+        "target":     target_price or None,
     }
 
     threading.Thread(

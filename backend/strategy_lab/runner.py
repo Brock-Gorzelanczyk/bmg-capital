@@ -589,8 +589,19 @@ def run_bot_profile(profile_name: str) -> dict:
                     except Exception as exc:
                         logger.warning("[runner:%s] trade_journal failed for %s: %s", profile_name, sig.symbol, exc)
 
-                    # Audit the signal
-                    log_signal(db, alloc.id, sig)
+                    # Resolve entry price for Discord embed and DB row
+                    _entry_price = None
+                    if bars.get(sig.symbol):
+                        _last = bars[sig.symbol][-1]
+                        _entry_price = float(_last.get("c") or _last.get("close") or 0) or None
+
+                    # Audit the signal (fires Discord via background thread with dedup)
+                    log_signal(
+                        db, alloc.id, sig,
+                        entry_price=_entry_price,
+                        stop_price=stop_info.get("stop_price"),
+                        target_price=stop_info.get("target_price"),
+                    )
 
                     # 10i. Execute: open position in Alpaca paper + create DB rows
                     try:
@@ -620,11 +631,7 @@ def run_bot_profile(profile_name: str) -> dict:
                         final_size_pct, stop_info.get("stop_price", "n/a"),
                     )
 
-                    # Build signal dict for notification dispatch
-                    _entry_price = None
-                    if bars.get(sig.symbol):
-                        _last = bars[sig.symbol][-1]
-                        _entry_price = float(_last.get("c") or _last.get("close") or 0) or None
+                    # Build signal dict for per-user notifications
                     _signal_dict = {
                         "bot": profile_name,
                         "symbol": sig.symbol,
@@ -644,13 +651,6 @@ def run_bot_profile(profile_name: str) -> dict:
                         dispatch_signal(_signal_dict, db)
                     except Exception as _exc:
                         logger.debug("[runner:%s] private notify skipped: %s", profile_name, _exc)
-
-                    # Public Discord signal feed (bot token + channel IDs)
-                    try:
-                        from app.services.discord_public import post_signal
-                        post_signal(_signal_dict)
-                    except Exception as _exc:
-                        logger.debug("[runner:%s] public discord skipped: %s", profile_name, _exc)
 
                     # Legacy single-webhook Discord (DISCORD_SIGNAL_WEBHOOK_URL)
                     try:
