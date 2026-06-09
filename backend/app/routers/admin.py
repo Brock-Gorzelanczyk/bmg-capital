@@ -495,6 +495,63 @@ def scan_now_verbose(
     return resp
 
 
+# ── GET /api/admin/alpaca/ping ────────────────────────────────────────────────
+
+@router.get("/alpaca/ping")
+def alpaca_ping(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Test Alpaca paper API credentials.
+
+    Reads ALPACA_PAPER_KEY + ALPACA_PAPER_SECRET env vars and hits
+    GET /v2/account on paper-api.alpaca.markets.
+
+    Returns {ok, account_id, buying_power, status, error}.
+    Env vars required in Railway:
+      ALPACA_PAPER_KEY    — Paper API Key ID  (from alpaca.markets → Paper dashboard → API Keys)
+      ALPACA_PAPER_SECRET — Paper API Secret Key
+    """
+    import os as _os
+    import urllib.request as _ur
+    import json as _json
+
+    key = _os.getenv("ALPACA_PAPER_KEY", "")
+    secret = _os.getenv("ALPACA_PAPER_SECRET", "")
+
+    if not key or not secret:
+        return {
+            "ok": False,
+            "error": "ALPACA_PAPER_KEY or ALPACA_PAPER_SECRET not set in Railway environment",
+            "key_set": bool(key),
+            "secret_set": bool(secret),
+        }
+
+    url = "https://paper-api.alpaca.markets/v2/account"
+    req = _ur.Request(url, headers={
+        "APCA-API-KEY-ID": key,
+        "APCA-API-SECRET-KEY": secret,
+    })
+    try:
+        with _ur.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read())
+        return {
+            "ok": True,
+            "account_id": data.get("id"),
+            "account_number": data.get("account_number"),
+            "status": data.get("status"),
+            "buying_power": data.get("buying_power"),
+            "cash": data.get("cash"),
+            "portfolio_value": data.get("portfolio_value"),
+            "currency": data.get("currency"),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "key_prefix": key[:8] + "..." if len(key) > 8 else "(short)",
+        }
+
+
 # ── GET /api/admin/system/health ──────────────────────────────────────────────
 
 @router.get("/system/health")

@@ -25,6 +25,17 @@ def _run_bot_position_monitor(bot_name: str) -> None:
         logger.error("bot_position_monitor[%s] failed: %s", bot_name, exc)
 
 
+def _run_and_log(profile_name: str) -> None:
+    """Thin wrapper so APScheduler job invocations appear in Railway logs."""
+    logger.info("[startup] job fired: run_bot_profile(%s)", profile_name)
+    try:
+        from strategy_lab.runner import run_bot_profile
+        result = run_bot_profile(profile_name)
+        logger.info("[startup] job done: run_bot_profile(%s) → %s", profile_name, result)
+    except Exception as exc:
+        logger.error("[startup] job FAILED: run_bot_profile(%s): %s", profile_name, exc, exc_info=True)
+
+
 def setup_bot_scheduler(scheduler) -> None:
     """Register the six bot-profile cron jobs.
 
@@ -34,6 +45,7 @@ def setup_bot_scheduler(scheduler) -> None:
       crypto_swing — every 4 hours (24/7)
       crypto_lt    — Monday 10:00 AM UTC (weekly DCA)
     """
+    logger.info("[startup] setup_bot_scheduler called — registering bot jobs")
     from strategy_lab.runner import run_bot_profile
 
     # ------------------------------------------------------------------
@@ -265,7 +277,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # High-turnover quant bot — 20-coin universe, 5-signal stack.
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("crypto_quant_aggressive"),
+        lambda: _run_and_log("crypto_quant_aggressive"),
         CronTrigger(minute="*/5"),
         id="bot_crypto_quant_aggressive",
         replace_existing=True,
@@ -338,7 +350,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # 1m scalper — tight R/R, liquid majors only.
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("crypto_quant_scalper"),
+        lambda: _run_and_log("crypto_quant_scalper"),
         CronTrigger(minute="*/1"),
         id="bot_crypto_quant_scalper",
         replace_existing=True,
@@ -353,7 +365,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # 5m mean-reversion bot — 4h holds, wider stops.
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("crypto_quant_mean_reversion"),
+        lambda: _run_and_log("crypto_quant_mean_reversion"),
         CronTrigger(minute="*/3"),
         id="bot_crypto_quant_mean_reversion",
         replace_existing=True,
