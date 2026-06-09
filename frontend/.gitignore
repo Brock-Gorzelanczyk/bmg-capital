@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# TradingView Advanced Charts — proprietary library (licensed, not committed to git)
+public/charting_library/

@@ -166,14 +166,43 @@ def _fetch_ccxt_ohlcv(symbol: str, timeframe: str, start_str: str) -> list[dict]
         return []
 
 
-def _fetch_yf_ohlcv(ticker: yf.Ticker, start_str: str, end_str: str, interval: str, timeframe: str) -> list[dict]:
+def _apply_split_adjustment(hist: pd.DataFrame) -> pd.DataFrame:
+    """Apply split-only backward adjustment — no dividend adjustment (matches TradingView default)."""
+    if hist.empty or "Stock Splits" not in hist.columns:
+        return hist
+    splits = hist["Stock Splits"]
+    splits = splits[splits > 0]
+    if splits.empty:
+        return hist
+    result = hist.copy()
+    idx = result.index
+    # Normalize index to tz-naive for comparison
+    idx_naive = idx.tz_localize(None) if getattr(idx, 'tz', None) else idx
+    for split_date, split_ratio in splits.items():
+        sd = pd.Timestamp(split_date)
+        sd_naive = sd.tz_localize(None) if sd.tz else sd
+        mask = idx_naive < sd_naive
+        if not mask.any():
+            continue
+        factor = 1.0 / float(split_ratio)  # 1-for-10 reverse split: ratio=0.1, factor=10
+        for col in ("Open", "High", "Low", "Close"):
+            if col in result.columns:
+                result.loc[mask, col] = result.loc[mask, col] * factor
+        if "Volume" in result.columns:
+            result.loc[mask, "Volume"] = result.loc[mask, "Volume"] / factor
+    return result
+
+
+def _fetch_yf_ohlcv(ticker: yf.Ticker, start_str: str, end_str: str, interval: str, timeframe: str, adjustment: str = "split") -> list[dict]:
     """Fetch OHLCV from yfinance and return as a list of dicts with open/high/low/close/volume."""
-    hist = ticker.history(
-        start=start_str,
-        end=end_str,
-        interval=interval,
-        auto_adjust=True,
-    )
+    if adjustment == "none":
+        hist = ticker.history(start=start_str, end=end_str, interval=interval, auto_adjust=False)
+    elif adjustment == "dividend":
+        hist = ticker.history(start=start_str, end=end_str, interval=interval, auto_adjust=True)
+    else:  # "split" — split-adjusted only, no dividend adjustment (matches TradingView)
+        hist = ticker.history(start=start_str, end=end_str, interval=interval, auto_adjust=False, actions=True)
+        hist = _apply_split_adjustment(hist)
+
     if hist.empty:
         return []
 
@@ -325,10 +354,21 @@ async def get_bars(
     indicators: Optional[str] = Query(
         None, description="Comma-separated indicator keys, e.g. SMA_20,RSI_14,MACD"
     ),
+    adjustment: str = Query("split", description="Price adjustment: split|dividend|none"),
+    from_ts: Optional[int] = Query(None, alias="from"),
+    to_ts: Optional[int] = Query(None, alias="to"),
+    limit: Optional[int] = Query(None),
 ):
     """Fetch OHLCV bars for a symbol with optional technical indicators."""
     symbol = _normalize_symbol(symbol)
     interval = YF_INTERVAL_MAP.get(timeframe, "1d")
+
+    # Accept Unix timestamps from TradingView datafeed (alias: from/to)
+    if from_ts is not None and start is None:
+        start = datetime.utcfromtimestamp(from_ts).strftime("%Y-%m-%d")
+    if to_ts is not None and end is None:
+        end = datetime.utcfromtimestamp(to_ts + 86400).strftime("%Y-%m-%d")  # inclusive
+
     end_dt = datetime.now(timezone.utc) if not end else datetime.fromisoformat(end)
 
     if not start:
@@ -359,15 +399,18 @@ async def get_bars(
     end_str = end_dt.date().isoformat()
     end_exclusive = (end_dt + timedelta(days=1)).date().isoformat()
 
+    # Use adjustment-aware symbol key for cache to prevent cross-contamination
+    cache_sym = f"{symbol}_{adjustment}"
+
     # ── Main bars ──────────────────────────────────────────────────────────────
-    cached = get_cached(symbol, timeframe, start_str, end_str)
+    cached = get_cached(cache_sym, timeframe, start_str, end_str)
     if cached:
         bars_list = cached
         main_ohlcv = [{"open": b["o"], "high": b["h"], "low": b["l"], "close": b["c"], "volume": b["v"]} for b in bars_list]
     else:
         try:
             ticker = yf.Ticker(symbol.upper())
-            rows = _fetch_yf_ohlcv(ticker, start_str, end_exclusive, interval, timeframe)
+            rows = _fetch_yf_ohlcv(ticker, start_str, end_exclusive, interval, timeframe, adjustment)
             if not rows:
                 # CCXT fallback for crypto symbols (e.g. FET-USD → FET/USDT on Binance)
                 rows = _fetch_ccxt_ohlcv(symbol, timeframe, start_str)
@@ -378,7 +421,7 @@ async def get_bars(
             main_ohlcv = [{"open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"]} for r in rows]
 
             ttl = 3600 if timeframe in ("4Hour", "1Hour") else 300 if timeframe in ("30Min", "15Min", "5Min", "1Min") else 86400
-            set_cache(symbol, timeframe, start_str, end_str, bars_list, ttl)
+            set_cache(cache_sym, timeframe, start_str, end_str, bars_list, ttl)
         except HTTPException:
             raise
         except Exception as e:
@@ -402,15 +445,15 @@ async def get_bars(
                 extra_days = math.ceil(lookback * days_per_bar)
                 warmup_start = start_dt - timedelta(days=extra_days)
                 warmup_key = f"__warmup_{symbol}_{timeframe}_{warmup_start.date().isoformat()}_{start_str}"
-                warmup_cached = get_cached(symbol, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str)
+                warmup_cached = get_cached(cache_sym, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str)
                 if warmup_cached:
                     warmup_ohlcv = warmup_cached
                 else:
                     try:
                         wt = yf.Ticker(symbol.upper())
-                        wrows = _fetch_yf_ohlcv(wt, warmup_start.date().isoformat(), start_str, interval, timeframe)
+                        wrows = _fetch_yf_ohlcv(wt, warmup_start.date().isoformat(), start_str, interval, timeframe, adjustment)
                         warmup_ohlcv = [{"open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"]} for r in wrows]
-                        set_cache(symbol, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str, warmup_ohlcv, 86400)
+                        set_cache(cache_sym, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str, warmup_ohlcv, 86400)
                     except Exception:
                         warmup_ohlcv = []  # fall back to no warm-up — indicators may start late
 

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import AdvancedChart from "@/components/AdvancedChart";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutList, X, Check } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
@@ -228,6 +229,9 @@ export default function ChartPage() {
   const canProMode = useTierStore((s) => s.can("pro_mode"));
   const [savedIndicator, setSavedIndicator] = useState(false);
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+  const [useAdvancedChart] = useState(() => {
+    try { return localStorage.getItem("bmg_advanced_chart") === "true"; } catch { return false; }
+  });
 
   const presetKey = searchParams.get("preset") ?? null;
 
@@ -746,7 +750,21 @@ export default function ChartPage() {
 
           {/* Main chart */}
           <div className="flex-1 overflow-hidden relative">
-            {isError && bars.length === 0 && !isLoading ? (
+            {useAdvancedChart ? (
+              <AdvancedChart
+                symbol={symbol}
+                theme="dark"
+                interval={
+                  PERIOD_CONFIGS[period].timeframe === "1Day" ? "1D" :
+                  PERIOD_CONFIGS[period].timeframe === "1Week" ? "1W" :
+                  PERIOD_CONFIGS[period].timeframe === "1Month" ? "1M" :
+                  PERIOD_CONFIGS[period].timeframe === "1Hour" ? "60" :
+                  PERIOD_CONFIGS[period].timeframe === "4Hour" ? "240" :
+                  "5"
+                }
+                onSymbolChange={handleSymbolChange}
+              />
+            ) : isError && bars.length === 0 && !isLoading ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-8">
                 <div className="text-3xl">📡</div>
                 <p className="text-[var(--text-secondary)] font-semibold text-sm">No chart data for {symbol}</p>
