@@ -127,15 +127,20 @@ function perMinuteCheck(channelId: string): boolean {
   return true;
 }
 
-// Content dedup: skip if same (bot, symbol, strategy) was posted within 5 minutes.
+// Content dedup: skip if same (bot, symbol, side) was successfully posted within 30 minutes.
+// Keyed on side (not strategy) so we don't suppress a genuine re-entry after a different strategy fires.
+// Only set after a real channel.send() — dedup is not a reason to mark discord_posted_at.
 const _recentKeys: Map<string, number> = new Map();
-const DEDUP_WINDOW_MS = 5 * 60 * 1000;
+const DEDUP_WINDOW_MS = 30 * 60 * 1000;
 function isDuplicate(signal: SignalInput): boolean {
-  const key = `${signal.botProfile}|${signal.symbol}|${signal.strategy}`;
+  const key = `${signal.botProfile}|${signal.symbol}|${signal.side}`;
   const last = _recentKeys.get(key);
   if (last && Date.now() - last < DEDUP_WINDOW_MS) return true;
-  _recentKeys.set(key, Date.now());
   return false;
+}
+function markSent(signal: SignalInput): void {
+  const key = `${signal.botProfile}|${signal.symbol}|${signal.side}`;
+  _recentKeys.set(key, Date.now());
 }
 
 export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
@@ -164,11 +169,23 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
 
   // ── Step 2: Build + send embed ───────────────────────────────────────────────
   try {
-    // Content dedup: identical (bot, symbol, strategy) within 5 min → mark posted, skip send.
+    // Content dedup: identical (bot, symbol, side) sent within 30 min → release claim, skip silently.
+    // Do NOT mark discord_posted_at — let the signal remain eligible so we can verify in the DB.
     if (isDuplicate(signal)) {
-      console.log(`[discord] dedup skip signal ${signal.signalId} (${signal.symbol} ${signal.side})`);
+      console.log(`[post-dedup] sig=${signal.signalId} ${signal.botProfile} ${signal.symbol} ${signal.side} — within dedup window, releasing claim`);
       await db.update(botSignals)
-        .set({ discordPostedAt: new Date(), claimedAt: null })
+        .set({ claimedAt: null })
+        .where(eq(botSignals.id, signal.signalId));
+      return;
+    }
+
+    const channelIds = channelIdsForBot(signal.botProfile);
+    console.warn(`[post-attempt] sig=${signal.signalId} bot=${signal.botProfile} symbol=${signal.symbol} side=${signal.side} channels=${channelIds.length} ids=[${channelIds.join(",")}]`);
+
+    if (channelIds.length === 0) {
+      console.error(`[post-norecipient] sig=${signal.signalId} ${signal.botProfile} — no channel IDs configured, releasing claim`);
+      await db.update(botSignals)
+        .set({ claimedAt: null })
         .where(eq(botSignals.id, signal.signalId));
       return;
     }
@@ -196,7 +213,6 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     const sizeFraction   = signal.positionSizePct != null ? signal.positionSizePct / 100 : 0;
     const notional       = portfolioValue > 0 && sizeFraction > 0 ? portfolioValue * sizeFraction : null;
     const qty            = notional != null && entry != null && entry > 0 ? notional / entry : null;
-    const baseAsset      = signal.symbol.split("/")[0];
 
     const qtyStr      = qty     != null ? formatQty(qty, signal.symbol)    : "—";
     const notionalStr = notional != null ? formatUSD(notional)               : "—";
@@ -224,31 +240,49 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
       .setFooter({ text: COMPLIANCE_FOOTER })
       .setTimestamp(new Date());
 
-    const channelIds = channelIdsForBot(signal.botProfile);
     let sentCount = 0;
     for (const channelId of channelIds) {
       if (!perMinuteCheck(channelId)) {
-        console.warn(`[discord] rate-limited channel ${channelId} — dropping signal ${signal.signalId}`);
+        console.warn(`[post-ratelimit] sig=${signal.signalId} channel=${channelId} — per-minute cap hit, skipping`);
         continue;
       }
       await rateLimit(channelId);
-      const channel = await client.channels.fetch(channelId);
-      if (channel?.isTextBased()) {
-        await (channel as TextChannel).send({ embeds: [embed] });
+      try {
+        const channel = await client.channels.fetch(channelId);
+        if (!channel) {
+          console.error(`[post-nochannel] sig=${signal.signalId} channel=${channelId} — fetch returned null`);
+          continue;
+        }
+        if (!channel.isTextBased()) {
+          console.error(`[post-nottext] sig=${signal.signalId} channel=${channelId} — not a text channel`);
+          continue;
+        }
+        const msg = await (channel as TextChannel).send({ embeds: [embed] });
+        console.warn(`[post-success] sig=${signal.signalId} channel=${channelId} message_id=${msg.id}`);
         sentCount++;
+      } catch (sendErr) {
+        console.error(`[post-sendfail] sig=${signal.signalId} channel=${channelId}:`, sendErr);
       }
     }
 
-    // ── Step 3: Mark as posted (success path) ──────────────────────────────────
-    await db.update(botSignals)
-      .set({ discordPostedAt: new Date(), claimedAt: null })
-      .where(eq(botSignals.id, signal.signalId));
-
-    console.log(`[discord] posted signal ${signal.signalId} (${signal.symbol} ${signal.side}) to ${sentCount} channel(s)`);
+    // ── Step 3: Mark posted ONLY if at least one channel received the message ───
+    if (sentCount > 0) {
+      markSent(signal);
+      await db.update(botSignals)
+        .set({ discordPostedAt: new Date(), claimedAt: null })
+        .where(eq(botSignals.id, signal.signalId));
+      console.warn(`[post-done] sig=${signal.signalId} sent to ${sentCount}/${channelIds.length} channel(s)`);
+    } else {
+      // Nothing sent — release claim so the signal can retry on next poll.
+      console.error(`[post-nosend] sig=${signal.signalId} — 0 of ${channelIds.length} channels received message, releasing claim`);
+      await db.update(botSignals)
+        .set({ claimedAt: null })
+        .where(eq(botSignals.id, signal.signalId));
+    }
 
   } catch (err) {
     // Discord send or DB update failed — release the claim so the signal can retry.
-    console.error(`[discord] failed to post signal ${signal.signalId}:`, err);
+    console.error(`[post-fail] sig=${signal.signalId}:`, err);
     try {
       await db.update(botSignals)
         .set({ claimedAt: null })

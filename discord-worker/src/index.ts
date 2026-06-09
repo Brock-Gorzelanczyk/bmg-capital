@@ -222,8 +222,17 @@ async function main(): Promise<void> {
     console.error("[discord] DISCORD_BOT_TOKEN not set — exiting");
     process.exit(1);
   }
+  // Boot diagnostics — log all channel env vars so Railway logs confirm config.
+  console.warn(
+    `[worker-boot] channel IDs: ALL_SIGNALS=${process.env.DISCORD_CH_ALL_SIGNALS ?? "MISSING"} ` +
+    `STOCKS=${process.env.DISCORD_CH_STOCKS_SIGNALS ?? "MISSING"} ` +
+    `CRYPTO=${process.env.DISCORD_CH_CRYPTO_SIGNALS ?? "MISSING"} ` +
+    `OPTIONS=${process.env.DISCORD_CH_OPTIONS_SIGNALS ?? "MISSING"} ` +
+    `QUANT=${process.env.BMG_QUANT_SIGNALS_CHANNEL_ID ?? process.env.DISCORD_CH_QUANT_SIGNALS ?? "MISSING"}`
+  );
+
   // Eagerly initialize Discord client so the bot shows Online immediately.
-    await getDiscordClient();
+  await getDiscordClient();
   // Ensure tables exist (idempotent — safe to run on every boot).
   await runMigrations();
 
