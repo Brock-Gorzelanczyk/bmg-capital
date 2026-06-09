@@ -21,6 +21,40 @@ import { getDiscordClient } from "./client.js";
 
 const POLL_INTERVAL_MS = 10_000; // 10 seconds
 
+// Columns that must exist on each bridge table, with their Postgres types.
+// Any column missing at boot gets ALTER TABLE ADD COLUMN IF NOT EXISTS.
+const REQUIRED_COLUMNS: Record<string, Record<string, string>> = {
+  bot_signals: {
+    id:                 "SERIAL PRIMARY KEY",
+    allocation_id:      "INTEGER NOT NULL",
+    ts:                 "TIMESTAMP NOT NULL DEFAULT NOW()",
+    symbol:             "VARCHAR NOT NULL",
+    side:               "VARCHAR NOT NULL",
+    confidence:         "REAL NOT NULL",
+    size_hint:          "REAL",
+    reason:             "TEXT",
+    strategy:           "VARCHAR",
+    entry_price:        "REAL",
+    stop_price:         "REAL",
+    target_price:       "REAL",
+    discord_posted_at:  "TIMESTAMP",
+    discord_message_id: "TEXT",
+    claimed_at:         "TIMESTAMP",
+    executed_at:        "TIMESTAMP",
+    is_test:            "BOOLEAN DEFAULT FALSE",
+  },
+  bot_allocations: {
+    id:                     "SERIAL PRIMARY KEY",
+    user_id:                "INTEGER NOT NULL",
+    profile_id:             "INTEGER NOT NULL",
+    starting_capital_cents: "BIGINT",
+  },
+  bot_profiles: {
+    id:   "SERIAL PRIMARY KEY",
+    name: "VARCHAR NOT NULL",
+  },
+};
+
 async function runMigrations(): Promise<void> {
   console.log("[discord] running startup migrations…");
   await db.execute(sql`
@@ -53,14 +87,34 @@ async function runMigrations(): Promise<void> {
       discord_posted_at  TIMESTAMP
     )
   `);
-  // Idempotent column additions.
-  await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE`);
-  await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS discord_message_id VARCHAR`);
-  // claimed_at: atomic worker lock — prevents concurrent poll loops from double-posting.
-  await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP`);
-  // executed_at: set by scan_and_execute.py after _execute_signal succeeds.
-  // Only signals with executed_at IS NOT NULL get posted to Discord.
-  await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS executed_at TIMESTAMP`);
+
+  // ── Comprehensive schema sync: ALTER TABLE for any missing column ─────────────
+  for (const [table, columns] of Object.entries(REQUIRED_COLUMNS)) {
+    const existing = await db.execute(sql`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = ${table}
+    `) as { column_name: string }[];
+    const have = new Set(existing.map((r: { column_name: string }) => r.column_name));
+    const missing = Object.keys(columns).filter(c => !have.has(c));
+    if (missing.length === 0) {
+      console.warn(`[migration] ${table} schema OK`);
+    } else {
+      console.warn(`[migration] ${table} missing: ${missing.join(",")}`);
+      for (const col of missing) {
+        const colType = columns[col];
+        // ALTER TABLE doesn't support IF NOT EXISTS on column type specs with defaults,
+        // so we wrap in a DO $$ block to swallow duplicate-column errors safely.
+        await db.execute(sql.raw(`
+          DO $$ BEGIN
+            ALTER TABLE ${table} ADD COLUMN ${col} ${colType};
+          EXCEPTION WHEN duplicate_column THEN NULL;
+          END $$;
+        `));
+        console.warn(`[migration] added ${table}.${col} (${colType})`);
+      }
+    }
+  }
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS bot_daily_pnl (
       id                        SERIAL PRIMARY KEY,
@@ -125,25 +179,6 @@ async function runMigrations(): Promise<void> {
       INSERT INTO discord_worker_migrations (name) VALUES ('purge_repost_loop_2026_06_09')
     `);
     console.log(`[discord] EMERGENCY PURGE: marked ${(purged as any).count ?? "?"} pending signals as posted`);
-  }
-
-  // Schema verification — log all bot_signals columns so boot logs confirm the schema.
-  try {
-    const cols = await db.execute(sql`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_name = 'bot_signals'
-      ORDER BY ordinal_position
-    `) as { column_name: string }[];
-    const colNames = cols.map((c: { column_name: string }) => c.column_name).join(",");
-    console.warn(`[worker-boot] bot_signals columns: ${colNames}`);
-    const required = ["executed_at", "claimed_at", "discord_message_id", "discord_posted_at"];
-    const missing = required.filter(r => !colNames.includes(r));
-    if (missing.length > 0) {
-      console.error(`[worker-boot] MISSING COLUMNS: ${missing.join(",")} — schema migration may have failed`);
-    }
-  } catch (schemaErr) {
-    console.error("[worker-boot] schema check failed:", schemaErr);
   }
 
   console.log("[discord] migrations complete");

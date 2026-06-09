@@ -30,6 +30,7 @@ def _write_to_bridge_postgres(
     stop_price: Optional[float],
     target_price: Optional[float],
     is_test: bool = False,
+    starting_capital_cents: Optional[int] = None,
 ) -> None:
     """Best-effort write to discord-worker's Postgres bridge.
 
@@ -51,16 +52,12 @@ def _write_to_bridge_postgres(
                     "ON CONFLICT (id) DO NOTHING",
                     (profile_id, profile_name),
                 )
-                # Mirror bot_allocations row
+                # Mirror bot_allocations row — upsert so starting_capital_cents stays current
                 cur.execute(
-                    "INSERT INTO bot_allocations (id, user_id, profile_id) "
-                    "VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
-                    (allocation_id, user_id, profile_id),
-                )
-                # Ensure is_test column exists (idempotent — Postgres IF NOT EXISTS)
-                cur.execute(
-                    "ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS "
-                    "is_test BOOLEAN DEFAULT FALSE"
+                    "INSERT INTO bot_allocations (id, user_id, profile_id, starting_capital_cents) "
+                    "VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (id) DO UPDATE SET starting_capital_cents = EXCLUDED.starting_capital_cents",
+                    (allocation_id, user_id, profile_id, starting_capital_cents),
                 )
                 # Write signal row
                 cur.execute(
@@ -154,15 +151,17 @@ def log_signal(
         logger.error("Failed to log signal: %s", exc)
         return None
 
-    # Resolve bot profile name for embed routing (session-cached, no extra queries)
+    # Resolve bot profile name + starting capital for embed routing
     profile_name = ""
     _user_id = 0
     _profile_id = 0
+    _starting_capital_cents: Optional[int] = None
     try:
         alloc = db.get(BotAllocation, allocation_id)
         if alloc:
             _user_id = alloc.user_id or 0
             _profile_id = alloc.profile_id or 0
+            _starting_capital_cents = alloc.starting_capital_cents
             prof = db.get(BotProfile, alloc.profile_id)
             if prof:
                 profile_name = prof.name
@@ -178,6 +177,7 @@ def log_signal(
             signal.size_hint, signal.reason, signal.strategy,
             entry_price or None, stop_price or None, target_price or None,
         ),
+        kwargs={"is_test": False, "starting_capital_cents": _starting_capital_cents},
         daemon=True,
     ).start()
 
