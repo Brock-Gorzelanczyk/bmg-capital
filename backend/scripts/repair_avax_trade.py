@@ -15,8 +15,14 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.db.session import SessionLocal
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from app.db.models.bots import BotTrade, BotPosition
+
+_db_url = os.environ.get("DATABASE_URL", "sqlite:////data/bmg_capital.db")
+_connect_args = {"check_same_thread": False} if _db_url.startswith("sqlite") else {}
+_engine = create_engine(_db_url, connect_args=_connect_args)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
 BAD_TRADE_ID = 25
 
