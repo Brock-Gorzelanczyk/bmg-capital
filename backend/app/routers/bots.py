@@ -815,6 +815,35 @@ def get_cross_bot_watchlist(
     return sorted(by_symbol.values(), key=lambda x: -x["score"])
 
 
+# ── GET /api/bots/watchlist-symbols ──────────────────────────────────────────
+
+@router.get("/watchlist-symbols")
+def get_watchlist_symbols(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return deduplicated list of symbols across all of the user's bot watchlists."""
+    allocations = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == current_user.id)
+        .all()
+    )
+    if not allocations:
+        return {"symbols": []}
+
+    profile_ids = list({a.profile_id for a in allocations})
+    rows = (
+        db.query(BotWatchlist.symbol)
+        .filter(
+            BotWatchlist.profile_id.in_(profile_ids),
+            BotWatchlist.status.in_(["active", "watching", "pending_entry"]),
+        )
+        .distinct()
+        .all()
+    )
+    return {"symbols": [r.symbol for r in rows]}
+
+
 # ── GET /api/bots/{profile_name}/activity ────────────────────────────────────
 
 @router.get("/{profile_name}/activity")

@@ -107,6 +107,8 @@ import VoiceAIModal from "@/components/voice/VoiceAIModal";
 import VoiceAIButton from "@/components/voice/VoiceAIButton";
 import CoPilot from "@/components/CoPilot";
 import { useCoPilot } from "@/hooks/useCoPilot";
+import { fetchBars } from "@/api/bars";
+import { useQueryClient } from "@tanstack/react-query";
 
 const PageLoader = () => (
   <div style={{ minHeight: "100vh", background: "#0a0a0a", padding: "24px" }}>
@@ -261,6 +263,29 @@ const persister = createSyncStoragePersister({
   throttleTime: 1000,
 });
 
+async function prefetchWatchlistBars(queryClient: ReturnType<typeof useQueryClient>) {
+  try {
+    const res = await fetch("/api/bots/watchlist-symbols", {
+      headers: { Authorization: `Bearer ${localStorage.getItem("bmg_token") ?? ""}` },
+    });
+    if (!res.ok) return;
+    const { symbols } = await res.json() as { symbols: string[] };
+    const BATCH = 5;
+    for (let i = 0; i < symbols.length; i += BATCH) {
+      const batch = symbols.slice(i, i + BATCH);
+      await Promise.all(
+        batch.map((sym) =>
+          queryClient.prefetchQuery({
+            queryKey: ["bars", sym, "1Day", undefined, undefined],
+            queryFn: () => fetchBars(sym, "1Day", undefined, undefined, 5000),
+            staleTime: 5 * 60_000,
+          })
+        )
+      );
+    }
+  } catch {}
+}
+
 function AppInner() {
   useWebSocket();
   useSignalToast();
@@ -268,6 +293,14 @@ function AppInner() {
   const isViewer = useIsViewer();
   const [voiceOpen, setVoiceOpen] = useState(false);
   const coPilot = useCoPilot();
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+
+  // Background prefetch watchlist symbols on login so bot pages load instantly
+  useEffect(() => {
+    if (user) prefetchWatchlistBars(queryClient);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Global 401 handler: when any API call receives a 401, the axios interceptor
   // fires this event. We log the user out and redirect to login.

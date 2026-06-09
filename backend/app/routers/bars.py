@@ -8,7 +8,7 @@ from typing import Optional
 
 import pandas as pd
 import yfinance as yf
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from app.indicators.engine import compute_indicators
@@ -348,6 +348,7 @@ async def get_bars_batch(body: BatchBarsRequest):
 @router.get("/{symbol}")
 async def get_bars(
     symbol: str,
+    response: Response,
     timeframe: str = Query("1Day"),
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -467,5 +468,11 @@ async def get_bars(
             indicator_data = {k: v[n_warmup:] for k, v in all_indicators.items()}
         except Exception:
             indicator_data = {}
+
+    # Cache-Control: 5 min client / 10 min shared; ETag based on last bar timestamp
+    last_t = bars_list[-1]["t"] if bars_list else ""
+    etag = f'"{symbol}:{timeframe}:{last_t}"'
+    response.headers["Cache-Control"] = "public, max-age=300, s-maxage=600"
+    response.headers["ETag"] = etag
 
     return {"symbol": symbol.upper(), "bars": bars_list, "indicators": indicator_data}
