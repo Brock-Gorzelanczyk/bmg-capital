@@ -2404,8 +2404,7 @@ export default function BotDetailPage() {
                   <span className="text-xs text-zinc-500 font-normal ml-1">
                     / $
                     {positions.reduce((sum, p) => {
-                      const price = livePrices[p.symbol] ?? (p.avg_cost_cents / 100);
-                      return sum + price * p.qty;
+                      return sum + (p.market_value ?? (livePrices[p.symbol] ?? (p.avg_cost_cents / 100)) * p.qty);
                     }, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} notional
                   </span>
                 )}
@@ -2474,16 +2473,16 @@ export default function BotDetailPage() {
                   </thead>
                   <tbody>
                     {positions.map((pos) => {
-                      const livePrice = livePrices[pos.symbol] ?? null;
-                      const avgCost = pos.avg_cost_cents ? pos.avg_cost_cents / 100 : null;
-                      const currentValue = livePrice && pos.qty ? livePrice * pos.qty : null;
-                      const unrealizedPnl = livePrice && avgCost && pos.qty
-                        ? (livePrice - avgCost) * pos.qty : null;
-                      const pnlPct = livePrice && avgCost
-                        ? ((livePrice - avgCost) / avgCost) * 100 : null;
+                      // Prefer server-enriched fields; fall back to live price fetch
+                      const currentValue = pos.market_value ?? (livePrices[pos.symbol] != null && pos.qty ? livePrices[pos.symbol]! * pos.qty : null);
+                      const unrealizedPnl = pos.unrealized_pnl ?? null;
+                      const pnlPct = pos.unrealized_pnl_pct ?? null;
                       const timeHeld = pos.opened_at
                         ? (() => {
-                            const ms = Date.now() - new Date(pos.opened_at).getTime();
+                            // Ensure UTC parsing — isoformat() from Python has no Z suffix
+                            const raw = pos.opened_at;
+                            const openedAt = new Date(raw.endsWith("Z") || raw.includes("+") ? raw : raw + "Z");
+                            const ms = Math.max(0, Date.now() - openedAt.getTime());
                             const hrs = Math.floor(ms / 3_600_000);
                             const mins = Math.floor((ms % 3_600_000) / 60_000);
                             return hrs >= 24
@@ -2509,16 +2508,16 @@ export default function BotDetailPage() {
                               ? formatTradeSize(pos.qty, pos.symbol, (pos.avg_cost_cents / 100) * Math.abs(pos.qty))
                               : pos.qty != null ? formatQty(pos.qty, pos.symbol) : "—"}
                           </td>
-                          <td className="py-2.5 text-right text-zinc-300">
+                          <td className="py-2.5 text-right text-zinc-300 tabular-nums">
                             {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
                           </td>
                           <td className={cn(
-                            "py-2.5 text-right text-sm font-medium",
+                            "py-2.5 text-right text-sm font-medium tabular-nums",
                             unrealizedPnl == null ? "text-zinc-500"
                               : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400"
                           )}>
                             {unrealizedPnl != null
-                              ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)} (${pnlPct! >= 0 ? "+" : ""}${pnlPct!.toFixed(2)}%)`
+                              ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)}${pnlPct != null ? ` (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%)` : ""}`
                               : "—"}
                           </td>
                           <td className="py-2.5 text-right text-xs text-zinc-500">{timeHeld}</td>

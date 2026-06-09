@@ -52,8 +52,13 @@ export interface BotPosition {
   symbol: string;
   qty: number;
   avg_cost_cents: number;
+  avg_cost?: number | null;
   opened_at: string;
   is_paper: true;
+  current_price?: number | null;
+  market_value?: number | null;
+  unrealized_pnl?: number | null;
+  unrealized_pnl_pct?: number | null;
 }
 
 export const getBots = () =>
