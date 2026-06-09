@@ -15,6 +15,7 @@ import type { ChartType, DrawingTool, HoveredBar, Drawing } from "@/types/chart"
 
 export interface ChartHandle {
   updateBar: (bar: Bar) => void;
+  setVisibleRange: (from: string, to?: string) => void;
 }
 
 export interface TradeLevels {
@@ -163,6 +164,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
           (mainSeriesRef.current as ISeriesApi<"Line">).update({ time: t, value: bar.c });
         }
         volSeriesRef.current?.update({ time: t, value: bar.v, color: bar.c >= bar.o ? TV.upVol : TV.downVol });
+      },
+      setVisibleRange: (from: string, to?: string) => {
+        if (!chartRef.current) return;
+        const fromTs = Math.floor(new Date(from).getTime() / 1000) as UTCTimestamp;
+        const toTs = Math.floor(new Date(to ?? new Date().toISOString()).getTime() / 1000) as UTCTimestamp;
+        try { chartRef.current.timeScale().setVisibleRange({ from: fromTs, to: toTs }); } catch {}
       },
     }));
 

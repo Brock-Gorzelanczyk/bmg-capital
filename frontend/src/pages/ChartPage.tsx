@@ -295,28 +295,6 @@ export default function ChartPage() {
       });
   }, [allTrades, symbol]);
 
-  // Extra years added when user zooms past the left edge
-  const [extraYears, setExtraYears] = useState(0);
-  const loadingMoreRef = useRef(false);
-
-  // Reset extra years whenever the period or symbol changes
-  useEffect(() => { setExtraYears(0); }, [period, symbol]);
-
-  // Extend start further back when the user has scrolled past the data window
-  const dynamicStart = useMemo(() => {
-    if (!start || extraYears === 0) return start;
-    const d = new Date(start);
-    d.setFullYear(d.getFullYear() - extraYears);
-    return d.toISOString().slice(0, 10);
-  }, [start, extraYears]);
-
-  const handleNearLeftEdge = useCallback(() => {
-    if (loadingMoreRef.current || period === "All") return;
-    loadingMoreRef.current = true;
-    setExtraYears((y) => y + 2);
-    setTimeout(() => { loadingMoreRef.current = false; }, 1500);
-  }, [period]);
-
   const presetIndsRef = useRef<string[]>([]);
   const [presetActive, setPresetActive] = useState(true);
   const [showPresetBanner, setShowPresetBanner] = useState(!!presetKey);
@@ -325,8 +303,8 @@ export default function ChartPage() {
   const liveBar = useMarketStore((s) => s.liveBars[symbol]);
 
   const indicatorsParam = Array.from(activeIndicators).join(",");
-  const { data, isLoading, isFetching, isError } = useBars(symbol, timeframe, indicatorsParam || undefined, dynamicStart);
-  const { data: compareData } = useBars(compareSymbol ?? "", timeframe, undefined, dynamicStart);
+  const { data, isLoading, isFetching, isError } = useBars(symbol, timeframe, indicatorsParam || undefined);
+  const { data: compareData } = useBars(compareSymbol ?? "", timeframe);
 
   const bars = data?.bars ?? [];
   const indicators = data?.indicators ?? {};
@@ -371,6 +349,22 @@ export default function ChartPage() {
       });
     }
   }, [liveBar]);
+
+  // After bars load, set the visible time range to match the selected period.
+  // Uses rAF to run after CandlestickChart's setData/fitContent effect.
+  // Skips background revalidations (same viewport key) and trade-level views.
+  const viewportKeyRef = useRef("");
+  useEffect(() => {
+    if (!bars.length || !chartRef.current || tradeLevels?.entryDate) return;
+    const key = `${symbol}|${timeframe}|${start ?? "all"}`;
+    if (viewportKeyRef.current === key) return;
+    viewportKeyRef.current = key;
+    if (!start) return; // "All" period — fitContent from CandlestickChart is correct
+    const handle = requestAnimationFrame(() => {
+      chartRef.current?.setVisibleRange(start);
+    });
+    return () => cancelAnimationFrame(handle);
+  }, [bars, symbol, timeframe, start, tradeLevels]);
 
   // Auto-enable preset indicators when arriving from the screener
   useEffect(() => {
@@ -752,11 +746,7 @@ export default function ChartPage() {
 
           {/* Main chart */}
           <div className="flex-1 overflow-hidden relative">
-            {isLoading ? (
-              <div className="w-full h-full flex items-center justify-center text-[var(--text-tertiary)] text-sm">
-                Loading {symbol}...
-              </div>
-            ) : isError && bars.length === 0 ? (
+            {isError && bars.length === 0 && !isLoading ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-8">
                 <div className="text-3xl">📡</div>
                 <p className="text-[var(--text-secondary)] font-semibold text-sm">No chart data for {symbol}</p>
@@ -779,9 +769,18 @@ export default function ChartPage() {
                   compareSymbol={compareSymbol ?? undefined}
                   onCrosshairMove={setHoveredBar}
                   onAddDrawing={handleAddDrawing}
-                  onNearLeftEdge={handleNearLeftEdge}
                 />
-                {isFetching && (
+                {/* Skeleton — only shown when there is no previous data to show (true first load) */}
+                {isLoading && (
+                  <div className="absolute inset-0 z-20 bg-[var(--bg-base)]/80 flex items-center justify-center pointer-events-none">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-6 h-6 border-2 border-[var(--text-tertiary)] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-[var(--text-tertiary)] text-xs">{symbol}</span>
+                    </div>
+                  </div>
+                )}
+                {/* Background revalidation pill — appears when old data is shown while refreshing */}
+                {isFetching && !isLoading && (
                   <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
                     <div className="flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-elevated)]/90 border border-[var(--border-subtle)] px-2.5 py-1 rounded-full backdrop-blur-sm">
                       <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] animate-pulse" />

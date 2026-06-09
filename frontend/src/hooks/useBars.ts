@@ -14,7 +14,10 @@ export function useBars(symbol: string, timeframe: string, indicators?: string, 
     queryKey: ["bars", symbol, timeframe, indicators, start],
     queryFn: () => fetchBars(symbol, timeframe, indicators, start),
     enabled: Boolean(symbol),
-    staleTime: timeframe === "1Day" ? 60_000 : 30_000,
+    // Full-history fetches are expensive — keep in cache for 5 min before staling,
+    // and hold in memory for 30 min so switching periods (same timeframe) is instant.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
     retry: 1,
     // Only keep previous data when the symbol hasn't changed (e.g. period/timeframe switch).
     // When the symbol itself changes we clear immediately so the old price axis doesn't bleed through.
