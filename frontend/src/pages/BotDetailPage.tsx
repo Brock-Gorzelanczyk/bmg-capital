@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { BracketFrame, SectionLabel } from "@/components/design";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1156,7 +1157,7 @@ function WatchlistPreview({ botName, onViewAll }: { botName: string; onViewAll: 
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-zinc-300">Watchlist</h2>
+          <SectionLabel as="h2">Watchlist</SectionLabel>
         </div>
         <div className="space-y-2">
           {[0, 1, 2].map((i) => <div key={i} className="animate-pulse h-10 bg-zinc-800 rounded-xl" />)}
@@ -1176,7 +1177,7 @@ function WatchlistPreview({ botName, onViewAll }: { botName: string; onViewAll: 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-zinc-300">Watchlist — Closest to Entry</h2>
+        <SectionLabel as="h2">Watchlist — Closest to Entry</SectionLabel>
         <button
           onClick={onViewAll}
           className="text-xs text-lime-400 hover:text-lime-300 transition-colors"
@@ -2055,7 +2056,7 @@ function SettingsTab({
     <div className="space-y-5">
       {/* Capital slider */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-zinc-300">Paper Allocation</h2>
+        <SectionLabel as="h2">Paper Allocation</SectionLabel>
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs text-zinc-500">Capital %</label>
@@ -2108,7 +2109,7 @@ function SettingsTab({
 
       {/* Go Live section */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-zinc-300">Go Live</h2>
+        <SectionLabel as="h2">Go Live</SectionLabel>
         <div className="flex items-center gap-3">
           <div className="relative">
             <button
@@ -2361,7 +2362,7 @@ export default function BotDetailPage() {
       <TabBar active={activeTab} onChange={setActiveTab} />
 
       {/* ── Bot Header Strip — always visible regardless of tab ── */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-4">
+      <BracketFrame className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-4" glow>
         {isLoading ? (
           <div className="animate-pulse flex items-center gap-4 w-full">
             <div className="h-6 w-40 bg-zinc-800 rounded" />
@@ -2372,7 +2373,7 @@ export default function BotDetailPage() {
           <>
             {/* Name + status */}
             <div className="flex items-center gap-2 min-w-0">
-              <h1 className="text-base font-bold text-white truncate">
+              <h1 className="text-base font-bold text-white truncate font-mono tracking-wide">
                 {meta?.displayName ?? displayName(botName)}
               </h1>
               <span
@@ -2444,14 +2445,14 @@ export default function BotDetailPage() {
             )}
           </>
         )}
-      </div>
+      </BracketFrame>
 
       {/* Overview tab */}
       {activeTab === "overview" && (
         <div className="space-y-6">
           {/* Open Positions */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-zinc-300 mb-4">Open Positions</h2>
+            <SectionLabel as="h2" className="mb-4">Open Positions</SectionLabel>
             {isLoading ? (
               <div className="animate-pulse space-y-2">
                 {[0, 1, 2].map((i) => <div key={i} className="h-10 bg-zinc-800 rounded" />)}
@@ -2585,7 +2586,7 @@ export default function BotDetailPage() {
 
             {/* RIGHT — Equity Curve */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
-              <h2 className="text-sm font-semibold text-zinc-300">Equity Curve</h2>
+              <SectionLabel as="h2">Equity Curve</SectionLabel>
               {equityCurve.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center min-h-[180px]">
                   <p className="text-zinc-600 text-sm text-center px-4 leading-relaxed">
@@ -2668,7 +2669,7 @@ export default function BotDetailPage() {
 
           {/* Bot Info — full width */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
-              <h2 className="text-sm font-semibold text-zinc-300">Bot Info</h2>
+              <SectionLabel as="h2">Bot Info</SectionLabel>
 
               {/* Description + asset class */}
               <div className="flex items-start gap-3">
@@ -2728,7 +2729,7 @@ export default function BotDetailPage() {
 
           {/* Activity feed below grid */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <h2 className="text-sm font-semibold text-zinc-300 mb-4">Recent Signals</h2>
+            <SectionLabel as="h2" className="mb-4">Recent Signals</SectionLabel>
             {signals.length === 0 ? (
               <p className="text-zinc-600 text-sm py-4 text-center">No signals fired today. Next scan at market open (9:30am ET).</p>
             ) : (
