@@ -16,11 +16,13 @@ export async function fetchBars(
   symbol: string,
   timeframe = "1Day",
   indicators?: string,
-  start?: string
+  start?: string,
+  limit?: number,
 ): Promise<BarsResponse> {
-  const params: Record<string, string> = { timeframe };
+  const params: Record<string, string> = { timeframe, adjustment: "split" };
   if (indicators) params.indicators = indicators;
   if (start) params.start = start;
+  if (limit) params.limit = String(limit);
   const { data } = await client.get<BarsResponse>(`/bars/${symbol}`, { params });
   return data;
 }
