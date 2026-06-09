@@ -12,8 +12,8 @@ universe:
             ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD,
             DOGE/USD, SHIB/USD]
 
-scan_timeframe: "15m"
-scan_lookback_bars: 500
+scan_timeframe: "5m"
+scan_lookback_bars: 200
 cadence: "*/5 * * * *"
 
 watchlist:
@@ -31,9 +31,12 @@ strategies:
   - crypto_quant_momentum_trigger
   - crypto_quant_volume_zscore_spike
   - crypto_quant_range_break_retest
+  - crypto_quant_orderflow_imbalance
+  - crypto_quant_funding_rate_arb
+  - crypto_quant_donchian_breakout_5m
 
 ensemble: any_above_threshold
-confidence_threshold: 0.55
+confidence_threshold: 0.45
 
 # Anti-overfit: if 3+ signals fire same symbol same scan, require higher conf
 anti_overfit_multi_signal_conf: 0.65
@@ -43,9 +46,12 @@ anti_correlation_top_n: 3
 
 # Confidence-weighted size multipliers
 size_bands:
+  - min: 0.45
+    max: 0.55
+    multiplier: 0.4
   - min: 0.55
     max: 0.65
-    multiplier: 0.5
+    multiplier: 0.7
   - min: 0.65
     max: 0.75
     multiplier: 1.0
@@ -53,22 +59,22 @@ size_bands:
     max: 1.0
     multiplier: 1.5
 
-position_cap: 8
-position_size_pct: 0.5         # per-trade risk pct of sub-account
+position_cap: 12
+position_size_pct: 0.4         # per-trade risk pct of sub-account
 stop_loss_pct: 1.5
 take_profit_pct: 3.0
 trailing_stop_activate_at_pct: 1.5
 trailing_stop_distance_pct: 0.75
 hold_max_hours: 8
 
-cooldown_minutes: 10
+cooldown_minutes: 3
 
 # Tier-specific position limits (% of sub-account)
 tier_limits:
   tier_a_max_pct: 25
   tier_b_max_pct: 10
   tier_c_max_pct: 10
-  tier_d_max_pct: 5   # DOGE/SHIB meme coins
+  tier_d_max_pct: 5
 
 risk_overlay:
   daily_loss_limit_pct: 3.0
@@ -79,7 +85,7 @@ risk_overlay:
   consecutive_loss_halt_at: 8
   portfolio_drawdown_circuit_pct: 5.0
   pdt_enforce: false
-  weekend_confidence_boost: 0.05   # threshold +0.05 on weekends
+  weekend_confidence_boost: 0.05
 
 execution:
   order_type: market
@@ -90,10 +96,8 @@ execution:
   use_brackets: true
 
 discord:
-  channel: "quant-signals"
+  channel: quant-signals
   eod_summary_cron: "55 23 * * *"
 
 paper_only: true
-starting_balance_cents: 10000000   # $100,000
-discord:
-  channel: quant-signals
+starting_capital_cents: 4000000   # $40k

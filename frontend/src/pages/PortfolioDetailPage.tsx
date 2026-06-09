@@ -69,6 +69,9 @@ const BOT_META: Record<string, { displayName: string; description: string }> = {
   crypto_onchain:     { displayName: "Crypto OnChain",      description: "On-chain flow — large wallet moves, DEX volume anomalies, L2 bridge activity" },
   options_income:     { displayName: "Options Income",      description: "Wheel, covered calls, CSPs, iron condors" },
   options_directional:{ displayName: "Options Directional", description: "Credit spreads, debit spreads, LEAPS" },
+  crypto_quant_aggressive:   { displayName: "Quant Aggressive",    description: "8-strategy quant stack, 5m bars, 20-coin universe" },
+  crypto_quant_scalper:      { displayName: "Quant Scalper",       description: "1m scalping, 5-strategy ensemble, liquid majors only" },
+  crypto_quant_mean_reversion: { displayName: "Quant Mean Reversion", description: "5m mean-reversion, 6-strategy fade stack, mid-cap alts" },
 };
 
 function resolveDisplayName(name: string, fromApi?: string): string {

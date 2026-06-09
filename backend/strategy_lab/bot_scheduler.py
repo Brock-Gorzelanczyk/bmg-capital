@@ -334,6 +334,36 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
+    # crypto_quant_scalper: every 1 min, 24/7
+    # 1m scalper — tight R/R, liquid majors only.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: run_bot_profile("crypto_quant_scalper"),
+        CronTrigger(minute="*/1"),
+        id="bot_crypto_quant_scalper",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=120,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
+    # crypto_quant_mean_reversion: every 3 min, 24/7
+    # 5m mean-reversion bot — 4h holds, wider stops.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: run_bot_profile("crypto_quant_mean_reversion"),
+        CronTrigger(minute="*/3"),
+        id="bot_crypto_quant_mean_reversion",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=180,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
     # Public Discord daily digest: 4:30 PM ET weekdays + midnight UTC (crypto)
     # ------------------------------------------------------------------
     def _discord_daily_digest():
