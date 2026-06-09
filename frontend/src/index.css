@@ -42,6 +42,24 @@
     --font-sans:    'Geist', system-ui, sans-serif;
     --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
     --font-mono:    'Geist Mono', ui-monospace, monospace;
+
+    /* ── BMG green identity tokens (hero sections, login, admin) ── */
+    --bmg-green:        #4ade80;
+    --bmg-green-glow:   rgba(74,222,128,0.4);
+    --bmg-green-dim:    rgba(74,222,128,0.15);
+    --bmg-green-border: rgba(74,222,128,0.3);
+    --bmg-bg-base:      #0a0d0a;
+    --bmg-bg-card:      #111511;
+    --bmg-bg-input:     #0f130f;
+    --bmg-text:         #e8efe8;
+    --bmg-text-muted:   #8a948a;
+    --bmg-text-label:   #6b756b;
+    --bmg-red:          #ef4444;
+    --bmg-red-glow:     rgba(239,68,68,0.4);
+
+    /* effects */
+    --glow-md:  0 0 16px var(--bmg-green-glow);
+    --glow-sm:  0 0 8px  var(--bmg-green-glow);
   }
 }
 

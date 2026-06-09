@@ -76,6 +76,14 @@ export default {
           brand:   "#BEF264",
           gold:    "#F59E0B",
         },
+
+        // BMG green identity tokens (hero / sci-fi design language)
+        "bmg-green": {
+          DEFAULT: "#4ade80",
+          glow:    "rgba(74,222,128,0.4)",
+          dim:     "rgba(74,222,128,0.15)",
+          border:  "rgba(74,222,128,0.3)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
