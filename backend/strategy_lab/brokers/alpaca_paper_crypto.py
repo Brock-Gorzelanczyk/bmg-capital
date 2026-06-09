@@ -23,8 +23,8 @@ class PaperCryptoAdapter(BrokerAdapter):
     """BrokerAdapter backed by the Alpaca paper trading endpoint for crypto."""
 
     def __init__(self) -> None:
-        self._api_key = os.getenv("ALPACA_PAPER_KEY", "")
-        self._secret = os.getenv("ALPACA_PAPER_SECRET", "")
+        self._api_key = os.getenv("ALPACA_PAPER_KEY") or os.getenv("ALPACA_API_KEY", "")
+        self._secret = os.getenv("ALPACA_PAPER_SECRET") or os.getenv("ALPACA_SECRET_KEY", "")
         self._headers = {
             "APCA-API-KEY-ID": self._api_key,
             "APCA-API-SECRET-KEY": self._secret,

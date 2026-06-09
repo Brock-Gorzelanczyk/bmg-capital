@@ -1286,7 +1286,9 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     #    a 10-second network timeout on every signal (which starves the scheduler).
     equity = 0.0
     broker = None
-    _has_paper_creds = bool(os.getenv("ALPACA_PAPER_KEY", "").strip())
+    _has_paper_creds = bool(
+        (os.getenv("ALPACA_PAPER_KEY") or os.getenv("ALPACA_API_KEY", "")).strip()
+    )
     if _has_paper_creds:
         try:
             from strategy_lab.core.execution import get_broker

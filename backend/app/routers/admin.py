@@ -515,13 +515,16 @@ def alpaca_ping(
     import urllib.request as _ur
     import json as _json
 
-    key = _os.getenv("ALPACA_PAPER_KEY", "")
-    secret = _os.getenv("ALPACA_PAPER_SECRET", "")
+    key = _os.getenv("ALPACA_PAPER_KEY") or _os.getenv("ALPACA_API_KEY", "")
+    secret = _os.getenv("ALPACA_PAPER_SECRET") or _os.getenv("ALPACA_SECRET_KEY", "")
 
     if not key or not secret:
         return {
             "ok": False,
-            "error": "ALPACA_PAPER_KEY or ALPACA_PAPER_SECRET not set in Railway environment",
+            "error": (
+                "No Alpaca credentials found. Set ALPACA_PAPER_KEY + ALPACA_PAPER_SECRET "
+                "or ALPACA_API_KEY + ALPACA_SECRET_KEY in Railway environment."
+            ),
             "key_set": bool(key),
             "secret_set": bool(secret),
         }
