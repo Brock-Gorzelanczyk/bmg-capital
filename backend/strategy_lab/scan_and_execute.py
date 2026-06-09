@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import traceback as _tb
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -158,6 +158,11 @@ def scan_and_execute(
     default_size = float(profile.get("position_size_pct", 5.0))
     cooldown_min = float(profile.get("cooldown_minutes", 0))
 
+    logger.warning(
+        "[cooldown-config] %s cooldown_minutes=%.0f position_cap=%s",
+        profile_name, cooldown_min, profile.get("position_cap", 999),
+    )
+
     from strategy_lab.core.audit import log_signal
     from strategy_lab.core.signals import Signal
     from app.db.models.bots import BotPosition as _BotPos, BotSignal as _BSig
@@ -166,33 +171,47 @@ def scan_and_execute(
         alloc_persisted = 0
         alloc_executed = 0
 
-        # ── Cooldown: one query fetches all (symbol, side) fired within window ──
+        # ── Cooldown: compare naive utcnow() vs naive ts column ───────────────
         on_cooldown: set = set()
         if cooldown_min > 0 and results:
-            from datetime import timedelta
-            _cutoff = datetime.now(timezone.utc) - timedelta(minutes=cooldown_min)
+            _cutoff = datetime.utcnow() - timedelta(minutes=cooldown_min)
             _recent = db.query(_BSig.symbol, _BSig.side).filter(
                 _BSig.allocation_id == alloc.id,
                 _BSig.ts >= _cutoff,
             ).all()
             on_cooldown = {(row.symbol, row.side) for row in _recent}
+            if on_cooldown:
+                logger.warning(
+                    "[cooldown] %s alloc=%d: %d symbol/side pairs still on cooldown",
+                    profile_name, alloc.id, len(on_cooldown),
+                )
 
-        # ── Position cap: one query per allocation ────────────────────────────
+        # ── Position cap: slots-remaining approach ────────────────────────────
         position_cap = int(profile.get("position_cap", 999))
         alloc_open = (
             db.query(_BotPos)
             .filter(_BotPos.allocation_id == alloc.id, _BotPos.closed_at.is_(None))
             .count()
         )
-        execute_blocked = alloc_open >= position_cap
-        if execute_blocked:
+        slots_remaining = max(0, position_cap - alloc_open)
+        if slots_remaining == 0:
             logger.warning(
-                "[guardrail] %s alloc=%d blocked: open_positions=%d >= position_cap=%d",
+                "[position-cap] %s alloc=%d full: %d/%d positions open",
                 profile_name, alloc.id, alloc_open, position_cap,
             )
 
+        # Sort buy signals by confidence desc so highest-conviction trades fill slots first
+        buy_signals = sorted(
+            [r for r in results if r["side"] in ("buy",) and r["confidence"] >= threshold],
+            key=lambda r: -r["confidence"],
+        )
+        sell_signals = [r for r in results if r["side"] in ("sell", "short", "cover") and r["confidence"] >= threshold]
+        # Sells don't consume open-position slots; only buys do
+        ordered_results = buy_signals + sell_signals
+
         # ── Per-signal: persist then execute ─────────────────────────────────
-        for r in results:
+        for r in ordered_results:
+            # confidence already filtered in ordered_results, but guard sell signals
             if r["confidence"] < threshold:
                 continue
 
@@ -251,6 +270,8 @@ def scan_and_execute(
                     )
                     alloc_persisted += 1
                     signals_persisted += 1
+                    # Self-update cooldown set so later signals in this same scan are blocked
+                    on_cooldown.add((r["symbol"], r["side"]))
                 except Exception as _pe:
                     persist_errors.append({
                         "symbol": r["symbol"],
@@ -261,8 +282,15 @@ def scan_and_execute(
                     logger.error("[scan:%s] persist FAILED %s/%s: %s",
                                  profile_name, r["symbol"], r["strategy"], _pe, exc_info=True)
 
-            # Execute
-            if execute and r["side"] in ("buy", "sell") and not execute_blocked:
+            # Execute — buys consume a slot; sells/covers don't open new positions
+            is_buy = r["side"] == "buy"
+            if is_buy and slots_remaining <= 0:
+                logger.warning(
+                    "[position-cap] %s %s skipped: no slots left (%d/%d open)",
+                    profile_name, r["symbol"], alloc_open, position_cap,
+                )
+                continue
+            if execute and r["side"] in ("buy", "sell"):
                 try:
                     sig2 = Signal(
                         symbol=r["symbol"],
@@ -284,6 +312,9 @@ def scan_and_execute(
                     )
                     alloc_executed += 1
                     trades_executed += 1
+                    if is_buy:
+                        slots_remaining -= 1
+                        alloc_open += 1
                     # Mark signal as executed — Discord worker requires executed_at IS NOT NULL
                     if signal_id is not None:
                         _sig_row = db.get(_BSig, signal_id)

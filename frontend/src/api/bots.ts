@@ -267,7 +267,7 @@ export const activateAllBots = (): Promise<{ ok: boolean; total_profiles: number
 export interface StrategyPortfolio {
   id: number;
   name: string;
-  asset_class: "stocks" | "crypto" | "options";
+  asset_class: "stocks" | "crypto" | "options" | "quant";
   emoji: string;
   color_hex: string;
   starting_capital_cents: number;

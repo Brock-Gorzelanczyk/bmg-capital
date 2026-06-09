@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import SymbolChartDrawer from "@/components/ui/SymbolChartDrawer";
+import AllocationDonut from "@/components/ui/AllocationDonut";
 import { toast } from "sonner";
 import {
   getBots,
@@ -525,6 +526,13 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
     retry: 0,
   });
 
+  const { data: portsData } = useQuery({
+    queryKey: ["strategy-portfolios"],
+    queryFn: getPortfolios,
+    staleTime: 60_000,
+    retry: 0,
+  });
+
   const { data: rawWatchlists } = useQuery<CrossBotWatchlistItem[]>({
     queryKey: ["cross-bot-watchlist"],
     queryFn: getCrossBotWatchlist,
@@ -605,6 +613,19 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
           </div>
         ))}
       </div>
+
+      {/* Allocation donut */}
+      {(portsData?.portfolios ?? []).length > 0 && (
+        <div className="pt-3 border-t border-zinc-800">
+          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Capital Allocation</p>
+          <AllocationDonut
+            totalCents={p?.total_value_cents ?? (portsData?.portfolios ?? []).reduce((s, port) => s + port.current_value_cents, 0)}
+            slices={[
+              ...(portsData?.portfolios ?? []).map((port) => ({ key: port.asset_class, value_cents: port.current_value_cents })),
+            ]}
+          />
+        </div>
+      )}
 
       {/* Open Positions — replaces equity curve until we have multi-day history */}
       <OpenPositionsPanel />

@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, Layers, Activity, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, Layers, Activity } from "lucide-react";
 import { getStrategyLabPortfolio, getPortfolios } from "@/api/bots";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
+import AllocationDonut from "@/components/ui/AllocationDonut";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -133,6 +134,18 @@ export default function Portfolio() {
             </div>
           </div>
         </div>
+
+        {/* Allocation donut */}
+        {portfolios.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 mb-8">
+            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Capital Allocation</p>
+            <AllocationDonut
+              totalCents={totalValue}
+              slices={portfolios.map((port: any) => ({ key: port.asset_class, value_cents: port.current_value_cents ?? 0 }))}
+              size={160}
+            />
+          </div>
+        )}
 
         {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
