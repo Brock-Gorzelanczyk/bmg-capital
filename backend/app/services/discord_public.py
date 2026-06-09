@@ -20,12 +20,34 @@ Env vars (DISCORD_CH_* names match Railway config):
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+_channel_log_done = False
+
+
+def _log_channel_config() -> None:
+    """Log resolved Discord channel IDs once at startup for env-var diagnosis."""
+    global _channel_log_done
+    if _channel_log_done:
+        return
+    _channel_log_done = True
+    cfg = _cfg()
+    ch_all     = cfg.discord_ch_all_signals     or cfg.discord_channel_all_signals
+    ch_stocks  = cfg.discord_ch_stocks_signals  or cfg.discord_channel_stocks
+    ch_crypto  = cfg.discord_ch_crypto_signals  or cfg.discord_channel_crypto
+    ch_options = cfg.discord_ch_options_signals or cfg.discord_channel_options
+    ch_quant   = cfg.discord_ch_quant_signals   or os.getenv("BMG_QUANT_SIGNALS_CHANNEL_ID", "")
+    logger.warning(
+        "[discord-channels] all=%s stocks=%s crypto=%s options=%s quant=%s",
+        ch_all or "MISSING", ch_stocks or "MISSING", ch_crypto or "MISSING",
+        ch_options or "MISSING", ch_quant or "MISSING",
+    )
 
 COMPLIANCE_FOOTER = "Paper trading. Not investment advice. Not a registered investment adviser."
 
@@ -67,7 +89,7 @@ def _channel_ids_for_bot(bot_name: str) -> list[str]:
     ch_stocks  = cfg.discord_ch_stocks_signals  or cfg.discord_channel_stocks
     ch_crypto  = cfg.discord_ch_crypto_signals  or cfg.discord_channel_crypto
     ch_options = cfg.discord_ch_options_signals or cfg.discord_channel_options
-    ch_quant   = cfg.discord_ch_quant_signals
+    ch_quant   = cfg.discord_ch_quant_signals or os.getenv("BMG_QUANT_SIGNALS_CHANNEL_ID", "")
 
     if bot_name in _QUANT_BOTS and not ch_quant:
         logger.warning(
@@ -182,6 +204,8 @@ def post_signal(signal: dict, db=None, signal_id: Optional[int] = None) -> None:
     cfg = _cfg()
     if not cfg.discord_bot_token:
         return
+
+    _log_channel_config()
 
     # Skip if the Node.js worker already posted this signal.
     if db is not None and signal_id is not None:

@@ -248,6 +248,24 @@ def scan_and_execute(
             # even if persist later fails (unconditional, outside the try-block)
             on_cooldown.add(_cd_key)
 
+            # Concurrent-scan dedup: if two scans start at nearly the same time
+            # they both read an empty cooldown set. A 60-second DB check catches
+            # that race before we persist a duplicate signal.
+            if persist:
+                _dedup_cutoff = datetime.utcnow() - timedelta(seconds=60)
+                _dup_sig = db.query(_BSig.id).filter(
+                    _BSig.allocation_id == alloc.id,
+                    _BSig.symbol == r["symbol"],
+                    _BSig.side == r["side"],
+                    _BSig.ts >= _dedup_cutoff,
+                ).first()
+                if _dup_sig:
+                    logger.warning(
+                        "[dedup-guard] %s %s/%s — duplicate within 60s (existing id=%d), skipping",
+                        profile_name, r["symbol"], r["side"], _dup_sig[0],
+                    )
+                    continue
+
             # Persist
             signal_id: Optional[int] = None
             if persist:

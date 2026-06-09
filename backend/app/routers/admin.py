@@ -578,4 +578,48 @@ def system_health(
     except Exception as exc:
         result["scheduler"] = {"error": str(exc)}
 
+
+# ── POST /api/admin/positions/dedupe-by-symbol-bot ───────────────────────────
+
+@router.post("/positions/dedupe-by-symbol-bot")
+def dedupe_positions_by_symbol_bot(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Quarantine duplicate open positions — keeps the newest per (allocation_id, symbol).
+
+    Run this after the same-scan dedup fix lands to clean up any duplicates
+    created by the now-fixed concurrent-scan race condition.
+    """
+    from app.db.models.bots import BotPosition
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    open_positions = (
+        db.query(BotPosition)
+        .filter(BotPosition.closed_at.is_(None), BotPosition.quarantined_at.is_(None))
+        .order_by(BotPosition.allocation_id, BotPosition.symbol, BotPosition.opened_at.desc())
+        .all()
+    )
+
+    seen: set = set()
+    to_quarantine = []
+    for pos in open_positions:
+        key = (pos.allocation_id, pos.symbol)
+        if key in seen:
+            to_quarantine.append(pos)
+        else:
+            seen.add(key)
+
+    for pos in to_quarantine:
+        pos.quarantined_at = now
+        pos.quarantine_reason = "dedupe_duplicate_open_position"
+    db.commit()
+
+    return {
+        "ok": True,
+        "positions_quarantined": len(to_quarantine),
+        "unique_positions_kept": len(seen),
+    }
+
     return result
