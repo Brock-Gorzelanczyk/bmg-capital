@@ -1,5 +1,5 @@
 import { EmbedBuilder, TextChannel } from "discord.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDiscordClient } from "./client.js";
 import { db, botSignals } from "./db.js";
 
@@ -51,22 +51,28 @@ export type SignalInput = {
 };
 
 const BOT_DISPLAY: Record<string, string> = {
-  stock_swing:          "Stock Swing",
-  stock_day:            "Stock Day",
-  stock_lt:             "Stock Long-Term",
-  crypto_swing:         "Crypto Swing",
-  crypto_day:           "Crypto Day",
-  crypto_lt:            "Crypto Long-Term",
-  crypto_onchain:            "Crypto On-Chain",
-  crypto_quant_aggressive:   "Crypto Quant Aggressive",
-  options_income:            "Options Income",
-  options_directional:  "Options Directional",
+  stock_swing:                  "Stock Swing",
+  stock_day:                    "Stock Day",
+  stock_lt:                     "Stock Long-Term",
+  crypto_swing:                 "Crypto Swing",
+  crypto_day:                   "Crypto Day",
+  crypto_lt:                    "Crypto Long-Term",
+  crypto_onchain:               "Crypto On-Chain",
+  crypto_quant_aggressive:      "Crypto Quant Aggressive",
+  crypto_quant_scalper:         "Crypto Quant Scalper",
+  crypto_quant_mean_reversion:  "Crypto Quant Mean Reversion",
+  options_income:               "Options Income",
+  options_directional:          "Options Directional",
 };
 
 const STOCKS_BOTS  = new Set(["stock_swing", "stock_day", "stock_lt"]);
 const CRYPTO_BOTS  = new Set(["crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"]);
 const OPTIONS_BOTS = new Set(["options_income", "options_directional"]);
-const QUANT_BOTS   = new Set(["crypto_quant_aggressive"]);
+const QUANT_BOTS   = new Set([
+  "crypto_quant_aggressive",
+  "crypto_quant_scalper",
+  "crypto_quant_mean_reversion",
+]);
 
 function channelIdsForBot(botProfile: string): string[] {
   const ids: string[] = [];
@@ -91,7 +97,7 @@ function sideEmoji(side: string): string {
   return "⚪";
 }
 
-// Simple in-process rate limiter: 5 messages per 5 seconds per channel.
+// In-process rate limiter: max 5 messages per 5 seconds per channel (Discord burst limit).
 const _lastSends: Map<string, number[]> = new Map();
 async function rateLimit(channelId: string): Promise<void> {
   const now = Date.now();
@@ -106,14 +112,64 @@ async function rateLimit(channelId: string): Promise<void> {
   _lastSends.set(channelId, sends);
 }
 
+// Per-minute per-channel hard cap: drop signals that would exceed 5/min.
+const _perMinuteSends: Map<string, number[]> = new Map();
+function perMinuteCheck(channelId: string): boolean {
+  const now = Date.now();
+  const window = 60_000;
+  const max = 5;
+  const sends = (_perMinuteSends.get(channelId) ?? []).filter(t => now - t < window);
+  if (sends.length >= max) return false; // drop
+  sends.push(now);
+  _perMinuteSends.set(channelId, sends);
+  return true;
+}
+
+// Content dedup: skip if same (bot, symbol, strategy) was posted within 5 minutes.
+const _recentKeys: Map<string, number> = new Map();
+const DEDUP_WINDOW_MS = 5 * 60 * 1000;
+function isDuplicate(signal: SignalInput): boolean {
+  const key = `${signal.botProfile}|${signal.symbol}|${signal.strategy}`;
+  const last = _recentKeys.get(key);
+  if (last && Date.now() - last < DEDUP_WINDOW_MS) return true;
+  _recentKeys.set(key, Date.now());
+  return false;
+}
+
 export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
+  // ── Step 1: Atomic claim ─────────────────────────────────────────────────────
+  // UPDATE with WHERE claimed_at IS NULL (and discord_posted_at IS NULL) is
+  // atomic in PostgreSQL — exactly one concurrent worker will get RETURNING rows.
+  // Also reclaims signals whose previous worker crashed (claimed_at > 2 min ago).
+  let claimed: unknown[];
   try {
-    // Deduplication: skip if already posted.
-    const existing = await db.query.botSignals.findFirst({
-      where: eq(botSignals.id, signal.signalId),
-      columns: { discordPostedAt: true },
-    });
-    if (existing?.discordPostedAt) return;
+    claimed = await db.execute(sql`
+      UPDATE bot_signals
+      SET claimed_at = NOW()
+      WHERE id = ${signal.signalId}
+        AND discord_posted_at IS NULL
+        AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL '2 minutes')
+      RETURNING id
+    `);
+  } catch (claimErr) {
+    console.error(`[discord] claim failed for signal ${signal.signalId}:`, claimErr);
+    return;
+  }
+  if (!claimed.length) {
+    // Another worker claimed it or it was already posted.
+    return;
+  }
+
+  // ── Step 2: Build + send embed ───────────────────────────────────────────────
+  try {
+    // Content dedup: identical (bot, symbol, strategy) within 5 min → mark posted, skip send.
+    if (isDuplicate(signal)) {
+      console.log(`[discord] dedup skip signal ${signal.signalId} (${signal.symbol} ${signal.side})`);
+      await db.update(botSignals)
+        .set({ discordPostedAt: new Date(), claimedAt: null })
+        .where(eq(botSignals.id, signal.signalId));
+      return;
+    }
 
     const client = await getDiscordClient();
     const color = colorForBot(signal.botProfile);
@@ -122,17 +178,11 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     const entry = signal.entryPrice ?? null;
     const isBuy = signal.side === "buy" || signal.side === "cover";
 
-    // Resolve stop — use DB value or compute 7% default from entry
     let stop = signal.stopLoss ?? null;
-    if (stop == null && entry != null) {
-      stop = isBuy ? entry * 0.93 : entry * 1.07;
-    }
+    if (stop == null && entry != null) stop = isBuy ? entry * 0.93 : entry * 1.07;
 
-    // Resolve target — use DB value or compute 10% default from entry
     let target = signal.takeProfit ?? null;
-    if (target == null && entry != null) {
-      target = isBuy ? entry * 1.10 : entry * 0.90;
-    }
+    if (target == null && entry != null) target = isBuy ? entry * 1.10 : entry * 0.90;
 
     const stopPct   = stop   != null && entry != null ? (stop   - entry) / entry * 100 : null;
     const targetPct = target != null && entry != null ? (target - entry) / entry * 100 : null;
@@ -148,7 +198,7 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
         { name: "Strategy",    value: signal.strategy,                                                                                   inline: true },
         { name: "Confidence",  value: `${(signal.confidence * 100).toFixed(1)}%`,                                                        inline: true },
         { name: "Size",        value: signal.positionSizePct != null ? `${signal.positionSizePct.toFixed(1)}% of portfolio` : "—",        inline: true },
-        { name: "Entry",       value: entry  != null ? `$${fmtPrice(entry)}`                                                         : "—", inline: true },
+        { name: "Entry",       value: entry  != null ? `$${fmtPrice(entry)}`                                                          : "—", inline: true },
         { name: "Stop",        value: stop   != null ? `$${fmtPrice(stop)}${stopPct   != null ? ` (${fmtPct(stopPct)})`   : ""}` : "—", inline: true },
         { name: "Take Profit", value: target != null ? `$${fmtPrice(target)}${targetPct != null ? ` (${fmtPct(targetPct)})` : ""}` : "—", inline: true },
       )
@@ -156,22 +206,36 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
       .setTimestamp(new Date());
 
     const channelIds = channelIdsForBot(signal.botProfile);
+    let sentCount = 0;
     for (const channelId of channelIds) {
+      if (!perMinuteCheck(channelId)) {
+        console.warn(`[discord] rate-limited channel ${channelId} — dropping signal ${signal.signalId}`);
+        continue;
+      }
       await rateLimit(channelId);
       const channel = await client.channels.fetch(channelId);
       if (channel?.isTextBased()) {
         await (channel as TextChannel).send({ embeds: [embed] });
+        sentCount++;
       }
     }
 
-    await db
-      .update(botSignals)
-      .set({ discordPostedAt: new Date() })
+    // ── Step 3: Mark as posted (success path) ──────────────────────────────────
+    await db.update(botSignals)
+      .set({ discordPostedAt: new Date(), claimedAt: null })
       .where(eq(botSignals.id, signal.signalId));
 
-    console.log(`[discord] posted signal ${signal.signalId} (${signal.symbol} ${signal.side})`);
+    console.log(`[discord] posted signal ${signal.signalId} (${signal.symbol} ${signal.side}) to ${sentCount} channel(s)`);
+
   } catch (err) {
-    // Never crash the signal loop — catch and log only.
-    console.error("[discord] failed to post signal", err);
+    // Discord send or DB update failed — release the claim so the signal can retry.
+    console.error(`[discord] failed to post signal ${signal.signalId}:`, err);
+    try {
+      await db.update(botSignals)
+        .set({ claimedAt: null })
+        .where(eq(botSignals.id, signal.signalId));
+    } catch (releaseErr) {
+      console.error(`[discord] failed to release claim for signal ${signal.signalId}:`, releaseErr);
+    }
   }
 }

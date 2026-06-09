@@ -53,10 +53,11 @@ async function runMigrations(): Promise<void> {
       discord_posted_at  TIMESTAMP
     )
   `);
-  // Add is_test column if it doesn't exist (one-time idempotent migration).
-  await db.execute(sql`
-    ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE
-  `);
+  // Idempotent column additions.
+  await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE`);
+  await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS discord_message_id VARCHAR`);
+  // claimed_at: atomic worker lock — prevents concurrent poll loops from double-posting.
+  await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP`);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS bot_daily_pnl (
       id                        SERIAL PRIMARY KEY,
@@ -76,8 +77,15 @@ async function runMigrations(): Promise<void> {
       is_active     BOOLEAN DEFAULT TRUE
     )
   `);
-  // One-time backfill: fill null stop_price / target_price on existing signals
-  // so the embed can always show all three levels. Idempotent — only touches NULL rows.
+  // Migrations tracking table for one-shot ops.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS discord_worker_migrations (
+      name       VARCHAR PRIMARY KEY,
+      applied_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // ── One-time: backfill stop/target on signals missing them ──────────────────
   await db.execute(sql`
     UPDATE bot_signals
     SET
@@ -96,10 +104,48 @@ async function runMigrations(): Promise<void> {
       AND entry_price IS NOT NULL
       AND (stop_price IS NULL OR target_price IS NULL)
   `);
+
+  // ── EMERGENCY: purge the repost loop ────────────────────────────────────────
+  // All signals existing before this fix was deployed have already been spammed.
+  // Mark them as posted so the loop stops immediately on next boot.
+  // Tracked in discord_worker_migrations so it never runs again after this deploy.
+  const purgeRan = await db.execute(sql`
+    SELECT 1 FROM discord_worker_migrations WHERE name = 'purge_repost_loop_2026_06_09'
+  `);
+  if (!purgeRan.length) {
+    const purged = await db.execute(sql`
+      UPDATE bot_signals
+      SET discord_posted_at = NOW()
+      WHERE discord_posted_at IS NULL
+    `);
+    await db.execute(sql`
+      INSERT INTO discord_worker_migrations (name) VALUES ('purge_repost_loop_2026_06_09')
+    `);
+    console.log(`[discord] EMERGENCY PURGE: marked ${(purged as any).count ?? "?"} pending signals as posted`);
+  }
+
   console.log("[discord] migrations complete");
 }
 
+// Guard: prevent setInterval from stacking concurrent pollAndPost invocations.
+// Without this, slow Discord API responses cause 10s poll ticks to overlap, each
+// picking up the same unposted signals before any of them commits discord_posted_at.
+let _isPolling = false;
+
 async function pollAndPost(): Promise<void> {
+  if (_isPolling) {
+    console.log("[discord] poll skipped — previous run still in progress");
+    return;
+  }
+  _isPolling = true;
+  try {
+    await _doPoll();
+  } finally {
+    _isPolling = false;
+  }
+}
+
+async function _doPoll(): Promise<void> {
   try {
     // Find unposted signals — join allocation → profile to get bot name.
     // 48-hour window prevents stale signals from spamming on restart.
@@ -121,9 +167,10 @@ async function pollAndPost(): Promise<void> {
       JOIN bot_allocations ba ON ba.id = bs.allocation_id
       JOIN bot_profiles bp    ON bp.id = ba.profile_id
       WHERE bs.discord_posted_at IS NULL
+        AND (bs.claimed_at IS NULL OR bs.claimed_at < NOW() - INTERVAL '2 minutes')
         AND bs.ts > NOW() - INTERVAL '48 hours'
       ORDER BY bs.ts ASC
-      LIMIT 50
+      LIMIT 20
     `) as {
       id: number;
       symbol: string;

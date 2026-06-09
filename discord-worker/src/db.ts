@@ -38,6 +38,8 @@ export const botSignals = pgTable("bot_signals", {
   stopPrice:      real("stop_price"),
   targetPrice:    real("target_price"),
   discordPostedAt: timestamp("discord_posted_at"),
+  discordMessageId: varchar("discord_message_id"),
+  claimedAt:      timestamp("claimed_at"),
   isTest:          boolean("is_test").default(false),
 });
 
