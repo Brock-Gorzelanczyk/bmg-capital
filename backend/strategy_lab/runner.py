@@ -575,6 +575,39 @@ def run_bot_profile(profile_name: str) -> dict:
 
                     symbol_bars = bars.get(sig.symbol, [])
 
+                    # ── Pre-compute entry price and stop/target so we can persist the
+                    # signal BEFORE execution guards that may skip/continue.  This
+                    # ensures bot_signals is populated even when anomaly/news/coordinator
+                    # blocks the actual trade.
+                    _entry_price = None
+                    if bars.get(sig.symbol):
+                        _last = bars[sig.symbol][-1]
+                        _entry_price = float(_last.get("c") or _last.get("close") or 0) or None
+
+                    stop_info: dict = {}
+                    try:
+                        from strategy_lab.core.expert.smart_stops import compute_stop
+                        if _entry_price and _entry_price > 0:
+                            stop_info = compute_stop(sig.symbol, sig.side, _entry_price, symbol_bars)
+                    except Exception as exc:
+                        logger.warning("[runner:%s] smart_stops failed for %s: %s", profile_name, sig.symbol, exc)
+
+                    # ── Persist signal to bot_signals now (before any execution guard
+                    # that could continue/skip).  Wrapped so a DB error never aborts
+                    # the scan loop.
+                    try:
+                        log_signal(
+                            db, alloc.id, sig,
+                            entry_price=_entry_price,
+                            stop_price=stop_info.get("stop_price"),
+                            target_price=stop_info.get("target_price"),
+                        )
+                    except Exception as _sig_persist_exc:
+                        logger.warning(
+                            "[runner:%s] log_signal failed for %s (non-fatal): %s",
+                            profile_name, sig.symbol, _sig_persist_exc,
+                        )
+
                     # 10a. Anomaly detector — halt on abnormal conditions
                     try:
                         from strategy_lab.core.expert.anomaly_detector import check_for_anomaly
@@ -642,19 +675,7 @@ def run_bot_profile(profile_name: str) -> dict:
                     except Exception as exc:
                         logger.warning("[runner:%s] vol_weighted_sizing failed for %s: %s", profile_name, sig.symbol, exc)
 
-                    # 10f. Smart stop placement
-                    stop_info: dict = {}
-                    try:
-                        from strategy_lab.core.expert.smart_stops import compute_stop
-                        # Use a stub entry price (bars[-1].close or 0) since real fills happen in execution
-                        entry_price = 0.0
-                        if symbol_bars:
-                            last_bar = symbol_bars[-1]
-                            entry_price = float(last_bar.get("c") or last_bar.get("close") or 0)
-                        if entry_price > 0:
-                            stop_info = compute_stop(sig.symbol, sig.side, entry_price, symbol_bars)
-                    except Exception as exc:
-                        logger.warning("[runner:%s] smart_stops failed for %s: %s", profile_name, sig.symbol, exc)
+                    # 10f. (smart_stops already computed above, before signal persist)
 
                     # 10g. Pyramid: enter at 50% of adjusted size
                     final_size_pct = adjusted_size_pct
@@ -686,20 +707,6 @@ def run_bot_profile(profile_name: str) -> dict:
                         )
                     except Exception as exc:
                         logger.warning("[runner:%s] trade_journal failed for %s: %s", profile_name, sig.symbol, exc)
-
-                    # Resolve entry price for Discord embed and DB row
-                    _entry_price = None
-                    if bars.get(sig.symbol):
-                        _last = bars[sig.symbol][-1]
-                        _entry_price = float(_last.get("c") or _last.get("close") or 0) or None
-
-                    # Audit the signal (fires Discord via background thread with dedup)
-                    log_signal(
-                        db, alloc.id, sig,
-                        entry_price=_entry_price,
-                        stop_price=stop_info.get("stop_price"),
-                        target_price=stop_info.get("target_price"),
-                    )
 
                     # 10i-pre. Institutional risk gates (stock_day + stock_swing only)
                     if profile_name in ("stock_day", "stock_swing") and sig.side == "buy":
@@ -866,9 +873,24 @@ def run_bot_profile(profile_name: str) -> dict:
                 for sig in hold_signals:
                     log_signal(db, alloc.id, sig)
 
-            # 11. Update watchlist last_evaluated_at for all symbols scanned this cycle
+            # 11. Update watchlist: score, reasons, and last_evaluated_at
             try:
                 from app.db.models.bots import BotWatchlist
+
+                # Build per-symbol best-confidence map from all strategy outputs.
+                # score = int(best_confidence * 100), capped at 100.
+                _sym_best: dict[str, dict] = {}  # symbol → {confidence, side, strategy}
+                for _strat_idx, _strat_name in enumerate(strategy_names):
+                    if _strat_idx >= len(signals_by_strategy):
+                        break
+                    for _s in (signals_by_strategy[_strat_idx] or []):
+                        if _s.symbol not in _sym_best or _s.confidence > _sym_best[_s.symbol]["confidence"]:
+                            _sym_best[_s.symbol] = {
+                                "confidence": _s.confidence,
+                                "side": _s.side,
+                                "strategy": _s.strategy or _strat_name,
+                            }
+
                 _now_ts = datetime.now(timezone.utc)
                 _wl_rows = (
                     db.query(BotWatchlist)
@@ -880,8 +902,18 @@ def run_bot_profile(profile_name: str) -> dict:
                 )
                 for _wl in _wl_rows:
                     _wl.last_evaluated_at = _now_ts
-                    # Replace placeholder seed reasons with real scan metadata
-                    if _wl.reasons and _wl.reasons.get("seeded") is not None:
+                    _best = _sym_best.get(_wl.symbol)
+                    if _best:
+                        # Update score with real confidence × 100 (int, capped 0-100)
+                        _wl.score = min(100, int(_best["confidence"] * 100))
+                        _wl.reasons = {
+                            _best["strategy"]: {
+                                "confidence": round(_best["confidence"], 4),
+                                "side": _best["side"],
+                            }
+                        }
+                    else:
+                        # Symbol scanned but no signal produced — update metadata only
                         _wl.reasons = {
                             "scanned": 1,
                             "strategies_run": strategies_loaded,
@@ -889,12 +921,13 @@ def run_bot_profile(profile_name: str) -> dict:
                         }
                 if _wl_rows:
                     db.commit()
+                    _updated_with_score = sum(1 for _wl in _wl_rows if _wl.symbol in _sym_best)
                     logger.info(
-                        "[runner:%s] Updated last_evaluated_at for %d watchlist symbols",
-                        profile_name, len(_wl_rows),
+                        "[runner:%s] Watchlist updated: %d rows, %d with real scores",
+                        profile_name, len(_wl_rows), _updated_with_score,
                     )
             except Exception as _wl_exc:
-                logger.warning("[runner:%s] watchlist last_evaluated_at update failed: %s", profile_name, _wl_exc)
+                logger.warning("[runner:%s] watchlist update failed: %s", profile_name, _wl_exc)
 
             # 12. Build and persist audit record
             regime_snapshot = json.dumps(regime, default=str) if regime else "{}"
