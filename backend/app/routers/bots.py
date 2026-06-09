@@ -294,6 +294,10 @@ def _signal_to_dict(s: BotSignal) -> dict:
         "size_hint": s.size_hint,
         "reason": s.reason,
         "strategy": s.strategy,
+        "entry_price": s.entry_price,
+        "stop_price": s.stop_price,
+        "target_price": s.target_price,
+        "discord_posted_at": s.discord_posted_at.isoformat() if s.discord_posted_at else None,
     }
 
 

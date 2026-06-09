@@ -304,6 +304,7 @@ def discord_test_fire(
 def scan_now_verbose(
     name: str,
     persist: bool = Query(False),
+    execute: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
@@ -473,6 +474,72 @@ def scan_now_verbose(
                         name, r["symbol"], _pe, exc_info=True,
                     )
 
+    # ── Optional execute path ─────────────────────────────────────────────────
+    trades_executed = 0
+    execute_errors: list[Dict[str, Any]] = []
+    if execute and results:
+        from strategy_lab.runner import _execute_signal
+        from app.db.models.bots import BotAllocation as _BA2, BotProfile as _BPP2
+        from strategy_lab.core.signals import Signal as _Signal2
+        from datetime import timezone as _tz2
+
+        _bp2 = db.query(_BPP2).filter(_BPP2.name == name).first()
+        _alloc2 = None
+        if _bp2:
+            _alloc2 = (
+                db.query(_BA2)
+                .filter(_BA2.user_id == current_user.id, _BA2.profile_id == _bp2.id)
+                .first()
+            )
+
+        if _alloc2 is None:
+            execute_errors.append({
+                "symbol": "*", "strategy": "*",
+                "error": f"No BotAllocation for user {current_user.id} + bot '{name}'",
+                "traceback": "",
+            })
+        else:
+            threshold = float(profile.get("confidence_threshold", 0.5))
+            default_size = float(profile.get("position_size_pct", 5.0))
+            for r in results:
+                if r["confidence"] < threshold or r["side"] != "buy":
+                    continue
+                try:
+                    sig2 = _Signal2(
+                        symbol=r["symbol"],
+                        side=r["side"],
+                        confidence=r["confidence"],
+                        size_hint=float(r.get("size_hint", 0.1)),
+                        reason=str(r.get("reasons", "")),
+                        strategy=r["strategy"],
+                        ts=__import__("datetime").datetime.now(_tz2.utc),
+                    )
+                    _execute_signal(
+                        db=db,
+                        alloc=_alloc2,
+                        sig=sig2,
+                        final_size_pct=default_size,
+                        profile=profile,
+                        profile_name=name,
+                        bars=bars,
+                    )
+                    trades_executed += 1
+                    logger.info(
+                        "[exec] verbose execute OK %s %s confidence=%.3f",
+                        r["side"], r["symbol"], r["confidence"],
+                    )
+                except Exception as _ee:
+                    execute_errors.append({
+                        "symbol": r["symbol"],
+                        "strategy": r["strategy"],
+                        "error": str(_ee),
+                        "traceback": _tb.format_exc(),
+                    })
+                    logger.error(
+                        "[exec] verbose execute FAILED %s %s: %s",
+                        r["side"], r["symbol"], _ee, exc_info=True,
+                    )
+
     resp: Dict[str, Any] = {
         "bot": name,
         "symbols_scanned": len(symbols),
@@ -485,12 +552,16 @@ def scan_now_verbose(
     if persist:
         resp["signals_persisted"] = signals_persisted
         resp["persist_errors"] = persist_errors
+    if execute:
+        resp["trades_executed"] = trades_executed
+        resp["execute_errors"] = execute_errors
     if bar_error:
         resp["bar_fetch_error"] = bar_error
     logger.info(
-        "scan_now_verbose[%s]: symbols=%d bars=%d strategies=%d signals=%d errors=%d persist=%s persisted=%d",
+        "scan_now_verbose[%s]: symbols=%d bars=%d strategies=%d signals=%d errors=%d "
+        "persist=%s persisted=%d execute=%s trades=%d",
         name, len(symbols), len(bars), strategies_executed, len(results), len(errors),
-        persist, signals_persisted,
+        persist, signals_persisted, execute, trades_executed,
     )
     return resp
 

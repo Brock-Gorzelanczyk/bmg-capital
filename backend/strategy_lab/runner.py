@@ -632,7 +632,7 @@ def run_bot_profile(profile_name: str) -> dict:
                         anomaly = check_for_anomaly(sig.symbol, symbol_bars, alloc.id, db)
                         if anomaly.get("halt"):
                             logger.warning(
-                                "[runner:%s] Anomaly halt for %s: %s",
+                                "[exec] SKIP anomaly_halt %s %s: %s",
                                 profile_name, sig.symbol, anomaly.get("anomaly_type"),
                             )
                             continue  # skip this signal
@@ -644,7 +644,8 @@ def run_bot_profile(profile_name: str) -> dict:
                         from strategy_lab.core.expert.news_stop_adjuster import should_block_new_entries
                         if should_block_new_entries(sig.symbol, db):
                             logger.info(
-                                "[runner:%s] News block on new entry: %s", profile_name, sig.symbol
+                                "[exec] SKIP news_block %s %s",
+                                profile_name, sig.symbol,
                             )
                             continue
                     except Exception as exc:
@@ -660,7 +661,7 @@ def run_bot_profile(profile_name: str) -> dict:
                         )
                         if not coord_result.get("allowed", True):
                             logger.info(
-                                "[runner:%s] Bot coordinator blocked %s: %s",
+                                "[exec] SKIP bot_coordinator %s %s: %s",
                                 profile_name, sig.symbol, coord_result.get("reason"),
                             )
                             continue
@@ -1273,6 +1274,10 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     import os
 
     if sig.side not in ("buy",):
+        logger.info(
+            "[exec] SKIP non-buy side=%s symbol=%s profile=%s — longs only",
+            sig.side, sig.symbol, profile_name,
+        )
         return  # only open long positions for now
 
     from datetime import datetime, timezone
