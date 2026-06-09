@@ -640,3 +640,24 @@ export interface TradeDetail {
 
 export const getTradeDetail = (tradeId: number): Promise<TradeDetail> =>
   client.get<TradeDetail>(`/bots/trade/${tradeId}`).then((r) => r.data);
+
+// ─── Signal feed (Mission Control Activity Feed) ──────────────────────────────
+
+export interface SignalFeedItem {
+  id: number;
+  bot: string;
+  bot_display: string;
+  symbol: string;
+  side: string;
+  strategy: string;
+  confidence: number;
+  reason: string;
+  entry_price: number | null;
+  ts: string | null;
+}
+
+export const getSignalsFeed = (limit = 20): Promise<{ signals: SignalFeedItem[] }> =>
+  client
+    .get<{ signals: SignalFeedItem[] }>("/bots/signals/recent", { params: { limit } })
+    .then((r) => r.data)
+    .catch(() => ({ signals: [] }));

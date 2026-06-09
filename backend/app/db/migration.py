@@ -444,7 +444,52 @@ def run_migrations(engine: Engine) -> None:
         _delete_zombie_signals(conn)
         _scrub_ghost_pnl(conn)
         _quarantine_cooldown_dupe_positions(conn)
+        _assign_quant_bots_to_crypto_portfolio(conn)
         _seed_all_watchlists_from_yaml(conn)
+
+
+def _assign_quant_bots_to_crypto_portfolio(conn) -> None:
+    """Assign quant bot allocations to each user's Crypto portfolio.
+
+    crypto_quant_* bots were created after _migrate_strategy_portfolios ran and
+    have portfolio_id = NULL, so they don't appear on the /portfolio per-bot rows.
+    """
+    MIGRATION_NAME = "bot_allocations.assign_quant_to_crypto_portfolio_2026"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        crypto_ports = conn.execute(text("""
+            SELECT user_id, id FROM strategy_portfolios WHERE asset_class = 'crypto'
+        """)).fetchall()
+
+        quant_names = (
+            "'crypto_quant_aggressive'",
+            "'crypto_quant_scalper'",
+            "'crypto_quant_mean_reversion'",
+        )
+        quant_profiles = conn.execute(text(
+            f"SELECT id FROM bot_profiles WHERE name IN ({', '.join(quant_names)})"
+        )).fetchall()
+        quant_profile_ids = [r[0] for r in quant_profiles]
+
+        updated = 0
+        for user_id, portfolio_id in crypto_ports:
+            for profile_id in quant_profile_ids:
+                r = conn.execute(text("""
+                    UPDATE bot_allocations
+                       SET portfolio_id = :pid,
+                           capital_cents_within_portfolio = COALESCE(starting_capital_cents, 3000000)
+                     WHERE user_id = :uid
+                       AND profile_id = :prid
+                       AND (portfolio_id IS NULL OR portfolio_id != :pid)
+                """), {"pid": portfolio_id, "uid": user_id, "prid": profile_id})
+                updated += r.rowcount
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_assign_quant_bots_to_crypto_portfolio: updated %d rows", updated)
+    except Exception as exc:
+        logger.warning("_assign_quant_bots_to_crypto_portfolio failed: %s", exc)
 
 
 def _seed_all_watchlists_from_yaml(conn) -> None:

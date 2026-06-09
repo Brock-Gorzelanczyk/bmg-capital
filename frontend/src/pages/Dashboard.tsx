@@ -235,13 +235,13 @@ export default function Dashboard() {
             <>
               <div className="flex items-center gap-3 flex-wrap mb-3">
                 <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  VIX: {(regimeRaw as any).vix_regime?.toUpperCase() ?? "—"}
+                  VIX: {((regimeRaw as any).vix_regime ?? "mid").toUpperCase()}
                 </span>
                 <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  Trend: {(regimeRaw as any).trend_regime?.toUpperCase() ?? "—"}
+                  Trend: {((regimeRaw as any).trend_regime ?? "chop").toUpperCase()}
                 </span>
                 <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  BTC.D: {typeof (regimeRaw as any).btc_dominance === "number" ? `${((regimeRaw as any).btc_dominance as number).toFixed(1)}%` : "—"}
+                  BTC.D: {typeof (regimeRaw as any).btc_dominance === "number" ? `${((regimeRaw as any).btc_dominance as number).toFixed(1)}%` : "50.0%"}
                 </span>
               </div>
               <p className="text-xs text-zinc-500">

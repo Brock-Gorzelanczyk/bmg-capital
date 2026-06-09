@@ -745,15 +745,26 @@ def get_cross_bot_positions(
     profile_name_by_id = {p.id: p.name for p in profiles}
     alloc_profile_name = {a.id: profile_name_by_id.get(a.profile_id, str(a.profile_id)) for a in allocations}
 
-    # Load all open positions across every bot
+    # Load all open, non-quarantined positions across every bot
     open_positions = (
         db.query(BotPosition)
         .filter(
             BotPosition.allocation_id.in_(alloc_ids),
             BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
         )
         .all()
     )
+
+    # Batch-fetch live prices for unrealized P&L
+    symbols = list({pos.symbol for pos in open_positions})
+    live_prices: dict = {}
+    if symbols:
+        try:
+            from app.services.live_prices import fetch_live_prices
+            live_prices = fetch_live_prices(symbols)
+        except Exception:
+            pass
 
     # Aggregate by symbol
     by_symbol: dict[str, dict] = {}
@@ -765,8 +776,72 @@ def get_cross_bot_positions(
         by_symbol[sym]["total_qty"] += pos.qty
         if bot_name not in by_symbol[sym]["bots_holding"]:
             by_symbol[sym]["bots_holding"].append(bot_name)
+        # Unrealized P&L from live prices
+        if pos.avg_cost_cents and pos.qty:
+            current = live_prices.get(sym)
+            if current:
+                by_symbol[sym]["pnl"] += (current - pos.avg_cost_cents / 100.0) * pos.qty
 
     return sorted(by_symbol.values(), key=lambda x: x["symbol"])
+
+
+# ── GET /api/bots/signals/recent ─────────────────────────────────────────────
+
+_BOT_DISPLAY_NAMES = {
+    "stock_swing": "Stock Swing", "stock_day": "Stock Day",
+    "stock_lt": "Stock Long-Term", "crypto_swing": "Crypto Swing",
+    "crypto_day": "Crypto Day", "crypto_lt": "Crypto Long-Term",
+    "crypto_onchain": "Crypto On-Chain",
+    "crypto_quant_aggressive": "Crypto Quant Aggressive",
+    "crypto_quant_scalper": "Crypto Quant Scalper",
+    "crypto_quant_mean_reversion": "Crypto Quant Mean Reversion",
+    "options_income": "Options Income", "options_directional": "Options Directional",
+}
+
+
+@router.get("/signals/recent")
+def get_signals_recent(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Last N bot signals across all of the user's allocations, newest first.
+    Used by Mission Control Activity Feed."""
+    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == current_user.id).all()
+    alloc_ids = [a.id for a in allocs]
+    if not alloc_ids:
+        return {"signals": []}
+
+    profile_ids = list({a.profile_id for a in allocs})
+    profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+    profile_map = {p.id: p.name for p in profiles}
+    alloc_to_profile = {a.id: profile_map.get(a.profile_id, "") for a in allocs}
+
+    sigs = (
+        db.query(BotSignal)
+        .filter(BotSignal.allocation_id.in_(alloc_ids))
+        .order_by(BotSignal.ts.desc())
+        .limit(max(1, min(100, limit)))
+        .all()
+    )
+
+    return {
+        "signals": [
+            {
+                "id": s.id,
+                "bot": alloc_to_profile.get(s.allocation_id, ""),
+                "bot_display": _BOT_DISPLAY_NAMES.get(alloc_to_profile.get(s.allocation_id, ""), ""),
+                "symbol": s.symbol,
+                "side": s.side,
+                "strategy": s.strategy or "",
+                "confidence": round(float(s.confidence), 4) if s.confidence else 0.0,
+                "reason": s.reason or "",
+                "entry_price": s.entry_price,
+                "ts": s.ts.isoformat() if hasattr(s.ts, "isoformat") else str(s.ts) if s.ts else None,
+            }
+            for s in sigs
+        ]
+    }
 
 
 # ── GET /api/bots/cross-bot-watchlist ────────────────────────────────────────

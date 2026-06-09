@@ -245,15 +245,18 @@ function formatRelativeAgo(ts: string | null): string {
 
 // ─── Side badge ───────────────────────────────────────────────────────────────
 
-function SideBadge({ side }: { side: "buy" | "sell" | "hold" }) {
-  const styles = {
-    buy: "bg-lime-500/15 text-lime-400 border-lime-500/30",
-    sell: "bg-red-500/15 text-red-400 border-red-500/30",
-    hold: "bg-zinc-800 text-zinc-400 border-zinc-700",
-  };
+function SideBadge({ side }: { side: string }) {
+  const isLong = side === "buy" || side === "long";
+  const isShort = side === "sell" || side === "short";
+  const label = isLong ? "LONG" : isShort ? "SHORT" : side.toUpperCase();
+  const style = isLong
+    ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+    : isShort
+    ? "bg-red-500/15 text-red-400 border-red-500/30"
+    : "bg-zinc-800 text-zinc-400 border-zinc-700";
   return (
-    <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", styles[side])}>
-      {side.toUpperCase()}
+    <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", style)}>
+      {label}
     </span>
   );
 }
@@ -854,11 +857,11 @@ function StrategyBlock({ strat }: { strat: StrategyTrace }) {
             {fired && strat.side && (
               <span className={cn(
                 "text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none",
-                strat.side === "buy"
+                strat.side === "buy" || strat.side === "long"
                   ? "bg-lime-500/20 text-lime-400 border border-lime-500/30"
                   : "bg-orange-500/20 text-orange-400 border border-orange-500/30",
               )}>
-                {strat.side.toUpperCase()}
+                {strat.side === "buy" || strat.side === "long" ? "LONG" : strat.side === "sell" || strat.side === "short" ? "SHORT" : strat.side.toUpperCase()}
               </span>
             )}
           </div>
@@ -1708,13 +1711,13 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
                   {item.side && (
                     <span className={cn(
                       "text-xs font-bold px-2 py-0.5 rounded-full border",
-                      item.side === "buy"
+                      item.side === "buy" || item.side === "long"
                         ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
-                        : item.side === "sell"
+                        : item.side === "sell" || item.side === "short"
                         ? "bg-red-500/15 text-red-400 border-red-500/30"
                         : "bg-zinc-800 text-zinc-400 border-zinc-700"
                     )}>
-                      {item.side.toUpperCase()}
+                      {item.side === "buy" || item.side === "long" ? "LONG" : item.side === "sell" || item.side === "short" ? "SHORT" : item.side.toUpperCase()}
                     </span>
                   )}
                   {isFill && item.qty != null && item.fill_price != null ? (
@@ -1983,8 +1986,8 @@ function StrategiesTab({
                 <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Last Signal</p>
                 {lastSignal ? (
                   <p className="text-xs font-semibold mt-0.5">
-                    <span className={lastSignal.side === "buy" ? "text-lime-400" : "text-red-400"}>
-                      {lastSignal.side.toUpperCase()}
+                    <span className={lastSignal.side === "buy" || lastSignal.side === "long" ? "text-lime-400" : "text-red-400"}>
+                      {lastSignal.side === "buy" || lastSignal.side === "long" ? "LONG" : lastSignal.side === "sell" || lastSignal.side === "short" ? "SHORT" : lastSignal.side.toUpperCase()}
                     </span>
                     <span className="text-zinc-500 ml-1">{lastSignal.symbol}</span>
                   </p>

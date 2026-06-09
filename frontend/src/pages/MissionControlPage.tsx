@@ -18,6 +18,7 @@ import {
   type AutonomousAction,
   type AutonomousGuardrail,
 } from "@/api/autonomous";
+import { getSignalsFeed, type SignalFeedItem } from "@/api/bots";
 import client from "@/api/client";
 import { formatCurrency, timeAgo, cn } from "@/lib/utils";
 import type { PaperAccount } from "@/api/paper";
@@ -167,6 +168,53 @@ function ActionCard({
       {action.rationale && (
         <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
           {action.rationale}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Real bot-signal feed card ────────────────────────────────────────────────
+
+function SignalFeedCard({ sig, isNew }: { sig: SignalFeedItem; isNew: boolean }) {
+  const isLong = sig.side === "buy" || sig.side === "long";
+  const isShort = sig.side === "sell" || sig.side === "short";
+  const direction = isLong ? "LONG" : isShort ? "SHORT" : sig.side.toUpperCase();
+  const arrow = isLong ? "🟢" : "🔴";
+  const confPct = sig.confidence ? `${(sig.confidence * 100).toFixed(1)}%` : null;
+  return (
+    <div
+      className={cn(
+        "border border-[var(--border-subtle)] rounded-xl p-3 border-l-4 transition-all duration-400",
+        isLong ? "border-l-lime-500/60" : isShort ? "border-l-red-500/60" : "border-l-zinc-600",
+        isNew && "animate-feed-in"
+      )}
+      style={isNew ? { boxShadow: "0 0 0 1px #84cc16", animation: "feedIn 400ms ease forwards" } : undefined}
+    >
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-base">{arrow}</span>
+          <span className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wide">
+            {direction} {sig.symbol}
+          </span>
+          {sig.bot_display && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated-2)] text-[var(--text-tertiary)] font-medium">
+              {sig.bot_display}
+            </span>
+          )}
+          <span className="text-[10px] text-[var(--text-tertiary)]">
+            {sig.ts ? timeAgo(sig.ts) : "—"}
+          </span>
+        </div>
+        {confPct && (
+          <span className="text-[10px] font-bold text-[var(--text-secondary)]">{confPct}</span>
+        )}
+      </div>
+      {(sig.strategy || sig.reason) && (
+        <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed truncate">
+          {sig.strategy && <span className="font-medium text-[var(--text-primary)]">{sig.strategy}</span>}
+          {sig.strategy && sig.reason && " · "}
+          {sig.reason && <span className="text-[var(--text-tertiary)]">{sig.reason}</span>}
         </p>
       )}
     </div>
@@ -375,6 +423,12 @@ export default function MissionControlPage() {
   const { data: feedData, refetch: refetchFeed } = useQuery({
     queryKey: ["autonomous-feed"],
     queryFn: getActionsFeed,
+    refetchInterval: 15_000,
+  });
+
+  const { data: signalFeedData, refetch: refetchSignals } = useQuery({
+    queryKey: ["bot-signals-feed"],
+    queryFn: () => getSignalsFeed(20),
     refetchInterval: 15_000,
   });
 
@@ -958,32 +1012,20 @@ export default function MissionControlPage() {
           </div>
 
           <div className="space-y-2">
-            {actions.length === 0 ? (
+            {(signalFeedData?.signals ?? []).length === 0 ? (
               <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">
-                No actions recorded yet
+                No signals yet — bots will post here when they fire
               </div>
             ) : (
-              actions.map(action => (
-                <ActionCard
-                  key={action.id}
-                  action={action}
-                  isNew={newIds.has(action.id)}
+              (signalFeedData?.signals ?? []).map(sig => (
+                <SignalFeedCard
+                  key={sig.id}
+                  sig={sig}
+                  isNew={false}
                 />
               ))
             )}
           </div>
-
-          {!extendedActions && (feedData?.actions ?? []).length >= 20 && (
-            <div className="text-center mt-4">
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="px-5 py-2 rounded-lg border border-[var(--border-subtle)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors disabled:opacity-50"
-              >
-                {loadingMore ? "Loading…" : "Load more"}
-              </button>
-            </div>
-          )}
         </div>
 
         {/* ── GUARDRAIL PANEL ──────────────────────────────────────────────── */}

@@ -29,7 +29,7 @@ function TradingViewWidget({ symbol, interval = "D", theme = "dark" }: Props) {
     script.src =
       "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
     script.async = true;
-    script.innerHTML = JSON.stringify({
+    script.textContent = JSON.stringify({
       autosize: true,
       symbol,
       interval,
