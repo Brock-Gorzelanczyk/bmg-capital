@@ -41,15 +41,17 @@ BOT_DISPLAY = {
     "crypto_day":                "Crypto Day",
     "crypto_lt":                 "Crypto Long-Term",
     "crypto_onchain":            "Crypto On-Chain",
-    "crypto_quant_aggressive":   "Crypto Quant Aggressive",
-    "options_income":            "Options Income",
+    "crypto_quant_aggressive":      "Crypto Quant Aggressive",
+    "crypto_quant_scalper":         "Crypto Quant Scalper",
+    "crypto_quant_mean_reversion":  "Crypto Quant Mean Reversion",
+    "options_income":               "Options Income",
     "options_directional":       "Options Directional",
 }
 
 _STOCKS_BOTS  = {"stock_swing", "stock_day", "stock_lt"}
 _CRYPTO_BOTS  = {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"}
 _OPTIONS_BOTS = {"options_income", "options_directional"}
-_QUANT_BOTS   = {"crypto_quant_aggressive"}
+_QUANT_BOTS   = {"crypto_quant_aggressive", "crypto_quant_scalper", "crypto_quant_mean_reversion"}
 
 
 def _cfg():
@@ -82,30 +84,66 @@ def _channel_ids_for_bot(bot_name: str) -> list[str]:
     return list(dict.fromkeys(channels))
 
 
+def _fmt_price(price: float) -> str:
+    abs_p = abs(price)
+    if abs_p >= 1000: return f"${price:,.2f}"
+    if abs_p >= 1:    return f"${price:.4f}"
+    if abs_p >= 0.01: return f"${price:.5f}"
+    return f"${price:.8f}"
+
+
+def _fmt_qty(qty: float, symbol: str) -> str:
+    base = symbol.split("/")[0] if "/" in symbol else symbol
+    abs_q = abs(qty)
+    if abs_q >= 100_000: return f"{qty:.0f} {base}"
+    if abs_q >= 100:     return f"{qty:.2f} {base}"
+    if abs_q >= 1:       return f"{qty:.4f} {base}"
+    return f"{qty:.8f} {base}"
+
+
 def _build_signal_embed(signal: dict) -> dict:
     bot    = signal.get("bot", "")
     symbol = signal.get("symbol", "")
-    side   = (signal.get("side") or "").upper()
-    arrow  = "🟢" if side == "BUY" else ("🔴" if side == "SELL" else "🟡")
-    color  = _COLOR_BUY if side == "BUY" else (_COLOR_SELL if side == "SELL" else _COLOR_REBALANCE)
+    raw_side = (signal.get("side") or "buy").lower()
+    is_buy   = raw_side in ("buy", "cover")
+    direction = "LONG" if is_buy else "SHORT"
+    arrow  = "🟢" if is_buy else "🔴"
+    color  = _COLOR_BUY if is_buy else _COLOR_SELL
     conf_pct = round((signal.get("confidence") or 0) * 100, 1)
 
+    # Compute dollar amount + qty from starting capital + size hint
+    size_pct   = signal.get("size_pct")          # already a percent (e.g. 0.3)
+    cap_cents  = signal.get("starting_capital_cents")
+    entry      = signal.get("price")
+    if size_pct is not None and cap_cents is not None and cap_cents > 0:
+        invested = (cap_cents / 100) * (size_pct / 100)
+        qty      = invested / entry if entry and entry > 0 else None
+        dollar_label = "Invested" if is_buy else "Notional"
+        size_value = (
+            f"${invested:,.2f} / {_fmt_qty(qty, symbol)}"
+            if qty is not None
+            else f"${invested:,.2f}"
+        )
+    else:
+        dollar_label = "Size"
+        size_value = f"{size_pct:.1f}%" if size_pct is not None else "—"
+
     fields = [
-        {"name": "Strategy",   "value": signal.get("strategy") or "—", "inline": True},
-        {"name": "Confidence", "value": f"{conf_pct}%",                "inline": True},
+        {"name": "Strategy",    "value": signal.get("strategy") or "—", "inline": True},
+        {"name": "Direction",   "value": direction,                      "inline": True},
+        {"name": "Confidence",  "value": f"{conf_pct}%",                 "inline": True},
+        {"name": dollar_label,  "value": size_value,                     "inline": True},
     ]
-    if signal.get("size_pct") is not None:
-        fields.append({"name": "Size",   "value": f"{signal['size_pct']:.1f}%",   "inline": True})
-    if signal.get("price") is not None:
-        fields.append({"name": "Entry",  "value": f"${signal['price']:,.2f}",     "inline": True})
+    if entry is not None:
+        fields.append({"name": "Entry",       "value": _fmt_price(entry),              "inline": True})
     if signal.get("stop") is not None:
-        fields.append({"name": "Stop",   "value": f"${signal['stop']:,.2f}",      "inline": True})
+        fields.append({"name": "Stop",        "value": _fmt_price(signal["stop"]),     "inline": True})
     if signal.get("target") is not None:
-        fields.append({"name": "Target", "value": f"${signal['target']:,.2f}",    "inline": True})
+        fields.append({"name": "Take Profit", "value": _fmt_price(signal["target"]),   "inline": True})
 
     return {
         "author": {"name": f"{BOT_DISPLAY.get(bot, bot)} bot"},
-        "title":  f"{arrow} {side} {symbol}",
+        "title":  f"{arrow} {direction} {symbol}",
         "description": (signal.get("reason") or "")[:2000],
         "color":  color,
         "fields": fields,

@@ -182,16 +182,17 @@ def log_signal(
     ).start()
 
     signal_dict = {
-        "bot":        profile_name,
-        "symbol":     signal.symbol,
-        "side":       signal.side,
-        "confidence": signal.confidence,
-        "reason":     signal.reason or "",
-        "strategy":   signal.strategy or "",
-        "size_pct":   round(signal.size_hint * 100, 1) if signal.size_hint else None,
-        "price":      entry_price or None,
-        "stop":       stop_price or None,
-        "target":     target_price or None,
+        "bot":                    profile_name,
+        "symbol":                 signal.symbol,
+        "side":                   signal.side,
+        "confidence":             signal.confidence,
+        "reason":                 signal.reason or "",
+        "strategy":               signal.strategy or "",
+        "size_pct":               round(signal.size_hint * 100, 1) if signal.size_hint else None,
+        "price":                  entry_price or None,
+        "stop":                   stop_price or None,
+        "target":                 target_price or None,
+        "starting_capital_cents": _starting_capital_cents,
     }
 
     threading.Thread(
