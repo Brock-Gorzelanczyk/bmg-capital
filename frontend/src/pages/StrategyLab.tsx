@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { BracketFrame, SectionLabel } from "@/components/design";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import SymbolChartDrawer from "@/components/ui/SymbolChartDrawer";
@@ -315,7 +316,7 @@ function OpenPositionsPanel() {
     <div className="pt-3 border-t border-zinc-800">
       {/* Header row */}
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Open Positions</p>
+        <SectionLabel as="p">Open Positions</SectionLabel>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortKey)}
@@ -562,12 +563,10 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
 
   return (
     <>
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
+    <BracketFrame className="rounded-2xl p-6 space-y-5 bg-zinc-900 border border-zinc-800" glow>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-          Strategy Lab Portfolio
-        </h2>
+        <SectionLabel as="h2">Strategy Lab Portfolio</SectionLabel>
         <span className="text-[10px] text-zinc-700">Live · refreshes every 60 s</span>
       </div>
 
@@ -641,7 +640,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
         if (slices.length === 0) return null;
         return (
           <div className="pt-3 border-t border-zinc-800">
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Capital Allocation</p>
+            <SectionLabel as="p" className="mb-3">Capital Allocation</SectionLabel>
             <AllocationDonut totalCents={totalCents} slices={slices} />
           </div>
         );
@@ -652,7 +651,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
 
       {/* Leaderboard */}
       <div className="pt-3 border-t border-zinc-800">
-        <p className="text-xs font-semibold text-zinc-400 mb-3">Bot Leaderboard — ranked by 30d return</p>
+        <SectionLabel as="p" className="mb-3">Bot Leaderboard</SectionLabel>
         <div className="space-y-1.5">
           {(p?.leaderboard ?? []).map((entry) => {
             const ret30 = entry.return_30d_pct ?? null;
@@ -689,9 +688,9 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
 
       {/* Watchlist */}
       <div ref={tabSectionRef} className="pt-3 border-t border-zinc-800">
-        <p className="text-xs font-semibold text-zinc-400 mb-3">
+        <SectionLabel as="p" className="mb-3">
           Watchlist — {watchlistItems.length} name{watchlistItems.length !== 1 ? "s" : ""}
-        </p>
+        </SectionLabel>
         {watchlistItems.length === 0 ? (
           <p className="text-zinc-600 text-xs py-3 text-center">Watchlist rebuilds at 8:30am ET. Check back after market open.</p>
         ) : (
@@ -711,7 +710,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
           </div>
         )}
       </div>
-    </div>
+    </BracketFrame>
     <SymbolChartDrawer symbol={chartSymbol} onClose={() => setChartSymbol(null)} />
     </>
   );
