@@ -239,9 +239,15 @@ async def get_summary(
     if cached is not None:
         return cached
 
-    all_trades = db.execute(
-        select(StrategyTrade).where(StrategyTrade.user_id == current_user.id)
-    ).scalars().all()
+    try:
+        all_trades = db.execute(
+            select(StrategyTrade).where(StrategyTrade.user_id == current_user.id)
+        ).scalars().all()
+    except Exception as _qe:
+        logger.warning("[strategy:summary] db query failed: %s", _qe)
+        db.rollback()
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail="Database unavailable, try again") from _qe
 
     open_trades = [t for t in all_trades if t.status == "open"]
     open_syms = [t.symbol for t in open_trades]

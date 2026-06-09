@@ -199,7 +199,7 @@ def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1h", limit: int = 5
             try:
                 df = yf.download(yf_sym, period=yf_period, interval=yf_interval, progress=False, auto_adjust=True)
                 if df.empty:
-                    logger.debug(f"[crypto] yfinance empty for {sym} (as {yf_sym})")
+                    logger.warning("[crypto] yfinance empty for %s (as %s)", sym, yf_sym)
                     continue
                 if hasattr(df.columns, "levels"):
                     df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df.columns]
@@ -208,9 +208,9 @@ def _fetch_crypto_bars(symbols: List[str], timeframe: str = "1h", limit: int = 5
                 if "close" not in df.columns:
                     continue
                 bars[sym] = df
-                logger.debug(f"[crypto] yfinance: {len(df)} bars for {sym}")
+                logger.warning("[crypto] yfinance: %d bars for %s", len(df), sym)
             except Exception as e:
-                logger.debug(f"[crypto] yfinance failed for {sym}: {e}")
+                logger.warning("[crypto] yfinance failed for %s: %s", sym, e)
 
     logger.info(f"[crypto] _fetch_crypto_bars: {len(bars)}/{len(symbols)} symbols returned data")
     return bars

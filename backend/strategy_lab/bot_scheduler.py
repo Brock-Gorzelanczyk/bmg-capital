@@ -27,13 +27,23 @@ def _run_bot_position_monitor(bot_name: str) -> None:
 
 def _run_and_log(profile_name: str) -> None:
     """Thin wrapper so APScheduler job invocations appear in Railway logs."""
-    logger.info("[startup] job fired: run_bot_profile(%s)", profile_name)
+    logger.warning("[scheduled] %s scan START", profile_name)
+    from app.db.session import SessionLocal
+    from strategy_lab.scan_and_execute import scan_and_execute
+    db = SessionLocal()
     try:
-        from strategy_lab.runner import run_bot_profile
-        result = run_bot_profile(profile_name)
-        logger.info("[startup] job done: run_bot_profile(%s) → %s", profile_name, result)
+        result = scan_and_execute(profile_name, db, persist=True, execute=True)
+        logger.warning(
+            "[scheduled] %s scan DONE — signals=%d trades=%d errors=%d",
+            profile_name,
+            result.get("signals_generated", 0),
+            result.get("trades_executed", 0),
+            len(result.get("errors", [])),
+        )
     except Exception as exc:
-        logger.error("[startup] job FAILED: run_bot_profile(%s): %s", profile_name, exc, exc_info=True)
+        logger.error("[scheduled] %s FAILED: %s", profile_name, exc, exc_info=True)
+    finally:
+        db.close()
 
 
 def setup_bot_scheduler(scheduler) -> None:
@@ -45,7 +55,7 @@ def setup_bot_scheduler(scheduler) -> None:
       crypto_swing — every 4 hours (24/7)
       crypto_lt    — Monday 10:00 AM UTC (weekly DCA)
     """
-    logger.info("[startup] setup_bot_scheduler called — registering bot jobs")
+    logger.warning("[startup-trace] setup_bot_scheduler called — registering bot jobs")
     from strategy_lab.runner import run_bot_profile
 
     # ------------------------------------------------------------------
@@ -286,6 +296,7 @@ def setup_bot_scheduler(scheduler) -> None:
         misfire_grace_time=300,
         coalesce=True,
     )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_aggressive (*/5 min, fires immediately)")
 
     # ------------------------------------------------------------------
     # crypto_quant_aggressive: end-of-day summary to #quant-signals at 23:55 UTC
@@ -359,6 +370,7 @@ def setup_bot_scheduler(scheduler) -> None:
         misfire_grace_time=120,
         coalesce=True,
     )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_scalper (*/1 min, fires immediately)")
 
     # ------------------------------------------------------------------
     # crypto_quant_mean_reversion: every 3 min, 24/7
@@ -374,6 +386,7 @@ def setup_bot_scheduler(scheduler) -> None:
         misfire_grace_time=180,
         coalesce=True,
     )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_mean_reversion (*/3 min, fires immediately)")
 
     # ------------------------------------------------------------------
     # Public Discord daily digest: 4:30 PM ET weekdays + midnight UTC (crypto)
@@ -506,10 +519,9 @@ def setup_bot_scheduler(scheduler) -> None:
         replace_existing=True,
     )
 
-    logger.info(
-        "strategy_lab: bot scheduler registered (stock_swing, stock_day, stock_lt[weekly], "
-        "crypto_swing, crypto_day, crypto_lt, crypto_onchain, crypto_quant_aggressive, "
-        "options_income, options_directional, "
-        "stock_day_position_monitor, stock_swing_position_monitor, "
-        "discord_digest, discord_leaderboard, daily_briefing_email, dead_mans_switch)"
+    logger.warning(
+        "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
+        "crypto_swing crypto_day crypto_lt crypto_onchain "
+        "crypto_quant_aggressive crypto_quant_scalper crypto_quant_mean_reversion "
+        "options_income options_directional position_monitor dead_mans_switch"
     )

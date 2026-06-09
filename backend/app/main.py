@@ -166,8 +166,10 @@ async def lifespan(app: FastAPI):
     setup_scheduler()
     from app.routers.monitoring import setup_monitoring_scheduler
     setup_monitoring_scheduler(scheduler)
+    logger.warning("[startup-trace] calling setup_bot_scheduler")
     from strategy_lab.bot_scheduler import setup_bot_scheduler
     setup_bot_scheduler(scheduler)
+    logger.warning("[startup-trace] setup_bot_scheduler returned")
     from app.services.onchain_ingest import setup_onchain_scheduler
     setup_onchain_scheduler(scheduler)
     scheduler.start()
