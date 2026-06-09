@@ -127,6 +127,25 @@ async function runMigrations(): Promise<void> {
     console.log(`[discord] EMERGENCY PURGE: marked ${(purged as any).count ?? "?"} pending signals as posted`);
   }
 
+  // Schema verification — log all bot_signals columns so boot logs confirm the schema.
+  try {
+    const cols = await db.execute(sql`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'bot_signals'
+      ORDER BY ordinal_position
+    `) as { column_name: string }[];
+    const colNames = cols.map((c: { column_name: string }) => c.column_name).join(",");
+    console.warn(`[worker-boot] bot_signals columns: ${colNames}`);
+    const required = ["executed_at", "claimed_at", "discord_message_id", "discord_posted_at"];
+    const missing = required.filter(r => !colNames.includes(r));
+    if (missing.length > 0) {
+      console.error(`[worker-boot] MISSING COLUMNS: ${missing.join(",")} — schema migration may have failed`);
+    }
+  } catch (schemaErr) {
+    console.error("[worker-boot] schema check failed:", schemaErr);
+  }
+
   console.log("[discord] migrations complete");
 }
 
