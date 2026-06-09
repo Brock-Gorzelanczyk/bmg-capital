@@ -35,7 +35,7 @@ class BotAllocation(Base):
     go_live_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     paused_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    starting_capital_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    starting_capital_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=10_000_000)
     # snapshot of paper balance at activation, used for all-time return calc
     card_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # per-user per-bot display preferences:

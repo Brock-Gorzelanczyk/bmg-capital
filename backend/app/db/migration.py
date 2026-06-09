@@ -438,6 +438,7 @@ def run_migrations(engine: Engine) -> None:
         _add_trade_provenance_trigger(conn)
         _reenable_options_bots(conn)
         _backfill_onchain_starting_capital(conn)
+        _fix_quant_bot_capitals(conn)
         _delete_zombie_signals(conn)
 
 
@@ -1316,6 +1317,64 @@ def _backfill_onchain_starting_capital(conn) -> None:
         logger.info("_backfill_onchain_starting_capital: updated %d rows", result.rowcount)
     except Exception as exc:
         logger.warning("_backfill_onchain_starting_capital failed: %s", exc)
+
+
+def _fix_quant_bot_capitals(conn) -> None:
+    """Set correct starting_capital_cents for the three quant bots (40/30/30 split = $100k).
+
+    Phase 2 deploy created crypto_quant_scalper and crypto_quant_mean_reversion with
+    NULL starting_capital_cents (seeded after _backfill_onchain_starting_capital ran).
+    crypto_quant_aggressive was also still at $100k instead of the spec's $40k.
+    Also seeds bot_health rows so /health endpoints don't 500 before first scan.
+    """
+    MIGRATION_NAME = "fix_quant_bot_capitals_40_30_30_split"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        # 1. crypto_quant_scalper → $30k
+        # 2. crypto_quant_mean_reversion → $30k
+        conn.execute(text(
+            """
+            UPDATE bot_allocations
+               SET starting_capital_cents = 3000000
+             WHERE profile_id IN (
+               SELECT id FROM bot_profiles
+                WHERE name IN ('crypto_quant_scalper', 'crypto_quant_mean_reversion')
+             )
+            """
+        ))
+
+        # 3. crypto_quant_aggressive → $40k (was $100k default)
+        conn.execute(text(
+            """
+            UPDATE bot_allocations
+               SET starting_capital_cents = 4000000
+             WHERE profile_id IN (
+               SELECT id FROM bot_profiles
+                WHERE name = 'crypto_quant_aggressive'
+             )
+            """
+        ))
+
+        # 4. Seed bot_health rows for new bots so /health doesn't 500 before first scan
+        conn.execute(text(
+            """
+            INSERT INTO bot_health (allocation_id, date, heartbeat_ok, paused_by_health)
+            SELECT a.id, CURRENT_TIMESTAMP, 1, 0
+              FROM bot_allocations a
+              JOIN bot_profiles p ON p.id = a.profile_id
+             WHERE p.name IN ('crypto_quant_scalper', 'crypto_quant_mean_reversion')
+               AND NOT EXISTS (
+                 SELECT 1 FROM bot_health bh WHERE bh.allocation_id = a.id
+               )
+            """
+        ))
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_fix_quant_bot_capitals: 40/30/30 split applied, bot_health rows seeded")
+    except Exception as exc:
+        logger.warning("_fix_quant_bot_capitals failed: %s", exc)
 
 
 def _delete_zombie_signals(conn) -> None:
