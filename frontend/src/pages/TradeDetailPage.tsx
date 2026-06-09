@@ -80,7 +80,7 @@ function ChartLegend({ entry, stop, takeProfit, exitPrice, livePrice, status }: 
     rows.push({ dot: "bg-amber-400", label: "Exit", price: exitPrice });
   }
   if (nowPrice != null) {
-    rows.push({ dot: nowAbove ? "bg-green-300" : "bg-red-300", label: status === "open" ? "Now" : "", price: nowPrice });
+    rows.push({ dot: "bg-cyan-400", label: status === "open" ? "Now" : "", price: nowPrice });
   }
 
   return (
@@ -153,9 +153,12 @@ function TradeChartSection({ symbol, entryPrice, entryTime, side, qty, stopLoss,
             </span>
           )}
           {status === "open" && livePrice != null && (
-            <span className={cn("flex items-center gap-1.5", livePrice >= entryPrice ? "text-green-300" : "text-red-300")}>
-              <span className={cn("w-3 h-0.5 rounded inline-block", livePrice >= entryPrice ? "bg-green-300" : "bg-red-300")} />
-              Now {fmt$(livePrice, gd)}
+            <span className="flex items-center gap-1.5 text-cyan-400">
+              <span className="w-3 h-0.5 bg-cyan-400 rounded inline-block" style={{ borderTop: "2px dashed #06b6d4", background: "none", height: 0 }} />
+              Now {fmt$(livePrice, gd)}{" "}
+              <span className={livePrice >= entryPrice ? "text-emerald-400" : "text-red-400"}>
+                ({fmtPct(livePrice, entryPrice)})
+              </span>
             </span>
           )}
         </div>
@@ -307,7 +310,10 @@ export default function TradeDetailPage() {
     staleTime: 0,
     enabled: !!priceSymbol && trade?.status === "open",
   });
-  const livePrice = (trade?.status === "open" ? (prices?.[priceSymbol] ?? null) : null);
+  // Backend normalizes LINK-USD → LINK/USD in its response keys, so check both.
+  const livePrice = (trade?.status === "open"
+    ? (prices?.[priceSymbol] ?? prices?.[trade?.symbol ?? ""] ?? null)
+    : null);
 
   if (isLoading) {
     return (

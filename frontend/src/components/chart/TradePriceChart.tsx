@@ -177,15 +177,14 @@ export default function TradePriceChart({
       });
     }
 
-    // Live NOW line — created now, updated imperatively when livePrice changes
+    // Live NOW line — dashed cyan so it stands out from entry(blue)/stop(red)/target(green)
     const nowPriceInitial = livePriceRef.current ?? entryPrice;
-    const nowAboveEntry = nowPriceInitial >= entryPrice;
     const nowPct = entryPrice > 0 ? ((nowPriceInitial - entryPrice) / entryPrice) * 100 : 0;
     const nowLine = candles.createPriceLine({
       price: nowPriceInitial,
-      color: nowAboveEntry ? "#86efac" : "#fca5a5",
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
+      color: "#06b6d4",
+      lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
       axisLabelVisible: livePriceRef.current != null,
       title: livePriceRef.current != null
         ? `NOW  $${nowPriceInitial.toFixed(precision)} (${nowPct >= 0 ? "+" : ""}${nowPct.toFixed(2)}%)`
@@ -279,7 +278,7 @@ export default function TradePriceChart({
     try {
       line.applyOptions({
         price: livePrice,
-        color: aboveEntry ? "#86efac" : "#fca5a5",
+        color: "#06b6d4",
         axisLabelVisible: true,
         title: `NOW  $${livePrice.toFixed(prec)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`,
       });
