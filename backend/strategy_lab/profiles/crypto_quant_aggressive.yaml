@@ -101,3 +101,6 @@ discord:
 
 paper_only: true
 starting_capital_cents: 4000000   # $40k
+
+# Bypass anomaly/news/bot_coordinator execution guards so scheduled scans execute.
+skip_execution_guards: true

@@ -564,6 +564,14 @@ def run_bot_profile(profile_name: str) -> dict:
                     if sig.side == "hold":
                         continue
 
+                    # Long-only filter: crypto/quant paper brokers have no short mechanism.
+                    if sig.side == "sell" and asset_class in ("crypto", "crypto_intraday", "quant"):
+                        logger.debug(
+                            "[runner:%s] SKIP sell %s (long-only asset_class=%s)",
+                            profile_name, sig.symbol, asset_class,
+                        )
+                        continue
+
                     # 10-pre. Extended-hours session filter (equities only).
                     # Only applies when the profile has execution.extended_hours: true.
                     _ext_hours_cfg = profile.get("execution", {})
@@ -606,6 +614,15 @@ def run_bot_profile(profile_name: str) -> dict:
                     except Exception as exc:
                         logger.warning("[runner:%s] smart_stops failed for %s: %s", profile_name, sig.symbol, exc)
 
+                    # Fallback: profile stop_loss_pct / take_profit_pct when smart_stops returned nothing
+                    if not stop_info.get("stop_price") and _entry_price and _entry_price > 0:
+                        _sl_pct = float(profile.get("stop_loss_pct", 7.0)) / 100
+                        _tp_pct = float(profile.get("take_profit_pct", 15.0)) / 100
+                        stop_info = {
+                            "stop_price": round(_entry_price * (1 - _sl_pct), 6),
+                            "target_price": round(_entry_price * (1 + _tp_pct), 6),
+                        }
+
                     # ── Persist signal to bot_signals now (before any execution guard
                     # that could continue/skip).  Wrapped so a DB error never aborts
                     # the scan loop.
@@ -626,16 +643,24 @@ def run_bot_profile(profile_name: str) -> dict:
                             profile_name, sig.side, sig.symbol, exc_info=True,
                         )
 
+                    # skip_execution_guards: true in YAML bypasses anomaly/news/coordinator blocks.
+                    _skip_guards = profile.get("skip_execution_guards", False)
+
                     # 10a. Anomaly detector — halt on abnormal conditions
                     try:
                         from strategy_lab.core.expert.anomaly_detector import check_for_anomaly
                         anomaly = check_for_anomaly(sig.symbol, symbol_bars, alloc.id, db)
-                        if anomaly.get("halt"):
+                        if anomaly.get("halt") and not _skip_guards:
                             logger.warning(
                                 "[exec] SKIP anomaly_halt %s %s: %s",
                                 profile_name, sig.symbol, anomaly.get("anomaly_type"),
                             )
                             continue  # skip this signal
+                        elif anomaly.get("halt"):
+                            logger.info(
+                                "[exec] guard_bypassed anomaly_halt %s %s (skip_execution_guards=true)",
+                                profile_name, sig.symbol,
+                            )
                     except Exception as exc:
                         logger.warning("[runner:%s] anomaly_detector failed for %s: %s", profile_name, sig.symbol, exc)
 
@@ -643,11 +668,17 @@ def run_bot_profile(profile_name: str) -> dict:
                     try:
                         from strategy_lab.core.expert.news_stop_adjuster import should_block_new_entries
                         if should_block_new_entries(sig.symbol, db):
-                            logger.info(
-                                "[exec] SKIP news_block %s %s",
-                                profile_name, sig.symbol,
-                            )
-                            continue
+                            if not _skip_guards:
+                                logger.info(
+                                    "[exec] SKIP news_block %s %s",
+                                    profile_name, sig.symbol,
+                                )
+                                continue
+                            else:
+                                logger.info(
+                                    "[exec] guard_bypassed news_block %s %s (skip_execution_guards=true)",
+                                    profile_name, sig.symbol,
+                                )
                     except Exception as exc:
                         logger.warning("[runner:%s] news_stop_adjuster failed for %s: %s", profile_name, sig.symbol, exc)
 
@@ -660,11 +691,17 @@ def run_bot_profile(profile_name: str) -> dict:
                             sig.side, adjusted_size_pct, db,
                         )
                         if not coord_result.get("allowed", True):
-                            logger.info(
-                                "[exec] SKIP bot_coordinator %s %s: %s",
-                                profile_name, sig.symbol, coord_result.get("reason"),
-                            )
-                            continue
+                            if not _skip_guards:
+                                logger.info(
+                                    "[exec] SKIP bot_coordinator %s %s: %s",
+                                    profile_name, sig.symbol, coord_result.get("reason"),
+                                )
+                                continue
+                            else:
+                                logger.info(
+                                    "[exec] guard_bypassed bot_coordinator %s %s: %s (skip_execution_guards=true)",
+                                    profile_name, sig.symbol, coord_result.get("reason"),
+                                )
                         adjusted_size_pct = coord_result.get("adjusted_size_pct", adjusted_size_pct)
                     except Exception as exc:
                         logger.warning("[runner:%s] bot_coordinator failed for %s: %s", profile_name, sig.symbol, exc)
@@ -1408,6 +1445,10 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         and profile.get("execution", {}).get("extended_hours")
         and _current_et_session() != "regular"
     )
+    # order_id stays None when broker is unavailable or submit fails — the DB rows
+    # are still created as a simulated paper fill.  alpaca_order_id=null in bot_trades
+    # is the expected state when Alpaca paper creds are present but the API rejects the
+    # order (e.g. market closed for crypto doesn't exist, but position sizing edge cases).
     order_id: str | None = None
     if broker is not None:
         try:

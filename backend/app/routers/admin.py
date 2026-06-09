@@ -456,7 +456,35 @@ def scan_now_verbose(
                         strategy=r["strategy"],
                         ts=__import__("datetime").datetime.now(_tz.utc),
                     )
-                    log_signal(db, _alloc.id, sig)
+                    # Compute entry_price from latest bar close
+                    _ep = None
+                    _sym_bars = bars.get(sig.symbol, [])
+                    if _sym_bars:
+                        _last = _sym_bars[-1]
+                        _ep = float(_last.get("c") or _last.get("close") or 0) or None
+
+                    # Compute stop/target — try smart_stops first, fall back to profile pcts
+                    _stop_info: dict = {}
+                    if _ep and _ep > 0:
+                        try:
+                            from strategy_lab.core.expert.smart_stops import compute_stop
+                            _stop_info = compute_stop(sig.symbol, sig.side, _ep, _sym_bars) or {}
+                        except Exception:
+                            pass
+                        if not _stop_info.get("stop_price"):
+                            _sl = float(profile.get("stop_loss_pct", 7.0)) / 100
+                            _tp = float(profile.get("take_profit_pct", 15.0)) / 100
+                            _stop_info = {
+                                "stop_price": round(_ep * (1 - _sl), 6),
+                                "target_price": round(_ep * (1 + _tp), 6),
+                            }
+
+                    log_signal(
+                        db, _alloc.id, sig,
+                        entry_price=_ep,
+                        stop_price=_stop_info.get("stop_price"),
+                        target_price=_stop_info.get("target_price"),
+                    )
                     signals_persisted += 1
                     logger.info(
                         "[scan-verbose-persist] %s/%s(%s) → persisted, confidence=%.3f",
@@ -624,6 +652,74 @@ def alpaca_ping(
             "error": str(exc),
             "key_prefix": key[:8] + "..." if len(key) > 8 else "(short)",
         }
+
+
+# ── POST /api/admin/bots/scrub-ghost-pnl ─────────────────────────────────────
+
+@router.post("/bots/scrub-ghost-pnl")
+def scrub_ghost_pnl(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Delete stale/phantom P&L rows and reset realized P&L on paper allocations.
+
+    Safe to call repeatedly — removes daily snapshots and pnl rows from before
+    today, and zeros out all_time_realized_pnl_cents on paper allocations.
+    """
+    from sqlalchemy import text
+    from app.db.models.bots import BotAllocation
+
+    snaps_deleted = pnl_deleted = allocs_reset = 0
+    errors = []
+
+    try:
+        r = db.execute(text(
+            "DELETE FROM daily_portfolio_snapshots WHERE snapshot_date < CURRENT_DATE"
+        ))
+        snaps_deleted = r.rowcount
+    except Exception as exc:
+        errors.append(f"daily_portfolio_snapshots: {exc}")
+
+    try:
+        r = db.execute(text(
+            "DELETE FROM bot_daily_pnl WHERE date < CURRENT_DATE"
+        ))
+        pnl_deleted = r.rowcount
+    except Exception as exc:
+        errors.append(f"bot_daily_pnl: {exc}")
+
+    try:
+        allocs = (
+            db.query(BotAllocation)
+            .filter(
+                BotAllocation.user_id == current_user.id,
+                BotAllocation.paper_mode.is_(True),
+            )
+            .all()
+        )
+        for a in allocs:
+            a.all_time_realized_pnl_cents = 0
+        allocs_reset = len(allocs)
+    except Exception as exc:
+        errors.append(f"bot_allocations reset: {exc}")
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        return {"ok": False, "error": f"commit failed: {exc}"}
+
+    logger.info(
+        "admin: scrub_ghost_pnl user=%d snaps=%d pnl_rows=%d allocs_reset=%d",
+        current_user.id, snaps_deleted, pnl_deleted, allocs_reset,
+    )
+    return {
+        "ok": True,
+        "daily_portfolio_snapshots_deleted": snaps_deleted,
+        "bot_daily_pnl_rows_deleted": pnl_deleted,
+        "paper_allocs_pnl_zeroed": allocs_reset,
+        "errors": errors,
+    }
 
 
 # ── GET /api/admin/system/health ──────────────────────────────────────────────
