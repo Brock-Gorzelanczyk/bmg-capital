@@ -48,6 +48,7 @@ export type SignalInput = {
   takeProfit?: number;
   positionSizePct?: number;
   isTest?: boolean;
+  startingCapitalCents?: number;
 };
 
 const BOT_DISPLAY: Record<string, string> = {
@@ -177,6 +178,7 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
 
     const entry = signal.entryPrice ?? null;
     const isBuy = signal.side === "buy" || signal.side === "cover";
+    const direction = isBuy ? "LONG" : "SHORT";
 
     let stop = signal.stopLoss ?? null;
     if (stop == null && entry != null) stop = isBuy ? entry * 0.93 : entry * 1.07;
@@ -188,17 +190,43 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     const targetPct = target != null && entry != null ? (target - entry) / entry * 100 : null;
     const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 
+    // Quantity and notional from allocation starting capital + size hint
+    const portfolioValue = signal.startingCapitalCents != null ? signal.startingCapitalCents / 100 : 0;
+    const sizeFraction   = signal.positionSizePct != null ? signal.positionSizePct / 100 : 0;
+    const notional       = portfolioValue > 0 && sizeFraction > 0 ? portfolioValue * sizeFraction : null;
+    const qty            = notional != null && entry != null && entry > 0 ? notional / entry : null;
+    const baseAsset      = signal.symbol.split("/")[0];
+
+    const fmtQty = (q: number): string => {
+      if (q >= 1000) return q.toFixed(0);
+      if (q >= 100)  return q.toFixed(2);
+      if (q >= 1)    return q.toFixed(4);
+      return q.toFixed(8);
+    };
+    const fmtUSD = (amount: number): string =>
+      amount >= 1000
+        ? "$" + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : "$" + amount.toFixed(2);
+
+    const qtyStr      = qty     != null ? `${fmtQty(qty)} ${baseAsset}`   : "—";
+    const notionalStr = notional != null ? fmtUSD(notional)                 : "—";
+    const allocStr    = signal.positionSizePct != null ? `${signal.positionSizePct.toFixed(1)}% of portfolio` : "—";
+    const costLabel   = isBuy ? "Cost Basis" : "Notional";
+
     const testPrefix = signal.isTest ? "[TEST] " : "";
     const embed = new EmbedBuilder()
       .setColor(color)
       .setAuthor({ name: `${displayName} bot` })
-      .setTitle(`${testPrefix}${sideEmoji(signal.side)} ${signal.side.toUpperCase()} ${signal.symbol}`)
+      .setTitle(`${testPrefix}${sideEmoji(signal.side)} ${direction} ${signal.symbol}`)
       .setDescription(signal.reason)
       .addFields(
-        { name: "Strategy",    value: signal.strategy,                                                                                   inline: true },
-        { name: "Confidence",  value: `${(signal.confidence * 100).toFixed(1)}%`,                                                        inline: true },
-        { name: "Size",        value: signal.positionSizePct != null ? `${signal.positionSizePct.toFixed(1)}% of portfolio` : "—",        inline: true },
-        { name: "Entry",       value: entry  != null ? `$${fmtPrice(entry)}`                                                          : "—", inline: true },
+        { name: "Strategy",    value: signal.strategy,                                       inline: true },
+        { name: "Direction",   value: direction,                                             inline: true },
+        { name: "Confidence",  value: `${(signal.confidence * 100).toFixed(1)}%`,           inline: true },
+        { name: "Quantity",    value: qtyStr,                                                inline: true },
+        { name: costLabel,     value: notionalStr,                                           inline: true },
+        { name: "Allocation",  value: allocStr,                                              inline: true },
+        { name: "Entry",       value: entry  != null ? `$${fmtPrice(entry)}`              : "—", inline: true },
         { name: "Stop",        value: stop   != null ? `$${fmtPrice(stop)}${stopPct   != null ? ` (${fmtPct(stopPct)})`   : ""}` : "—", inline: true },
         { name: "Take Profit", value: target != null ? `$${fmtPrice(target)}${targetPct != null ? ` (${fmtPct(targetPct)})` : ""}` : "—", inline: true },
       )

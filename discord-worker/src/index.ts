@@ -165,7 +165,8 @@ async function _doPoll(): Promise<void> {
         bs.target_price,
         bs.size_hint,
         bs.is_test,
-        bp.name AS bot_profile
+        bp.name AS bot_profile,
+        ba.starting_capital_cents
       FROM bot_signals bs
       JOIN bot_allocations ba ON ba.id = bs.allocation_id
       JOIN bot_profiles bp    ON bp.id = ba.profile_id
@@ -189,6 +190,7 @@ async function _doPoll(): Promise<void> {
       size_hint: number | null;
       is_test: boolean | null;
       bot_profile: string;
+      starting_capital_cents: number | null;
     }[];
 
     for (const row of rows) {
@@ -205,6 +207,7 @@ async function _doPoll(): Promise<void> {
         takeProfit:     row.target_price ?? undefined,
         positionSizePct: row.size_hint != null ? row.size_hint * 100 : undefined,
         isTest:         row.is_test ?? false,
+        startingCapitalCents: row.starting_capital_cents ?? undefined,
       });
     }
   } catch (err) {
