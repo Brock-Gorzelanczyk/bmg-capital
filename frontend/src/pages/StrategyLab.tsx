@@ -533,6 +533,15 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
     retry: 0,
   });
 
+  // Shared cache key with OpenPositionsPanel — no extra network request
+  const { data: openPosData } = useQuery({
+    queryKey: ["open-positions"],
+    queryFn: getOpenPositions,
+    refetchInterval: 60_000,
+    staleTime: 25_000,
+    retry: 0,
+  });
+
   const { data: rawWatchlists } = useQuery<CrossBotWatchlistItem[]>({
     queryKey: ["cross-bot-watchlist"],
     queryFn: getCrossBotWatchlist,
@@ -614,18 +623,29 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
         ))}
       </div>
 
-      {/* Allocation donut */}
-      {(portsData?.portfolios ?? []).length > 0 && (
-        <div className="pt-3 border-t border-zinc-800">
-          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Capital Allocation</p>
-          <AllocationDonut
-            totalCents={p?.total_value_cents ?? (portsData?.portfolios ?? []).reduce((s, port) => s + port.current_value_cents, 0)}
-            slices={[
-              ...(portsData?.portfolios ?? []).map((port) => ({ key: port.asset_class, value_cents: port.current_value_cents })),
-            ]}
-          />
-        </div>
-      )}
+      {/* Allocation donut — deployed capital by asset class vs cash */}
+      {(p?.total_value_cents ?? 0) > 0 && (() => {
+        const totalCents = p!.total_value_cents;
+        const openPos = openPosData?.positions ?? [];
+        const byClass: Record<string, number> = {};
+        for (const pos of openPos) {
+          const cls = pos.asset_class ?? "other";
+          byClass[cls] = (byClass[cls] ?? 0) + Math.round((pos.current_value_usd ?? 0) * 100);
+        }
+        const deployedCents = Object.values(byClass).reduce((s, v) => s + v, 0);
+        const cashCents = Math.max(0, totalCents - deployedCents);
+        const slices = [
+          ...Object.entries(byClass).filter(([, v]) => v > 0).map(([key, value_cents]) => ({ key, value_cents })),
+          ...(cashCents > 0 ? [{ key: "cash", value_cents: cashCents }] : []),
+        ];
+        if (slices.length === 0) return null;
+        return (
+          <div className="pt-3 border-t border-zinc-800">
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Capital Allocation</p>
+            <AllocationDonut totalCents={totalCents} slices={slices} />
+          </div>
+        );
+      })()}
 
       {/* Open Positions — replaces equity curve until we have multi-day history */}
       <OpenPositionsPanel />

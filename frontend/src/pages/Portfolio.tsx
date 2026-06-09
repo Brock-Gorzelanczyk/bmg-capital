@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, TrendingDown, Layers, Activity } from "lucide-react";
-import { getStrategyLabPortfolio, getPortfolios } from "@/api/bots";
+import { getStrategyLabPortfolio, getPortfolios, getOpenPositions } from "@/api/bots";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import AllocationDonut from "@/components/ui/AllocationDonut";
 
@@ -94,6 +94,13 @@ export default function Portfolio() {
     staleTime: 30_000,
   });
 
+  const { data: openPosData } = useQuery({
+    queryKey: ["open-positions"],
+    queryFn: getOpenPositions,
+    staleTime: 30_000,
+    retry: 0,
+  });
+
   const loading = aggLoading || portsLoading;
   const totalValue = agg?.total_value_cents ?? 0;
   const todayPnl = agg?.today_pnl_cents ?? 0;
@@ -135,17 +142,27 @@ export default function Portfolio() {
           </div>
         </div>
 
-        {/* Allocation donut */}
-        {portfolios.length > 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 mb-8">
-            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Capital Allocation</p>
-            <AllocationDonut
-              totalCents={totalValue}
-              slices={portfolios.map((port: any) => ({ key: port.asset_class, value_cents: port.current_value_cents ?? 0 }))}
-              size={160}
-            />
-          </div>
-        )}
+        {/* Allocation donut — deployed by asset class vs cash */}
+        {totalValue > 0 && (() => {
+          const byClass: Record<string, number> = {};
+          for (const pos of openPosData?.positions ?? []) {
+            const cls = pos.asset_class ?? "other";
+            byClass[cls] = (byClass[cls] ?? 0) + Math.round((pos.current_value_usd ?? 0) * 100);
+          }
+          const deployedCents = Object.values(byClass).reduce((s, v) => s + v, 0);
+          const cashCents = Math.max(0, totalValue - deployedCents);
+          const slices = [
+            ...Object.entries(byClass).filter(([, v]) => v > 0).map(([key, value_cents]) => ({ key, value_cents })),
+            ...(cashCents > 0 ? [{ key: "cash", value_cents: cashCents }] : []),
+          ];
+          if (slices.length === 0) return null;
+          return (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 mb-8">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Capital Allocation</p>
+              <AllocationDonut totalCents={totalValue} slices={slices} size={160} />
+            </div>
+          );
+        })()}
 
         {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">

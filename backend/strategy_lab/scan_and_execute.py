@@ -157,10 +157,28 @@ def scan_and_execute(
     threshold = float(profile.get("confidence_threshold", 0.5))
     default_size = float(profile.get("position_size_pct", 5.0))
     cooldown_min = float(profile.get("cooldown_minutes", 0))
+    position_cap = int(profile.get("position_cap", 999))
 
     logger.warning(
-        "[cooldown-config] %s cooldown_minutes=%.0f position_cap=%s",
-        profile_name, cooldown_min, profile.get("position_cap", 999),
+        "[cooldown-config] %s cooldown_minutes=%.0f position_cap=%d",
+        profile_name, cooldown_min, position_cap,
+    )
+
+    # ── Pre-deduplicate: keep one signal per (symbol, side) — highest confidence ─
+    # Multiple strategies can fire the same (symbol, side) in one scan.
+    # Without dedup, 5 strategies × SOL/buy = 5 signals; only 1 should reach the DB.
+    seen_pairs: dict[tuple, dict] = {}
+    for r in results:
+        if r["confidence"] < threshold:
+            continue
+        key = (r["symbol"], r["side"])
+        if key not in seen_pairs or r["confidence"] > seen_pairs[key]["confidence"]:
+            seen_pairs[key] = r
+    deduped = list(seen_pairs.values())
+
+    logger.warning(
+        "[scan:%s] pre-dedup=%d post-dedup=%d (unique symbol/side pairs)",
+        profile_name, len(results), len(deduped),
     )
 
     from strategy_lab.core.audit import log_signal
@@ -172,22 +190,22 @@ def scan_and_execute(
         alloc_executed = 0
 
         # ── Cooldown: compare naive utcnow() vs naive ts column ───────────────
+        # datetime.utcnow() → naive UTC; ts column stores naive UTC (tz stripped at insert).
         on_cooldown: set = set()
-        if cooldown_min > 0 and results:
+        if cooldown_min > 0 and deduped:
             _cutoff = datetime.utcnow() - timedelta(minutes=cooldown_min)
             _recent = db.query(_BSig.symbol, _BSig.side).filter(
                 _BSig.allocation_id == alloc.id,
                 _BSig.ts >= _cutoff,
             ).all()
             on_cooldown = {(row.symbol, row.side) for row in _recent}
-            if on_cooldown:
-                logger.warning(
-                    "[cooldown] %s alloc=%d: %d symbol/side pairs still on cooldown",
-                    profile_name, alloc.id, len(on_cooldown),
-                )
+            logger.warning(
+                "[cooldown] %s alloc=%d cutoff=%s found=%d on_cooldown=%s",
+                profile_name, alloc.id, _cutoff.strftime("%H:%M:%S"),
+                len(_recent), [f"{s}/{d}" for s, d in list(on_cooldown)[:5]],
+            )
 
         # ── Position cap: slots-remaining approach ────────────────────────────
-        position_cap = int(profile.get("position_cap", 999))
         alloc_open = (
             db.query(_BotPos)
             .filter(_BotPos.allocation_id == alloc.id, _BotPos.closed_at.is_(None))
@@ -202,25 +220,24 @@ def scan_and_execute(
 
         # Sort buy signals by confidence desc so highest-conviction trades fill slots first
         buy_signals = sorted(
-            [r for r in results if r["side"] in ("buy",) and r["confidence"] >= threshold],
+            [r for r in deduped if r["side"] == "buy"],
             key=lambda r: -r["confidence"],
         )
-        sell_signals = [r for r in results if r["side"] in ("sell", "short", "cover") and r["confidence"] >= threshold]
-        # Sells don't consume open-position slots; only buys do
+        sell_signals = [r for r in deduped if r["side"] in ("sell", "short", "cover")]
         ordered_results = buy_signals + sell_signals
 
         # ── Per-signal: persist then execute ─────────────────────────────────
         for r in ordered_results:
-            # confidence already filtered in ordered_results, but guard sell signals
-            if r["confidence"] < threshold:
-                continue
-
             if (r["symbol"], r["side"]) in on_cooldown:
                 logger.warning(
                     "[cooldown] %s %s %s — fired within last %.0fmin, skipping",
                     profile_name, r["symbol"], r["side"], cooldown_min,
                 )
                 continue
+
+            # Mark as in-flight immediately — prevents re-entry in the same scan
+            # even if persist later fails (unconditional, outside the try-block)
+            on_cooldown.add((r["symbol"], r["side"]))
 
             # Persist
             signal_id: Optional[int] = None
@@ -270,8 +287,6 @@ def scan_and_execute(
                     )
                     alloc_persisted += 1
                     signals_persisted += 1
-                    # Self-update cooldown set so later signals in this same scan are blocked
-                    on_cooldown.add((r["symbol"], r["side"]))
                 except Exception as _pe:
                     persist_errors.append({
                         "symbol": r["symbol"],

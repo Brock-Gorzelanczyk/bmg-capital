@@ -52,12 +52,16 @@ _TO_KRAKEN_PAIR: dict[str, str] = {
     "NEAR/USD":  "NEARUSD",
     "APT/USD":   "APTUSD",
     "SUI/USD":   "SUIUSD",
+    "TIA/USD":   "TIAUSD",   # Celestia
+    "INJ/USD":   "INJUSD",   # Injective
+    "BNB/USD":   "BNBUSD",
 }
 
 # Symbols that should NOT go to Kraken — price is wrong or pair doesn't exist.
 # They fall through to the Alpaca crypto fallback automatically.
 _SKIP_KRAKEN: set[str] = {
-    "ARB/USD",  # Kraken ARBUSD returns ~$0.0008 (decimal bug); Alpaca is correct
+    "ARB/USD",   # Kraken ARBUSD returns ~$0.0008 (decimal bug); Alpaca is correct
+    "SHIB/USD",  # Kraken has SHIB2/USDT, not SHIBUSD; Alpaca handles it correctly
 }
 
 # Some Kraken response keys differ from the pair we requested.

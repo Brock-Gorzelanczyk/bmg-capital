@@ -388,6 +388,19 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job bot_crypto_quant_mean_reversion (*/3 min, fires immediately)")
 
+    # One-time startup log: emit cooldown_minutes for each quant bot so Railway
+    # logs confirm the YAML setting is in effect on this deploy.
+    try:
+        from strategy_lab.seeds import load_profile as _lp
+        for _pname in ("crypto_quant_scalper", "crypto_quant_aggressive", "crypto_quant_mean_reversion"):
+            _p = _lp(_pname) or {}
+            logger.warning(
+                "[cooldown-active] bot=%s cadence=%s cooldown_minutes=%s position_cap=%s",
+                _pname, _p.get("cadence", "?"), _p.get("cooldown_minutes", 0), _p.get("position_cap", "?"),
+            )
+    except Exception as _exc:
+        logger.warning("[cooldown-active] could not load profiles: %s", _exc)
+
     # ------------------------------------------------------------------
     # Public Discord daily digest: 4:30 PM ET weekdays + midnight UTC (crypto)
     # ------------------------------------------------------------------

@@ -2,14 +2,14 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { getCrossBotPositions, getBots, type CrossBotPosition } from "@/api/bots";
+  getCrossBotPositions,
+  getBots,
+  getOpenPositions,
+  getStrategyLabPortfolio,
+  type CrossBotPosition,
+} from "@/api/bots";
 import { cn } from "@/lib/utils";
+import AllocationDonut from "@/components/ui/AllocationDonut";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -18,11 +18,6 @@ function formatPnl(val: number): string {
   const sign = val >= 0 ? "+" : "-";
   if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
   return `${sign}$${abs.toFixed(2)}`;
-}
-
-function formatPct(val: number): string {
-  const sign = val >= 0 ? "+" : "";
-  return `${sign}${val.toFixed(2)}%`;
 }
 
 // ─── Summary card ─────────────────────────────────────────────────────────────
@@ -57,6 +52,23 @@ export default function NetPortfolio() {
     staleTime: 30_000,
   });
 
+  // Open positions with live current_value_usd per position — used for the donut
+  const { data: openPosData } = useQuery({
+    queryKey: ["open-positions"],
+    queryFn: getOpenPositions,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    retry: 0,
+  });
+
+  // Total portfolio value for Cash calculation
+  const { data: portfolioAgg } = useQuery({
+    queryKey: ["strategy-lab-portfolio"],
+    queryFn: getStrategyLabPortfolio,
+    staleTime: 60_000,
+    retry: 0,
+  });
+
   const bots = botsData?.bots ?? [];
   const activeBots = bots.filter((b) => b.allocation?.enabled).length;
 
@@ -67,25 +79,21 @@ export default function NetPortfolio() {
   );
   const openPositions = positions.length;
 
-  // Asset class pie: infer from symbol names (rough heuristic: crypto symbols tend to end with USD or be BTC/ETH/SOL etc.)
-  const cryptoSymbols = new Set(["BTC", "ETH", "SOL", "ADA", "DOT", "AVAX", "MATIC", "LINK", "UNI", "AAVE"]);
-  let stockQty = 0;
-  let cryptoQty = 0;
-  positions.forEach((p: CrossBotPosition) => {
-    const sym = p.symbol?.toUpperCase().replace(/USD$/, "").replace(/-.*$/, "");
-    if (cryptoSymbols.has(sym)) {
-      cryptoQty += p.total_qty ?? 0;
-    } else {
-      stockQty += p.total_qty ?? 0;
-    }
-  });
-  const totalQty = stockQty + cryptoQty || 1;
-  const stockPct = Math.round((stockQty / totalQty) * 100);
-  const cryptoPct = 100 - stockPct;
+  // ── Allocation donut: sum current_value_usd by asset_class ──────────────────
+  const totalCents = portfolioAgg?.total_value_cents ?? 0;
+  const deployedByClass: Record<string, number> = {};
+  for (const pos of openPosData?.positions ?? []) {
+    const cls = pos.asset_class ?? "other";
+    deployedByClass[cls] = (deployedByClass[cls] ?? 0) + Math.round((pos.current_value_usd ?? 0) * 100);
+  }
+  const totalDeployedCents = Object.values(deployedByClass).reduce((s, v) => s + v, 0);
+  const cashCents = Math.max(0, totalCents - totalDeployedCents);
 
-  const pieData = [
-    { name: "Stocks", value: stockPct, color: "#3b82f6" },
-    { name: "Crypto", value: cryptoPct, color: "#f97316" },
+  const donutSlices = [
+    ...Object.entries(deployedByClass)
+      .filter(([, v]) => v > 0)
+      .map(([key, value_cents]) => ({ key, value_cents })),
+    ...(cashCents > 0 ? [{ key: "cash", value_cents: cashCents }] : []),
   ];
 
   return (
@@ -104,7 +112,7 @@ export default function NetPortfolio() {
       <div>
         <h1 className="text-2xl font-bold text-white">Portfolio View</h1>
         <p className="text-zinc-500 text-sm mt-1">
-          Consolidated paper-trading positions across all six autonomous bots.
+          Consolidated paper-trading positions across all active bots.
         </p>
       </div>
 
@@ -116,6 +124,14 @@ export default function NetPortfolio() {
         </span>
       </div>
 
+      {/* Allocation donut — full-width, above the table */}
+      {totalCents > 0 && donutSlices.length > 0 && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Capital Allocation</p>
+          <AllocationDonut slices={donutSlices} totalCents={totalCents} size={160} />
+        </div>
+      )}
+
       {/* Summary cards */}
       {posLoading ? (
         <div className="flex flex-wrap gap-4 animate-pulse">
@@ -125,146 +141,65 @@ export default function NetPortfolio() {
         </div>
       ) : positions.length === 0 ? (
         <div className="flex items-center justify-center py-16 text-zinc-500 text-sm text-center">
-          Connect a brokerage or add positions to see your net worth.
+          No open positions. Bots scan continuously — check back shortly.
         </div>
       ) : (
         <div className="flex flex-wrap gap-4">
-          <SummaryCard
-            label="Total Paper P&L"
-            value={formatPnl(totalPnl)}
-            sub="all bots combined"
-          />
-          <SummaryCard
-            label="Total Exposure"
-            value={`${totalExposure.toFixed(1)}%`}
-            sub="weighted across portfolio"
-          />
-          <SummaryCard
-            label="Open Positions"
-            value={String(openPositions)}
-            sub="across all bots"
-          />
-          <SummaryCard
-            label="Bots Active"
-            value={String(activeBots)}
-            sub={`of ${bots.length} total`}
-          />
+          <SummaryCard label="Total Paper P&L" value={formatPnl(totalPnl)} sub="all bots combined" />
+          <SummaryCard label="Total Exposure" value={`${totalExposure.toFixed(1)}%`} sub="weighted across portfolio" />
+          <SummaryCard label="Open Positions" value={String(openPositions)} sub="across all bots" />
+          <SummaryCard label="Bots Active" value={String(activeBots)} sub={`of ${bots.length} total`} />
         </div>
       )}
 
-      {/* Exposure by symbol table + Pie */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Table */}
-        <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Exposure by Symbol</h2>
-          {posLoading ? (
-            <div className="animate-pulse space-y-2">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-10 bg-zinc-800 rounded" />
-              ))}
-            </div>
-          ) : positions.length === 0 ? (
-            <p className="text-zinc-600 text-sm py-6 text-center">No open positions across bots</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-                    <th className="text-left pb-2 font-medium">Symbol</th>
-                    <th className="text-right pb-2 font-medium">Total Qty</th>
-                    <th className="text-left pb-2 font-medium">Bots Holding</th>
-                    <th className="text-right pb-2 font-medium">Exposure %</th>
-                    <th className="text-right pb-2 font-medium">P&L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {positions.map((p: CrossBotPosition) => (
-                    <tr
-                      key={p.symbol}
-                      className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors"
-                    >
-                      <td className="py-2.5 font-semibold text-white">{p.symbol}</td>
-                      <td className="py-2.5 text-right text-zinc-300">{p.total_qty}</td>
-                      <td className="py-2.5">
-                        <div className="flex flex-wrap gap-1">
-                          {(p.bots_holding ?? []).map((b) => (
-                            <span
-                              key={b}
-                              className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700"
-                            >
-                              {b.replace(/_/g, " ")}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="py-2.5 text-right text-zinc-300">
-                        {p.exposure_pct?.toFixed(1)}%
-                      </td>
-                      <td
-                        className={cn(
-                          "py-2.5 text-right font-semibold text-xs",
-                          (p.pnl ?? 0) >= 0 ? "text-lime-400" : "text-red-400"
-                        )}
-                      >
-                        {formatPnl(p.pnl ?? 0)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Asset class pie */}
+      {/* Exposure by symbol table */}
+      {positions.length > 0 && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Asset Class Mix</h2>
-          {positions.length === 0 ? (
-            <p className="text-zinc-600 text-sm py-6 text-center">No data</p>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={45}
-                    outerRadius={70}
-                    paddingAngle={3}
-                    dataKey="value"
+          <h2 className="text-sm font-semibold text-zinc-300 mb-4">Exposure by Symbol</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+                  <th className="text-left pb-2 font-medium">Symbol</th>
+                  <th className="text-right pb-2 font-medium">Total Qty</th>
+                  <th className="text-left pb-2 font-medium">Bots Holding</th>
+                  <th className="text-right pb-2 font-medium">Exposure %</th>
+                  <th className="text-right pb-2 font-medium">P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((p: CrossBotPosition) => (
+                  <tr
+                    key={p.symbol}
+                    className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors"
                   >
-                    {pieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #3f3f46",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                    formatter={(v: number) => [`${v}%`]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex gap-4 justify-center mt-2">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" />
-                  Stocks {stockPct}%
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <span className="w-3 h-3 rounded-full bg-orange-500 inline-block" />
-                  Crypto {cryptoPct}%
-                </div>
-              </div>
-            </>
-          )}
+                    <td className="py-2.5 font-semibold text-white">{p.symbol}</td>
+                    <td className="py-2.5 text-right text-zinc-300">{p.total_qty}</td>
+                    <td className="py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {(p.bots_holding ?? []).map((b) => (
+                          <span
+                            key={b}
+                            className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700"
+                          >
+                            {b.replace(/_/g, " ")}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-2.5 text-right text-zinc-300">{p.exposure_pct?.toFixed(1)}%</td>
+                    <td className={cn("py-2.5 text-right font-semibold text-xs", (p.pnl ?? 0) >= 0 ? "text-lime-400" : "text-red-400")}>
+                      {formatPnl(p.pnl ?? 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Return to Command Center link */}
+      {/* Return link */}
       <div className="flex justify-center pt-4">
         <button
           onClick={() => navigate("/strategy")}
