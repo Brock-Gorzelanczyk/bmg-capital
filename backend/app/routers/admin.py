@@ -303,30 +303,26 @@ def discord_test_fire(
 @router.post("/bots/{name}/scan-now-verbose")
 def scan_now_verbose(
     name: str,
+    persist: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Run one full synchronous scan cycle for the named bot and return verbose results.
 
-    This is a diagnostic tool — it shows whether strategies run at all, what
-    confidence scores each symbol produces, and what errors occur.  Nothing is
-    committed to the database and no orders are submitted.
-
-    Returns:
-        {
-            "bot": str,
-            "symbols_scanned": int,
-            "strategies_executed": int,
-            "results": [{"symbol", "strategy", "confidence", "reasons"}, ...],
-            "signals_generated": int,
-            "errors": [{"symbol", "strategy", "error"}, ...]
-        }
+    With persist=false (default): dry-run — nothing is written to the database.
+    With persist=true: calls the exact same log_signal() function the scheduled
+    scan uses, captures every exception with full traceback, and reports how many
+    inserts succeeded.
     """
+    import traceback as _tb
+
     from strategy_lab.seeds import load_profile
     from strategy_lab.runner import _load_strategy_module
 
     results: list[Dict[str, Any]] = []
     errors: list[Dict[str, Any]] = []
+    signals_persisted = 0
+    persist_errors: list[Dict[str, Any]] = []
 
     # 1. Load profile YAML
     profile = load_profile(name)
@@ -420,6 +416,63 @@ def scan_now_verbose(
             )
             errors.append({"symbol": "*", "strategy": strat_name, "error": str(exc)})
 
+    # ── Optional persist path ──────────────────────────────────────────────────
+    if persist and results:
+        from app.db.models.bots import BotAllocation as _BA, BotProfile as _BPP
+        from strategy_lab.core.audit import log_signal
+        from strategy_lab.core.signals import Signal
+        from datetime import timezone as _tz
+
+        # Find allocation for this user + bot profile
+        _bp = db.query(_BPP).filter(_BPP.name == name).first()
+        _alloc = None
+        if _bp:
+            _alloc = (
+                db.query(_BA)
+                .filter(_BA.user_id == current_user.id, _BA.profile_id == _bp.id)
+                .first()
+            )
+
+        if _alloc is None:
+            persist_errors.append({
+                "symbol": "*",
+                "strategy": "*",
+                "error": f"No BotAllocation found for user {current_user.id} + bot '{name}'",
+                "traceback": "",
+            })
+        else:
+            threshold = float(profile.get("confidence_threshold", 0.5))
+            for r in results:
+                if r["confidence"] < threshold:
+                    continue
+                try:
+                    sig = Signal(
+                        symbol=r["symbol"],
+                        side=r["side"],
+                        confidence=r["confidence"],
+                        size_hint=float(r.get("size_hint", 0.1)),
+                        reason=str(r.get("reasons", "")),
+                        strategy=r["strategy"],
+                        ts=__import__("datetime").datetime.now(_tz.utc),
+                    )
+                    log_signal(db, _alloc.id, sig)
+                    signals_persisted += 1
+                    logger.info(
+                        "[scan-verbose-persist] %s/%s(%s) → persisted, confidence=%.3f",
+                        name, r["strategy"], r["symbol"], r["confidence"],
+                    )
+                except Exception as _pe:
+                    persist_errors.append({
+                        "symbol": r["symbol"],
+                        "strategy": r["strategy"],
+                        "error": str(_pe),
+                        "traceback": _tb.format_exc(),
+                    })
+                    logger.error(
+                        "[scan-verbose-persist] EXCEPTION persisting %s/%s: %s",
+                        name, r["symbol"], _pe, exc_info=True,
+                    )
+
     resp: Dict[str, Any] = {
         "bot": name,
         "symbols_scanned": len(symbols),
@@ -429,11 +482,15 @@ def scan_now_verbose(
         "signals_generated": len(results),
         "errors": errors,
     }
+    if persist:
+        resp["signals_persisted"] = signals_persisted
+        resp["persist_errors"] = persist_errors
     if bar_error:
         resp["bar_fetch_error"] = bar_error
     logger.info(
-        "scan_now_verbose[%s]: symbols=%d bars=%d strategies=%d signals=%d errors=%d",
+        "scan_now_verbose[%s]: symbols=%d bars=%d strategies=%d signals=%d errors=%d persist=%s persisted=%d",
         name, len(symbols), len(bars), strategies_executed, len(results), len(errors),
+        persist, signals_persisted,
     )
     return resp
 

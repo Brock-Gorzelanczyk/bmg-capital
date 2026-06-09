@@ -603,9 +603,9 @@ def run_bot_profile(profile_name: str) -> dict:
                             target_price=stop_info.get("target_price"),
                         )
                     except Exception as _sig_persist_exc:
-                        logger.warning(
-                            "[runner:%s] log_signal failed for %s (non-fatal): %s",
-                            profile_name, sig.symbol, _sig_persist_exc,
+                        logger.error(
+                            "[runner:%s] log_signal FAILED for %s — full traceback follows",
+                            profile_name, sig.symbol, exc_info=True,
                         )
 
                     # 10a. Anomaly detector — halt on abnormal conditions
