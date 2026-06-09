@@ -1,0 +1,55 @@
+name: crypto_quant_scalper
+display_name: "Crypto Quant Scalper"
+asset_class: quant
+broker: alpaca_paper_crypto
+
+universe:
+  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, AVAX/USD]
+
+scan_timeframe: "1m"
+scan_lookback_bars: 120
+cadence: "*/1 * * * *"
+
+strategies:
+  - crypto_scalper_micro_breakout
+  - crypto_scalper_orderbook_imbalance
+  - crypto_scalper_tape_acceleration
+  - crypto_scalper_vwap_band_reject
+  - crypto_scalper_volume_spike_continuation
+
+ensemble: any_above_threshold
+confidence_threshold: 0.42
+
+cooldown_minutes: 1
+hold_max_minutes: 30
+
+position_size_pct: 0.3
+position_cap: 20
+stop_loss_pct: 0.5
+take_profit_pct: 1.0
+trailing_stop_activate_at_pct: 0.6
+
+risk_overlay:
+  daily_loss_limit_pct: 2.0
+  max_position_size_pct: 10.0
+  max_gross_exposure_pct: 40.0
+  consecutive_loss_halve_at: 5
+  consecutive_loss_halt_hours: 2
+  consecutive_loss_halt_at: 10
+  portfolio_drawdown_circuit_pct: 3.0
+  pdt_enforce: false
+  weekend_confidence_boost: 0.03
+
+execution:
+  order_type: market
+  limit_offset_bps: 5
+  reprice_after_seconds: 10
+  reprice_attempts: 2
+  fallback_to_market: true
+  use_brackets: true
+
+discord:
+  channel: quant-signals
+
+paper_only: true
+starting_capital_cents: 3000000   # $30k

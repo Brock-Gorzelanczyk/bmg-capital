@@ -1,0 +1,56 @@
+name: crypto_quant_mean_reversion
+display_name: "Crypto Quant Mean Reversion"
+asset_class: quant
+broker: alpaca_paper_crypto
+
+universe:
+  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, MATIC/USD,
+            LINK/USD, DOT/USD, ADA/USD, NEAR/USD, ATOM/USD]
+
+scan_timeframe: "5m"
+scan_lookback_bars: 288
+cadence: "*/3 * * * *"
+
+strategies:
+  - crypto_mr_bollinger_extreme
+  - crypto_mr_rsi_oversold_bounce
+  - crypto_mr_rsi_overbought_short
+  - crypto_mr_zscore_reversion
+  - crypto_mr_keltner_outside_band
+  - crypto_mr_pin_bar_rejection
+
+ensemble: any_above_threshold
+confidence_threshold: 0.50
+
+cooldown_minutes: 5
+hold_max_hours: 4
+
+position_size_pct: 0.6
+position_cap: 6
+stop_loss_pct: 2.0
+take_profit_pct: 2.5
+
+risk_overlay:
+  daily_loss_limit_pct: 3.0
+  max_position_size_pct: 20.0
+  max_gross_exposure_pct: 50.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_hours: 4
+  consecutive_loss_halt_at: 6
+  portfolio_drawdown_circuit_pct: 5.0
+  pdt_enforce: false
+  weekend_confidence_boost: 0.04
+
+execution:
+  order_type: market
+  limit_offset_bps: 8
+  reprice_after_seconds: 20
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
+
+discord:
+  channel: quant-signals
+
+paper_only: true
+starting_capital_cents: 3000000   # $30k
