@@ -1939,7 +1939,30 @@ def get_positions(
         .all()
     )
 
-    return {"positions": [_position_to_dict(p) for p in positions], "demo": False}
+    from app.core.canonical import _cached_live_prices
+    all_symbols = list({p.symbol for p in positions})
+    live_prices = _cached_live_prices(all_symbols) if all_symbols else {}
+
+    def _enrich(p: BotPosition) -> dict:
+        d = _position_to_dict(p)
+        price = live_prices.get(p.symbol, 0.0)
+        if price > 0 and p.avg_cost_cents and p.qty:
+            entry = p.avg_cost_cents / 100
+            is_short = getattr(p, "side", "long") == "short"
+            unrealized = (entry - price) * p.qty if is_short else (price - entry) * p.qty
+            cost_basis = entry * abs(p.qty)
+            d["current_price"] = round(price, 6)
+            d["market_value"] = round(price * abs(p.qty), 2)
+            d["unrealized_pnl"] = round(unrealized, 2)
+            d["unrealized_pnl_pct"] = round(unrealized / cost_basis * 100 if cost_basis > 0 else 0, 2)
+        else:
+            d["current_price"] = None
+            d["market_value"] = None
+            d["unrealized_pnl"] = None
+            d["unrealized_pnl_pct"] = None
+        return d
+
+    return {"positions": [_enrich(p) for p in positions], "demo": False}
 
 
 # ── GET /api/bots/{profile_name}/trades ───────────────────────────────────────

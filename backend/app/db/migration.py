@@ -443,6 +443,7 @@ def run_migrations(engine: Engine) -> None:
         _fix_quant_bot_capitals(conn)
         _delete_zombie_signals(conn)
         _scrub_ghost_pnl(conn)
+        _quarantine_cooldown_dupe_positions(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -1452,3 +1453,82 @@ def _scrub_ghost_pnl(conn) -> None:
         )
     except Exception as exc:
         logger.warning("_scrub_ghost_pnl failed: %s", exc)
+
+
+def _quarantine_cooldown_dupe_positions(conn) -> None:
+    """Quarantine duplicate open positions opened within 60 s of each other.
+
+    The cooldown bug (pre-2026-06-09) allowed multiple strategies in a single
+    scan to each open the same (symbol, avg_cost, qty) position. Keep the
+    lowest id in each dupe cluster; quarantine the rest.
+    """
+    MIGRATION_NAME = "bot_positions.quarantine_cooldown_dupes_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        rows = conn.execute(text("""
+            SELECT id, allocation_id, symbol, avg_cost_cents, qty, opened_at
+            FROM bot_positions
+            WHERE closed_at IS NULL
+              AND quarantined_at IS NULL
+            ORDER BY allocation_id, symbol, id
+        """)).fetchall()
+
+        from collections import defaultdict
+        groups: dict = defaultdict(list)
+        for row in rows:
+            key = (row[1], row[2])  # allocation_id, symbol
+            groups[key].append({
+                "id": row[0],
+                "avg_cost_cents": row[3] or 0,
+                "qty": row[4] or 0,
+                "opened_at": row[5],
+            })
+
+        def _ts(s) -> int:
+            if not s:
+                return 0
+            try:
+                from datetime import datetime as _dt
+                if isinstance(s, _dt):
+                    return int(s.timestamp())
+                return int(_dt.fromisoformat(str(s).replace("Z", "+00:00")).timestamp())
+            except Exception:
+                return 0
+
+        to_quarantine: list[int] = []
+        for positions in groups.values():
+            if len(positions) < 2:
+                continue
+            # Sort by id — earliest is the keeper
+            sorted_pos = sorted(positions, key=lambda x: x["id"])
+            keeper = sorted_pos[0]
+            keeper_ts = _ts(keeper["opened_at"])
+            for pos in sorted_pos[1:]:
+                same_cost = abs(pos["avg_cost_cents"] - keeper["avg_cost_cents"]) <= 1
+                same_qty = abs(pos["qty"] - keeper["qty"]) < 0.0001
+                within_60s = abs(_ts(pos["opened_at"]) - keeper_ts) <= 60
+                if same_cost and same_qty and within_60s:
+                    to_quarantine.append(pos["id"])
+
+        now = datetime.now(timezone.utc).isoformat()
+        for pos_id in to_quarantine:
+            conn.execute(text("""
+                UPDATE bot_positions
+                SET quarantined_at = :now,
+                    quarantine_reason = 'cooldown_dupe_merged'
+                WHERE id = :id
+            """), {"now": now, "id": pos_id})
+
+        if to_quarantine:
+            conn.commit()
+            logger.warning(
+                "_quarantine_cooldown_dupe_positions: quarantined %d duplicate positions",
+                len(to_quarantine),
+            )
+        else:
+            logger.info("_quarantine_cooldown_dupe_positions: no duplicates found")
+
+        _record_migration(conn, MIGRATION_NAME)
+    except Exception as exc:
+        logger.warning("_quarantine_cooldown_dupe_positions failed: %s", exc)
