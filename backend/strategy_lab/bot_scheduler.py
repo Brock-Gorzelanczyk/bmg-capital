@@ -618,10 +618,44 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
 
+    def _post_discord_daily_digest(db) -> None:
+        from strategy_lab.daily_briefing import build_discord_digest
+        from app.services.discord_public import post_daily_digest
+        try:
+            digest = build_discord_digest(db)
+            post_daily_digest(digest)
+            logger.warning(
+                "[daily-digest] posted — signals=%d pnl_cents=%d open=%d",
+                digest["total_signals"], digest["realized_pnl_cents"], digest["open_positions"],
+            )
+        except Exception as exc:
+            logger.error("[daily-digest] build/post failed: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Daily Discord digest: 4:30 PM ET, Mon-Fri (after stock market close)
+    # Posts P&L summary, top trades, signal count to #daily-digest.
+    # ------------------------------------------------------------------
+    def _run_daily_discord_digest():
+        from app.db.session import SessionLocal
+        db = SessionLocal()
+        try:
+            _post_discord_daily_digest(db)
+        except Exception as exc:
+            logger.error("daily_discord_digest job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_daily_discord_digest,
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=ET),
+        id="daily_discord_digest",
+        replace_existing=True,
+    )
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
         "crypto_quant_aggressive crypto_quant_scalper crypto_quant_mean_reversion "
         "options_income options_directional position_monitor dead_mans_switch "
-        "quarantine_dupes_periodic"
+        "quarantine_dupes_periodic daily_discord_digest"
     )

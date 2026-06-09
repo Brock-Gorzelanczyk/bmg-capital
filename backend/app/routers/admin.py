@@ -622,4 +622,44 @@ def dedupe_positions_by_symbol_bot(
         "unique_positions_kept": len(seen),
     }
 
-    return result
+
+@router.get("/bots/{bot_id}/risk-status")
+def get_bot_risk_status(
+    bot_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return deployment-target sizing status for a bot allocation.
+
+    Example: GET /api/admin/bots/crypto_quant_scalper/risk-status
+    """
+    from app.db.models.bots import BotProfile, BotAllocation
+    from strategy_lab.seeds import load_profile
+    from strategy_lab.core.deployment_sizer import get_risk_status
+
+    bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
+    if not bp:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Bot profile '{bot_id}' not found")
+
+    alloc = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.profile_id == bp.id,
+            BotAllocation.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not alloc:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"No allocation for '{bot_id}' under this user")
+
+    profile = load_profile(bot_id)
+    capital_usd = (
+        alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000
+    ) / 100.0
+
+    flag_enabled = os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").lower() == "true"
+    status = get_risk_status(alloc, profile, capital_usd, db)
+    status["flag_enabled"] = flag_enabled
+    return status

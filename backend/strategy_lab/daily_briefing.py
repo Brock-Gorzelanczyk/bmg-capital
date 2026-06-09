@@ -344,6 +344,86 @@ def send_daily_briefing(user_id: int, email: str, db: Session) -> bool:
         return False
 
 
+def build_discord_digest(db: Session) -> dict:
+    """Build the daily digest payload for Discord #daily-digest.
+
+    Returns a dict consumed by discord_public.post_daily_digest().
+    Aggregates across ALL users (portfolio-wide view).
+    """
+    from app.db.models.bots import (
+        BotAllocation, BotProfile, BotSignal, BotTrade, BotPosition,
+    )
+
+    today_start = datetime.combine(date.today(), datetime.min.time()).replace(tzinfo=timezone.utc)
+
+    # Today's signals count by bot
+    allocs = db.query(BotAllocation).filter(BotAllocation.enabled.is_(True)).all()
+    alloc_ids = [a.id for a in allocs]
+
+    signals_today = (
+        db.query(BotSignal.allocation_id)
+        .filter(BotSignal.allocation_id.in_(alloc_ids), BotSignal.ts >= today_start)
+        .all()
+    ) if alloc_ids else []
+
+    # Build by_bot signal count
+    alloc_id_to_name: dict[int, str] = {}
+    for alloc in allocs:
+        bp = db.query(BotProfile).filter(BotProfile.id == alloc.profile_id).first()
+        if bp:
+            alloc_id_to_name[alloc.id] = bp.name
+
+    by_bot: dict[str, int] = {}
+    for (aid,) in signals_today:
+        name = alloc_id_to_name.get(aid, str(aid))
+        by_bot[name] = by_bot.get(name, 0) + 1
+
+    # Today's closed trades for P&L + top winners/losers
+    trades_today = (
+        db.query(BotTrade)
+        .filter(
+            BotTrade.allocation_id.in_(alloc_ids),
+            BotTrade.side == "sell",
+            BotTrade.created_at >= today_start,
+        )
+        .all()
+    ) if alloc_ids else []
+
+    realized_cents = 0
+    trade_pnl: list[tuple[int, str]] = []  # (pnl_cents, symbol)
+    for trade in trades_today:
+        pnl_c = int((trade.pnl_cents or 0))
+        realized_cents += pnl_c
+        trade_pnl.append((pnl_c, trade.symbol or "?"))
+
+    trade_pnl.sort(key=lambda x: -x[0])
+    top_winners = [{"symbol": s, "pnl_cents": p} for p, s in trade_pnl[:3]]
+    top_losers  = [{"symbol": s, "pnl_cents": p} for p, s in sorted(trade_pnl, key=lambda x: x[0])[:3]]
+    top_symbols = list(dict.fromkeys(s for _, s in trade_pnl))[:5]
+
+    # Open position count for deployment level
+    open_count = (
+        db.query(BotPosition)
+        .filter(
+            BotPosition.allocation_id.in_(alloc_ids),
+            BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
+        )
+        .count()
+    ) if alloc_ids else 0
+
+    return {
+        "realized_pnl_cents": realized_cents,
+        "total_signals": len(signals_today),
+        "top_symbols": top_symbols,
+        "by_bot": by_bot,
+        "top_winners": top_winners,
+        "top_losers": top_losers,
+        "open_positions": open_count,
+        "date": date.today().isoformat(),
+    }
+
+
 def run_daily_briefing_job(db: Session) -> None:
     """Called by APScheduler at 8am ET weekdays. Sends to all active users."""
     from app.db.models.users import User

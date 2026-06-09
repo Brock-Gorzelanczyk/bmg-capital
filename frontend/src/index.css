@@ -369,3 +369,17 @@
 .animate-confetti-fall {
   animation: confetti-fall linear forwards;
 }
+
+/* ── Login page animations ───────────────────────────────────────────────── */
+@keyframes bmg-ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes bmg-scan {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(400%); }
+}
+@keyframes bmg-scan-btn {
+  from { left: -10%; }
+  to   { left: 110%; }
+}
