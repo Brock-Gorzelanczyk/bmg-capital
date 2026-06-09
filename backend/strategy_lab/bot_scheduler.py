@@ -532,9 +532,96 @@ def setup_bot_scheduler(scheduler) -> None:
         replace_existing=True,
     )
 
+    # ------------------------------------------------------------------
+    # Recurring dupe quarantine: every 10 min, 24/7
+    # Band-aid until cooldown root cause is confirmed fixed. Same logic
+    # as the startup migration but runs repeatedly so dupes can't
+    # accumulate between restarts.
+    # ------------------------------------------------------------------
+    def _quarantine_dupes_periodic():
+        try:
+            from app.db.session import SessionLocal
+            from sqlalchemy import text
+            from datetime import datetime as _dt, timezone as _tz
+            from collections import defaultdict as _dd
+
+            db = SessionLocal()
+            try:
+                rows = db.execute(text("""
+                    SELECT id, allocation_id, symbol, avg_cost_cents, qty, opened_at
+                    FROM bot_positions
+                    WHERE closed_at IS NULL
+                      AND quarantined_at IS NULL
+                    ORDER BY allocation_id, symbol, id
+                """)).fetchall()
+
+                groups = _dd(list)
+                for row in rows:
+                    groups[(row[1], row[2])].append({
+                        "id": row[0], "avg_cost_cents": row[3] or 0,
+                        "qty": row[4] or 0, "opened_at": row[5],
+                    })
+
+                def _ts(s):
+                    if not s:
+                        return 0
+                    try:
+                        if isinstance(s, _dt):
+                            return int(s.timestamp())
+                        return int(_dt.fromisoformat(str(s).replace("Z", "+00:00")).timestamp())
+                    except Exception:
+                        return 0
+
+                to_quarantine = []
+                for positions in groups.values():
+                    if len(positions) < 2:
+                        continue
+                    sorted_pos = sorted(positions, key=lambda x: x["id"])
+                    keeper = sorted_pos[0]
+                    keeper_ts = _ts(keeper["opened_at"])
+                    for pos in sorted_pos[1:]:
+                        same_cost = abs(pos["avg_cost_cents"] - keeper["avg_cost_cents"]) <= 1
+                        same_qty = abs(pos["qty"] - keeper["qty"]) < 0.0001
+                        within_60s = abs(_ts(pos["opened_at"]) - keeper_ts) <= 60
+                        if same_cost and same_qty and within_60s:
+                            to_quarantine.append(pos["id"])
+
+                if to_quarantine:
+                    now = _dt.now(_tz.utc).isoformat()
+                    for pos_id in to_quarantine:
+                        db.execute(text("""
+                            UPDATE bot_positions
+                            SET quarantined_at = :now,
+                                quarantine_reason = 'cooldown_dupe_merged'
+                            WHERE id = :id
+                        """), {"now": now, "id": pos_id})
+                    db.commit()
+                    logger.error(
+                        "[dupe-quarantine] periodic: quarantined %d duplicate positions",
+                        len(to_quarantine),
+                    )
+                else:
+                    logger.warning("[dupe-quarantine] periodic: no duplicates found")
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("[dupe-quarantine] periodic job failed: %s", exc)
+
+    scheduler.add_job(
+        _quarantine_dupes_periodic,
+        CronTrigger(minute="*/10"),
+        id="quarantine_dupes_periodic",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
         "crypto_quant_aggressive crypto_quant_scalper crypto_quant_mean_reversion "
-        "options_income options_directional position_monitor dead_mans_switch"
+        "options_income options_directional position_monitor dead_mans_switch "
+        "quarantine_dupes_periodic"
     )

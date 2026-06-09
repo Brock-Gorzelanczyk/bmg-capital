@@ -211,7 +211,8 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     const qtyStr      = qty     != null ? `${fmtQty(qty)} ${baseAsset}`   : "—";
     const notionalStr = notional != null ? fmtUSD(notional)                 : "—";
     const allocStr    = signal.positionSizePct != null ? `${signal.positionSizePct.toFixed(1)}% of portfolio` : "—";
-    const costLabel   = isBuy ? "Cost Basis" : "Notional";
+    const dollarLabel = isBuy ? "Invested" : "Notional";
+    const assetLabel  = isBuy ? "Acquired" : "Sold Short";
 
     const testPrefix = signal.isTest ? "[TEST] " : "";
     const embed = new EmbedBuilder()
@@ -223,8 +224,8 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
         { name: "Strategy",    value: signal.strategy,                                       inline: true },
         { name: "Direction",   value: direction,                                             inline: true },
         { name: "Confidence",  value: `${(signal.confidence * 100).toFixed(1)}%`,           inline: true },
-        { name: "Quantity",    value: qtyStr,                                                inline: true },
-        { name: costLabel,     value: notionalStr,                                           inline: true },
+        { name: dollarLabel,   value: notionalStr,                                           inline: true },
+        { name: assetLabel,    value: qtyStr,                                                inline: true },
         { name: "Allocation",  value: allocStr,                                              inline: true },
         { name: "Entry",       value: entry  != null ? `$${fmtPrice(entry)}`              : "—", inline: true },
         { name: "Stop",        value: stop   != null ? `$${fmtPrice(stop)}${stopPct   != null ? ` (${fmtPct(stopPct)})`   : ""}` : "—", inline: true },

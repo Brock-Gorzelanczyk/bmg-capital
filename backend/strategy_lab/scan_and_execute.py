@@ -159,9 +159,9 @@ def scan_and_execute(
     cooldown_min = float(profile.get("cooldown_minutes", 0))
     position_cap = int(profile.get("position_cap", 999))
 
-    logger.warning(
-        "[cooldown-config] %s cooldown_minutes=%.0f position_cap=%d",
-        profile_name, cooldown_min, position_cap,
+    logger.error(
+        "[cooldown-runtime-check] %s cooldown_minutes=%.0f position_cap=%d position_size_pct=%.4f",
+        profile_name, cooldown_min, position_cap, default_size,
     )
 
     # ── Pre-deduplicate: keep one signal per (symbol, side) — highest confidence ─
@@ -228,16 +228,22 @@ def scan_and_execute(
 
         # ── Per-signal: persist then execute ─────────────────────────────────
         for r in ordered_results:
-            if (r["symbol"], r["side"]) in on_cooldown:
-                logger.warning(
-                    "[cooldown] %s %s %s — fired within last %.0fmin, skipping",
+            _cd_key = (r["symbol"], r["side"])
+            _is_blocked = _cd_key in on_cooldown
+            logger.error(
+                "[cooldown-check] %s symbol=%s side=%s on_cooldown=%s cooldown_set_size=%d",
+                profile_name, r["symbol"], r["side"], _is_blocked, len(on_cooldown),
+            )
+            if _is_blocked:
+                logger.error(
+                    "[cooldown-blocked] %s %s %s — fired within last %.0fmin, skipping",
                     profile_name, r["symbol"], r["side"], cooldown_min,
                 )
                 continue
 
             # Mark as in-flight immediately — prevents re-entry in the same scan
             # even if persist later fails (unconditional, outside the try-block)
-            on_cooldown.add((r["symbol"], r["side"]))
+            on_cooldown.add(_cd_key)
 
             # Persist
             signal_id: Optional[int] = None
@@ -274,7 +280,7 @@ def scan_and_execute(
                         symbol=r["symbol"],
                         side=r["side"],
                         confidence=r["confidence"],
-                        size_hint=float(r.get("size_hint", 0.1)),
+                        size_hint=min(1.0, max(0.0, default_size / 100.0)),
                         reason=str(r.get("reasons", "")),
                         strategy=r["strategy"],
                         ts=datetime.now(timezone.utc),
