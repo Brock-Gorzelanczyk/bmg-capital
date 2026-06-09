@@ -81,8 +81,8 @@ function PortfolioCard({ p }: { p: StrategyPortfolio }) {
 }
 
 function SignalRow({ s }: { s: RecentSignal }) {
-  const dotCls = { buy: "bg-emerald-500", sell: "bg-red-500", hold: "bg-zinc-500" }[s.side] ?? "bg-zinc-500";
-  const textCls = { buy: "text-emerald-400", sell: "text-red-400", hold: "text-zinc-400" }[s.side] ?? "text-zinc-400";
+  const dotCls = { buy: "bg-emerald-500", long: "bg-emerald-500", sell: "bg-red-500", short: "bg-red-500", hold: "bg-zinc-500" }[s.side] ?? "bg-zinc-500";
+  const textCls = { buy: "text-emerald-400", long: "text-emerald-400", sell: "text-red-400", short: "text-red-400", hold: "text-zinc-400" }[s.side] ?? "text-zinc-400";
   return (
     <div className="flex items-center gap-3 py-3 border-b border-zinc-800 last:border-0">
       <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dotCls)} />

@@ -861,7 +861,7 @@ function StrategyBlock({ strat }: { strat: StrategyTrace }) {
                   ? "bg-lime-500/20 text-lime-400 border border-lime-500/30"
                   : "bg-orange-500/20 text-orange-400 border border-orange-500/30",
               )}>
-                {strat.side === "buy" || strat.side === "long" ? "LONG" : strat.side === "sell" || strat.side === "short" ? "SHORT" : strat.side.toUpperCase()}
+                {strat.side === "buy" || strat.side === "long" ? "LONG" : "SHORT"}
               </span>
             )}
           </div>

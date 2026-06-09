@@ -41,7 +41,7 @@ export interface BotSignal {
   id: number;
   ts: string;
   symbol: string;
-  side: "buy" | "sell" | "hold";
+  side: "buy" | "sell" | "long" | "short" | "hold";
   confidence: number;
   reason: string;
   strategy: string;
@@ -227,7 +227,7 @@ export interface StrategyTrace {
   weight: number;
   score: number;
   fired: boolean;
-  side: "buy" | "sell" | null;
+  side: "buy" | "sell" | "long" | "short" | null;
   summary: string;
   conditions: ConditionTrace[];
   error?: string;
@@ -343,7 +343,7 @@ export interface ActivityEvent {
   ts: string;
   category: "signal" | "fill" | "skip" | string;
   symbol: string;
-  side?: "buy" | "sell" | "hold";
+  side?: "buy" | "sell" | "long" | "short" | "hold";
   strategy?: string;
   reason?: string;
   result?: "filled" | "skipped" | "error";
@@ -451,7 +451,7 @@ export interface PendingReview {
   symbol: string;
   ts: string;
   confidence: number;
-  side: "buy" | "sell" | "hold";
+  side: "buy" | "sell" | "long" | "short" | "hold";
   reason?: string;
 }
 
@@ -519,7 +519,7 @@ export interface RecentSignal {
   bot_name: string;
   display_name: string;
   symbol: string;
-  side: "buy" | "sell" | "hold";
+  side: "buy" | "sell" | "long" | "short" | "hold";
   confidence: number;
   reason: string;
   strategy: string;
@@ -556,7 +556,7 @@ export interface OpenPosition {
   bot_color: string;
   asset_class: "stock" | "crypto" | "options" | "quant";
   symbol: string;
-  side: "buy" | "sell";
+  side: "buy" | "sell" | "long" | "short";
   qty: number;
   entry_price: number;
   current_price: number;
