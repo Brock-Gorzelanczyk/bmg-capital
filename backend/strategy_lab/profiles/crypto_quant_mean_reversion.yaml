@@ -4,7 +4,7 @@ asset_class: quant
 broker: alpaca_paper_crypto
 
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, MATIC/USD,
+  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, POL/USD,
             LINK/USD, DOT/USD, ADA/USD, NEAR/USD, ATOM/USD]
 
 scan_timeframe: "5m"

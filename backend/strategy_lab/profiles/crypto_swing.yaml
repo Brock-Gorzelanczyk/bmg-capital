@@ -2,7 +2,7 @@ name: crypto_swing
 asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, MATIC/USD, LINK/USD, DOT/USD, ADA/USD, ATOM/USD, DOGE/USD,
+  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, POL/USD, LINK/USD, DOT/USD, ADA/USD, ATOM/USD, DOGE/USD,
             ARB/USD, OP/USD, INJ/USD, FET/USD, TIA/USD, SEI/USD, JUP/USD, ONDO/USD, WIF/USD, BONK/USD]
 cadence: "0 */4 * * *"
 watchlist:
