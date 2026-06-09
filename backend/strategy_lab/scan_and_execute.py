@@ -262,7 +262,7 @@ def scan_and_execute(
                             _stop_info = compute_stop(r["symbol"], r["side"], _ep, _sym_bars) or {}
                         except Exception:
                             pass
-                        if not _stop_info.get("stop_price"):
+                        if not _stop_info.get("stop_price") or not _stop_info.get("target_price"):
                             _sl = float(profile.get("stop_loss_pct", 7.0)) / 100
                             _tp = float(profile.get("take_profit_pct", 15.0)) / 100
                             if r["side"] in ("buy", "cover"):
@@ -283,7 +283,7 @@ def scan_and_execute(
                         size_hint=min(1.0, max(0.0, default_size / 100.0)),
                         reason=str(r.get("reasons", "")),
                         strategy=r["strategy"],
-                        ts=datetime.now(timezone.utc),
+                        ts=datetime.utcnow(),  # naive UTC — matches datetime.utcnow() cutoff in cooldown query
                     )
                     signal_id = log_signal(
                         db, alloc.id, sig,

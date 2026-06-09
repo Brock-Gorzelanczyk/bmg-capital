@@ -171,13 +171,15 @@ def _get_live_crypto_cls():
 
 
 PAPER_BROKERS = {
-    "stock": _get_paper_stocks_cls,
-    "crypto": _get_paper_crypto_cls,
+    "stock":   _get_paper_stocks_cls,
+    "crypto":  _get_paper_crypto_cls,
+    "quant":   _get_paper_crypto_cls,  # quant bots trade crypto via Alpaca paper
 }
 
 LIVE_BROKERS = {
-    "stock": _get_live_stocks_cls,
-    "crypto": _get_live_crypto_cls,
+    "stock":   _get_live_stocks_cls,
+    "crypto":  _get_live_crypto_cls,
+    "quant":   _get_live_crypto_cls,
 }
 
 
