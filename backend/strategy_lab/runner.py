@@ -564,13 +564,7 @@ def run_bot_profile(profile_name: str) -> dict:
                     if sig.side == "hold":
                         continue
 
-                    # Long-only filter: crypto/quant paper brokers have no short mechanism.
-                    if sig.side == "sell" and asset_class in ("crypto", "crypto_intraday", "quant"):
-                        logger.debug(
-                            "[runner:%s] SKIP sell %s (long-only asset_class=%s)",
-                            profile_name, sig.symbol, asset_class,
-                        )
-                        continue
+                    # sell signals now route to the short execution path in _execute_signal.
 
                     # 10-pre. Extended-hours session filter (equities only).
                     # Only applies when the profile has execution.extended_hours: true.
@@ -1310,12 +1304,12 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     """
     import os
 
-    if sig.side not in ("buy",):
+    if sig.side not in ("buy", "sell"):
         logger.info(
-            "[exec] SKIP non-buy side=%s symbol=%s profile=%s — longs only",
+            "[exec] SKIP side=%s symbol=%s profile=%s — only buy/sell handled",
             sig.side, sig.symbol, profile_name,
         )
-        return  # only open long positions for now
+        return
 
     from datetime import datetime, timezone
     from app.db.models.bots import BotPosition, BotTrade
@@ -1436,8 +1430,16 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     if qty <= 0:
         return
 
-    # 3. Compute stop and target from profile rules
-    stop_price, target_price = compute_bracket_prices(entry_price, profile)
+    is_short = sig.side == "sell"
+
+    # 3. Compute stop and target from profile rules (reversed for shorts)
+    if is_short:
+        _sl_pct = abs(profile.get("stop_loss_pct", 8.0)) / 100
+        _tp_pct = abs(profile.get("take_profit_pct", 18.0)) / 100
+        stop_price = round(entry_price * (1 + _sl_pct), 8)
+        target_price = round(entry_price * (1 - _tp_pct), 8)
+    else:
+        stop_price, target_price = compute_bracket_prices(entry_price, profile)
 
     # 4. Submit bracket order to Alpaca (best-effort — sim fill if unavailable)
     _in_ext_hours = (
@@ -1455,7 +1457,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             result = broker.submit_bracket_order(
                 symbol=sig.symbol,
                 qty=qty,
-                side="buy",
+                side="sell" if is_short else "buy",
                 stop_price=stop_price,
                 target_price=target_price,
                 extended_hours=_in_ext_hours,
@@ -1465,7 +1467,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             logger.warning("[execute:%s] bracket_order failed for %s: %s", profile_name, sig.symbol, exc)
             # Fall through — still create DB rows as simulated paper fill
 
-    fill_cents = int(entry_price * 100)
+    fill_cents = entry_price * 100  # float — preserves sub-penny precision (e.g. SHIB)
 
     # 5–6. Create BotPosition + BotTrade — wrapped so a DB error can't corrupt the
     # session and block all subsequent signals in this scan cycle.
@@ -1475,6 +1477,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             symbol=sig.symbol,
             qty=qty,
             avg_cost_cents=fill_cents,
+            side="short" if is_short else "long",
             opened_at=now,
             closed_at=None,
             is_paper=True,
@@ -1488,7 +1491,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         trade = BotTrade(
             allocation_id=alloc.id,
             symbol=sig.symbol,
-            side="buy",
+            side="short" if is_short else "buy",  # "short" marks entry; "cover" marks exit
             qty=qty,
             fill_price_cents=fill_cents,
             fees_cents=0,

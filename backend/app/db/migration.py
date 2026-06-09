@@ -221,6 +221,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("trailing_stop_price_usd","FLOAT"),
         ("quarantined_at",         "DATETIME"),
         ("quarantine_reason",      "VARCHAR"),
+        ("side",                   "VARCHAR NOT NULL DEFAULT 'long'"),
     ],
     "bot_trades": [
         ("expected_fill_cents", "INTEGER"),

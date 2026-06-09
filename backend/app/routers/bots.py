@@ -664,8 +664,8 @@ def get_portfolio_activity(
         .all()
     )
 
-    # For sell trades, look up the position to compute realized PnL
-    position_ids = [t.position_id for t in trades if t.position_id and t.side == "sell"]
+    # For exit trades (sell / cover), look up the position to compute realized PnL
+    position_ids = [t.position_id for t in trades if t.position_id and t.side in ("sell", "cover")]
     position_map = {}
     if position_ids:
         pos_rows = db.query(BotPosition).filter(BotPosition.id.in_(position_ids)).all()
@@ -676,12 +676,17 @@ def get_portfolio_activity(
         bot_name = alloc_profile.get(t.allocation_id, "")
         from app.core.canonical import DISPLAY_NAMES
         display = DISPLAY_NAMES.get(bot_name, bot_name.replace("_", " ").title())
-        fill_price = round(t.fill_price_cents / 100, 2)
+        fill_price = round(t.fill_price_cents / 100, 8)
 
         realized_pnl = None
-        if t.side == "sell" and t.position_id and t.position_id in position_map:
+        if t.side in ("sell", "cover") and t.position_id and t.position_id in position_map:
             pos = position_map[t.position_id]
-            realized_pnl = round((fill_price - pos.avg_cost_cents / 100) * t.qty, 2)
+            entry_price = pos.avg_cost_cents / 100
+            is_short = getattr(pos, "side", "long") == "short"
+            if is_short:
+                realized_pnl = round((entry_price - fill_price) * t.qty, 2)
+            else:
+                realized_pnl = round((fill_price - entry_price) * t.qty, 2)
 
         result.append({
             "id": t.id,
@@ -907,7 +912,8 @@ def get_bot_activity(
     if category in ("all", "fill"):
         # Build position avg_cost map for PnL display
         positions = db.query(BotPosition).filter(BotPosition.allocation_id == allocation.id).all()
-        pos_cost: dict[int, int] = {p.id: p.avg_cost_cents for p in positions}
+        pos_cost: dict[int, float] = {p.id: p.avg_cost_cents for p in positions}
+        pos_side: dict[int, str] = {p.id: getattr(p, "side", "long") or "long" for p in positions}
 
         trades = (
             db.query(BotTrade)
@@ -920,11 +926,15 @@ def get_bot_activity(
             .all()
         )
         for t in trades:
-            fill_price = round(t.fill_price_cents / 100, 2)
+            fill_price = round(t.fill_price_cents / 100, 8)
             pnl_usd: float | None = None
-            if t.side.lower() in ("sell", "close") and t.position_id and t.position_id in pos_cost:
+            if t.side.lower() in ("sell", "close", "cover") and t.position_id and t.position_id in pos_cost:
                 avg = pos_cost[t.position_id]
-                pnl_usd = round((t.fill_price_cents - avg) * t.qty / 100, 2)
+                is_short_pos = pos_side.get(t.position_id, "long") == "short"
+                if is_short_pos:
+                    pnl_usd = round((avg - t.fill_price_cents) * t.qty / 100, 2)
+                else:
+                    pnl_usd = round((t.fill_price_cents - avg) * t.qty / 100, 2)
             items.append({
                 "id": f"fill-{t.id}",
                 "ts": t.ts.isoformat() if t.ts else None,

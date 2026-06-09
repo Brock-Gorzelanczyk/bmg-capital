@@ -55,11 +55,12 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     """Record exit trade and mark position closed."""
     from app.db.models.bots import BotTrade
 
-    fill_cents = int(price_usd * 100)
+    is_short = getattr(pos, "side", "long") == "short"
+    fill_cents = price_usd * 100  # float — preserves sub-penny precision
     exit_trade = BotTrade(
         allocation_id=alloc.id,
         symbol=pos.symbol,
-        side="sell",
+        side="cover" if is_short else "sell",  # cover = buy-to-close for shorts
         qty=pos.qty,
         fill_price_cents=fill_cents,
         fees_cents=0,
@@ -76,7 +77,7 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     db.commit()
 
     entry_usd = pos.avg_cost_cents / 100.0
-    pnl = (price_usd - entry_usd) * pos.qty
+    pnl = (entry_usd - price_usd) * pos.qty if is_short else (price_usd - entry_usd) * pos.qty
     logger.info(
         "[monitor] CLOSED %s qty=%.6f entry=%.4f exit=%.4f pnl=%.2f reason=%s pos_id=%d",
         pos.symbol, pos.qty, entry_usd, price_usd, pnl, reason, pos.id,
@@ -160,6 +161,7 @@ def run_position_monitor() -> dict:
                 continue
 
             checked += 1
+            is_short = getattr(pos, "side", "long") == "short"
             entry_usd = pos.avg_cost_cents / 100.0
             alloc = db.get(BotAllocation, pos.allocation_id)
             if not alloc:
@@ -200,9 +202,10 @@ def run_position_monitor() -> dict:
                     closed_time += 1
                     continue
 
-            # ── Trailing stop: activate when position up >= activate_pct ─────────
+            # ── Trailing stop (longs only for now) ────────────────────────────────
             if (
-                not pos.trailing_stop_activated
+                not is_short
+                and not pos.trailing_stop_activated
                 and entry_usd > 0
                 and current_price >= entry_usd * (1 + activate_pct / 100)
             ):
@@ -219,17 +222,31 @@ def run_position_monitor() -> dict:
                         pos.symbol, new_stop,
                     )
 
-            # ── Stop loss check ──────────────────────────────────────────────────
-            if pos.stop_price_usd is not None and current_price <= pos.stop_price_usd:
-                _close_position(db, pos, alloc, current_price, "stop_loss", now)
-                closed_stop += 1
-                continue
+            # ── Stop loss check (direction-aware) ────────────────────────────────
+            if pos.stop_price_usd is not None:
+                # Short: stop is above entry — hit when price rises above it
+                # Long:  stop is below entry — hit when price falls below it
+                stop_hit = (
+                    current_price >= pos.stop_price_usd if is_short
+                    else current_price <= pos.stop_price_usd
+                )
+                if stop_hit:
+                    _close_position(db, pos, alloc, current_price, "stop_loss", now)
+                    closed_stop += 1
+                    continue
 
-            # ── Take profit check ────────────────────────────────────────────────
-            if pos.target_price_usd is not None and current_price >= pos.target_price_usd:
-                _close_position(db, pos, alloc, current_price, "take_profit", now)
-                closed_target += 1
-                continue
+            # ── Take profit check (direction-aware) ──────────────────────────────
+            if pos.target_price_usd is not None:
+                # Short: target is below entry — profit when price falls below it
+                # Long:  target is above entry — profit when price rises above it
+                target_hit = (
+                    current_price <= pos.target_price_usd if is_short
+                    else current_price >= pos.target_price_usd
+                )
+                if target_hit:
+                    _close_position(db, pos, alloc, current_price, "take_profit", now)
+                    closed_target += 1
+                    continue
 
     except Exception as exc:
         logger.error("[monitor] position_monitor error: %s", exc, exc_info=True)

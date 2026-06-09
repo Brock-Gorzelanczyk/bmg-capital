@@ -166,7 +166,8 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         .filter(BotPosition.allocation_id == alloc.id)
         .all()
     )
-    pos_cost_map: dict[int, int] = {p.id: p.avg_cost_cents for p in all_positions}
+    pos_cost_map: dict[int, float] = {p.id: p.avg_cost_cents for p in all_positions}
+    pos_side_map: dict[int, str] = {p.id: getattr(p, "side", "long") or "long" for p in all_positions}
 
     # ── All trades (excluding quarantined) ───────────────────────────────────
     all_trades = (
@@ -179,25 +180,31 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         .all()
     )
 
-    # ── Realized PnL — sell fills only ───────────────────────────────────────
-    # PnL per fill = (sell_price - avg_cost) × qty - fees
+    # ── Realized PnL ─────────────────────────────────────────────────────────
+    # Long exits:  side="sell"|"close"  — PnL = (exit - entry) × qty
+    # Short exits: side="cover"         — PnL = (entry - exit) × qty
     realized_pnl_cents = 0
     today_realized_cents = 0
     realized_30d_cents = 0
 
-    # Fallback avg_cost by symbol: last buy trade price for trades without position_id
-    buy_price_by_symbol: dict[str, int] = {}
+    # Fallback avg_cost by symbol: last buy/short-entry price for trades without position_id
+    buy_price_by_symbol: dict[str, float] = {}
     for t in all_trades:
-        if t.side.lower() in ("buy", "open"):
+        if t.side.lower() in ("buy", "open", "short"):
             buy_price_by_symbol[t.symbol] = t.fill_price_cents
 
     for t in all_trades:
-        if t.side.lower() not in ("sell", "close"):
+        side_lower = t.side.lower()
+        if side_lower not in ("sell", "close", "cover"):
             continue
         avg_cost = pos_cost_map.get(t.position_id) if t.position_id else None
         if avg_cost is None:
             avg_cost = buy_price_by_symbol.get(t.symbol, t.fill_price_cents)
-        fill_pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
+        # "cover" closes a short: profit when exit price < entry price
+        if side_lower == "cover":
+            fill_pnl = int((avg_cost - t.fill_price_cents) * t.qty) - int(t.fees_cents or 0)
+        else:
+            fill_pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
         realized_pnl_cents += fill_pnl
         trade_date = t.ts.date() if hasattr(t.ts, "date") else t.ts
         if trade_date == today:
@@ -216,7 +223,11 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     for p in open_pos_rows:
         price = live_prices.get(p.symbol)
         if price and p.avg_cost_cents and p.qty:
-            unrealized_pnl_cents += int((price * 100 - p.avg_cost_cents) * p.qty)
+            is_short = pos_side_map.get(p.id, "long") == "short"
+            if is_short:
+                unrealized_pnl_cents += int((p.avg_cost_cents - price * 100) * p.qty)
+            else:
+                unrealized_pnl_cents += int((price * 100 - p.avg_cost_cents) * p.qty)
 
     # ── Portfolio value (the invariant) ──────────────────────────────────────
     portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
@@ -249,8 +260,13 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         cost = p.avg_cost_cents / 100 if p.avg_cost_cents else None
         qty = p.qty or 0
         market_val = round(price * qty, 2) if price and qty else None
-        unreal = round((price - cost) * qty, 2) if price and cost and qty else None
-        unreal_pct = round((price - cost) / cost * 100, 2) if price and cost else None
+        _pos_short = pos_side_map.get(p.id, "long") == "short"
+        if price and cost:
+            unreal = round((cost - price) * qty, 2) if _pos_short else round((price - cost) * qty, 2)
+            unreal_pct = round((cost - price) / cost * 100, 2) if _pos_short else round((price - cost) / cost * 100, 2)
+        else:
+            unreal = None
+            unreal_pct = None
         open_positions.append({
             "id": p.id,
             "symbol": p.symbol,
