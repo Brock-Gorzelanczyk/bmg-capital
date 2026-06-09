@@ -223,6 +223,7 @@ def run_bot_profile(profile_name: str) -> dict:
         On error: {"error": str}.
     """
     _scan_start = datetime.now(timezone.utc)
+    logger.info("[scheduled] %s scan START %s", profile_name, _scan_start.isoformat())
     logger.info(">>> [runner:%s] scan cycle START %s", profile_name, _scan_start.isoformat())
     try:
         # 1. Load profile YAML
@@ -431,6 +432,7 @@ def run_bot_profile(profile_name: str) -> dict:
 
             # 8a. Multi-timeframe confluence filter (graceful)
             bot_cadence = _cadence_for_profile(profile_name)
+            _pre_mtf = len(signals)
             filtered_signals = []
             for sig in signals:
                 if sig.side == "hold":
@@ -447,13 +449,17 @@ def run_bot_profile(profile_name: str) -> dict:
                         )
                     else:
                         logger.info(
-                            "[runner:%s] MTF %s %s: score=%.2f SKIP",
+                            "[runner:%s] MTF %s %s: score=%.2f SKIP (threshold=0.66)",
                             profile_name, sig.symbol, sig.side, score,
                         )
                 except Exception as exc:
                     logger.warning("[runner:%s] multi_timeframe failed for %s: %s", profile_name, sig.symbol, exc)
                     filtered_signals.append(sig)  # degrade gracefully
             signals = filtered_signals
+            logger.info(
+                "[scheduled] %s after_mtf=%d/%d cadence=%s",
+                profile_name, len(signals), _pre_mtf, bot_cadence,
+            )
             logger.info(
                 "[runner:%s] FILTER after_mtf=%d cadence=%s (dropped %d)",
                 profile_name, len(signals), bot_cadence,
@@ -468,6 +474,10 @@ def run_bot_profile(profile_name: str) -> dict:
             except (ImportError, Exception) as exc:
                 logger.debug("[runner:%s] risk_overlay unavailable: %s", profile_name, exc)
             logger.info(
+                "[scheduled] %s after_overlay=%d/%d",
+                profile_name, len(signals), pre_overlay_count,
+            )
+            logger.info(
                 "[runner:%s] FILTER after_overlay=%d (dropped %d)",
                 profile_name, len(signals), pre_overlay_count - len(signals),
             )
@@ -476,6 +486,10 @@ def run_bot_profile(profile_name: str) -> dict:
             from strategy_lab.core.audit import log_signal
 
             actionable = [s for s in signals if s.side != "hold"]
+            logger.info(
+                "[scheduled] %s actionable=%d hold=%d — entering alloc loop (%d allocs)",
+                profile_name, len(actionable), len(signals) - len(actionable), len(allocations),
+            )
             logger.info(
                 "[runner:%s] FILTER actionable=%d hold=%d",
                 profile_name, len(actionable), len(signals) - len(actionable),
@@ -602,10 +616,14 @@ def run_bot_profile(profile_name: str) -> dict:
                             stop_price=stop_info.get("stop_price"),
                             target_price=stop_info.get("target_price"),
                         )
+                        logger.info(
+                            "[scheduled] %s SIGNAL PERSISTED %s %s confidence=%.3f alloc=%d",
+                            profile_name, sig.side, sig.symbol, sig.confidence, alloc.id,
+                        )
                     except Exception as _sig_persist_exc:
                         logger.error(
-                            "[runner:%s] log_signal FAILED for %s — full traceback follows",
-                            profile_name, sig.symbol, exc_info=True,
+                            "[scheduled] %s log_signal FAILED %s %s — traceback:",
+                            profile_name, sig.side, sig.symbol, exc_info=True,
                         )
 
                     # 10a. Anomaly detector — halt on abnormal conditions
@@ -799,9 +817,15 @@ def run_bot_profile(profile_name: str) -> dict:
                             profile_name=profile_name,
                             bars=bars,
                         )
+                        logger.info(
+                            "[scheduled] %s _execute_signal OK %s %s",
+                            profile_name, sig.side, sig.symbol,
+                        )
                     except Exception as exc:
-                        logger.warning("[runner:%s] execute_signal failed for %s: %s",
-                                       profile_name, sig.symbol, exc)
+                        logger.error(
+                            "[scheduled] %s _execute_signal FAILED %s %s — traceback:",
+                            profile_name, sig.side, sig.symbol, exc_info=True,
+                        )
 
                     processed_signals.append({
                         "signal": sig,
@@ -845,8 +869,15 @@ def run_bot_profile(profile_name: str) -> dict:
                             strategy=sig.strategy or profile_name, reason=sig.reason or "",
                             confidence=sig.confidence, price=_entry_price, size_pct=final_size_pct,
                         )
+                        logger.info(
+                            "[scheduled] %s Discord webhook fired %s %s",
+                            profile_name, sig.side, sig.symbol,
+                        )
                     except Exception as _exc:
-                        logger.debug("[runner:%s] webhook discord skipped: %s", profile_name, _exc)
+                        logger.error(
+                            "[scheduled] %s Discord webhook FAILED %s %s — traceback:",
+                            profile_name, sig.side, sig.symbol, exc_info=True,
+                        )
 
                     # One-shot: #announcements alert on the very first real crypto buy signal
                     if profile_name in {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain", "crypto_quant_aggressive"} and sig.side == "buy":
@@ -944,6 +975,10 @@ def run_bot_profile(profile_name: str) -> dict:
             logger.info("[runner:%s] Audit: %s", profile_name, audit_record)
 
             _scan_ms = int((datetime.now(timezone.utc) - _scan_start).total_seconds() * 1000)
+            logger.info(
+                "[scheduled] %s COMPLETE %dms — allocs=%d actionable=%d persisted=%d",
+                profile_name, _scan_ms, len(allocations), len(actionable), len(processed_signals),
+            )
             logger.info(
                 "<<< [runner:%s] scan cycle COMPLETE in %dms — "
                 "%d allocs, %d actionable signals, %d processed",
