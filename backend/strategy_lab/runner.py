@@ -357,20 +357,26 @@ def run_bot_profile(profile_name: str) -> dict:
             signals_by_strategy: list[list] = []
             strategies_loaded = 0
 
+            logger.info("[scan] bot=%s starting, %d symbols", profile_name, len(symbols))
+
             for strat_name in strategy_names:
                 mod = _load_strategy_module(strat_name)
                 if mod is None:
+                    logger.warning("[scan] strategy '%s' not in registry — skipping", strat_name)
                     continue
                 if not hasattr(mod, "generate_signals"):
-                    logger.warning("[runner:%s] Strategy '%s' has no generate_signals()", profile_name, strat_name)
+                    logger.warning("[scan] strategy '%s' not in registry — skipping (no generate_signals)", strat_name)
                     continue
+                # Log per-symbol intent before the bulk generate_signals call
+                for _sym in symbols:
+                    logger.debug("[scan] bot=%s running strategy=%s on %s", profile_name, strat_name, _sym)
                 try:
-                    strat_signals = mod.generate_signals(bars, profile, regime)
+                    strat_signals_raw = mod.generate_signals(bars, profile, regime)
                     # Apply strategy weight as confidence multiplier
                     weight = strategy_weight_map.get(strat_name, 1.0)
-                    if weight != 1.0 and strat_signals:
+                    if weight != 1.0 and strat_signals_raw:
                         from strategy_lab.core.signals import Signal
-                        strat_signals = [
+                        strat_signals_raw = [
                             Signal(
                                 symbol=s.symbol,
                                 side=s.side,
@@ -379,17 +385,22 @@ def run_bot_profile(profile_name: str) -> dict:
                                 reason=f"[w={weight:.3f}] {s.reason}",
                                 strategy=s.strategy,
                             )
-                            for s in strat_signals
+                            for s in strat_signals_raw
                         ]
-                    signals_by_strategy.append(strat_signals or [])
+                    signals_by_strategy.append(strat_signals_raw or [])
                     strategies_loaded += 1
                     logger.info(
                         "[runner:%s] strategy %s → %d signals",
-                        profile_name, strat_name, len(strat_signals or []),
+                        profile_name, strat_name, len(strat_signals_raw or []),
                     )
+                    for _sig in (strat_signals_raw or []):
+                        logger.info(
+                            "[scan] bot=%s/%s(%s) → confidence=%.3f",
+                            profile_name, strat_name, _sig.symbol, _sig.confidence,
+                        )
                 except Exception as exc:
                     logger.error(
-                        "[runner:%s] Strategy '%s' raised: %s",
+                        "[scan] EXCEPTION in %s/%s: %s",
                         profile_name, strat_name, exc, exc_info=True,
                     )
                     signals_by_strategy.append([])
@@ -855,7 +866,37 @@ def run_bot_profile(profile_name: str) -> dict:
                 for sig in hold_signals:
                     log_signal(db, alloc.id, sig)
 
-            # 11. Build and persist audit record
+            # 11. Update watchlist last_evaluated_at for all symbols scanned this cycle
+            try:
+                from app.db.models.bots import BotWatchlist
+                _now_ts = datetime.now(timezone.utc)
+                _wl_rows = (
+                    db.query(BotWatchlist)
+                    .filter(
+                        BotWatchlist.profile_id == bp.id,
+                        BotWatchlist.symbol.in_(symbols) if symbols else False,
+                    )
+                    .all()
+                )
+                for _wl in _wl_rows:
+                    _wl.last_evaluated_at = _now_ts
+                    # Replace placeholder seed reasons with real scan metadata
+                    if _wl.reasons and _wl.reasons.get("seeded") is not None:
+                        _wl.reasons = {
+                            "scanned": 1,
+                            "strategies_run": strategies_loaded,
+                            "signals_generated": sum(len(s) for s in signals_by_strategy),
+                        }
+                if _wl_rows:
+                    db.commit()
+                    logger.info(
+                        "[runner:%s] Updated last_evaluated_at for %d watchlist symbols",
+                        profile_name, len(_wl_rows),
+                    )
+            except Exception as _wl_exc:
+                logger.warning("[runner:%s] watchlist last_evaluated_at update failed: %s", profile_name, _wl_exc)
+
+            # 12. Build and persist audit record
             regime_snapshot = json.dumps(regime, default=str) if regime else "{}"
             audit_record = {
                 "profile": profile_name,

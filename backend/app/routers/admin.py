@@ -298,6 +298,146 @@ def discord_test_fire(
     }
 
 
+# ── POST /api/admin/bots/{name}/scan-now-verbose ──────────────────────────────
+
+@router.post("/bots/{name}/scan-now-verbose")
+def scan_now_verbose(
+    name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Run one full synchronous scan cycle for the named bot and return verbose results.
+
+    This is a diagnostic tool — it shows whether strategies run at all, what
+    confidence scores each symbol produces, and what errors occur.  Nothing is
+    committed to the database and no orders are submitted.
+
+    Returns:
+        {
+            "bot": str,
+            "symbols_scanned": int,
+            "strategies_executed": int,
+            "results": [{"symbol", "strategy", "confidence", "reasons"}, ...],
+            "signals_generated": int,
+            "errors": [{"symbol", "strategy", "error"}, ...]
+        }
+    """
+    from strategy_lab.seeds import load_profile
+    from strategy_lab.runner import _load_strategy_module
+
+    results: list[Dict[str, Any]] = []
+    errors: list[Dict[str, Any]] = []
+
+    # 1. Load profile YAML
+    profile = load_profile(name)
+    if not profile:
+        return {"bot": name, "error": f"Profile '{name}' not found", "symbols_scanned": 0,
+                "strategies_executed": 0, "results": [], "signals_generated": 0, "errors": []}
+
+    # 2. Verify bot is in DB and enabled
+    from app.db.models.bots import BotProfile as _BP, BotAllocation as _BA
+    bp = db.query(_BP).filter(_BP.name == name).first()
+    if not bp or not bp.enabled:
+        return {"bot": name, "error": "profile disabled or not found in DB", "symbols_scanned": 0,
+                "strategies_executed": 0, "results": [], "signals_generated": 0, "errors": []}
+
+    # 3. Fetch bars (same logic as runner, read-only)
+    asset_class = profile.get("asset_class", "stock")
+    universe = profile.get("universe", {})
+    symbols: list[str] = (
+        universe.get("symbols", []) if isinstance(universe, dict) else list(universe or [])
+    )
+    timeframe = profile.get("scan_timeframe", "1h")
+    limit = int(profile.get("scan_lookback_bars", 200))
+
+    bars: Dict[str, list] = {}
+    bar_error: str = ""
+    try:
+        if asset_class in ("crypto", "crypto_intraday", "quant"):
+            from app.screener.crypto_runner import _fetch_crypto_bars
+            raw = _fetch_crypto_bars(symbols, timeframe=timeframe, limit=limit)
+        else:
+            from app.screener.runner import _fetch_bars_sync
+            raw = _fetch_bars_sync(symbols, period="60d")
+        for sym, df in raw.items():
+            if df is None or df.empty:
+                continue
+            bars[sym] = [
+                {"c": float(r["close"]), "o": float(r["open"]),
+                 "h": float(r["high"]), "l": float(r["low"]),
+                 "v": float(r.get("volume", 0) or 0),
+                 "ts": r.name.isoformat() if hasattr(r.name, "isoformat") else str(r.name)}
+                for _, r in df.iterrows()
+            ]
+    except Exception as exc:
+        bar_error = str(exc)
+        logger.warning("scan_now_verbose[%s] bar fetch failed: %s", name, exc)
+
+    # 4. Regime (graceful)
+    regime: Dict[str, Any] = {}
+    try:
+        from strategy_lab.core.regime_detector import detect_regime
+        regime = detect_regime(name, profile) or {}
+    except Exception:
+        pass
+
+    # 5. Run each strategy, per-symbol, capturing output
+    strategy_names: list[str] = profile.get("strategies", [])
+    strategies_executed = 0
+
+    for strat_name in strategy_names:
+        mod = _load_strategy_module(strat_name)
+        if mod is None:
+            errors.append({"symbol": "*", "strategy": strat_name,
+                           "error": "module not found in registry"})
+            logger.warning("[scan] strategy '%s' not in registry — skipping", strat_name)
+            continue
+        if not hasattr(mod, "generate_signals"):
+            errors.append({"symbol": "*", "strategy": strat_name,
+                           "error": "module has no generate_signals()"})
+            logger.warning("[scan] strategy '%s' not in registry — skipping (no generate_signals)", strat_name)
+            continue
+
+        try:
+            sigs = mod.generate_signals(bars, profile, regime) or []
+            strategies_executed += 1
+            for sig in sigs:
+                logger.info(
+                    "[scan] bot=%s/%s(%s) → confidence=%.3f",
+                    name, strat_name, sig.symbol, sig.confidence,
+                )
+                results.append({
+                    "symbol": sig.symbol,
+                    "strategy": strat_name,
+                    "confidence": round(sig.confidence, 4),
+                    "side": sig.side,
+                    "reasons": {"reason": sig.reason},
+                })
+        except Exception as exc:
+            logger.error(
+                "[scan] EXCEPTION in %s/%s: %s",
+                name, strat_name, exc, exc_info=True,
+            )
+            errors.append({"symbol": "*", "strategy": strat_name, "error": str(exc)})
+
+    resp: Dict[str, Any] = {
+        "bot": name,
+        "symbols_scanned": len(symbols),
+        "symbols_with_bars": len(bars),
+        "strategies_executed": strategies_executed,
+        "results": results,
+        "signals_generated": len(results),
+        "errors": errors,
+    }
+    if bar_error:
+        resp["bar_fetch_error"] = bar_error
+    logger.info(
+        "scan_now_verbose[%s]: symbols=%d bars=%d strategies=%d signals=%d errors=%d",
+        name, len(symbols), len(bars), strategies_executed, len(results), len(errors),
+    )
+    return resp
+
+
 # ── GET /api/admin/system/health ──────────────────────────────────────────────
 
 @router.get("/system/health")
