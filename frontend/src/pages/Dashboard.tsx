@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import TickerTape from "@/components/ui/TickerTape";
+import { BracketFrame, SectionLabel } from "@/components/design";
 import {
   getStrategyLabPortfolio,
   getPortfolios,
@@ -211,26 +212,26 @@ export default function Dashboard() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
 
         {/* Row 2 – Hero Stats */}
-        <div className="mb-8">
-          <p className="text-sm text-zinc-500 mb-1">Total Portfolio Value</p>
-          <div className="text-5xl font-bold tracking-tight tabular-nums">
+        <BracketFrame className="mb-8 p-5 rounded-xl" glow>
+          <SectionLabel as="p" className="mb-3">Portfolio Value</SectionLabel>
+          <div className="text-5xl font-bold tracking-tight tabular-nums font-mono">
             {totalValue ? fmtUsd(totalValue) : <span className="text-zinc-700">$—</span>}
           </div>
           <div className="flex items-center gap-4 mt-3 flex-wrap">
-            <span className={cn("text-lg font-semibold tabular-nums", isUp ? "text-emerald-400" : "text-red-400")}>
+            <span className={cn("text-lg font-semibold tabular-nums", isUp ? "text-[var(--bmg-green)]" : "text-red-400")}>
               {isUp ? "+" : ""}{fmtUsd(todayPnl)}{" "}
               <span className="text-sm font-normal">({fmtPct(todayPct)} today)</span>
             </span>
             <span className="text-zinc-600">·</span>
-            <span className={cn("text-sm tabular-nums", return30d >= 0 ? "text-emerald-400/70" : "text-red-400/70")}>
+            <span className={cn("text-sm tabular-nums font-mono", return30d >= 0 ? "text-[var(--bmg-green)]/70" : "text-red-400/70")}>
               {fmtPct(return30d)} 30d
             </span>
           </div>
-        </div>
+        </BracketFrame>
 
         {/* Row 3 – Market Regime */}
         <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-3">Market Regime</h2>
+          <SectionLabel as="h2" className="mb-3 text-zinc-300">Market Regime</SectionLabel>
           {regimeRaw ? (
             <>
               <div className="flex items-center gap-3 flex-wrap mb-3">
@@ -280,7 +281,7 @@ export default function Dashboard() {
         {/* Row 5 – Analyst Highlights */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-300">Analyst Highlights</h2>
+            <SectionLabel as="h2" className="text-zinc-300">Analyst Highlights</SectionLabel>
             <Link to="/strategy/analyst" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">View all →</Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -301,7 +302,7 @@ export default function Dashboard() {
         {/* Row 6 – Today's Catalysts */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-sm font-semibold text-zinc-300">Catalysts</h2>
+            <SectionLabel as="h2" className="text-zinc-300">Catalysts</SectionLabel>
             <span className="text-xs text-zinc-600">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -316,7 +317,7 @@ export default function Dashboard() {
         {/* Row 7 – Live Activity Feed */}
         <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-300">Live Activity</h2>
+            <SectionLabel as="h2" className="text-zinc-300">Live Activity</SectionLabel>
             <Link to="/strategy" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">View all →</Link>
           </div>
           {signals.length > 0 ? (
@@ -329,7 +330,7 @@ export default function Dashboard() {
         {/* Row 8 – Top Positions */}
         <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-300">Top Positions</h2>
+            <SectionLabel as="h2" className="text-zinc-300">Top Positions</SectionLabel>
             <span className="text-xs text-zinc-600">{topPositions.length} across all portfolios</span>
           </div>
           {topPositions.length > 0 ? (
@@ -368,7 +369,7 @@ export default function Dashboard() {
 
         {/* Row 9 – Watchlist Movers */}
         <div className="mb-8">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-3">Watchlist Movers</h2>
+          <SectionLabel as="h2" className="text-zinc-300 mb-3">Watchlist Movers</SectionLabel>
           {movers.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {movers.map((m, i) => (
@@ -391,7 +392,7 @@ export default function Dashboard() {
 
         {/* Row 10 – Strategy Spotlight */}
         <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-3">Strategy Spotlight</h2>
+          <SectionLabel as="h2" className="text-zinc-300 mb-3">Strategy Spotlight</SectionLabel>
           {topBot ? (
             <div className="flex items-center justify-between">
               <div>
@@ -409,7 +410,7 @@ export default function Dashboard() {
 
         {/* Row 11 – Learning Tip */}
         <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-2">Daily Tip</h2>
+          <SectionLabel as="h2" className="text-zinc-300 mb-2">Daily Tip</SectionLabel>
           <p className="text-sm text-zinc-400">💡 {dailyTip}</p>
         </div>
 
