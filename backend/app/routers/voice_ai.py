@@ -48,25 +48,138 @@ def _get_daily_usage(db: Session, user_id: int) -> int:
     return sum(s.duration_seconds or 0 for s in sessions)
 
 
-def _get_portfolio_summary(db: Session, user_id: int) -> str:
-    """Build a short text summary of the user's portfolio for the system prompt."""
+def _get_strategy_lab_summary(db: Session, user_id: int) -> str:
+    """Build a compact Strategy Lab portfolio summary for the Voice AI system prompt.
+
+    Reads live data from the canonical aggregate (same source as the UI).
+    Stays under ~400 tokens so it doesn't eat the model's context window.
+    """
     try:
-        from app.db.models.portfolio import Portfolio, Position
-        portfolios = (
-            db.query(Portfolio).filter_by(user_id=user_id).all()
+        from datetime import timedelta
+        from app.core.canonical import compute_strategy_lab_aggregate
+        from app.db.models.bots import (
+            BotAllocation, BotProfile, BotSignal, BotPosition, StrategyPortfolio,
         )
-        if not portfolios:
-            return "No portfolio positions on file."
-        lines: list[str] = []
-        for p in portfolios:
-            for pos in p.positions:
-                lines.append(f"{pos.symbol}: {pos.shares} shares @ avg ${pos.average_cost:.2f}")
-        if not lines:
-            return "No positions in portfolio."
-        return "; ".join(lines[:15])  # cap at 15 positions to keep prompt short
-    except Exception as e:
-        logger.debug(f"Could not load portfolio for voice prompt: {e}")
-        return "Portfolio data unavailable."
+
+        agg = compute_strategy_lab_aggregate(user_id, db)
+        if not agg:
+            return "Strategy Lab portfolios not yet initialised."
+
+        now = datetime.now(timezone.utc)
+        total_usd  = (agg.get("total_value_cents") or 0) / 100
+        today_pnl  = (agg.get("today_pnl_cents")   or 0) / 100
+        today_pct  = agg.get("today_pnl_pct")  or 0.0
+        ret_30d    = agg.get("return_30d_pct")  or 0.0
+        open_pos   = agg.get("total_open_positions") or 0
+
+        sign = "+" if today_pnl >= 0 else ""
+        lines = [
+            f"USER PORTFOLIO STATE (live, {now.strftime('%Y-%m-%d %H:%M UTC')}):",
+            f"  Total value:   ${total_usd:,.2f}",
+            f"  Today P&L:     {sign}${today_pnl:,.2f} ({sign}{today_pct:.2f}%)",
+            f"  30d return:    {ret_30d:+.2f}%",
+            f"  Open positions: {open_pos}",
+            "",
+            "  By portfolio:",
+        ]
+
+        # Per-portfolio breakdown
+        portfolios = (
+            db.query(StrategyPortfolio)
+            .filter(StrategyPortfolio.user_id == user_id)
+            .all()
+        )
+        allocs = db.query(BotAllocation).filter(BotAllocation.user_id == user_id).all()
+        profile_ids = list({a.profile_id for a in allocs})
+        profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+        prof_map = {p.id: p.name for p in profiles}
+        port_alloc_map: dict[int, list[str]] = {}
+        for a in allocs:
+            if a.portfolio_id:
+                port_alloc_map.setdefault(a.portfolio_id, []).append(
+                    prof_map.get(a.profile_id, str(a.profile_id))
+                )
+
+        for port in portfolios:
+            port_bots = port_alloc_map.get(port.id, [])
+            cap_usd = (port.starting_capital_cents or 0) / 100
+            bot_list = ", ".join(port_bots) if port_bots else "none"
+            lines.append(
+                f"    {port.name:<10} ${cap_usd:>10,.0f}  ({len(port_bots)} bot{'s' if len(port_bots) != 1 else ''}: {bot_list})"
+            )
+
+        # Recent signals (last 24h)
+        cutoff = now - timedelta(hours=24)
+        alloc_ids = [a.id for a in allocs]
+        recent_signals = 0
+        recent_signal_details: list[str] = []
+        if alloc_ids:
+            sigs = (
+                db.query(BotSignal)
+                .filter(
+                    BotSignal.allocation_id.in_(alloc_ids),
+                    BotSignal.ts >= cutoff,
+                    (BotSignal.is_test == False) | (BotSignal.is_test.is_(None)),
+                )
+                .order_by(BotSignal.ts.desc())
+                .limit(5)
+                .all()
+            )
+            recent_signals = len(sigs)
+            for s in sigs[:3]:
+                bot_name = prof_map.get(
+                    next((a.profile_id for a in allocs if a.id == s.allocation_id), 0), "?"
+                )
+                recent_signal_details.append(
+                    f"{bot_name}: {s.side.upper()} {s.symbol} conf={s.confidence:.0%}"
+                )
+
+        lines.append("")
+        lines.append(f"  Recent signals (24h): {recent_signals}")
+        if recent_signal_details:
+            for d in recent_signal_details:
+                lines.append(f"    • {d}")
+
+        # Leaderboard top performer
+        lb = agg.get("leaderboard") or []
+        if lb:
+            best = lb[0]
+            lines.append(
+                f"  Top performer: {best.get('name')} ({best.get('return_30d_pct', 0):+.2f}% 30d)"
+            )
+
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning("_get_strategy_lab_summary failed: %s", exc)
+        return "Portfolio data temporarily unavailable."
+
+
+def _get_market_context(db: Session) -> str:
+    """Return a short market regime summary for the Voice AI market tab."""
+    try:
+        from app.db.models.bots import RegimeSnapshot
+        snap = (
+            db.query(RegimeSnapshot)
+            .order_by(RegimeSnapshot.id.desc())
+            .first()
+        )
+        if not snap:
+            return "No market regime data available yet."
+        lines = [
+            "CURRENT MARKET REGIME:",
+            f"  VIX regime:   {snap.vix_regime}",
+            f"  Trend regime: {snap.trend_regime}",
+        ]
+        if hasattr(snap, "vix") and snap.vix:
+            lines.append(f"  VIX level:    {snap.vix:.1f}")
+        if hasattr(snap, "spy_price") and snap.spy_price:
+            lines.append(f"  SPY:          ${snap.spy_price:.2f}")
+        if hasattr(snap, "btc_dominance") and snap.btc_dominance:
+            lines.append(f"  BTC dominance:{snap.btc_dominance:.1f}%")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.debug("_get_market_context failed: %s", exc)
+        return "Market regime data unavailable."
 
 
 def _serialize_session(s: VoiceSession) -> Dict[str, Any]:
@@ -163,17 +276,22 @@ async def voice_chat(
         db.add(session)
         db.flush()
 
-    # Build system prompt
-    portfolio_summary = _get_portfolio_summary(db, current_user.id)
-    context_hint = {
-        "portfolio": "Focus on the user's specific portfolio holdings and positions.",
-        "market": "Focus on current market conditions, macro trends, and sector analysis.",
-        "general": "Answer general investing and financial questions.",
-    }.get(body.context, "")
+    # Build system prompt — inject live context per tab
+    if body.context == "portfolio":
+        context_data = _get_strategy_lab_summary(db, current_user.id)
+        context_hint = "Focus on the user's specific portfolio holdings, positions, and performance."
+    elif body.context == "market":
+        context_data = _get_market_context(db)
+        context_hint = "Focus on current market conditions, macro trends, and sector analysis."
+    else:
+        context_data = ""
+        context_hint = "Answer general investing and financial questions."
+
     system_prompt = (
-        f"You are BMG Capital's AI advisor. {context_hint} "
-        f"The user's portfolio: {portfolio_summary}. "
-        "Answer in 1-3 sentences, spoken-language style. Always cite your reasoning. "
+        "You are BMG Capital's AI advisor. "
+        + context_hint
+        + (" \n\n" + context_data + "\n\n" if context_data else " ")
+        + "Answer in 1-3 sentences, spoken-language style. Always cite your reasoning. "
         "Never give specific buy/sell advice without saying "
         "'this is educational, not financial advice.'"
     )

@@ -16,8 +16,24 @@ function fmtPrice(price: number): string {
 
 const COMPLIANCE_FOOTER =
   "Paper trading. Not investment advice. Not a registered investment adviser.";
-const COLOR_BUY  = 0x2ec4a1;
-const COLOR_SELL = 0xe5484d;
+
+// Sidebar color = asset class category. Buy/sell direction stays in the title emoji.
+const COLOR_BY_CATEGORY: Record<string, number> = {
+  crypto:   0x9333EA,  // purple
+  stocks:   0x10B981,  // green
+  equities: 0x10B981,  // alias — stock_* bots report asset_class "equities"
+  options:  0xF97316,  // orange
+  quant:    0x2D2D2D,  // soft black
+};
+const COLOR_FALLBACK = 0x6B7280; // gray
+
+function colorForBot(botProfile: string): number {
+  if (STOCKS_BOTS.has(botProfile))  return COLOR_BY_CATEGORY.stocks;
+  if (CRYPTO_BOTS.has(botProfile))  return COLOR_BY_CATEGORY.crypto;
+  if (OPTIONS_BOTS.has(botProfile)) return COLOR_BY_CATEGORY.options;
+  if (QUANT_BOTS.has(botProfile))   return COLOR_BY_CATEGORY.quant;
+  return COLOR_FALLBACK;
+}
 
 export type SignalInput = {
   signalId: number;
@@ -100,7 +116,7 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     if (existing?.discordPostedAt) return;
 
     const client = await getDiscordClient();
-    const color = signal.side === "buy" ? COLOR_BUY : COLOR_SELL;
+    const color = colorForBot(signal.botProfile);
     const displayName = BOT_DISPLAY[signal.botProfile] ?? signal.botProfile;
 
     const entry = signal.entryPrice ?? null;
