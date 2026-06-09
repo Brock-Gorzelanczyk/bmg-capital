@@ -444,6 +444,100 @@ def run_migrations(engine: Engine) -> None:
         _delete_zombie_signals(conn)
         _scrub_ghost_pnl(conn)
         _quarantine_cooldown_dupe_positions(conn)
+        _seed_all_watchlists_from_yaml(conn)
+
+
+def _seed_all_watchlists_from_yaml(conn) -> None:
+    """Idempotent: seed bot_watchlist from each YAML profile's universe.symbols.
+
+    Runs every startup — no migration lock. Only seeds profiles that have zero
+    watchlist rows so existing watchlists are never overwritten.
+    """
+    import os
+    import glob
+
+    try:
+        import yaml as _yaml
+    except ImportError:
+        logger.warning("_seed_all_watchlists_from_yaml: PyYAML not available")
+        return
+
+    profiles_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "strategy_lab", "profiles")
+    )
+    if not os.path.isdir(profiles_dir):
+        logger.warning("_seed_all_watchlists_from_yaml: profiles dir not found: %s", profiles_dir)
+        return
+
+    yaml_files = sorted(
+        glob.glob(os.path.join(profiles_dir, "*.yaml"))
+        + glob.glob(os.path.join(profiles_dir, "*.yml"))
+    )
+
+    now_str = datetime.now(timezone.utc).isoformat()
+    total_added = 0
+
+    for yaml_path in yaml_files:
+        try:
+            with open(yaml_path) as fh:
+                profile = _yaml.safe_load(fh)
+            if not profile:
+                continue
+
+            bot_name = profile.get("name")
+            if not bot_name:
+                continue
+
+            universe = profile.get("universe", {})
+            symbols: list = (
+                universe.get("symbols", [])
+                if isinstance(universe, dict)
+                else list(universe or [])
+            )
+            if not symbols:
+                continue
+
+            profile_row = conn.execute(
+                text("SELECT id FROM bot_profiles WHERE name = :n"), {"n": bot_name}
+            ).fetchone()
+            if not profile_row:
+                continue
+
+            profile_id = profile_row[0]
+
+            existing = conn.execute(
+                text("SELECT COUNT(*) FROM bot_watchlist WHERE profile_id = :pid"),
+                {"pid": profile_id},
+            ).scalar() or 0
+            if existing > 0:
+                continue
+
+            for rank, sym in enumerate(symbols, 1):
+                score = float(len(symbols) - rank + 1)
+                conn.execute(text("""
+                    INSERT OR IGNORE INTO bot_watchlist
+                        (profile_id, symbol, score, rank, reasons, status,
+                         added_at, last_evaluated_at)
+                    VALUES
+                        (:pid, :sym, :score, :rank,
+                         '{"seeded": 1.0}', 'active',
+                         :now, :now)
+                """), {"pid": profile_id, "sym": sym, "score": score,
+                       "rank": rank, "now": now_str})
+                total_added += 1
+
+            logger.info(
+                "_seed_all_watchlists_from_yaml: seeded %d symbols for %s",
+                len(symbols), bot_name,
+            )
+        except Exception as exc:
+            logger.warning(
+                "_seed_all_watchlists_from_yaml: error processing %s: %s", yaml_path, exc
+            )
+
+    if total_added > 0:
+        conn.commit()
+        logger.info("_seed_all_watchlists_from_yaml: total %d rows inserted", total_added)
 
 
 def _archive_legacy_tables(conn) -> None:
