@@ -108,9 +108,9 @@ const BOT_ORDER = [
 function formatPnl(val: number): string {
   const abs = Math.abs(val);
   const sign = val >= 0 ? "+" : "-";
-  if (abs >= 1000) {
-    return `${sign}$${(abs / 1000).toFixed(1)}k`;
-  }
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000)     return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000)         return `${sign}$${(abs / 1_000).toFixed(1)}k`;
   return `${sign}$${abs.toFixed(2)}`;
 }
 
@@ -482,10 +482,12 @@ function OpenPositionsPanel() {
 // ─── Portfolio hero ────────────────────────────────────────────────────────────
 
 function dollars(cents: number): string {
-  const abs = Math.abs(cents / 100);
-  return abs >= 1000
-    ? `$${(abs / 1000).toFixed(1)}k`
-    : `$${abs.toFixed(2)}`;
+  const usd = cents / 100;
+  const abs = Math.abs(usd);
+  if (abs >= 1_000_000_000) return `$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000)     return `$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000)         return `$${(abs / 1_000).toFixed(1)}k`;
+  return `$${abs.toFixed(2)}`;
 }
 
 function PortfolioHeroSkeleton() {

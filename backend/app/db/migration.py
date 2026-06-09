@@ -440,6 +440,7 @@ def run_migrations(engine: Engine) -> None:
         _backfill_onchain_starting_capital(conn)
         _fix_quant_bot_capitals(conn)
         _delete_zombie_signals(conn)
+        _scrub_ghost_pnl(conn)
 
 
 def _archive_legacy_tables(conn) -> None:
@@ -1393,3 +1394,59 @@ def _delete_zombie_signals(conn) -> None:
         logger.info("_delete_zombie_signals: deleted %d rows", result.rowcount)
     except Exception as exc:
         logger.warning("_delete_zombie_signals failed: %s", exc)
+
+
+def _scrub_ghost_pnl(conn) -> None:
+    """Scrub any P&L residue from trades that escaped the universal quarantine.
+
+    The -$2.70 crypto ghost comes from exit/close trades whose position_id points
+    to a quarantined position — canonical.py still sums them because the trade
+    row itself was not quarantined (position_monitor exits have position_id set,
+    which exempted them from _quarantine_universal_fake_trades).
+
+    Also clears bot_daily_pnl rows from before the quarantine date so the
+    daily P&L history starts clean.
+    """
+    MIGRATION_NAME = "scrub_ghost_pnl_quarantined_position_exits_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Quarantine any exit trade whose position was itself quarantined
+        r_exits = conn.execute(text("""
+            UPDATE bot_trades
+               SET quarantined_at   = :now,
+                   quarantine_reason = 'exit_of_quarantined_position'
+             WHERE quarantined_at IS NULL
+               AND position_id IS NOT NULL
+               AND position_id IN (
+                 SELECT id FROM bot_positions WHERE quarantined_at IS NOT NULL
+               )
+        """), {"now": now})
+
+        # Quarantine any remaining sell/close trade with no alpaca_order_id
+        # (catches position_monitor exits that fired on synthetic positions)
+        r_synth = conn.execute(text("""
+            UPDATE bot_trades
+               SET quarantined_at   = :now,
+                   quarantine_reason = 'synthetic_exit_no_alpaca_order'
+             WHERE quarantined_at IS NULL
+               AND alpaca_order_id IS NULL
+               AND LOWER(side) IN ('sell', 'close', 'short')
+        """), {"now": now})
+
+        # Clear stale daily P&L rows from before quarantine date
+        r_dpnl = conn.execute(text(
+            "DELETE FROM bot_daily_pnl WHERE date < '2026-06-08'"
+        ))
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info(
+            "_scrub_ghost_pnl: quarantined %d exit trades, %d synthetic sells, "
+            "deleted %d stale daily_pnl rows",
+            r_exits.rowcount, r_synth.rowcount, r_dpnl.rowcount,
+        )
+    except Exception as exc:
+        logger.warning("_scrub_ghost_pnl failed: %s", exc)
