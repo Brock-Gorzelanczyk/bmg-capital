@@ -3,6 +3,7 @@ import { useParams, Navigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
+import { BracketFrame, SectionLabel, GlowInput, BMGButton, BMGCard } from "@/components/design";
 import {
   getBotConfig, getBotWatchlist, getBotAudit,
   patchBotConfig, deleteBotConfig,
@@ -44,21 +45,15 @@ function ConfirmDialog({
   message, onConfirm, onCancel,
 }: { message: string; onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
-        <p className="text-sm text-zinc-200 mb-5">{message}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <BracketFrame className="bg-[var(--bmg-bg-card)] border border-[var(--bmg-green-border)] rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl" glow>
+        <SectionLabel as="p" className="mb-3">Confirm Action</SectionLabel>
+        <p className="text-sm text-[var(--bmg-text)] mb-5">{message}</p>
         <div className="flex gap-3 justify-end">
-          <button onClick={onCancel} className="px-4 py-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-1.5 text-sm font-semibold bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
-          >
-            Confirm
-          </button>
+          <BMGButton variant="secondary" size="sm" onClick={onCancel}>Cancel</BMGButton>
+          <BMGButton variant="destructive" size="sm" onClick={onConfirm}>Confirm</BMGButton>
         </div>
-      </div>
+      </BracketFrame>
     </div>
   );
 }
@@ -67,10 +62,10 @@ function ConfirmDialog({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-      <h2 className="text-sm font-semibold text-zinc-300 mb-4">{title}</h2>
+    <BMGCard padding="md">
+      <SectionLabel as="h2" className="mb-4">{title}</SectionLabel>
       {children}
-    </div>
+    </BMGCard>
   );
 }
 
@@ -87,7 +82,7 @@ function useToast() {
   };
 
   const Toast = msg ? (
-    <div className="fixed bottom-6 right-6 z-50 bg-zinc-800 border border-zinc-700 text-sm text-white px-4 py-2.5 rounded-lg shadow-xl">
+    <div className="fixed bottom-6 right-6 z-50 bg-[var(--bmg-bg-card)] border border-[var(--bmg-green-border)] text-sm text-[var(--bmg-text)] px-4 py-2.5 rounded-lg shadow-xl">
       {msg}
     </div>
   ) : null;
@@ -202,12 +197,12 @@ function SizingSection({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         {fields.map(f => (
           <div key={f.key}>
-            <label className="block text-xs text-zinc-400 mb-1 group">
+            <label className="block text-xs text-[var(--bmg-text-muted)] mb-1 group">
               {f.label}
-              <span className="ml-1 text-zinc-600 cursor-help" title={f.tip}>(?)</span>
+              <span className="ml-1 text-[var(--bmg-text-label)] cursor-help" title={f.tip}>(?)</span>
             </label>
             <div className="flex items-center gap-2">
-              <input
+              <GlowInput
                 type="number"
                 step={f.step} min={f.min} max={f.max}
                 value={f.pct ? (vals[f.key] as number * 100).toFixed(1) : vals[f.key]}
@@ -215,9 +210,9 @@ function SizingSection({
                   const raw = f.pct ? String(parseFloat(e.target.value) / 100) : e.target.value;
                   update(f.key, raw);
                 }}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-teal-500/50 tabular-nums"
+                className="tabular-nums"
               />
-              {f.pct && <span className="text-xs text-zinc-500">%</span>}
+              {f.pct && <span className="text-xs text-[var(--bmg-text-muted)]">%</span>}
             </div>
           </div>
         ))}
@@ -225,7 +220,7 @@ function SizingSection({
 
       {/* Live preview */}
       {botCapital > 0 && (
-        <div className="bg-zinc-800/60 border border-zinc-700/50 rounded-lg p-3 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+        <div className="bg-[var(--bmg-bg-input)] border border-[var(--bmg-green-border)]/50 rounded-lg p-3 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
           {[
             ["Per-trade target", fmtUsd(perTrade)],
             ["Total deployment target", fmtUsd(totalTarget)],
@@ -233,27 +228,25 @@ function SizingSection({
             ["Hard cap / total", fmtUsd(hardCapTotal)],
           ].map(([label, val]) => (
             <div key={label as string}>
-              <p className="text-[10px] text-zinc-600 uppercase tracking-wide">{label}</p>
-              <p className="text-sm font-semibold text-white tabular-nums">{val}</p>
+              <p className="text-[10px] text-[var(--bmg-text-label)] uppercase tracking-wide font-mono">{label}</p>
+              <p className="text-sm font-semibold text-[var(--bmg-text)] tabular-nums font-mono">{val}</p>
             </div>
           ))}
         </div>
       )}
 
       <div className="flex gap-2">
-        <button
-          onClick={handleReset}
-          className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-600 rounded-lg transition-colors"
-        >
+        <BMGButton variant="secondary" size="sm" onClick={handleReset}>
           Reset to YAML
-        </button>
-        <button
+        </BMGButton>
+        <BMGButton
+          variant="primary" size="sm"
           onClick={handleSave}
           disabled={!dirty || isPending}
-          className="px-4 py-1.5 text-xs font-semibold bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+          loading={isPending}
         >
           {isPending ? "Saving…" : "Save changes"}
-        </button>
+        </BMGButton>
       </div>
     </Section>
   );
@@ -280,12 +273,12 @@ function ConfidenceSection({ botId, config, onSaved }: { botId: string; config: 
       {Toast}
       <div className="flex items-end gap-4 mb-4">
         <div>
-          <label className="block text-xs text-zinc-400 mb-1">
+          <label className="block text-xs text-[var(--bmg-text-muted)] mb-1">
             Global threshold
-            <span className="ml-1 text-zinc-600 cursor-help" title="Minimum model confidence to emit a signal. Higher = fewer but more reliable signals.">(?)</span>
+            <span className="ml-1 text-[var(--bmg-text-label)] cursor-help" title="Minimum model confidence to emit a signal. Higher = fewer but more reliable signals.">(?)</span>
           </label>
           <div className="flex items-center gap-2">
-            <input
+            <GlowInput
               type="number" step="0.01" min="0" max="1"
               value={(val * 100).toFixed(1)}
               onChange={e => {
@@ -293,33 +286,34 @@ function ConfidenceSection({ botId, config, onSaved }: { botId: string; config: 
                 setVal(isNaN(v) ? val : v);
                 setDirty(Math.abs((isNaN(v) ? val : v) - yaml) > 0.001);
               }}
-              className="w-28 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-teal-500/50 tabular-nums"
+              className="w-28 tabular-nums"
             />
-            <span className="text-xs text-zinc-500">%</span>
+            <span className="text-xs text-[var(--bmg-text-muted)]">%</span>
           </div>
-          <p className="text-xs text-zinc-600 mt-1">YAML default: {(yaml * 100).toFixed(1)}%</p>
+          <p className="text-xs text-[var(--bmg-text-label)] font-mono mt-1">YAML default: {(yaml * 100).toFixed(1)}%</p>
         </div>
       </div>
       <div className="flex gap-2">
-        <button
+        <BMGButton
+          variant="secondary" size="sm"
           onClick={async () => {
             try { await del(); qc.invalidateQueries({ queryKey: ["admin-bot-config", botId] }); show("Reset to YAML"); onSaved(); }
             catch { show("No override to reset"); }
           }}
-          className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-600 rounded-lg transition-colors"
         >
           Reset to YAML
-        </button>
-        <button
+        </BMGButton>
+        <BMGButton
+          variant="primary" size="sm"
           onClick={async () => {
             try { await patch(val); qc.invalidateQueries({ queryKey: ["admin-bot-config", botId] }); setDirty(false); show("Threshold saved"); onSaved(); }
             catch (e: any) { show(`Error: ${e?.response?.data?.detail ?? e.message}`); }
           }}
           disabled={!dirty || isPending}
-          className="px-4 py-1.5 text-xs font-semibold bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+          loading={isPending}
         >
           {isPending ? "Saving…" : "Save"}
-        </button>
+        </BMGButton>
       </div>
     </Section>
   );
@@ -373,7 +367,7 @@ function WatchlistSection({ botId }: { botId: string }) {
         {(data?.symbols ?? []).map(sym => (
           <span
             key={sym}
-            className="inline-flex items-center gap-1 px-2.5 py-1 bg-zinc-800 border border-zinc-700 rounded-full text-xs text-zinc-200"
+            className="inline-flex items-center gap-1 px-2.5 py-1 bg-[var(--bmg-bg-input)] border border-[var(--bmg-green-border)] rounded-full text-xs text-[var(--bmg-text)]"
           >
             {sym}
             <button
@@ -385,26 +379,28 @@ function WatchlistSection({ botId }: { botId: string }) {
             </button>
           </span>
         ))}
-        {!data && <span className="text-xs text-zinc-600">Loading…</span>}
-        {data?.symbols.length === 0 && <span className="text-xs text-zinc-600">No symbols in watchlist</span>}
+        {!data && <span className="text-xs text-[var(--bmg-text-label)]">Loading…</span>}
+        {data?.symbols.length === 0 && <span className="text-xs text-[var(--bmg-text-label)]">No symbols in watchlist</span>}
       </div>
 
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value.toUpperCase())}
-          onKeyDown={e => e.key === "Enter" && handleAdd()}
-          placeholder="BTC/USD or AAPL"
-          className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-teal-500/50 w-44"
-        />
-        <button
+      <div className="flex gap-3 items-end">
+        <div className="w-44">
+          <GlowInput
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === "Enter" && handleAdd()}
+            placeholder="BTC/USD or AAPL"
+          />
+        </div>
+        <BMGButton
+          variant="primary"
+          size="sm"
           onClick={handleAdd}
           disabled={adding || !input.trim()}
-          className="px-4 py-1.5 text-xs font-semibold bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
         >
-          Add symbol
-        </button>
+          Add
+        </BMGButton>
       </div>
     </Section>
   );
@@ -431,12 +427,12 @@ function CooldownSection({ botId, config, onSaved }: { botId: string; config: Re
       {Toast}
       <div className="flex items-end gap-4 mb-4">
         <div>
-          <label className="block text-xs text-zinc-400 mb-1">
+          <label className="block text-xs text-[var(--bmg-text-muted)] mb-1">
             Cooldown minutes
-            <span className="ml-1 text-zinc-600 cursor-help" title="Minimum time between signals on the same (symbol, side). 0 = no cooldown.">(?)</span>
+            <span className="ml-1 text-[var(--bmg-text-label)] cursor-help" title="Minimum time between signals on the same (symbol, side). 0 = no cooldown.">(?)</span>
           </label>
           <div className="flex items-center gap-2">
-            <input
+            <GlowInput
               type="number" step="1" min="0" max="1440"
               value={val}
               onChange={e => {
@@ -444,33 +440,34 @@ function CooldownSection({ botId, config, onSaved }: { botId: string; config: Re
                 setVal(isNaN(v) ? val : v);
                 setDirty((isNaN(v) ? val : v) !== yaml);
               }}
-              className="w-28 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-teal-500/50 tabular-nums"
+              className="w-28 tabular-nums"
             />
-            <span className="text-xs text-zinc-500">min</span>
+            <span className="text-xs text-[var(--bmg-text-muted)]">min</span>
           </div>
-          <p className="text-xs text-zinc-600 mt-1">YAML default: {yaml} min</p>
+          <p className="text-xs text-[var(--bmg-text-label)] font-mono mt-1">YAML default: {yaml} min</p>
         </div>
       </div>
       <div className="flex gap-2">
-        <button
+        <BMGButton
+          variant="secondary" size="sm"
           onClick={async () => {
             try { await del(); qc.invalidateQueries({ queryKey: ["admin-bot-config", botId] }); show("Reset to YAML"); onSaved(); }
             catch { show("No override to reset"); }
           }}
-          className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-600 rounded-lg transition-colors"
         >
           Reset to YAML
-        </button>
-        <button
+        </BMGButton>
+        <BMGButton
+          variant="primary" size="sm"
           onClick={async () => {
             try { await patch(val); qc.invalidateQueries({ queryKey: ["admin-bot-config", botId] }); setDirty(false); show("Cooldown saved"); onSaved(); }
             catch (e: any) { show(`Error: ${e?.response?.data?.detail ?? e.message}`); }
           }}
           disabled={!dirty || isPending}
-          className="px-4 py-1.5 text-xs font-semibold bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+          loading={isPending}
         >
           {isPending ? "Saving…" : "Save"}
-        </button>
+        </BMGButton>
       </div>
     </Section>
   );
@@ -487,34 +484,34 @@ function AuditLog({ botId }: { botId: string }) {
   });
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+    <div className="bg-[var(--bmg-bg-card)] border border-[var(--bmg-green-border)] rounded-xl overflow-hidden">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
+        className="w-full flex items-center justify-between px-5 py-3 text-xs font-mono font-semibold text-[var(--bmg-text-muted)] hover:text-[var(--bmg-text)] transition-colors"
       >
-        Audit Log
-        <span className="text-xs text-zinc-600">{open ? "▲ collapse" : "▼ expand"}</span>
+        <SectionLabel>Audit Log</SectionLabel>
+        <span className="text-[var(--bmg-text-label)]">{open ? "▲ collapse" : "▼ expand"}</span>
       </button>
 
       {open && (
-        <div className="border-t border-zinc-800 divide-y divide-zinc-800/60">
-          {!data && <p className="px-5 py-3 text-xs text-zinc-600">Loading…</p>}
-          {data?.entries.length === 0 && <p className="px-5 py-3 text-xs text-zinc-600">No changes recorded yet.</p>}
+        <div className="border-t border-[var(--bmg-green-border)]/40 divide-y divide-[var(--bmg-green-border)]/20">
+          {!data && <p className="px-5 py-3 text-xs text-[var(--bmg-text-label)]">Loading…</p>}
+          {data?.entries.length === 0 && <p className="px-5 py-3 text-xs text-[var(--bmg-text-label)]">No changes recorded yet.</p>}
           {data?.entries.map(e => (
-            <div key={e.id} className="px-5 py-2.5 flex items-start gap-3 text-xs">
-              <span className="text-zinc-600 whitespace-nowrap">{timeAgo(e.changed_at)}</span>
-              <span className="text-teal-400 font-mono">{e.key}</span>
-              <span className="text-zinc-500">
+            <div key={e.id} className="px-5 py-2.5 flex items-start gap-3 text-xs font-mono">
+              <span className="text-[var(--bmg-text-label)] whitespace-nowrap">{timeAgo(e.changed_at)}</span>
+              <span className="text-[var(--bmg-green)]">{e.key}</span>
+              <span className="text-[var(--bmg-text-muted)]">
                 {e.old_value !== null && e.old_value !== undefined
                   ? `${JSON.stringify(e.old_value)} → `
                   : ""}
                 {e.new_value !== null ? (
-                  <span className="text-zinc-200">{JSON.stringify(e.new_value)}</span>
+                  <span className="text-[var(--bmg-text)]">{JSON.stringify(e.new_value)}</span>
                 ) : (
-                  <span className="text-red-400">deleted</span>
+                  <span className="text-[var(--bmg-red)]">deleted</span>
                 )}
               </span>
-              <span className="ml-auto text-zinc-700 flex-shrink-0">{e.changed_by}</span>
+              <span className="ml-auto text-[var(--bmg-text-label)] flex-shrink-0">{e.changed_by}</span>
             </div>
           ))}
         </div>
@@ -578,75 +575,62 @@ export default function AdminBotDetailPage() {
       )}
 
       {/* Breadcrumb */}
-      <Link to="/admin" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
+      <Link to="/admin" className="text-xs font-mono text-[var(--bmg-text-label)] hover:text-[var(--bmg-text-muted)] transition-colors">
         ← All bots
       </Link>
 
       {/* Header */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+      <BracketFrame className="bg-[var(--bmg-bg-card)] border border-[var(--bmg-green-border)] rounded-xl p-5" glow>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold text-white">{label}</h1>
+            <SectionLabel as="h1" className="text-base mb-1">{label}</SectionLabel>
             {lastChange && (
-              <p className="text-xs text-zinc-600 mt-0.5">
+              <p className="text-xs text-[var(--bmg-text-muted)] mt-0.5">
                 Last change {timeAgo(lastChange.updated_at)} by {lastChange.updated_by}
               </p>
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Status */}
             {!isEnabled
               ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30">DISABLED</span>
               : isPaused
               ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">PAUSED</span>
-              : <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">ACTIVE</span>
+              : <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[var(--bmg-green-dim)] text-[var(--bmg-green)] border border-[var(--bmg-green-border)]">ACTIVE</span>
             }
           </div>
         </div>
 
         <div className="flex gap-2 mt-4 flex-wrap">
           {isPaused ? (
-            <button
-              onClick={async () => { await doResume(); showToast("Bot resumed"); }}
-              className="px-4 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
-            >
+            <BMGButton variant="primary" size="sm" onClick={async () => { await doResume(); showToast("Bot resumed"); }}>
               Resume
-            </button>
+            </BMGButton>
           ) : (
-            <button
-              onClick={async () => { await doPause(); showToast("Bot paused"); }}
-              className="px-4 py-1.5 text-xs font-semibold bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg transition-colors"
-            >
+            <BMGButton variant="secondary" size="sm" onClick={async () => { await doPause(); showToast("Bot paused"); }}>
               Pause
-            </button>
+            </BMGButton>
           )}
 
           {isEnabled ? (
-            <button
-              onClick={() => setConfirm("disable")}
-              className="px-4 py-1.5 text-xs font-semibold bg-zinc-700 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
+            <BMGButton variant="destructive" size="sm" onClick={() => setConfirm("disable")}>
               Disable
-            </button>
+            </BMGButton>
           ) : (
-            <button
-              onClick={async () => { await doEnable(); showToast("Bot enabled"); }}
-              className="px-4 py-1.5 text-xs font-semibold bg-zinc-700 hover:bg-emerald-700 text-white rounded-lg transition-colors"
-            >
+            <BMGButton variant="primary" size="sm" onClick={async () => { await doEnable(); showToast("Bot enabled"); }}>
               Enable
-            </button>
+            </BMGButton>
           )}
 
           {overrides.length > 0 && (
-            <span className="text-xs text-zinc-600 self-center">{overrides.length} active override{overrides.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-[var(--bmg-text-muted)] self-center font-mono">{overrides.length} override{overrides.length !== 1 ? "s" : ""} active</span>
           )}
         </div>
-      </div>
+      </BracketFrame>
 
       {isLoading && (
         <div className="space-y-4">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl h-32 animate-pulse" />
+            <div key={i} className="bg-[var(--bmg-bg-card)] border border-[var(--bmg-green-border)] rounded-xl h-32 animate-pulse" />
           ))}
         </div>
       )}

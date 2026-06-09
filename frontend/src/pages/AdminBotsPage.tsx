@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { listBots, type BotListItem } from "@/api/adminBots";
 import { cn } from "@/lib/utils";
+import { BracketFrame, SectionLabel, BMGCard } from "@/components/design";
 
 const ADMIN_EMAIL = "32bgorzelanczyk@gmail.com";
 
@@ -16,15 +17,15 @@ const CATEGORY_COLORS: Record<string, string> = {
 function StatusPill({ enabled, paused }: { enabled: boolean; paused: boolean }) {
   if (!enabled) return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30">DISABLED</span>;
   if (paused)   return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">PAUSED</span>;
-  return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">ACTIVE</span>;
+  return <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[var(--bmg-green-dim)] text-[var(--bmg-green)] border border-[var(--bmg-green-border)]">ACTIVE</span>;
 }
 
 function BotCard({ bot }: { bot: BotListItem }) {
   const label = bot.bot_id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3 hover:border-zinc-700 transition-colors">
+    <BMGCard padding="sm" className="flex flex-col gap-3 hover:border-[var(--bmg-green)]/50 transition-colors">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold text-white leading-snug">{label}</p>
+        <p className="text-sm font-mono font-semibold text-[var(--bmg-text)] leading-snug">{label}</p>
         <span className={cn(
           "text-[10px] font-bold px-1.5 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0",
           CATEGORY_COLORS[bot.category] ?? "bg-zinc-800 text-zinc-400 border-zinc-700",
@@ -35,16 +36,16 @@ function BotCard({ bot }: { bot: BotListItem }) {
 
       <div className="flex items-center gap-2">
         <StatusPill enabled={bot.enabled} paused={bot.paused} />
-        <span className="text-xs text-zinc-500">{bot.open_positions} open</span>
+        <span className="text-xs text-[var(--bmg-text-muted)]">{bot.open_positions} open</span>
       </div>
 
       <Link
         to={`/admin/bots/${bot.bot_id}`}
-        className="mt-auto text-xs font-semibold text-teal-400 hover:text-teal-300 transition-colors"
+        className="mt-auto text-xs font-mono font-semibold text-[var(--bmg-green)] hover:text-[var(--bmg-green)]/80 transition-colors"
       >
         Configure →
       </Link>
-    </div>
+    </BMGCard>
   );
 }
 
@@ -63,15 +64,15 @@ export default function AdminBotsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Bot Configuration</h1>
-        <p className="text-sm text-zinc-500 mt-1">Runtime knobs — no deploy required. YAML defaults remain the baseline.</p>
-      </div>
+      <BracketFrame className="mb-8 p-5 rounded-xl" glow>
+        <SectionLabel as="h1" className="text-base mb-1">Bot Configuration</SectionLabel>
+        <p className="text-xs text-[var(--bmg-text-muted)] mt-2">Runtime knobs — no deploy required. YAML defaults remain the baseline.</p>
+      </BracketFrame>
 
       {isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl h-32 animate-pulse" />
+            <div key={i} className="bg-[var(--bmg-bg-card)] border border-[var(--bmg-green-border)] rounded-xl h-32 animate-pulse" />
           ))}
         </div>
       )}
@@ -85,11 +86,11 @@ export default function AdminBotsPage() {
       {data && (
         <>
           {/* Summary strip */}
-          <div className="flex gap-4 mb-5 text-xs text-zinc-500">
-            <span>{data.bots.filter(b => b.enabled && !b.paused).length} active</span>
-            <span>{data.bots.filter(b => b.paused).length} paused</span>
-            <span>{data.bots.filter(b => !b.enabled).length} disabled</span>
-            <span>{data.bots.reduce((s, b) => s + b.open_positions, 0)} total open positions</span>
+          <div className="flex gap-4 mb-5 text-xs text-[var(--bmg-text-muted)] font-mono">
+            <span><span className="text-[var(--bmg-green)]">{data.bots.filter(b => b.enabled && !b.paused).length}</span> active</span>
+            <span><span className="text-yellow-400">{data.bots.filter(b => b.paused).length}</span> paused</span>
+            <span><span className="text-red-400">{data.bots.filter(b => !b.enabled).length}</span> disabled</span>
+            <span><span className="text-white">{data.bots.reduce((s, b) => s + b.open_positions, 0)}</span> open positions</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -147,13 +147,13 @@ function VoiceDemo() {
               )}
               <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-[#1e40af]/40 text-blue-100 rounded-br-sm border border-blue-500/20"
+                  ? "bg-[var(--bmg-green-dim)] text-[var(--bmg-text)] rounded-br-sm border border-[var(--bmg-green-border)]"
                   : "bg-[#84cc16]/8 text-slate-200 rounded-bl-sm border-l-2 border-[#84cc16]/60"
               }`}>
                 {msg.text}
               </div>
               {msg.role === "user" && (
-                <div className="w-6 h-6 rounded-full bg-[#1e40af] flex items-center justify-center ml-2 mt-0.5 shrink-0">
+                <div className="w-6 h-6 rounded-full bg-[var(--bmg-green-dim)] border border-[var(--bmg-green-border)] flex items-center justify-center ml-2 mt-0.5 shrink-0">
                   <Mic className="w-3 h-3 text-white" />
                 </div>
               )}
@@ -187,8 +187,8 @@ function VoiceDemo() {
       <div className="absolute -top-3 -right-3 bg-[#0a0f1e] border border-[#84cc16]/30 rounded-xl px-3 py-1.5 shadow-lg">
         <span className="text-[#84cc16] text-xs font-bold">+0.43% today</span>
       </div>
-      <div className="absolute -bottom-3 -left-3 bg-[#0a0f1e] border border-blue-500/30 rounded-xl px-3 py-1.5 shadow-lg">
-        <span className="text-blue-400 text-xs font-bold">8 bots · paper only</span>
+      <div className="absolute -bottom-3 -left-3 bg-[var(--bmg-bg-base)] border border-[var(--bmg-green-border)] rounded-xl px-3 py-1.5 shadow-lg">
+        <span className="text-[var(--bmg-green)] text-xs font-bold font-mono">8 bots · paper only</span>
       </div>
     </div>
   );
