@@ -102,5 +102,11 @@ discord:
 paper_only: true
 starting_capital_cents: 4000000   # $40k
 
+risk:
+  deployment_target_pct: 0.60    # target: deploy 60% of bot capital ($19.8k)
+  target_position_count: 20      # spread across 20 positions → ~$990/trade
+  max_position_pct: 0.06         # hard cap: no single position > 6% ($2,376)
+  max_total_deployed_pct: 0.85   # hard cap: never exceed 85% deployed ($33.7k)
+
 # Bypass anomaly/news/bot_coordinator execution guards so scheduled scans execute.
 skip_execution_guards: true

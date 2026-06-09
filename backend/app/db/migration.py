@@ -446,6 +446,42 @@ def run_migrations(engine: Engine) -> None:
         _quarantine_cooldown_dupe_positions(conn)
         _assign_quant_bots_to_crypto_portfolio(conn)
         _seed_all_watchlists_from_yaml(conn)
+        _ensure_bot_config_tables(conn)
+
+
+def _ensure_bot_config_tables(conn) -> None:
+    """Create bot_config_overrides and bot_config_audit tables if they don't exist."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS bot_config_overrides (
+            id         BIGSERIAL PRIMARY KEY,
+            bot_id     TEXT NOT NULL,
+            key        TEXT NOT NULL,
+            value      JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_by TEXT NOT NULL,
+            CONSTRAINT uq_bot_config_overrides_bot_key UNIQUE (bot_id, key)
+        )
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_bot_config_overrides_bot
+        ON bot_config_overrides (bot_id)
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS bot_config_audit (
+            id         BIGSERIAL PRIMARY KEY,
+            bot_id     TEXT NOT NULL,
+            key        TEXT NOT NULL,
+            old_value  JSONB,
+            new_value  JSONB,
+            changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            changed_by TEXT NOT NULL
+        )
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_bot_config_audit_bot
+        ON bot_config_audit (bot_id)
+    """))
+    conn.commit()
 
 
 def _assign_quant_bots_to_crypto_portfolio(conn) -> None:

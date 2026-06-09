@@ -8,7 +8,7 @@ import {
   GraduationCap, Users, ScanSearch, Scale, Award,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
-  Grid3X3, Zap, Globe, Eye, TestTube2, Cpu,
+  Grid3X3, Zap, Globe, Eye, TestTube2, Cpu, SlidersHorizontal,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -103,7 +103,8 @@ const NAV_COMMUNITY = [
 ];
 
 const NAV_ADMIN = [
-  { to: "/admin/monitoring",   label: "Monitoring",     Icon: Activity   },
+  { to: "/admin",              label: "Bot Config",      Icon: SlidersHorizontal },
+  { to: "/admin/monitoring",   label: "Monitoring",      Icon: Activity   },
   { to: "/admin/heatmap",      label: "Heat Map",        Icon: Grid3X3    },
   { to: "/admin/flow",         label: "Options Flow",    Icon: Zap        },
   { to: "/admin/macro",        label: "Macro Dashboard", Icon: Globe      },

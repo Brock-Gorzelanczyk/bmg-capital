@@ -105,3 +105,9 @@ regime_overrides:
   vix_extreme_halt_new_entries: true
 discord:
   channel: stocks-signals
+
+risk:
+  deployment_target_pct: 0.50    # target: deploy 50% of bot capital → ~$5,000/trade at $100k
+  target_position_count: 10
+  max_position_pct: 0.08
+  max_total_deployed_pct: 0.80

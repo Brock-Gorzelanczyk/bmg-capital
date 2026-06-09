@@ -100,6 +100,8 @@ const ExamPage = lazy(() => import("@/pages/ExamPage"));
 const ExamResultPage = lazy(() => import("@/pages/ExamResultPage"));
 const CertificatesPage = lazy(() => import("@/pages/CertificatesPage"));
 const VerifyPage = lazy(() => import("@/pages/VerifyPage"));
+const AdminBotsPage = lazy(() => import("@/pages/AdminBotsPage"));
+const AdminBotDetailPage = lazy(() => import("@/pages/AdminBotDetailPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore, useIsViewer } from "@/store/authStore";
@@ -364,6 +366,8 @@ function AppInner() {
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/workshop" element={<Page component={WorkshopPage} />} />
+        <Route path="/admin"             element={<AdminRoute><AdminBotsPage /></AdminRoute>} />
+        <Route path="/admin/bots/:botId" element={<AdminRoute><AdminBotDetailPage /></AdminRoute>} />
         <Route path="/admin/monitoring"  element={<AdminRoute><MonitoringPage /></AdminRoute>} />
         <Route path="/admin/heatmap"     element={<AdminRoute><HeatMapPage /></AdminRoute>} />
         <Route path="/admin/flow"        element={<AdminRoute><OptionsFlowPage /></AdminRoute>} />

@@ -64,3 +64,9 @@ paper_only: true
 notes: "PDT eliminated FINRA Notice 26-10 June 4 2026. Requires Alpaca Level 2 options approval."
 discord:
   channel: options-signals
+
+risk:
+  deployment_target_pct: 0.30    # options have leverage — keep deployed % lower
+  target_position_count: 6       # → ~$5,000/trade at $100k
+  max_position_pct: 0.07
+  max_total_deployed_pct: 0.65

@@ -67,3 +67,9 @@ paper_only: true
 notes: "Requires Alpaca Level 2-3 options approval. PDT eliminated FINRA Notice 26-10 June 4 2026."
 discord:
   channel: options-signals
+
+risk:
+  deployment_target_pct: 0.40    # target: deploy 40% of bot capital → ~$5,000/trade at $100k
+  target_position_count: 8
+  max_position_pct: 0.07
+  max_total_deployed_pct: 0.70
