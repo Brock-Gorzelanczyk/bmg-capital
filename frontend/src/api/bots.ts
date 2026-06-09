@@ -342,6 +342,10 @@ export interface ActivityEvent {
   strategy?: string;
   reason?: string;
   result?: "filled" | "skipped" | "error";
+  // fill-category extras
+  qty?: number;
+  fill_price?: number;
+  pnl_usd?: number | null;
 }
 
 export const getActivity = (

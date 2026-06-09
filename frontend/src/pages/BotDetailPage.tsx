@@ -44,6 +44,7 @@ import {
   type StrategyTrace,
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
+import { formatTradeSize, formatQty } from "@/lib/formatTradeSize";
 import { CoachmarkOverlay } from "@/pages/CustomBotBuilderPage";
 import { getWatchlistAnalyses, type WatchlistAnalysis } from "@/api/analyst";
 import { getLatestPrices } from "@/api/bars";
@@ -1716,17 +1717,32 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
                       {item.side.toUpperCase()}
                     </span>
                   )}
-                  {item.strategy && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
-                      {item.strategy}
+                  {isFill && item.qty != null && item.fill_price != null ? (
+                    <span className="text-xs text-zinc-400 tabular-nums">
+                      {(() => {
+                        const base = item.symbol.includes("/") ? item.symbol.split("/")[0] : item.symbol;
+                        const absQty = Math.abs(item.qty);
+                        const qtyStr = absQty >= 100 ? item.qty.toFixed(2) : absQty >= 1 ? item.qty.toFixed(4) : item.qty.toFixed(8);
+                        const cost = Math.abs(item.qty * item.fill_price);
+                        const costStr = cost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        return `${qtyStr} ${base} ($${costStr})`;
+                      })()}
                     </span>
+                  ) : (
+                    <>
+                      {item.strategy && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
+                          {item.strategy}
+                        </span>
+                      )}
+                      {item.reason && (
+                        <span className="text-xs text-zinc-500 flex-1 truncate min-w-0">{item.reason}</span>
+                      )}
+                    </>
                   )}
-                  {item.reason && (
-                    <span className="text-xs text-zinc-500 flex-1 truncate min-w-0">{item.reason}</span>
-                  )}
-                  {(item as any).pnl_usd != null && (
-                    <span className={cn("text-xs font-semibold tabular-nums", (item as any).pnl_usd >= 0 ? "text-emerald-400" : "text-red-400")}>
-                      {(item as any).pnl_usd >= 0 ? "+" : ""}${(item as any).pnl_usd.toFixed(2)}
+                  {item.pnl_usd != null && (
+                    <span className={cn("text-xs font-semibold tabular-nums", item.pnl_usd >= 0 ? "text-emerald-400" : "text-red-400")}>
+                      {item.pnl_usd >= 0 ? "+" : ""}${item.pnl_usd.toFixed(2)}
                     </span>
                   )}
                   <span className="ml-auto flex-shrink-0">{resultIcon(item.result)}</span>
@@ -2450,8 +2466,7 @@ export default function BotDetailPage() {
                     <tr className="text-xs text-zinc-600 border-b border-zinc-800">
                       <th className="text-left pb-2 font-medium">Symbol</th>
                       <th className="text-left pb-2 font-medium">Side</th>
-                      <th className="text-right pb-2 font-medium">Qty</th>
-                      <th className="text-right pb-2 font-medium">Avg Cost</th>
+                      <th className="text-right pb-2 font-medium">Size</th>
                       <th className="text-right pb-2 font-medium">Current Value</th>
                       <th className="text-right pb-2 font-medium">Unrealized P&L</th>
                       <th className="text-right pb-2 font-medium">Time Held</th>
@@ -2489,8 +2504,11 @@ export default function BotDetailPage() {
                               LONG
                             </span>
                           </td>
-                          <td className="py-2.5 text-right text-zinc-300">{pos.qty}</td>
-                          <td className="py-2.5 text-right text-zinc-300">{formatCents(pos.avg_cost_cents)}</td>
+                          <td className="py-2.5 text-right text-zinc-300 tabular-nums">
+                            {pos.qty != null && pos.avg_cost_cents != null
+                              ? formatTradeSize(pos.qty, pos.symbol, (pos.avg_cost_cents / 100) * Math.abs(pos.qty))
+                              : pos.qty != null ? formatQty(pos.qty, pos.symbol) : "—"}
+                          </td>
                           <td className="py-2.5 text-right text-zinc-300">
                             {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
                           </td>

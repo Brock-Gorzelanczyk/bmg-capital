@@ -13,6 +13,7 @@ import {
 } from "@/api/bots";
 import client from "@/api/client";
 import { cn } from "@/lib/utils";
+import { formatTradeSize } from "@/lib/formatTradeSize";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -339,7 +340,7 @@ function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: nu
                   <span className="text-zinc-600 text-xs">{t.bot_display_name}</span>
                 </div>
                 <p className="text-zinc-500 text-xs mt-0.5">
-                  {t.qty.toFixed(4)} {getTradeUnit(t.symbol, assetClass)} <span className="text-zinc-600">{formatNotional(t.qty, t.fill_price)}</span> @ ${t.fill_price.toFixed(2)}
+                  {formatTradeSize(t.qty, t.symbol, Math.abs(t.qty) * t.fill_price)}
                   {hasPnl && (
                     <span className={cn("ml-2 font-semibold", pnlPositive ? "text-lime-400" : "text-red-400")}>
                       · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized

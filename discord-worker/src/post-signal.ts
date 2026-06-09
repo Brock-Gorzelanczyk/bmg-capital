@@ -2,6 +2,7 @@ import { EmbedBuilder, TextChannel } from "discord.js";
 import { eq, sql } from "drizzle-orm";
 import { getDiscordClient } from "./client.js";
 import { db, botSignals } from "./db.js";
+import { formatQty, formatUSD } from "./format.js";
 
 function fmtPrice(price: number): string {
   const abs = Math.abs(price);
@@ -197,19 +198,8 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     const qty            = notional != null && entry != null && entry > 0 ? notional / entry : null;
     const baseAsset      = signal.symbol.split("/")[0];
 
-    const fmtQty = (q: number): string => {
-      if (q >= 1000) return q.toFixed(0);
-      if (q >= 100)  return q.toFixed(2);
-      if (q >= 1)    return q.toFixed(4);
-      return q.toFixed(8);
-    };
-    const fmtUSD = (amount: number): string =>
-      amount >= 1000
-        ? "$" + amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : "$" + amount.toFixed(2);
-
-    const qtyStr      = qty     != null ? `${fmtQty(qty)} ${baseAsset}`   : "—";
-    const notionalStr = notional != null ? fmtUSD(notional)                 : "—";
+    const qtyStr      = qty     != null ? formatQty(qty, signal.symbol)    : "—";
+    const notionalStr = notional != null ? formatUSD(notional)               : "—";
     const allocStr    = signal.positionSizePct != null ? `${signal.positionSizePct.toFixed(1)}% of portfolio` : "—";
     const dollarLabel = isBuy ? "Invested" : "Notional";
     const assetLabel  = isBuy ? "Acquired" : "Sold Short";
