@@ -3,9 +3,26 @@ asset_class: options
 broker: alpaca_paper_stocks
 universe:
   source: russell_1000_momentum
+  symbols:
+    - SPY
+    - QQQ
+    - AAPL
+    - NVDA
+    - TSLA
+    - AMD
+    - META
+    - AMZN
+    - MSFT
+    - GOOGL
+    - NFLX
+    - SMCI
+    - AVGO
+    - ARM
+    - CRM
   filters:
     - price_gte: 20
     - adv_gte: 5000000
+scan_lookback_period: "1y"
 cadence: "45 9 * * 1-5"
 watchlist:
   rebuild_at: "30 9 * * 1-5"

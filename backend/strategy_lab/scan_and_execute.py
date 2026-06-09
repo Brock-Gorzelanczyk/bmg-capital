@@ -92,7 +92,8 @@ def scan_and_execute(
             raw = _fetch_crypto_bars(symbols, timeframe=timeframe, limit=limit)
         else:
             from app.screener.runner import _fetch_bars_sync
-            raw = _fetch_bars_sync(symbols, period="60d")
+            lookback_period = profile.get("scan_lookback_period", "1y")
+            raw = _fetch_bars_sync(symbols, period=lookback_period)
         for sym, df in raw.items():
             if df is None or df.empty:
                 continue
@@ -148,9 +149,11 @@ def scan_and_execute(
             logger.error("[scan:%s] EXCEPTION in strategy %s: %s", profile_name, strat_name, exc, exc_info=True)
             errors.append({"symbol": "*", "strategy": strat_name, "error": str(exc)})
 
+    symbols_missing_bars = [s for s in symbols if s not in bars]
     logger.warning(
-        "[scan:%s] bars=%d/%d strategies=%d signals=%d errors=%d",
+        "[scan:%s] bars=%d/%d strategies=%d signals=%d errors=%d missing=%s",
         profile_name, len(bars), len(symbols), strategies_executed, len(results), len(errors),
+        symbols_missing_bars[:5] if symbols_missing_bars else "none",
     )
 
     # ── 7. Persist + execute per allocation ───────────────────────────────────
@@ -361,6 +364,7 @@ def scan_and_execute(
         "bot": profile_name,
         "symbols_scanned": len(symbols),
         "symbols_with_bars": len(bars),
+        "symbols_missing_bars": [s for s in symbols if s not in bars],
         "strategies_executed": strategies_executed,
         "results": results,
         "signals_generated": len(results),

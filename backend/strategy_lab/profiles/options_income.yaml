@@ -3,10 +3,27 @@ asset_class: options
 broker: alpaca_paper_stocks
 universe:
   source: sp500_high_iv_rank
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - AAPL
+    - MSFT
+    - GOOGL
+    - NVDA
+    - AMZN
+    - JPM
+    - XOM
+    - GLD
+    - TLT
+    - SMCI
+    - AVGO
+    - GS
   filters:
     - price_gte: 20
     - adv_gte: 1000000
     - iv_rank_gte: 30
+scan_lookback_period: "1y"
 cadence: "0 10 * * 1-5"
 watchlist:
   rebuild_at: "0 9 * * 1-5"

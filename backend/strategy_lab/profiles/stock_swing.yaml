@@ -3,9 +3,41 @@ asset_class: equities
 broker: alpaca_paper_stocks
 universe:
   source: russell_1000
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+    - NVDA
+    - META
+    - TSLA
+    - AMD
+    - NFLX
+    - JPM
+    - BAC
+    - XOM
+    - CVX
+    - GLD
+    - TLT
+    - GS
+    - SMCI
+    - AVGO
+    - CRM
+    - ORCL
+    - SHOP
+    - PLTR
+    - COIN
+    - MSTR
+    - ARM
+    - SOFI
+    - HOOD
   filters:
     - price_gte: 5
     - adv_gte: 10000000
+scan_lookback_period: "1y"
 cadence: "5 16 * * 1-5"
 watchlist:
   rebuild_at: "5 16 * * 1-5"
