@@ -23,8 +23,10 @@ _PROFILE_DESCRIPTIONS = {
     "crypto_lt": "Weekly DCA accumulation into top 10 crypto assets. Long-term conviction approach, no stops.",
     "options_income": "Wheel strategy, covered calls, cash-secured puts, iron condors — premium collection on high-IV stocks.",
     "options_directional": "Credit spreads, debit spreads, LEAPS — directional options plays on momentum stocks.",
-    "crypto_quant_aggressive": "5-signal high-turnover quant on 20 coins. VWAP fade, BB breakout, momentum trigger, volume z-score, range break retest. $100k paper sub-account.",
+    "crypto_quant_aggressive": "8-strategy high-turnover quant on 20 coins. 5m bars, VWAP fade, BB breakout, momentum, volume z-score, range break, orderflow imbalance, funding arb, Donchian. $40k.",
     "crypto_onchain": "On-chain flow analysis — large wallet movements, DEX volume anomalies, L2 bridge activity on top 20 chains.",
+    "crypto_quant_scalper": "5-strategy 1m scalper on liquid majors. Micro breakout, OB imbalance, tape acceleration, VWAP band reject, volume spike continuation. $30k.",
+    "crypto_quant_mean_reversion": "6-strategy mean reversion on 10 mid-cap coins. BB extreme fade, RSI oversold bounce, RSI overbought short, z-score reversion, Keltner fade, pin bar rejection. $30k.",
 }
 
 
