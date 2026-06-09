@@ -533,9 +533,9 @@ def run_bot_profile(profile_name: str) -> dict:
                 # ── FIX D: position_cap enforcement ──────────────────────────────
                 position_cap = int(profile.get("position_cap", 999))
                 if len(open_pos_rows) >= position_cap:
-                    logger.info(
-                        "[runner:%s] FILTER[alloc=%d] SKIP position_cap=%d open=%d",
-                        profile_name, alloc.id, position_cap, len(open_pos_rows),
+                    logger.warning(
+                        "[guardrail] %s alloc=%d blocked: open_positions=%d >= position_cap=%d",
+                        profile_name, alloc.id, len(open_pos_rows), position_cap,
                     )
                     _alloc_skip_counts["position_cap"] = _alloc_skip_counts.get("position_cap", 0) + 1
                     continue

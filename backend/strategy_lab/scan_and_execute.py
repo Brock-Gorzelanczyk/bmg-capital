@@ -224,41 +224,55 @@ def scan_and_execute(
                                  profile_name, r["symbol"], r["strategy"], _pe, exc_info=True)
 
         if execute and results:
-            for r in results:
-                if r["confidence"] < threshold:
-                    continue
-                if r["side"] not in ("buy", "sell"):
-                    continue
-                try:
-                    sig2 = Signal(
-                        symbol=r["symbol"],
-                        side=r["side"],
-                        confidence=r["confidence"],
-                        size_hint=float(r.get("size_hint", 0.1)),
-                        reason=str(r.get("reasons", "")),
-                        strategy=r["strategy"],
-                        ts=datetime.now(timezone.utc),
-                    )
-                    _execute_signal(
-                        db=db,
-                        alloc=alloc,
-                        sig=sig2,
-                        final_size_pct=default_size,
-                        profile=profile,
-                        profile_name=profile_name,
-                        bars=bars,
-                    )
-                    alloc_executed += 1
-                    trades_executed += 1
-                except Exception as _ee:
-                    execute_errors.append({
-                        "symbol": r["symbol"],
-                        "strategy": r["strategy"],
-                        "error": str(_ee),
-                        "traceback": _tb.format_exc(),
-                    })
-                    logger.error("[scan:%s] execute FAILED %s %s: %s",
-                                 profile_name, r["side"], r["symbol"], _ee, exc_info=True)
+            # Per-bot position cap — count open positions for THIS allocation only
+            from app.db.models.bots import BotPosition as _BotPos
+            position_cap = int(profile.get("position_cap", 999))
+            alloc_open = (
+                db.query(_BotPos)
+                .filter(_BotPos.allocation_id == alloc.id, _BotPos.closed_at.is_(None))
+                .count()
+            )
+            if alloc_open >= position_cap:
+                logger.warning(
+                    "[guardrail] %s alloc=%d blocked: open_positions=%d >= position_cap=%d",
+                    profile_name, alloc.id, alloc_open, position_cap,
+                )
+            else:
+                for r in results:
+                    if r["confidence"] < threshold:
+                        continue
+                    if r["side"] not in ("buy", "sell"):
+                        continue
+                    try:
+                        sig2 = Signal(
+                            symbol=r["symbol"],
+                            side=r["side"],
+                            confidence=r["confidence"],
+                            size_hint=float(r.get("size_hint", 0.1)),
+                            reason=str(r.get("reasons", "")),
+                            strategy=r["strategy"],
+                            ts=datetime.now(timezone.utc),
+                        )
+                        _execute_signal(
+                            db=db,
+                            alloc=alloc,
+                            sig=sig2,
+                            final_size_pct=default_size,
+                            profile=profile,
+                            profile_name=profile_name,
+                            bars=bars,
+                        )
+                        alloc_executed += 1
+                        trades_executed += 1
+                    except Exception as _ee:
+                        execute_errors.append({
+                            "symbol": r["symbol"],
+                            "strategy": r["strategy"],
+                            "error": str(_ee),
+                            "traceback": _tb.format_exc(),
+                        })
+                        logger.error("[scan:%s] execute FAILED %s %s: %s",
+                                     profile_name, r["side"], r["symbol"], _ee, exc_info=True)
 
         logger.warning(
             "[scheduled] %s alloc=%d persisted=%d executed=%d",

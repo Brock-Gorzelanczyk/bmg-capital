@@ -66,19 +66,11 @@ def check_guardrails(user_id: int, db: Session) -> tuple[bool, str]:
     if weekly_loss_pct >= guardrail.weekly_loss_limit_pct:
         return False, f"Weekly loss limit hit ({weekly_loss_pct:.1f}% vs {guardrail.weekly_loss_limit_pct}% limit)"
 
-    # Max open positions check — count open BotPositions (not paper trading positions)
-    from app.db.models.bots import BotPosition, BotAllocation
-    open_positions = (
-        db.query(BotPosition)
-        .join(BotAllocation, BotPosition.allocation_id == BotAllocation.id)
-        .filter(
-            BotAllocation.user_id == user_id,
-            BotPosition.closed_at.is_(None),
-            BotPosition.quarantined_at.is_(None),
-        )
-        .count()
-    )
-    if open_positions >= guardrail.max_open_positions:
-        return False, f"Max open positions reached ({open_positions})"
+    # Max open positions is intentionally NOT checked here.
+    # Each bot profile enforces its own position_cap from its YAML config.
+    # A single user can run multiple bots, each with independent books —
+    # summing cross-bot positions and comparing to a user-level cap
+    # incorrectly blocks bots that haven't hit their own limits.
+    # Per-bot cap: runner.py lines ~533-541, scan_and_execute.py execute gate.
 
     return True, ""
