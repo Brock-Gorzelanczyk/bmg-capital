@@ -107,8 +107,11 @@ def log_signal(
     entry_price: Optional[float] = None,
     stop_price: Optional[float] = None,
     target_price: Optional[float] = None,
-) -> None:
-    """Persist a Signal to bot_signals, then fire Discord embed in background."""
+) -> Optional[int]:
+    """Persist a Signal to bot_signals, then fire Discord embed in background.
+
+    Returns the new row's id, or None if the insert failed.
+    """
     from app.db.models.bots import BotSignal, BotAllocation, BotProfile
 
     # Always persist stop and target — compute defaults if caller omitted them.
@@ -149,7 +152,7 @@ def log_signal(
     except Exception as exc:
         db.rollback()
         logger.error("Failed to log signal: %s", exc)
-        return
+        return None
 
     # Resolve bot profile name for embed routing (session-cached, no extra queries)
     profile_name = ""
@@ -196,6 +199,8 @@ def log_signal(
         args=(row.id, signal_dict),
         daemon=True,
     ).start()
+
+    return row.id
 
 
 def log_fill(

@@ -22,6 +22,7 @@ strategies:
   - crypto_relative_strength
 ensemble: weighted_vote
 confidence_threshold: 0.55
+cooldown_minutes: 240
 position_cap: 6
 position_size_pct: 4.0
 stop_loss_pct: 8.0

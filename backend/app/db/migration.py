@@ -213,6 +213,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("discord_posted_at",    "DATETIME"),
         ("discord_message_id",   "TEXT"),
         ("is_test",              "BOOLEAN DEFAULT 0"),
+        ("executed_at",          "DATETIME"),
     ],
     "bot_positions": [
         ("stop_price_usd",         "FLOAT"),

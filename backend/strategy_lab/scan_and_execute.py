@@ -156,18 +156,56 @@ def scan_and_execute(
     # ── 7. Persist + execute per allocation ───────────────────────────────────
     threshold = float(profile.get("confidence_threshold", 0.5))
     default_size = float(profile.get("position_size_pct", 5.0))
+    cooldown_min = float(profile.get("cooldown_minutes", 0))
 
     from strategy_lab.core.audit import log_signal
     from strategy_lab.core.signals import Signal
+    from app.db.models.bots import BotPosition as _BotPos, BotSignal as _BSig
 
     for alloc in allocations:
         alloc_persisted = 0
         alloc_executed = 0
 
-        if persist and results:
-            for r in results:
-                if r["confidence"] < threshold:
-                    continue
+        # ── Cooldown: one query fetches all (symbol, side) fired within window ──
+        on_cooldown: set = set()
+        if cooldown_min > 0 and results:
+            from datetime import timedelta
+            _cutoff = datetime.now(timezone.utc) - timedelta(minutes=cooldown_min)
+            _recent = db.query(_BSig.symbol, _BSig.side).filter(
+                _BSig.allocation_id == alloc.id,
+                _BSig.ts >= _cutoff,
+            ).all()
+            on_cooldown = {(row.symbol, row.side) for row in _recent}
+
+        # ── Position cap: one query per allocation ────────────────────────────
+        position_cap = int(profile.get("position_cap", 999))
+        alloc_open = (
+            db.query(_BotPos)
+            .filter(_BotPos.allocation_id == alloc.id, _BotPos.closed_at.is_(None))
+            .count()
+        )
+        execute_blocked = alloc_open >= position_cap
+        if execute_blocked:
+            logger.warning(
+                "[guardrail] %s alloc=%d blocked: open_positions=%d >= position_cap=%d",
+                profile_name, alloc.id, alloc_open, position_cap,
+            )
+
+        # ── Per-signal: persist then execute ─────────────────────────────────
+        for r in results:
+            if r["confidence"] < threshold:
+                continue
+
+            if (r["symbol"], r["side"]) in on_cooldown:
+                logger.warning(
+                    "[cooldown] %s %s %s — fired within last %.0fmin, skipping",
+                    profile_name, r["symbol"], r["side"], cooldown_min,
+                )
+                continue
+
+            # Persist
+            signal_id: Optional[int] = None
+            if persist:
                 try:
                     _ep: Optional[float] = None
                     _sym_bars = bars.get(r["symbol"], [])
@@ -205,7 +243,7 @@ def scan_and_execute(
                         strategy=r["strategy"],
                         ts=datetime.now(timezone.utc),
                     )
-                    log_signal(
+                    signal_id = log_signal(
                         db, alloc.id, sig,
                         entry_price=_ep,
                         stop_price=_stop_info.get("stop_price"),
@@ -223,56 +261,44 @@ def scan_and_execute(
                     logger.error("[scan:%s] persist FAILED %s/%s: %s",
                                  profile_name, r["symbol"], r["strategy"], _pe, exc_info=True)
 
-        if execute and results:
-            # Per-bot position cap — count open positions for THIS allocation only
-            from app.db.models.bots import BotPosition as _BotPos
-            position_cap = int(profile.get("position_cap", 999))
-            alloc_open = (
-                db.query(_BotPos)
-                .filter(_BotPos.allocation_id == alloc.id, _BotPos.closed_at.is_(None))
-                .count()
-            )
-            if alloc_open >= position_cap:
-                logger.warning(
-                    "[guardrail] %s alloc=%d blocked: open_positions=%d >= position_cap=%d",
-                    profile_name, alloc.id, alloc_open, position_cap,
-                )
-            else:
-                for r in results:
-                    if r["confidence"] < threshold:
-                        continue
-                    if r["side"] not in ("buy", "sell"):
-                        continue
-                    try:
-                        sig2 = Signal(
-                            symbol=r["symbol"],
-                            side=r["side"],
-                            confidence=r["confidence"],
-                            size_hint=float(r.get("size_hint", 0.1)),
-                            reason=str(r.get("reasons", "")),
-                            strategy=r["strategy"],
-                            ts=datetime.now(timezone.utc),
-                        )
-                        _execute_signal(
-                            db=db,
-                            alloc=alloc,
-                            sig=sig2,
-                            final_size_pct=default_size,
-                            profile=profile,
-                            profile_name=profile_name,
-                            bars=bars,
-                        )
-                        alloc_executed += 1
-                        trades_executed += 1
-                    except Exception as _ee:
-                        execute_errors.append({
-                            "symbol": r["symbol"],
-                            "strategy": r["strategy"],
-                            "error": str(_ee),
-                            "traceback": _tb.format_exc(),
-                        })
-                        logger.error("[scan:%s] execute FAILED %s %s: %s",
-                                     profile_name, r["side"], r["symbol"], _ee, exc_info=True)
+            # Execute
+            if execute and r["side"] in ("buy", "sell") and not execute_blocked:
+                try:
+                    sig2 = Signal(
+                        symbol=r["symbol"],
+                        side=r["side"],
+                        confidence=r["confidence"],
+                        size_hint=float(r.get("size_hint", 0.1)),
+                        reason=str(r.get("reasons", "")),
+                        strategy=r["strategy"],
+                        ts=datetime.now(timezone.utc),
+                    )
+                    _execute_signal(
+                        db=db,
+                        alloc=alloc,
+                        sig=sig2,
+                        final_size_pct=default_size,
+                        profile=profile,
+                        profile_name=profile_name,
+                        bars=bars,
+                    )
+                    alloc_executed += 1
+                    trades_executed += 1
+                    # Mark signal as executed — Discord worker requires executed_at IS NOT NULL
+                    if signal_id is not None:
+                        _sig_row = db.get(_BSig, signal_id)
+                        if _sig_row is not None:
+                            _sig_row.executed_at = datetime.now(timezone.utc)
+                            db.commit()
+                except Exception as _ee:
+                    execute_errors.append({
+                        "symbol": r["symbol"],
+                        "strategy": r["strategy"],
+                        "error": str(_ee),
+                        "traceback": _tb.format_exc(),
+                    })
+                    logger.error("[scan:%s] execute FAILED %s %s: %s",
+                                 profile_name, r["side"], r["symbol"], _ee, exc_info=True)
 
         logger.warning(
             "[scheduled] %s alloc=%d persisted=%d executed=%d",

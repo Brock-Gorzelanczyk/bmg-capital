@@ -58,6 +58,9 @@ async function runMigrations(): Promise<void> {
   await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS discord_message_id VARCHAR`);
   // claimed_at: atomic worker lock — prevents concurrent poll loops from double-posting.
   await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP`);
+  // executed_at: set by scan_and_execute.py after _execute_signal succeeds.
+  // Only signals with executed_at IS NOT NULL get posted to Discord.
+  await db.execute(sql`ALTER TABLE bot_signals ADD COLUMN IF NOT EXISTS executed_at TIMESTAMP`);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS bot_daily_pnl (
       id                        SERIAL PRIMARY KEY,
@@ -167,6 +170,8 @@ async function _doPoll(): Promise<void> {
       JOIN bot_allocations ba ON ba.id = bs.allocation_id
       JOIN bot_profiles bp    ON bp.id = ba.profile_id
       WHERE bs.discord_posted_at IS NULL
+        AND bs.executed_at IS NOT NULL
+        AND bs.confidence >= 0.65
         AND (bs.claimed_at IS NULL OR bs.claimed_at < NOW() - INTERVAL '2 minutes')
         AND bs.ts > NOW() - INTERVAL '48 hours'
       ORDER BY bs.ts ASC

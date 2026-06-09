@@ -67,7 +67,7 @@ trailing_stop_activate_at_pct: 1.5
 trailing_stop_distance_pct: 0.75
 hold_max_hours: 8
 
-cooldown_minutes: 3
+cooldown_minutes: 30
 
 # Tier-specific position limits (% of sub-account)
 tier_limits:

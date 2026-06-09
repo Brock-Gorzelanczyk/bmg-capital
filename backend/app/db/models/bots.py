@@ -70,6 +70,7 @@ class BotSignal(Base):
     discord_posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     discord_message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_test: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
+    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class BotPosition(Base):

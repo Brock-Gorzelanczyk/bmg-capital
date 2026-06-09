@@ -22,7 +22,7 @@ strategies:
 ensemble: any_above_threshold
 confidence_threshold: 0.50
 
-cooldown_minutes: 5
+cooldown_minutes: 60
 hold_max_hours: 4
 
 position_size_pct: 0.6

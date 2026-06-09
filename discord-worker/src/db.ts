@@ -41,6 +41,7 @@ export const botSignals = pgTable("bot_signals", {
   discordMessageId: varchar("discord_message_id"),
   claimedAt:      timestamp("claimed_at"),
   isTest:          boolean("is_test").default(false),
+  executedAt:      timestamp("executed_at"),
 });
 
 export const botAllocations = pgTable("bot_allocations", {

@@ -30,7 +30,7 @@ take_profit_pct: 1.5
 trailing_stop_activate_at_pct: 0.75
 trailing_stop_distance_pct: 0.25
 hold_max_hours: 8
-cooldown_minutes: 15
+cooldown_minutes: 30
 risk_overlay:
   daily_loss_limit_pct: 3.0
   max_position_size_pct: 6.0
