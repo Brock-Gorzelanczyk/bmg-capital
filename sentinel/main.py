@@ -7,22 +7,21 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import text
 
+from sentinel.observability import configure_logging, metrics, get_sentinel_stats
 from sentinel.settings import settings
 from sentinel.db.session import SessionLocal, engine
 from sentinel.db.migrations import run_migrations
 from sentinel.orchestrator import SentinelOrchestrator
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
-    stream=sys.stdout,
-)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BMG Sentinel", version="1.0.0")
@@ -30,7 +29,7 @@ app = FastAPI(title="BMG Sentinel", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -40,22 +39,20 @@ _orchestrator: SentinelOrchestrator | None = None
 @app.on_event("startup")
 async def startup() -> None:
     global _orchestrator
-    logger.info("[sentinel] Starting up — SENTINEL_ENABLED=%s", settings.sentinel_enabled)
+    logger.info("sentinel starting", extra={"sentinel_enabled": settings.sentinel_enabled})
 
-    # Run DB migrations
     try:
         run_migrations(engine)
-        logger.info("[sentinel] DB migrations complete")
+        logger.info("db migrations complete")
     except Exception as e:
-        logger.error("[sentinel] DB migration failed: %s", e)
+        logger.error("db migration failed", extra={"error": str(e)})
 
-    # Start orchestrator
     _orchestrator = SentinelOrchestrator()
     if settings.sentinel_enabled:
         _orchestrator.start()
-        logger.info("[sentinel] Orchestrator started")
+        logger.info("orchestrator started")
     else:
-        logger.warning("[sentinel] SENTINEL_ENABLED=false — agents are paused")
+        logger.warning("SENTINEL_ENABLED=false — agents paused")
 
 
 @app.on_event("shutdown")
@@ -64,62 +61,104 @@ async def shutdown() -> None:
         _orchestrator.stop()
 
 
+# ── Health ────────────────────────────────────────────────────────────────────
+
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "enabled": settings.sentinel_enabled}
+    metrics.inc("health_checks")
+    agent_info: dict = {}
+    if _orchestrator:
+        for name, a in _orchestrator.agent_status().items():
+            agent_info[name] = {
+                "running": a.get("running", False),
+                "last_run": a.get("last_run"),
+            }
+    return {
+        "status": "ok",
+        "sentinel_enabled": settings.sentinel_enabled,
+        "agents": agent_info,
+    }
 
 
-@app.get("/api/sentinel/status")
-async def sentinel_status() -> dict:
-    if not _orchestrator:
-        return {"error": "not initialized"}
-    return _orchestrator.status()
+# ── Stats (KPIs for dashboard) ────────────────────────────────────────────────
 
+@app.get("/api/sentinel/stats")
+async def sentinel_stats() -> dict:
+    db = SessionLocal()
+    try:
+        return get_sentinel_stats(db, settings.daily_cost_cap_usd, settings.max_daily_prs)
+    finally:
+        db.close()
+
+
+# ── Events ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/sentinel/events")
-async def sentinel_events(limit: int = 50, state: str = "open") -> dict:
+async def sentinel_events(limit: int = 50, status: str = "open") -> list:
     db = SessionLocal()
     try:
         rows = db.execute(text("""
-            SELECT id, agent_id, severity, category, state, detected_at, payload
+            SELECT id, agent_id, severity, category, title,
+                   affected_file, status, created_at, resolved_at
             FROM agent_events
-            WHERE state = :state
-            ORDER BY detected_at DESC
+            WHERE (:status = 'all' OR status = :status)
+            ORDER BY created_at DESC
             LIMIT :limit
-        """), {"state": state, "limit": limit}).fetchall()
-        return {"events": [dict(r._mapping) for r in rows]}
+        """), {"status": status, "limit": limit}).fetchall()
+        return [dict(r._mapping) for r in rows]
     finally:
         db.close()
 
+
+# ── Fixes / PRs ───────────────────────────────────────────────────────────────
+
+@app.get("/api/sentinel/fixes")
+async def sentinel_fixes(limit: int = 50) -> list:
+    db = SessionLocal()
+    try:
+        rows = db.execute(text("""
+            SELECT id, event_id, agent_id, category, file_path,
+                   pr_url, pr_number, outcome, llm_cost_usd, created_at
+            FROM agent_fixes
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """), {"limit": limit}).fetchall()
+        return [dict(r._mapping) for r in rows]
+    finally:
+        db.close()
+
+
+# ── Circuit breakers ──────────────────────────────────────────────────────────
+
+@app.get("/api/sentinel/circuit-breakers")
+async def circuit_breakers() -> list:
+    db = SessionLocal()
+    try:
+        rows = db.execute(text("""
+            SELECT id, file_path, pr_count_today, tripped,
+                   tripped_at, cooldown_until
+            FROM agent_circuit_breakers
+            ORDER BY tripped DESC, tripped_at DESC
+        """)).fetchall()
+        return [dict(r._mapping) for r in rows]
+    finally:
+        db.close()
+
+
+# ── Escalations ───────────────────────────────────────────────────────────────
 
 @app.get("/api/sentinel/escalations")
-async def sentinel_escalations() -> dict:
+async def sentinel_escalations(limit: int = 50) -> list:
     db = SessionLocal()
     try:
         rows = db.execute(text("""
-            SELECT ae.id, ae.event_id, ae.paste_ready, ae.sent_at, ae.user_action,
-                   ev.category, ev.severity
-            FROM agent_escalations ae
-            JOIN agent_events ev ON ev.id = ae.event_id
-            WHERE ae.user_action IS NULL
-            ORDER BY ae.sent_at DESC
-            LIMIT 20
-        """)).fetchall()
-        return {"escalations": [dict(r._mapping) for r in rows]}
-    finally:
-        db.close()
-
-
-@app.get("/api/sentinel/escalations/{esc_id}/paste")
-async def get_paste_ready(esc_id: int) -> dict:
-    db = SessionLocal()
-    try:
-        row = db.execute(text("""
-            SELECT paste_ready FROM agent_escalations WHERE id = :id
-        """), {"id": esc_id}).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Escalation not found")
-        return {"paste_ready": row[0]}
+            SELECT id, event_id, channel_id, message_preview,
+                   resolved, created_at
+            FROM agent_escalations
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """), {"limit": limit}).fetchall()
+        return [dict(r._mapping) for r in rows]
     finally:
         db.close()
 
@@ -131,28 +170,23 @@ async def set_user_action(esc_id: int, action: str) -> dict:
     db = SessionLocal()
     try:
         db.execute(text("""
-            UPDATE agent_escalations SET user_action = :action WHERE id = :id
-        """), {"action": action, "id": esc_id})
+            UPDATE agent_escalations SET resolved = true WHERE id = :id
+        """), {"id": esc_id})
         db.commit()
+        metrics.inc("escalations_actioned", action=action)
         return {"ok": True}
     finally:
         db.close()
 
 
-@app.get("/api/sentinel/circuit-breakers")
-async def circuit_breakers() -> dict:
-    db = SessionLocal()
-    try:
-        rows = db.execute(text("""
-            SELECT id, breaker_type, key, tripped_at, resets_at, reason
-            FROM agent_circuit_breakers
-            WHERE resets_at > NOW()
-            ORDER BY tripped_at DESC
-        """)).fetchall()
-        return {"breakers": [dict(r._mapping) for r in rows]}
-    finally:
-        db.close()
+# ── Prometheus metrics ────────────────────────────────────────────────────────
 
+@app.get("/metrics", response_class=PlainTextResponse)
+async def prometheus_metrics() -> str:
+    return metrics.prometheus_text()
+
+
+# ── Entry ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8001))

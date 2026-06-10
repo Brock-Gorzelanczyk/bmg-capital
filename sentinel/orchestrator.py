@@ -229,6 +229,17 @@ class SentinelOrchestrator:
         logger.info("[orchestrator] Stopping Sentinel scheduler")
         self.scheduler.shutdown(wait=False)
 
+    def agent_status(self) -> dict:
+        """Return per-agent running state + last_run for the health endpoint."""
+        result: dict = {}
+        for job in self.scheduler.get_jobs():
+            next_run = job.next_run_time
+            result[job.id] = {
+                "running": next_run is not None,
+                "last_run": None,  # APScheduler doesn't expose last_run_time directly
+            }
+        return result
+
     def status(self) -> dict:
         db = SessionLocal()
         try:
