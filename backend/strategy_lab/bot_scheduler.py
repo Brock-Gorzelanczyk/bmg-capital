@@ -692,10 +692,34 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
 
+    # ------------------------------------------------------------------
+    # Signal explanation pre-gen: hourly — gate on ENABLE_TRADE_EXPLAIN.
+    # ------------------------------------------------------------------
+    def _run_explain_pregen():
+        import os
+        if os.getenv("ENABLE_TRADE_EXPLAIN", "false").strip().lower() != "true":
+            return
+        try:
+            from strategy_lab.explain_pregen import run_explain_pregen
+            run_explain_pregen()
+        except Exception as exc:
+            logger.error("[explain-pregen] job failed: %s", exc)
+
+    scheduler.add_job(
+        _run_explain_pregen,
+        CronTrigger(minute=30),
+        id="signal_explain_pregen",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
         "crypto_quant_aggressive crypto_quant_scalper crypto_quant_mean_reversion "
         "options_income options_directional position_monitor dead_mans_switch "
-        "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan strategy_forge_scan"
+        "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan "
+        "strategy_forge_scan signal_explain_pregen"
     )
