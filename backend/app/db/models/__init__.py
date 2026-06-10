@@ -44,6 +44,7 @@ from app.db.models.dca_baskets import DCABasket, DCABasketAsset  # noqa: F401
 from app.db.models.bots import BotProfile, BotAllocation, BotSignal, BotPosition, BotTrade, BotDailyPnL, GoLiveWaitlist, BotWatchlist, BotHealth, RegimeSnapshot, CatalystEvent, StrategyWeight, CrossBotPosition, NewsEvent, AnomalyEvent  # noqa: F401
 from app.db.models.learning import LearningTrack, LearningModule, LearningLesson, UserLessonProgress, UserCertificate  # noqa: F401
 from app.db.models.smart_money import SmartMoneyCongressTrade  # noqa: F401
+from app.db.models.sentinel import AgentEvent, AgentFix, AgentCircuitBreaker, AgentEscalation  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -86,4 +87,5 @@ __all__ = [
     "StrategyWeight", "CrossBotPosition", "NewsEvent", "AnomalyEvent",
     "LearningTrack", "LearningModule", "LearningLesson", "UserLessonProgress", "UserCertificate",
     "SmartMoneyCongressTrade",
+    "AgentEvent", "AgentFix", "AgentCircuitBreaker", "AgentEscalation",
 ]

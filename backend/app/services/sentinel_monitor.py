@@ -132,6 +132,29 @@ def send_hourly_status() -> None:
     )
 
 
+async def sentinel_loop() -> None:
+    """
+    Async loop that runs for the lifetime of the server.
+    Wakes every 60 s: logs a heartbeat and posts to Discord if SENTINEL_ENABLED=true.
+    """
+    import asyncio
+
+    enabled = os.getenv("SENTINEL_ENABLED", "false").lower() == "true"
+    channel = _channel()
+    logger.warning(
+        "[sentinel] loop starting — enabled=%s channel=%s",
+        enabled,
+        channel if channel else "MISSING",
+    )
+    while True:
+        await asyncio.sleep(60)
+        now = datetime.now(timezone.utc).strftime("%H:%M UTC")
+        logger.info("[sentinel] heartbeat tick — %s", now)
+        if enabled and channel:
+            import asyncio as _asyncio
+            await _asyncio.to_thread(_post_plain, f"💓 Sentinel heartbeat · {now}")
+
+
 def send_test_heartbeat() -> dict:
     """
     Called from POST /api/admin/sentinel/test-heartbeat.

@@ -32,6 +32,7 @@ from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
 from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money, exams, admin
 from app.routers.admin_bots import router as admin_bots_router
+from app.routers.sentinel import router as sentinel_router
 from app.routers.scout import router as scout_router
 from app.routers.forge import router as forge_router
 from app.routers.performance import router as performance_router
@@ -193,14 +194,18 @@ async def lifespan(app: FastAPI):
             "Set in Railway environment variables."
         )
 
-    # Sentinel observation layer — startup heartbeat + hourly status to #sentinel-ops
-    from app.services.sentinel_monitor import log_config as _sentinel_log_config
-    from app.services.sentinel_monitor import send_startup_heartbeat as _sentinel_startup
-    from app.services.sentinel_monitor import send_hourly_status as _sentinel_hourly
+    # Sentinel observation layer — startup heartbeat + 60-s loop + hourly status to #sentinel-ops
+    from app.services.sentinel_monitor import (
+        log_config as _sentinel_log_config,
+        send_startup_heartbeat as _sentinel_startup,
+        send_hourly_status as _sentinel_hourly,
+        sentinel_loop as _sentinel_loop,
+    )
     _sentinel_log_config()
     scheduler.add_job(_sentinel_hourly, "interval", hours=1, id="sentinel_hourly_status",
                       replace_existing=True, max_instances=1)
     asyncio.create_task(asyncio.to_thread(_sentinel_startup))
+    asyncio.create_task(_sentinel_loop())
 
     yield
 
@@ -314,6 +319,7 @@ app.include_router(exams.router)
 app.include_router(exams.verify_router)
 app.include_router(admin.router)
 app.include_router(admin_bots_router)
+app.include_router(sentinel_router)
 app.include_router(scout_router)
 app.include_router(forge_router)
 app.include_router(performance_router)
