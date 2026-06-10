@@ -76,11 +76,14 @@ class TestEventBody(BaseModel):
 
 
 @router.post("/test-event")
-def test_event(body: TestEventBody, _current_user=Depends(get_current_user)):
+def test_event(body: TestEventBody):
     """
     Inject a fake AgentEvent and, if SENTINEL_ESCALATION_MODE=true,
     post a real escalation embed to #sentinel-ops.
+    Gated on SENTINEL_ENABLED — no Bearer token required.
     """
+    if not os.getenv("SENTINEL_ENABLED", "false").lower() == "true":
+        raise HTTPException(status_code=403, detail="SENTINEL_ENABLED is not set")
     from app.services.sentinel_monitor import (
         create_agent_event,
         _escalation_enabled,
