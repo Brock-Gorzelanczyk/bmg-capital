@@ -1113,7 +1113,8 @@ def trace_bot_profile(profile_name: str, confidence_threshold_override: float | 
                     raw = _fetch_crypto_bars(symbols, timeframe=timeframe, limit=limit)
                 else:
                     from app.screener.runner import _fetch_bars_sync
-                    raw = _fetch_bars_sync(symbols, period="60d")
+                    _lookback = profile.get("scan_lookback_period", "60d")
+                    raw = _fetch_bars_sync(symbols, period=_lookback)
                 for sym, df in raw.items():
                     if df is None or df.empty:
                         continue

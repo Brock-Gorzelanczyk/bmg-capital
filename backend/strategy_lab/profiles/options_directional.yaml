@@ -39,7 +39,7 @@ strategies:
   - leaps_stock_replacement
   - long_call_directional
 ensemble: weighted_vote
-position_cap: 4
+position_cap: 8
 position_size_pct: 15.0
 stop_loss_pct: 100.0
 take_profit_pct: 50.0
