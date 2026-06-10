@@ -748,7 +748,7 @@ def get_bot_risk_status(
         alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000
     ) / 100.0
 
-    flag_enabled = os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").lower() == "true"
+    flag_enabled = os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true"
     status = get_risk_status(alloc, profile, capital_usd, db)
     status["flag_enabled"] = flag_enabled
     return status

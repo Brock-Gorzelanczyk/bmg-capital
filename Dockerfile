@@ -4,9 +4,12 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-# VITE_DEMO_MODE can be overridden at build time via --build-arg
+# VITE_ vars are baked into the JS bundle at build time — declare each as ARG
+# so Railway passes them through from service variables to docker build.
 ARG VITE_DEMO_MODE=false
 ENV VITE_DEMO_MODE=$VITE_DEMO_MODE
+ARG VITE_ENABLE_LOGIN_SHOWCASE=false
+ENV VITE_ENABLE_LOGIN_SHOWCASE=$VITE_ENABLE_LOGIN_SHOWCASE
 RUN npm run build
 
 # ── Stage 2: Python backend + static frontend ─────────────────────────────────

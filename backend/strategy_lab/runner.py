@@ -1427,7 +1427,8 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     # 2. Size: pct of bot capital (capital_cents_within_portfolio or starting capital)
     capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
-    _use_deployment_sizer = os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").lower() == "true"
+    _raw_flag = os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower()
+    _use_deployment_sizer = _raw_flag == "true"
     if _use_deployment_sizer:
         from strategy_lab.core.deployment_sizer import compute_per_trade_notional
         position_dollars = compute_per_trade_notional(alloc, profile, db, capital_usd, profile_name)
@@ -1439,6 +1440,10 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             return
     else:
         position_dollars = capital_usd * (final_size_pct / 100.0)
+    logger.warning(
+        "[sizing-mode] %s %s: enabled=%s notional=%.2f capital=%.0f",
+        profile_name, sig.symbol, _use_deployment_sizer, position_dollars, capital_usd,
+    )
     qty = round(position_dollars / entry_price, 6)
     if qty <= 0:
         return
