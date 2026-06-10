@@ -223,8 +223,8 @@ def run_bot_profile(profile_name: str) -> dict:
         On error: {"error": str}.
     """
     _scan_start = datetime.now(timezone.utc)
-    logger.info("[scheduled] %s scan START %s", profile_name, _scan_start.isoformat())
-    logger.info(">>> [runner:%s] scan cycle START %s", profile_name, _scan_start.isoformat())
+    logger.warning("[scheduled] %s scan START %s", profile_name, _scan_start.isoformat())
+    logger.warning(">>> [runner:%s] scan cycle START %s", profile_name, _scan_start.isoformat())
     try:
         # 1. Load profile YAML
         from strategy_lab.seeds import load_profile
@@ -238,7 +238,7 @@ def run_bot_profile(profile_name: str) -> dict:
         try:
             bp = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
             if not bp or not bp.enabled:
-                logger.info("[runner:%s] SKIP profile disabled or not found in DB", profile_name)
+                logger.warning("[runner:%s] SKIP profile disabled or not found in DB", profile_name)
                 return {"skipped": True, "reason": "profile disabled or not found"}
 
             allocations = (
@@ -251,7 +251,7 @@ def run_bot_profile(profile_name: str) -> dict:
                 .all()
             )
             if not allocations:
-                logger.info(
+                logger.warning(
                     "[runner:%s] SKIP no enabled paper allocations — "
                     "profile_id=%s enabled=%s alloc_count=%s",
                     profile_name, bp.id, bp.enabled,
@@ -331,7 +331,7 @@ def run_bot_profile(profile_name: str) -> dict:
                             }
                             for _, row in df.iterrows()
                         ]
-                    logger.info(
+                    logger.warning(
                         "[runner:%s] fetched bars for %d/%d symbols",
                         profile_name, len(bars), len(symbols),
                     )
@@ -358,7 +358,7 @@ def run_bot_profile(profile_name: str) -> dict:
             signals_by_strategy: list[list] = []
             strategies_loaded = 0
 
-            logger.info("[scan] bot=%s starting, %d symbols", profile_name, len(symbols))
+            logger.warning("[scan] bot=%s starting, %d symbols", profile_name, len(symbols))
 
             for strat_name in strategy_names:
                 mod = _load_strategy_module(strat_name)
@@ -420,12 +420,12 @@ def run_bot_profile(profile_name: str) -> dict:
             ensemble = profile.get("ensemble", "weighted_vote")
             conf_threshold = float(profile.get("confidence_threshold", 0.5))
             raw_total = sum(len(s) for s in signals_by_strategy)
-            logger.info(
+            logger.warning(
                 "[runner:%s] FILTER raw_signals=%d across %d strategies (threshold=%.2f, ensemble=%s)",
                 profile_name, raw_total, strategies_loaded, conf_threshold, ensemble,
             )
             signals = _apply_ensemble(ensemble, signals_by_strategy, max(1, strategies_loaded), conf_threshold)
-            logger.info(
+            logger.warning(
                 "[runner:%s] FILTER after_ensemble=%d (dropped %d)",
                 profile_name, len(signals), raw_total - len(signals),
             )
@@ -1007,11 +1007,11 @@ def run_bot_profile(profile_name: str) -> dict:
             logger.info("[runner:%s] Audit: %s", profile_name, audit_record)
 
             _scan_ms = int((datetime.now(timezone.utc) - _scan_start).total_seconds() * 1000)
-            logger.info(
+            logger.warning(
                 "[scheduled] %s COMPLETE %dms — allocs=%d actionable=%d persisted=%d",
                 profile_name, _scan_ms, len(allocations), len(actionable), len(processed_signals),
             )
-            logger.info(
+            logger.warning(
                 "<<< [runner:%s] scan cycle COMPLETE in %dms — "
                 "%d allocs, %d actionable signals, %d processed",
                 profile_name, _scan_ms, len(allocations), len(actionable), len(processed_signals),
