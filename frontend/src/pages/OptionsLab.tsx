@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import RetiredBanner from "@/components/RetiredBanner";
 import { ChevronDown, RefreshCw, X, Bot, Zap, TrendingUp, TrendingDown, AlertTriangle, Play, Pause, DollarSign, Activity } from "lucide-react";
 import { getOptionsChain, getExpirations } from "@/api/options";
 import OptionsChain from "@/components/options/OptionsChain";
@@ -401,6 +402,7 @@ export default function OptionsLab() {
 
   return (
     <div className="space-y-4 pb-8">
+      <RetiredBanner />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

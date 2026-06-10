@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useIsViewer } from "@/store/authStore";
+import RetiredBanner from "@/components/RetiredBanner";
 import {
   AreaChart,
   Area,
@@ -641,6 +642,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-5 pb-10">
+      <RetiredBanner replacedBy={{ label: "Performance Analytics", to: "/strategy/performance" }} />
       {/* Page header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>

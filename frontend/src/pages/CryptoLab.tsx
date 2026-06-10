@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import RetiredBanner from "@/components/RetiredBanner";
 import {
   Star, RotateCw, X, ChevronUp, ChevronDown, ChevronsUpDown,
   ArrowLeft, Search, ExternalLink, Bot, Info,
@@ -1973,6 +1974,7 @@ export default function CryptoLab() {
 
   return (
     <div className="space-y-5 pb-8">
+      <RetiredBanner replacedBy={{ label: "Markets", to: "/markets" }} />
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>

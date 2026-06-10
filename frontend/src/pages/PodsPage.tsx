@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useIsViewer } from "@/store/authStore";
+import RetiredBanner from "@/components/RetiredBanner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getPods,
@@ -659,6 +660,7 @@ export default function PodsPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-base)] p-6">
+      <RetiredBanner replacedBy={{ label: "Strategy Lab", to: "/strategy" }} />
       {/* Header */}
       <div className="flex items-start justify-between mb-6 gap-4">
         <div>

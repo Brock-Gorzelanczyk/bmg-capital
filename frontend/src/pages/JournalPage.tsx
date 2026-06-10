@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Edit2, TrendingUp, TrendingDown, BookOpen, BarChart2, Star, Lock, Download, Bot } from "lucide-react";
+import RetiredBanner from "@/components/RetiredBanner";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { useIsViewer } from "@/store/authStore";
 import { toast } from "sonner";
@@ -596,6 +597,7 @@ export default function JournalPage() {
 
   return (
     <div className="space-y-4 pb-8">
+      <RetiredBanner />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

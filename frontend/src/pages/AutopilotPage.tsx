@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import RetiredBanner from "@/components/RetiredBanner";
 import {
   Zap,
   BarChart2,
@@ -848,6 +849,7 @@ export default function AutopilotPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-8">
+      <RetiredBanner replacedBy={{ label: "Strategy Lab", to: "/strategy" }} />
 
       {/* Global paused banner */}
       {globalPaused && (

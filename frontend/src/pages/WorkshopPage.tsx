@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { CheckSquare, Square, Lock, ChevronDown, ChevronUp, Upload, Flame, BookOpen, X, Trophy, Loader2, AlertCircle } from "lucide-react";
+import RetiredBanner from "@/components/RetiredBanner";
 import { cn } from "@/lib/utils";
 import { analyzeImage, type ImageAnalysis } from "@/api/workshop";
 import { useIsAdmin } from "@/store/authStore";
@@ -427,6 +428,7 @@ export default function WorkshopPage() {
 
   return (
     <div className="max-w-3xl mx-auto pb-24 px-4 md:px-0">
+      <RetiredBanner />
       {/* Header */}
       <div className="pt-6 pb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

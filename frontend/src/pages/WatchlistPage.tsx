@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import RetiredBanner from "@/components/RetiredBanner";
 import { getWatchlists, createWatchlist, addSymbol, removeSymbol, getSnapshot } from "@/api/watchlist";
 import { useMarketStore } from "@/store";
 import { useIsViewer } from "@/store/authStore";
@@ -309,6 +310,7 @@ export default function WatchlistPage() {
   // ── Normal state ──────────────────────────────────────────────────────────
   return (
     <>
+      <RetiredBanner replacedBy={{ label: "Markets", to: "/markets" }} />
       {showTemplates && <TemplateGallery onClose={() => setShowTemplates(false)} />}
       <div className="max-w-3xl mx-auto space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--border-subtle)]">
