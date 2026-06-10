@@ -1655,8 +1655,8 @@ export default function StrategyLab() {
             <RegimeBar regime={regime} isLoading={regimeLoading} />
           </div>
 
-          {/* Three portfolio tab cards / Bot cards — above the portfolio hero */}
-          {portfoliosLoading || isLoading ? (
+          {/* Capital pods */}
+          {portfoliosLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[0, 1, 2, 3].map((i) => (
                 <div key={i} className="h-28 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
@@ -1668,23 +1668,7 @@ export default function StrategyLab() {
                 <PortfolioTab key={port.id} portfolio={port} />
               ))}
             </div>
-          ) : (
-            <div className={cn(
-              "grid gap-4",
-              railOpen
-                ? "grid-cols-1 sm:grid-cols-2"
-                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
-            )}>
-              {bots.map((item) => (
-                <BotCard
-                  key={item.profile.name}
-                  item={item}
-                  onNavigate={(name) => navigate(`/strategy/${name}`)}
-                  isViewer={isViewer}
-                />
-              ))}
-            </div>
-          )}
+          ) : null}
 
           {/* Strategy Scout entry card */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
@@ -1708,6 +1692,54 @@ export default function StrategyLab() {
               </Link>
             </div>
           </div>
+
+          {/* The Forge entry card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+                // THE FORGE
+              </p>
+              <p className="text-sm text-zinc-300">
+                Forge your own quant bot — combine strategies, set your watchlist, allocate capital.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <span className="text-xs text-zinc-500 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 whitespace-nowrap">
+                Active bots: <span className="text-white font-semibold">—</span>
+              </span>
+              <Link
+                to="/strategy/library/custom-bot"
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-400 hover:bg-orange-500/25 transition-colors whitespace-nowrap"
+              >
+                Open Forge →
+              </Link>
+            </div>
+          </div>
+
+          {/* Prebuilt bot tiles */}
+          {isLoading ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <div key={i} className="h-36 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className={cn(
+              "grid gap-4",
+              railOpen
+                ? "grid-cols-1 sm:grid-cols-2"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+            )}>
+              {bots.map((item) => (
+                <BotCard
+                  key={item.profile.name}
+                  item={item}
+                  onNavigate={(name) => navigate(`/strategy/${name}`)}
+                  isViewer={isViewer}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Aggregate portfolio hero */}
           <PortfolioHero onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
