@@ -618,6 +618,19 @@ def run_bot_profile(profile_name: str) -> dict:
                             "target_price": round(_entry_price * (1 + _tp_pct), 6),
                         }
 
+                    # ── Compute notional before log_signal so the audit.py background
+                    # Discord post (which fires immediately from log_signal) shows the
+                    # deployment-sizer amount rather than position_size_pct × capital.
+                    _log_capital = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+                    if os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true":
+                        try:
+                            from strategy_lab.core.deployment_sizer import compute_per_trade_notional as _cpt_pre
+                            _notional_usd = _cpt_pre(alloc, profile, db, _log_capital, profile_name) or (_log_capital * final_size_pct / 100.0)
+                        except Exception:
+                            _notional_usd = _log_capital * final_size_pct / 100.0
+                    else:
+                        _notional_usd = _log_capital * final_size_pct / 100.0
+
                     # ── Persist signal to bot_signals now (before any execution guard
                     # that could continue/skip).  Wrapped so a DB error never aborts
                     # the scan loop.
@@ -628,6 +641,7 @@ def run_bot_profile(profile_name: str) -> dict:
                             entry_price=_entry_price,
                             stop_price=stop_info.get("stop_price"),
                             target_price=stop_info.get("target_price"),
+                            notional_usd=_notional_usd,
                         )
                         logger.info(
                             "[scheduled] %s SIGNAL PERSISTED %s %s confidence=%.3f alloc=%d signal_id=%s",
@@ -873,17 +887,6 @@ def run_bot_profile(profile_name: str) -> dict:
                         profile_name, sig.side, sig.symbol,
                         final_size_pct, stop_info.get("stop_price", "n/a"),
                     )
-
-                    # Compute actual notional for Discord display — mirrors _execute_signal path
-                    _discord_capital = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
-                    if os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true":
-                        try:
-                            from strategy_lab.core.deployment_sizer import compute_per_trade_notional as _cpt
-                            _notional_usd = _cpt(alloc, profile, db, _discord_capital, profile_name) or (_discord_capital * final_size_pct / 100.0)
-                        except Exception:
-                            _notional_usd = _discord_capital * final_size_pct / 100.0
-                    else:
-                        _notional_usd = _discord_capital * final_size_pct / 100.0
 
                     # Build signal dict for per-user notifications
                     _signal_dict = {

@@ -104,6 +104,7 @@ def log_signal(
     entry_price: Optional[float] = None,
     stop_price: Optional[float] = None,
     target_price: Optional[float] = None,
+    notional_usd: Optional[float] = None,
 ) -> Optional[int]:
     """Persist a Signal to bot_signals, then fire Discord embed in background.
 
@@ -193,6 +194,7 @@ def log_signal(
         "stop":                   stop_price or None,
         "target":                 target_price or None,
         "starting_capital_cents": _starting_capital_cents,
+        "notional_usd":           notional_usd,
     }
 
     threading.Thread(
