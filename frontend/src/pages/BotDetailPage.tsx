@@ -2379,7 +2379,11 @@ export default function BotDetailPage() {
   const positions: BotPosition[] = Array.isArray(data?.positions) ? data!.positions : [];
 
   const isSymbolMismatch = (symbol: string): boolean => {
-    const ac = profile?.asset_class;
+    // Fallback to bot name prefix when DB asset_class is missing or stale
+    const acFromName = botName.startsWith("crypto_") || botName.startsWith("quant_") ? "crypto"
+      : botName.startsWith("stock_") || botName.startsWith("options_") ? "stock"
+      : null;
+    const ac = profile?.asset_class ?? acFromName;
     if (!ac) return false;
     const isCryptoSym = symbol.includes("/USD");
     if (ac === "crypto" || ac === "quant") return !isCryptoSym;
