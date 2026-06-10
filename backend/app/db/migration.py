@@ -510,6 +510,81 @@ def _create_signal_explanations_table(conn) -> None:
         logger.warning("_create_signal_explanations_table failed: %s", exc)
 
 
+def _recreate_sentinel_tables(conn) -> None:
+    """Drop and recreate sentinel tables with INTEGER primary keys (BigInteger broke SQLite autoincrement)."""
+    MIGRATION_NAME = "sentinel_tables_integer_pk_v1"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+
+    for tbl in ("agent_escalations", "agent_fixes", "agent_circuit_breakers", "agent_events"):
+        conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
+
+    conn.execute(text("""
+        CREATE TABLE agent_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id VARCHAR NOT NULL,
+            severity VARCHAR NOT NULL,
+            category VARCHAR NOT NULL,
+            fingerprint VARCHAR NOT NULL,
+            payload TEXT NOT NULL DEFAULT '{}',
+            state VARCHAR NOT NULL DEFAULT 'open',
+            detected_at DATETIME NOT NULL,
+            resolved_at DATETIME
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE agent_fixes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL,
+            fixer_agent VARCHAR NOT NULL,
+            pr_number INTEGER,
+            pr_url TEXT,
+            files_changed TEXT,
+            diff_summary TEXT,
+            llm_model VARCHAR,
+            cost_usd NUMERIC,
+            status VARCHAR NOT NULL DEFAULT 'pending',
+            created_at DATETIME NOT NULL
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE agent_circuit_breakers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            breaker_type VARCHAR NOT NULL,
+            key VARCHAR NOT NULL,
+            tripped_at DATETIME NOT NULL,
+            resets_at DATETIME NOT NULL,
+            reason TEXT
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE agent_escalations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL,
+            paste_ready TEXT NOT NULL,
+            sent_to_discord BOOLEAN NOT NULL DEFAULT 0,
+            sent_at DATETIME,
+            user_action TEXT
+        )
+    """))
+
+    for idx_sql in (
+        "CREATE INDEX IF NOT EXISTS ix_agent_events_agent_id ON agent_events (agent_id)",
+        "CREATE INDEX IF NOT EXISTS ix_agent_events_category ON agent_events (category)",
+        "CREATE INDEX IF NOT EXISTS ix_agent_events_fingerprint ON agent_events (fingerprint)",
+        "CREATE INDEX IF NOT EXISTS ix_agent_events_state ON agent_events (state)",
+        "CREATE INDEX IF NOT EXISTS ix_agent_fixes_event_id ON agent_fixes (event_id)",
+        "CREATE INDEX IF NOT EXISTS ix_agent_circuit_breakers_breaker_type ON agent_circuit_breakers (breaker_type)",
+        "CREATE INDEX IF NOT EXISTS ix_agent_circuit_breakers_key ON agent_circuit_breakers (key)",
+        "CREATE INDEX IF NOT EXISTS ix_agent_escalations_event_id ON agent_escalations (event_id)",
+    ):
+        conn.execute(text(idx_sql))
+
+    conn.commit()
+    _record_migration(conn, MIGRATION_NAME)
+    logger.info("Migration: recreated sentinel tables with INTEGER primary keys")
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -585,6 +660,10 @@ def run_migrations(engine: Engine) -> None:
             _create_signal_explanations_table(conn)
         except Exception as _e:
             logger.warning("_create_signal_explanations_table failed (non-fatal): %s", _e)
+        try:
+            _recreate_sentinel_tables(conn)
+        except Exception as _e:
+            logger.warning("_recreate_sentinel_tables failed (non-fatal): %s", _e)
 
 
 def _add_bot_signals_cooldown_index(conn) -> None:
