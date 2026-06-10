@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -30,6 +30,60 @@ function GridBg() {
         background: "radial-gradient(ellipse 80% 60% at 50% 10%, rgba(132,204,22,0.07) 0%, transparent 70%)",
       }} />
     </>
+  );
+}
+
+// ─── 3D tilt card ─────────────────────────────────────────────────────────────
+
+function TiltCard({ children, className, style, intensity = 12 }: {
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+  intensity?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotateX = useSpring(useTransform(y, [-0.5, 0.5], [intensity, -intensity]), { stiffness: 300, damping: 30 });
+  const rotateY = useSpring(useTransform(x, [-0.5, 0.5], [-intensity, intensity]), { stiffness: 300, damping: 30 });
+  const glowX = useTransform(x, [-0.5, 0.5], ["0%", "100%"]);
+  const glowY = useTransform(y, [-0.5, 0.5], ["0%", "100%"]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    x.set((e.clientX - rect.left) / rect.width - 0.5);
+    y.set((e.clientY - rect.top) / rect.height - 0.5);
+  }, [x, y]);
+
+  const handleMouseLeave = useCallback(() => {
+    x.set(0);
+    y.set(0);
+  }, [x, y]);
+
+  return (
+    <motion.div
+      ref={ref}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{ rotateX, rotateY, transformStyle: "preserve-3d", perspective: 800, ...style }}
+      className={className}
+    >
+      {/* Glare overlay */}
+      <motion.div
+        className="absolute inset-0 rounded-2xl pointer-events-none z-10 opacity-0 group-hover:opacity-100"
+        style={{
+          background: useTransform(
+            [glowX, glowY],
+            ([gx, gy]) => `radial-gradient(circle at ${gx} ${gy}, rgba(132,204,22,0.08) 0%, transparent 60%)`
+          ),
+          transition: "opacity 0.2s",
+        }}
+      />
+      <div style={{ transform: "translateZ(8px)" }} className="relative h-full flex flex-col justify-between">
+        {children}
+      </div>
+    </motion.div>
   );
 }
 
@@ -269,8 +323,22 @@ const TICKER = [
 
 function HeroSection({ onAuth }: { onAuth: () => void }) {
   const items = [...TICKER, ...TICKER];
+  const heroRef = useRef<HTMLElement>(null);
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [6, -6]), { stiffness: 120, damping: 25 });
+  const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-8, 8]), { stiffness: 120, damping: 25 });
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    const rect = heroRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
+    mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
+  }, [mouseX, mouseY]);
+
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#020b02] px-4">
+    <section ref={heroRef} onMouseMove={handleMouseMove}
+      className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#020b02] px-4">
       <GridBg />
       {/* Ticker */}
       <div className="absolute bottom-0 inset-x-0 overflow-hidden h-7 pointer-events-none select-none border-t border-[#0f1a0f]">
@@ -281,17 +349,37 @@ function HeroSection({ onAuth }: { onAuth: () => void }) {
       </div>
 
       <div className="relative z-10 max-w-3xl mx-auto text-center space-y-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
+        {/* 3D floating logo block */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}
+          style={{ rotateX, rotateY, transformStyle: "preserve-3d", perspective: 1000 }}
+        >
           <div className="flex items-center justify-center gap-2 mb-4">
             <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: G }} />
             <span className="text-[10px] font-mono tracking-[0.4em] uppercase" style={{ color: `${G}60` }}>
               Paper trading only · not financial advice
             </span>
           </div>
-          <h1 className="text-5xl sm:text-6xl font-black tracking-[0.1em] uppercase leading-none"
-            style={{ color: G, textShadow: "0 0 60px rgba(132,204,22,0.3), 0 0 120px rgba(132,204,22,0.1)" }}>
+          <motion.h1
+            className="text-5xl sm:text-6xl font-black tracking-[0.1em] uppercase leading-none"
+            style={{
+              color: G,
+              textShadow: "0 0 60px rgba(132,204,22,0.3), 0 0 120px rgba(132,204,22,0.1)",
+              transform: "translateZ(30px)",
+            }}
+          >
             BMG CAPITAL
-          </h1>
+          </motion.h1>
+          {/* Depth shadow layer */}
+          <div className="text-5xl sm:text-6xl font-black tracking-[0.1em] uppercase leading-none select-none pointer-events-none absolute inset-0 flex items-center justify-center"
+            style={{
+              color: "transparent",
+              WebkitTextStroke: "1px rgba(132,204,22,0.12)",
+              transform: "translateZ(-20px) translateY(4px)",
+              filter: "blur(2px)",
+            }}>
+            BMG CAPITAL
+          </div>
           <p className="text-[11px] font-mono tracking-[0.5em] mt-2 uppercase" style={{ color: `${G}30` }}>
             Quantitative Trading System
           </p>
@@ -363,39 +451,41 @@ const BENTO_TILES = [
 ];
 
 function BentoSection() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  useGSAP(() => {
-    const tiles = containerRef.current?.querySelectorAll(".bento-tile");
-    if (!tiles) return;
-    tiles.forEach((tile, i) => {
-      gsap.fromTo(tile,
-        { opacity: 0, y: 30 },
-        { opacity: 1, y: 0, duration: 0.6, delay: i * 0.06,
-          scrollTrigger: { trigger: tile, start: "top 88%", toggleActions: "play none none none" } }
-      );
-    });
-  }, { scope: containerRef });
-
   return (
-    <section className="py-24 px-4 bg-[#020b02]" ref={containerRef}>
+    <section className="py-24 px-4 bg-[#020b02]">
       <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-12">
+        <motion.div className="text-center mb-12"
+          initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }} transition={{ duration: 0.6 }}>
           <p className="text-[10px] font-mono tracking-[0.4em] uppercase mb-2" style={{ color: `${G}50` }}>// PLATFORM</p>
           <h2 className="text-3xl font-black text-white">Everything you need to trade smarter.</h2>
-        </div>
-        <div className="grid grid-cols-3 gap-3 auto-rows-[120px]">
+        </motion.div>
+        <div className="grid grid-cols-3 gap-3 auto-rows-[120px]" style={{ perspective: "1200px" }}>
           {BENTO_TILES.map((tile, i) => (
-            <div key={i} className={`bento-tile ${tile.col} rounded-2xl p-4 border border-white/5 flex flex-col justify-between overflow-hidden relative`}
-              style={{ background: `color-mix(in srgb, ${tile.accent} 100%, #020b02)` }}>
-              <div className="flex items-center gap-2 mb-1">
-                <span style={{ color: tile.textAccent }}>{tile.icon}</span>
-                <span className="text-[10px] font-bold tracking-widest font-mono" style={{ color: tile.textAccent }}>{tile.label}</span>
-              </div>
-              <p className="text-[11px] text-white/60 leading-snug">{tile.body}</p>
-              {tile.stat && (
-                <span className="text-[9px] font-mono mt-1" style={{ color: tile.textAccent }}>{tile.stat}</span>
-              )}
-            </div>
+            <motion.div
+              key={i}
+              className={`${tile.col}`}
+              initial={{ opacity: 0, rotateX: -35, y: 30 }}
+              whileInView={{ opacity: 1, rotateX: 0, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.55, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] }}
+              style={{ transformStyle: "preserve-3d" }}
+            >
+              <TiltCard
+                intensity={10}
+                className="rounded-2xl p-4 border border-white/5 overflow-hidden relative group h-full"
+                style={{ background: `color-mix(in srgb, ${tile.accent} 100%, #020b02)` }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span style={{ color: tile.textAccent }}>{tile.icon}</span>
+                  <span className="text-[10px] font-bold tracking-widest font-mono" style={{ color: tile.textAccent }}>{tile.label}</span>
+                </div>
+                <p className="text-[11px] text-white/60 leading-snug">{tile.body}</p>
+                {tile.stat && (
+                  <span className="text-[9px] font-mono mt-1" style={{ color: tile.textAccent }}>{tile.stat}</span>
+                )}
+              </TiltCard>
+            </motion.div>
           ))}
         </div>
       </div>
@@ -511,13 +601,14 @@ function StatsSection() {
 
   return (
     <section className="py-20 px-4 bg-[#020b02]" ref={ref}>
-      <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4" style={{ perspective: "1000px" }}>
         {STATS.map(s => (
-          <div key={s.label} className="stat-card text-center rounded-2xl p-6 border border-[#0f1a0f] bg-[#030f03]">
+          <TiltCard key={s.label} intensity={8}
+            className="stat-card text-center rounded-2xl p-6 border border-[#0f1a0f] bg-[#030f03] group">
             <p className="text-4xl font-black font-mono" style={{ color: G }}>{s.value}</p>
             <p className="text-sm font-semibold text-white mt-1">{s.label}</p>
             <p className="text-[10px] text-slate-500 mt-0.5 font-mono">{s.sub}</p>
-          </div>
+          </TiltCard>
         ))}
       </div>
     </section>
@@ -575,9 +666,17 @@ function PricingSection({ onAuth }: { onAuth: () => void }) {
           <h2 className="text-3xl font-black text-white">Simple, transparent pricing.</h2>
           <p className="text-slate-400 mt-2 text-sm">Paper trading only. No financial advice.</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {PLANS.map(plan => (
-            <div key={plan.name} className={`price-card rounded-2xl p-6 border flex flex-col relative`}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4" style={{ perspective: "1200px" }}>
+          {PLANS.map((plan, pi) => (
+            <motion.div key={plan.name}
+              initial={{ opacity: 0, rotateY: -18, x: -20 }}
+              whileInView={{ opacity: 1, rotateY: 0, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: pi * 0.12, ease: [0.22, 1, 0.36, 1] }}
+              style={{ transformStyle: "preserve-3d" }}
+            >
+            <TiltCard intensity={6}
+              className={`price-card rounded-2xl p-6 border flex flex-col relative group`}
               style={{
                 borderColor: plan.highlight ? `${plan.accent}60` : "rgba(255,255,255,0.07)",
                 background: plan.highlight ? `color-mix(in srgb, ${plan.accent} 8%, #030f03)` : "#030f03",
@@ -613,7 +712,8 @@ function PricingSection({ onAuth }: { onAuth: () => void }) {
                 }}>
                 {plan.cta}
               </button>
-            </div>
+            </TiltCard>
+            </motion.div>
           ))}
         </div>
       </div>
