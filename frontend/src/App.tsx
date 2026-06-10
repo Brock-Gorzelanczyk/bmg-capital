@@ -353,8 +353,10 @@ function AppInner() {
         <Route path="/strategy/library" element={<StrategyLibraryPage />} />
         <Route path="/strategy/library/custom-bot" element={<Navigate to="/strategy/forge" replace />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
+        <Route path="/strategy/analytics" element={<Navigate to="/analytics" replace />} />
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
+        <Route path="/strategy-lab" element={<Navigate to="/strategy" replace />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
         <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
