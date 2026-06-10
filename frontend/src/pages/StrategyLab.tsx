@@ -1748,6 +1748,42 @@ export default function StrategyLab() {
             </div>
           </div>
 
+          {/* Performance Analytics entry card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+                // PERFORMANCE ANALYTICS
+              </p>
+              <p className="text-sm text-zinc-300">
+                Sharpe, drawdown, win rate — every bot, measured against the data.
+              </p>
+            </div>
+            <Link
+              to="/strategy/performance"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 transition-colors whitespace-nowrap flex-shrink-0"
+            >
+              Open Analytics →
+            </Link>
+          </div>
+
+          {/* Strategy Leaderboard entry card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+                // STRATEGY LEADERBOARD
+              </p>
+              <p className="text-sm text-zinc-300">
+                Dollar-weighted rankings — see which strategies are actually printing across every bot.
+              </p>
+            </div>
+            <Link
+              to="/strategy/leaderboard"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 transition-colors whitespace-nowrap flex-shrink-0"
+            >
+              View Leaderboard →
+            </Link>
+          </div>
+
           {/* Prebuilt bot tiles */}
           {isLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -1559,7 +1559,7 @@ function BacktestTab({ botName }: { botName: string }) {
 
 // ─── Tab system ───────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "watchlist" | "backtest" | "activity" | "strategies" | "settings";
+type Tab = "overview" | "watchlist" | "backtest" | "activity" | "strategies" | "settings" | "performance";
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { key: Tab; label: string }[] = [
@@ -1568,6 +1568,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
     { key: "backtest", label: "Backtest" },
     { key: "activity", label: "Recent Trades" },
     { key: "strategies", label: "Strategies" },
+    { key: "performance", label: "Performance" },
     { key: "settings", label: "Settings" },
   ];
 
@@ -2139,6 +2140,131 @@ function SettingsTab({
         )}
       </div>
 
+    </div>
+  );
+}
+
+// ─── Performance tab (read-only analytics) ───────────────────────────────────
+
+function BotPerformanceTab({ botName }: { botName: string }) {
+  const [period, setPeriod] = useState<"7d" | "30d" | "90d" | "all">("30d");
+
+  const { data: metrics, isLoading, isError } = useQuery({
+    queryKey: ["perf-bot-detail", botName, period],
+    queryFn: () =>
+      import("@/api/performance").then((m) => m.getBotPerformance(botName, period)),
+    staleTime: 300_000,
+    retry: 0,
+  });
+
+  const { data: attrData } = useQuery({
+    queryKey: ["perf-bot-attr-detail", botName],
+    queryFn: () =>
+      import("@/api/performance").then((m) => m.getBotStrategyAttribution(botName, "all")),
+    staleTime: 300_000,
+    retry: 0,
+    enabled: !isError,
+  });
+
+  if (isError) return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-10 text-center">
+      <p className="text-zinc-400 font-semibold mb-1">Performance analytics not enabled</p>
+      <p className="text-zinc-600 text-sm">Set ENABLE_PERFORMANCE_ANALYTICS=true to activate.</p>
+    </div>
+  );
+
+  const fmtPct = (v: number | null | undefined) =>
+    v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+  const fmtUsd = (v: number | null | undefined) => {
+    if (v == null) return "—";
+    const abs = Math.abs(v);
+    const s = abs >= 1000 ? `$${(abs / 1000).toFixed(1)}k` : `$${abs.toFixed(0)}`;
+    return v < 0 ? `-${s}` : `+${s}`;
+  };
+  const pclr = (v: number | null | undefined) =>
+    v == null ? "text-zinc-400" : v >= 0 ? "text-emerald-400" : "text-red-400";
+
+  return (
+    <div className="space-y-5">
+      {/* Period selector */}
+      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+        {(["7d","30d","90d","all"] as const).map((p) => (
+          <button key={p} onClick={() => setPeriod(p)}
+            className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors uppercase",
+              period === p ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-300")}>
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[0,1,2,3].map((i) => <div key={i} className="h-20 bg-zinc-900 border border-zinc-800 rounded-2xl animate-pulse" />)}
+        </div>
+      ) : metrics?.total_trades === 0 ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-10 text-center">
+          <p className="text-zinc-400 font-semibold">No trade data yet</p>
+          <p className="text-zinc-600 text-sm mt-1">Performance appears after the first closed trade.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Metrics grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Total Return", value: fmtPct(metrics?.total_return_pct), sub: fmtUsd(metrics?.total_return_usd), cls: pclr(metrics?.total_return_pct) },
+              { label: "Sharpe", value: metrics?.sharpe != null ? metrics.sharpe.toFixed(2) : "—", cls: "text-white" },
+              { label: "Max Drawdown", value: fmtPct(metrics?.max_drawdown_pct), cls: "text-red-400" },
+              { label: "Win Rate", value: metrics?.win_rate != null ? `${(metrics.win_rate * 100).toFixed(0)}%` : "—", sub: `${metrics?.total_trades ?? 0} trades`, cls: "text-white" },
+            ].map((card) => (
+              <div key={card.label} className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3">
+                <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-1">{card.label}</p>
+                <p className={cn("text-xl font-bold font-mono", card.cls)}>{card.value}</p>
+                {card.sub && <p className="text-xs text-zinc-500 mt-0.5 font-mono">{card.sub}</p>}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Sortino", value: metrics?.sortino != null ? metrics.sortino.toFixed(2) : "—" },
+              { label: "Profit Factor", value: metrics?.profit_factor != null ? metrics.profit_factor.toFixed(2) : "—" },
+              { label: "Best Trade", value: fmtUsd(metrics?.best_trade_usd), cls: "text-emerald-400" },
+              { label: "Worst Trade", value: fmtUsd(metrics?.worst_trade_usd), cls: "text-red-400" },
+            ].map((card) => (
+              <div key={card.label} className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3">
+                <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-1">{card.label}</p>
+                <p className={cn("text-xl font-bold font-mono", (card as any).cls ?? "text-white")}>{card.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Strategy attribution */}
+          {attrData && attrData.attribution.length > 0 && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 overflow-x-auto">
+              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-3">// STRATEGY ATTRIBUTION</p>
+              <table className="w-full text-xs min-w-max">
+                <thead>
+                  <tr className="border-b border-zinc-800">
+                    {["Strategy","Raw Return %","$ Contribution","Capital","Weight"].map((h) => (
+                      <th key={h} className="text-left text-[10px] text-zinc-600 uppercase py-2 px-2 first:pl-0">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {attrData.attribution.map((row) => (
+                    <tr key={row.strategy} className="border-b border-zinc-800/40">
+                      <td className="py-2 pr-4 text-white font-medium">{row.strategy?.replace(/_/g," ") ?? "Unattributed"}</td>
+                      <td className={cn("py-2 px-2 font-mono", pclr(row.raw_return_pct))}>{fmtPct(row.raw_return_pct)}</td>
+                      <td className={cn("py-2 px-2 font-mono", pclr(row.pnl_usd))}>{fmtUsd(row.pnl_usd)}</td>
+                      <td className="py-2 px-2 font-mono text-zinc-400">${(row.capital_deployed_usd ?? 0).toFixed(0)}</td>
+                      <td className="py-2 px-2 font-mono text-zinc-400">{row.weight_pct != null ? `${row.weight_pct.toFixed(1)}%` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -2820,6 +2946,10 @@ export default function BotDetailPage() {
       {activeTab === "strategies" && <StrategiesTab botName={botName} signals={signals} />}
 
       {/* Settings tab */}
+      {activeTab === "performance" && (
+        <BotPerformanceTab botName={botName} />
+      )}
+
       {activeTab === "settings" && (
         <SettingsTab
           botName={botName}

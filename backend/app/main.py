@@ -34,6 +34,7 @@ from app.routers import bars, screener, watchlist, portfolio, alerts, market, ne
 from app.routers.admin_bots import router as admin_bots_router
 from app.routers.scout import router as scout_router
 from app.routers.forge import router as forge_router
+from app.routers.performance import router as performance_router
 from app.routers import symbols as symbols_router
 from app.routers import chart_layouts as chart_layouts_router
 from app.routers.learning import router as learning_router
@@ -305,6 +306,7 @@ app.include_router(admin.router)
 app.include_router(admin_bots_router)
 app.include_router(scout_router)
 app.include_router(forge_router)
+app.include_router(performance_router)
 app.include_router(symbols_router.router)
 app.include_router(chart_layouts_router.router)
 
