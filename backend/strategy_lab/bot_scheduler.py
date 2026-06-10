@@ -672,10 +672,30 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
 
+    # ------------------------------------------------------------------
+    # The Forge scanner: every 5 min — gate on ENABLE_STRATEGY_FORGE.
+    # ------------------------------------------------------------------
+    def _run_forge_scan():
+        try:
+            from strategy_lab.forge_scanner import run_forge_scan
+            run_forge_scan()
+        except Exception as exc:
+            logger.error("[forge-scanner] job failed: %s", exc)
+
+    scheduler.add_job(
+        _run_forge_scan,
+        CronTrigger(minute="*/5"),
+        id="strategy_forge_scan",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
+        coalesce=True,
+    )
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
         "crypto_quant_aggressive crypto_quant_scalper crypto_quant_mean_reversion "
         "options_income options_directional position_monitor dead_mans_switch "
-        "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan"
+        "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan strategy_forge_scan"
     )
