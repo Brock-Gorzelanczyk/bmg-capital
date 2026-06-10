@@ -151,14 +151,22 @@ def _build_signal_embed(signal: dict) -> dict:
     color  = _COLOR_BUY if is_buy else _COLOR_SELL
     conf_pct = round((signal.get("confidence") or 0) * 100, 1)
 
-    # Compute dollar amount + qty from starting capital + size hint
-    size_pct   = signal.get("size_pct")          # already a percent (e.g. 0.3)
-    cap_cents  = signal.get("starting_capital_cents")
-    entry      = signal.get("price")
-    if size_pct is not None and cap_cents is not None and cap_cents > 0:
+    # Dollar amount: prefer explicit notional_usd (set by deployment sizer), else fallback
+    entry        = signal.get("price")
+    notional_usd = signal.get("notional_usd")
+    size_pct     = signal.get("size_pct")
+    cap_cents    = signal.get("starting_capital_cents")
+    dollar_label = "Invested" if is_buy else "Notional"
+    if notional_usd is not None and notional_usd > 0:
+        qty = notional_usd / entry if entry and entry > 0 else None
+        size_value = (
+            f"${notional_usd:,.2f} / {_fmt_qty(qty, symbol)}"
+            if qty is not None
+            else f"${notional_usd:,.2f}"
+        )
+    elif size_pct is not None and cap_cents is not None and cap_cents > 0:
         invested = (cap_cents / 100) * (size_pct / 100)
         qty      = invested / entry if entry and entry > 0 else None
-        dollar_label = "Invested" if is_buy else "Notional"
         size_value = (
             f"${invested:,.2f} / {_fmt_qty(qty, symbol)}"
             if qty is not None
