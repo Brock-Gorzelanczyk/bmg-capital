@@ -446,10 +446,40 @@ def run_migrations(engine: Engine) -> None:
         _quarantine_cooldown_dupe_positions(conn)
         _assign_quant_bots_to_crypto_portfolio(conn)
         _seed_all_watchlists_from_yaml(conn)
+        _add_bot_signals_cooldown_index(conn)
         try:
             _ensure_bot_config_tables(conn)
         except Exception as _e:
             logger.warning("_ensure_bot_config_tables failed (non-fatal): %s", _e)
+
+
+def _add_bot_signals_cooldown_index(conn) -> None:
+    """Add a unique-per-minute index on bot_signals to prevent concurrent-scan duplicates.
+
+    Prevents two simultaneous scan cycles from inserting the same (allocation, symbol, side)
+    within the same UTC minute — a last-resort DB-level guard even if the application-level
+    cooldown check has a race window.
+    """
+    MIGRATION_NAME = "bot_signals.cooldown_index_2026"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        # Try Postgres syntax first (date_trunc), fall back to SQLite strftime
+        try:
+            conn.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_bot_signals_cooldown_minute
+                ON bot_signals (allocation_id, symbol, side, date_trunc('minute', ts))
+            """))
+        except Exception:
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_bot_signals_cooldown_minute
+                ON bot_signals (allocation_id, symbol, side, ts)
+            """))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_add_bot_signals_cooldown_index: index created")
+    except Exception as exc:
+        logger.warning("_add_bot_signals_cooldown_index failed (non-fatal): %s", exc)
 
 
 def _ensure_bot_config_tables(conn) -> None:

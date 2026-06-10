@@ -17,6 +17,44 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _can_fire_signal(
+    db,
+    profile_name: str,
+    symbol: str,
+    side: str,
+    cooldown_min: float,
+) -> bool:
+    """Profile-level cooldown gate.
+
+    Queries across ALL allocations for this bot so multiple allocations cannot
+    independently bypass the same cooldown window. Also enforces a minimum
+    1-minute concurrent-scan dedup regardless of cooldown_minutes setting.
+    """
+    effective_min = max(cooldown_min, 1.0)  # always block within 1 min
+    cutoff = datetime.utcnow() - timedelta(minutes=effective_min)
+    from sqlalchemy import text as _text
+    row = db.execute(
+        _text("""
+            SELECT bs.id FROM bot_signals bs
+            JOIN bot_allocations ba ON ba.id = bs.allocation_id
+            JOIN bot_profiles bp ON bp.id = ba.profile_id
+            WHERE bp.name = :pname
+              AND bs.symbol = :symbol
+              AND bs.side = :side
+              AND bs.ts >= :cutoff
+            LIMIT 1
+        """),
+        {"pname": profile_name, "symbol": symbol, "side": side, "cutoff": cutoff},
+    ).first()
+    if row is not None:
+        logger.warning(
+            "[cooldown-blocked] %s %s/%s — within last %.0fmin (signal id=%s)",
+            profile_name, symbol, side, effective_min, row[0],
+        )
+        return False
+    return True
+
+
 def scan_and_execute(
     profile_name: str,
     db,
@@ -162,9 +200,9 @@ def scan_and_execute(
     cooldown_min = float(profile.get("cooldown_minutes", 0))
     position_cap = int(profile.get("position_cap", 999))
 
-    logger.error(
-        "[cooldown-runtime-check] %s cooldown_minutes=%.0f position_cap=%d position_size_pct=%.4f",
-        profile_name, cooldown_min, position_cap, default_size,
+    logger.warning(
+        "[scan:%s] cooldown_minutes=%.0f position_cap=%d",
+        profile_name, cooldown_min, position_cap,
     )
 
     # ── Pre-deduplicate: keep one signal per (symbol, side) — highest confidence ─
@@ -192,22 +230,6 @@ def scan_and_execute(
         alloc_persisted = 0
         alloc_executed = 0
 
-        # ── Cooldown: compare naive utcnow() vs naive ts column ───────────────
-        # datetime.utcnow() → naive UTC; ts column stores naive UTC (tz stripped at insert).
-        on_cooldown: set = set()
-        if cooldown_min > 0 and deduped:
-            _cutoff = datetime.utcnow() - timedelta(minutes=cooldown_min)
-            _recent = db.query(_BSig.symbol, _BSig.side).filter(
-                _BSig.allocation_id == alloc.id,
-                _BSig.ts >= _cutoff,
-            ).all()
-            on_cooldown = {(row.symbol, row.side) for row in _recent}
-            logger.warning(
-                "[cooldown] %s alloc=%d cutoff=%s found=%d on_cooldown=%s",
-                profile_name, alloc.id, _cutoff.strftime("%H:%M:%S"),
-                len(_recent), [f"{s}/{d}" for s, d in list(on_cooldown)[:5]],
-            )
-
         # ── Position cap: slots-remaining approach ────────────────────────────
         alloc_open = (
             db.query(_BotPos)
@@ -231,40 +253,11 @@ def scan_and_execute(
 
         # ── Per-signal: persist then execute ─────────────────────────────────
         for r in ordered_results:
-            _cd_key = (r["symbol"], r["side"])
-            _is_blocked = _cd_key in on_cooldown
-            logger.error(
-                "[cooldown-check] %s symbol=%s side=%s on_cooldown=%s cooldown_set_size=%d",
-                profile_name, r["symbol"], r["side"], _is_blocked, len(on_cooldown),
-            )
-            if _is_blocked:
-                logger.error(
-                    "[cooldown-blocked] %s %s %s — fired within last %.0fmin, skipping",
-                    profile_name, r["symbol"], r["side"], cooldown_min,
-                )
+            # Hard profile-level cooldown gate — checks ALL allocations for this bot
+            # so multiple allocations cannot independently bypass the same cooldown.
+            # Also enforces minimum 1-minute concurrent-scan dedup.
+            if not _can_fire_signal(db, profile_name, r["symbol"], r["side"], cooldown_min):
                 continue
-
-            # Mark as in-flight immediately — prevents re-entry in the same scan
-            # even if persist later fails (unconditional, outside the try-block)
-            on_cooldown.add(_cd_key)
-
-            # Concurrent-scan dedup: if two scans start at nearly the same time
-            # they both read an empty cooldown set. A 60-second DB check catches
-            # that race before we persist a duplicate signal.
-            if persist:
-                _dedup_cutoff = datetime.utcnow() - timedelta(seconds=60)
-                _dup_sig = db.query(_BSig.id).filter(
-                    _BSig.allocation_id == alloc.id,
-                    _BSig.symbol == r["symbol"],
-                    _BSig.side == r["side"],
-                    _BSig.ts >= _dedup_cutoff,
-                ).first()
-                if _dup_sig:
-                    logger.warning(
-                        "[dedup-guard] %s %s/%s — duplicate within 60s (existing id=%d), skipping",
-                        profile_name, r["symbol"], r["side"], _dup_sig[0],
-                    )
-                    continue
 
             # Persist
             signal_id: Optional[int] = None

@@ -623,6 +623,95 @@ def dedupe_positions_by_symbol_bot(
     }
 
 
+@router.post("/signals/quarantine-spam")
+def quarantine_spam_signals(
+    since: str = Query(
+        ...,
+        description="ISO timestamp — quarantine signals after this time that violate cooldown rules",
+        example="2026-06-09T00:00:00Z",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Mark spam signals (cooldown violations) as is_test=True so they're hidden from stats.
+
+    Finds signals where the same (profile, symbol, side) fired more than once within its
+    cooldown_minutes window, keeping only the FIRST occurrence per window and marking
+    all subsequent duplicates as test signals. Operates only on signals after `since`.
+
+    Safe to call repeatedly (idempotent — already-quarantined signals are skipped).
+    """
+    from app.db.models.bots import BotSignal, BotAllocation, BotProfile
+    from strategy_lab.seeds import load_profile
+    from sqlalchemy import text as _text
+
+    try:
+        since_dt = datetime.fromisoformat(since.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError as exc:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail=f"Invalid `since` timestamp: {exc}")
+
+    # Load cooldown windows per profile
+    profile_cooldowns: dict[str, float] = {}
+    for bp in db.query(BotProfile).all():
+        try:
+            cfg = load_profile(bp.name) or {}
+            profile_cooldowns[bp.id] = float(cfg.get("cooldown_minutes", 0))
+        except Exception:
+            profile_cooldowns[bp.id] = 0
+
+    # Fetch all non-test signals after `since`, ordered by ts asc
+    signals = (
+        db.query(BotSignal)
+        .filter(
+            BotSignal.ts >= since_dt,
+            BotSignal.is_test.is_(False) | BotSignal.is_test.is_(None),
+        )
+        .order_by(BotSignal.ts.asc())
+        .all()
+    )
+
+    # Walk signals chronologically; track last-seen ts per (profile_id, symbol, side)
+    last_fired: dict[tuple, datetime] = {}
+    quarantined = 0
+    kept = 0
+    for sig in signals:
+        alloc = db.get(BotAllocation, sig.allocation_id)
+        if alloc is None:
+            continue
+        cooldown_min = profile_cooldowns.get(alloc.profile_id, 0)
+        if cooldown_min <= 0:
+            kept += 1
+            continue
+
+        key = (alloc.profile_id, sig.symbol, sig.side)
+        last_ts = last_fired.get(key)
+        sig_ts = sig.ts if isinstance(sig.ts, datetime) else datetime.fromisoformat(str(sig.ts))
+
+        if last_ts is not None:
+            elapsed_min = (sig_ts - last_ts).total_seconds() / 60.0
+            if elapsed_min < cooldown_min:
+                sig.is_test = True
+                quarantined += 1
+                continue  # don't update last_fired — preserve the original window start
+
+        last_fired[key] = sig_ts
+        kept += 1
+
+    db.commit()
+    logger.warning(
+        "quarantine-spam: since=%s quarantined=%d kept=%d",
+        since, quarantined, kept,
+    )
+    return {
+        "ok": True,
+        "since": since,
+        "signals_examined": len(signals),
+        "quarantined": quarantined,
+        "kept": kept,
+    }
+
+
 @router.get("/bots/{bot_id}/risk-status")
 def get_bot_risk_status(
     bot_id: str,
