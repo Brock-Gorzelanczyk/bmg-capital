@@ -515,6 +515,7 @@ export const getDashboardHealth = (): Promise<DashboardHealth> =>
     }));
 
 export interface RecentSignal {
+  id: number;
   ts: string;
   bot_name: string;
   display_name: string;

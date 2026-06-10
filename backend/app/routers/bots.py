@@ -2989,6 +2989,7 @@ def get_recent_signals(
         bot_name = profile.name
         display = _DISPLAY_NAMES.get(bot_name, bot_name.replace("_", " ").title())
         result.append({
+            "id": s.id,
             "ts": s.ts.isoformat() if s.ts else None,
             "bot_name": bot_name,
             "display_name": display,

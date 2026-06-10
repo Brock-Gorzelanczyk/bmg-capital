@@ -1800,7 +1800,7 @@ export default function StrategyLab() {
                   const diff = Date.now() - new Date(sig.created_at).getTime();
                   const mins = Math.floor(diff / 60_000);
                   const ago = mins < 1 ? "now" : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`;
-                  const displayName = "display_name" in sig ? sig.display_name : sig.strategy_id;
+                  const displayName = sig.display_name;
                   return (
                     <div key={`${sig.source}-${sig.id}`} className="flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/40 transition-colors border-b border-zinc-800/50 last:border-0">
                       <span className={cn(
