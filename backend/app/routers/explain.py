@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.dependencies import get_current_user
+from app.db.session import get_db
 from app.db.models.users import User
 from app.services.glossary_data import lookup, all_terms
 
@@ -142,3 +145,91 @@ async def explain(
 async def get_terms(_: User = Depends(get_current_user)):
     """All glossary terms + aliases, for autocomplete."""
     return all_terms()
+
+
+# ── Signal explanation endpoint ────────────────────────────────────────────────
+
+def _explain_enabled():
+    if os.getenv("ENABLE_TRADE_EXPLAIN", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Trade explanations not enabled")
+
+
+def _fetch_bot_signal(db: Session, signal_id: int) -> dict:
+    from sqlalchemy import text
+    row = db.execute(
+        text("""
+            SELECT bs.id, ba.symbol, bs.side, bs.confidence, bs.entry_price,
+                   bs.stop_price, bs.target_price, bs.reason, bs.strategy
+            FROM bot_signals bs
+            JOIN bot_allocations ba ON ba.id = bs.allocation_id
+            WHERE bs.id = :id
+        """),
+        {"id": signal_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    return {
+        "ticker": row[1], "side": row[2], "confidence": row[3],
+        "entry_price": row[4], "stop_price": row[5], "target_price": row[6],
+        "reason": row[7], "strategy": row[8],
+    }
+
+
+def _fetch_scout_signal(db: Session, signal_id: int) -> dict:
+    from sqlalchemy import text
+    from app.db.models.scout import UserScoutSignal
+    row = db.query(UserScoutSignal).filter(UserScoutSignal.id == signal_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    return {
+        "ticker": row.ticker, "side": row.side, "confidence": row.confidence,
+        "entry_price": row.entry_price, "stop_price": row.stop_price,
+        "target_price": row.target_price, "reason": row.reason,
+        "strategy": row.display_name,
+    }
+
+
+def _fetch_forge_signal(db: Session, signal_id: int) -> dict:
+    from app.db.models.forge import UserForgeSignal
+    row = db.query(UserForgeSignal).filter(UserForgeSignal.id == signal_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    return {
+        "ticker": row.ticker, "side": row.side, "confidence": row.confidence,
+        "entry_price": row.entry_price, "stop_price": row.stop_price,
+        "target_price": row.target_price, "reason": row.reason,
+        "strategy": row.strategy_id,
+    }
+
+
+@router.post("/signal/{signal_id}")
+async def explain_signal(
+    signal_id: int,
+    source: str = Query(..., regex="^(bot|scout|forge)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _flag: None = Depends(_explain_enabled),
+):
+    from app.services.signal_explain import get_or_generate_explanation
+
+    if source == "bot":
+        signal = _fetch_bot_signal(db, signal_id)
+    elif source == "scout":
+        signal = _fetch_scout_signal(db, signal_id)
+    else:
+        signal = _fetch_forge_signal(db, signal_id)
+
+    try:
+        result = await get_or_generate_explanation(
+            db=db,
+            user_id=current_user.id,
+            source=source,
+            signal_id=signal_id,
+            signal=signal,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+
+    return {"signal_id": signal_id, "source": source, **result}

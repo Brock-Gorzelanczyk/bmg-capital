@@ -485,6 +485,31 @@ def _create_forge_tables(conn) -> None:
         logger.warning("_create_forge_tables failed: %s", exc)
 
 
+def _create_signal_explanations_table(conn) -> None:
+    """Create signal_explanations cache table for AI trade explanations."""
+    MIGRATION_NAME = "signal_explanations.table_v1_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS signal_explanations (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                signal_source   TEXT NOT NULL,
+                signal_id       INTEGER NOT NULL,
+                explanation     TEXT NOT NULL,
+                model_used      TEXT NOT NULL DEFAULT 'claude-haiku-4-5-20251001',
+                generated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(signal_source, signal_id)
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_sig_explain_source_id ON signal_explanations(signal_source, signal_id)"))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration: signal_explanations table created")
+    except Exception as exc:
+        logger.warning("_create_signal_explanations_table failed: %s", exc)
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -556,6 +581,10 @@ def run_migrations(engine: Engine) -> None:
             _create_forge_tables(conn)
         except Exception as _e:
             logger.warning("_create_forge_tables failed (non-fatal): %s", _e)
+        try:
+            _create_signal_explanations_table(conn)
+        except Exception as _e:
+            logger.warning("_create_signal_explanations_table failed (non-fatal): %s", _e)
 
 
 def _add_bot_signals_cooldown_index(conn) -> None:
