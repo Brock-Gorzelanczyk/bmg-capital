@@ -33,6 +33,7 @@ from app.ws.router import router as ws_router
 from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money, exams, admin
 from app.routers.admin_bots import router as admin_bots_router
 from app.routers.sentinel import router as sentinel_router
+from app.routers.dashboard import router as dashboard_router
 from app.routers.scout import router as scout_router
 from app.routers.forge import router as forge_router
 from app.routers.performance import router as performance_router
@@ -319,6 +320,7 @@ app.include_router(exams.verify_router)
 app.include_router(admin.router)
 app.include_router(admin_bots_router)
 app.include_router(sentinel_router)
+app.include_router(dashboard_router)
 app.include_router(scout_router)
 app.include_router(forge_router)
 app.include_router(performance_router)
