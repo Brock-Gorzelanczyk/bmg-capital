@@ -94,6 +94,7 @@ const NetWorthPage = lazy(() => import("@/pages/NetWorthPage"));
 const StrategyLibraryPage = lazy(() => import("@/pages/StrategyLibraryPage"));
 const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
 const StrategyScoutPage = lazy(() => import("@/pages/StrategyScoutPage"));
+const ForgeBuilderPage = lazy(() => import("@/pages/ForgeBuilderPage"));
 const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage"));
 const TermsPage = lazy(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
@@ -337,6 +338,7 @@ function AppInner() {
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<Page component={StrategyLab} />} />
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
+        <Route path="/strategy/forge" element={<ForgeBuilderPage />} />
         <Route path="/strategy/library" element={<StrategyLibraryPage />} />
         <Route path="/strategy/library/custom-bot" element={<CustomBotBuilderPage />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
