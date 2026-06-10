@@ -687,8 +687,9 @@ function ShowcaseForgeDemo() {
       </p>
       <div className="space-y-3">
         {FORGE_STEPS.map((step, i) => (
-          <BMGCard key={step.num} padding="sm"
-            style={{ opacity: i < 2 ? 0.7 : 1, borderColor: i === 2 ? "rgba(132,204,22,0.5)" : undefined }}>
+          <div key={step.num} style={{ opacity: i < 2 ? 0.7 : 1 }}>
+          <BMGCard padding="sm"
+            className={i === 2 ? "border-[rgba(132,204,22,0.5)]" : ""}>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono font-bold" style={{ color: i === 2 ? "var(--bmg-green)" : "var(--bmg-text-label)" }}>
                 {step.num}
@@ -698,6 +699,7 @@ function ShowcaseForgeDemo() {
             </div>
             {step.content}
           </BMGCard>
+          </div>
         ))}
       </div>
     </div>
