@@ -30,6 +30,7 @@ import {
 } from "@/api/bots";
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
 import { getCrossBotWatchlist, type CrossBotWatchlistItem } from "@/api/bots";
+import { getSetups } from "@/api/scout";
 import { getAnalystSummary, type AnalystSummaryItem } from "@/api/analyst";
 import { cn } from "@/lib/utils";
 import { useIsViewer } from "@/store/authStore";
@@ -1567,6 +1568,14 @@ export default function StrategyLab() {
 
   const isPauseOrResumePending = pauseAllMut.isPending || resumeAllMut.isPending;
 
+  const { data: scoutSetupsData } = useQuery({
+    queryKey: ["scout-setups"],
+    queryFn: getSetups,
+    staleTime: 60_000,
+    retry: 0,
+  });
+  const activeScoutCount = (scoutSetupsData?.setups ?? []).filter((s) => s.status === "active").length;
+
   return (
     <>
       {/* Outer layout: content area + optional right rail */}
@@ -1676,6 +1685,29 @@ export default function StrategyLab() {
               ))}
             </div>
           )}
+
+          {/* Strategy Scout entry card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+                // STRATEGY SCOUT
+              </p>
+              <p className="text-sm text-zinc-300">
+                Match strategies to tickers, fire personal signals when setups arm.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <span className="text-xs text-zinc-500 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 whitespace-nowrap">
+                Active setups: <span className="text-white font-semibold">{activeScoutCount}</span>
+              </span>
+              <Link
+                to="/strategy/scout"
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-400 hover:bg-violet-500/25 transition-colors whitespace-nowrap"
+              >
+                Open Scout →
+              </Link>
+            </div>
+          </div>
 
           {/* Aggregate portfolio hero */}
           <PortfolioHero onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
