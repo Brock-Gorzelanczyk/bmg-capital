@@ -179,12 +179,39 @@ function EvaluateTab() {
 
   const grouped = useMemo(() => {
     const entries = catalogData?.strategies ?? [];
+
+    // When a ticker is typed, surface matching strategies as a "Suggested" group
+    if (ticker.trim()) {
+      const t = ticker.trim().toUpperCase();
+      const CRYPTO_SYMBOLS = new Set(["BTC", "ETH", "SOL", "AVAX", "LINK", "MATIC", "BNB", "ADA", "DOT", "DOGE", "XRP", "LTC", "UNI", "AAVE", "ATOM", "NEAR", "ARB", "OP"]);
+      const isCrypto = t.includes("/") || CRYPTO_SYMBOLS.has(t) || t.endsWith("USD") || t.endsWith("USDT");
+
+      const suggested = entries.filter((e) =>
+        isCrypto
+          ? e.category.toLowerCase().startsWith("crypto")
+          : !e.category.toLowerCase().startsWith("crypto")
+      );
+      const rest = entries.filter((e) =>
+        isCrypto
+          ? !e.category.toLowerCase().startsWith("crypto")
+          : e.category.toLowerCase().startsWith("crypto")
+      );
+
+      const restMap: Record<string, typeof entries> = {};
+      for (const e of rest) (restMap[e.category] ??= []).push(e);
+
+      return [
+        [`✦ Suggested for ${isCrypto ? "Crypto" : "Stocks"}`, suggested] as [string, typeof entries],
+        ...Object.entries(restMap).sort(([a], [b]) => a.localeCompare(b)),
+      ];
+    }
+
     const map: Record<string, typeof entries> = {};
     for (const e of entries) {
       (map[e.category] ??= []).push(e);
     }
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
-  }, [catalogData]);
+  }, [catalogData, ticker]);
 
   const evalMut = useMutation({
     mutationFn: () => evaluate(strategyId, ticker),

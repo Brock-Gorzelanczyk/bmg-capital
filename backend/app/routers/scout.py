@@ -34,7 +34,7 @@ router = APIRouter(prefix="/api/scout", tags=["scout"])
 # ── Feature flag guard ─────────────────────────────────────────────────────────
 
 def _scout_enabled() -> None:
-    if not os.getenv("ENABLE_STRATEGY_SCOUT", "false").strip().lower() == "true":
+    if not os.getenv("ENABLE_STRATEGY_SCOUT", "true").strip().lower() == "true":
         raise HTTPException(status_code=404, detail="Strategy Scout not enabled")
 
 
