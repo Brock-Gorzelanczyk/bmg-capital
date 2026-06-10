@@ -14,8 +14,8 @@ export function SectionLabel({
   as: Tag = "span",
   noPrefix = false,
 }: SectionLabelProps) {
-  const text = String(children);
-  const label = noPrefix || text.startsWith("//") ? text : `// ${text}`;
+  const alreadyPrefixed = typeof children === "string" && children.startsWith("//");
+  const showPrefix = !noPrefix && !alreadyPrefixed;
   return (
     <Tag
       className={cn(
@@ -24,7 +24,7 @@ export function SectionLabel({
         className
       )}
     >
-      {label}
+      {showPrefix && "// "}{children}
     </Tag>
   );
 }
