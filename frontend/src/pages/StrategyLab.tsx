@@ -31,6 +31,7 @@ import {
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
 import { getCrossBotWatchlist, type CrossBotWatchlistItem } from "@/api/bots";
 import { getSetups } from "@/api/scout";
+import { getForgeBots } from "@/api/forge";
 import { getAnalystSummary, type AnalystSummaryItem } from "@/api/analyst";
 import { cn } from "@/lib/utils";
 import { useIsViewer } from "@/store/authStore";
@@ -1576,6 +1577,14 @@ export default function StrategyLab() {
   });
   const activeScoutCount = (scoutSetupsData?.setups ?? []).filter((s) => s.status === "active").length;
 
+  const { data: forgeBotsData } = useQuery({
+    queryKey: ["forge-bots"],
+    queryFn: getForgeBots,
+    staleTime: 60_000,
+    retry: 0,
+  });
+  const activeForgeCount = (forgeBotsData?.bots ?? []).filter((b) => b.status === "active").length;
+
   return (
     <>
       {/* Outer layout: content area + optional right rail */}
@@ -1705,10 +1714,10 @@ export default function StrategyLab() {
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
               <span className="text-xs text-zinc-500 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 whitespace-nowrap">
-                Active bots: <span className="text-white font-semibold">—</span>
+                Active bots: <span className="text-white font-semibold">{activeForgeCount}</span>
               </span>
               <Link
-                to="/strategy/library/custom-bot"
+                to="/strategy/forge"
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-400 hover:bg-orange-500/25 transition-colors whitespace-nowrap"
               >
                 Open Forge →
