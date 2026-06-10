@@ -35,6 +35,7 @@ from app.routers.admin_bots import router as admin_bots_router
 from app.routers.scout import router as scout_router
 from app.routers.forge import router as forge_router
 from app.routers.performance import router as performance_router
+from app.routers.markets import router as markets_router
 from app.routers import symbols as symbols_router
 from app.routers import chart_layouts as chart_layouts_router
 from app.routers.learning import router as learning_router
@@ -192,6 +193,15 @@ async def lifespan(app: FastAPI):
             "Set in Railway environment variables."
         )
 
+    # Sentinel observation layer — startup heartbeat + hourly status to #sentinel-ops
+    from app.services.sentinel_monitor import log_config as _sentinel_log_config
+    from app.services.sentinel_monitor import send_startup_heartbeat as _sentinel_startup
+    from app.services.sentinel_monitor import send_hourly_status as _sentinel_hourly
+    _sentinel_log_config()
+    scheduler.add_job(_sentinel_hourly, "interval", hours=1, id="sentinel_hourly_status",
+                      replace_existing=True, max_instances=1)
+    asyncio.create_task(asyncio.to_thread(_sentinel_startup))
+
     yield
 
     # Graceful shutdown
@@ -307,6 +317,7 @@ app.include_router(admin_bots_router)
 app.include_router(scout_router)
 app.include_router(forge_router)
 app.include_router(performance_router)
+app.include_router(markets_router)
 app.include_router(symbols_router.router)
 app.include_router(chart_layouts_router.router)
 

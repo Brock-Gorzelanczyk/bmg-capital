@@ -270,7 +270,7 @@ const queryClient = new QueryClient({
 
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
-  key: "BMG_QUERY_CACHE_v6",
+  key: "BMG_QUERY_CACHE_v7",
   throttleTime: 1000,
 });
 

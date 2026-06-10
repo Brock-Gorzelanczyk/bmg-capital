@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -194,6 +194,18 @@ def set_position_cap(
     db.commit()
     logger.info("admin: set max_open_positions user=%d %d→%d by user=%d", user_id, old, value, current_user.id)
     return {"ok": True, "user_id": user_id, "old": old, "new": value}
+
+
+# ── POST /api/admin/sentinel/test-heartbeat ──────────────────────────────────
+
+@router.post("/sentinel/test-heartbeat")
+def sentinel_test_heartbeat(current_user=Depends(get_current_user)):
+    """Post a test heartbeat to #sentinel-ops to verify bot token + channel permissions."""
+    from app.services.sentinel_monitor import send_test_heartbeat
+    result = send_test_heartbeat()
+    if not result["ok"]:
+        raise HTTPException(status_code=500, detail=result.get("error", "Discord post failed"))
+    return result
 
 
 # ── POST /api/admin/discord/test-fire ─────────────────────────────────────────

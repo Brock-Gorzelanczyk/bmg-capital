@@ -174,7 +174,7 @@ function EvaluateTab() {
   const { data: catalogData } = useQuery({
     queryKey: ["scout-catalog"],
     queryFn: getCatalog,
-    staleTime: Infinity,
+    staleTime: 10 * 60_000, // 10 min — prevents stale-forever from persisted cache
   });
 
   const grouped = useMemo(() => {
