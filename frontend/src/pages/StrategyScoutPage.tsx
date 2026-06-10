@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BracketFrame, SectionLabel, BMGCard, BMGButton, GlowInput } from "@/components/design";
+import SignalExplainButton from "@/components/explain/SignalExplainButton";
 import {
   getCatalog,
   evaluate,
@@ -490,6 +491,7 @@ function MySetupsTab() {
                       <span>{fmtTs(sig.created_at)}</span>
                     </div>
                   </div>
+                  <SignalExplainButton signalId={sig.id} source="scout" />
                 </div>
               );
             })}

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { getRecentSignals } from "@/api/bots";
 import { getSignals as getScoutSignals } from "@/api/scout";
 import { getForgeSignals } from "@/api/forge";
+import SignalExplainButton from "@/components/explain/SignalExplainButton";
 
 // ── Unified shape ──────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ type Source = "bot" | "scout" | "forge";
 
 interface UnifiedSignal {
   key: string;
+  id: number | null;
   source: Source;
   label: string;        // bot display name / forge bot name
   ticker: string;
@@ -136,6 +138,11 @@ function SignalRow({ sig }: { sig: UnifiedSignal }) {
               <p className="text-xs text-zinc-400 leading-relaxed">{sig.reason}</p>
             </div>
           )}
+          {sig.id != null && (
+            <div className="col-span-2 sm:col-span-4 flex">
+              <SignalExplainButton signalId={sig.id} source={sig.source} />
+            </div>
+          )}
         </div>
       )}
     </>
@@ -182,6 +189,7 @@ export default function SignalsFeedPage() {
     for (const s of botData?.signals ?? []) {
       out.push({
         key:        `bot-${s.id ?? s.ts}`,
+        id:         (s as any).id ?? null,
         source:     "bot",
         label:      (s as any).bot_display || (s as any).bot_name || (s as any).bot || "",
         ticker:     (s as any).symbol,
@@ -198,6 +206,7 @@ export default function SignalsFeedPage() {
     for (const s of scoutData?.signals ?? []) {
       out.push({
         key:        `scout-${s.id}`,
+        id:         s.id,
         source:     "scout",
         label:      "Strategy Scout",
         ticker:     s.ticker,
@@ -214,6 +223,7 @@ export default function SignalsFeedPage() {
     for (const s of forgeData?.signals ?? []) {
       out.push({
         key:        `forge-${s.id}`,
+        id:         s.id,
         source:     "forge",
         label:      s.bot_name,
         ticker:     s.ticker,

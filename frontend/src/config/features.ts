@@ -10,4 +10,5 @@ export const FEATURES = {
   AI_COPILOT:       flag("VITE_FF_AI", false),
   SOCIAL:           flag("VITE_FF_SOCIAL", false),
   CERTIFICATIONS:   flag("VITE_FF_CERTS"),
+  TRADE_EXPLAIN:    flag("VITE_FF_TRADE_EXPLAIN", false),
 } as const;

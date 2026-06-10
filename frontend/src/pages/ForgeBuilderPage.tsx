@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { BracketFrame, SectionLabel } from "@/components/design";
+import SignalExplainButton from "@/components/explain/SignalExplainButton";
 import { cn } from "@/lib/utils";
 import { getCatalog, type ScoutCatalogEntry } from "@/api/scout";
 import {
@@ -553,6 +554,7 @@ function SignalRow({ sig }: { sig: ForgeSignal }) {
       <span className="text-xs text-zinc-600 w-14 text-right flex-shrink-0">
         {relativeTime(sig.created_at)}
       </span>
+      <SignalExplainButton signalId={sig.id} source="forge" />
     </div>
   );
 }
