@@ -24,11 +24,14 @@ logger = logging.getLogger(__name__)
 _events_observed: int = 0
 _events_deduped: int = 0
 _events_resolved: int = 0
+_cycles_complete: int = 0
+_events_since_last_hb: int = 0   # resets each time we post the hourly heartbeat
 
 
 def increment_observed() -> None:
-    global _events_observed
+    global _events_observed, _events_since_last_hb
     _events_observed += 1
+    _events_since_last_hb += 1
 
 
 def increment_deduped() -> None:
@@ -39,6 +42,26 @@ def increment_deduped() -> None:
 def increment_resolved() -> None:
     global _events_resolved
     _events_resolved += 1
+
+
+def _get_cost_24h() -> float:
+    """Query agent_fixes for total LLM cost in the last 24 hours."""
+    try:
+        from datetime import timedelta
+        from sqlalchemy import func
+        from app.db.session import SessionLocal
+        from app.db.models.sentinel import AgentFix
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        db = SessionLocal()
+        try:
+            result = db.query(func.coalesce(func.sum(AgentFix.cost_usd), 0)).filter(
+                AgentFix.created_at >= cutoff
+            ).scalar()
+            return float(result) if result else 0.0
+        finally:
+            db.close()
+    except Exception:
+        return 0.0
 
 
 # ── Discord helpers ───────────────────────────────────────────────────────────
@@ -119,40 +142,56 @@ def send_startup_heartbeat() -> None:
         logger.warning("[sentinel] startup heartbeat failed — check Discord env vars above")
 
 
+def _post_hourly_heartbeat() -> None:
+    """Build and post the rich hourly heartbeat. Resets the per-hour event counter."""
+    global _events_since_last_hb, _cycles_complete
+    cost = _get_cost_24h()
+    now = datetime.now(timezone.utc).strftime("%H:%M UTC")
+    text = (
+        f"💓 **Sentinel** @ {now} — "
+        f"events observed (1h): **{_events_since_last_hb}**, "
+        f"cost (24h): **${cost:.2f}**, "
+        f"cycles complete: **{_cycles_complete}**"
+    )
+    _post_plain(text)
+    _events_since_last_hb = 0  # reset window
+
+
 def send_hourly_status() -> None:
-    """Scheduled job: post hourly status to #sentinel-ops."""
+    """APScheduler fallback — delegates to the same rich heartbeat post."""
     enabled = os.getenv("SENTINEL_ENABLED", "false").lower() == "true"
     if not enabled:
         return
-
-    now = datetime.now(timezone.utc).strftime("%H:%M UTC")
-    _post_plain(
-        f"👁️ **Hourly status** · {now}\n"
-        f"> Observed: **{_events_observed}** · Dedup'd: **{_events_deduped}** · Resolved: **{_events_resolved}**"
-    )
+    _post_hourly_heartbeat()
 
 
 async def sentinel_loop() -> None:
     """
-    Async loop that runs for the lifetime of the server.
-    Wakes every 60 s: logs a heartbeat and posts to Discord if SENTINEL_ENABLED=true.
+    Internal tick loop — runs every 60 s for responsiveness.
+    Posts to Discord ONCE PER HOUR; individual ticks only log.
     """
     import asyncio
+
+    TICK_S = 60
+    DISCORD_EVERY_N = 60   # 60 ticks × 60 s = 3600 s = 1 hour
 
     enabled = os.getenv("SENTINEL_ENABLED", "false").lower() == "true"
     channel = _channel()
     logger.warning(
-        "[sentinel] loop starting — enabled=%s channel=%s",
-        enabled,
-        channel if channel else "MISSING",
+        "[sentinel] loop starting — enabled=%s channel=%s tick=%ds discord_every=%d ticks",
+        enabled, channel if channel else "MISSING", TICK_S, DISCORD_EVERY_N,
     )
+
+    global _cycles_complete
+    tick = 0
     while True:
-        await asyncio.sleep(60)
-        now = datetime.now(timezone.utc).strftime("%H:%M UTC")
-        logger.info("[sentinel] heartbeat tick — %s", now)
-        if enabled and channel:
-            import asyncio as _asyncio
-            await _asyncio.to_thread(_post_plain, f"💓 Sentinel heartbeat · {now}")
+        await asyncio.sleep(TICK_S)
+        tick += 1
+        _cycles_complete += 1
+        logger.debug("[sentinel] tick=%d cycles=%d", tick, _cycles_complete)
+
+        if enabled and channel and tick % DISCORD_EVERY_N == 0:
+            await asyncio.to_thread(_post_hourly_heartbeat)
 
 
 def send_test_heartbeat() -> dict:

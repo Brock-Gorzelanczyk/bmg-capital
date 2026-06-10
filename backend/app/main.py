@@ -194,16 +194,13 @@ async def lifespan(app: FastAPI):
             "Set in Railway environment variables."
         )
 
-    # Sentinel observation layer — startup heartbeat + 60-s loop + hourly status to #sentinel-ops
+    # Sentinel — startup heartbeat + internal tick loop (posts to Discord hourly)
     from app.services.sentinel_monitor import (
         log_config as _sentinel_log_config,
         send_startup_heartbeat as _sentinel_startup,
-        send_hourly_status as _sentinel_hourly,
         sentinel_loop as _sentinel_loop,
     )
     _sentinel_log_config()
-    scheduler.add_job(_sentinel_hourly, "interval", hours=1, id="sentinel_hourly_status",
-                      replace_existing=True, max_instances=1)
     asyncio.create_task(asyncio.to_thread(_sentinel_startup))
     asyncio.create_task(_sentinel_loop())
 
