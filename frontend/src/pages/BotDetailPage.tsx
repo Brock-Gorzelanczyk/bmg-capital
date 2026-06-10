@@ -2377,6 +2377,16 @@ export default function BotDetailPage() {
   const profile = data?.profile;
   const allocation = data?.allocation;
   const positions: BotPosition[] = Array.isArray(data?.positions) ? data!.positions : [];
+
+  const isSymbolMismatch = (symbol: string): boolean => {
+    const ac = profile?.asset_class;
+    if (!ac) return false;
+    const isCryptoSym = symbol.includes("/USD");
+    if (ac === "crypto" || ac === "quant") return !isCryptoSym;
+    if (ac === "stock" || ac === "options") return isCryptoSym;
+    return false;
+  };
+  const isRebalanceOnly = !!(profile?.config as Record<string, unknown> | undefined)?.rebalance_only;
   const signals: BotSignal[] = (Array.isArray(data?.signals) ? data!.signals : []).filter(
     (s) => !s.reason?.toLowerCase().includes("stub") && !s.strategy?.toLowerCase().includes("stub")
   );
@@ -2579,6 +2589,11 @@ export default function BotDetailPage() {
           {/* Open Positions */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
             <SectionLabel as="h2" className="mb-4">Open Positions</SectionLabel>
+            {isRebalanceOnly && positions.length > 0 && (
+              <p className="text-xs text-zinc-500 mb-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2">
+                Long-term holds — this bot uses larger position sizes by design (weekly DCA / rebalance, fewer trades, longer hold periods).
+              </p>
+            )}
             {isLoading ? (
               <div className="animate-pulse space-y-2">
                 {[0, 1, 2].map((i) => <div key={i} className="h-10 bg-zinc-800 rounded" />)}
@@ -2627,7 +2642,14 @@ export default function BotDetailPage() {
                           onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
                           title={`View ${pos.symbol} chart`}
                         >
-                          <td className="py-2.5 font-semibold text-white">{pos.symbol}</td>
+                          <td className="py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-white">{pos.symbol}</span>
+                              {isSymbolMismatch(pos.symbol) && (
+                                <span className="text-[10px] text-amber-400 border border-amber-400/30 bg-amber-400/10 px-1 py-0.5 rounded font-medium whitespace-nowrap">⚠️ mismatch</span>
+                              )}
+                            </div>
+                          </td>
                           <td className="py-2.5">
                             <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">
                               LONG
