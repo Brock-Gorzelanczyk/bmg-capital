@@ -621,16 +621,17 @@ def run_bot_profile(profile_name: str) -> dict:
                     # ── Persist signal to bot_signals now (before any execution guard
                     # that could continue/skip).  Wrapped so a DB error never aborts
                     # the scan loop.
+                    _signal_id: int | None = None
                     try:
-                        log_signal(
+                        _signal_id = log_signal(
                             db, alloc.id, sig,
                             entry_price=_entry_price,
                             stop_price=stop_info.get("stop_price"),
                             target_price=stop_info.get("target_price"),
                         )
                         logger.info(
-                            "[scheduled] %s SIGNAL PERSISTED %s %s confidence=%.3f alloc=%d",
-                            profile_name, sig.side, sig.symbol, sig.confidence, alloc.id,
+                            "[scheduled] %s SIGNAL PERSISTED %s %s confidence=%.3f alloc=%d signal_id=%s",
+                            profile_name, sig.side, sig.symbol, sig.confidence, alloc.id, _signal_id,
                         )
                     except Exception as _sig_persist_exc:
                         logger.error(
@@ -894,22 +895,22 @@ def run_bot_profile(profile_name: str) -> dict:
                     except Exception as _exc:
                         logger.debug("[runner:%s] private notify skipped: %s", profile_name, _exc)
 
-                    # Legacy single-webhook Discord (DISCORD_SIGNAL_WEBHOOK_URL)
+                    # Channel-routed Discord post via bot token (stocks/options/crypto)
                     try:
-                        from app.services.discord import send_signal
-                        send_signal(
-                            bot=profile_name, symbol=sig.symbol, side=sig.side,
-                            strategy=sig.strategy or profile_name, reason=sig.reason or "",
-                            confidence=sig.confidence, price=_entry_price, size_pct=final_size_pct,
+                        from app.services.discord_public import post_signal as _pub_post
+                        _pub_post(
+                            signal=_signal_dict,
+                            db=db,
+                            signal_id=_signal_id,
                         )
-                        logger.info(
-                            "[scheduled] %s Discord webhook fired %s %s",
-                            profile_name, sig.side, sig.symbol,
+                        logger.warning(
+                            "[discord] %s posted %s %s to channel (signal_id=%s)",
+                            profile_name, sig.side, sig.symbol, _signal_id,
                         )
                     except Exception as _exc:
-                        logger.error(
-                            "[scheduled] %s Discord webhook FAILED %s %s — traceback:",
-                            profile_name, sig.side, sig.symbol, exc_info=True,
+                        logger.warning(
+                            "[discord] %s post FAILED %s %s: %s",
+                            profile_name, sig.side, sig.symbol, _exc,
                         )
 
                     # One-shot: #announcements alert on the very first real crypto buy signal

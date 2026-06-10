@@ -48,6 +48,24 @@ def _log_channel_config() -> None:
         ch_all or "MISSING", ch_stocks or "MISSING", ch_crypto or "MISSING",
         ch_options or "MISSING", ch_quant or "MISSING",
     )
+    # Per-bot routing map — any MISSING line means that bot's signals will only hit #all-signals
+    routing = [
+        ("stock_day",                   ch_stocks,  "DISCORD_CH_STOCKS_SIGNALS"),
+        ("stock_swing",                 ch_stocks,  "DISCORD_CH_STOCKS_SIGNALS"),
+        ("stock_lt",                    ch_stocks,  "DISCORD_CH_STOCKS_SIGNALS"),
+        ("options_directional",         ch_options, "DISCORD_CH_OPTIONS_SIGNALS"),
+        ("options_income",              ch_options, "DISCORD_CH_OPTIONS_SIGNALS"),
+        ("crypto_day",                  ch_crypto,  "DISCORD_CH_CRYPTO_SIGNALS"),
+        ("crypto_swing",                ch_crypto,  "DISCORD_CH_CRYPTO_SIGNALS"),
+        ("crypto_lt",                   ch_crypto,  "DISCORD_CH_CRYPTO_SIGNALS"),
+        ("crypto_onchain",              ch_crypto,  "DISCORD_CH_CRYPTO_SIGNALS"),
+        ("crypto_quant_scalper",        ch_quant,   "DISCORD_CH_QUANT_SIGNALS"),
+        ("crypto_quant_aggressive",     ch_quant,   "DISCORD_CH_QUANT_SIGNALS"),
+        ("crypto_quant_mean_reversion", ch_quant,   "DISCORD_CH_QUANT_SIGNALS"),
+    ]
+    logger.warning("[discord-routing-map]")
+    for bot, ch, env_name in routing:
+        logger.warning("  %-32s → %s  (%s)", bot, ch or "MISSING", env_name)
 
 COMPLIANCE_FOOTER = "Paper trading. Not investment advice. Not a registered investment adviser."
 
