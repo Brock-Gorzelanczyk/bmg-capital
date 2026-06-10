@@ -11,6 +11,7 @@ import Dashboard from "@/pages/Dashboard";
 import ChartPage from "@/pages/ChartPage";
 import Screener from "@/pages/Screener";
 import LoginPage from "@/pages/LoginPage";
+const LOGIN_V2 = import.meta.env.VITE_LOGIN_V2 === "true";
 import NotFoundPage from "@/pages/NotFoundPage";
 // Heavy/non-critical pages — lazy-loaded for code splitting
 const WatchlistPage = lazy(() => import("@/pages/WatchlistPage"));
@@ -99,6 +100,7 @@ const SignalsFeedPage = lazy(() => import("@/pages/SignalsFeedPage"));
 const PerformancePage = lazy(() => import("@/pages/PerformancePage"));
 const StrategyLeaderboardPage = lazy(() => import("@/pages/StrategyLeaderboardPage"));
 const MarketsPage = lazy(() => import("@/pages/MarketsPage"));
+const LoginV2Page = lazy(() => import("@/pages/LoginV2Page"));
 const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage"));
 const TermsPage = lazy(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
@@ -458,7 +460,7 @@ export default function App() {
             <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<LoginPage />} />
+              <Route path="/login" element={LOGIN_V2 ? <LoginV2Page /> : <LoginPage />} />
               <Route path="/signin" element={<Navigate to="/login" replace />} />
               <Route path="/signup" element={<Navigate to="/login" replace />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
