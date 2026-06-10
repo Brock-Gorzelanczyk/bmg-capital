@@ -60,7 +60,7 @@ size_bands:
     multiplier: 1.5
 
 position_cap: 12
-position_size_pct: 0.4         # per-trade risk pct of sub-account
+position_size_pct: 2.5         # per-trade risk pct of sub-account
 stop_loss_pct: 1.5
 take_profit_pct: 3.0
 trailing_stop_activate_at_pct: 1.5
@@ -104,9 +104,9 @@ starting_capital_cents: 4000000   # $40k
 
 risk:
   deployment_target_pct: 0.75    # target: deploy 75% of bot capital ($30k)
-  target_position_count: 25      # spread across 25 positions → ~$1,200/trade
-  max_position_pct: 0.06         # hard cap: no single position > 6% ($2,376)
-  max_total_deployed_pct: 0.85   # hard cap: never exceed 85% deployed ($33.7k)
+  target_position_count: 8       # spread across 8 positions → ~$3,750/trade
+  max_position_pct: 0.15         # hard cap: no single position > 15% ($6,000)
+  max_total_deployed_pct: 0.85   # hard cap: never exceed 85% deployed ($34k)
 
 # Bypass anomaly/news/bot_coordinator execution guards so scheduled scans execute.
 skip_execution_guards: true

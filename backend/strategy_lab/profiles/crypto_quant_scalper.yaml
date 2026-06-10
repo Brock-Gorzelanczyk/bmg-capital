@@ -23,8 +23,8 @@ confidence_threshold: 0.42
 cooldown_minutes: 15
 hold_max_minutes: 30
 
-position_size_pct: 0.3
-position_cap: 20
+position_size_pct: 1.5
+position_cap: 12
 stop_loss_pct: 0.5
 take_profit_pct: 1.0
 trailing_stop_activate_at_pct: 0.6
@@ -56,9 +56,9 @@ starting_capital_cents: 3000000   # $30k
 
 risk:
   deployment_target_pct: 0.70    # target: deploy 70% of bot capital ($21k)
-  target_position_count: 30      # spread across 30 positions → ~$700/trade
-  max_position_pct: 0.04         # hard cap: no single position > 4% ($1,320)
-  max_total_deployed_pct: 0.80   # hard cap: never exceed 80% deployed ($26.4k)
+  target_position_count: 10      # spread across 10 positions → ~$2,100/trade
+  max_position_pct: 0.10         # hard cap: no single position > 10% ($3,000)
+  max_total_deployed_pct: 0.80   # hard cap: never exceed 80% deployed ($24k)
 
 # Bypass anomaly/news/bot_coordinator execution guards so scheduled scans execute.
 skip_execution_guards: true
