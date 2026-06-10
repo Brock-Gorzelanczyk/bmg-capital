@@ -23,6 +23,7 @@ from app.db.models.onchain import OnChainMetric  # noqa: F401
 from app.db.models.discord_posts import DiscordSignalPost  # noqa: F401
 from app.db.models.bot_config import BotConfigOverride, BotConfigAudit  # noqa: F401
 from app.db.models.scout import UserScoutSetup, UserScoutSignal  # noqa: F401
+from app.db.models.forge import UserForgeBot, UserForgeSignal  # noqa: F401
 from app.routers.chart_layouts import ChartLayout  # noqa: F401
 from app.db.migration import run_migrations
 from app.alpaca.stream import stream_manager
@@ -32,6 +33,7 @@ from app.ws.router import router as ws_router
 from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money, exams, admin
 from app.routers.admin_bots import router as admin_bots_router
 from app.routers.scout import router as scout_router
+from app.routers.forge import router as forge_router
 from app.routers import symbols as symbols_router
 from app.routers import chart_layouts as chart_layouts_router
 from app.routers.learning import router as learning_router
@@ -302,6 +304,7 @@ app.include_router(exams.verify_router)
 app.include_router(admin.router)
 app.include_router(admin_bots_router)
 app.include_router(scout_router)
+app.include_router(forge_router)
 app.include_router(symbols_router.router)
 app.include_router(chart_layouts_router.router)
 
