@@ -1,10 +1,12 @@
 """Sentinel status and control endpoints."""
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -62,6 +64,62 @@ def test_heartbeat(_current_user=Depends(get_current_user)):
     from app.services.sentinel_monitor import send_test_heartbeat
     result = send_test_heartbeat()
     if not result["ok"]:
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=result.get("error", "Discord post failed"))
     return result
+
+
+class TestEventBody(BaseModel):
+    agent_id: str = "test-agent"
+    severity: str = "warning"
+    category: str = "test-event"
+    message: str = "Manual test event"
+
+
+@router.post("/test-event")
+def test_event(body: TestEventBody, _current_user=Depends(get_current_user)):
+    """
+    Inject a fake AgentEvent and, if SENTINEL_ESCALATION_MODE=true,
+    post a real escalation embed to #sentinel-ops.
+    """
+    from app.services.sentinel_monitor import (
+        create_agent_event,
+        _escalation_enabled,
+        _post_escalation_embed,
+    )
+
+    # Unique fingerprint per call so it never dedupes
+    now_str = datetime.now(timezone.utc).isoformat()
+    fingerprint = hashlib.sha256(
+        f"test:{body.agent_id}:{body.category}:{now_str}".encode()
+    ).hexdigest()[:64]
+
+    payload = {"message": body.message, "source": "test-event endpoint"}
+
+    event_id = create_agent_event(
+        agent_id=body.agent_id,
+        severity=body.severity,
+        category=body.category,
+        fingerprint=fingerprint,
+        payload=payload,
+    )
+
+    if event_id is None:
+        raise HTTPException(status_code=500, detail="Failed to create test event")
+
+    escalation_posted = False
+    if _escalation_enabled():
+        escalation_posted = _post_escalation_embed(
+            event_id=event_id,
+            agent_id=body.agent_id,
+            severity=body.severity,
+            category=body.category,
+            payload=payload,
+            message=body.message,
+        )
+
+    return {
+        "event_id": event_id,
+        "fingerprint": fingerprint[:16] + "…",
+        "escalation_mode": _escalation_enabled(),
+        "escalation_posted": escalation_posted,
+    }
