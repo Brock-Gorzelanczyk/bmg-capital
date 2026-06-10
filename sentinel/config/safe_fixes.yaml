@@ -1,0 +1,28 @@
+# Categories where Sentinel may auto-generate a PR (no human approval needed)
+auto_pr_allowed:
+  - typescript_missing_property
+  - missing_npm_dependency
+  - missing_python_dependency
+  - syntax_error_simple
+  - eslint_warning
+  - broken_image_url
+  - dead_link
+  - css_class_typo
+  - import_path_wrong
+
+# These path patterns are NEVER touched by any agent, ever
+blocklist_patterns:
+  - "backend/strategy_lab/profiles/*.yaml"
+  - "backend/strategy_lab/strategies/*.py"
+  - "backend/strategy_lab/runner.py"
+  - "backend/strategy_lab/scan_and_execute.py"
+  - "*trade*"
+  - "*position*"
+  - "*order*"
+
+# Hard limits (non-overridable)
+daily_cost_cap_usd: 5.0
+max_daily_prs: 5
+file_loop_window_hours: 24
+file_loop_max_prs: 2
+file_loop_cooldown_hours: 48

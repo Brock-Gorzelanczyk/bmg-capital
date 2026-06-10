@@ -1,0 +1,18 @@
+# Maximum expected gap (minutes) between signals per category
+# If no message appears within this window, flag as stale
+channels:
+  all-signals:
+    max_gap_minutes: 30
+    category: mixed
+  stocks:
+    max_gap_minutes: 60
+    category: stocks
+  crypto:
+    max_gap_minutes: 20
+    category: crypto
+  options:
+    max_gap_minutes: 120
+    category: options
+  quant:
+    max_gap_minutes: 90
+    category: quant
