@@ -3,19 +3,10 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import TickerTape from "@/components/ui/TickerTape";
 import { BracketFrame, SectionLabel } from "@/components/design";
-import {
-  getStrategyLabPortfolio,
-  getPortfolios,
-  getRecentSignals,
-  getCatalysts,
-  getWatchlistMovers,
-  pauseAllBots,
-  type StrategyPortfolio,
-  type RecentSignal,
-} from "@/api/bots";
-import { getRegime } from "@/api/bots";
+import { pauseAllBots } from "@/api/bots";
+import { getDashboardV2, type DashboardV2, type DashV2Sleeve } from "@/api/dashboard";
 import { useIsViewer } from "@/store/authStore";
-import { getAnalystHighlights, type AnalystHighlight } from "@/api/analyst";
+import type { AnalystHighlight } from "@/api/analyst";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,32 +47,41 @@ const DAILY_TIPS: Record<number, string> = {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function PortfolioCard({ p }: { p: StrategyPortfolio }) {
-  const isUp = p.pnl_cents >= 0;
+const SLEEVE_META: Record<string, { name: string; emoji: string }> = {
+  stocks:  { name: "Stocks",  emoji: "📈" },
+  crypto:  { name: "Crypto",  emoji: "🪙" },
+  options: { name: "Options", emoji: "⚡" },
+};
+
+function SleeveCard({ id, sleeve }: { id: string; sleeve: DashV2Sleeve }) {
+  const meta = SLEEVE_META[id] ?? { name: id, emoji: "📊" };
+  const starting = sleeve.value_cents - sleeve.pnl_cents;
+  const pnlPct = starting > 0 ? sleeve.pnl_cents / starting * 100 : 0;
+  const isUp = sleeve.pnl_cents >= 0;
   return (
     <Link to="/strategy" className="block bg-zinc-900 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-700 transition-colors">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-xl">{p.emoji}</span>
-          <span className="text-sm font-medium text-zinc-400 capitalize">{p.name}</span>
+          <span className="text-xl">{meta.emoji}</span>
+          <span className="text-sm font-medium text-zinc-400 capitalize">{meta.name}</span>
         </div>
         <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", isUp ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
-          {fmtPct(p.pnl_pct)}
+          {fmtPct(pnlPct)}
         </span>
       </div>
-      <div className="text-2xl font-bold text-white tabular-nums">{fmtUsd(p.current_value_cents)}</div>
+      <div className="text-2xl font-bold text-white tabular-nums">{fmtUsd(sleeve.value_cents)}</div>
       <div className={cn("text-sm mt-1 tabular-nums", isUp ? "text-emerald-400" : "text-red-400")}>
-        {isUp ? "+" : ""}{fmtUsd(p.pnl_cents)} all time
+        {isUp ? "+" : ""}{fmtUsd(sleeve.pnl_cents)} all time
       </div>
       <div className="mt-4 pt-4 border-t border-zinc-800 flex justify-between text-xs text-zinc-500">
-        <span>{p.bots.length} bot{p.bots.length !== 1 ? "s" : ""}</span>
-        <span>{p.bots.filter((b) => b.allocation?.enabled).length} active</span>
+        <span>{sleeve.bots_total} bot{sleeve.bots_total !== 1 ? "s" : ""}</span>
+        <span>{sleeve.bots_active} active · {sleeve.open_positions} pos · {sleeve.watching} watching</span>
       </div>
     </Link>
   );
 }
 
-function SignalRow({ s }: { s: RecentSignal }) {
+function SignalRow({ s }: { s: DashboardV2["recent_signals"][number] }) {
   const dotCls = { buy: "bg-emerald-500", long: "bg-emerald-500", sell: "bg-red-500", short: "bg-red-500", hold: "bg-zinc-500" }[s.side] ?? "bg-zinc-500";
   const textCls = { buy: "text-emerald-400", long: "text-emerald-400", sell: "text-red-400", short: "text-red-400", hold: "text-zinc-400" }[s.side] ?? "text-zinc-400";
   return (
@@ -119,62 +119,51 @@ const PLACEHOLDER_CATALYSTS = [
 export default function Dashboard() {
   const qc = useQueryClient();
   const isViewer = useIsViewer();
-  const { data: overview } = useQuery({ queryKey: ["strategy-lab-portfolio"], queryFn: getStrategyLabPortfolio, staleTime: 60_000, retry: 0 });
-  const { data: portfoliosData } = useQuery({ queryKey: ["portfolios"], queryFn: getPortfolios, staleTime: 60_000, retry: 0 });
-  const { data: signalsData } = useQuery({ queryKey: ["recent-signals", 20], queryFn: () => getRecentSignals(20), staleTime: 30_000, retry: 0 });
-  const { data: catalystsRaw } = useQuery({ queryKey: ["catalysts"], queryFn: getCatalysts, staleTime: 60_000, retry: 0 });
-  const { data: moversData } = useQuery({ queryKey: ["watchlist-movers"], queryFn: () => getWatchlistMovers(4), staleTime: 60_000, retry: 0 });
-  const { data: regimeRaw } = useQuery({ queryKey: ["strategy-regime"], queryFn: getRegime, staleTime: 120_000, retry: 0 });
-  const { data: highlightsData } = useQuery({ queryKey: ["analyst-highlights"], queryFn: getAnalystHighlights, staleTime: 120_000, retry: 0 });
 
-  const invalidateAll = () => {
-    qc.invalidateQueries({ queryKey: ["strategy-lab-portfolio"] });
-    qc.invalidateQueries({ queryKey: ["portfolios"] });
-    qc.invalidateQueries({ queryKey: ["bots-v2"] });
-  };
+  const { data } = useQuery({
+    queryKey: ["dashboard-v2"],
+    queryFn: getDashboardV2,
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  const invalidateAll = () => qc.invalidateQueries({ queryKey: ["dashboard-v2"] });
   const pauseMut = useMutation({ mutationFn: pauseAllBots, onSuccess: invalidateAll });
 
-  const portfolios = portfoliosData?.portfolios ?? [];
-  const signals = signalsData?.signals ?? [];
-  const catalysts = (catalystsRaw && catalystsRaw.length > 0) ? catalystsRaw : PLACEHOLDER_CATALYSTS;
-  const movers = moversData?.movers ?? [];
-  const highlights: AnalystHighlight[] =
-    highlightsData?.highlights && highlightsData.highlights.length > 0
-      ? highlightsData.highlights.slice(0, 4)
-      : PLACEHOLDER_HIGHLIGHTS;
-
-  const totalValue = overview?.total_value_cents ?? 0;
-  const todayPnl = overview?.today_pnl_cents ?? 0;
-  const todayPct = overview?.today_pnl_pct ?? 0;
-  const return30d = overview?.return_30d_pct ?? 0;
+  // ── Map v2 response to render variables ──────────────────────────────────
+  const totalValue = data?.portfolio.total_value_cents ?? 0;
+  const todayPnl = data?.portfolio.today_pnl_cents ?? 0;
+  const todayPct = data?.portfolio.today_pnl_pct ?? 0;
+  const return30d = data?.portfolio.return_30d_pct ?? 0;
   const isUp = todayPnl >= 0;
 
-  const leaderboard = overview?.leaderboard ?? [];
+  const leaderboard = data?.portfolio.leaderboard ?? [];
   const topBot = leaderboard.length > 0
-    ? leaderboard.reduce((a, b) => (b.return_30d_pct > a.return_30d_pct ? b : a))
+    ? leaderboard.reduce((a, b) => b.return_30d_pct > a.return_30d_pct ? b : a)
     : null;
 
-  // Open positions from all portfolio bots
-  const allPositions: Array<{ symbol: string; side: string; qty: number; avg_cost: number; current: number; pnl: number; botName: string }> = [];
-  portfolios.forEach((p) => {
-    p.bots.forEach((b) => {
-      const raw = b as any;
-      const positions: any[] = raw.open_positions ?? raw.positions ?? [];
-      positions.forEach((pos: any) => {
-        const avgCents = pos.avg_cost_cents ?? 0;
-        const currentCents = pos.current_price_cents ?? pos.current_value_cents ?? avgCents;
-        const qty = pos.qty ?? 1;
-        const pnl = (currentCents - avgCents) * qty;
-        allPositions.push({ symbol: pos.symbol ?? "?", side: pos.side ?? "long", qty, avg_cost: avgCents, current: currentCents, pnl, botName: b.profile.name });
-      });
-    });
-  });
-  const topPositions = allPositions.sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)).slice(0, 5);
+  const signals = data?.recent_signals ?? [];
+
+  const highlights: AnalystHighlight[] =
+    data?.analyst_highlights && data.analyst_highlights.length > 0
+      ? data.analyst_highlights
+      : PLACEHOLDER_HIGHLIGHTS;
+
+  const topPositions = (data?.open_positions ?? []).slice(0, 5).map((pos) => ({
+    symbol: pos.symbol,
+    side: pos.side,
+    qty: pos.qty,
+    avg_cost: pos.avg_cost_cents,
+    current: pos.avg_cost_cents,
+    pnl: 0,
+    botName: pos.bot_name,
+  }));
 
   const todayDow = new Date().getDay();
   const dailyTip = DAILY_TIPS[todayDow] ?? DAILY_TIPS[1];
 
-  const botsEnabled = portfolios.some((p) => p.bots.some((b) => b.allocation?.enabled));
+  // Banner: warn only if no active bots, not just because data hasn't loaded
+  const botsEnabled = data ? data.health.status === "ok" : true;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -232,35 +221,30 @@ export default function Dashboard() {
         {/* Row 3 – Market Regime */}
         <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
           <SectionLabel as="h2" className="mb-3 text-zinc-300">Market Regime</SectionLabel>
-          {regimeRaw ? (
+          {data?.regime ? (
             <>
               <div className="flex items-center gap-3 flex-wrap mb-3">
                 <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  VIX: {((regimeRaw as any).vix_regime ?? "mid").toUpperCase()}
+                  {data.regime.label}
                 </span>
                 <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  Trend: {((regimeRaw as any).trend_regime ?? "chop").toUpperCase()}
-                </span>
-                <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  BTC.D: {typeof (regimeRaw as any).btc_dominance === "number" ? `${((regimeRaw as any).btc_dominance as number).toFixed(1)}%` : "50.0%"}
+                  BTC.D: {data.regime.btc_dominance.toFixed(1)}%
                 </span>
               </div>
-              <p className="text-xs text-zinc-500">
-                {(regimeRaw as any).regime
-                  ? `Regime: ${(regimeRaw as any).regime} — bots are adjusting strategy accordingly`
-                  : "Bots are optimizing for current market conditions"}
-              </p>
+              <p className="text-xs text-zinc-500">{data.regime.description}</p>
             </>
           ) : (
             <p className="text-xs text-zinc-600">Regime: Scanning markets...</p>
           )}
         </div>
 
-        {/* Row 4 – 3 Portfolio Cards */}
+        {/* Row 4 – 3 Sleeve Cards */}
         <div className="mb-8">
-          {portfolios.length > 0 ? (
+          {data?.sleeves ? (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {portfolios.map((p) => <PortfolioCard key={p.id} p={p} />)}
+              {(["stocks", "crypto", "options"] as const).map((key) => (
+                <SleeveCard key={key} id={key} sleeve={data.sleeves[key]} />
+              ))}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -306,7 +290,7 @@ export default function Dashboard() {
             <span className="text-xs text-zinc-600">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {catalysts.map((c: any, i: number) => (
+            {PLACEHOLDER_CATALYSTS.map((c: any, i: number) => (
               <span key={c.id ?? i} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-zinc-700 text-xs text-zinc-200 whitespace-nowrap">
                 {c.description && c.description.length <= 2 ? c.description : "📅"} {c.event_type}{c.symbol ? ` · ${c.symbol}` : ""}
               </span>
@@ -342,8 +326,7 @@ export default function Dashboard() {
                     <th className="text-left pb-2 font-medium">Side</th>
                     <th className="text-right pb-2 font-medium">Qty</th>
                     <th className="text-right pb-2 font-medium">Avg Cost</th>
-                    <th className="text-right pb-2 font-medium">Current</th>
-                    <th className="text-right pb-2 font-medium">P&L</th>
+                    <th className="text-right pb-2 font-medium">Bot</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -353,10 +336,7 @@ export default function Dashboard() {
                       <td className="py-2 text-zinc-400 capitalize">{pos.side}</td>
                       <td className="py-2 text-right tabular-nums text-zinc-300">{pos.qty}</td>
                       <td className="py-2 text-right tabular-nums text-zinc-400">{pos.avg_cost ? fmtUsd(pos.avg_cost) : "—"}</td>
-                      <td className="py-2 text-right tabular-nums text-zinc-300">{pos.current ? fmtUsd(pos.current) : "—"}</td>
-                      <td className={cn("py-2 text-right tabular-nums font-medium", pos.pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
-                        {pos.pnl >= 0 ? "+" : ""}{fmtUsd(pos.pnl)}
-                      </td>
+                      <td className="py-2 text-right text-zinc-500 text-xs">{pos.botName.replace(/_/g, " ")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -367,30 +347,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Row 9 – Watchlist Movers */}
-        <div className="mb-8">
-          <SectionLabel as="h2" className="text-zinc-300 mb-3">Watchlist Movers</SectionLabel>
-          {movers.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {movers.map((m, i) => (
-                <div key={`${m.symbol}-${i}`} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-bold text-white">{m.symbol}</span>
-                    <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded-full", m.score >= 70 ? "bg-emerald-500/10 text-emerald-400" : "bg-zinc-700 text-zinc-400")}>
-                      {m.score}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-600 truncate">{m.portfolio}</p>
-                  <span className="mt-2 inline-block text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">{m.status}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-zinc-600 py-4">No watchlist movers</p>
-          )}
-        </div>
-
-        {/* Row 10 – Strategy Spotlight */}
+        {/* Row 9 – Strategy Spotlight */}
         <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
           <SectionLabel as="h2" className="text-zinc-300 mb-3">Strategy Spotlight</SectionLabel>
           {topBot ? (
@@ -408,19 +365,19 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Row 11 – Learning Tip */}
+        {/* Row 10 – Learning Tip */}
         <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
           <SectionLabel as="h2" className="text-zinc-300 mb-2">Daily Tip</SectionLabel>
           <p className="text-sm text-zinc-400">💡 {dailyTip}</p>
         </div>
 
-        {/* Row 12 – Quick Links footer */}
+        {/* Row 11 – Quick Links footer */}
         <div className="mb-4">
           <div className="flex items-center justify-around flex-wrap gap-4 py-4 border-t border-zinc-800">
             {[
               { label: "Strategy Lab", to: "/strategy" },
               { label: "Screener", to: "/screener" },
-              { label: "Analytics", to: "/analytics" },
+              { label: "Analytics", to: "/strategy/performance" },
               { label: "Chart", to: "/chart" },
             ].map((link) => (
               <Link key={link.to} to={link.to} className="text-sm text-zinc-500 hover:text-white transition-colors flex items-center gap-1">
