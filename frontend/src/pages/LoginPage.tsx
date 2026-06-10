@@ -5,10 +5,12 @@ import { Mic, Zap, Eye, EyeOff, TrendingUp, Cpu, BarChart2, Trophy, Search, Hamm
 import { useAuthStore } from "@/store/authStore";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/demoMode";
 import { BracketFrame, SectionLabel, BMGCard } from "@/components/design";
+import { Login3DBackground } from "@/components/Login3DBackground";
 
 const ENABLE_SHOWCASE = import.meta.env.VITE_ENABLE_LOGIN_SHOWCASE === "true";
 
 // ─── Shared ticker ────────────────────────────────────────────────────────────
+// TODO: replace TICKER array with live WebSocket price feed
 
 const TICKER = [
   "BTC/USD $99,240 +2.31%", "ETH/USD $3,821 +1.42%", "SOL/USD $182.40 +4.07%",
@@ -46,17 +48,22 @@ function GridBg() {
 
 // ─── Corner brackets ──────────────────────────────────────────────────────────
 
-const BRACKET_SIZE = "w-6 h-6";
 const BRACKET_COLOR = "border-[#84cc16]";
 const BRACKET_GLOW = { boxShadow: "0 0 8px rgba(132,204,22,0.5)" };
 
-function CornerBrackets() {
+function CornerBrackets({ expanded = false }: { expanded?: boolean }) {
+  const bracketStyle: React.CSSProperties = {
+    ...BRACKET_GLOW,
+    width:  expanded ? 30 : 24,
+    height: expanded ? 30 : 24,
+    transition: "width 0.35s ease, height 0.35s ease",
+  };
   return (
     <>
-      <span className={`absolute -top-px -left-px ${BRACKET_SIZE} border-t-2 border-l-2 ${BRACKET_COLOR}`} style={BRACKET_GLOW} />
-      <span className={`absolute -top-px -right-px ${BRACKET_SIZE} border-t-2 border-r-2 ${BRACKET_COLOR}`} style={BRACKET_GLOW} />
-      <span className={`absolute -bottom-px -left-px ${BRACKET_SIZE} border-b-2 border-l-2 ${BRACKET_COLOR}`} style={BRACKET_GLOW} />
-      <span className={`absolute -bottom-px -right-px ${BRACKET_SIZE} border-b-2 border-r-2 ${BRACKET_COLOR}`} style={BRACKET_GLOW} />
+      <span className={`absolute -top-px -left-px border-t-2 border-l-2 ${BRACKET_COLOR}`} style={bracketStyle} />
+      <span className={`absolute -top-px -right-px border-t-2 border-r-2 ${BRACKET_COLOR}`} style={bracketStyle} />
+      <span className={`absolute -bottom-px -left-px border-b-2 border-l-2 ${BRACKET_COLOR}`} style={bracketStyle} />
+      <span className={`absolute -bottom-px -right-px border-b-2 border-r-2 ${BRACKET_COLOR}`} style={bracketStyle} />
     </>
   );
 }
@@ -876,12 +883,53 @@ function ShowcaseLoginPage() {
   );
 }
 
+// ─── CRT overlay ──────────────────────────────────────────────────────────────
+
+function CRTOverlay() {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1,
+        pointerEvents: "none",
+        backgroundImage: [
+          "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px)",
+          "radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.55) 100%)",
+        ].join(", "),
+      }}
+    />
+  );
+}
+
 // ─── Simple login page (default) ─────────────────────────────────────────────
 
 function SimpleLoginPage() {
+  const isMobile = window.innerWidth < 860;
+  const [cardHovered, setCardHovered] = useState(false);
+  const cardTiltRef = useRef<HTMLDivElement>(null);
+
+  const handleCardMouseMove = (e: React.MouseEvent) => {
+    if (!cardTiltRef.current || isMobile) return;
+    const rect = cardTiltRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    cardTiltRef.current.style.transform = `perspective(1200px) rotateX(${-y * 4}deg) rotateY(${x * 4}deg)`;
+  };
+
+  const handleCardMouseLeave = () => {
+    if (cardTiltRef.current) {
+      cardTiltRef.current.style.transform = "perspective(1200px) rotateX(0deg) rotateY(0deg)";
+    }
+    setCardHovered(false);
+  };
+
   return (
     <div className="relative min-h-screen bg-[#020b02] overflow-hidden">
-      <GridBg /><TickerBg />
+      <Login3DBackground />
+      <GridBg />
+      <TickerBg />
+      <CRTOverlay />
       <div className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-[#0f1a0f]">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-[#84cc16] animate-pulse" />
@@ -924,9 +972,17 @@ function SimpleLoginPage() {
             transition={{ duration: 0.6, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="w-full lg:max-w-sm flex-shrink-0"
           >
-            <div className="relative p-8 rounded-sm" style={{ background: "rgba(2,11,2,0.85)", backdropFilter: "blur(12px)" }}>
-              <CornerBrackets />
-              <LoginForm />
+            <div
+              ref={cardTiltRef}
+              onMouseMove={handleCardMouseMove}
+              onMouseEnter={() => { if (!isMobile) setCardHovered(true); }}
+              onMouseLeave={handleCardMouseLeave}
+              style={{ transition: "transform 0.15s ease", willChange: "transform" }}
+            >
+              <div className="relative p-8 rounded-sm" style={{ background: "rgba(2,11,2,0.85)", backdropFilter: "blur(12px)" }}>
+                <CornerBrackets expanded={cardHovered} />
+                <LoginForm />
+              </div>
             </div>
           </motion.div>
         </div>
