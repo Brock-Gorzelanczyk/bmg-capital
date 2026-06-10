@@ -436,6 +436,55 @@ def _create_scout_tables(conn) -> None:
         logger.warning("_create_scout_tables failed: %s", exc)
 
 
+def _create_forge_tables(conn) -> None:
+    """Create user_forge_bots and user_forge_signals tables for The Forge."""
+    MIGRATION_NAME = "strategy_forge.tables_v1_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_forge_bots (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL,
+                name            TEXT NOT NULL,
+                description     TEXT,
+                status          TEXT NOT NULL DEFAULT 'active',
+                strategies      TEXT NOT NULL DEFAULT '[]',
+                watchlist       TEXT NOT NULL DEFAULT '[]',
+                capital_pct     REAL NOT NULL DEFAULT 5.0,
+                created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_scanned_at DATETIME,
+                last_fired_at   DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_forge_signals (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                forge_bot_id        INTEGER NOT NULL REFERENCES user_forge_bots(id) ON DELETE CASCADE,
+                user_id             INTEGER NOT NULL,
+                ticker              TEXT NOT NULL,
+                strategy_id         TEXT NOT NULL,
+                side                TEXT NOT NULL,
+                confidence          REAL NOT NULL,
+                entry_price         REAL,
+                stop_price          REAL,
+                target_price        REAL,
+                reason              TEXT,
+                discord_message_id  TEXT,
+                created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_forge_bots_user   ON user_forge_bots(user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_forge_bots_active ON user_forge_bots(status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_forge_signals_bot  ON user_forge_signals(forge_bot_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_forge_signals_user ON user_forge_signals(user_id)"))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration: The Forge tables created")
+    except Exception as exc:
+        logger.warning("_create_forge_tables failed: %s", exc)
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -502,6 +551,10 @@ def run_migrations(engine: Engine) -> None:
             _create_scout_tables(conn)
         except Exception as _e:
             logger.warning("_create_scout_tables failed (non-fatal): %s", _e)
+        try:
+            _create_forge_tables(conn)
+        except Exception as _e:
+            logger.warning("_create_forge_tables failed (non-fatal): %s", _e)
 
 
 def _add_bot_signals_cooldown_index(conn) -> None:
