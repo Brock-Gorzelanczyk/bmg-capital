@@ -141,6 +141,60 @@ def _fmt_qty(qty: float, symbol: str) -> str:
     return f"{qty:.8f} {base}"
 
 
+def _build_scout_embed(signal: dict) -> dict:
+    """Embed for Strategy Scout and Custom Bot personal signals."""
+    symbol   = signal.get("symbol", "")
+    raw_side = (signal.get("side") or "buy").lower()
+    is_buy   = raw_side in ("buy", "cover")
+    direction = "LONG" if is_buy else "SHORT"
+    arrow  = "🟢" if is_buy else "🔴"
+    color  = _COLOR_BUY if is_buy else _COLOR_SELL
+    conf_pct = round((signal.get("confidence") or 0) * 100, 1)
+    source   = signal.get("source", "scout")
+    strategy = signal.get("strategy") or "—"
+    entry    = signal.get("price")
+
+    notional_usd = signal.get("notional_usd")
+    if notional_usd and entry and entry > 0:
+        qty = notional_usd / entry
+        size_value = f"${notional_usd:,.2f} / {_fmt_qty(qty, symbol)}"
+    elif notional_usd:
+        size_value = f"${notional_usd:,.2f}"
+    else:
+        size_value = "—"
+
+    if source == "custom_bot":
+        bot_name = signal.get("bot_name") or signal.get("bot") or "Custom Bot"
+        author_name = f"Custom: {bot_name}"
+    else:
+        author_name = "Strategy Scout — Personal Setup"
+
+    fields = [
+        {"name": "Strategy",   "value": strategy,       "inline": True},
+        {"name": "Direction",  "value": direction,       "inline": True},
+        {"name": "Confidence", "value": f"{conf_pct}%",  "inline": True},
+        {"name": "Notional",   "value": size_value,      "inline": True},
+    ]
+    if entry is not None:
+        fields.append({"name": "Entry",       "value": _fmt_price(entry),           "inline": True})
+    if signal.get("stop") is not None:
+        fields.append({"name": "Stop",        "value": _fmt_price(signal["stop"]),  "inline": True})
+    if signal.get("target") is not None:
+        fields.append({"name": "Take Profit", "value": _fmt_price(signal["target"]),"inline": True})
+    if signal.get("triggering_strategies"):
+        fields.append({"name": "Triggered by", "value": signal["triggering_strategies"], "inline": False})
+
+    return {
+        "author":      {"name": author_name},
+        "title":       f"{arrow} {direction} {symbol}",
+        "description": (signal.get("reason") or "")[:2000],
+        "color":       color,
+        "fields":      fields,
+        "footer":      {"text": COMPLIANCE_FOOTER},
+        "timestamp":   datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def _build_signal_embed(signal: dict) -> dict:
     bot    = signal.get("bot", "")
     symbol = signal.get("symbol", "")
@@ -221,11 +275,19 @@ def _post_to_channel(channel_id: str, embed: dict, token: str) -> Optional[str]:
             return None
 
 
-def post_signal(signal: dict, db=None, signal_id: Optional[int] = None) -> None:
+def post_signal(
+    signal: dict,
+    db=None,
+    signal_id: Optional[int] = None,
+    source: str = "bot",
+) -> None:
     """Post signal embed to all relevant channels.
 
-    If `db` and `signal_id` are provided, sets discord_posted_at on the
-    bot_signals row after posting (deduplication guard for the Node.js worker).
+    source: "bot" (default) | "scout" | "custom_bot"
+
+    If `db` and `signal_id` are provided and source="bot", sets
+    discord_posted_at on the bot_signals row (deduplication guard for the
+    Node.js worker).
     """
     cfg = _cfg()
     if not cfg.discord_bot_token:
@@ -233,7 +295,17 @@ def post_signal(signal: dict, db=None, signal_id: Optional[int] = None) -> None:
 
     _log_channel_config()
 
-    # Skip if the Node.js worker already posted this signal.
+    # Personal signals (scout / custom_bot) go to #my-signals only.
+    if source in ("scout", "custom_bot"):
+        my_signals_ch = os.getenv("DISCORD_CHANNEL_ID_MY_SIGNALS", "")
+        if not my_signals_ch:
+            logger.warning("[discord] DISCORD_CHANNEL_ID_MY_SIGNALS not set — scout/custom-bot signal dropped")
+            return
+        embed = _build_scout_embed({**signal, "source": source})
+        _post_to_channel(my_signals_ch, embed, cfg.discord_bot_token)
+        return
+
+    # Standard bot path — dedup guard.
     if db is not None and signal_id is not None:
         from app.db.models.bots import BotSignal
         row = db.get(BotSignal, signal_id)

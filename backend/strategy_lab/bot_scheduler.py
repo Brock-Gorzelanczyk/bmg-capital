@@ -652,10 +652,30 @@ def setup_bot_scheduler(scheduler) -> None:
         replace_existing=True,
     )
 
+    # ------------------------------------------------------------------
+    # Strategy Scout scanner: every 5 min — gate on ENABLE_STRATEGY_SCOUT.
+    # ------------------------------------------------------------------
+    def _run_scout_scan():
+        try:
+            from strategy_lab.scout_scanner import run_scout_scan
+            run_scout_scan()
+        except Exception as exc:
+            logger.error("[scout-scanner] job failed: %s", exc)
+
+    scheduler.add_job(
+        _run_scout_scan,
+        CronTrigger(minute="*/5"),
+        id="strategy_scout_scan",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
+        coalesce=True,
+    )
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
         "crypto_quant_aggressive crypto_quant_scalper crypto_quant_mean_reversion "
         "options_income options_directional position_monitor dead_mans_switch "
-        "quarantine_dupes_periodic daily_discord_digest"
+        "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan"
     )
