@@ -22,6 +22,7 @@ from app.db.models.notification_channels import NotificationChannel, Notificatio
 from app.db.models.onchain import OnChainMetric  # noqa: F401
 from app.db.models.discord_posts import DiscordSignalPost  # noqa: F401
 from app.db.models.bot_config import BotConfigOverride, BotConfigAudit  # noqa: F401
+from app.db.models.scout import UserScoutSetup, UserScoutSignal  # noqa: F401
 from app.routers.chart_layouts import ChartLayout  # noqa: F401
 from app.db.migration import run_migrations
 from app.alpaca.stream import stream_manager

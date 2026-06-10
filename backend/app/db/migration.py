@@ -389,6 +389,53 @@ def _fix_bots_enabled(conn) -> None:
         logger.warning(f"Migration {MIGRATION_NAME} failed: {exc}")
 
 
+def _create_scout_tables(conn) -> None:
+    """Create user_scout_setups and user_scout_signals tables for Strategy Scout."""
+    MIGRATION_NAME = "strategy_scout.tables_v1_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_scout_setups (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL,
+                ticker          TEXT NOT NULL,
+                strategy_id     TEXT NOT NULL,
+                status          TEXT NOT NULL DEFAULT 'active',
+                created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_scanned_at DATETIME,
+                last_confidence REAL,
+                fired_at        DATETIME,
+                UNIQUE(user_id, ticker, strategy_id)
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_scout_signals (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                setup_id            INTEGER NOT NULL REFERENCES user_scout_setups(id) ON DELETE CASCADE,
+                user_id             INTEGER NOT NULL,
+                ticker              TEXT NOT NULL,
+                strategy_id         TEXT NOT NULL,
+                side                TEXT NOT NULL,
+                confidence          REAL NOT NULL,
+                entry_price         REAL,
+                stop_price          REAL,
+                target_price        REAL,
+                reason              TEXT,
+                discord_message_id  TEXT,
+                created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_scout_setups_user   ON user_scout_setups(user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_scout_setups_active ON user_scout_setups(status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_scout_signals_user  ON user_scout_signals(user_id)"))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration: Strategy Scout tables created")
+    except Exception as exc:
+        logger.warning("_create_scout_tables failed: %s", exc)
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -451,6 +498,10 @@ def run_migrations(engine: Engine) -> None:
             _ensure_bot_config_tables(conn)
         except Exception as _e:
             logger.warning("_ensure_bot_config_tables failed (non-fatal): %s", _e)
+        try:
+            _create_scout_tables(conn)
+        except Exception as _e:
+            logger.warning("_create_scout_tables failed (non-fatal): %s", _e)
 
 
 def _add_bot_signals_cooldown_index(conn) -> None:
