@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Zap, Eye, EyeOff, TrendingUp, Cpu, BarChart2 } from "lucide-react";
+import { Mic, Zap, Eye, EyeOff, TrendingUp, Cpu, BarChart2, Trophy, Search, Hammer, Bot, Target, ShieldCheck } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/demoMode";
 import { BracketFrame, SectionLabel, BMGCard } from "@/components/design";
@@ -397,46 +397,63 @@ function ShowcaseVoiceAI() {
   );
 }
 
-// ─── Section 2: Capital Pods ──────────────────────────────────────────────────
+// ─── Section 2: Strategy Lab Hub ─────────────────────────────────────────────
 
-const PODS = [
-  { icon: <Cpu className="w-4 h-4" />, label: "QUANT",   c: { bg: "rgba(139,92,246,0.2)",  text: "#c4b5fd" }, desc: "Pure factor + mean-reversion. Market-neutral targets.", capital: "$312K", bots: "3 bots", ret: "+18.4%" },
-  { icon: <Zap className="w-4 h-4" />, label: "CRYPTO",  c: { bg: "rgba(245,158,11,0.2)",  text: "#fcd34d" }, desc: "24/7 cross-exchange momentum and alpha capture.",       capital: "$248K", bots: "3 bots", ret: "+31.7%" },
-  { icon: <TrendingUp className="w-4 h-4" />, label: "STOCKS",  c: { bg: "rgba(14,165,233,0.2)",  text: "#7dd3fc" }, desc: "US equity swing, momentum, and earnings edge.",        capital: "$418K", bots: "3 bots", ret: "+14.2%" },
-  { icon: <BarChart2 className="w-4 h-4" />, label: "OPTIONS", c: { bg: "rgba(16,185,129,0.2)",  text: "#6ee7b7" }, desc: "Volatility surface strategies. Theta decay + skew.",    capital: "$188K", bots: "3 bots", ret: "+9.8%"  },
+const LAB_FEATURES = [
+  {
+    icon: <Search className="w-4 h-4" />,
+    label: "STRATEGY SCOUT",
+    c: { bg: "rgba(139,92,246,0.2)", text: "#c4b5fd" },
+    desc: "AI-scored trade setups with entry, stop, and target — delivered before the open.",
+    stat: "87% avg confidence",
+  },
+  {
+    icon: <Hammer className="w-4 h-4" />,
+    label: "THE FORGE",
+    c: { bg: "rgba(245,158,11,0.2)", text: "#fcd34d" },
+    desc: "Build custom trading bots in a guided wizard. No code. Deploy in under 5 minutes.",
+    stat: "30+ configurable params",
+  },
+  {
+    icon: <Bot className="w-4 h-4" />,
+    label: "SMART BOTS",
+    c: { bg: "rgba(14,165,233,0.2)", text: "#7dd3fc" },
+    desc: "12 pre-built strategies across stocks, crypto, and quant — live paper trading 24/7.",
+    stat: "12 active strategies",
+  },
+  {
+    icon: <Trophy className="w-4 h-4" />,
+    label: "LEADERBOARD",
+    c: { bg: "rgba(16,185,129,0.2)", text: "#6ee7b7" },
+    desc: "Real-time dollar-weighted strategy rankings. Know what's working before you allocate.",
+    stat: "Dollar-weighted returns",
+  },
 ];
 
-function ShowcaseCapitalPods() {
+function ShowcaseStrategyLabHub() {
   const { ref, visible } = useReveal();
   return (
     <div ref={ref} className="min-h-screen flex flex-col justify-center py-20 px-12 border-b border-[var(--bmg-green-border)]/20"
       style={REVEAL_STYLE(visible, 0.05)}>
-      <SectionLabel className="mb-3">Capital Pods</SectionLabel>
+      <SectionLabel className="mb-3">Strategy Lab</SectionLabel>
       <h2 className="text-2xl font-black text-[var(--bmg-text)] mb-3 leading-tight">
-        4 isolated pods.<br />
-        <span style={{ color: "var(--bmg-green)" }}>Zero cross-contamination.</span>
+        One hub. Every edge.<br />
+        <span style={{ color: "var(--bmg-green)" }}>Scout → Build → Deploy → Rank.</span>
       </h2>
       <p className="text-[var(--bmg-text-muted)] text-sm mb-8 max-w-sm leading-relaxed">
-        Each pod runs its own strategy class with independent risk budgets.
-        A drawdown in crypto can't touch your equity pod.
+        Strategy Lab is the full lifecycle — from AI-scored signals to custom bot deployment
+        and live performance rankings.
       </p>
       <div className="grid grid-cols-2 gap-3">
-        {PODS.map(pod => (
-          <BMGCard key={pod.label} padding="sm" className="flex flex-col gap-2.5">
+        {LAB_FEATURES.map(f => (
+          <BMGCard key={f.label} padding="sm" className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg flex-shrink-0" style={{ background: pod.c.bg, color: pod.c.text }}>{pod.icon}</span>
-              <span className="text-[10px] font-bold tracking-widest font-mono" style={{ color: pod.c.text }}>{pod.label}</span>
+              <span className="p-1.5 rounded-lg flex-shrink-0" style={{ background: f.c.bg, color: f.c.text }}>{f.icon}</span>
+              <span className="text-[9px] font-bold tracking-widest font-mono" style={{ color: f.c.text }}>{f.label}</span>
             </div>
-            <p className="text-[11px] text-[var(--bmg-text-muted)] leading-snug">{pod.desc}</p>
-            <div className="grid grid-cols-3 gap-1 text-center pt-1 border-t border-[var(--bmg-green-border)]/30">
-              {(["Capital", "Bots", "Return"] as const).map((k, ki) => (
-                <div key={k}>
-                  <p className="text-[9px] text-[var(--bmg-text-label)] font-mono uppercase tracking-wider">{k}</p>
-                  <p className="text-[11px] font-mono" style={{ color: ki === 2 ? "var(--bmg-green)" : "var(--bmg-text)" }}>
-                    {ki === 0 ? pod.capital : ki === 1 ? pod.bots : pod.ret}
-                  </p>
-                </div>
-              ))}
+            <p className="text-[11px] text-[var(--bmg-text-muted)] leading-snug">{f.desc}</p>
+            <div className="pt-1 border-t border-[var(--bmg-green-border)]/30">
+              <span className="text-[9px] font-mono" style={{ color: f.c.text }}>{f.stat}</span>
             </div>
           </BMGCard>
         ))}
@@ -445,58 +462,86 @@ function ShowcaseCapitalPods() {
   );
 }
 
-// ─── Section 3: 12 Bot Strategies ────────────────────────────────────────────
+// ─── Section 3: Strategy Scout demo ──────────────────────────────────────────
 
-const BOTS = [
-  { id: "qmr", cat: "quant",   label: "Mean Reversion",  status: "active"   },
-  { id: "qfm", cat: "quant",   label: "Factor Momentum", status: "active"   },
-  { id: "qsa", cat: "quant",   label: "Stat Arb",        status: "paused"   },
-  { id: "cbm", cat: "crypto",  label: "BTC Momentum",    status: "active"   },
-  { id: "ces", cat: "crypto",  label: "ETH Swing",       status: "active"   },
-  { id: "cab", cat: "crypto",  label: "Alt Breakout",    status: "active"   },
-  { id: "ssc", cat: "stocks",  label: "Swing Classic",   status: "active"   },
-  { id: "sef", cat: "stocks",  label: "Earnings Fade",   status: "active"   },
-  { id: "ssr", cat: "stocks",  label: "Sector Rotate",   status: "disabled" },
-  { id: "ovl", cat: "options", label: "VIX Long",        status: "active"   },
-  { id: "otd", cat: "options", label: "Theta Decay",     status: "active"   },
-  { id: "osa", cat: "options", label: "Skew Arb",        status: "paused"   },
+const SCOUT_SIGNALS = [
+  { sym: "NVDA",     side: "LONG",  strat: "Momentum Breakout", entry: "$145.20", stop: "$141.80", target: "$152.40", rr: "2.1:1", conf: 87, cat: "stocks",  explain: "NVDA is clearing 3-week consolidation above the $145 supply zone on above-average volume. Earnings catalyst blackout lifts Friday — risk/reward favors continuation." },
+  { sym: "BTC/USD",  side: "LONG",  strat: "BTC Trend Follow",  entry: "$99,240", stop: "$96,800", target: "$105,000", rr: "2.4:1", conf: 81, cat: "crypto", explain: "Bitcoin reclaimed the 21-day EMA after a 3-day pullback. On-chain accumulation signal active. Next resistance cluster at $105K." },
+  { sym: "SPY",      side: "SHORT", strat: "Macro Hedge",       entry: "$592.10", stop: "$596.50", target: "$582.00", rr: "2.3:1", conf: 73, cat: "stocks",  explain: "Bearish divergence on daily RSI while VIX term structure inverted. Hedge position ahead of CPI print Thursday." },
 ];
-const CAT_BG:   Record<string, string> = { quant: "rgba(139,92,246,0.2)", crypto: "rgba(245,158,11,0.2)", stocks: "rgba(14,165,233,0.2)", options: "rgba(16,185,129,0.2)" };
-const CAT_TEXT: Record<string, string> = { quant: "#c4b5fd", crypto: "#fcd34d", stocks: "#7dd3fc", options: "#6ee7b7" };
 
-function ShowcaseBotStrategies() {
+const SCOUT_CAT: Record<string, { bg: string; text: string }> = {
+  stocks: { bg: "rgba(14,165,233,0.2)",  text: "#7dd3fc" },
+  crypto: { bg: "rgba(245,158,11,0.2)",  text: "#fcd34d" },
+};
+
+function ShowcaseScoutDemo() {
   const { ref, visible } = useReveal();
+  const [active, setActive] = useState(0);
+  const sig = SCOUT_SIGNALS[active];
+  const isLong = sig.side === "LONG";
+
   return (
     <div ref={ref} className="min-h-screen flex flex-col justify-center py-20 px-12 border-b border-[var(--bmg-green-border)]/20"
       style={REVEAL_STYLE(visible, 0.05)}>
-      <SectionLabel className="mb-3">Bot Strategies</SectionLabel>
+      <SectionLabel className="mb-3">Strategy Scout</SectionLabel>
       <h2 className="text-2xl font-black text-[var(--bmg-text)] mb-3 leading-tight">
-        12 independent strategies.<br />
-        <span style={{ color: "var(--bmg-green)" }}>Zero human override needed.</span>
+        AI scans the tape.<br />
+        <span style={{ color: "var(--bmg-green)" }}>You get the setups.</span>
       </h2>
-      <p className="text-[var(--bmg-text-muted)] text-sm mb-8 max-w-sm leading-relaxed">
-        YAML-configured risk rules. Position sizing, deployment targets, and confidence
-        thresholds are hot-swappable without code deploys.
+      <p className="text-[var(--bmg-text-muted)] text-sm mb-6 max-w-sm leading-relaxed">
+        Scout scores 500+ symbols every 15 minutes and surfaces the highest-conviction
+        setups with entry, stop, target, and an AI trade briefing.
       </p>
-      <div className="grid grid-cols-3 gap-2">
-        {BOTS.map(bot => (
-          <BMGCard key={bot.id} padding="sm" className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${bot.status === "active" ? "bg-[var(--bmg-green)]" : bot.status === "paused" ? "bg-yellow-400" : "bg-red-500"}`} />
-              <span className="text-[10px] font-mono font-semibold text-[var(--bmg-text)] leading-tight truncate">{bot.label}</span>
-            </div>
-            <span className="text-[9px] font-bold tracking-widest font-mono px-1.5 py-0.5 rounded self-start"
-              style={{ background: CAT_BG[bot.cat], color: CAT_TEXT[bot.cat] }}>
-              {bot.cat.toUpperCase()}
-            </span>
-          </BMGCard>
+      {/* Signal selector */}
+      <div className="flex gap-2 mb-4">
+        {SCOUT_SIGNALS.map((s, i) => (
+          <button key={i} onClick={() => setActive(i)}
+            className="text-[10px] font-mono px-2.5 py-1 rounded-full border transition-all"
+            style={{
+              background: i === active ? "rgba(132,204,22,0.15)" : "transparent",
+              borderColor: i === active ? "#84cc16" : "rgba(132,204,22,0.2)",
+              color: i === active ? "#84cc16" : "var(--bmg-text-muted)",
+            }}>
+            {s.sym}
+          </button>
         ))}
       </div>
-      <div className="flex gap-4 mt-4 text-xs font-mono text-[var(--bmg-text-muted)]">
-        <span><span style={{ color: "var(--bmg-green)" }}>●</span> {BOTS.filter(b => b.status === "active").length} active</span>
-        <span><span className="text-yellow-400">●</span> {BOTS.filter(b => b.status === "paused").length} paused</span>
-        <span><span className="text-red-500">●</span> {BOTS.filter(b => b.status === "disabled").length} disabled</span>
-      </div>
+      {/* Signal card */}
+      <BMGCard padding="sm" className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-bold text-[var(--bmg-text)]">{sig.sym}</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+              style={{ background: isLong ? "rgba(132,204,22,0.15)" : "rgba(239,68,68,0.15)", color: isLong ? "var(--bmg-green)" : "var(--bmg-red)" }}>
+              {sig.side}
+            </span>
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+              style={{ background: SCOUT_CAT[sig.cat].bg, color: SCOUT_CAT[sig.cat].text }}>
+              {sig.strat}
+            </span>
+          </div>
+          <span className="text-[10px] font-mono font-bold" style={{ color: sig.conf >= 80 ? "var(--bmg-green)" : "#fcd34d" }}>
+            {sig.conf}% conf
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[["Entry", sig.entry, false], ["Stop", sig.stop, false], ["Target", sig.target, true]].map(([k, v, green]) => (
+            <div key={String(k)} className="bg-[var(--bmg-bg-input)] rounded-lg p-2 text-center border border-[var(--bmg-green-border)]/20">
+              <p className="text-[9px] text-[var(--bmg-text-label)] font-mono uppercase tracking-wider mb-0.5">{k}</p>
+              <p className="text-[11px] font-mono font-semibold" style={{ color: green ? "var(--bmg-green)" : "var(--bmg-text)" }}>{v}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 text-[10px] font-mono text-[var(--bmg-text-muted)]">
+          <span><Target className="w-3 h-3 inline mr-1" style={{ color: "var(--bmg-green)" }} />R:R {sig.rr}</span>
+          <span><ShieldCheck className="w-3 h-3 inline mr-1 text-yellow-400" />Risk-defined</span>
+        </div>
+        <div className="border-t border-[var(--bmg-green-border)]/20 pt-2">
+          <p className="text-[9px] font-mono text-[var(--bmg-green)]/60 mb-1 uppercase tracking-widest">⚒ AI Brief</p>
+          <p className="text-[11px] text-[var(--bmg-text-muted)] leading-relaxed">{sig.explain}</p>
+        </div>
+      </BMGCard>
     </div>
   );
 }
@@ -549,133 +594,183 @@ function ShowcaseDiscordSignals() {
   );
 }
 
-// ─── Section 5: Backtest P&L ──────────────────────────────────────────────────
+// ─── Section 5: The Forge wizard demo ────────────────────────────────────────
 
-const EQUITY_DATA = [0, 4, 11, 7, 16, 22, 17, 28, 35, 29, 42, 51, 45, 58, 67, 61, 76, 87, 81, 98, 112, 105, 128, 147];
+const FORGE_STEPS = [
+  {
+    num: "01",
+    label: "Pick a base strategy",
+    content: (
+      <div className="grid grid-cols-2 gap-2 mt-2">
+        {[
+          { id: "mb", name: "Momentum Breakout", active: true },
+          { id: "mr", name: "Mean Reversion",    active: false },
+          { id: "tf", name: "Trend Follow",      active: false },
+          { id: "ee", name: "Earnings Edge",     active: false },
+        ].map(s => (
+          <div key={s.id} className="rounded-lg px-2.5 py-2 text-[10px] font-mono border transition-all cursor-default"
+            style={{
+              background: s.active ? "rgba(132,204,22,0.12)" : "var(--bmg-bg-input)",
+              borderColor: s.active ? "#84cc16" : "rgba(132,204,22,0.15)",
+              color: s.active ? "#84cc16" : "var(--bmg-text-muted)",
+            }}>
+            {s.active && <span className="text-[8px] mr-1">✓</span>}{s.name}
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    num: "02",
+    label: "Configure parameters",
+    content: (
+      <div className="mt-2 space-y-2">
+        <div className="flex items-center justify-between text-[10px] font-mono">
+          <span className="text-[var(--bmg-text-muted)]">Risk per trade</span>
+          <div className="flex gap-1">
+            {["0.5%","1%","2%"].map(v => (
+              <span key={v} className="px-2 py-0.5 rounded border text-[9px]"
+                style={{ background: v === "1%" ? "rgba(132,204,22,0.15)" : "transparent", borderColor: v === "1%" ? "#84cc16" : "rgba(132,204,22,0.2)", color: v === "1%" ? "#84cc16" : "var(--bmg-text-label)" }}>
+                {v}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-[10px] font-mono">
+          <span className="text-[var(--bmg-text-muted)]">Timeframe</span>
+          <div className="flex gap-1">
+            {["5m","15m","1h","4h"].map(v => (
+              <span key={v} className="px-2 py-0.5 rounded border text-[9px]"
+                style={{ background: v === "15m" ? "rgba(132,204,22,0.15)" : "transparent", borderColor: v === "15m" ? "#84cc16" : "rgba(132,204,22,0.2)", color: v === "15m" ? "#84cc16" : "var(--bmg-text-label)" }}>
+                {v}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-[10px] font-mono">
+          <span className="text-[var(--bmg-text-muted)]">Universe</span>
+          <span className="text-[var(--bmg-green)] text-[9px]">Stocks + ETFs</span>
+        </div>
+      </div>
+    ),
+  },
+  {
+    num: "03",
+    label: "Deploy bot",
+    content: (
+      <div className="mt-2 rounded-lg border border-[var(--bmg-green)] bg-[rgba(132,204,22,0.07)] p-3 flex items-start gap-3">
+        <div className="w-6 h-6 rounded-full bg-[var(--bmg-green)] flex items-center justify-center flex-shrink-0 mt-0.5">
+          <span className="text-black text-xs font-bold">✓</span>
+        </div>
+        <div>
+          <p className="text-[10px] font-mono font-bold text-[var(--bmg-green)]">NVDA_MOMENTUM_v1 created</p>
+          <p className="text-[9px] text-[var(--bmg-text-muted)] mt-0.5">Paper trading · $10,000 allocated · Signals streaming</p>
+        </div>
+      </div>
+    ),
+  },
+];
 
-function EquityCurve() {
-  const W = 560; const H = 100; const P = 6;
-  const maxV = 147;
-  const pts = EQUITY_DATA.map((v, i) => ({
-    x: P + (i / (EQUITY_DATA.length - 1)) * (W - P * 2),
-    y: H - P - (v / maxV) * (H - P * 2),
-  }));
-  const line = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-  const area = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} ${pts.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")} L${pts[pts.length-1].x.toFixed(1)},${H} L${pts[0].x.toFixed(1)},${H} Z`;
-  const last = pts[pts.length - 1];
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="eq-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#4ade80" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#4ade80" stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#eq-fill)" />
-      <polyline points={line} fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={last.x.toFixed(1)} cy={last.y.toFixed(1)} r="3" fill="#4ade80" />
-    </svg>
-  );
-}
-
-function ShowcaseBacktestPnL() {
+function ShowcaseForgeDemo() {
   const { ref, visible } = useReveal();
-  const stats: [string, string, boolean][] = [
-    ["Total return",  "+147.3%", true],
-    ["Sharpe ratio",  "2.14",    false],
-    ["Max drawdown",  "−8.2%",   false],
-    ["Win rate",      "67.4%",   false],
-    ["Profit factor", "2.31",    false],
-    ["Avg trade",     "+0.61%",  true],
-  ];
   return (
     <div ref={ref} className="min-h-screen flex flex-col justify-center py-20 px-12 border-b border-[var(--bmg-green-border)]/20"
       style={REVEAL_STYLE(visible, 0.05)}>
-      <SectionLabel className="mb-3">Backtest Performance</SectionLabel>
+      <SectionLabel className="mb-3">The Forge</SectionLabel>
       <h2 className="text-2xl font-black text-[var(--bmg-text)] mb-3 leading-tight">
-        Walk-forward validated.<br />
-        <span style={{ color: "var(--bmg-green)" }}>Out-of-sample tested.</span>
+        Build your bot.<br />
+        <span style={{ color: "var(--bmg-green)" }}>No code. 5 minutes.</span>
       </h2>
-      <p className="text-[var(--bmg-text-muted)] text-sm mb-6 max-w-sm leading-relaxed">
-        All strategies backtested on 3+ years of data with realistic slippage,
-        commissions, and held-out test periods.
+      <p className="text-[var(--bmg-text-muted)] text-sm mb-8 max-w-sm leading-relaxed">
+        A guided wizard walks you through picking a strategy, tuning parameters,
+        and deploying a live paper-trading bot — all without touching code.
       </p>
-      <BMGCard padding="sm" className="mb-4">
-        <div className="flex items-center justify-between px-1 pb-2">
-          <SectionLabel className="text-[9px]">Cumulative P&L · 24 months</SectionLabel>
-          <span className="text-[10px] font-mono" style={{ color: "var(--bmg-green)" }}>+147.3%</span>
-        </div>
-        <div className="h-24"><EquityCurve /></div>
-        <div className="flex items-center justify-between px-1 pt-1 text-[9px] font-mono text-[var(--bmg-text-label)]">
-          <span>Jan 2023</span><span>Jan 2024</span><span>Dec 2024</span>
-        </div>
-      </BMGCard>
-      <div className="grid grid-cols-3 gap-2">
-        {stats.map(([label, val, green]) => (
-          <div key={label} className="bg-[var(--bmg-bg-input)] rounded-lg p-2 text-center border border-[var(--bmg-green-border)]/30">
-            <p className="text-[9px] text-[var(--bmg-text-label)] font-mono uppercase tracking-wider mb-0.5">{label}</p>
-            <p className="text-sm font-mono font-semibold" style={{ color: green ? "var(--bmg-green)" : "var(--bmg-text)" }}>{val}</p>
-          </div>
+      <div className="space-y-3">
+        {FORGE_STEPS.map((step, i) => (
+          <BMGCard key={step.num} padding="sm"
+            style={{ opacity: i < 2 ? 0.7 : 1, borderColor: i === 2 ? "rgba(132,204,22,0.5)" : undefined }}>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono font-bold" style={{ color: i === 2 ? "var(--bmg-green)" : "var(--bmg-text-label)" }}>
+                {step.num}
+              </span>
+              <span className="text-[11px] font-mono font-semibold text-[var(--bmg-text)]">{step.label}</span>
+              {i < 2 && <span className="ml-auto text-[9px] font-mono text-[var(--bmg-green)]">✓</span>}
+            </div>
+            {step.content}
+          </BMGCard>
         ))}
       </div>
     </div>
   );
 }
 
-// ─── Section 6: Mission Control ───────────────────────────────────────────────
+// ─── Section 6: Strategy Leaderboard preview ─────────────────────────────────
 
-const POSITIONS = [
-  { sym: "BTC/USD", side: "LONG",  entry: "$99,240", size: "$12,400", pnl: "+$840" },
-  { sym: "NVDA",    side: "LONG",  entry: "$145.20", size: "$8,200",  pnl: "+$312" },
-  { sym: "ETH/USD", side: "LONG",  entry: "$3,821",  size: "$6,800",  pnl: "+$204" },
-  { sym: "SPY",     side: "SHORT", entry: "$592.10", size: "$5,100",  pnl: "+$128" },
-  { sym: "AAPL",    side: "LONG",  entry: "$214.30", size: "$4,800",  pnl: "+$96"  },
+const LEADERBOARD_ROWS = [
+  { rank: 1, name: "Momentum Breakout", cat: "stocks",  ret: "+31.4%", pnl: "+$9,420", wr: "72%", trades: 58, bots: 4 },
+  { rank: 2, name: "BTC Trend Follow",  cat: "crypto",  ret: "+28.7%", pnl: "+$7,180", wr: "68%", trades: 41, bots: 2 },
+  { rank: 3, name: "Mean Reversion",    cat: "quant",   ret: "+19.2%", pnl: "+$4,800", wr: "61%", trades: 87, bots: 3 },
+  { rank: 4, name: "Earnings Edge",     cat: "stocks",  ret: "+17.8%", pnl: "+$3,560", wr: "65%", trades: 29, bots: 2 },
+  { rank: 5, name: "ETH Swing",         cat: "crypto",  ret: "+14.1%", pnl: "+$2,820", wr: "58%", trades: 52, bots: 2 },
 ];
 
-function ShowcaseMissionControl() {
+const LB_CAT: Record<string, { bg: string; text: string }> = {
+  stocks: { bg: "rgba(14,165,233,0.2)",  text: "#7dd3fc" },
+  crypto: { bg: "rgba(245,158,11,0.2)",  text: "#fcd34d" },
+  quant:  { bg: "rgba(139,92,246,0.2)",  text: "#c4b5fd" },
+};
+
+function ShowcaseLeaderboardPreview() {
   const { ref, visible } = useReveal();
-  const kpis: [string, string, boolean][] = [
-    ["Portfolio value",  "$1,247,830",       true],
-    ["Today's P&L",      "+$5,420 (+0.44%)", true],
-    ["Open positions",   "18",               false],
-    ["Active bots",      "10 / 12",          false],
-  ];
+  const [period, setPeriod] = useState<"7d"|"30d"|"90d">("30d");
   return (
     <div ref={ref} className="min-h-screen flex flex-col justify-center py-20 px-12"
       style={REVEAL_STYLE(visible, 0.05)}>
-      <SectionLabel className="mb-3">Mission Control</SectionLabel>
+      <SectionLabel className="mb-3">Strategy Leaderboard</SectionLabel>
       <h2 className="text-2xl font-black text-[var(--bmg-text)] mb-3 leading-tight">
-        Full portfolio visibility.<br />
-        <span style={{ color: "var(--bmg-green)" }}>Real-time, always.</span>
+        Know what's working.<br />
+        <span style={{ color: "var(--bmg-green)" }}>Dollar-weighted, always honest.</span>
       </h2>
       <p className="text-[var(--bmg-text-muted)] text-sm mb-6 max-w-sm leading-relaxed">
-        One dashboard for every position, every bot, every P&L line.
-        Daily digest to Discord every morning at market open.
+        Every strategy ranked by actual $ P&L across all bots and users.
+        No cherry-picked win rates. Dollar-weighted returns show what's making money.
       </p>
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        {kpis.map(([label, val, green]) => (
-          <BMGCard key={label} padding="sm">
-            <p className="text-[9px] text-[var(--bmg-text-label)] font-mono uppercase tracking-wider mb-1">{label}</p>
-            <p className="text-base font-mono font-bold" style={{ color: green ? "var(--bmg-green)" : "var(--bmg-text)" }}>{val}</p>
-          </BMGCard>
+      {/* Period selector */}
+      <div className="flex gap-2 mb-4">
+        {(["7d","30d","90d"] as const).map(p => (
+          <button key={p} onClick={() => setPeriod(p)}
+            className="text-[10px] font-mono px-3 py-1 rounded-full border transition-all"
+            style={{
+              background: period === p ? "rgba(132,204,22,0.15)" : "transparent",
+              borderColor: period === p ? "#84cc16" : "rgba(132,204,22,0.2)",
+              color: period === p ? "#84cc16" : "var(--bmg-text-muted)",
+            }}>
+            {p}
+          </button>
         ))}
       </div>
-      <BMGCard padding="sm">
-        <SectionLabel className="text-[9px] mb-2 px-1">Top Open Positions</SectionLabel>
-        <div className="divide-y divide-[var(--bmg-green-border)]/20">
-          {POSITIONS.map(p => (
-            <div key={p.sym} className="flex items-center gap-2 py-1.5 px-1 text-[11px] font-mono">
-              <span className="text-[var(--bmg-text)] font-semibold w-16">{p.sym}</span>
-              <span className="text-[9px] px-1.5 py-0.5 rounded" style={{
-                background: p.side === "LONG" ? "var(--bmg-green-dim)" : "rgba(239,68,68,0.15)",
-                color: p.side === "LONG" ? "var(--bmg-green)" : "var(--bmg-red)",
-              }}>{p.side}</span>
-              <span className="text-[var(--bmg-text-muted)]">{p.entry}</span>
-              <span className="ml-auto text-[var(--bmg-text-muted)]">{p.size}</span>
-              <span style={{ color: "var(--bmg-green)" }}>{p.pnl}</span>
-            </div>
+      <BMGCard padding="sm" className="overflow-hidden">
+        {/* Header */}
+        <div className="grid grid-cols-[24px_1fr_56px_40px] gap-2 px-2 pb-2 border-b border-[var(--bmg-green-border)]/20">
+          {["#","Strategy","Return","W/R"].map(h => (
+            <span key={h} className="text-[9px] font-mono text-[var(--bmg-text-label)] uppercase tracking-widest">{h}</span>
           ))}
         </div>
+        {/* Rows */}
+        {LEADERBOARD_ROWS.map(row => (
+          <div key={row.rank} className="grid grid-cols-[24px_1fr_56px_40px] gap-2 items-center px-2 py-2 border-b border-[var(--bmg-green-border)]/10 last:border-0">
+            <span className="text-[10px] font-mono text-[var(--bmg-text-label)]">{row.rank}</span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-mono font-semibold text-[var(--bmg-text)] truncate">{row.name}</p>
+              <span className="text-[8px] font-mono px-1.5 py-0.5 rounded"
+                style={{ background: LB_CAT[row.cat].bg, color: LB_CAT[row.cat].text }}>
+                {row.cat}
+              </span>
+            </div>
+            <span className="text-[11px] font-mono font-bold" style={{ color: "var(--bmg-green)" }}>{row.ret}</span>
+            <span className="text-[10px] font-mono text-[var(--bmg-text-muted)]">{row.wr}</span>
+          </div>
+        ))}
       </BMGCard>
     </div>
   );
@@ -758,12 +853,12 @@ function ShowcaseLoginPage() {
           <div className="relative">
             <GridBg />
             <div className="relative z-10">
+              <ShowcaseStrategyLabHub />
               <ShowcaseVoiceAI />
-              <ShowcaseCapitalPods />
-              <ShowcaseBotStrategies />
+              <ShowcaseScoutDemo />
+              <ShowcaseForgeDemo />
+              <ShowcaseLeaderboardPreview />
               <ShowcaseDiscordSignals />
-              <ShowcaseBacktestPnL />
-              <ShowcaseMissionControl />
             </div>
           </div>
           <TickerBg />
