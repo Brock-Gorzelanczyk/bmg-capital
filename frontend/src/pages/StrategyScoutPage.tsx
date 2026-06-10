@@ -507,10 +507,19 @@ type Tab = "evaluate" | "scan" | "setups";
 export default function StrategyScoutPage() {
   const [tab, setTab] = useState<Tab>("evaluate");
 
+  // Feature-flag guard — if the catalog 404s, the feature is off server-side
+  const { isError: catalogError, isLoading: catalogLoading } = useQuery({
+    queryKey: ["scout-catalog"],
+    queryFn: getCatalog,
+    retry: 0,
+    staleTime: 300_000,
+  });
+
   const { data: setupData } = useQuery({
     queryKey: ["scout-setups"],
     queryFn: getSetups,
     staleTime: 60_000,
+    enabled: !catalogError,
   });
   const activeCount = (setupData?.setups ?? []).filter(
     (s) => s.status === "active" || s.status === "fired"
@@ -521,6 +530,34 @@ export default function StrategyScoutPage() {
     { key: "scan",     label: "// SCAN TICKER" },
     { key: "setups",   label: `// MY SETUPS${activeCount > 0 ? ` (${activeCount})` : ""}` },
   ];
+
+  if (catalogLoading) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-6">
+        <div className="h-48 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (catalogError) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-6">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-10 text-center">
+          <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-3">
+            // STRATEGY SCOUT
+          </p>
+          <p className="text-white font-semibold mb-2">Strategy Scout is not enabled</p>
+          <p className="text-zinc-500 text-sm">
+            Set{" "}
+            <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs text-zinc-300">
+              ENABLE_STRATEGY_SCOUT=true
+            </code>{" "}
+            in Railway environment variables to activate.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 space-y-6">

@@ -30,8 +30,8 @@ import {
 } from "@/api/bots";
 import { getAutopilotActivity, type AutopilotAction } from "@/api/autopilot";
 import { getCrossBotWatchlist, type CrossBotWatchlistItem } from "@/api/bots";
-import { getSetups } from "@/api/scout";
-import { getForgeBots } from "@/api/forge";
+import { getSetups, getSignals as getScoutSignals, type ScoutSignal } from "@/api/scout";
+import { getForgeBots, getForgeSignals, type ForgeSignal } from "@/api/forge";
 import { getAnalystSummary, type AnalystSummaryItem } from "@/api/analyst";
 import { cn } from "@/lib/utils";
 import { useIsViewer } from "@/store/authStore";
@@ -1585,6 +1585,29 @@ export default function StrategyLab() {
   });
   const activeForgeCount = (forgeBotsData?.bots ?? []).filter((b) => b.status === "active").length;
 
+  const { data: scoutSignalsData } = useQuery({
+    queryKey: ["scout-signals"],
+    queryFn: getScoutSignals,
+    staleTime: 30_000,
+    retry: 0,
+    refetchInterval: 60_000,
+  });
+  const { data: forgeSignalsData } = useQuery({
+    queryKey: ["forge-signals"],
+    queryFn: getForgeSignals,
+    staleTime: 30_000,
+    retry: 0,
+    refetchInterval: 60_000,
+  });
+
+  type CombinedSignal = (ScoutSignal & { source: "scout" }) | (ForgeSignal & { source: "forge" });
+  const mySignals: CombinedSignal[] = [
+    ...(scoutSignalsData?.signals ?? []).map((s) => ({ ...s, source: "scout" as const })),
+    ...(forgeSignalsData?.signals ?? []).map((s) => ({ ...s, source: "forge" as const })),
+  ]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 15);
+
   return (
     <>
       {/* Outer layout: content area + optional right rail */}
@@ -1747,6 +1770,63 @@ export default function StrategyLab() {
                   isViewer={isViewer}
                 />
               ))}
+            </div>
+          )}
+
+          {/* My Signals feed — Scout + Forge combined */}
+          {mySignals.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">
+                  // MY SIGNALS
+                </p>
+                <div className="flex gap-2">
+                  <Link to="/strategy/scout" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Scout →</Link>
+                  <Link to="/strategy/forge" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Forge →</Link>
+                </div>
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-800">
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-12">Source</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-10">Side</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-20">Ticker</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase flex-1">Strategy</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-10 text-right">Conf</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-14 text-right">When</span>
+                </div>
+                {mySignals.map((sig) => {
+                  const isLong = sig.side === "buy" || sig.side === "long" || sig.side === "cover";
+                  const isShort = sig.side === "sell" || sig.side === "short";
+                  const diff = Date.now() - new Date(sig.created_at).getTime();
+                  const mins = Math.floor(diff / 60_000);
+                  const ago = mins < 1 ? "now" : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`;
+                  const displayName = "display_name" in sig ? sig.display_name : sig.strategy_id;
+                  return (
+                    <div key={`${sig.source}-${sig.id}`} className="flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/40 transition-colors border-b border-zinc-800/50 last:border-0">
+                      <span className={cn(
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded border w-12 text-center",
+                        sig.source === "scout"
+                          ? "bg-violet-500/10 border-violet-500/20 text-violet-400"
+                          : "bg-orange-500/10 border-orange-500/20 text-orange-400"
+                      )}>
+                        {sig.source === "scout" ? "SCOUT" : "FORGE"}
+                      </span>
+                      <span className={cn(
+                        "text-xs font-bold w-10 uppercase",
+                        isLong ? "text-emerald-400" : isShort ? "text-red-400" : "text-zinc-400"
+                      )}>
+                        {sig.side}
+                      </span>
+                      <span className="text-xs font-mono text-white w-20 truncate">{sig.ticker}</span>
+                      <span className="text-xs text-zinc-400 flex-1 truncate">{displayName}</span>
+                      <span className="text-xs font-semibold text-white w-10 text-right">
+                        {Math.round(sig.confidence * 100)}%
+                      </span>
+                      <span className="text-xs text-zinc-600 w-14 text-right">{ago}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

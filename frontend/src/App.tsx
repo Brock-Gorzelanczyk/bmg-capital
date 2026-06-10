@@ -340,7 +340,7 @@ function AppInner() {
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
         <Route path="/strategy/forge" element={<ForgeBuilderPage />} />
         <Route path="/strategy/library" element={<StrategyLibraryPage />} />
-        <Route path="/strategy/library/custom-bot" element={<CustomBotBuilderPage />} />
+        <Route path="/strategy/library/custom-bot" element={<Navigate to="/strategy/forge" replace />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
