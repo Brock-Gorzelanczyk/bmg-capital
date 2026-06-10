@@ -39,11 +39,26 @@ def _get_closes(bars: list[dict]) -> list[float]:
     return closes
 
 
-def _compute_agreement(bars: list[dict], side: str, sma_period: int = 20) -> bool | None:
+_MEAN_REVERSION_STRATEGIES = frozenset({
+    "mean_reversion",
+    "rsi_bands",
+    "bollinger_squeeze",
+    "wheel_strategy",
+    "vwap_reversion_chop",
+    "gex_pin_reversion",
+})
+
+
+def _compute_agreement(
+    bars: list[dict],
+    side: str,
+    sma_period: int = 20,
+    mean_reversion: bool = False,
+) -> bool | None:
     """
     Returns True if bars agree with 'side', False if opposed, None if insufficient data.
-    For 'buy': price > SMA(20) is agreement.
-    For 'sell': price < SMA(20) is agreement.
+    For trend-following buy: price > SMA(20) is agreement.
+    For mean-reversion buy: price < SMA(20) is agreement (entry is the dip).
     """
     closes = _get_closes(bars)
     if not closes:
@@ -53,9 +68,9 @@ def _compute_agreement(bars: list[dict], side: str, sma_period: int = 20) -> boo
         return None
     current_price = closes[-1]
     if side == "buy":
-        return current_price > sma
+        return (current_price < sma) if mean_reversion else (current_price > sma)
     elif side == "sell":
-        return current_price < sma
+        return (current_price > sma) if mean_reversion else (current_price < sma)
     return None
 
 
@@ -64,6 +79,7 @@ def check_confluence(
     primary_signal: "Signal",
     bars: dict[str, list[dict]],
     bot_cadence: str,  # "day" | "swing" | "lt"
+    strategy: str = "",
 ) -> float:
     """
     Check if 3 timeframes agree on direction.
@@ -81,6 +97,7 @@ def check_confluence(
     (bars[-60:] as 1h equivalent for a 1-min bot)
     """
     side = primary_signal.side
+    is_mean_rev = (strategy or getattr(primary_signal, "strategy", "")) in _MEAN_REVERSION_STRATEGIES
 
     # lt bots: single timeframe, always proceed
     if bot_cadence == "lt":
@@ -107,7 +124,7 @@ def check_confluence(
         htf_bars = symbol_bars[-180:] if len(symbol_bars) >= 180 else symbol_bars
 
         for bar_slice in (ltf_bars, primary_bars, htf_bars):
-            result = _compute_agreement(bar_slice, side)
+            result = _compute_agreement(bar_slice, side, mean_reversion=is_mean_rev)
             if result is not None:
                 agreements.append(result)
 
@@ -118,13 +135,13 @@ def check_confluence(
         monthly_bars = symbol_bars[::22] if len(symbol_bars) >= 22 else symbol_bars
 
         for bar_slice in (daily_bars, weekly_bars, monthly_bars):
-            result = _compute_agreement(bar_slice, side)
+            result = _compute_agreement(bar_slice, side, mean_reversion=is_mean_rev)
             if result is not None:
                 agreements.append(result)
 
     else:
         # Unknown cadence — default to primary only
-        result = _compute_agreement(symbol_bars, side)
+        result = _compute_agreement(symbol_bars, side, mean_reversion=is_mean_rev)
         if result is not None:
             agreements.append(result)
 

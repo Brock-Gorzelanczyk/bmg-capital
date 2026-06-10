@@ -51,10 +51,10 @@ def _current_et_session() -> str:
 
 # ── Ensemble helpers ──────────────────────────────────────────────────────────
 
-def _weighted_vote(signals_by_strategy: list[list]) -> list:
+def _weighted_vote(signals_by_strategy: list[list], threshold: float = 0.5) -> list:
     """Average confidence for each symbol/side combination across strategies.
 
-    A symbol/side pair wins if its weighted-average confidence >= 0.5.
+    A symbol/side pair wins if its weighted-average confidence >= threshold.
     Returns a deduplicated list of winning signals (highest confidence wins
     when multiple strategies agree on a symbol).
     """
@@ -74,7 +74,7 @@ def _weighted_vote(signals_by_strategy: list[list]) -> list:
     winners = []
     for key, confs in agg.items():
         avg_conf = sum(confs) / len(confs)
-        if avg_conf >= 0.5:
+        if avg_conf >= threshold:
             template = signal_map[key]
             # Clone with averaged confidence
             winners.append(Signal(
@@ -176,7 +176,7 @@ def _apply_ensemble(
 ) -> list:
     """Dispatch to the appropriate ensemble aggregator."""
     if ensemble == "weighted_vote":
-        return _weighted_vote(signals_by_strategy)
+        return _weighted_vote(signals_by_strategy, threshold=confidence_threshold)
     if ensemble == "majority_vote":
         return _majority_vote(signals_by_strategy, n_strategies)
     if ensemble == "factor_rank":
@@ -314,7 +314,8 @@ def run_bot_profile(profile_name: str) -> dict:
                         raw_bars = _fetch_crypto_bars(symbols, timeframe=timeframe, limit=limit)
                     else:
                         from app.screener.runner import _fetch_bars_sync
-                        raw_bars = _fetch_bars_sync(symbols, period="60d")
+                        lookback_period = profile.get("scan_lookback_period", "60d")
+                        raw_bars = _fetch_bars_sync(symbols, period=lookback_period)
                     for sym, df in raw_bars.items():
                         if df is None or df.empty:
                             continue
@@ -440,17 +441,17 @@ def run_bot_profile(profile_name: str) -> dict:
                     continue
                 try:
                     from strategy_lab.core.expert.multi_timeframe import check_confluence
-                    score = check_confluence(sig.symbol, sig, bars, bot_cadence)
+                    score = check_confluence(sig.symbol, sig, bars, bot_cadence, strategy=sig.strategy)
                     if score >= 0.66:
                         filtered_signals.append(sig)
                         logger.info(
-                            "[runner:%s] MTF %s %s: score=%.2f PASS",
-                            profile_name, sig.symbol, sig.side, score,
+                            "[runner:%s] MTF %s %s [%s]: score=%.2f PASS",
+                            profile_name, sig.symbol, sig.side, sig.strategy, score,
                         )
                     else:
                         logger.info(
-                            "[runner:%s] MTF %s %s: score=%.2f SKIP (threshold=0.66)",
-                            profile_name, sig.symbol, sig.side, score,
+                            "[runner:%s] MTF %s %s [%s]: score=%.2f SKIP (threshold=0.66)",
+                            profile_name, sig.symbol, sig.side, sig.strategy, score,
                         )
                 except Exception as exc:
                     logger.warning("[runner:%s] multi_timeframe failed for %s: %s", profile_name, sig.symbol, exc)
@@ -1177,8 +1178,8 @@ def trace_bot_profile(profile_name: str, confidence_threshold_override: float | 
                     continue
                 try:
                     from strategy_lab.core.expert.multi_timeframe import check_confluence
-                    score = check_confluence(sig.symbol, sig, bars, bot_cadence)
-                    mtf_detail.append(f"{sig.symbol}/{sig.side}={score:.2f}")
+                    score = check_confluence(sig.symbol, sig, bars, bot_cadence, strategy=sig.strategy)
+                    mtf_detail.append(f"{sig.symbol}/{sig.side}[{sig.strategy}]={score:.2f}")
                     if score >= 0.66:
                         filtered.append(sig)
                 except Exception:
