@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, LineChart, BookMarked, Briefcase, BookOpen, BarChart2,
-  FlaskConical, Layers, Bitcoin, PenTool,
+  FlaskConical, Layers, Bitcoin, PenTool, Radio,
   Filter, Newspaper, Calendar, Microscope, Compass,
   Droplets, ShieldCheck, Activity,
   GraduationCap, Users, ScanSearch, Scale, Award,
@@ -65,6 +65,7 @@ const NAV_TRADE = [
 
 const NAV_LABS = [
   { to: "/strategy", label: "Strategy Lab",  Icon: FlaskConical },
+  { to: "/signals",  label: "My Signals",    Icon: Radio },
   { to: "/options",  label: "Options Lab",   Icon: Layers },
   { to: "/crypto",   label: "Crypto Lab",    Icon: Bitcoin },
   { to: "/workshop", label: "TA Workshop",   Icon: PenTool },
