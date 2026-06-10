@@ -36,7 +36,7 @@ discord:
   channel: crypto-signals
 
 risk:
-  deployment_target_pct: 0.60    # target: deploy 60% of bot capital → ~$10,000/trade at $100k
+  deployment_target_pct: 0.70    # target: deploy 70% of bot capital → ~$11,667/trade at $100k
   target_position_count: 6
   max_position_pct: 0.12
   max_total_deployed_pct: 0.85

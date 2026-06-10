@@ -108,7 +108,7 @@ discord:
   channel: stocks-signals
 
 risk:
-  deployment_target_pct: 0.50    # target: deploy 50% of bot capital → ~$6,250/trade at $100k
+  deployment_target_pct: 0.55    # target: deploy 55% of bot capital → ~$6,875/trade at $100k
   target_position_count: 8
   max_position_pct: 0.10
   max_total_deployed_pct: 0.80

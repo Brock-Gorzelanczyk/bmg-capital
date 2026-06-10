@@ -30,7 +30,7 @@ universe:
     - AMD
     - NFLX
     - TSLA
-scan_lookback_period: "1y"
+scan_lookback_period: "2y"
 confidence_threshold: 0.45
 cadence: "0 10 1-7 * 2"
 watchlist:
@@ -71,7 +71,7 @@ discord:
   channel: stocks-signals
 
 risk:
-  deployment_target_pct: 0.60    # target: deploy 60% of bot capital → ~$10,000/trade at $100k
+  deployment_target_pct: 0.70    # target: deploy 70% of bot capital → ~$11,667/trade at $100k
   target_position_count: 6
   max_position_pct: 0.12
   max_total_deployed_pct: 0.85
