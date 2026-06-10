@@ -5,7 +5,7 @@ import hashlib
 import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,18 @@ from app.db.models.sentinel import AgentEvent, AgentFix, AgentCircuitBreaker
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/sentinel", tags=["sentinel"])
+
+# IPs allowed to call kill-switch and test-action without a Bearer token
+_ALLOWED_IPS: set[str] = {"127.0.0.1", "::1"}
+
+
+def _check_ip(request: Request) -> None:
+    client_ip = request.client.host if request.client else "unknown"
+    allowed_raw = os.getenv("SENTINEL_ADMIN_IPS", "")
+    extra = {ip.strip() for ip in allowed_raw.split(",") if ip.strip()}
+    allowed = _ALLOWED_IPS | extra
+    if client_ip not in allowed:
+        raise HTTPException(status_code=403, detail=f"IP {client_ip} not in SENTINEL_ADMIN_IPS allowlist")
 
 
 @router.get("/status")
@@ -49,12 +61,15 @@ def sentinel_status(db: Session = Depends(get_db)):
     except Exception:
         active_breakers = None
 
+    from app.services.sentinel_actions import autofix_enabled, get_autofix_tier
     return {
         "enabled": enabled,
         "channel_id": channel_id if channel_id else None,
         "events_open": events_open,
         "cost_24h_usd": cost_24h,
         "active_circuit_breakers": active_breakers,
+        "autofix_enabled": autofix_enabled(),
+        "autofix_tier": get_autofix_tier(),
     }
 
 
@@ -125,4 +140,69 @@ def test_event(body: TestEventBody):
         "fingerprint": fingerprint[:16] + "…",
         "escalation_mode": _escalation_enabled(),
         "escalation_posted": escalation_posted,
+    }
+
+
+# ── Autofix endpoints ─────────────────────────────────────────────────────────
+
+@router.post("/disable-autofix")
+def disable_autofix_endpoint(request: Request):
+    """
+    Kill switch — disables autofix in process memory until next restart.
+    IP-allowlist gated (no Bearer token required for emergency access).
+    Set SENTINEL_ADMIN_IPS env var to allow additional IPs.
+    """
+    _check_ip(request)
+    from app.services.sentinel_actions import disable_autofix
+    disable_autofix()
+    return {"autofix_enabled": False, "note": "Disabled until next restart. SENTINEL_AUTOFIX_ENABLED env var unchanged."}
+
+
+class TestActionBody(BaseModel):
+    action: str
+    params: dict = {}
+
+
+@router.post("/test-action")
+def test_action(body: TestActionBody, request: Request):
+    """
+    Test a whitelisted autofix action end-to-end.
+    Posts pre/post Discord embeds. IP-allowlist gated.
+    Returns 403 if action is permanently blocked.
+    """
+    if not os.getenv("SENTINEL_ENABLED", "false").lower() == "true":
+        raise HTTPException(status_code=403, detail="SENTINEL_ENABLED is not set")
+
+    _check_ip(request)
+
+    from app.services.sentinel_actions import (
+        execute_action,
+        SentinelBlockedAction,
+        autofix_enabled,
+        get_autofix_tier,
+    )
+
+    # Let blocked actions 403 before checking autofix flag
+    try:
+        from app.services.sentinel_actions import _validate_action
+        _validate_action(body.action)
+    except SentinelBlockedAction as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    try:
+        result = execute_action(body.action, body.params)
+    except SentinelBlockedAction as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {
+        "action": body.action,
+        "tier": get_autofix_tier(),
+        "autofix_enabled": autofix_enabled(),
+        "result": result,
     }

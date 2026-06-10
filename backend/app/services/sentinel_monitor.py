@@ -456,6 +456,16 @@ def _check_railway_deploys() -> None:
                 payload=payload,
                 message=f"Deploy `{deploy_id[:12]}` failed\n```\n{first_line[:200]}\n```",
             )
+            # Phase D: attempt auto-fix if enabled
+            from app.services.sentinel_actions import autofix_enabled, run_autofix_decision
+            if autofix_enabled():
+                run_autofix_decision(
+                    event_id=event_id,
+                    agent_id="railway-watcher",
+                    severity="critical",
+                    category="deploy-failed",
+                    message=first_line[:400],
+                )
 
 
 async def railway_watcher_loop() -> None:

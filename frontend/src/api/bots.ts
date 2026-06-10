@@ -11,6 +11,7 @@ export interface BotProfile {
   take_profit_pct: number | null;
   paper_only: true;
   enabled: boolean;
+  config?: Record<string, unknown>;
 }
 
 export interface BotAllocation {
@@ -81,6 +82,7 @@ export const getBot = (name: string) =>
         take_profit_pct: b.config?.take_profit_pct ?? null,
         paper_only: true as const,
         enabled: b.enabled ?? true,
+        config: b.config ?? {},
       } as BotProfile,
       allocation: b.allocation as BotAllocation | null,
       positions: (b.open_positions ?? []) as BotPosition[],
