@@ -210,21 +210,21 @@ function CryptoTaxReport1099() {
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => window.open("/api/tax/1099-da/export.csv")}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-base)] border border-[var(--border-subtle)] text-sm font-semibold text-[var(--text-primary)] hover:border-[#84cc16] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-base)] border border-[var(--border-subtle)] text-sm font-semibold text-[var(--text-primary)] hover:border-[#4ade80] transition-colors cursor-pointer"
             >
               <Download size={14} />
               Download CSV
             </button>
             <button
               onClick={() => window.open("/api/tax/1099-da/export.csv")}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-base)] border border-[var(--border-subtle)] text-sm font-semibold text-[var(--text-primary)] hover:border-[#84cc16] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-base)] border border-[var(--border-subtle)] text-sm font-semibold text-[var(--text-primary)] hover:border-[#4ade80] transition-colors cursor-pointer"
             >
               <FileText size={14} />
               Export to TurboTax
             </button>
           </div>
 
-          <p className="text-xs font-semibold text-[#84cc16]">
+          <p className="text-xs font-semibold text-[#4ade80]">
             Federal mandate effective 2025 — BMG handles this automatically.
           </p>
         </>

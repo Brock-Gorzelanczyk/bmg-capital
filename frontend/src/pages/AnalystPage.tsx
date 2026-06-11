@@ -312,7 +312,7 @@ function QuickAnalyze() {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
       <h2 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
-        <Brain size={14} className="text-[#84cc16]" />
+        <Brain size={14} className="text-[#4ade80]" />
         Analyze Any Symbol
       </h2>
       <div className="flex gap-2 flex-wrap">
@@ -338,7 +338,7 @@ function QuickAnalyze() {
         <button
           onClick={() => analyzeMut.mutate()}
           disabled={analyzeMut.isPending || !symbol || !botProfileId}
-          className="px-4 py-2 rounded-lg bg-[#84cc16] text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50"
+          className="px-4 py-2 rounded-lg bg-[#4ade80] text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50"
         >
           {analyzeMut.isPending ? "Analyzing…" : "Analyze"}
         </button>
@@ -387,7 +387,7 @@ export default function AnalystPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Brain size={20} className="text-[#84cc16]" />
+            <Brain size={20} className="text-[#4ade80]" />
             <h1 className="text-2xl font-bold text-white">AI Analyst</h1>
           </div>
           <p className="text-zinc-500 text-sm">
@@ -415,7 +415,7 @@ export default function AnalystPage() {
       {/* Summary metrics */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Analyzed Today", value: isLoading ? "—" : String(summary?.total_analyzed ?? 0), icon: <Brain size={14} className="text-[#84cc16]" /> },
+          { label: "Analyzed Today", value: isLoading ? "—" : String(summary?.total_analyzed ?? 0), icon: <Brain size={14} className="text-[#4ade80]" /> },
           { label: "High Conviction", value: isLoading ? "—" : String(summary?.num_high_conviction ?? 0), icon: <Star size={14} className="text-lime-400" /> },
           { label: "Concerns Flagged", value: isLoading ? "—" : String(summary?.num_flagged ?? 0), icon: <AlertTriangle size={14} className="text-amber-400" /> },
         ].map(m => (

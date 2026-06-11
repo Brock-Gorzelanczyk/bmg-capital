@@ -60,18 +60,18 @@ export default function FounderTodayWidget() {
   const todaySignups = summary?.waitlist?.today_count ?? 0;
 
   return (
-    <div className="rounded-2xl border border-[#84cc16]/30 bg-[#84cc16]/5 p-4 space-y-3">
+    <div className="rounded-2xl border border-[#4ade80]/30 bg-[#4ade80]/5 p-4 space-y-3">
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Target className="w-4 h-4 text-[#84cc16]" />
-          <span className="text-xs font-bold text-[#84cc16] uppercase tracking-widest">
+          <Target className="w-4 h-4 text-[#4ade80]" />
+          <span className="text-xs font-bold text-[#4ade80] uppercase tracking-widest">
             Founder Mode
           </span>
         </div>
         <Link
           to="/settings/founder"
-          className="flex items-center gap-1 text-xs text-[var(--text-secondary)] hover:text-[#84cc16] transition-colors"
+          className="flex items-center gap-1 text-xs text-[var(--text-secondary)] hover:text-[#4ade80] transition-colors"
         >
           Hub
           <ChevronRight className="w-3 h-3" />
@@ -88,13 +88,13 @@ export default function FounderTodayWidget() {
             </span>{" "}
             of 90
           </span>
-          <span className="text-xs font-bold font-mono text-[#84cc16]">
+          <span className="text-xs font-bold font-mono text-[#4ade80]">
             {pct}%
           </span>
         </div>
         <div className="w-full h-1.5 bg-[var(--border-subtle)] rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full bg-[#84cc16] transition-all duration-700"
+            className="h-full rounded-full bg-[#4ade80] transition-all duration-700"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -117,7 +117,7 @@ export default function FounderTodayWidget() {
               }
             }}
             disabled={completeMutation.isPending}
-            className="w-full py-1.5 rounded-lg bg-[#84cc16] text-black text-xs font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+            className="w-full py-1.5 rounded-lg bg-[#4ade80] text-black text-xs font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
             {completeMutation.isPending ? "Saving…" : "Mark Complete"}

@@ -422,7 +422,7 @@ function SaveModal({
                   type="checkbox"
                   checked={channels[ch]}
                   onChange={() => toggleChannel(ch)}
-                  className="accent-[#BEF264]"
+                  className="accent-[#4ade80]"
                 />
                 <span className="text-sm capitalize text-[var(--text-secondary)]">{ch}</span>
               </label>
@@ -992,7 +992,7 @@ export default function AlertBuilderPage() {
                     <polyline
                       points={backtestResult.curve}
                       fill="none"
-                      stroke="#BEF264"
+                      stroke="#4ade80"
                       strokeWidth="1.5"
                       vectorEffect="non-scaling-stroke"
                     />

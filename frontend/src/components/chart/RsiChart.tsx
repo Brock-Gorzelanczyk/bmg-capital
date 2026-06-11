@@ -33,7 +33,7 @@ export default function RsiChart({ bars, values, height = 100 }: Props) {
     });
     series.createPriceLine({ price: 70, color: "#FB7185", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "OB" });
     series.createPriceLine({ price: 50, color: "#1f1f1f", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
-    series.createPriceLine({ price: 30, color: "#BEF264", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "OS" });
+    series.createPriceLine({ price: 30, color: "#4ade80", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "OS" });
 
     chartRef.current = chart;
     seriesRef.current = series;

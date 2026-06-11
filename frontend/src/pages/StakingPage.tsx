@@ -77,7 +77,7 @@ function StakeModal({ asset, onClose, onSuccess }: StakeModalProps) {
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="bg-[var(--bg-base)] rounded-xl p-3">
             <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">APY</p>
-            <p className="text-[#84cc16] font-bold text-lg">{asset.apy}%</p>
+            <p className="text-[#4ade80] font-bold text-lg">{asset.apy}%</p>
           </div>
           <div className="bg-[var(--bg-base)] rounded-xl p-3">
             <p className="text-xs text-[var(--text-tertiary)] uppercase tracking-wider">Unstake Period</p>
@@ -101,7 +101,7 @@ function StakeModal({ asset, onClose, onSuccess }: StakeModalProps) {
               value={amount}
               onChange={e => setAmount(e.target.value)}
               placeholder={`Min: ${asset.min_amount}`}
-              className="flex-1 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#84cc16] transition-colors"
+              className="flex-1 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-primary)] text-sm focus:outline-none focus:border-[#4ade80] transition-colors"
             />
             <button
               onClick={() => setAmount(String(asset.min_amount * 10))}
@@ -114,9 +114,9 @@ function StakeModal({ asset, onClose, onSuccess }: StakeModalProps) {
         </div>
 
         {parsed > 0 && (
-          <div className="bg-[#84cc16]/5 border border-[#84cc16]/20 rounded-xl p-3 space-y-1">
+          <div className="bg-[#4ade80]/5 border border-[#4ade80]/20 rounded-xl p-3 space-y-1">
             <p className="text-xs text-[var(--text-tertiary)] font-semibold uppercase tracking-wider">Projected Annual Earnings</p>
-            <p className="text-[#84cc16] font-bold text-lg">
+            <p className="text-[#4ade80] font-bold text-lg">
               {annualEarnings.toFixed(6)} {asset.asset}
               <span className="text-sm font-normal text-[var(--text-secondary)] ml-2">
                 ({fmtUsd(annualEarningsUsd)} / yr)
@@ -128,7 +128,7 @@ function StakeModal({ asset, onClose, onSuccess }: StakeModalProps) {
         <button
           disabled={!isValid || mutation.isPending}
           onClick={() => mutation.mutate()}
-          className="w-full py-3 rounded-xl font-bold text-sm bg-[#84cc16] text-black hover:bg-[#a3e635] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          className="w-full py-3 rounded-xl font-bold text-sm bg-[#4ade80] text-black hover:bg-[#a3e635] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           {mutation.isPending ? "Staking…" : `Stake ${asset.asset}`}
         </button>
@@ -144,7 +144,7 @@ function AssetCard({ asset, onStake }: { asset: StakingAsset; onStake: (a: Staki
     <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-lg font-black text-[var(--text-primary)]">{asset.asset}</span>
-        <span className="text-xl font-black text-[#84cc16]">{asset.apy}%</span>
+        <span className="text-xl font-black text-[#4ade80]">{asset.apy}%</span>
       </div>
       <div className="space-y-1 text-sm">
         <div className="flex justify-between text-[var(--text-secondary)]">
@@ -166,7 +166,7 @@ function AssetCard({ asset, onStake }: { asset: StakingAsset; onStake: (a: Staki
       </div>
       <button
         onClick={() => onStake(asset)}
-        className="w-full py-2.5 rounded-xl bg-[#84cc16] text-black font-bold text-sm hover:bg-[#a3e635] transition-colors cursor-pointer"
+        className="w-full py-2.5 rounded-xl bg-[#4ade80] text-black font-bold text-sm hover:bg-[#a3e635] transition-colors cursor-pointer"
       >
         Stake {asset.asset}
       </button>
@@ -223,8 +223,8 @@ export default function StakingPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: "Total Staked", value: fmtUsd(summary.total_staked_usd) },
-            { label: "Total Rewards", value: fmtUsd(summary.total_rewards_usd), accent: "text-[#84cc16]" },
-            { label: "Avg APY", value: `${summary.avg_apy}%`, accent: "text-[#84cc16]" },
+            { label: "Total Rewards", value: fmtUsd(summary.total_rewards_usd), accent: "text-[#4ade80]" },
+            { label: "Avg APY", value: `${summary.avg_apy}%`, accent: "text-[#4ade80]" },
             { label: "Active Positions", value: String(summary.positions_count) },
           ].map(s => (
             <div key={s.label} className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
@@ -282,7 +282,7 @@ export default function StakingPage() {
                     <td className="py-3 pr-4 font-bold text-[var(--text-primary)]">{pos.asset}</td>
                     <td className="py-3 pr-4 text-[var(--text-secondary)]">{pos.amount_staked} {pos.asset}</td>
                     <td className="py-3 pr-4 text-[var(--text-primary)]">{fmtUsd(pos.staked_value_usd)}</td>
-                    <td className="py-3 pr-4 text-[#84cc16] font-semibold">
+                    <td className="py-3 pr-4 text-[#4ade80] font-semibold">
                       {pos.rewards_earned.toFixed(6)} ({fmtUsd(pos.rewards_usd)})
                     </td>
                     <td className="py-3 pr-4"><StatusPill status={pos.status} /></td>

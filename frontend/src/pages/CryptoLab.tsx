@@ -197,7 +197,7 @@ function FearGauge({ value, label }: { value: number; label: string }) {
   const arcX = cx + r * Math.cos(toRad(angle));
   const arcY = cy + r * Math.sin(toRad(angle));
   const trackColor = "#1e293b";
-  const fillColor = value <= 25 ? "#FB7185" : value <= 50 ? "#F97316" : value <= 75 ? "#EAB308" : "#BEF264";
+  const fillColor = value <= 25 ? "#FB7185" : value <= 50 ? "#F97316" : value <= 75 ? "#EAB308" : "#4ade80";
 
   const describeArc = (fromDeg: number, toDeg: number) => {
     const x1 = cx + r * Math.cos(toRad(fromDeg));

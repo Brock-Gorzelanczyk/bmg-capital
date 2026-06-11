@@ -68,7 +68,7 @@ const ALL_CATEGORIES = Object.keys(CATEGORY_META);
 function ResultPill({ result }: { result: AutopilotAction["result"] }) {
   if (result === "success") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#84cc16]/15 text-[#84cc16]">
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#4ade80]/15 text-[#4ade80]">
         <CheckCircle size={10} /> success
       </span>
     );
@@ -177,7 +177,7 @@ function ConfigPanel({
           onClick={() => onChange(!value)}
           className={cn(
             "relative w-9 h-5 rounded-full transition-colors duration-200",
-            value ? "bg-[#84cc16]" : "bg-[var(--bg-elevated-2)]"
+            value ? "bg-[#4ade80]" : "bg-[var(--bg-elevated-2)]"
           )}
         >
           <span
@@ -198,7 +198,7 @@ function ConfigPanel({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm text-[var(--text-secondary)]">Rebalance threshold</span>
-              <span className="text-sm font-semibold text-[#84cc16]">{rebalanceThreshold}%</span>
+              <span className="text-sm font-semibold text-[#4ade80]">{rebalanceThreshold}%</span>
             </div>
             <input
               type="range"
@@ -206,7 +206,7 @@ function ConfigPanel({
               max={20}
               value={rebalanceThreshold}
               onChange={e => setRebalanceThreshold(Number(e.target.value))}
-              className="w-full accent-[#84cc16] cursor-pointer"
+              className="w-full accent-[#4ade80] cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] mt-0.5">
               <span>1%</span><span>20%</span>
@@ -227,7 +227,7 @@ function ConfigPanel({
               min={0}
               value={cashSweep}
               onChange={e => setCashSweep(Number(e.target.value))}
-              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
             />
           </div>
         </>
@@ -256,7 +256,7 @@ function ConfigPanel({
                   className={cn(
                     "flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors",
                     maxPush === v
-                      ? "border-[#84cc16] bg-[#84cc16]/15 text-[#84cc16]"
+                      ? "border-[#4ade80] bg-[#4ade80]/15 text-[#4ade80]"
                       : "border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:border-[var(--border-emphasis)]"
                   )}
                 >
@@ -293,7 +293,7 @@ function ConfigPanel({
           <button
             onClick={() => mut.mutate(buildConfig())}
             disabled={mut.isPending}
-            className="px-4 py-1.5 bg-[#84cc16] text-black text-sm font-semibold rounded-lg hover:bg-[#84cc16]/90 disabled:opacity-50 transition-colors cursor-pointer"
+            className="px-4 py-1.5 bg-[#4ade80] text-black text-sm font-semibold rounded-lg hover:bg-[#4ade80]/90 disabled:opacity-50 transition-colors cursor-pointer"
           >
             {mut.isPending ? "Saving…" : "Save"}
           </button>
@@ -401,11 +401,11 @@ function CategoryCard({
             className={cn(
               "flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-colors cursor-pointer shrink-0",
               enabled
-                ? "border-[#84cc16] text-[#84cc16] bg-[#84cc16]/10 hover:bg-[#84cc16]/20"
+                ? "border-[#4ade80] text-[#4ade80] bg-[#4ade80]/10 hover:bg-[#4ade80]/20"
                 : "border-[var(--border-emphasis)] text-[var(--text-tertiary)] hover:border-[var(--border-subtle)]"
             )}
           >
-            <span className={cn("w-1.5 h-1.5 rounded-full", enabled ? "bg-[#84cc16]" : "bg-[var(--text-tertiary)]")} />
+            <span className={cn("w-1.5 h-1.5 rounded-full", enabled ? "bg-[#4ade80]" : "bg-[var(--text-tertiary)]")} />
             {enabled ? "ON" : "OFF"}
           </button>
         </div>
@@ -508,7 +508,7 @@ function GuardrailsPanel() {
                   [field]: field === "global_paused" ? e.target.value === "1" : Number(e.target.value),
                 }))
               }
-              className="w-20 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded px-2 py-1 text-xs text-[var(--text-primary)] text-right focus:outline-none focus:border-[#84cc16]"
+              className="w-20 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded px-2 py-1 text-xs text-[var(--text-primary)] text-right focus:outline-none focus:border-[#4ade80]"
             />
             {suffix && <span className="text-xs text-[var(--text-tertiary)]">{suffix}</span>}
           </div>
@@ -529,7 +529,7 @@ function GuardrailsPanel() {
         className="w-full flex items-center justify-between cursor-pointer"
       >
         <div className="flex items-center gap-2">
-          <Shield size={16} className="text-[#84cc16]" />
+          <Shield size={16} className="text-[#4ade80]" />
           <span className="text-sm font-semibold text-[var(--text-primary)]">Hard Guardrails</span>
         </div>
         <div className="flex items-center gap-2">
@@ -577,7 +577,7 @@ function GuardrailsPanel() {
               <button
                 onClick={() => saveMut.mutate(form)}
                 disabled={saveMut.isPending}
-                className="px-4 py-1.5 bg-[#84cc16] text-black text-sm font-semibold rounded-lg hover:bg-[#84cc16]/90 disabled:opacity-50 transition-colors cursor-pointer"
+                className="px-4 py-1.5 bg-[#4ade80] text-black text-sm font-semibold rounded-lg hover:bg-[#4ade80]/90 disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {saveMut.isPending ? "Saving…" : "Save"}
               </button>
@@ -679,7 +679,7 @@ function ActivityLog({ initialCategory }: { initialCategory?: string }) {
             className={cn(
               "shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer",
               activeCategory === tab
-                ? "bg-[#84cc16] text-black"
+                ? "bg-[#4ade80] text-black"
                 : "bg-[var(--bg-elevated)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             )}
           >
@@ -870,7 +870,7 @@ export default function AutopilotPage() {
       <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <Zap size={20} className="text-[#84cc16]" />
+            <Zap size={20} className="text-[#4ade80]" />
             <span className="text-xs font-bold tracking-[0.15em] uppercase text-[var(--text-tertiary)]">Autopilot</span>
           </div>
           <div className="flex items-center gap-2">
@@ -884,7 +884,7 @@ export default function AutopilotPage() {
                 <span className="text-xs text-[var(--text-tertiary)]">Health</span>
                 <span className={cn(
                   "text-xs font-bold",
-                  healthScore >= 80 ? "text-[#84cc16]" : healthScore >= 50 ? "text-yellow-400" : "text-red-400"
+                  healthScore >= 80 ? "text-[#4ade80]" : healthScore >= 50 ? "text-yellow-400" : "text-red-400"
                 )}>{healthScore}</span>
               </div>
             )}
@@ -893,7 +893,7 @@ export default function AutopilotPage() {
               <button
                 onClick={() => resumeMut.mutate()}
                 disabled={resumeMut.isPending}
-                className="px-4 py-1.5 bg-[#84cc16] hover:bg-[#84cc16]/90 text-black text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors cursor-pointer"
+                className="px-4 py-1.5 bg-[#4ade80] hover:bg-[#4ade80]/90 text-black text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {resumeMut.isPending ? "Resuming…" : "Resume All"}
               </button>
@@ -917,7 +917,7 @@ export default function AutopilotPage() {
             <p className="text-2xl font-bold text-[var(--text-primary)]">
               Today, BMG did{" "}
               <span
-                className="text-[#84cc16] animate-pulse"
+                className="text-[#4ade80] animate-pulse"
                 style={{ animationDuration: "3s" }}
               >
                 {totalActions}
@@ -947,7 +947,7 @@ export default function AutopilotPage() {
 
         <button
           onClick={() => document.getElementById("autopilot-activity-log")?.scrollIntoView({ behavior: "smooth" })}
-          className="mt-4 text-xs text-[#84cc16] hover:underline cursor-pointer"
+          className="mt-4 text-xs text-[#4ade80] hover:underline cursor-pointer"
         >
           View full activity log &darr;
         </button>

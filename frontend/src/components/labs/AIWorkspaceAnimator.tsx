@@ -58,8 +58,8 @@ const STYLES = `
   100% { opacity: 1; transform: scale(1) translateY(0px); filter: blur(0px); }
 }
 @keyframes bmg-border-flash {
-  0%   { box-shadow: 0 0 0 1px #84cc16; }
-  60%  { box-shadow: 0 0 0 1px #84cc1680; }
+  0%   { box-shadow: 0 0 0 1px #4ade80; }
+  60%  { box-shadow: 0 0 0 1px #4ade8080; }
   100% { box-shadow: 0 0 0 0px transparent; }
 }
 @keyframes bmg-toast-up {
@@ -297,7 +297,7 @@ export default function AIWorkspaceAnimator({
               width: "100%",
               height: 1,
               background:
-                "linear-gradient(90deg, transparent, #84cc16, transparent)",
+                "linear-gradient(90deg, transparent, #4ade80, transparent)",
               animation: "bmg-scan-line 1.2s linear infinite",
             }}
           />
@@ -310,12 +310,12 @@ export default function AIWorkspaceAnimator({
               width: 72,
               height: 72,
               borderRadius: "50%",
-              border: "1.5px solid #84cc16",
+              border: "1.5px solid #4ade80",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               animation: "bmg-logo-pulse 1.2s ease-in-out infinite",
-              boxShadow: "0 0 24px #84cc1640",
+              boxShadow: "0 0 24px #4ade8040",
               position: "relative",
               zIndex: 1,
             }}
@@ -324,7 +324,7 @@ export default function AIWorkspaceAnimator({
               style={{
                 fontFamily: "monospace",
                 fontSize: 20,
-                color: "#84cc16",
+                color: "#4ade80",
                 fontWeight: 700,
               }}
             >
@@ -340,7 +340,7 @@ export default function AIWorkspaceAnimator({
               marginTop: 16,
               fontFamily: "monospace",
               fontSize: 13,
-              color: "#84cc16",
+              color: "#4ade80",
               letterSpacing: "0.05em",
               position: "relative",
               zIndex: 1,
@@ -367,7 +367,7 @@ export default function AIWorkspaceAnimator({
               style={{
                 fontFamily: "monospace",
                 fontSize: 13,
-                color: "#84cc16",
+                color: "#4ade80",
                 letterSpacing: "0.04em",
               }}
             >
@@ -387,7 +387,7 @@ export default function AIWorkspaceAnimator({
                   style={{
                     fontFamily: "monospace",
                     fontSize: 11,
-                    color: "#84cc16",
+                    color: "#4ade80",
                     opacity: parsingStep === i ? 1 : 0.2,
                     transition: "opacity 220ms",
                     letterSpacing: "0.04em",
@@ -406,7 +406,7 @@ export default function AIWorkspaceAnimator({
             style={{
               fontFamily: "monospace",
               fontSize: 13,
-              color: "#84cc16",
+              color: "#4ade80",
               letterSpacing: "0.05em",
               opacity: 0.8,
             }}
@@ -434,7 +434,7 @@ export default function AIWorkspaceAnimator({
                 marginBottom: 8,
                 fontFamily: "monospace",
                 fontSize: 11,
-                color: "#84cc16",
+                color: "#4ade80",
                 letterSpacing: "0.08em",
                 opacity: 0.7,
               }}
@@ -512,7 +512,7 @@ export default function AIWorkspaceAnimator({
         >
           <span
             style={{
-              color: "#84cc16",
+              color: "#4ade80",
               fontSize: 12,
               fontFamily: "monospace",
             }}

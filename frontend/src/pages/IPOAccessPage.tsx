@@ -17,7 +17,7 @@ const SECTOR_COLORS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  upcoming: { label: "Upcoming", color: "bg-[#84cc16]/20 text-[#84cc16]" },
+  upcoming: { label: "Upcoming", color: "bg-[#4ade80]/20 text-[#4ade80]" },
   pricing: { label: "Pricing", color: "bg-yellow-500/20 text-yellow-400" },
   open: { label: "Open", color: "bg-green-500/20 text-green-400" },
   closed: { label: "Closed", color: "bg-zinc-500/20 text-zinc-400" },
@@ -107,7 +107,7 @@ export default function IPOAccessPage() {
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${sectorColor}`}>{deal.sector}</span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusInfo.color}`}>{statusInfo.label}</span>
                         {deal.min_tier !== "free" && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#84cc16]/20 text-[#84cc16] capitalize">{deal.min_tier}+</span>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#4ade80]/20 text-[#4ade80] capitalize">{deal.min_tier}+</span>
                         )}
                       </div>
                       <div>
@@ -145,7 +145,7 @@ export default function IPOAccessPage() {
                           <span className="capitalize">{deal.min_tier}</span>
                         </div>
                       ) : alreadyRegistered ? (
-                        <div className="text-xs font-semibold text-[#84cc16] bg-[#84cc16]/10 border border-[#84cc16]/30 px-3 py-2 rounded-lg">
+                        <div className="text-xs font-semibold text-[#4ade80] bg-[#4ade80]/10 border border-[#4ade80]/30 px-3 py-2 rounded-lg">
                           Waitlisted
                         </div>
                       ) : (
@@ -189,7 +189,7 @@ export default function IPOAccessPage() {
                           reg.status === "allocated" ? "bg-green-500/20 text-green-400" :
                           reg.status === "cancelled" ? "bg-zinc-500/20 text-zinc-400" :
                           reg.status === "missed" ? "bg-red-500/20 text-red-400" :
-                          "bg-[#84cc16]/20 text-[#84cc16]"
+                          "bg-[#4ade80]/20 text-[#4ade80]"
                         }`}>{reg.status}</span>
                       </td>
                       <td className="p-4 text-right font-mono font-bold text-[var(--text-primary)]">

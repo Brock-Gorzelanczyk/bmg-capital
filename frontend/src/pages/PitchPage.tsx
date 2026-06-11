@@ -63,7 +63,7 @@ export default function PitchPage() {
           {/* Logo */}
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center font-black text-xl"
-            style={{ background: "#BEF264", color: "#0a0a0f" }}
+            style={{ background: "#4ade80", color: "#0a0a0f" }}
           >
             B
           </div>
@@ -78,14 +78,14 @@ export default function PitchPage() {
           className={cn(
             "flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition-all duration-200",
             demoMode
-              ? "border-[#BEF264] text-[#BEF264]"
+              ? "border-[#4ade80] text-[#4ade80]"
               : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
           )}
         >
           {demoMode && (
             <span
-              className="w-2 h-2 rounded-full bg-[#BEF264] animate-pulse"
-              style={{ boxShadow: "0 0 6px #BEF264" }}
+              className="w-2 h-2 rounded-full bg-[#4ade80] animate-pulse"
+              style={{ boxShadow: "0 0 6px #4ade80" }}
             />
           )}
           Demo Mode
@@ -98,9 +98,9 @@ export default function PitchPage() {
         <div
           className="w-24 h-24 rounded-full flex items-center justify-center font-black text-5xl mb-8 shadow-2xl"
           style={{
-            background: "#BEF264",
+            background: "#4ade80",
             color: "#0a0a0f",
-            boxShadow: "0 0 80px rgba(190,242,100,0.25)",
+            boxShadow: "0 0 80px rgba(74,222,128,0.25)",
           }}
         >
           B
@@ -116,7 +116,7 @@ export default function PitchPage() {
           {demoMode && (
             <span
               className="px-2 py-0.5 rounded text-xs font-bold tracking-widest animate-pulse"
-              style={{ background: "rgba(190,242,100,0.15)", color: "#BEF264", border: "1px solid #BEF264" }}
+              style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "1px solid #4ade80" }}
             >
               LIVE
             </span>
@@ -132,9 +132,9 @@ export default function PitchPage() {
             onClick={() => navigate("/pitch/deck")}
             className="px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 hover:scale-105"
             style={{
-              background: "#BEF264",
+              background: "#4ade80",
               color: "#0a0a0f",
-              boxShadow: "0 0 32px rgba(190,242,100,0.3)",
+              boxShadow: "0 0 32px rgba(74,222,128,0.3)",
             }}
           >
             Start Pitch Demo →
@@ -166,7 +166,7 @@ export default function PitchPage() {
             >
               <div
                 className="text-3xl font-black mb-1"
-                style={{ color: "#BEF264" }}
+                style={{ color: "#4ade80" }}
               >
                 {m.value}
               </div>
@@ -230,7 +230,7 @@ export default function PitchPage() {
                   >
                     <div
                       className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: "rgba(190,242,100,0.1)", color: "#BEF264" }}
+                      style={{ background: "rgba(74,222,128,0.1)", color: "#4ade80" }}
                     >
                       <Icon size={18} />
                     </div>
@@ -249,7 +249,7 @@ export default function PitchPage() {
                         });
                       }}
                       className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:scale-105"
-                      style={{ background: "#BEF264", color: "#0a0a0f" }}
+                      style={{ background: "#4ade80", color: "#0a0a0f" }}
                     >
                       Request Access
                     </button>

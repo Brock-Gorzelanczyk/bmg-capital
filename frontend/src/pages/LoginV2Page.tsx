@@ -17,17 +17,17 @@ gsap.registerPlugin(useGSAP);
 
 // ─── Shared bg primitives ─────────────────────────────────────────────────────
 
-const G = "#84cc16";
+const G = "#4ade80";
 
 function GridBg() {
   return (
     <>
       <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "linear-gradient(rgba(132,204,22,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(132,204,22,0.04) 1px, transparent 1px)",
+        backgroundImage: "linear-gradient(rgba(74,222,128,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(74,222,128,0.04) 1px, transparent 1px)",
         backgroundSize: "60px 60px",
       }} />
       <div className="absolute inset-0 pointer-events-none" style={{
-        background: "radial-gradient(ellipse 80% 60% at 50% 10%, rgba(132,204,22,0.07) 0%, transparent 70%)",
+        background: "radial-gradient(ellipse 80% 60% at 50% 10%, rgba(74,222,128,0.07) 0%, transparent 70%)",
       }} />
     </>
   );
@@ -75,7 +75,7 @@ function TiltCard({ children, className, style, intensity = 12 }: {
         style={{
           background: useTransform(
             [glowX, glowY],
-            ([gx, gy]) => `radial-gradient(circle at ${gx} ${gy}, rgba(132,204,22,0.08) 0%, transparent 60%)`
+            ([gx, gy]) => `radial-gradient(circle at ${gx} ${gy}, rgba(74,222,128,0.08) 0%, transparent 60%)`
           ),
           transition: "opacity 0.2s",
         }}
@@ -129,7 +129,7 @@ function LoadingScreen({ onDone }: { onDone: () => void }) {
       <GridBg />
       <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
         <h1 className="text-3xl font-black tracking-[0.2em] uppercase text-center"
-          style={{ color: G, textShadow: `0 0 40px rgba(132,204,22,0.5)` }}>
+          style={{ color: G, textShadow: `0 0 40px rgba(74,222,128,0.5)` }}>
           BMG CAPITAL
         </h1>
         <p className="text-[10px] font-mono tracking-[0.5em] text-center mt-1" style={{ color: `${G}40` }}>
@@ -152,13 +152,13 @@ function LoadingScreen({ onDone }: { onDone: () => void }) {
 // ─── Auth modal ───────────────────────────────────────────────────────────────
 
 function CornerBrackets() {
-  const s = { boxShadow: "0 0 8px rgba(132,204,22,0.5)" };
+  const s = { boxShadow: "0 0 8px rgba(74,222,128,0.5)" };
   return (
     <>
-      <span className="absolute -top-px -left-px w-6 h-6 border-t-2 border-l-2 border-[#84cc16]" style={s} />
-      <span className="absolute -top-px -right-px w-6 h-6 border-t-2 border-r-2 border-[#84cc16]" style={s} />
-      <span className="absolute -bottom-px -left-px w-6 h-6 border-b-2 border-l-2 border-[#84cc16]" style={s} />
-      <span className="absolute -bottom-px -right-px w-6 h-6 border-b-2 border-r-2 border-[#84cc16]" style={s} />
+      <span className="absolute -top-px -left-px w-6 h-6 border-t-2 border-l-2 border-[#4ade80]" style={s} />
+      <span className="absolute -top-px -right-px w-6 h-6 border-t-2 border-r-2 border-[#4ade80]" style={s} />
+      <span className="absolute -bottom-px -left-px w-6 h-6 border-b-2 border-l-2 border-[#4ade80]" style={s} />
+      <span className="absolute -bottom-px -right-px w-6 h-6 border-b-2 border-r-2 border-[#4ade80]" style={s} />
     </>
   );
 }
@@ -223,7 +223,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
       <motion.div className="relative z-10 w-full max-w-sm"
         initial={{ scale: 0.92, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 20 }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
-        <div className="relative p-8 rounded-sm" style={{ background: "rgba(2,11,2,0.95)", backdropFilter: "blur(16px)", border: "1px solid rgba(132,204,22,0.2)" }}>
+        <div className="relative p-8 rounded-sm" style={{ background: "rgba(2,11,2,0.95)", backdropFilter: "blur(16px)", border: "1px solid rgba(74,222,128,0.2)" }}>
           <CornerBrackets />
           <div className="mb-6 text-center">
             <h2 className="text-lg font-black tracking-[0.15em] uppercase" style={{ color: G }}>BMG CAPITAL</h2>
@@ -271,7 +271,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
             </AnimatePresence>
             <button type="submit" disabled={loading}
               className="relative w-full overflow-hidden rounded border text-sm font-mono tracking-[0.2em] uppercase py-3 transition-all disabled:opacity-50"
-              style={{ background: "rgba(132,204,22,0.1)", borderColor: "rgba(132,204,22,0.4)", color: G }}>
+              style={{ background: "rgba(74,222,128,0.1)", borderColor: "rgba(74,222,128,0.4)", color: G }}>
               <span>{loading ? "AUTHENTICATING…" : mode === "login" ? "AUTHENTICATE" : "CREATE ACCOUNT"}</span>
             </button>
             {mode === "login" && (
@@ -342,7 +342,7 @@ function HeroSection({ onAuth }: { onAuth: () => void }) {
       <GridBg />
       {/* Ticker */}
       <div className="absolute bottom-0 inset-x-0 overflow-hidden h-7 pointer-events-none select-none border-t border-[#0f1a0f]">
-        <div className="flex gap-8 whitespace-nowrap text-[10px] font-mono text-[#84cc16]/18"
+        <div className="flex gap-8 whitespace-nowrap text-[10px] font-mono text-[#4ade80]/18"
           style={{ animation: "bmg-ticker 60s linear infinite" }}>
           {items.map((t, i) => <span key={i}>{t}</span>)}
         </div>
@@ -364,7 +364,7 @@ function HeroSection({ onAuth }: { onAuth: () => void }) {
             className="text-5xl sm:text-6xl font-black tracking-[0.1em] uppercase leading-none"
             style={{
               color: G,
-              textShadow: "0 0 60px rgba(132,204,22,0.3), 0 0 120px rgba(132,204,22,0.1)",
+              textShadow: "0 0 60px rgba(74,222,128,0.3), 0 0 120px rgba(74,222,128,0.1)",
               transform: "translateZ(30px)",
             }}
           >
@@ -374,7 +374,7 @@ function HeroSection({ onAuth }: { onAuth: () => void }) {
           <div className="text-5xl sm:text-6xl font-black tracking-[0.1em] uppercase leading-none select-none pointer-events-none absolute inset-0 flex items-center justify-center"
             style={{
               color: "transparent",
-              WebkitTextStroke: "1px rgba(132,204,22,0.12)",
+              WebkitTextStroke: "1px rgba(74,222,128,0.12)",
               transform: "translateZ(-20px) translateY(4px)",
               filter: "blur(2px)",
             }}>
@@ -396,7 +396,7 @@ function HeroSection({ onAuth }: { onAuth: () => void }) {
           className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <button onClick={onAuth}
             className="w-full sm:w-auto px-8 py-3.5 rounded font-mono text-sm tracking-[0.15em] uppercase font-bold transition-all duration-300"
-            style={{ background: `linear-gradient(135deg, ${G} 0%, #65a30d 100%)`, color: "#020b02", boxShadow: "0 0 30px rgba(132,204,22,0.35)" }}>
+            style={{ background: `linear-gradient(135deg, ${G} 0%, #22c55e 100%)`, color: "#020b02", boxShadow: "0 0 30px rgba(74,222,128,0.35)" }}>
             Get Started Free <ArrowRight className="inline w-4 h-4 ml-1" />
           </button>
           <button onClick={onAuth}
@@ -440,7 +440,7 @@ const BENTO_TILES = [
   { col: "col-span-1 row-span-2", icon: <Trophy className="w-5 h-5" />, label: "Leaderboard", accent: "rgba(16,185,129,0.25)", textAccent: "#6ee7b7",
     body: "Dollar-weighted strategy rankings across all bots. Know what's making money before you allocate.",
     stat: "Real-time rankings", tall: true },
-  { col: "col-span-1 row-span-1", icon: <Mic className="w-4 h-4" />, label: "Voice AI", accent: "rgba(132,204,22,0.2)", textAccent: "#84cc16",
+  { col: "col-span-1 row-span-1", icon: <Mic className="w-4 h-4" />, label: "Voice AI", accent: "rgba(74,222,128,0.2)", textAccent: "#4ade80",
     body: "Natural language portfolio control. Ask anything. Pause bots. Get instant P&L." },
   { col: "col-span-1 row-span-1", icon: <BarChart2 className="w-4 h-4" />, label: "Performance", accent: "rgba(239,68,68,0.2)", textAccent: "#fca5a5",
     body: "Sharpe, Sortino, drawdown, win rate, and equity curves — per bot or portfolio-wide." },
@@ -500,7 +500,7 @@ const HOW_STEPS = [
     desc: "AI scans 500+ symbols every 15 minutes. High-conviction setups come with entry, stop, target, R:R, and an AI trade briefing. Never miss a setup again." },
   { num: "02", title: "Forge builds your bot", icon: <Hammer className="w-6 h-6" />, accent: "#fcd34d",
     desc: "Pick a strategy template, configure parameters (risk %, timeframe, universe), and deploy a live paper-trading bot in under 5 minutes. No code." },
-  { num: "03", title: "Bot executes automatically", icon: <Zap className="w-6 h-6" />, accent: "#84cc16",
+  { num: "03", title: "Bot executes automatically", icon: <Zap className="w-6 h-6" />, accent: "#4ade80",
     desc: "Bots run 24/7, apply your risk rules, and push every signal to Discord. Full audit trail. You stay in control without watching every tick." },
   { num: "04", title: "Leaderboard shows the truth", icon: <Trophy className="w-6 h-6" />, accent: "#6ee7b7",
     desc: "Dollar-weighted rankings across every strategy. No cherry-picked metrics. Allocate more to what's working. Cut what's not." },
@@ -680,7 +680,7 @@ function PricingSection({ onAuth }: { onAuth: () => void }) {
               style={{
                 borderColor: plan.highlight ? `${plan.accent}60` : "rgba(255,255,255,0.07)",
                 background: plan.highlight ? `color-mix(in srgb, ${plan.accent} 8%, #030f03)` : "#030f03",
-                boxShadow: plan.highlight ? `0 0 40px rgba(132,204,22,0.1)` : "none",
+                boxShadow: plan.highlight ? `0 0 40px rgba(74,222,128,0.1)` : "none",
               }}>
               {plan.badge && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[9px] font-mono font-bold"
@@ -787,7 +787,7 @@ function FinalCTASection({ onAuth }: { onAuth: () => void }) {
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
           <button onClick={onAuth}
             className="px-10 py-3.5 rounded font-mono text-sm tracking-[0.15em] uppercase font-bold transition-all"
-            style={{ background: `linear-gradient(135deg, ${G} 0%, #65a30d 100%)`, color: "#020b02", boxShadow: "0 0 30px rgba(132,204,22,0.3)" }}>
+            style={{ background: `linear-gradient(135deg, ${G} 0%, #22c55e 100%)`, color: "#020b02", boxShadow: "0 0 30px rgba(74,222,128,0.3)" }}>
             Get Started Free
           </button>
         </div>

@@ -78,9 +78,9 @@ export default function CFPBookingPage() {
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
 
         {/* Header */}
-        <div className="rounded-2xl border border-[#84cc16]/30 bg-[#84cc16]/5 p-6">
+        <div className="rounded-2xl border border-[#4ade80]/30 bg-[#4ade80]/5 p-6">
           <div className="flex items-center gap-3 mb-2">
-            <Calendar className="w-6 h-6 text-[#84cc16]" />
+            <Calendar className="w-6 h-6 text-[#4ade80]" />
             <h1 className="text-2xl font-black text-[var(--text-primary)]">CFP Sessions</h1>
           </div>
           <p className="text-sm text-[var(--text-secondary)]">Book a 1:1 session with a Certified Financial Planner.</p>
@@ -92,7 +92,7 @@ export default function CFPBookingPage() {
           ) : (
             <div className="mt-4 flex items-center gap-6">
               <div>
-                <div className="text-2xl font-black font-mono text-[#84cc16]">{sessionsRemaining}</div>
+                <div className="text-2xl font-black font-mono text-[#4ade80]">{sessionsRemaining}</div>
                 <div className="text-xs text-[var(--text-secondary)]">sessions remaining</div>
               </div>
               <div>
@@ -132,8 +132,8 @@ export default function CFPBookingPage() {
                             onClick={() => setSelectedSlot(slot.datetime)}
                             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                               selectedSlot === slot.datetime
-                                ? "border-[#84cc16] bg-[#84cc16]/10 text-[var(--text-primary)]"
-                                : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[#84cc16]/40"
+                                ? "border-[#4ade80] bg-[#4ade80]/10 text-[var(--text-primary)]"
+                                : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[#4ade80]/40"
                             }`}
                           >
                             <Clock className="w-3.5 h-3.5" />
@@ -157,7 +157,7 @@ export default function CFPBookingPage() {
                   onChange={e => setTopic(e.target.value)}
                   placeholder="e.g. Retirement planning, tax optimization, portfolio review..."
                   rows={3}
-                  className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg pl-10 pr-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#84cc16] resize-none"
+                  className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg pl-10 pr-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#4ade80] resize-none"
                 />
               </div>
             </div>
@@ -172,8 +172,8 @@ export default function CFPBookingPage() {
                     onClick={() => setFormat(f)}
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border transition-colors ${
                       format === f
-                        ? "border-[#84cc16] bg-[#84cc16]/10 text-[var(--text-primary)]"
-                        : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[#84cc16]/40"
+                        ? "border-[#4ade80] bg-[#4ade80]/10 text-[var(--text-primary)]"
+                        : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[#4ade80]/40"
                     }`}
                   >
                     {f === "video" ? <Video className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
@@ -186,7 +186,7 @@ export default function CFPBookingPage() {
             <button
               onClick={() => bookMutation.mutate()}
               disabled={!selectedSlot || !canBook || bookMutation.isPending}
-              className="w-full py-3 rounded-xl bg-[#84cc16] text-black font-bold text-sm hover:bg-[#a3e635] transition-colors disabled:opacity-50"
+              className="w-full py-3 rounded-xl bg-[#4ade80] text-black font-bold text-sm hover:bg-[#a3e635] transition-colors disabled:opacity-50"
             >
               {bookMutation.isPending ? "Booking…" : "Book Session"}
             </button>
@@ -201,9 +201,9 @@ export default function CFPBookingPage() {
 
         {/* Confirmation */}
         {confirmation && (
-          <div className="rounded-2xl border border-[#84cc16]/30 bg-[#84cc16]/5 p-6 space-y-4">
+          <div className="rounded-2xl border border-[#4ade80]/30 bg-[#4ade80]/5 p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <CheckCircle className="w-6 h-6 text-[#84cc16]" />
+              <CheckCircle className="w-6 h-6 text-[#4ade80]" />
               <h2 className="font-bold text-[var(--text-primary)]">Session Confirmed!</h2>
             </div>
             <div className="space-y-2 text-sm">
@@ -280,7 +280,7 @@ export default function CFPBookingPage() {
                       </td>
                       <td className="p-4 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          b.status === "confirmed" ? "bg-[#84cc16]/20 text-[#84cc16]" :
+                          b.status === "confirmed" ? "bg-[#4ade80]/20 text-[#4ade80]" :
                           b.status === "cancelled" ? "bg-zinc-500/20 text-zinc-400" :
                           "bg-blue-500/20 text-blue-400"
                         }`}>{b.status}</span>

@@ -91,7 +91,7 @@ export default function FounderHubPage() {
                 FOUNDER OPERATING MODE
               </h1>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
-                <span className="text-sm font-mono text-[#84cc16]">
+                <span className="text-sm font-mono text-[#4ade80]">
                   Day{" "}
                   <span className="text-2xl font-black">
                     {isLoading ? "…" : dayNumber}
@@ -105,7 +105,7 @@ export default function FounderHubPage() {
               </div>
             </div>
             <div className="text-right shrink-0">
-              <div className="text-3xl font-black font-mono text-[#84cc16]">
+              <div className="text-3xl font-black font-mono text-[#4ade80]">
                 {pct}%
               </div>
               <div className="text-xs text-[var(--text-secondary)]">
@@ -118,17 +118,17 @@ export default function FounderHubPage() {
           <div className="w-full h-2.5 bg-[var(--border-subtle)] rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${pct}%`, background: "#84cc16" }}
+              style={{ width: `${pct}%`, background: "#4ade80" }}
             />
           </div>
         </div>
 
         {/* ── Today's Focus ── */}
         {summary?.playbook_task && (
-          <div className="rounded-2xl border border-[#84cc16]/40 bg-[#84cc16]/5 p-5 space-y-3">
+          <div className="rounded-2xl border border-[#4ade80]/40 bg-[#4ade80]/5 p-5 space-y-3">
             <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-[#84cc16]" />
-              <span className="text-xs font-bold text-[#84cc16] uppercase tracking-widest">
+              <Target className="w-4 h-4 text-[#4ade80]" />
+              <span className="text-xs font-bold text-[#4ade80] uppercase tracking-widest">
                 Today's Focus
               </span>
               {priorityBadge(summary.playbook_task.priority)}
@@ -156,7 +156,7 @@ export default function FounderHubPage() {
                 }
               }}
               disabled={completeMutation.isPending}
-              className="w-full py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
+              className="w-full py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
             >
               {completeMutation.isPending ? "Saving…" : "Mark Complete"}
             </button>
@@ -168,16 +168,16 @@ export default function FounderHubPage() {
           {/* Investor Pipeline */}
           <button
             onClick={() => navigate("/settings/founder/investors")}
-            className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 text-left hover:border-[#84cc16]/40 transition-all group space-y-3"
+            className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 text-left hover:border-[#4ade80]/40 transition-all group space-y-3"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#84cc16]" />
+                <Users className="w-4 h-4 text-[#4ade80]" />
                 <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest">
                   Investor Pipeline
                 </span>
               </div>
-              <ArrowRight className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[#84cc16] transition-colors" />
+              <ArrowRight className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[#4ade80] transition-colors" />
             </div>
 
             <div className="space-y-1.5">
@@ -216,7 +216,7 @@ export default function FounderHubPage() {
               </div>
             </div>
 
-            <div className="text-xs text-[#84cc16] font-semibold group-hover:underline">
+            <div className="text-xs text-[#4ade80] font-semibold group-hover:underline">
               View pipeline →
             </div>
           </button>
@@ -224,16 +224,16 @@ export default function FounderHubPage() {
           {/* Content */}
           <button
             onClick={() => navigate("/settings/founder/content")}
-            className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 text-left hover:border-[#84cc16]/40 transition-all group space-y-3"
+            className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 text-left hover:border-[#4ade80]/40 transition-all group space-y-3"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#84cc16]" />
+                <FileText className="w-4 h-4 text-[#4ade80]" />
                 <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest">
                   Content
                 </span>
               </div>
-              <ArrowRight className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[#84cc16] transition-colors" />
+              <ArrowRight className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[#4ade80] transition-colors" />
             </div>
 
             <div className="space-y-1.5">
@@ -262,7 +262,7 @@ export default function FounderHubPage() {
               </div>
             </div>
 
-            <div className="text-xs text-[#84cc16] font-semibold group-hover:underline">
+            <div className="text-xs text-[#4ade80] font-semibold group-hover:underline">
               View calendar →
             </div>
           </button>
@@ -270,16 +270,16 @@ export default function FounderHubPage() {
           {/* Waitlist */}
           <button
             onClick={() => navigate("/settings/founder/waitlist")}
-            className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 text-left hover:border-[#84cc16]/40 transition-all group space-y-3"
+            className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 text-left hover:border-[#4ade80]/40 transition-all group space-y-3"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-[#84cc16]" />
+                <Mail className="w-4 h-4 text-[#4ade80]" />
                 <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest">
                   Waitlist
                 </span>
               </div>
-              <ArrowRight className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[#84cc16] transition-colors" />
+              <ArrowRight className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[#4ade80] transition-colors" />
             </div>
 
             <div className="space-y-1.5">
@@ -287,7 +287,7 @@ export default function FounderHubPage() {
                 <span className="text-sm text-[var(--text-secondary)]">
                   Total signups
                 </span>
-                <span className="text-lg font-bold text-[#84cc16] font-mono">
+                <span className="text-lg font-bold text-[#4ade80] font-mono">
                   {summary?.waitlist?.total ?? "—"}
                 </span>
               </div>
@@ -310,7 +310,7 @@ export default function FounderHubPage() {
               </div>
             </div>
 
-            <div className="text-xs text-[#84cc16] font-semibold group-hover:underline">
+            <div className="text-xs text-[#4ade80] font-semibold group-hover:underline">
               View analytics →
             </div>
           </button>
@@ -320,13 +320,13 @@ export default function FounderHubPage() {
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-[#84cc16]" />
+              <CheckCircle2 className="w-5 h-5 text-[#4ade80]" />
               <span className="text-sm font-semibold text-[var(--text-primary)]">
                 Compliance Status
               </span>
             </div>
             <span className="text-sm text-[var(--text-secondary)]">·</span>
-            <span className="text-sm text-[#84cc16]">
+            <span className="text-sm text-[#4ade80]">
               All recent posts compliant
             </span>
           </div>

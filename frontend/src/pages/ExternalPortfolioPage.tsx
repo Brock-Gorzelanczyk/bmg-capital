@@ -67,7 +67,7 @@ export default function ExternalPortfolioPage() {
               </p>
             </div>
             <div className="text-right">
-              <div className="text-3xl font-black font-mono" style={{ color: "#84cc16" }}>
+              <div className="text-3xl font-black font-mono" style={{ color: "#4ade80" }}>
                 ${totalAUM.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
               <div className="text-xs text-[var(--text-secondary)]">total external AUM</div>
@@ -83,7 +83,7 @@ export default function ExternalPortfolioPage() {
             </h2>
             <button
               onClick={() => setConnectOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors"
             >
               <Plus className="w-4 h-4" />
               Connect
@@ -98,7 +98,7 @@ export default function ExternalPortfolioPage() {
               <p className="text-sm text-[var(--text-secondary)]">No brokerages connected yet.</p>
               <button
                 onClick={() => setConnectOpen(true)}
-                className="px-5 py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors"
+                className="px-5 py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors"
               >
                 Connect your first brokerage
               </button>
@@ -107,7 +107,7 @@ export default function ExternalPortfolioPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {brokerages.map(b => (
                 <div key={b.id} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[var(--bg-base)] flex items-center justify-center text-xs font-black text-[#84cc16]">
+                  <div className="w-10 h-10 rounded-full bg-[var(--bg-base)] flex items-center justify-center text-xs font-black text-[#4ade80]">
                     {b.institution_name.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -147,7 +147,7 @@ export default function ExternalPortfolioPage() {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${activeTab === tab ? "bg-[#84cc16] text-black" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${activeTab === tab ? "bg-[#4ade80] text-black" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
                 >
                   {tab}
                 </button>

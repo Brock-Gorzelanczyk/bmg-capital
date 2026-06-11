@@ -132,7 +132,7 @@ function AnswerChip({
         "px-4 py-3 rounded-xl text-sm font-medium text-left transition-all duration-150 border",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950",
         selected
-          ? "bg-lime-400/15 border-lime-400/60 text-lime-300 shadow-[0_0_12px_rgba(132,204,22,0.15)]"
+          ? "bg-lime-400/15 border-lime-400/60 text-lime-300 shadow-[0_0_12px_rgba(74,222,128,0.15)]"
           : "bg-zinc-900 border-white/10 text-zinc-300 hover:bg-zinc-800 hover:border-white/20 hover:text-zinc-100"
       )}
     >
@@ -224,13 +224,13 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
               <div className="flex flex-col items-center gap-2">
                 <div
                   className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold text-zinc-950"
-                  style={{ background: "#84cc16" }}
+                  style={{ background: "#4ade80" }}
                 >
                   B
                 </div>
                 <span
                   className="text-xl font-semibold tracking-tight"
-                  style={{ color: "#84cc16" }}
+                  style={{ color: "#4ade80" }}
                 >
                   BMG Capital
                 </span>
@@ -270,7 +270,7 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
                   type="button"
                   onClick={handleStartQuiz}
                   className="w-full h-11 rounded-xl font-semibold text-zinc-950 text-sm transition-all duration-150 hover:brightness-110 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                  style={{ background: "#84cc16" }}
+                  style={{ background: "#4ade80" }}
                 >
                   Take the 60-second tour
                 </button>
@@ -337,7 +337,7 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
                     ? "text-zinc-950 hover:brightness-110"
                     : "opacity-40 cursor-not-allowed bg-zinc-800 text-zinc-500"
                 )}
-                style={selectedAnswer ? { background: "#84cc16" } : undefined}
+                style={selectedAnswer ? { background: "#4ade80" } : undefined}
               >
                 {step < totalSteps - 1 ? "Next →" : "See my results →"}
               </button>
@@ -350,7 +350,7 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
               {/* Trophy icon */}
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl"
-                style={{ background: "rgba(132,204,22,0.15)", color: "#84cc16" }}
+                style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80" }}
               >
                 ✦
               </div>
@@ -369,7 +369,7 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
                 <div className="flex items-center gap-2">
                   <span
                     className="w-2 h-2 rounded-full animate-pulse"
-                    style={{ background: "#84cc16" }}
+                    style={{ background: "#4ade80" }}
                   />
                   <span className="text-lg font-bold text-lime-300">{bot.name}</span>
                 </div>
@@ -396,7 +396,7 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
                 type="button"
                 onClick={handleFinish}
                 className="w-full h-11 rounded-xl font-semibold text-zinc-950 text-sm transition-all duration-150 hover:brightness-110 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                style={{ background: "#84cc16" }}
+                style={{ background: "#4ade80" }}
               >
                 Let's go →
               </button>

@@ -199,7 +199,7 @@ function AudioModal({ text, onClose }: AudioModalProps) {
 // ── Section icon helper ────────────────────────────────────────────────────────
 
 function SectionIcon({ icon }: { icon: string }) {
-  const cls = "w-4 h-4 text-[#84cc16]";
+  const cls = "w-4 h-4 text-[#4ade80]";
   switch (icon) {
     case "moon": return <Moon className={cls} />;
     case "zap": return <Zap className={cls} />;
@@ -226,7 +226,7 @@ function BriefSectionCard({ section, onAskAI }: BriefSectionCardProps) {
         </div>
         <button
           onClick={() => onAskAI(section.id)}
-          className="flex items-center gap-1 text-xs text-[#84cc16] hover:text-[#a3e635] transition-colors"
+          className="flex items-center gap-1 text-xs text-[#4ade80] hover:text-[#a3e635] transition-colors"
           title="Ask AI about this section"
         >
           <Mic className="w-3 h-3" />
@@ -480,7 +480,7 @@ export default function MorningBriefPage() {
               className={cn(
                 "px-2.5 py-1 rounded-full text-xs font-medium transition-colors",
                 readingLevel === lvl.id
-                  ? "bg-[#84cc16] text-black"
+                  ? "bg-[#4ade80] text-black"
                   : "border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               )}
             >
@@ -633,7 +633,7 @@ export default function MorningBriefPage() {
           </button>
           <button
             onClick={() => setVoiceOpen(true)}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#84cc16] text-black font-semibold text-sm hover:bg-[#a3e635] transition-colors cursor-pointer"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#4ade80] text-black font-semibold text-sm hover:bg-[#a3e635] transition-colors cursor-pointer"
           >
             <Mic size={14} />
             Ask AI

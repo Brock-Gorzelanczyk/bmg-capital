@@ -66,9 +66,9 @@ function getThemeColors() {
     grid:    "rgba(255,255,255,0.04)",
     text:    "#A1A1AA",
     border:  "rgba(255,255,255,0.08)",
-    up:      "#BEF264",
+    up:      "#4ade80",
     down:    "#FB7185",
-    upVol:   "#BEF26428",
+    upVol:   "#4ade8028",
     downVol: "#FB718528",
   };
 }
@@ -447,7 +447,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(
         .map((m) => ({
           time: m.time as UTCTimestamp,
           position: m.isEntry ? "belowBar" as const : "aboveBar" as const,
-          color: m.isEntry ? "#BEF264" : "#FB7185",
+          color: m.isEntry ? "#4ade80" : "#FB7185",
           shape: m.isEntry ? "arrowUp" as const : "arrowDown" as const,
           text: m.label,
           size: 1,

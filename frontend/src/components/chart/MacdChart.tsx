@@ -32,7 +32,7 @@ export default function MacdChart({ bars, macdLine, macdSignal, macdHist, height
       autoSize: true,
     });
 
-    histRef.current = chart.addSeries(HistogramSeries, { color: "#BEF26428", priceLineVisible: false, lastValueVisible: false });
+    histRef.current = chart.addSeries(HistogramSeries, { color: "#4ade8028", priceLineVisible: false, lastValueVisible: false });
     lineRef.current = chart.addSeries(LineSeries, { color: "#ec4899", lineWidth: 1, priceLineVisible: false, lastValueVisible: true });
     signalRef.current = chart.addSeries(LineSeries, { color: "#3b82f6", lineWidth: 1, priceLineVisible: false, lastValueVisible: true });
     chartRef.current = chart;
@@ -51,7 +51,7 @@ export default function MacdChart({ bars, macdLine, macdSignal, macdHist, height
       bars.slice(0, n)
         .map((b, i) => {
           const v = macdHist[i];
-          return v != null ? { time: toTime(b.t), value: v, color: v >= 0 ? "#BEF26440" : "#FB718566" } : null;
+          return v != null ? { time: toTime(b.t), value: v, color: v >= 0 ? "#4ade8040" : "#FB718566" } : null;
         })
         .filter(Boolean) as { time: ReturnType<typeof toTime>; value: number; color: string }[]
     );

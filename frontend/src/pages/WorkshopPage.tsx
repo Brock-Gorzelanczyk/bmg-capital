@@ -117,7 +117,7 @@ function LessonModal({ lesson, completed, onToggle, onClose }: { lesson: Lesson;
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors"><X size={16} /></button>
         </div>
         <p className="text-sm text-zinc-300 leading-relaxed mb-5">{lesson.description}</p>
-        <button onClick={() => { onToggle(); onClose(); }} className={cn("w-full py-2.5 rounded-xl text-sm font-semibold transition-colors", completed ? "bg-zinc-700 hover:bg-zinc-600 text-zinc-300" : "bg-[#84cc16] hover:bg-[#a3e635] text-zinc-900")}>
+        <button onClick={() => { onToggle(); onClose(); }} className={cn("w-full py-2.5 rounded-xl text-sm font-semibold transition-colors", completed ? "bg-zinc-700 hover:bg-zinc-600 text-zinc-300" : "bg-[#4ade80] hover:bg-[#a3e635] text-zinc-900")}>
           {completed ? "Mark incomplete" : "Mark complete"}
         </button>
       </div>
@@ -140,7 +140,7 @@ function SkillSection({ section, completed, onOpenLesson }: { section: Section; 
           <span className="text-xs text-zinc-500">{doneCount}/{section.lessons.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          {doneCount > 0 && <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-[#84cc16] rounded-full" style={{ width: `${(doneCount / section.lessons.length) * 100}%` }} /></div>}
+          {doneCount > 0 && <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-[#4ade80] rounded-full" style={{ width: `${(doneCount / section.lessons.length) * 100}%` }} /></div>}
           {open ? <ChevronUp size={16} className="text-zinc-500" /> : <ChevronDown size={16} className="text-zinc-500" />}
         </div>
       </button>
@@ -382,10 +382,10 @@ function ProgressSummary({ completed, streak, onScroll }: { completed: Set<strin
   const pct = Math.round((count / TOTAL_LESSONS) * 100);
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-4">
-      <h2 className="font-bold text-white mb-4 flex items-center gap-2"><BookOpen size={15} className="text-[#84cc16]" />Your Progress</h2>
+      <h2 className="font-bold text-white mb-4 flex items-center gap-2"><BookOpen size={15} className="text-[#4ade80]" />Your Progress</h2>
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-zinc-950/60 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-[#84cc16]">{streak}</div>
+          <div className="text-2xl font-bold text-[#4ade80]">{streak}</div>
           <div className="text-xs text-zinc-500 mt-0.5 flex items-center justify-center gap-1"><Flame size={10} className="text-orange-400" />day streak</div>
         </div>
         <div className="bg-zinc-950/60 rounded-xl p-4 text-center">
@@ -395,9 +395,9 @@ function ProgressSummary({ completed, streak, onScroll }: { completed: Set<strin
       </div>
       <div className="mb-4">
         <div className="flex justify-between text-xs text-zinc-500 mb-1"><span>Overall completion</span><span>{pct}%</span></div>
-        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-[#84cc16] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} /></div>
+        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-[#4ade80] rounded-full transition-all duration-500" style={{ width: `${pct}%` }} /></div>
       </div>
-      <button onClick={onScroll} className="w-full py-2.5 bg-[#84cc16] hover:bg-[#a3e635] text-zinc-900 font-bold text-sm rounded-xl transition-colors">Continue training</button>
+      <button onClick={onScroll} className="w-full py-2.5 bg-[#4ade80] hover:bg-[#a3e635] text-zinc-900 font-bold text-sm rounded-xl transition-colors">Continue training</button>
     </div>
   );
 }
@@ -435,7 +435,7 @@ export default function WorkshopPage() {
           <h1 className="text-2xl font-bold text-white">TA Workshop</h1>
           <p className="text-sm text-zinc-400 mt-1">Learn to read charts. Practice with real historical setups.</p>
         </div>
-        <button onClick={() => treeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="flex-shrink-0 bg-[#84cc16] hover:bg-[#a3e635] text-zinc-900 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors">
+        <button onClick={() => treeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="flex-shrink-0 bg-[#4ade80] hover:bg-[#a3e635] text-zinc-900 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors">
           Start Training
         </button>
       </div>

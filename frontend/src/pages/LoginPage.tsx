@@ -24,7 +24,7 @@ function TickerBg() {
   const items = [...TICKER, ...TICKER];
   return (
     <div className="absolute bottom-0 inset-x-0 overflow-hidden h-7 pointer-events-none select-none">
-      <div className="flex gap-8 whitespace-nowrap text-[10px] font-mono text-[#84cc16]/18"
+      <div className="flex gap-8 whitespace-nowrap text-[10px] font-mono text-[#4ade80]/18"
         style={{ animation: "bmg-ticker 60s linear infinite" }}>
         {items.map((t, i) => <span key={i}>{t}</span>)}
       </div>
@@ -36,11 +36,11 @@ function GridBg() {
   return (
     <>
       <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "linear-gradient(rgba(132,204,22,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(132,204,22,0.04) 1px, transparent 1px)",
+        backgroundImage: "linear-gradient(rgba(74,222,128,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(74,222,128,0.04) 1px, transparent 1px)",
         backgroundSize: "60px 60px",
       }} />
       <div className="absolute inset-0 pointer-events-none" style={{
-        background: "radial-gradient(ellipse 80% 60% at 50% 20%, rgba(132,204,22,0.07) 0%, transparent 70%)",
+        background: "radial-gradient(ellipse 80% 60% at 50% 20%, rgba(74,222,128,0.07) 0%, transparent 70%)",
       }} />
     </>
   );
@@ -48,8 +48,8 @@ function GridBg() {
 
 // ─── Corner brackets ──────────────────────────────────────────────────────────
 
-const BRACKET_COLOR = "border-[#84cc16]";
-const BRACKET_GLOW = { boxShadow: "0 0 8px rgba(132,204,22,0.5)" };
+const BRACKET_COLOR = "border-[#4ade80]";
+const BRACKET_GLOW = { boxShadow: "0 0 8px rgba(74,222,128,0.5)" };
 
 function CornerBrackets({ expanded = false }: { expanded?: boolean }) {
   const bracketStyle: React.CSSProperties = {
@@ -129,16 +129,16 @@ function VoiceDemo() {
 
   return (
     <div className="relative w-full max-w-md">
-      <div className="relative bg-[#05080f] border border-[#1e293b] rounded-2xl overflow-hidden shadow-2xl shadow-[#84cc16]/5">
+      <div className="relative bg-[#05080f] border border-[#1e293b] rounded-2xl overflow-hidden shadow-2xl shadow-[#4ade80]/5">
         <div className="flex items-center gap-2.5 px-4 py-3 border-b border-[#1e293b]">
-          <div className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${isListening ? "bg-[#84cc16] animate-pulse scale-125" : "bg-[#84cc16]"}`} />
+          <div className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${isListening ? "bg-[#4ade80] animate-pulse scale-125" : "bg-[#4ade80]"}`} />
           <span className="text-sm font-semibold text-white">BMG Voice AI</span>
           <span className="ml-auto text-xs text-slate-500 font-mono">{isListening ? "Listening…" : "Paper trading"}</span>
         </div>
         <div className={`overflow-hidden transition-all duration-300 ${isListening ? "max-h-10 opacity-100" : "max-h-0 opacity-0"}`}>
-          <div className="flex items-center justify-center gap-1 py-2 bg-[#84cc16]/5">
+          <div className="flex items-center justify-center gap-1 py-2 bg-[#4ade80]/5">
             {[1,2,3,4,5,6,7].map(i => (
-              <div key={i} className="w-0.5 bg-[#84cc16] rounded-full"
+              <div key={i} className="w-0.5 bg-[#4ade80] rounded-full"
                 style={{ height: `${10 + (i % 3) * 8}px`, animation: `pulse ${0.4 + i * 0.08}s ease-in-out infinite alternate` }} />
             ))}
           </div>
@@ -147,14 +147,14 @@ function VoiceDemo() {
           {visibleMessages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               {msg.role === "ai" && (
-                <div className="w-6 h-6 rounded-full bg-[#84cc16] flex items-center justify-center mr-2 mt-0.5 shrink-0">
+                <div className="w-6 h-6 rounded-full bg-[#4ade80] flex items-center justify-center mr-2 mt-0.5 shrink-0">
                   <Zap className="w-3 h-3 text-black" />
                 </div>
               )}
               <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-[var(--bmg-green-dim)] text-[var(--bmg-text)] rounded-br-sm border border-[var(--bmg-green-border)]"
-                  : "bg-[#84cc16]/8 text-slate-200 rounded-bl-sm border-l-2 border-[#84cc16]/60"
+                  : "bg-[#4ade80]/8 text-slate-200 rounded-bl-sm border-l-2 border-[#4ade80]/60"
               }`}>
                 {msg.text}
               </div>
@@ -167,12 +167,12 @@ function VoiceDemo() {
           ))}
           {visibleMessages.length > 0 && visibleMessages[visibleMessages.length - 1].role === "user" && (
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-[#84cc16] flex items-center justify-center shrink-0">
+              <div className="w-6 h-6 rounded-full bg-[#4ade80] flex items-center justify-center shrink-0">
                 <Zap className="w-3 h-3 text-black" />
               </div>
               <div className="flex gap-1 px-3 py-2">
                 {[0,1,2].map(i => (
-                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#84cc16]/60 animate-bounce"
+                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#4ade80]/60 animate-bounce"
                     style={{ animationDelay: `${i * 150}ms` }} />
                 ))}
               </div>
@@ -183,13 +183,13 @@ function VoiceDemo() {
           <div className="flex-1 bg-[#0f172a] border border-[#1e293b] rounded-lg px-3 py-2 text-xs text-slate-600">
             Ask anything about your portfolio…
           </div>
-          <div className="w-8 h-8 rounded-lg bg-[#84cc16] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-[#4ade80] flex items-center justify-center">
             <Mic className="w-4 h-4 text-black" />
           </div>
         </div>
       </div>
-      <div className="absolute -top-3 -right-3 bg-[#0a0f1e] border border-[#84cc16]/30 rounded-xl px-3 py-1.5 shadow-lg">
-        <span className="text-[#84cc16] text-xs font-bold">+0.43% today</span>
+      <div className="absolute -top-3 -right-3 bg-[#0a0f1e] border border-[#4ade80]/30 rounded-xl px-3 py-1.5 shadow-lg">
+        <span className="text-[#4ade80] text-xs font-bold">+0.43% today</span>
       </div>
       <div className="absolute -bottom-3 -left-3 bg-[var(--bmg-bg-base)] border border-[var(--bmg-green-border)] rounded-xl px-3 py-1.5 shadow-lg">
         <span className="text-[var(--bmg-green)] text-xs font-bold font-mono">8 bots · paper only</span>
@@ -211,7 +211,7 @@ function AuthField({
   const [focused, setFocused] = useState(false);
   return (
     <div className="relative">
-      <label className="block text-[10px] font-mono tracking-[0.2em] uppercase text-[#84cc16]/60 mb-1.5">{label}</label>
+      <label className="block text-[10px] font-mono tracking-[0.2em] uppercase text-[#4ade80]/60 mb-1.5">{label}</label>
       <div className="relative group">
         <input
           type={type} value={value}
@@ -221,13 +221,13 @@ function AuthField({
           autoComplete={autoComplete} placeholder={placeholder}
           className="w-full bg-transparent border-0 border-b text-white text-sm py-2 pr-8 outline-none placeholder-[#2a3a2a] transition-all duration-300"
           style={{
-            borderBottomColor: focused ? "#84cc16" : "#1e3a1e",
-            boxShadow: focused ? "0 1px 0 0 rgba(132,204,22,0.6)" : "none",
+            borderBottomColor: focused ? "#4ade80" : "#1e3a1e",
+            boxShadow: focused ? "0 1px 0 0 rgba(74,222,128,0.6)" : "none",
           }}
         />
         {focused && (
           <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ borderBottom: "1px solid transparent" }}>
-            <div className="h-full w-16 bg-gradient-to-r from-transparent via-[#84cc16]/10 to-transparent"
+            <div className="h-full w-16 bg-gradient-to-r from-transparent via-[#4ade80]/10 to-transparent"
               style={{ animation: "bmg-scan 1.5s linear infinite" }} />
           </div>
         )}
@@ -280,7 +280,7 @@ function LoginForm() {
   const isLogin = mode === "login";
   return (
     <div className="w-full">
-      <p className="text-[10px] font-mono tracking-[0.3em] text-[#84cc16]/40 mb-6 uppercase">
+      <p className="text-[10px] font-mono tracking-[0.3em] text-[#4ade80]/40 mb-6 uppercase">
         {isLogin ? "// AUTHENTICATE" : "// NEW ACCOUNT"}
       </p>
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -293,7 +293,7 @@ function LoginForm() {
         <AuthField label="Password" type={showPassword ? "text" : "password"} value={password} onChange={setPassword}
           autoComplete={isLogin ? "current-password" : "new-password"} placeholder="••••••••">
           <button type="button" onClick={() => setShowPassword(v => !v)} tabIndex={-1}
-            className="absolute right-0 top-1/2 -translate-y-1/2 text-[#2a4a2a] hover:text-[#84cc16] transition-colors">
+            className="absolute right-0 top-1/2 -translate-y-1/2 text-[#2a4a2a] hover:text-[#4ade80] transition-colors">
             {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         </AuthField>
@@ -301,14 +301,14 @@ function LoginForm() {
           <AuthField label="Confirm Password" type={showConfirm ? "text" : "password"} value={confirm} onChange={setConfirm}
             autoComplete="new-password" placeholder="••••••••">
             <button type="button" onClick={() => setShowConfirm(v => !v)} tabIndex={-1}
-              className="absolute right-0 top-1/2 -translate-y-1/2 text-[#2a4a2a] hover:text-[#84cc16] transition-colors">
+              className="absolute right-0 top-1/2 -translate-y-1/2 text-[#2a4a2a] hover:text-[#4ade80] transition-colors">
               {showConfirm ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </AuthField>
         )}
         {isLogin && (
           <div className="flex justify-end -mt-2">
-            <Link to="/forgot-password" className="text-[10px] font-mono text-[#2a4a2a] hover:text-[#84cc16]/60 transition-colors tracking-widest uppercase">
+            <Link to="/forgot-password" className="text-[10px] font-mono text-[#2a4a2a] hover:text-[#4ade80]/60 transition-colors tracking-widest uppercase">
               Forgot password?
             </Link>
           </div>
@@ -322,15 +322,15 @@ function LoginForm() {
           )}
         </AnimatePresence>
         <button type="submit" disabled={loading}
-          className="relative w-full overflow-hidden rounded border border-[#84cc16]/40 text-sm font-mono tracking-[0.2em] uppercase py-3 transition-all duration-300 disabled:opacity-50"
+          className="relative w-full overflow-hidden rounded border border-[#4ade80]/40 text-sm font-mono tracking-[0.2em] uppercase py-3 transition-all duration-300 disabled:opacity-50"
           style={{
-            background: scanning ? "rgba(132,204,22,0.15)" : "linear-gradient(135deg, rgba(132,204,22,0.1) 0%, rgba(132,204,22,0.05) 100%)",
-            color: "#84cc16",
-            boxShadow: "0 0 20px rgba(132,204,22,0.15), inset 0 1px 0 rgba(132,204,22,0.1)",
+            background: scanning ? "rgba(74,222,128,0.15)" : "linear-gradient(135deg, rgba(74,222,128,0.1) 0%, rgba(74,222,128,0.05) 100%)",
+            color: "#4ade80",
+            boxShadow: "0 0 20px rgba(74,222,128,0.15), inset 0 1px 0 rgba(74,222,128,0.1)",
           }}>
           {scanning && (
             <div className="absolute inset-0 pointer-events-none" style={{ animation: "bmg-scan-btn 1s linear infinite" }}>
-              <div className="absolute inset-y-0 w-12 bg-gradient-to-r from-transparent via-[#84cc16]/30 to-transparent" />
+              <div className="absolute inset-y-0 w-12 bg-gradient-to-r from-transparent via-[#4ade80]/30 to-transparent" />
             </div>
           )}
           <span className="relative">{scanning ? "AUTHENTICATING…" : isLogin ? "AUTHENTICATE" : "CREATE ACCOUNT"}</span>
@@ -343,8 +343,8 @@ function LoginForm() {
               <div className="flex-1 h-px bg-[#1e3a1e]" />
             </div>
             <button type="button" onClick={handleTryDemo} disabled={loading}
-              className="w-full flex items-center justify-center gap-2 border border-[#1e3a1e] bg-transparent hover:border-[#84cc16]/20 text-[#2a6a2a] hover:text-[#84cc16]/60 text-xs font-mono tracking-widest uppercase py-2.5 rounded transition-all duration-300 disabled:opacity-50">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#84cc16] animate-pulse" />
+              className="w-full flex items-center justify-center gap-2 border border-[#1e3a1e] bg-transparent hover:border-[#4ade80]/20 text-[#2a6a2a] hover:text-[#4ade80]/60 text-xs font-mono tracking-widest uppercase py-2.5 rounded transition-all duration-300 disabled:opacity-50">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse" />
               LIVE DEMO — NO ACCOUNT
             </button>
           </>
@@ -355,12 +355,12 @@ function LoginForm() {
           {isLogin ? (
             <>NO ACCOUNT?{" "}
               <button type="button" onClick={() => { setMode("register"); setError(""); }}
-                className="text-[#84cc16]/50 hover:text-[#84cc16] transition-colors">SIGN UP FREE</button>
+                className="text-[#4ade80]/50 hover:text-[#4ade80] transition-colors">SIGN UP FREE</button>
             </>
           ) : (
             <>HAVE AN ACCOUNT?{" "}
               <button type="button" onClick={() => { setMode("login"); setError(""); }}
-                className="text-[#84cc16]/50 hover:text-[#84cc16] transition-colors">SIGN IN</button>
+                className="text-[#4ade80]/50 hover:text-[#4ade80] transition-colors">SIGN IN</button>
             </>
           )}
         </p>
@@ -506,9 +506,9 @@ function ShowcaseScoutDemo() {
           <button key={i} onClick={() => setActive(i)}
             className="text-[10px] font-mono px-2.5 py-1 rounded-full border transition-all"
             style={{
-              background: i === active ? "rgba(132,204,22,0.15)" : "transparent",
-              borderColor: i === active ? "#84cc16" : "rgba(132,204,22,0.2)",
-              color: i === active ? "#84cc16" : "var(--bmg-text-muted)",
+              background: i === active ? "rgba(74,222,128,0.15)" : "transparent",
+              borderColor: i === active ? "#4ade80" : "rgba(74,222,128,0.2)",
+              color: i === active ? "#4ade80" : "var(--bmg-text-muted)",
             }}>
             {s.sym}
           </button>
@@ -520,7 +520,7 @@ function ShowcaseScoutDemo() {
           <div className="flex items-center gap-2">
             <span className="text-base font-bold text-[var(--bmg-text)]">{sig.sym}</span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded"
-              style={{ background: isLong ? "rgba(132,204,22,0.15)" : "rgba(239,68,68,0.15)", color: isLong ? "var(--bmg-green)" : "var(--bmg-red)" }}>
+              style={{ background: isLong ? "rgba(74,222,128,0.15)" : "rgba(239,68,68,0.15)", color: isLong ? "var(--bmg-green)" : "var(--bmg-red)" }}>
               {sig.side}
             </span>
             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded"
@@ -617,9 +617,9 @@ const FORGE_STEPS = [
         ].map(s => (
           <div key={s.id} className="rounded-lg px-2.5 py-2 text-[10px] font-mono border transition-all cursor-default"
             style={{
-              background: s.active ? "rgba(132,204,22,0.12)" : "var(--bmg-bg-input)",
-              borderColor: s.active ? "#84cc16" : "rgba(132,204,22,0.15)",
-              color: s.active ? "#84cc16" : "var(--bmg-text-muted)",
+              background: s.active ? "rgba(74,222,128,0.12)" : "var(--bmg-bg-input)",
+              borderColor: s.active ? "#4ade80" : "rgba(74,222,128,0.15)",
+              color: s.active ? "#4ade80" : "var(--bmg-text-muted)",
             }}>
             {s.active && <span className="text-[8px] mr-1">✓</span>}{s.name}
           </div>
@@ -637,7 +637,7 @@ const FORGE_STEPS = [
           <div className="flex gap-1">
             {["0.5%","1%","2%"].map(v => (
               <span key={v} className="px-2 py-0.5 rounded border text-[9px]"
-                style={{ background: v === "1%" ? "rgba(132,204,22,0.15)" : "transparent", borderColor: v === "1%" ? "#84cc16" : "rgba(132,204,22,0.2)", color: v === "1%" ? "#84cc16" : "var(--bmg-text-label)" }}>
+                style={{ background: v === "1%" ? "rgba(74,222,128,0.15)" : "transparent", borderColor: v === "1%" ? "#4ade80" : "rgba(74,222,128,0.2)", color: v === "1%" ? "#4ade80" : "var(--bmg-text-label)" }}>
                 {v}
               </span>
             ))}
@@ -648,7 +648,7 @@ const FORGE_STEPS = [
           <div className="flex gap-1">
             {["5m","15m","1h","4h"].map(v => (
               <span key={v} className="px-2 py-0.5 rounded border text-[9px]"
-                style={{ background: v === "15m" ? "rgba(132,204,22,0.15)" : "transparent", borderColor: v === "15m" ? "#84cc16" : "rgba(132,204,22,0.2)", color: v === "15m" ? "#84cc16" : "var(--bmg-text-label)" }}>
+                style={{ background: v === "15m" ? "rgba(74,222,128,0.15)" : "transparent", borderColor: v === "15m" ? "#4ade80" : "rgba(74,222,128,0.2)", color: v === "15m" ? "#4ade80" : "var(--bmg-text-label)" }}>
                 {v}
               </span>
             ))}
@@ -665,7 +665,7 @@ const FORGE_STEPS = [
     num: "03",
     label: "Deploy bot",
     content: (
-      <div className="mt-2 rounded-lg border border-[var(--bmg-green)] bg-[rgba(132,204,22,0.07)] p-3 flex items-start gap-3">
+      <div className="mt-2 rounded-lg border border-[var(--bmg-green)] bg-[rgba(74,222,128,0.07)] p-3 flex items-start gap-3">
         <div className="w-6 h-6 rounded-full bg-[var(--bmg-green)] flex items-center justify-center flex-shrink-0 mt-0.5">
           <span className="text-black text-xs font-bold">✓</span>
         </div>
@@ -696,7 +696,7 @@ function ShowcaseForgeDemo() {
         {FORGE_STEPS.map((step, i) => (
           <div key={step.num} style={{ opacity: i < 2 ? 0.7 : 1 }}>
           <BMGCard padding="sm"
-            className={i === 2 ? "border-[rgba(132,204,22,0.5)]" : ""}>
+            className={i === 2 ? "border-[rgba(74,222,128,0.5)]" : ""}>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono font-bold" style={{ color: i === 2 ? "var(--bmg-green)" : "var(--bmg-text-label)" }}>
                 {step.num}
@@ -750,9 +750,9 @@ function ShowcaseLeaderboardPreview() {
           <button key={p} onClick={() => setPeriod(p)}
             className="text-[10px] font-mono px-3 py-1 rounded-full border transition-all"
             style={{
-              background: period === p ? "rgba(132,204,22,0.15)" : "transparent",
-              borderColor: period === p ? "#84cc16" : "rgba(132,204,22,0.2)",
-              color: period === p ? "#84cc16" : "var(--bmg-text-muted)",
+              background: period === p ? "rgba(74,222,128,0.15)" : "transparent",
+              borderColor: period === p ? "#4ade80" : "rgba(74,222,128,0.2)",
+              color: period === p ? "#4ade80" : "var(--bmg-text-muted)",
             }}>
             {p}
           </button>
@@ -797,10 +797,10 @@ function AuthCard() {
         className="mb-8 text-center"
       >
         <h1 className="text-2xl font-black tracking-[0.15em] uppercase"
-          style={{ color: "#84cc16", textShadow: "0 0 30px rgba(132,204,22,0.4), 0 0 60px rgba(132,204,22,0.15)" }}>
+          style={{ color: "#4ade80", textShadow: "0 0 30px rgba(74,222,128,0.4), 0 0 60px rgba(74,222,128,0.15)" }}>
           BMG CAPITAL
         </h1>
-        <p className="mt-1.5 text-[10px] font-mono tracking-[0.4em] text-[#84cc16]/30 uppercase">
+        <p className="mt-1.5 text-[10px] font-mono tracking-[0.4em] text-[#4ade80]/30 uppercase">
           Quantitative Trading System
         </p>
       </motion.div>
@@ -828,17 +828,17 @@ function ShowcaseLoginPage() {
         <GridBg /><TickerBg />
         <div className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-[#0f1a0f]">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-[#84cc16] animate-pulse" />
-            <span className="text-[10px] font-mono text-[#84cc16]/40 tracking-[0.3em] uppercase">BMG Capital</span>
+            <div className="w-2 h-2 rounded-full bg-[#4ade80] animate-pulse" />
+            <span className="text-[10px] font-mono text-[#4ade80]/40 tracking-[0.3em] uppercase">BMG Capital</span>
           </div>
         </div>
         <div className="relative z-10 flex flex-col items-center justify-center min-h-[calc(100vh-56px)] px-4 py-12">
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-black tracking-[0.15em] uppercase"
-              style={{ color: "#84cc16", textShadow: "0 0 30px rgba(132,204,22,0.4)" }}>
+              style={{ color: "#4ade80", textShadow: "0 0 30px rgba(74,222,128,0.4)" }}>
               BMG CAPITAL
             </h1>
-            <p className="mt-2 text-[10px] font-mono tracking-[0.4em] text-[#84cc16]/30 uppercase">Quantitative Trading System</p>
+            <p className="mt-2 text-[10px] font-mono tracking-[0.4em] text-[#4ade80]/30 uppercase">Quantitative Trading System</p>
           </div>
           <div className="w-full max-w-sm">
             <div className="relative p-8 rounded-sm" style={{ background: "rgba(2,11,2,0.85)", backdropFilter: "blur(12px)" }}>
@@ -932,8 +932,8 @@ function SimpleLoginPage() {
       <CRTOverlay />
       <div className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-[#0f1a0f]">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#84cc16] animate-pulse" />
-          <span className="text-[10px] font-mono text-[#84cc16]/40 tracking-[0.3em] uppercase">BMG Capital</span>
+          <div className="w-2 h-2 rounded-full bg-[#4ade80] animate-pulse" />
+          <span className="text-[10px] font-mono text-[#4ade80]/40 tracking-[0.3em] uppercase">BMG Capital</span>
         </div>
         <span className="text-[9px] font-mono text-[#1e3a1e] tracking-widest uppercase hidden sm:block">
           Paper trading only — not financial advice
@@ -947,10 +947,10 @@ function SimpleLoginPage() {
           className="mb-10 text-center"
         >
           <h1 className="text-3xl sm:text-4xl font-black tracking-[0.15em] uppercase"
-            style={{ color: "#84cc16", textShadow: "0 0 30px rgba(132,204,22,0.4), 0 0 60px rgba(132,204,22,0.15)" }}>
+            style={{ color: "#4ade80", textShadow: "0 0 30px rgba(74,222,128,0.4), 0 0 60px rgba(74,222,128,0.15)" }}>
             BMG CAPITAL
           </h1>
-          <p className="mt-2 text-[10px] font-mono tracking-[0.4em] text-[#84cc16]/30 uppercase">Quantitative Trading System</p>
+          <p className="mt-2 text-[10px] font-mono tracking-[0.4em] text-[#4ade80]/30 uppercase">Quantitative Trading System</p>
         </motion.div>
         <div className="flex flex-col lg:flex-row items-center gap-16 w-full max-w-5xl">
           <motion.div
@@ -960,7 +960,7 @@ function SimpleLoginPage() {
             className="flex-1 flex flex-col gap-4"
           >
             <div className="hidden lg:block">
-              <p className="text-xs font-mono text-[#84cc16]/40 tracking-widest uppercase mb-1">Voice AI Interface</p>
+              <p className="text-xs font-mono text-[#4ade80]/40 tracking-widest uppercase mb-1">Voice AI Interface</p>
               <p className="text-slate-500 text-sm">Ask your AI anything about your portfolio — in plain English.</p>
             </div>
             <div className="hidden lg:block"><VoiceDemo /></div>

@@ -95,7 +95,7 @@ function GrowthChart({ data }: GrowthChartProps) {
                 y={y}
                 width={barW}
                 height={barH}
-                fill="#84cc16"
+                fill="#4ade80"
                 fillOpacity={0.85}
                 rx={1}
                 style={{ cursor: "pointer" }}
@@ -134,7 +134,7 @@ function GrowthChart({ data }: GrowthChartProps) {
           style={{ left: tooltip.x, top: tooltip.y, transform: "translate(-50%, -100%)" }}
         >
           <div className="text-[var(--text-secondary)]">{tooltip.label}</div>
-          <div className="font-bold text-[#84cc16]">{tooltip.count} signups</div>
+          <div className="font-bold text-[#4ade80]">{tooltip.count} signups</div>
         </div>
       )}
     </div>
@@ -157,7 +157,7 @@ function StatCard({ icon, label, value, sub }: StatCardProps) {
         {icon}
         <span className="text-xs font-bold uppercase tracking-widest">{label}</span>
       </div>
-      <div className="text-3xl font-black font-mono" style={{ color: "#84cc16" }}>
+      <div className="text-3xl font-black font-mono" style={{ color: "#4ade80" }}>
         {value}
       </div>
       {sub && <div className="text-xs text-[var(--text-secondary)]">{sub}</div>}
@@ -285,7 +285,7 @@ export default function WaitlistAnalyticsPage() {
                   {topSources.map((row) => (
                     <tr key={row.source} className="hover:bg-[var(--bg-base)] transition-colors">
                       <td className="py-2 text-[var(--text-primary)] capitalize">{row.source}</td>
-                      <td className="py-2 text-right font-mono font-semibold text-[#84cc16]">
+                      <td className="py-2 text-right font-mono font-semibold text-[#4ade80]">
                         {row.count.toLocaleString()}
                       </td>
                       <td className="py-2 text-right font-mono text-[var(--text-secondary)]">
@@ -327,7 +327,7 @@ export default function WaitlistAnalyticsPage() {
                       <td className="py-2 text-[var(--text-primary)] truncate max-w-[140px]">
                         {row.email}
                       </td>
-                      <td className="py-2 text-right font-mono font-bold text-[#84cc16]">
+                      <td className="py-2 text-right font-mono font-bold text-[#4ade80]">
                         {row.referral_count}
                       </td>
                       <td className="py-2 text-right font-mono text-[var(--text-secondary)] text-xs">
@@ -365,12 +365,12 @@ export default function WaitlistAnalyticsPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@example.com"
-                  className="sm:col-span-2 text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#84cc16]/50"
+                  className="sm:col-span-2 text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#4ade80]/50"
                 />
                 <select
                   value={source}
                   onChange={(e) => setSource(e.target.value)}
-                  className="text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]/50"
+                  className="text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]/50"
                 >
                   <option value="manual">Manual</option>
                   <option value="twitter">Twitter</option>
@@ -383,7 +383,7 @@ export default function WaitlistAnalyticsPage() {
               <button
                 onClick={() => addMutation.mutate()}
                 disabled={!email || addMutation.isPending}
-                className="px-5 py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
+                className="px-5 py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
               >
                 {addMutation.isPending ? "Adding…" : "Add Signup"}
               </button>

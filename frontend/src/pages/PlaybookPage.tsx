@@ -53,7 +53,7 @@ function priorityBadge(priority: string) {
 function statusIcon(status: string) {
   switch (status) {
     case "complete":
-      return <CheckCircle2 className="w-4 h-4 text-[#84cc16] shrink-0" />;
+      return <CheckCircle2 className="w-4 h-4 text-[#4ade80] shrink-0" />;
     case "in_progress":
       return <Loader2 className="w-4 h-4 text-blue-400 shrink-0 animate-spin" />;
     case "skipped":
@@ -99,7 +99,7 @@ function TaskRow({ task, onUpdate, isLoading }: TaskRowProps) {
     <div
       className={cn(
         "group rounded-lg border border-[var(--border-subtle)] px-4 py-3 transition-all",
-        isDone ? "opacity-60 bg-[var(--bg-elevated)]" : "bg-[var(--bg-elevated)] hover:border-[#84cc16]/30"
+        isDone ? "opacity-60 bg-[var(--bg-elevated)]" : "bg-[var(--bg-elevated)] hover:border-[#4ade80]/30"
       )}
     >
       <div className="flex items-start gap-3">
@@ -140,7 +140,7 @@ function TaskRow({ task, onUpdate, isLoading }: TaskRowProps) {
           )}
 
           {task.completion_note && isDone && (
-            <p className="mt-1 text-xs text-[#84cc16]/80 italic">
+            <p className="mt-1 text-xs text-[#4ade80]/80 italic">
               Note: {task.completion_note}
             </p>
           )}
@@ -152,7 +152,7 @@ function TaskRow({ task, onUpdate, isLoading }: TaskRowProps) {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Optional completion note…"
-                className="flex-1 text-xs bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#84cc16]/50"
+                className="flex-1 text-xs bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded px-3 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#4ade80]/50"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave();
                   if (e.key === "Escape") setNoteOpen(false);
@@ -160,7 +160,7 @@ function TaskRow({ task, onUpdate, isLoading }: TaskRowProps) {
               />
               <button
                 onClick={handleSave}
-                className="text-xs px-3 py-1.5 rounded bg-[#84cc16] text-black font-semibold hover:bg-[#a3e635] transition-colors"
+                className="text-xs px-3 py-1.5 rounded bg-[#4ade80] text-black font-semibold hover:bg-[#a3e635] transition-colors"
               >
                 Done
               </button>
@@ -196,7 +196,7 @@ function WeekCard({ week, isCurrentWeek, onUpdate, isLoading }: WeekCardProps) {
       className={cn(
         "rounded-xl border overflow-hidden",
         isCurrentWeek
-          ? "border-[#84cc16]/40 shadow-[0_0_20px_rgba(132,204,22,0.08)]"
+          ? "border-[#4ade80]/40 shadow-[0_0_20px_rgba(74,222,128,0.08)]"
           : "border-[var(--border-subtle)]"
       )}
     >
@@ -210,7 +210,7 @@ function WeekCard({ week, isCurrentWeek, onUpdate, isLoading }: WeekCardProps) {
               Week {week.week_number} — {week.title}
             </span>
             {isCurrentWeek && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#84cc16]/20 text-[#84cc16] font-bold border border-[#84cc16]/30">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#4ade80]/20 text-[#4ade80] font-bold border border-[#4ade80]/30">
                 CURRENT
               </span>
             )}
@@ -223,7 +223,7 @@ function WeekCard({ week, isCurrentWeek, onUpdate, isLoading }: WeekCardProps) {
 
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right">
-            <div className="text-xs font-semibold text-[#84cc16]">{pct}%</div>
+            <div className="text-xs font-semibold text-[#4ade80]">{pct}%</div>
             <div className="text-[10px] text-[var(--text-secondary)]">
               {week.tasks.filter((t) => t.status === "complete").length}/{week.tasks.length}
             </div>
@@ -278,24 +278,24 @@ function PhaseSection({ phase, dayNumber, onUpdate, isLoading }: PhaseSectionPro
       className={cn(
         "rounded-2xl border p-6 space-y-4",
         isCurrent
-          ? "border-[#84cc16]/40"
+          ? "border-[#4ade80]/40"
           : isComplete
           ? "border-[var(--border-subtle)] opacity-80"
           : "border-[var(--border-subtle)]"
       )}
-      style={{ borderLeftWidth: "3px", borderLeftColor: isCurrent ? "#84cc16" : "transparent" }}
+      style={{ borderLeftWidth: "3px", borderLeftColor: isCurrent ? "#4ade80" : "transparent" }}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[#84cc16] uppercase tracking-widest">
+            <span className="text-xs font-bold text-[#4ade80] uppercase tracking-widest">
               Phase {phase.phase_number}
             </span>
             {isComplete && (
-              <CheckCircle2 className="w-4 h-4 text-[#84cc16]" />
+              <CheckCircle2 className="w-4 h-4 text-[#4ade80]" />
             )}
             {isCurrent && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#84cc16] text-black font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#4ade80] text-black font-bold">
                 ACTIVE
               </span>
             )}
@@ -304,7 +304,7 @@ function PhaseSection({ phase, dayNumber, onUpdate, isLoading }: PhaseSectionPro
           <p className="text-sm text-[var(--text-secondary)] mt-1">{phase.outcome_target}</p>
         </div>
         <div className="text-right shrink-0">
-          <div className="text-2xl font-bold font-mono text-[#84cc16]">{pct}%</div>
+          <div className="text-2xl font-bold font-mono text-[#4ade80]">{pct}%</div>
           <div className="text-xs text-[var(--text-secondary)]">
             Day {phase.day_start}–{phase.day_end}
           </div>
@@ -358,8 +358,8 @@ function TodayFocusCard({ phases, dayNumber, onUpdate, isLoading }: TodayFocusPr
 
   if (!focusTask) {
     return (
-      <div className="rounded-2xl border border-[#84cc16]/40 bg-[#84cc16]/5 p-5">
-        <div className="flex items-center gap-2 text-[#84cc16] font-semibold text-sm">
+      <div className="rounded-2xl border border-[#4ade80]/40 bg-[#4ade80]/5 p-5">
+        <div className="flex items-center gap-2 text-[#4ade80] font-semibold text-sm">
           <CheckCircle2 className="w-5 h-5" />
           All tasks complete for this week!
         </div>
@@ -378,10 +378,10 @@ function TodayFocusCard({ phases, dayNumber, onUpdate, isLoading }: TodayFocusPr
   }
 
   return (
-    <div className="rounded-2xl border border-[#84cc16]/40 bg-[#84cc16]/5 p-5 space-y-3">
+    <div className="rounded-2xl border border-[#4ade80]/40 bg-[#4ade80]/5 p-5 space-y-3">
       <div className="flex items-center gap-2">
-        <Target className="w-4 h-4 text-[#84cc16]" />
-        <span className="text-xs font-bold text-[#84cc16] uppercase tracking-widest">Today's Focus</span>
+        <Target className="w-4 h-4 text-[#4ade80]" />
+        <span className="text-xs font-bold text-[#4ade80] uppercase tracking-widest">Today's Focus</span>
         {priorityBadge(focusTask.priority)}
       </div>
 
@@ -401,7 +401,7 @@ function TodayFocusCard({ phases, dayNumber, onUpdate, isLoading }: TodayFocusPr
         <button
           onClick={handleComplete}
           disabled={isLoading}
-          className="w-full py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
+          className="w-full py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
         >
           Mark Complete
         </button>
@@ -412,7 +412,7 @@ function TodayFocusCard({ phases, dayNumber, onUpdate, isLoading }: TodayFocusPr
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Completion note (optional)…"
-            className="w-full text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#84cc16]/50"
+            className="w-full text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#4ade80]/50"
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSave();
               if (e.key === "Escape") setNoteOpen(false);
@@ -421,7 +421,7 @@ function TodayFocusCard({ phases, dayNumber, onUpdate, isLoading }: TodayFocusPr
           <div className="flex gap-2">
             <button
               onClick={handleSave}
-              className="flex-1 py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors"
+              className="flex-1 py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors"
             >
               Confirm
             </button>
@@ -508,7 +508,7 @@ export default function PlaybookPage() {
             <div>
               <div
                 className="text-5xl font-black font-mono leading-none"
-                style={{ color: "#84cc16", fontVariantNumeric: "tabular-nums" }}
+                style={{ color: "#4ade80", fontVariantNumeric: "tabular-nums" }}
               >
                 Day {statusLoading ? "…" : dayNumber}
                 <span className="text-2xl text-[var(--text-secondary)] font-medium"> of 90</span>
@@ -523,7 +523,7 @@ export default function PlaybookPage() {
             </div>
 
             <div className="text-right">
-              <div className="text-3xl font-bold font-mono text-[#84cc16]">{pct}%</div>
+              <div className="text-3xl font-bold font-mono text-[#4ade80]">{pct}%</div>
               <div className="text-xs text-[var(--text-secondary)] mt-0.5">
                 {status?.completed_tasks ?? 0} / {status?.total_tasks ?? 0} tasks done
               </div>
@@ -534,7 +534,7 @@ export default function PlaybookPage() {
           <div className="w-full h-2 bg-[var(--border-subtle)] rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${pct}%`, background: "#84cc16" }}
+              style={{ width: `${pct}%`, background: "#4ade80" }}
             />
           </div>
         </div>
@@ -552,10 +552,10 @@ export default function PlaybookPage() {
                   className={cn(
                     "flex-1 min-w-[160px] rounded-xl border px-4 py-3 text-left transition-all shrink-0",
                     isCurrent
-                      ? "bg-[#84cc16] border-[#84cc16] text-black"
+                      ? "bg-[#4ade80] border-[#4ade80] text-black"
                       : isComplete
                       ? "bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
-                      : "bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[#84cc16]/40"
+                      : "bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[#4ade80]/40"
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -577,7 +577,7 @@ export default function PlaybookPage() {
         {/* ── No data / init ── */}
         {noData && (
           <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-8 text-center space-y-4">
-            <Flag className="w-10 h-10 text-[#84cc16] mx-auto" />
+            <Flag className="w-10 h-10 text-[#4ade80] mx-auto" />
             <div>
               <h2 className="text-lg font-bold">Playbook not initialized</h2>
               <p className="text-sm text-[var(--text-secondary)] mt-1">
@@ -587,7 +587,7 @@ export default function PlaybookPage() {
             <button
               onClick={() => initMutation.mutate()}
               disabled={initMutation.isPending}
-              className="px-6 py-2 rounded-lg bg-[#84cc16] text-black font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
+              className="px-6 py-2 rounded-lg bg-[#4ade80] text-black font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
             >
               {initMutation.isPending ? "Initializing…" : "Initialize Playbook"}
             </button>
@@ -643,16 +643,16 @@ export default function PlaybookPage() {
         {/* ── Decision Tree Link ── */}
         <button
           onClick={() => navigate("/settings/pitch/playbook/decisions")}
-          className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 flex items-center justify-between gap-3 hover:border-[#84cc16]/40 transition-all group"
+          className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 flex items-center justify-between gap-3 hover:border-[#4ade80]/40 transition-all group"
         >
           <div className="flex items-center gap-3">
-            <GitBranch className="w-5 h-5 text-[#84cc16]" />
+            <GitBranch className="w-5 h-5 text-[#4ade80]" />
             <div className="text-left">
               <div className="text-sm font-semibold text-[var(--text-primary)]">Decision Tree</div>
               <div className="text-xs text-[var(--text-secondary)]">8 critical decisions with clear rules</div>
             </div>
           </div>
-          <ExternalLink className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[#84cc16] transition-colors" />
+          <ExternalLink className="w-4 h-4 text-[var(--text-secondary)] group-hover:text-[#4ade80] transition-colors" />
         </button>
 
       </div>

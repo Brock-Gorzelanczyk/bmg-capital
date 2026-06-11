@@ -161,10 +161,10 @@ export default function VoiceAIModal({ open, onClose }: Props) {
             <div
               className={`w-3 h-3 rounded-full ${
                 listening
-                  ? "bg-[#84cc16] animate-pulse"
+                  ? "bg-[#4ade80] animate-pulse"
                   : mutation.isPending
                   ? "bg-amber-400 animate-pulse"
-                  : "bg-[#84cc16]"
+                  : "bg-[#4ade80]"
               }`}
             />
             <span className="font-bold text-sm text-[var(--text-primary)]">BMG Voice AI</span>
@@ -175,7 +175,7 @@ export default function VoiceAIModal({ open, onClose }: Props) {
                   onClick={() => setContext(c)}
                   className={`px-2 py-0.5 rounded text-xs font-medium capitalize transition-colors ${
                     context === c
-                      ? "bg-[#84cc16] text-black"
+                      ? "bg-[#4ade80] text-black"
                       : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   }`}
                 >
@@ -187,11 +187,11 @@ export default function VoiceAIModal({ open, onClose }: Props) {
           <div className="flex items-center gap-3">
             <span className="text-xs font-mono text-[var(--text-secondary)]">{fmtTime(elapsed)}</span>
             {remaining !== null && (
-              <span className={`text-xs font-mono ${remaining < 60 ? "text-amber-400" : "text-[#84cc16]"}`}>
+              <span className={`text-xs font-mono ${remaining < 60 ? "text-amber-400" : "text-[#4ade80]"}`}>
                 {fmtTime(remaining)} left
               </span>
             )}
-            {usage?.unlimited && <span className="text-xs text-[#84cc16]">∞ unlimited</span>}
+            {usage?.unlimited && <span className="text-xs text-[#4ade80]">∞ unlimited</span>}
             <button
               onClick={onClose}
               className="p-1 rounded hover:bg-[var(--bg-base)] text-[var(--text-secondary)]"
@@ -203,18 +203,18 @@ export default function VoiceAIModal({ open, onClose }: Props) {
 
         {/* Waveform when listening */}
         {listening && (
-          <div className="flex items-center justify-center gap-1 py-2 bg-[#84cc16]/5 shrink-0">
+          <div className="flex items-center justify-center gap-1 py-2 bg-[#4ade80]/5 shrink-0">
             {[1, 2, 3, 4, 5].map(i => (
               <div
                 key={i}
-                className="w-1 bg-[#84cc16] rounded-full"
+                className="w-1 bg-[#4ade80] rounded-full"
                 style={{
                   height: `${8 + Math.sin(Date.now() / 200 + i) * 8}px`,
                   animation: `pulse ${0.5 + i * 0.1}s ease-in-out infinite alternate`,
                 }}
               />
             ))}
-            <span className="ml-2 text-xs text-[#84cc16]">Listening…</span>
+            <span className="ml-2 text-xs text-[#4ade80]">Listening…</span>
           </div>
         )}
 
@@ -226,7 +226,7 @@ export default function VoiceAIModal({ open, onClose }: Props) {
                 className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
                   m.role === "user"
                     ? "bg-[var(--bg-base)] text-[var(--text-primary)] rounded-br-sm"
-                    : "border-l-4 border-[#84cc16] bg-[#84cc16]/5 text-[var(--text-primary)] rounded-bl-sm"
+                    : "border-l-4 border-[#4ade80] bg-[#4ade80]/5 text-[var(--text-primary)] rounded-bl-sm"
                 }`}
               >
                 {m.content}
@@ -235,8 +235,8 @@ export default function VoiceAIModal({ open, onClose }: Props) {
           ))}
           {mutation.isPending && (
             <div className="flex justify-start">
-              <div className="border-l-4 border-[#84cc16] bg-[#84cc16]/5 rounded-2xl rounded-bl-sm px-4 py-2.5">
-                <Loader2 className="w-4 h-4 text-[#84cc16] animate-spin" />
+              <div className="border-l-4 border-[#4ade80] bg-[#4ade80]/5 rounded-2xl rounded-bl-sm px-4 py-2.5">
+                <Loader2 className="w-4 h-4 text-[#4ade80] animate-spin" />
               </div>
             </div>
           )}
@@ -258,7 +258,7 @@ export default function VoiceAIModal({ open, onClose }: Props) {
               className={`p-2.5 rounded-lg transition-colors ${
                 listening
                   ? "bg-red-500/20 text-red-400"
-                  : "bg-[var(--bg-base)] text-[var(--text-secondary)] hover:text-[#84cc16]"
+                  : "bg-[var(--bg-base)] text-[var(--text-secondary)] hover:text-[#4ade80]"
               }`}
             >
               {listening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
@@ -274,12 +274,12 @@ export default function VoiceAIModal({ open, onClose }: Props) {
                 }
               }}
               placeholder="Ask anything about your portfolio…"
-              className="flex-1 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#84cc16]/50"
+              className="flex-1 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#4ade80]/50"
             />
             <button
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || mutation.isPending}
-              className="p-2.5 rounded-lg bg-[#84cc16] text-black hover:bg-[#a3e635] transition-colors disabled:opacity-50"
+              className="p-2.5 rounded-lg bg-[#4ade80] text-black hover:bg-[#a3e635] transition-colors disabled:opacity-50"
             >
               {mutation.isPending ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

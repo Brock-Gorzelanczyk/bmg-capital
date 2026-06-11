@@ -481,9 +481,9 @@ export default function CopilotModal({ open, onClose }: Props) {
                     onClick={() => send("Build me a workspace for this lab")}
                     className="text-xs px-3 py-1.5 rounded-full border transition-all font-mono flex items-center gap-1.5"
                     style={{
-                      background: "rgba(132,204,22,0.08)",
-                      borderColor: "rgba(132,204,22,0.35)",
-                      color: "#84cc16",
+                      background: "rgba(74,222,128,0.08)",
+                      borderColor: "rgba(74,222,128,0.35)",
+                      color: "#4ade80",
                     }}
                   >
                     <span style={{ fontSize: 9 }}>✦</span>
@@ -516,8 +516,8 @@ export default function CopilotModal({ open, onClose }: Props) {
         {/* Workspace build loading overlay */}
         {buildingWorkspace && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--bg-base)]/90 backdrop-blur-sm rounded-2xl z-10">
-            <Loader2 size={24} className="animate-spin text-[#84cc16]" />
-            <p className="text-sm font-mono text-[#84cc16]">
+            <Loader2 size={24} className="animate-spin text-[#4ade80]" />
+            <p className="text-sm font-mono text-[#4ade80]">
               ✦ Building your workspace...
             </p>
           </div>

@@ -162,7 +162,7 @@ function Editor({
         value={post.title ?? ""}
         onChange={(e) => onChange({ ...post, title: e.target.value })}
         placeholder="Post title…"
-        className="w-full text-base font-semibold bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#84cc16]/50"
+        className="w-full text-base font-semibold bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#4ade80]/50"
       />
 
       {/* Platform + Type row */}
@@ -170,7 +170,7 @@ function Editor({
         <select
           value={platform}
           onChange={(e) => onChange({ ...post, platform: e.target.value })}
-          className="text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]/50"
+          className="text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]/50"
         >
           {PLATFORMS.map((p) => (
             <option key={p.value} value={p.value}>
@@ -181,7 +181,7 @@ function Editor({
         <select
           value={post.content_type ?? "tweet"}
           onChange={(e) => onChange({ ...post, content_type: e.target.value })}
-          className="text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]/50"
+          className="text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]/50"
         >
           {CONTENT_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
@@ -198,13 +198,13 @@ function Editor({
           onChange={(e) => onChange({ ...post, body_md: e.target.value })}
           placeholder="Write your post…"
           rows={10}
-          className="w-full text-sm font-mono bg-[#0a0a0a] border border-[var(--border-subtle)] rounded-lg px-4 py-3 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#84cc16]/50 resize-y"
+          className="w-full text-sm font-mono bg-[#0a0a0a] border border-[var(--border-subtle)] rounded-lg px-4 py-3 text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#4ade80]/50 resize-y"
         />
         {isTwitter && (
           <div className="flex items-center gap-2 mt-1">
             <div className="flex-1 h-1 bg-[var(--border-subtle)] rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${charOver ? "bg-red-500" : "bg-[#84cc16]"}`}
+                className={`h-full rounded-full transition-all ${charOver ? "bg-red-500" : "bg-[#4ade80]"}`}
                 style={{ width: `${charPct * 100}%` }}
               />
             </div>
@@ -222,7 +222,7 @@ function Editor({
         <button
           onClick={onCheckCompliance}
           disabled={isChecking || !post.id}
-          className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[#84cc16]/40 transition-colors disabled:opacity-40 flex items-center gap-2"
+          className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[#4ade80]/40 transition-colors disabled:opacity-40 flex items-center gap-2"
         >
           {isChecking ? (
             <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
@@ -233,7 +233,7 @@ function Editor({
         </button>
 
         {isClean && (
-          <div className="flex items-center gap-2 text-[#84cc16] text-sm">
+          <div className="flex items-center gap-2 text-[#4ade80] text-sm">
             <Check className="w-4 h-4" />
             Compliant
           </div>
@@ -252,12 +252,12 @@ function Editor({
           onChange={(e) =>
             onChange({ ...post, scheduled_for: e.target.value || null })
           }
-          className="text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]/50"
+          className="text-sm bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]/50"
         />
         <button
           onClick={onSchedule}
           disabled={isSaving || !post.scheduled_for}
-          className="px-4 py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
+          className="px-4 py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors disabled:opacity-50"
         >
           Schedule post
         </button>
@@ -268,14 +268,14 @@ function Editor({
         <button
           onClick={onSaveDraft}
           disabled={isSaving}
-          className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[#84cc16]/40 transition-colors disabled:opacity-50"
+          className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[#4ade80]/40 transition-colors disabled:opacity-50"
         >
           {isSaving ? "Saving…" : "Save Draft"}
         </button>
         <button
           onClick={onMarkPosted}
           disabled={isSaving}
-          className="px-4 py-2 rounded-lg border border-[#84cc16]/40 text-sm text-[#84cc16] hover:bg-[#84cc16]/10 transition-colors disabled:opacity-50"
+          className="px-4 py-2 rounded-lg border border-[#4ade80]/40 text-sm text-[#4ade80] hover:bg-[#4ade80]/10 transition-colors disabled:opacity-50"
         >
           Mark Posted
         </button>
@@ -331,13 +331,13 @@ function CalendarStrip({ posts, onSlotClick }: CalendarStripProps) {
             key={key}
             className={`rounded-xl border p-2 min-h-[80px] cursor-pointer transition-all ${
               isToday
-                ? "border-[#84cc16]/50 bg-[#84cc16]/5"
-                : "border-[var(--border-subtle)] bg-[var(--bg-elevated)] hover:border-[#84cc16]/30"
+                ? "border-[#4ade80]/50 bg-[#4ade80]/5"
+                : "border-[var(--border-subtle)] bg-[var(--bg-elevated)] hover:border-[#4ade80]/30"
             }`}
             onClick={() => onSlotClick(key)}
           >
             <div
-              className={`text-[10px] font-bold mb-1.5 ${isToday ? "text-[#84cc16]" : "text-[var(--text-secondary)]"}`}
+              className={`text-[10px] font-bold mb-1.5 ${isToday ? "text-[#4ade80]" : "text-[var(--text-secondary)]"}`}
             >
               {DAY_LABELS[i]}
               <span className="ml-1 font-mono">{day.getDate()}</span>
@@ -347,7 +347,7 @@ function CalendarStrip({ posts, onSlotClick }: CalendarStripProps) {
                 <div
                   key={p.id}
                   className="rounded px-1.5 py-0.5 text-[9px] font-medium truncate"
-                  style={{ background: "rgba(132,204,22,0.15)", color: "#84cc16" }}
+                  style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80" }}
                 >
                   {p.title || p.platform}
                 </div>
@@ -529,7 +529,7 @@ export default function ContentCalendarPage() {
               </span>
               <button
                 onClick={() => setSelectedPost(EMPTY_POST)}
-                className="p-1 rounded hover:bg-[#84cc16]/10 text-[var(--text-secondary)] hover:text-[#84cc16] transition-colors"
+                className="p-1 rounded hover:bg-[#4ade80]/10 text-[var(--text-secondary)] hover:text-[#4ade80] transition-colors"
                 title="New post"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -553,7 +553,7 @@ export default function ContentCalendarPage() {
                       onClick={() => setSelectedPost(post)}
                       className={`w-full text-left px-4 py-3 transition-colors ${
                         isActive
-                          ? "bg-[#84cc16]/10 border-l-2 border-l-[#84cc16]"
+                          ? "bg-[#4ade80]/10 border-l-2 border-l-[#4ade80]"
                           : "hover:bg-[var(--bg-base)]"
                       }`}
                     >

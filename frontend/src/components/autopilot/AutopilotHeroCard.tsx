@@ -170,8 +170,8 @@ export default function AutopilotHeroCard() {
       {/* Header row */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Zap size={16} className="text-[#84cc16]" fill="#84cc16" />
-          <span className="text-xs font-bold tracking-widest uppercase text-[#84cc16]">
+          <Zap size={16} className="text-[#4ade80]" fill="#4ade80" />
+          <span className="text-xs font-bold tracking-widest uppercase text-[#4ade80]">
             Autopilot
           </span>
         </div>
@@ -212,7 +212,7 @@ export default function AutopilotHeroCard() {
         <p className="text-[var(--text-primary)] text-lg font-semibold leading-snug">
           Today, BMG did{" "}
           <span
-            className="text-[#84cc16] font-bold tabular-nums"
+            className="text-[#4ade80] font-bold tabular-nums"
             style={{ fontSize: "1.75rem", lineHeight: 1 }}
           >
             {animatedTotal}
@@ -230,7 +230,7 @@ export default function AutopilotHeroCard() {
         ) : (
           bullets.map((b) => (
             <span key={b.key} className="text-xs text-[var(--text-secondary)] flex items-center gap-1.5">
-              <span className="w-1 h-1 rounded-full bg-[#84cc16] shrink-0" />
+              <span className="w-1 h-1 rounded-full bg-[#4ade80] shrink-0" />
               {b.label}
             </span>
           ))

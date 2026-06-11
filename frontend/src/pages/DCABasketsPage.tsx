@@ -119,7 +119,7 @@ function CreateBasketModal({ onClose, onSuccess, prefill }: CreateBasketModalPro
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Crypto Core"
-              className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16] transition-colors"
+              className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80] transition-colors"
             />
           </div>
 
@@ -131,7 +131,7 @@ function CreateBasketModal({ onClose, onSuccess, prefill }: CreateBasketModalPro
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
                 placeholder="100"
-                className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16] transition-colors"
+                className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80] transition-colors"
               />
             </div>
             <div>
@@ -139,7 +139,7 @@ function CreateBasketModal({ onClose, onSuccess, prefill }: CreateBasketModalPro
               <select
                 value={frequency}
                 onChange={e => setFrequency(e.target.value)}
-                className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16] transition-colors"
+                className="w-full bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80] transition-colors"
               >
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
@@ -152,7 +152,7 @@ function CreateBasketModal({ onClose, onSuccess, prefill }: CreateBasketModalPro
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Assets</label>
-              <span className={`text-xs font-bold ${pctValid ? "text-[#84cc16]" : "text-amber-400"}`}>
+              <span className={`text-xs font-bold ${pctValid ? "text-[#4ade80]" : "text-amber-400"}`}>
                 {totalPct.toFixed(1)}% / 100%
               </span>
             </div>
@@ -163,19 +163,19 @@ function CreateBasketModal({ onClose, onSuccess, prefill }: CreateBasketModalPro
                     value={a.symbol}
                     onChange={e => updateAsset(i, "symbol", e.target.value)}
                     placeholder="BTC"
-                    className="w-20 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-2 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16] uppercase"
+                    className="w-20 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-2 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80] uppercase"
                   />
                   <input
                     type="number"
                     value={a.allocation_pct}
                     onChange={e => updateAsset(i, "allocation_pct", e.target.value)}
                     placeholder="%"
-                    className="w-16 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-2 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+                    className="w-16 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-2 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
                   />
                   <select
                     value={a.asset_type}
                     onChange={e => updateAsset(i, "asset_type", e.target.value)}
-                    className="flex-1 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-2 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+                    className="flex-1 bg-[var(--bg-base)] border border-[var(--border-subtle)] rounded-lg px-2 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
                   >
                     <option value="etf">ETF</option>
                     <option value="stock">Stock</option>
@@ -194,7 +194,7 @@ function CreateBasketModal({ onClose, onSuccess, prefill }: CreateBasketModalPro
             </div>
             <button
               onClick={addAsset}
-              className="mt-2 text-xs text-[#84cc16] hover:underline cursor-pointer"
+              className="mt-2 text-xs text-[#4ade80] hover:underline cursor-pointer"
             >
               + Add asset
             </button>
@@ -204,7 +204,7 @@ function CreateBasketModal({ onClose, onSuccess, prefill }: CreateBasketModalPro
         <button
           disabled={!canSubmit || mutation.isPending}
           onClick={() => mutation.mutate()}
-          className="w-full py-3 rounded-xl font-bold text-sm bg-[#84cc16] text-black hover:bg-[#a3e635] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+          className="w-full py-3 rounded-xl font-bold text-sm bg-[#4ade80] text-black hover:bg-[#a3e635] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           {mutation.isPending ? "Creating…" : "Create Basket"}
         </button>
@@ -232,7 +232,7 @@ function TemplateCard({ template, onUse }: { template: DCATemplate; onUse: (t: D
       </p>
       <button
         onClick={() => onUse(template)}
-        className="mt-auto w-full py-2 rounded-xl border border-[#84cc16] text-[#84cc16] text-sm font-semibold hover:bg-[#84cc16]/10 transition-colors cursor-pointer"
+        className="mt-auto w-full py-2 rounded-xl border border-[#4ade80] text-[#4ade80] text-sm font-semibold hover:bg-[#4ade80]/10 transition-colors cursor-pointer"
       >
         Use Template
       </button>
@@ -352,7 +352,7 @@ export default function DCABasketsPage() {
         </div>
         <button
           onClick={() => { setPrefillTemplate(null); setShowCreate(true); }}
-          className="px-4 py-2.5 rounded-xl bg-[#84cc16] text-black text-sm font-bold hover:bg-[#a3e635] transition-colors cursor-pointer shrink-0"
+          className="px-4 py-2.5 rounded-xl bg-[#4ade80] text-black text-sm font-bold hover:bg-[#a3e635] transition-colors cursor-pointer shrink-0"
         >
           + Create Custom
         </button>

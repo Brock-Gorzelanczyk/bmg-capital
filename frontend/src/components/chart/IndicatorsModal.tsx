@@ -39,7 +39,7 @@ const ALL_INDICATORS: IndicatorDef[] = [
   { key: "VORTEX",      label: "Vortex Indicator",               params: "14",      color: "#4ade80", category: "Trend" },
   { key: "STC",         label: "Schaff Trend Cycle",             params: "",        color: "#38bdf8", category: "Trend" },
   // Oscillators
-  { key: "RSI_14",      label: "Relative Strength Index",        params: "14",      color: "#BEF264", category: "Oscillators" },
+  { key: "RSI_14",      label: "Relative Strength Index",        params: "14",      color: "#4ade80", category: "Oscillators" },
   { key: "MACD",        label: "MACD",                           params: "12,26,9", color: "#ec4899", category: "Oscillators" },
   { key: "STOCH",       label: "Stochastic",                     params: "14,3,3",  color: "#f97316", category: "Oscillators" },
   { key: "WILLR",       label: "Williams %R",                    params: "14",      color: "#14b8a6", category: "Oscillators" },

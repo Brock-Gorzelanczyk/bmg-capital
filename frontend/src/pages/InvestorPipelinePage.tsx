@@ -34,7 +34,7 @@ const COLUMNS = [
   { id: "email_sent",         label: "Email Sent",          color: "#3b82f6" },
   { id: "reply_received",     label: "Reply Received",      color: "#8b5cf6" },
   { id: "meeting_scheduled",  label: "Meeting Scheduled",   color: "#f59e0b" },
-  { id: "met",                label: "Met",                 color: "#84cc16" },
+  { id: "met",                label: "Met",                 color: "#4ade80" },
   { id: "following_up",       label: "Following Up",        color: "#f97316" },
   { id: "committed",          label: "Committed 🎉",        color: "#22c55e" },
   { id: "passed",             label: "Passed",              color: "#ef4444" },
@@ -53,7 +53,7 @@ function introBadge(path: Investor["intro_path"]) {
   const map: Record<string, string> = {
     cold:     "bg-zinc-700 text-zinc-300",
     warm:     "bg-amber-500/20 text-amber-300",
-    referral: "bg-[#84cc16]/20 text-[#84cc16]",
+    referral: "bg-[#4ade80]/20 text-[#4ade80]",
   };
   return (
     <span className={cn("text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded tracking-wide", map[path] ?? "bg-zinc-700 text-zinc-300")}>
@@ -115,7 +115,7 @@ function AddInvestorModal({ onClose, onSave, isSaving }: AddModalProps) {
             <div key={field}>
               <label className="block text-[11px] text-[var(--text-secondary)] mb-1 capitalize">{field} {field === "name" || field === "firm" ? "*" : ""}</label>
               <input
-                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
                 value={(form[field] as string) ?? ""}
                 onChange={e => set(field, e.target.value)}
                 placeholder={field}
@@ -127,7 +127,7 @@ function AddInvestorModal({ onClose, onSave, isSaving }: AddModalProps) {
             <div>
               <label className="block text-[11px] text-[var(--text-secondary)] mb-1">Email</label>
               <input
-                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
                 value={form.contact_email ?? ""}
                 onChange={e => set("contact_email", e.target.value)}
                 placeholder="email@firm.com"
@@ -136,7 +136,7 @@ function AddInvestorModal({ onClose, onSave, isSaving }: AddModalProps) {
             <div>
               <label className="block text-[11px] text-[var(--text-secondary)] mb-1">Intro Path</label>
               <select
-                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
                 value={form.intro_path ?? "cold"}
                 onChange={e => set("intro_path", e.target.value)}
               >
@@ -151,7 +151,7 @@ function AddInvestorModal({ onClose, onSave, isSaving }: AddModalProps) {
             <div>
               <label className="block text-[11px] text-[var(--text-secondary)] mb-1">Check Size Target</label>
               <input
-                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
                 value={form.check_size_target ?? ""}
                 onChange={e => set("check_size_target", e.target.value)}
                 placeholder="e.g. $250k"
@@ -160,7 +160,7 @@ function AddInvestorModal({ onClose, onSave, isSaving }: AddModalProps) {
             <div>
               <label className="block text-[11px] text-[var(--text-secondary)] mb-1">Stage Focus</label>
               <input
-                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+                className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
                 value={form.stage_focus ?? ""}
                 onChange={e => set("stage_focus", e.target.value)}
                 placeholder="e.g. Pre-seed"
@@ -171,7 +171,7 @@ function AddInvestorModal({ onClose, onSave, isSaving }: AddModalProps) {
           <div>
             <label className="block text-[11px] text-[var(--text-secondary)] mb-1">Next Action</label>
             <input
-              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
               value={form.next_action ?? ""}
               onChange={e => set("next_action", e.target.value)}
               placeholder="Send intro email..."
@@ -189,7 +189,7 @@ function AddInvestorModal({ onClose, onSave, isSaving }: AddModalProps) {
           <button
             onClick={() => onSave(form)}
             disabled={isSaving || !form.name || !form.firm}
-            className="px-4 py-2 text-sm font-semibold bg-[#84cc16] text-black rounded-lg disabled:opacity-50 hover:bg-[#a3e635] transition-colors"
+            className="px-4 py-2 text-sm font-semibold bg-[#4ade80] text-black rounded-lg disabled:opacity-50 hover:bg-[#a3e635] transition-colors"
           >
             {isSaving ? "Saving..." : "Add Investor"}
           </button>
@@ -414,7 +414,7 @@ function DetailDrawer({ investor, onClose, onUpdate, onDelete }: DetailDrawerPro
             <label className="block text-[11px] text-[var(--text-secondary)] mb-1">Last Contact Date</label>
             <input
               type="datetime-local"
-              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
               value={lastContact ? lastContact.slice(0, 16) : ""}
               onChange={e => setLastContact(e.target.value)}
               onBlur={() => onUpdate(investor.id, { last_contact_at: lastContact || null })}
@@ -425,7 +425,7 @@ function DetailDrawer({ investor, onClose, onUpdate, onDelete }: DetailDrawerPro
           <div>
             <label className="block text-[11px] text-[var(--text-secondary)] mb-1">Next Action</label>
             <input
-              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
               value={nextAction}
               onChange={e => setNextAction(e.target.value)}
               onBlur={() => onUpdate(investor.id, { next_action: nextAction })}
@@ -437,7 +437,7 @@ function DetailDrawer({ investor, onClose, onUpdate, onDelete }: DetailDrawerPro
           <div>
             <label className="block text-[11px] text-[var(--text-secondary)] mb-1">Notes (Markdown)</label>
             <textarea
-              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16] resize-none"
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80] resize-none"
               rows={5}
               value={notes}
               onChange={e => setNotes(e.target.value)}
@@ -451,7 +451,7 @@ function DetailDrawer({ investor, onClose, onUpdate, onDelete }: DetailDrawerPro
             <p className="text-[11px] text-[var(--text-secondary)] mb-2 font-medium uppercase tracking-wide">Generate Email</p>
             <div className="flex gap-2 mb-2">
               <select
-                className="flex-1 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#84cc16]"
+                className="flex-1 bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#4ade80]"
                 value={selectedTemplate}
                 onChange={e => setSelectedTemplate(e.target.value)}
               >
@@ -463,7 +463,7 @@ function DetailDrawer({ investor, onClose, onUpdate, onDelete }: DetailDrawerPro
               <button
                 onClick={handleGenerateEmail}
                 disabled={generatingEmail}
-                className="px-3 py-1.5 text-sm font-medium bg-[#84cc16]/20 text-[#84cc16] border border-[#84cc16]/30 rounded-lg hover:bg-[#84cc16]/30 disabled:opacity-50 transition-colors"
+                className="px-3 py-1.5 text-sm font-medium bg-[#4ade80]/20 text-[#4ade80] border border-[#4ade80]/30 rounded-lg hover:bg-[#4ade80]/30 disabled:opacity-50 transition-colors"
               >
                 {generatingEmail ? "..." : "Generate"}
               </button>
@@ -507,7 +507,7 @@ function DetailDrawer({ investor, onClose, onUpdate, onDelete }: DetailDrawerPro
         <div className="p-4 border-t border-[var(--border-subtle)] space-y-2">
           <button
             onClick={handleMarkContacted}
-            className="w-full py-2 text-sm font-medium bg-[#84cc16]/20 text-[#84cc16] border border-[#84cc16]/30 rounded-lg hover:bg-[#84cc16]/30 transition-colors"
+            className="w-full py-2 text-sm font-medium bg-[#4ade80]/20 text-[#4ade80] border border-[#4ade80]/30 rounded-lg hover:bg-[#4ade80]/30 transition-colors"
           >
             Mark contacted today
           </button>
@@ -581,7 +581,7 @@ function KanbanColumn({ col, investors, onDrop, onOpenDetail, onMove, onAddClick
         {onAddClick && (
           <button
             onClick={onAddClick}
-            className="text-[var(--text-tertiary)] hover:text-[#84cc16] transition-colors ml-1 shrink-0"
+            className="text-[var(--text-tertiary)] hover:text-[#4ade80] transition-colors ml-1 shrink-0"
             title="Add investor"
           >
             <UserPlus className="w-3.5 h-3.5" />
@@ -788,7 +788,7 @@ export default function InvestorPipelinePage() {
       {/* Board */}
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#84cc16] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[#4ade80] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
         <div className="flex-1 overflow-x-auto min-h-0">

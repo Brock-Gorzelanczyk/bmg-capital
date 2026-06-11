@@ -45,7 +45,7 @@ function actionBorderColor(actionType: string): string {
     case "paper_sell":
     case "target_hit":      return "border-l-[#3B82F6]";
     case "stop_hit":        return "border-l-amber-500";
-    case "signal_fired":    return "border-l-[#84cc16]";
+    case "signal_fired":    return "border-l-[#4ade80]";
     case "guardrail_trip":  return "border-l-[#EF4444]";
     case "pattern_detected":return "border-l-purple-500";
     case "heartbeat":       return "border-l-[var(--border-subtle)]";
@@ -117,7 +117,7 @@ function ActionCard({
       style={
         isNew
           ? {
-              boxShadow: "0 0 0 1px #84cc16",
+              boxShadow: "0 0 0 1px #4ade80",
               animation: "feedIn 400ms ease forwards",
             }
           : undefined
@@ -189,7 +189,7 @@ function SignalFeedCard({ sig, isNew }: { sig: SignalFeedItem; isNew: boolean })
         isLong ? "border-l-lime-500/60" : isShort ? "border-l-red-500/60" : "border-l-zinc-600",
         isNew && "animate-feed-in"
       )}
-      style={isNew ? { boxShadow: "0 0 0 1px #84cc16", animation: "feedIn 400ms ease forwards" } : undefined}
+      style={isNew ? { boxShadow: "0 0 0 1px #4ade80", animation: "feedIn 400ms ease forwards" } : undefined}
     >
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
@@ -253,7 +253,7 @@ function GuardrailModal({
       <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-2xl p-6 w-full max-w-md shadow-2xl shadow-black/40">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
-            <Shield size={16} className="text-[#84cc16]" />
+            <Shield size={16} className="text-[#4ade80]" />
             <h3 className="font-semibold text-[var(--text-primary)]">Edit Risk Guardrails</h3>
           </div>
           <button
@@ -313,7 +313,7 @@ function GuardrailModal({
           <button
             onClick={() => mutation.mutate(form)}
             disabled={mutation.isPending}
-            className="flex-1 px-4 py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#65a30d] transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#65a30d] transition-colors disabled:opacity-50"
           >
             {mutation.isPending ? "Saving…" : "Save Guardrails"}
           </button>
@@ -344,7 +344,7 @@ function SliderField({
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-xs font-medium text-[var(--text-secondary)]">{label}</span>
-        <span className="text-xs font-bold font-mono-t tabular-nums text-[#84cc16]">
+        <span className="text-xs font-bold font-mono-t tabular-nums text-[#4ade80]">
           {value}{unit}
         </span>
       </div>
@@ -356,7 +356,7 @@ function SliderField({
         value={value}
         onChange={e => onChange(Number(e.target.value))}
         className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-        style={{ accentColor: "#84cc16" }}
+        style={{ accentColor: "#4ade80" }}
       />
       <div className="flex justify-between text-[10px] font-mono-t tabular-nums text-[var(--text-tertiary)] mt-0.5">
         <span>{min}{unit}</span>
@@ -380,7 +380,7 @@ function UsageBar({
   unit: string;
 }) {
   const pct = Math.min(100, (current / max) * 100);
-  const color = pct > 80 ? "#EF4444" : pct > 60 ? "#F59E0B" : "#84cc16";
+  const color = pct > 80 ? "#EF4444" : pct > 60 ? "#F59E0B" : "#4ade80";
 
   return (
     <div className="mb-3">
@@ -635,13 +635,13 @@ export default function MissionControlPage() {
                 <div className="flex items-center gap-2">
                   {engineRunning && !isPaused ? (
                     <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#84cc16] opacity-60" />
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-[#84cc16]" />
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4ade80] opacity-60" />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-[#4ade80]" />
                     </span>
                   ) : (
                     <span className="h-3 w-3 rounded-full bg-[#EF4444]" />
                   )}
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#84cc16]">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#4ade80]">
                     {isPaused ? "PAUSED" : engineRunning ? "LIVE" : "OFFLINE"}
                   </span>
                 </div>
@@ -663,7 +663,7 @@ export default function MissionControlPage() {
 
               <p className="text-sm text-[var(--text-secondary)] mb-0.5">
                 BMG is monitoring{" "}
-                <span className="font-bold font-mono-t tabular-nums text-[#84cc16]">
+                <span className="font-bold font-mono-t tabular-nums text-[#4ade80]">
                   {assetsMonitored.toLocaleString() || "8,212"}
                 </span>{" "}
                 assets across{" "}
@@ -747,7 +747,7 @@ export default function MissionControlPage() {
           {/* Column 1 — Right Now */}
           <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
             <div className="flex items-center gap-2 mb-4">
-              <Activity size={15} className="text-[#84cc16]" />
+              <Activity size={15} className="text-[#4ade80]" />
               <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
                 Right Now
               </h2>
@@ -757,7 +757,7 @@ export default function MissionControlPage() {
               {/* Strategies active */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Strategies active</span>
-                <span className="text-lg font-bold font-mono-t tabular-nums text-[#84cc16]">{strategiesDisplay || 247}</span>
+                <span className="text-lg font-bold font-mono-t tabular-nums text-[#4ade80]">{strategiesDisplay || 247}</span>
               </div>
 
               {/* Open positions */}
@@ -835,7 +835,7 @@ export default function MissionControlPage() {
               {/* Signals fired */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Signals fired</span>
-                <span className="text-lg font-bold font-mono-t tabular-nums text-[#84cc16]">
+                <span className="text-lg font-bold font-mono-t tabular-nums text-[#4ade80]">
                   {stats?.signals_fired ?? "—"}
                 </span>
               </div>
@@ -909,7 +909,7 @@ export default function MissionControlPage() {
                       </div>
                       <div className="h-1 bg-[var(--bg-elevated-2)] rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-[#84cc16] rounded-full"
+                          className="h-full bg-[#4ade80] rounded-full"
                           style={{ width: `${(count / labTotal) * 100}%` }}
                         />
                       </div>
@@ -944,9 +944,9 @@ export default function MissionControlPage() {
                     {forming.map(a => (
                       <div
                         key={a.id}
-                        className="flex items-center gap-2 text-xs px-2 py-1.5 bg-[#84cc16]/5 border border-[#84cc16]/20 rounded-lg"
+                        className="flex items-center gap-2 text-xs px-2 py-1.5 bg-[#4ade80]/5 border border-[#4ade80]/20 rounded-lg"
                       >
-                        <span className="text-[#84cc16]">📡</span>
+                        <span className="text-[#4ade80]">📡</span>
                         <span className="font-semibold text-[var(--text-primary)]">{a.asset}</span>
                         <span className="text-[var(--text-tertiary)] truncate">{a.strategy_id}</span>
                       </div>
@@ -994,12 +994,12 @@ export default function MissionControlPage() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Zap size={15} className="text-[#84cc16]" />
+              <Zap size={15} className="text-[#4ade80]" />
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">
                 Activity Feed
               </h2>
-              <span className="flex items-center gap-1 text-[10px] font-medium text-[#84cc16] bg-[#84cc16]/10 border border-[#84cc16]/20 px-1.5 py-0.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#84cc16] animate-pulse" />
+              <span className="flex items-center gap-1 text-[10px] font-medium text-[#4ade80] bg-[#4ade80]/10 border border-[#4ade80]/20 px-1.5 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse" />
                 LIVE
               </span>
             </div>
@@ -1035,7 +1035,7 @@ export default function MissionControlPage() {
             className="w-full flex items-center justify-between px-4 py-3 hover:bg-[var(--bg-elevated-2)] transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Shield size={15} className="text-[#84cc16]" />
+              <Shield size={15} className="text-[#4ade80]" />
               <span className="text-sm font-semibold text-[var(--text-primary)]">
                 Risk Guardrails
               </span>
@@ -1077,7 +1077,7 @@ export default function MissionControlPage() {
                   </div>
                   <button
                     onClick={() => setGuardrailModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[#84cc16]/40 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[#4ade80]/40 transition-colors"
                   >
                     <Edit2 size={11} />
                     Edit

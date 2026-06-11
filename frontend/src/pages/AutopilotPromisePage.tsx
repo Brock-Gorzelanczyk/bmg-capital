@@ -95,7 +95,7 @@ export default function AutopilotPromisePage() {
 
       {/* Hero */}
       <div className="text-center pt-6 space-y-3">
-        <div className="inline-flex items-center gap-2 bg-[#84cc16]/10 border border-[#84cc16]/20 text-[#84cc16] text-xs px-3 py-1 rounded-full font-semibold tracking-wide uppercase">
+        <div className="inline-flex items-center gap-2 bg-[#4ade80]/10 border border-[#4ade80]/20 text-[#4ade80] text-xs px-3 py-1 rounded-full font-semibold tracking-wide uppercase">
           <Shield size={12} />
           Ethical Principles
         </div>
@@ -112,11 +112,11 @@ export default function AutopilotPromisePage() {
         {PRINCIPLES.map(({ number, title, icon: Icon, body }) => (
           <div
             key={number}
-            className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-5 flex gap-4 group hover:border-[#84cc16]/30 transition-colors duration-200"
+            className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-5 flex gap-4 group hover:border-[#4ade80]/30 transition-colors duration-200"
           >
             {/* Number */}
             <div className="shrink-0 w-10 text-right">
-              <span className="font-mono text-4xl font-bold text-[#84cc16] leading-none">
+              <span className="font-mono text-4xl font-bold text-[#4ade80] leading-none">
                 {number}
               </span>
             </div>
@@ -124,7 +124,7 @@ export default function AutopilotPromisePage() {
             {/* Content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5">
-                <Icon size={16} className="text-[#84cc16] shrink-0" />
+                <Icon size={16} className="text-[#4ade80] shrink-0" />
                 <span className="text-[var(--text-primary)] font-semibold text-sm">
                   {title}
                 </span>
@@ -154,7 +154,7 @@ export default function AutopilotPromisePage() {
                   : (col + 1) * Math.ceil(IN_PRACTICE.length / 3)
               ).map((item) => (
                 <li key={item} className="flex items-start gap-2.5">
-                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#84cc16] shrink-0" />
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#4ade80] shrink-0" />
                   <span className="text-[var(--text-secondary)] text-sm leading-snug">
                     {item}
                   </span>
@@ -177,7 +177,7 @@ export default function AutopilotPromisePage() {
         </div>
         <Link
           to="/autopilot/activity"
-          className="shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-[#84cc16]/10 hover:bg-[#84cc16]/20 border border-[#84cc16]/30 text-[#84cc16] text-sm font-semibold rounded-lg transition-colors"
+          className="shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-[#4ade80]/10 hover:bg-[#4ade80]/20 border border-[#4ade80]/30 text-[#4ade80] text-sm font-semibold rounded-lg transition-colors"
         >
           View your activity log
           <ArrowRight size={14} />
@@ -189,7 +189,7 @@ export default function AutopilotPromisePage() {
         These principles are the foundation of BMG's autonomous engine.{" "}
         <Link
           to="/autopilot/activity"
-          className="text-[#84cc16] hover:underline"
+          className="text-[#4ade80] hover:underline"
         >
           View your activity log →
         </Link>

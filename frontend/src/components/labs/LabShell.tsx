@@ -257,7 +257,7 @@ export default function LabShell({ labId }: LabShellProps) {
                     if (e.key === "Enter") commitRename();
                     if (e.key === "Escape") setRenameId(null);
                   }}
-                  className="text-xs px-2 py-1 rounded bg-[var(--bg-elevated-2)] text-[var(--text-primary)] border border-[#BEF264]/50 outline-none w-28"
+                  className="text-xs px-2 py-1 rounded bg-[var(--bg-elevated-2)] text-[var(--text-primary)] border border-[#4ade80]/50 outline-none w-28"
                 />
               ) : (
                 <button
@@ -273,7 +273,7 @@ export default function LabShell({ labId }: LabShellProps) {
                   <span>{ws.name}</span>
                   {/* Active underline */}
                   {isActive && (
-                    <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-[#BEF264]" />
+                    <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-[#4ade80]" />
                   )}
                 </button>
               )}
@@ -311,7 +311,7 @@ export default function LabShell({ labId }: LabShellProps) {
           className={cn(
             "shrink-0 flex items-center justify-center w-6 h-6 rounded transition-colors",
             locked
-              ? "text-[#BEF264] hover:bg-[#BEF264]/10"
+              ? "text-[#4ade80] hover:bg-[#4ade80]/10"
               : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
           )}
           title={locked ? "Unlock layout" : "Lock layout"}

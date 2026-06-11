@@ -372,6 +372,6 @@ export const SECTOR_COLOR: Record<string, string> = {
   "Comm. Services":   "#06b6d4",
   "Real Estate":      "#ec4899",
   "Materials":        "#d97706",
-  "Utilities":        "#84cc16",
+  "Utilities":        "#4ade80",
   "ETF":              "#6b7280",
 };

@@ -277,7 +277,7 @@ const SLIDES: Slide[] = [
     data: {
       headline: "Raising $1.2M to reach 500K users",
       segments: [
-        { label: "Engineering", pct: 40, color: "#BEF264", detail: "Hire 2 senior engineers, ML infra" },
+        { label: "Engineering", pct: 40, color: "#4ade80", detail: "Hire 2 senior engineers, ML infra" },
         { label: "Growth", pct: 25, color: "#60A5FA", detail: "Creator partnerships, paid acquisition test" },
         { label: "Infrastructure", pct: 20, color: "#FBBF24", detail: "Scaling Railway → AWS, data costs" },
         { label: "Operations", pct: 15, color: "#71717A", detail: "Legal, compliance, office" },
@@ -345,12 +345,12 @@ function CoverSlide() {
       className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden"
       style={{
         background:
-          "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(190,242,100,0.07) 0%, transparent 70%), #0a0a0f",
+          "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(74,222,128,0.07) 0%, transparent 70%), #0a0a0f",
       }}
     >
       <div
         className="w-24 h-24 rounded-full flex items-center justify-center font-black text-5xl mb-8 shadow-2xl"
-        style={{ background: "#BEF264", color: "#0a0a0f", boxShadow: "0 0 80px rgba(190,242,100,0.35)" }}
+        style={{ background: "#4ade80", color: "#0a0a0f", boxShadow: "0 0 80px rgba(74,222,128,0.35)" }}
       >
         B
       </div>
@@ -365,7 +365,7 @@ function CoverSlide() {
           <span
             key={tag}
             className="px-4 py-1.5 rounded-full text-sm font-semibold border"
-            style={{ border: "1px solid rgba(190,242,100,0.4)", color: "#BEF264", background: "rgba(190,242,100,0.07)" }}
+            style={{ border: "1px solid rgba(74,222,128,0.4)", color: "#4ade80", background: "rgba(74,222,128,0.07)" }}
           >
             {tag}
           </span>
@@ -403,31 +403,31 @@ function TwoColumnSlide({ data }: { data: Record<string, unknown> }) {
           <svg width="280" height="280" viewBox="0 0 280 280" fill="none">
             {/* Monitor */}
             <rect x="60" y="80" width="160" height="100" rx="8" fill="none" stroke="#3F3F46" strokeWidth="3" />
-            <rect x="60" y="80" width="160" height="100" rx="8" fill="rgba(190,242,100,0.04)" />
+            <rect x="60" y="80" width="160" height="100" rx="8" fill="rgba(74,222,128,0.04)" />
             {/* Screen lines (noise) */}
             <line x1="80" y1="105" x2="200" y2="105" stroke="#FB7185" strokeWidth="2" opacity="0.5" strokeDasharray="6 3" />
-            <line x1="80" y1="120" x2="160" y2="120" stroke="#BEF264" strokeWidth="2" opacity="0.3" strokeDasharray="4 4" />
+            <line x1="80" y1="120" x2="160" y2="120" stroke="#4ade80" strokeWidth="2" opacity="0.3" strokeDasharray="4 4" />
             <line x1="80" y1="135" x2="185" y2="135" stroke="#60A5FA" strokeWidth="2" opacity="0.4" strokeDasharray="5 2" />
             <line x1="80" y1="150" x2="130" y2="150" stroke="#FBBF24" strokeWidth="2" opacity="0.4" strokeDasharray="3 5" />
             {/* Stand */}
             <rect x="125" y="180" width="30" height="14" rx="2" fill="#3F3F46" />
             <rect x="105" y="194" width="70" height="8" rx="4" fill="#3F3F46" />
             {/* Body */}
-            <circle cx="140" cy="50" r="22" fill="none" stroke="#BEF264" strokeWidth="2.5" />
+            <circle cx="140" cy="50" r="22" fill="none" stroke="#4ade80" strokeWidth="2.5" />
             {/* Confused face */}
-            <circle cx="132" cy="46" r="2.5" fill="#BEF264" />
-            <circle cx="148" cy="46" r="2.5" fill="#BEF264" />
-            <path d="M132 58 Q140 54 148 58" stroke="#BEF264" strokeWidth="2" fill="none" />
+            <circle cx="132" cy="46" r="2.5" fill="#4ade80" />
+            <circle cx="148" cy="46" r="2.5" fill="#4ade80" />
+            <path d="M132 58 Q140 54 148 58" stroke="#4ade80" strokeWidth="2" fill="none" />
             {/* Question marks */}
-            <text x="190" y="62" fill="rgba(190,242,100,0.6)" fontSize="22" fontWeight="bold">?</text>
-            <text x="72" y="50" fill="rgba(190,242,100,0.4)" fontSize="16" fontWeight="bold">?</text>
+            <text x="190" y="62" fill="rgba(74,222,128,0.6)" fontSize="22" fontWeight="bold">?</text>
+            <text x="72" y="50" fill="rgba(74,222,128,0.4)" fontSize="16" fontWeight="bold">?</text>
             {/* Stick arms up (confused) */}
-            <line x1="140" y1="72" x2="140" y2="78" stroke="#BEF264" strokeWidth="2.5" />
-            <line x1="140" y1="78" x2="110" y2="65" stroke="#BEF264" strokeWidth="2.5" />
-            <line x1="140" y1="78" x2="170" y2="65" stroke="#BEF264" strokeWidth="2.5" />
+            <line x1="140" y1="72" x2="140" y2="78" stroke="#4ade80" strokeWidth="2.5" />
+            <line x1="140" y1="78" x2="110" y2="65" stroke="#4ade80" strokeWidth="2.5" />
+            <line x1="140" y1="78" x2="170" y2="65" stroke="#4ade80" strokeWidth="2.5" />
             {/* Legs */}
-            <line x1="140" y1="78" x2="125" y2="100" stroke="#BEF264" strokeWidth="2.5" />
-            <line x1="140" y1="78" x2="155" y2="100" stroke="#BEF264" strokeWidth="2.5" />
+            <line x1="140" y1="78" x2="125" y2="100" stroke="#4ade80" strokeWidth="2.5" />
+            <line x1="140" y1="78" x2="155" y2="100" stroke="#4ade80" strokeWidth="2.5" />
           </svg>
         </div>
       </div>
@@ -447,7 +447,7 @@ function SolutionSlide({ data }: { data: Record<string, unknown> }) {
   return (
     <SlideWrapper>
       <div className="text-center w-full">
-        <div className="w-16 h-1 rounded-full mx-auto mb-6" style={{ background: "#BEF264" }} />
+        <div className="w-16 h-1 rounded-full mx-auto mb-6" style={{ background: "#4ade80" }} />
         <h2 className="text-4xl md:text-5xl font-black text-white mb-12 leading-tight max-w-3xl mx-auto">
           {headline}
         </h2>
@@ -460,7 +460,7 @@ function SolutionSlide({ data }: { data: Record<string, unknown> }) {
             >
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ background: "rgba(190,242,100,0.12)", color: "#BEF264" }}
+                style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}
               >
                 {iconMap[p.icon] ?? <Zap size={28} />}
               </div>
@@ -491,13 +491,13 @@ function ProductSlide({ data }: { data: Record<string, unknown> }) {
             <rect width="360" height="50" rx="16" fill="#27272A" />
             <rect x="0" y="34" width="360" height="16" fill="#27272A" />
             <text x="20" y="32" fill="#FAFAFA" fontSize="13" fontWeight="700">Portfolio Value</text>
-            <text x="20" y="47" fill="#BEF264" fontSize="18" fontWeight="800">$72,226</text>
-            <text x="290" y="32" fill="#BEF264" fontSize="11" fontWeight="600">+4.2%</text>
+            <text x="20" y="47" fill="#4ade80" fontSize="18" fontWeight="800">$72,226</text>
+            <text x="290" y="32" fill="#4ade80" fontSize="11" fontWeight="600">+4.2%</text>
             {/* Sparkline 1 */}
             <rect x="16" y="66" width="100" height="56" rx="8" fill="#27272A" />
-            <polyline points="26,108 40,96 54,100 68,88 82,92 96,80 110,76" stroke="#BEF264" strokeWidth="2" fill="none" />
+            <polyline points="26,108 40,96 54,100 68,88 82,92 96,80 110,76" stroke="#4ade80" strokeWidth="2" fill="none" />
             <text x="26" y="80" fill="#A1A1AA" fontSize="8">AAPL</text>
-            <text x="26" y="118" fill="#BEF264" fontSize="9" fontWeight="700">+$1,220</text>
+            <text x="26" y="118" fill="#4ade80" fontSize="9" fontWeight="700">+$1,220</text>
             {/* Sparkline 2 */}
             <rect x="126" y="66" width="100" height="56" rx="8" fill="#27272A" />
             <polyline points="136,100 150,108 164,96 178,104 192,92 206,86 220,80" stroke="#60A5FA" strokeWidth="2" fill="none" />
@@ -513,9 +513,9 @@ function ProductSlide({ data }: { data: Record<string, unknown> }) {
             {/* Strategy rows */}
             <rect x="16" y="150" width="328" height="34" rx="6" fill="#27272A" />
             <text x="28" y="171" fill="#FAFAFA" fontSize="11" fontWeight="600">Momentum Surge</text>
-            <text x="28" y="183" fill="#BEF264" fontSize="10">+$1,530 · 3 trades</text>
-            <circle cx="323" cy="167" r="6" fill="rgba(190,242,100,0.2)" />
-            <circle cx="323" cy="167" r="3" fill="#BEF264" />
+            <text x="28" y="183" fill="#4ade80" fontSize="10">+$1,530 · 3 trades</text>
+            <circle cx="323" cy="167" r="6" fill="rgba(74,222,128,0.2)" />
+            <circle cx="323" cy="167" r="3" fill="#4ade80" />
 
             <rect x="16" y="190" width="328" height="34" rx="6" fill="#27272A" />
             <text x="28" y="211" fill="#FAFAFA" fontSize="11" fontWeight="600">Mean Reversion</text>
@@ -530,7 +530,7 @@ function ProductSlide({ data }: { data: Record<string, unknown> }) {
             <div key={b} className="flex items-start gap-4">
               <div
                 className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                style={{ background: "rgba(190,242,100,0.15)", color: "#BEF264" }}
+                style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80" }}
               >
                 <Check size={14} />
               </div>
@@ -575,7 +575,7 @@ function TractionSlide({ data }: { data: Record<string, unknown> }) {
             className="p-5 rounded-2xl border text-center"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
           >
-            <p className="text-3xl font-black mb-1" style={{ color: "#BEF264" }}>
+            <p className="text-3xl font-black mb-1" style={{ color: "#4ade80" }}>
               {s.value}
             </p>
             <p className="text-sm text-zinc-400">{s.label}</p>
@@ -587,12 +587,12 @@ function TractionSlide({ data }: { data: Record<string, unknown> }) {
         <svg width="100%" viewBox={`0 0 ${W} ${H + 10}`} preserveAspectRatio="none">
           <defs>
             <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#BEF264" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#BEF264" stopOpacity="0" />
+              <stop offset="0%" stopColor="#4ade80" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#4ade80" stopOpacity="0" />
             </linearGradient>
           </defs>
           <path d={fillPath} fill="url(#growthGrad)" />
-          <polyline points={polyline} stroke="#BEF264" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points={polyline} stroke="#4ade80" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <p className="text-center text-xs text-zinc-500 mt-2">
           Organic growth. Zero paid acquisition.
@@ -620,22 +620,22 @@ function MarketSlide({ data }: { data: Record<string, unknown> }) {
                 cx="170"
                 cy="170"
                 r={ring.r}
-                fill={i === rings.length - 1 ? "rgba(190,242,100,0.12)" : "none"}
-                stroke={i === rings.length - 1 ? "#BEF264" : "rgba(190,242,100,0.3)"}
+                fill={i === rings.length - 1 ? "rgba(74,222,128,0.12)" : "none"}
+                stroke={i === rings.length - 1 ? "#4ade80" : "rgba(74,222,128,0.3)"}
                 strokeWidth={i === rings.length - 1 ? 2.5 : 1.5}
               />
             ))}
             {/* Labels */}
-            <text x="170" y="165" fill="#BEF264" fontSize="13" fontWeight="800" textAnchor="middle">
+            <text x="170" y="165" fill="#4ade80" fontSize="13" fontWeight="800" textAnchor="middle">
               $28B SOM
             </text>
-            <text x="170" y="181" fill="#BEF264" fontSize="9" textAnchor="middle" opacity="0.7">
+            <text x="170" y="181" fill="#4ade80" fontSize="9" textAnchor="middle" opacity="0.7">
               Year 5
             </text>
-            <text x="170" y="255" fill="rgba(190,242,100,0.5)" fontSize="10" textAnchor="middle">
+            <text x="170" y="255" fill="rgba(74,222,128,0.5)" fontSize="10" textAnchor="middle">
               $340B SAM
             </text>
-            <text x="170" y="310" fill="rgba(190,242,100,0.3)" fontSize="10" textAnchor="middle">
+            <text x="170" y="310" fill="rgba(74,222,128,0.3)" fontSize="10" textAnchor="middle">
               $2.4T TAM
             </text>
           </svg>
@@ -646,7 +646,7 @@ function MarketSlide({ data }: { data: Record<string, unknown> }) {
             <div key={b} className="flex items-start gap-4">
               <div
                 className="w-2 h-2 rounded-full mt-2 flex-shrink-0"
-                style={{ background: "#BEF264" }}
+                style={{ background: "#4ade80" }}
               />
               <p className="text-zinc-300 text-lg leading-relaxed">{b}</p>
             </div>
@@ -670,20 +670,20 @@ function BusinessModelSlide({ data }: { data: Record<string, unknown> }) {
             key={t.name}
             className={cn("p-6 rounded-2xl border flex flex-col gap-3 relative", t.highlight && "shadow-2xl")}
             style={{
-              background: t.highlight ? "rgba(190,242,100,0.07)" : "rgba(255,255,255,0.04)",
-              border: t.highlight ? "2px solid #BEF264" : "1px solid rgba(255,255,255,0.08)",
+              background: t.highlight ? "rgba(74,222,128,0.07)" : "rgba(255,255,255,0.04)",
+              border: t.highlight ? "2px solid #4ade80" : "1px solid rgba(255,255,255,0.08)",
             }}
           >
             {t.tag && (
               <span
                 className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-xs font-bold"
-                style={{ background: "#BEF264", color: "#0a0a0f" }}
+                style={{ background: "#4ade80", color: "#0a0a0f" }}
               >
                 {t.tag}
               </span>
             )}
             <p className="font-bold text-zinc-400 text-sm">{t.name}</p>
-            <p className="text-3xl font-black" style={{ color: t.highlight ? "#BEF264" : "#FAFAFA" }}>
+            <p className="text-3xl font-black" style={{ color: t.highlight ? "#4ade80" : "#FAFAFA" }}>
               {t.price}
             </p>
             <p className="text-zinc-400 text-sm leading-relaxed">{t.features}</p>
@@ -703,7 +703,7 @@ function BusinessModelSlide({ data }: { data: Record<string, unknown> }) {
           { label: "LTV:CAC", value: "28×" },
         ].map((m) => (
           <div key={m.label} className="text-center">
-            <p className="text-2xl font-black" style={{ color: "#BEF264" }}>{m.value}</p>
+            <p className="text-2xl font-black" style={{ color: "#4ade80" }}>{m.value}</p>
             <p className="text-xs text-zinc-500">{m.label}</p>
           </div>
         ))}
@@ -737,10 +737,10 @@ function QuadrantSlide({ data }: { data: Record<string, unknown> }) {
 
           {/* Quadrant labels */}
           <text x="15" y="24" fill="rgba(255,255,255,0.18)" fontSize="11">Easy but dumb</text>
-          <text x={HALF + 12} y="24" fill="rgba(190,242,100,0.35)" fontSize="11" fontWeight="700">
+          <text x={HALF + 12} y="24" fill="rgba(74,222,128,0.35)" fontSize="11" fontWeight="700">
             Easy AND smart
           </text>
-          <text x={HALF + 12} y="40" fill="rgba(190,242,100,0.35)" fontSize="10">
+          <text x={HALF + 12} y="40" fill="rgba(74,222,128,0.35)" fontSize="10">
             ← BMG lives here
           </text>
           <text x="15" y={SIZE - 12} fill="rgba(255,255,255,0.18)" fontSize="11">Hard AND dumb</text>
@@ -776,15 +776,15 @@ function QuadrantSlide({ data }: { data: Record<string, unknown> }) {
           })}
 
           {/* BMG dot — large, pulsing via SVG animate */}
-          <circle cx={SIZE * 0.85} cy={SIZE * 0.1} r="22" fill="rgba(190,242,100,0.12)" stroke="#BEF264" strokeWidth="0">
+          <circle cx={SIZE * 0.85} cy={SIZE * 0.1} r="22" fill="rgba(74,222,128,0.12)" stroke="#4ade80" strokeWidth="0">
             <animate attributeName="r" values="22;28;22" dur="2.5s" repeatCount="indefinite" />
             <animate attributeName="opacity" values="1;0.4;1" dur="2.5s" repeatCount="indefinite" />
           </circle>
-          <circle cx={SIZE * 0.85} cy={SIZE * 0.1} r="14" fill="#BEF264" />
-          <text x={SIZE * 0.85 + 20} y={SIZE * 0.1 - 8} fill="#BEF264" fontSize="12" fontWeight="800">
+          <circle cx={SIZE * 0.85} cy={SIZE * 0.1} r="14" fill="#4ade80" />
+          <text x={SIZE * 0.85 + 20} y={SIZE * 0.1 - 8} fill="#4ade80" fontSize="12" fontWeight="800">
             BMG Capital
           </text>
-          <text x={SIZE * 0.85 + 20} y={SIZE * 0.1 + 8} fill="rgba(190,242,100,0.6)" fontSize="10">
+          <text x={SIZE * 0.85 + 20} y={SIZE * 0.1 + 8} fill="rgba(74,222,128,0.6)" fontSize="10">
             You are here
           </text>
         </svg>
@@ -807,12 +807,12 @@ function GTMSlide({ data }: { data: Record<string, unknown> }) {
             className="flex-1 p-6 rounded-2xl border"
             style={{
               background: p.done
-                ? "rgba(190,242,100,0.07)"
+                ? "rgba(74,222,128,0.07)"
                 : p.current
                 ? "rgba(251,191,36,0.07)"
                 : "rgba(255,255,255,0.04)",
               border: p.done
-                ? "1.5px solid rgba(190,242,100,0.4)"
+                ? "1.5px solid rgba(74,222,128,0.4)"
                 : p.current
                 ? "1.5px solid rgba(251,191,36,0.4)"
                 : "1px solid rgba(255,255,255,0.08)",
@@ -822,8 +822,8 @@ function GTMSlide({ data }: { data: Record<string, unknown> }) {
               <span
                 className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{
-                  background: p.done ? "rgba(190,242,100,0.15)" : p.current ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.08)",
-                  color: p.done ? "#BEF264" : p.current ? "#FBBF24" : "#71717A",
+                  background: p.done ? "rgba(74,222,128,0.15)" : p.current ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.08)",
+                  color: p.done ? "#4ade80" : p.current ? "#FBBF24" : "#71717A",
                 }}
               >
                 {p.done ? "✓ Done" : p.current ? "Current" : `Phase ${i + 1}`}
@@ -864,13 +864,13 @@ function TeamSlide({ data }: { data: Record<string, unknown> }) {
           >
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center font-black text-xl"
-              style={{ background: "rgba(190,242,100,0.15)", color: "#BEF264", border: "2px solid rgba(190,242,100,0.3)" }}
+              style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80", border: "2px solid rgba(74,222,128,0.3)" }}
             >
               {m.initials}
             </div>
             <div>
               <p className="font-bold text-white text-lg">{m.name}</p>
-              <p className="text-sm font-semibold mb-2" style={{ color: "#BEF264" }}>{m.role}</p>
+              <p className="text-sm font-semibold mb-2" style={{ color: "#4ade80" }}>{m.role}</p>
               <p className="text-zinc-400 text-sm leading-relaxed">{m.bio}</p>
             </div>
           </div>
@@ -894,8 +894,8 @@ function TechSlide({ data }: { data: Record<string, unknown> }) {
   const headline = data.headline as string;
   const layers = data.layers as Array<{ label: string; items: string[] }>;
   const diff = data.differentiators as Array<{ title: string; body: string }>;
-  const layerColors = ["rgba(190,242,100,0.1)", "rgba(96,165,250,0.1)", "rgba(251,191,36,0.1)"];
-  const layerBorders = ["rgba(190,242,100,0.3)", "rgba(96,165,250,0.3)", "rgba(251,191,36,0.3)"];
+  const layerColors = ["rgba(74,222,128,0.1)", "rgba(96,165,250,0.1)", "rgba(251,191,36,0.1)"];
+  const layerBorders = ["rgba(74,222,128,0.3)", "rgba(96,165,250,0.3)", "rgba(251,191,36,0.3)"];
   return (
     <SlideWrapper>
       <SlideHeadline text={headline} />
@@ -908,7 +908,7 @@ function TechSlide({ data }: { data: Record<string, unknown> }) {
               className="p-4 rounded-xl border"
               style={{ background: layerColors[i], border: `1px solid ${layerBorders[i]}` }}
             >
-              <p className="text-xs font-bold mb-2 uppercase tracking-widest" style={{ color: i === 0 ? "#BEF264" : i === 1 ? "#60A5FA" : "#FBBF24" }}>
+              <p className="text-xs font-bold mb-2 uppercase tracking-widest" style={{ color: i === 0 ? "#4ade80" : i === 1 ? "#60A5FA" : "#FBBF24" }}>
                 {layer.label}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -974,7 +974,7 @@ function FinancialsSlide({ data }: { data: Record<string, unknown> }) {
           >
             <span className="font-bold text-white">{r.year}</span>
             <span className="text-zinc-300">{r.users}</span>
-            <span className="font-bold" style={{ color: "#BEF264" }}>{r.arr}</span>
+            <span className="font-bold" style={{ color: "#4ade80" }}>{r.arr}</span>
             <span className="text-zinc-300">{r.margin}</span>
           </div>
         ))}
@@ -985,7 +985,7 @@ function FinancialsSlide({ data }: { data: Record<string, unknown> }) {
         </p>
         <p className="text-zinc-400 text-sm">
           Profitable at{" "}
-          <span className="font-bold" style={{ color: "#BEF264" }}>18K paid subscribers</span>{" "}
+          <span className="font-bold" style={{ color: "#4ade80" }}>18K paid subscribers</span>{" "}
           (~Month 22)
         </p>
       </div>
@@ -1023,7 +1023,7 @@ function UseOfFundsSlide({ data }: { data: Record<string, unknown> }) {
   return (
     <SlideWrapper>
       <SlideHeadline text={headline} />
-      <p className="text-3xl font-black mb-8" style={{ color: "#BEF264" }}>
+      <p className="text-3xl font-black mb-8" style={{ color: "#4ade80" }}>
         $1,200,000 Seed Round
       </p>
       <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
@@ -1089,9 +1089,9 @@ function RoadmapSlide({ data }: { data: Record<string, unknown> }) {
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                 style={{
-                  background: i === 0 ? "rgba(190,242,100,0.15)" : "rgba(255,255,255,0.06)",
-                  border: `1.5px solid ${i === 0 ? "#BEF264" : "rgba(255,255,255,0.12)"}`,
-                  color: i === 0 ? "#BEF264" : "#71717A",
+                  background: i === 0 ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.06)",
+                  border: `1.5px solid ${i === 0 ? "#4ade80" : "rgba(255,255,255,0.12)"}`,
+                  color: i === 0 ? "#4ade80" : "#71717A",
                 }}
               >
                 {i + 1}
@@ -1106,13 +1106,13 @@ function RoadmapSlide({ data }: { data: Record<string, unknown> }) {
             <div
               className="p-5 rounded-2xl border flex-1"
               style={{
-                background: i === 0 ? "rgba(190,242,100,0.05)" : "rgba(255,255,255,0.03)",
-                border: i === 0 ? "1px solid rgba(190,242,100,0.25)" : "1px solid rgba(255,255,255,0.07)",
+                background: i === 0 ? "rgba(74,222,128,0.05)" : "rgba(255,255,255,0.03)",
+                border: i === 0 ? "1px solid rgba(74,222,128,0.25)" : "1px solid rgba(255,255,255,0.07)",
               }}
             >
               <p
                 className="text-xs font-bold mb-3 uppercase tracking-widest"
-                style={{ color: i === 0 ? "#BEF264" : "#71717A" }}
+                style={{ color: i === 0 ? "#4ade80" : "#71717A" }}
               >
                 {q.label}
               </p>
@@ -1144,7 +1144,7 @@ function VisionSlide() {
           width: 400,
           height: 400,
           background:
-            "radial-gradient(ellipse at center, rgba(190,242,100,0.55) 0%, rgba(16,185,129,0.2) 40%, transparent 70%)",
+            "radial-gradient(ellipse at center, rgba(74,222,128,0.55) 0%, rgba(16,185,129,0.2) 40%, transparent 70%)",
           animation: "orbPulse 4s ease-in-out infinite",
           zIndex: 0,
           filter: "blur(40px)",
@@ -1156,7 +1156,7 @@ function VisionSlide() {
         >
           Every investor deserves an edge.
         </h2>
-        <p className="text-2xl md:text-3xl font-bold mb-8" style={{ color: "#BEF264" }}>
+        <p className="text-2xl md:text-3xl font-bold mb-8" style={{ color: "#4ade80" }}>
           BMG Capital is that edge.
         </p>
         <p className="text-zinc-500 text-sm mb-10">
@@ -1166,7 +1166,7 @@ function VisionSlide() {
           <a
             href="mailto:32bgorzelanczyk@gmail.com?subject=BMG Capital — Let's Talk"
             className="px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 hover:scale-105"
-            style={{ background: "#BEF264", color: "#0a0a0f", boxShadow: "0 0 32px rgba(190,242,100,0.3)" }}
+            style={{ background: "#4ade80", color: "#0a0a0f", boxShadow: "0 0 32px rgba(74,222,128,0.3)" }}
           >
             Schedule a Call →
           </a>
@@ -1310,7 +1310,7 @@ export default function PitchDeckPage() {
         <div className="flex items-center gap-2">
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center font-black text-sm"
-            style={{ background: "#BEF264", color: "#0a0a0f" }}
+            style={{ background: "#4ade80", color: "#0a0a0f" }}
           >
             B
           </div>
@@ -1393,7 +1393,7 @@ export default function PitchDeckPage() {
       {/* Progress bar */}
       <div
         className="absolute bottom-0 left-0 h-0.5 z-30 transition-all duration-300"
-        style={{ width: `${progressPct}%`, background: "#BEF264" }}
+        style={{ width: `${progressPct}%`, background: "#4ade80" }}
       />
     </div>
   );

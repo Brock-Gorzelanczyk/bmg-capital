@@ -49,7 +49,7 @@ export default function ConnectBrokerageModal({ onClose }: Props) {
 
         {step === "pick" && (
           <div className="p-5 space-y-4">
-            <div className="flex items-center gap-2 text-xs text-[#84cc16] bg-[#84cc16]/10 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-[#4ade80] bg-[#4ade80]/10 rounded-lg px-3 py-2">
               <Shield className="w-3.5 h-3.5 shrink-0" />
               <span>Read-only access — BMG never trades your external accounts</span>
             </div>
@@ -58,9 +58,9 @@ export default function ConnectBrokerageModal({ onClose }: Props) {
                 <button
                   key={inst.slug}
                   onClick={() => { setStep("connecting"); mutation.mutate({ slug: inst.slug }); }}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] hover:border-[#84cc16]/40 transition-colors text-left"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] hover:border-[#4ade80]/40 transition-colors text-left"
                 >
-                  <div className="w-9 h-9 rounded-full bg-[var(--bg-elevated)] flex items-center justify-center text-xs font-black text-[#84cc16]">
+                  <div className="w-9 h-9 rounded-full bg-[var(--bg-elevated)] flex items-center justify-center text-xs font-black text-[#4ade80]">
                     {inst.abbr}
                   </div>
                   <span className="text-sm font-medium text-[var(--text-primary)]">{inst.name}</span>
@@ -72,21 +72,21 @@ export default function ConnectBrokerageModal({ onClose }: Props) {
 
         {step === "connecting" && (
           <div className="p-12 flex flex-col items-center gap-4">
-            <Loader2 className="w-8 h-8 text-[#84cc16] animate-spin" />
+            <Loader2 className="w-8 h-8 text-[#4ade80] animate-spin" />
             <p className="text-sm text-[var(--text-secondary)]">Connecting securely…</p>
           </div>
         )}
 
         {step === "done" && (
           <div className="p-12 flex flex-col items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-[#84cc16]/20 flex items-center justify-center">
-              <Check className="w-7 h-7 text-[#84cc16]" />
+            <div className="w-14 h-14 rounded-full bg-[#4ade80]/20 flex items-center justify-center">
+              <Check className="w-7 h-7 text-[#4ade80]" />
             </div>
             <p className="text-base font-semibold text-[var(--text-primary)]">{connected} connected!</p>
             <p className="text-sm text-[var(--text-secondary)]">Syncing your holdings…</p>
             <button
               onClick={onClose}
-              className="px-6 py-2 rounded-lg bg-[#84cc16] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors"
+              className="px-6 py-2 rounded-lg bg-[#4ade80] text-black text-sm font-semibold hover:bg-[#a3e635] transition-colors"
             >
               Done
             </button>

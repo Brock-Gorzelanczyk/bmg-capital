@@ -108,7 +108,7 @@ export default function PnLCalendarWidget(_props: IDockviewPanelProps) {
                         title={hasData ? `${cell.date}: ${fmt$(pnl!)}` : cell.date}
                         className={cn(
                           "aspect-square rounded flex flex-col items-center justify-center text-[9px] font-mono transition-colors relative",
-                          isToday && "ring-1 ring-[#BEF264]",
+                          isToday && "ring-1 ring-[#4ade80]",
                           hasData && pnl! > 0 && "bg-emerald-500/20 text-emerald-300",
                           hasData && pnl! < 0 && "bg-red-500/20 text-red-300",
                           hasData && pnl! === 0 && "bg-zinc-700/50 text-zinc-400",

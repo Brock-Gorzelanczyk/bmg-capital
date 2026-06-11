@@ -59,7 +59,7 @@ function fmt$(n: number) {
 }
 
 function ConfBar({ v }: { v: number }) {
-  const color = v >= 85 ? "#BEF264" : v >= 70 ? "#F59E0B" : "#94A3B8";
+  const color = v >= 85 ? "#4ade80" : v >= 70 ? "#F59E0B" : "#94A3B8";
   return (
     <div className="flex items-center gap-1.5">
       <div className="w-16 h-1.5 bg-[var(--bg-elevated-2)] rounded-full overflow-hidden">
@@ -255,7 +255,7 @@ function BigMoneyFlow() {
                 <input
                   type="range" min={60} max={95} step={5} value={threshold}
                   onChange={(e) => setThreshold(Number(e.target.value))}
-                  className="w-full accent-[#BEF264] h-1.5 rounded-full cursor-pointer"
+                  className="w-full accent-[#4ade80] h-1.5 rounded-full cursor-pointer"
                 />
                 <div className="flex justify-between text-[9px] text-[var(--text-tertiary)] mt-0.5">
                   <span>60% (aggressive)</span><span>95% (cautious)</span>

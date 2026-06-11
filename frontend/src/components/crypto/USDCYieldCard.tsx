@@ -20,9 +20,9 @@ export default function USDCYieldCard() {
     <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-5 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">USDC Yield</span>
-        <span className="text-xs font-semibold text-[#84cc16]">{rates?.current_user_apy ?? 4.0}% APY</span>
+        <span className="text-xs font-semibold text-[#4ade80]">{rates?.current_user_apy ?? 4.0}% APY</span>
       </div>
-      <div className="text-3xl font-black font-mono" style={{ color: "#84cc16" }}>
+      <div className="text-3xl font-black font-mono" style={{ color: "#4ade80" }}>
         ${(balance?.usdc_balance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
       </div>
       <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">

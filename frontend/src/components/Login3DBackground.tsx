@@ -55,7 +55,7 @@ export function Login3DBackground() {
       linePositions[i * 3 + 2] = -5;
     }
     lineGeo.setAttribute("position", new THREE.BufferAttribute(linePositions, 3));
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x84cc16, transparent: true, opacity: 0.7 });
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.7 });
     const priceLine = new THREE.Line(lineGeo, lineMat);
     scene.add(priceLine);
     let lastLineFrame = 0;
@@ -64,9 +64,9 @@ export function Login3DBackground() {
     const candleGroup = new THREE.Group();
     const candleGeos: THREE.BufferGeometry[] = [];
     const NUM_CANDLES = 40;
-    const bullMat = new THREE.MeshBasicMaterial({ color: 0x84cc16, transparent: true, opacity: 0.55 });
+    const bullMat = new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.55 });
     const bearMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.45 });
-    const wickMat = new THREE.LineBasicMaterial({ color: 0x84cc16, transparent: true, opacity: 0.4 });
+    const wickMat = new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.4 });
 
     for (let i = 0; i < NUM_CANDLES; i++) {
       const isBull = Math.random() > 0.42;
@@ -103,7 +103,7 @@ export function Login3DBackground() {
     const particleGeo = new THREE.BufferGeometry();
     particleGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
     const particleMat = new THREE.PointsMaterial({
-      color: 0x84cc16,
+      color: 0x4ade80,
       size: 0.12,
       transparent: true,
       opacity: 0.45,

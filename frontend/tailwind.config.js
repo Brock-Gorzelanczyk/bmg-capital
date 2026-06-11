@@ -8,11 +8,11 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display:  ['Bricolage Grotesque', 'system-ui', 'sans-serif'],
-        sans:     ['Geist', 'system-ui', '-apple-system', 'sans-serif'],
-        mono:     ['Geist Mono', 'ui-monospace', 'monospace'],
+        display:  ["'Space Grotesk'", 'system-ui', 'sans-serif'],
+        sans:     ["'Space Grotesk'", "'Inter'", 'system-ui', '-apple-system', 'sans-serif'],
+        mono:     ["'JetBrains Mono'", "'Geist Mono'", 'ui-monospace', 'monospace'],
         "mono-t": ["'JetBrains Mono'", "'Geist Mono'", 'ui-monospace', 'monospace'],
-        "ui-t":   ["'Inter'", "'Geist'", 'system-ui', 'sans-serif'],
+        "ui-t":   ["'Space Grotesk'", "'Inter'", 'system-ui', 'sans-serif'],
       },
       colors: {
         // ── shadcn compatibility layer ────────────────────────────
@@ -49,34 +49,34 @@ export default {
         // ── BMG design tokens ─────────────────────────────────────
         bmg: {
           // Backgrounds
-          base:       "#18181B",
-          elevated:   "#27272A",
-          elevated2:  "#3F3F46",
+          base:       "#040804",
+          elevated:   "#080d08",
+          elevated2:  "#0c120c",
 
           // Borders
-          subtle:     "rgba(255,255,255,0.06)",
-          emphasis:   "rgba(255,255,255,0.12)",
+          subtle:     "rgba(74,222,128,0.10)",
+          emphasis:   "rgba(74,222,128,0.20)",
 
           // Text
-          primary:    "#FAFAFA",
-          secondary:  "#A1A1AA",
-          tertiary:   "#71717A",
+          primary:    "#eafbe9",
+          secondary:  "#dce8dc",
+          tertiary:   "#7e8e7e",
 
           // Accents
-          positive:   "#BEF264",
-          negative:   "#FB7185",
-          "positive-bg": "rgba(190,242,100,0.10)",
-          "negative-bg": "rgba(251,113,133,0.10)",
+          positive:   "#4ade80",
+          negative:   "#f87171",
+          "positive-bg": "rgba(74,222,128,0.10)",
+          "negative-bg": "rgba(248,113,113,0.10)",
 
           // Legacy aliases (used in chart + keep-alive components)
-          bg:      "#18181B",
-          surface: "#27272A",
-          raised:  "#3F3F46",
-          border:  "#3F3F46",
-          profit:  "#BEF264",
-          loss:    "#FB7185",
-          brand:   "#BEF264",
-          gold:    "#F59E0B",
+          bg:      "#040804",
+          surface: "#080d08",
+          raised:  "#0c120c",
+          border:  "#0c120c",
+          profit:  "#4ade80",
+          loss:    "#f87171",
+          brand:   "#4ade80",
+          gold:    "#fbbf24",
         },
 
         // BMG green identity tokens (hero / sci-fi design language)

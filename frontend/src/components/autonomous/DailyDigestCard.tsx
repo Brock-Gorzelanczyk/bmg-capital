@@ -61,14 +61,14 @@ export default function DailyDigestCard({ className }: DailyDigestCardProps) {
     <div
       className={cn(
         "bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 border-l-4",
-        "border-l-[#84cc16]",
+        "border-l-[#4ade80]",
         className
       )}
     >
       {/* Header row */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Sun size={16} className="text-[#84cc16]" />
+          <Sun size={16} className="text-[#4ade80]" />
           <span className="text-sm font-semibold text-[var(--text-primary)]">
             Daily Digest
           </span>
@@ -84,7 +84,7 @@ export default function DailyDigestCard({ className }: DailyDigestCardProps) {
           </button>
           <button
             onClick={() => navigate("/mission-control")}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#84cc16] hover:bg-[#84cc16]/10 border border-[#84cc16]/30 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#4ade80] hover:bg-[#4ade80]/10 border border-[#4ade80]/30 transition-colors"
           >
             <ExternalLink size={12} />
             View Full
@@ -102,7 +102,7 @@ export default function DailyDigestCard({ className }: DailyDigestCardProps) {
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-lg">📡</span>
           <span className="text-[var(--text-tertiary)]">Signals:</span>
-          <span className="font-semibold text-[#84cc16]">{digest.signals_fired}</span>
+          <span className="font-semibold text-[#4ade80]">{digest.signals_fired}</span>
         </div>
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-lg">🟢</span>
@@ -142,7 +142,7 @@ export default function DailyDigestCard({ className }: DailyDigestCardProps) {
           <ul className="space-y-1">
             {highlights.map((h, i) => (
               <li key={i} className="flex items-start gap-2 text-xs text-[var(--text-secondary)]">
-                <span className="text-[#84cc16] mt-0.5 shrink-0">•</span>
+                <span className="text-[#4ade80] mt-0.5 shrink-0">•</span>
                 <span>{h}</span>
               </li>
             ))}

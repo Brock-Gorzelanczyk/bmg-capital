@@ -291,7 +291,7 @@ function EquityCurve({ data, isCrypto }: { data: EquityPoint[]; isCrypto: boolea
           contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
           labelStyle={{ color: "#a1a1aa" }}
         />
-        <Line type="monotone" dataKey="portfolio" stroke="#84cc16" strokeWidth={2} dot={false} name="Portfolio" />
+        <Line type="monotone" dataKey="portfolio" stroke="#4ade80" strokeWidth={2} dot={false} name="Portfolio" />
         <Line type="monotone" dataKey="benchmark" stroke="#52525b" strokeWidth={2} dot={false} name={benchmarkLabel} />
       </LineChart>
     </ResponsiveContainer>
@@ -1366,7 +1366,7 @@ function StrategyAttributionChart({ botName, totalPnl }: { botName: string; tota
           />
           <Bar dataKey="value" radius={[3, 3, 0, 0]}>
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.value >= 0 ? "#84cc16" : "#ef4444"} />
+              <Cell key={`cell-${index}`} fill={entry.value >= 0 ? "#4ade80" : "#ef4444"} />
             ))}
           </Bar>
         </BarChart>
@@ -1507,7 +1507,7 @@ function BacktestTab({ botName }: { botName: string }) {
                     labelStyle={{ color: "#a1a1aa" }}
                     formatter={(v: number) => [`$${v.toFixed(0)}`, "Portfolio"]}
                   />
-                  <Line type="monotone" dataKey="equity" stroke="#84cc16" strokeWidth={2} dot={false} name="Portfolio" />
+                  <Line type="monotone" dataKey="equity" stroke="#4ade80" strokeWidth={2} dot={false} name="Portfolio" />
                   {/* Flat benchmark line at starting capital */}
                   <Line
                     type="monotone"
@@ -1522,7 +1522,7 @@ function BacktestTab({ botName }: { botName: string }) {
               </ResponsiveContainer>
               <div className="flex gap-4 mt-2">
                 <div className="flex items-center gap-1.5 text-xs text-t-muted font-ui-t">
-                  <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
+                  <span className="w-3 h-0.5 bg-[#4ade80] inline-block rounded" />
                   Portfolio
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-t-muted font-ui-t">
@@ -2978,11 +2978,11 @@ export default function BotDetailPage() {
                         <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor={
                             equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                              ? "#84cc16" : "#ef4444"
+                              ? "#4ade80" : "#ef4444"
                           } stopOpacity={0.3} />
                           <stop offset="95%" stopColor={
                             equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                              ? "#84cc16" : "#ef4444"
+                              ? "#4ade80" : "#ef4444"
                           } stopOpacity={0} />
                         </linearGradient>
                       </defs>
@@ -2999,7 +2999,7 @@ export default function BotDetailPage() {
                         dataKey="portfolio"
                         stroke={
                           equityCurve.length > 0 && equityCurve[equityCurve.length - 1].portfolio >= equityCurve[0].portfolio
-                            ? "#84cc16" : "#ef4444"
+                            ? "#4ade80" : "#ef4444"
                         }
                         strokeWidth={2}
                         fill="url(#equityGradient)"
@@ -3009,7 +3009,7 @@ export default function BotDetailPage() {
                   </ResponsiveContainer>
                   <div className="flex gap-4">
                     <div className="flex items-center gap-1.5 text-xs text-t-muted font-ui-t">
-                      <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
+                      <span className="w-3 h-0.5 bg-[#4ade80] inline-block rounded" />
                       Portfolio
                     </div>
                   </div>
