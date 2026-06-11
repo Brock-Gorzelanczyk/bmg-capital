@@ -59,24 +59,24 @@ export interface ScoutSignal {
 }
 
 export const getCatalog = () =>
-  client.get<{ strategies: ScoutCatalogEntry[] }>("/api/scout/catalog").then((r) => r.data);
+  client.get<{ strategies: ScoutCatalogEntry[] }>("/scout/catalog").then((r) => r.data);
 
 export const evaluate = (strategy_id: string, ticker: string) =>
   client
-    .post<EvaluateResult>("/api/scout/evaluate", { strategy_id, ticker })
+    .post<EvaluateResult>("/scout/evaluate", { strategy_id, ticker })
     .then((r) => r.data);
 
 export const scanTicker = (ticker: string) =>
-  client.post<ScanResult>("/api/scout/scan-ticker", { ticker }).then((r) => r.data);
+  client.post<ScanResult>("/scout/scan-ticker", { ticker }).then((r) => r.data);
 
 export const getSetups = () =>
-  client.get<{ setups: ScoutSetup[] }>("/api/scout/setups").then((r) => r.data);
+  client.get<{ setups: ScoutSetup[] }>("/scout/setups").then((r) => r.data);
 
 export const createSetup = (ticker: string, strategy_id: string) =>
-  client.post<{ id: number; already_exists: boolean }>("/api/scout/setups", { ticker, strategy_id }).then((r) => r.data);
+  client.post<{ id: number; already_exists: boolean }>("/scout/setups", { ticker, strategy_id }).then((r) => r.data);
 
 export const deleteSetup = (id: number) =>
-  client.delete(`/api/scout/setups/${id}`).then((r) => r.data);
+  client.delete(`/scout/setups/${id}`).then((r) => r.data);
 
 export const getSignals = () =>
-  client.get<{ signals: ScoutSignal[] }>("/api/scout/signals").then((r) => r.data);
+  client.get<{ signals: ScoutSignal[] }>("/scout/signals").then((r) => r.data);
