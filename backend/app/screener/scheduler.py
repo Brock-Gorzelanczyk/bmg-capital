@@ -993,3 +993,25 @@ def setup_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
     )
+
+    # ── Allocation tier jobs ──────────────────────────────────────────────────
+
+    # Daily stats rollup — 2:00 AM ET after market close
+    from app.jobs.compute_bot_stats import run as run_compute_bot_stats
+    scheduler.add_job(
+        run_compute_bot_stats,
+        CronTrigger(hour=2, minute=0, timezone=ET),
+        id="compute_bot_stats_daily",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Weekly promotion digest — Monday 9:00 AM ET
+    from app.jobs.weekly_promotion_digest import run as run_weekly_promotion_digest
+    scheduler.add_job(
+        run_weekly_promotion_digest,
+        CronTrigger(day_of_week="mon", hour=9, minute=0, timezone=ET),
+        id="weekly_promotion_digest",
+        replace_existing=True,
+        max_instances=1,
+    )

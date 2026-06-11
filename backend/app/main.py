@@ -34,6 +34,7 @@ from app.routers import bars, screener, watchlist, portfolio, alerts, market, ne
 from app.routers.admin_bots import router as admin_bots_router
 from app.routers.sentinel import router as sentinel_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.allocation import router as allocation_router
 from app.routers.scout import router as scout_router
 from app.routers.forge import router as forge_router
 from app.routers.performance import router as performance_router
@@ -307,6 +308,7 @@ app.include_router(ipo.router)
 app.include_router(cfp.router)
 app.include_router(staking.router)
 app.include_router(dca_baskets.router)
+app.include_router(allocation_router)
 app.include_router(bots.router)
 app.include_router(strategy_lab.router)
 app.include_router(notification_channels_router.router)

@@ -664,6 +664,64 @@ def run_migrations(engine: Engine) -> None:
             _recreate_sentinel_tables(conn)
         except Exception as _e:
             logger.warning("_recreate_sentinel_tables failed (non-fatal): %s", _e)
+        try:
+            _create_allocation_tier_tables(conn)
+        except Exception as _e:
+            logger.warning("_create_allocation_tier_tables failed (non-fatal): %s", _e)
+
+
+def _create_allocation_tier_tables(conn) -> None:
+    """Create bot_performance_stats and bot_tier_history tables if absent."""
+    MIGRATION_NAME = "allocation_tier_tables_v1"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS bot_performance_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            allocation_id INTEGER NOT NULL REFERENCES bot_allocations(id) ON DELETE CASCADE,
+            stat_date DATE NOT NULL,
+            total_return_pct REAL,
+            return_30d_pct REAL,
+            return_7d_pct REAL,
+            win_rate REAL,
+            profit_factor REAL,
+            max_drawdown_pct REAL,
+            sharpe_ratio REAL,
+            total_trades INTEGER NOT NULL DEFAULT 0,
+            winning_trades INTEGER NOT NULL DEFAULT 0,
+            losing_trades INTEGER NOT NULL DEFAULT 0,
+            starting_capital_cents INTEGER NOT NULL DEFAULT 0,
+            current_value_cents INTEGER NOT NULL DEFAULT 0,
+            realized_pnl_cents INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_bot_perf_stats_alloc_date
+            ON bot_performance_stats(allocation_id, stat_date)
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS bot_tier_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            allocation_id INTEGER NOT NULL REFERENCES bot_allocations(id) ON DELETE CASCADE,
+            changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            previous_tier TEXT,
+            new_tier TEXT NOT NULL,
+            reason TEXT,
+            triggered_by TEXT NOT NULL DEFAULT 'daily_job',
+            return_30d_pct_at_change REAL,
+            win_rate_at_change REAL,
+            max_drawdown_at_change REAL,
+            trade_count_at_change INTEGER NOT NULL DEFAULT 0
+        )
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_bot_tier_history_alloc
+            ON bot_tier_history(allocation_id, changed_at)
+    """))
+    conn.commit()
+    _record_migration(conn, MIGRATION_NAME)
+    logger.info("_create_allocation_tier_tables: tables created")
 
 
 def _add_bot_signals_cooldown_index(conn) -> None:
