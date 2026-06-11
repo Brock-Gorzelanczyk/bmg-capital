@@ -11,8 +11,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from sqlalchemy import func
+
 from app.dependencies import get_db, get_current_user
-from app.db.models.bots import BotAllocation, BotProfile, BotDailyPnL
+from app.db.models.bots import BotAllocation, BotProfile, BotDailyPnL, BotTrade
 from app.db.models.allocation import BotPerformanceStats
 from app.db.models.users import User
 
@@ -82,6 +84,15 @@ def get_strategy_leaderboard(
                 unrealized_today_by_alloc.get(aid, 0) + row.unrealized_cents
             )
 
+    # ── Trade counts from bot_trades (nightly rollup may not have run yet) ──
+    trade_count_rows = (
+        db.query(BotTrade.allocation_id, func.count(BotTrade.id).label("cnt"))
+        .filter(BotTrade.allocation_id.in_(alloc_ids))
+        .group_by(BotTrade.allocation_id)
+        .all()
+    )
+    trade_counts: dict[int, int] = {row.allocation_id: row.cnt for row in trade_count_rows}
+
     # ── Performance stats (Sharpe, win rate — from nightly rollup) ──────────
     stats_rows = (
         db.query(BotPerformanceStats)
@@ -117,7 +128,7 @@ def get_strategy_leaderboard(
         sharpe_30d: float | None = stats.sharpe_ratio if stats else None
         win_rate: float | None = stats.win_rate if stats else None
         max_drawdown_pct: float | None = stats.max_drawdown_pct if stats else None
-        total_trades: int = stats.total_trades if stats else 0
+        total_trades: int = trade_counts.get(alloc.id, 0)
 
         created = alloc.created_at
         if created.tzinfo is None:
