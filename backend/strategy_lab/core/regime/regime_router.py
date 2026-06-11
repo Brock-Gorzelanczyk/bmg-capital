@@ -457,3 +457,53 @@ class RegimePersistenceFilter:
         self.pending_regime = None
         self.consecutive_days = 0
         logger.debug("RegimePersistenceFilter: force-set regime to %r", regime)
+
+
+# ---------------------------------------------------------------------------
+# Advisory VIX scaling — opt-in per strategy, not a global loop modifier
+# ---------------------------------------------------------------------------
+
+
+def advisory_vix_scale(
+    signals: list,
+    profile_name: str,
+    regime: dict,
+) -> tuple[list, float]:
+    """
+    Scale signal size_hints by VIX regime — advisory only.
+
+    Strategies call this explicitly if they want VIX-aware sizing.
+    It is never applied globally in the scan loop.
+
+    Delegates to ``strategy_lab.core.vix_regime_allocator.apply_vix_scaling``.
+
+    Parameters
+    ----------
+    signals:
+        List of Signal objects from a strategy's ``generate_signals()``.
+    profile_name:
+        Bot profile key (e.g. ``"stock_swing"``). Determines whether this
+        profile is classified as momentum, mean-reversion, or carry/income,
+        which controls the scaling direction.
+    regime:
+        Regime dict from ``RegimeRouter.detect_regime()`` or the live
+        ``RegimeSnapshot``; must contain ``"vix"`` or ``"vix_value"``.
+
+    Returns
+    -------
+    (scaled_signals, multiplier_applied)
+        ``multiplier_applied`` is ``1.0`` when no scaling occurs (VIX below
+        threshold, unknown profile type, or missing VIX data).
+
+    Example
+    -------
+    Inside a strategy's ``generate_signals()``::
+
+        from strategy_lab.core.regime.regime_router import advisory_vix_scale
+
+        raw = _build_signals(bars)
+        scaled, mult = advisory_vix_scale(raw, profile_config["name"], regime)
+        return scaled
+    """
+    from strategy_lab.core.vix_regime_allocator import apply_vix_scaling
+    return apply_vix_scaling(signals, profile_name, regime)
