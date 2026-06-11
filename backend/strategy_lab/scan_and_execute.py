@@ -222,6 +222,34 @@ def scan_and_execute(
         profile_name, len(results), len(deduped),
     )
 
+    # ── VIX regime scaling: apply after ensemble vote, before execution ───────
+    # Scales size_hints for momentum/mean-reversion bots based on VIX level.
+    # See strategy_lab/core/vix_regime_allocator.py for thresholds and classification.
+    try:
+        from strategy_lab.core.vix_regime_allocator import apply_vix_scaling
+        from strategy_lab.core.signals import Signal as _Sig
+        _pre_scale_signals = [
+            _Sig(
+                symbol=r["symbol"], side=r["side"],
+                confidence=r["confidence"],
+                size_hint=float(r.get("size_hint", 0.1)),
+                reason=str(r.get("reasons", "")),
+                strategy=r.get("strategy", ""),
+            )
+            for r in deduped
+        ]
+        _scaled_signals, _vix_mult = apply_vix_scaling(_pre_scale_signals, profile_name, regime)
+        if _vix_mult != 1.0:
+            logger.warning(
+                "[scan:%s] VIX scaling applied: multiplier=%.2f on %d signals",
+                profile_name, _vix_mult, len(_scaled_signals),
+            )
+            # Update deduped dicts with scaled size_hints
+            for i, r in enumerate(deduped):
+                r["size_hint"] = _scaled_signals[i].size_hint
+    except Exception as _vix_exc:
+        logger.debug("[scan:%s] VIX scaling skipped: %s", profile_name, _vix_exc)
+
     from strategy_lab.core.audit import log_signal
     from strategy_lab.core.signals import Signal
     from app.db.models.bots import BotPosition as _BotPos, BotSignal as _BSig

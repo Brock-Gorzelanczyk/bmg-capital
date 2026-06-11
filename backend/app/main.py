@@ -158,6 +158,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m002_exc:
         logger.warning("[startup] m002_seed_bots_t2_v1 failed (non-fatal): %s", _m002_exc)
 
+    try:
+        from app.db.migrations.m003_quant_research import run as _run_m003
+        with engine.connect() as _m003_conn:
+            _run_m003(_m003_conn)
+    except Exception as _m003_exc:
+        logger.warning("[startup] m003_quant_research failed (non-fatal): %s", _m003_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()

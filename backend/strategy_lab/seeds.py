@@ -27,6 +27,11 @@ _PROFILE_DESCRIPTIONS = {
     "crypto_onchain": "On-chain flow analysis — large wallet movements, DEX volume anomalies, L2 bridge activity on top 20 chains.",
     "crypto_quant_scalper": "5-strategy 1m scalper on liquid majors. Micro breakout, OB imbalance, tape acceleration, VWAP band reject, volume spike continuation. $30k.",
     "crypto_quant_mean_reversion": "6-strategy mean reversion on 10 mid-cap coins. BB extreme fade, RSI oversold bounce, RSI overbought short, z-score reversion, Keltner fade, pin bar rejection. $30k.",
+    "tsmom_multi_asset": "Multi-asset time-series momentum across 12 ETFs + crypto. 252d signal, weekly rebalance, inverse-vol sizing. Moskowitz, Ooi & Pedersen (2012). ~0.7 expected Sharpe after 30% haircut.",
+    "quality_factor": "Long-only quality factor (GP/A + ROE + low leverage proxy). Top quintile S&P 500, quarterly rebalance, max 25 names. Novy-Marx (2013). ~0.5 expected Sharpe.",
+    "value_quality": "Cheap-and-good combo (value z + quality z). AQR QMJ-style. Top decile, 20 names, quarterly. ~0.9 expected Sharpe after 30% haircut.",
+    "crypto_meanrev_2163": "21-63 day crypto mean reversion on top-20 coins. 30d z-score entry, falling-knife filter, 5-day time stop. Complements intraday MR bots at weekly horizon.",
+    "earnings_nlp": "BLOCKED: earnings call tone delta (LM sentiment). Long top-decile tone improvement, hold 1-3 days. Needs transcript API feed.",
 }
 
 

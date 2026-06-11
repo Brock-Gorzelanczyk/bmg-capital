@@ -715,11 +715,82 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
 
+    # ------------------------------------------------------------------
+    # tsmom_multi_asset: Friday 5PM ET weekly rebalance
+    # Moskowitz, Ooi & Pedersen (2012) TSMOM — 12 ETFs + crypto, inv-vol.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: _run_and_log("tsmom_multi_asset"),
+        CronTrigger(day_of_week="fri", hour=17, minute=0, timezone=ET),
+        id="bot_tsmom_multi_asset",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
+    # quality_factor: first Tuesday of month 10:30 AM ET (quarterly logic in strategy)
+    # Novy-Marx (2013) Gross Profitability proxy — top quintile SP500.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: _run_and_log("quality_factor"),
+        CronTrigger(day_of_week="tue", hour=10, minute=30, timezone=ET),
+        id="bot_quality_factor",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
+    # value_quality: first Tuesday of month 11 AM ET (same as quality_factor, staggered)
+    # AQR QMJ-style value + quality combo — top decile SP500.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: _run_and_log("value_quality"),
+        CronTrigger(day_of_week="tue", hour=11, minute=0, timezone=ET),
+        id="bot_value_quality",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
+    # crypto_meanrev_2163: every 4 hours, 24/7
+    # 21-63 day mean reversion on top-20 crypto via 30d z-score.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_meanrev_2163"),
+        CronTrigger(hour="*/4", minute=30),
+        id="bot_crypto_meanrev_2163",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+
+    # ------------------------------------------------------------------
+    # earnings_nlp: 9AM ET daily Mon-Fri
+    # BLOCKED stub — will be no-op until transcript feed is wired.
+    # ------------------------------------------------------------------
+    scheduler.add_job(
+        lambda: _run_and_log("earnings_nlp"),
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=0, timezone=ET),
+        id="bot_earnings_nlp",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
         "crypto_quant_aggressive crypto_quant_scalper crypto_quant_mean_reversion "
         "options_income options_directional position_monitor dead_mans_switch "
         "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan "
-        "strategy_forge_scan signal_explain_pregen"
+        "strategy_forge_scan signal_explain_pregen "
+        "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp"
     )
