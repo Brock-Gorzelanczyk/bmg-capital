@@ -3,8 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -28,7 +27,7 @@ class StrategyMeta(Base):
     decay_risk: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)          # low, medium, high
     source_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     paper_citation: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    required_inputs: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    required_inputs: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     suggested_bot: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     description_md: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     mechanics_md: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
