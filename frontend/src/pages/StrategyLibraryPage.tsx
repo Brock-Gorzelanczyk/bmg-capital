@@ -65,7 +65,7 @@ function getStrategyLibrary(params?: {
 const DIFFICULTY_COLOR: Record<string, string> = {
   beginner: "bg-lime-500/15 text-lime-400 border-lime-500/30",
   intermediate: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  advanced: "bg-red-500/15 text-red-400 border-red-500/30",
+  advanced: "bg-t-red/15 text-t-red border-t-red/30",
 };
 
 const HORIZON_ICON: Record<string, typeof TrendingUp> = {
@@ -94,10 +94,10 @@ const BOT_LABEL: Record<string, string> = {
 };
 
 function sharpeColor(v: number | null): string {
-  if (v == null) return "text-zinc-500";
+  if (v == null) return "text-t-muted";
   if (v >= 2) return "text-lime-400";
   if (v >= 1) return "text-yellow-400";
-  return "text-red-400";
+  return "text-t-red";
 }
 
 // ─── Strategy Card ────────────────────────────────────────────────────────────
@@ -112,8 +112,8 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
   return (
     <div
       className={cn(
-        "bg-zinc-900 border rounded-2xl p-5 space-y-3 transition-all cursor-pointer hover:border-zinc-600",
-        s.is_top_pick ? "border-teal-500/40" : "border-zinc-800"
+        "bg-t-bg1 border rounded-2xl p-5 space-y-3 transition-all cursor-pointer card-hover",
+        s.is_top_pick ? "border-teal-500/40" : "border-t-dim"
       )}
       onClick={() => setExpanded((v) => !v)}
     >
@@ -124,17 +124,17 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
             {s.is_top_pick && (
               <Star className="w-3.5 h-3.5 text-teal-400 fill-teal-400 flex-shrink-0" />
             )}
-            <h3 className="text-sm font-bold text-white truncate">{s.display_name}</h3>
+            <h3 className="text-sm font-bold text-t-hi truncate">{s.display_name}</h3>
             <span className={cn(
               "text-[10px] font-semibold px-1.5 py-0.5 rounded-full border",
-              DIFFICULTY_COLOR[s.difficulty] ?? "bg-zinc-800 text-zinc-400 border-zinc-700"
+              DIFFICULTY_COLOR[s.difficulty] ?? "bg-t-bg2 text-t-mid2 border-t-mid"
             )}>
               {s.difficulty}
             </span>
           </div>
-          <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">{s.tagline}</p>
+          <p className="text-xs text-t-muted mt-0.5 leading-relaxed">{s.tagline}</p>
         </div>
-        <div className="flex items-center gap-1 text-zinc-500 flex-shrink-0">
+        <div className="flex items-center gap-1 text-t-muted flex-shrink-0">
           <HorizonIcon className="w-3.5 h-3.5" />
           <span className="text-[10px]">{s.time_horizon}</span>
         </div>
@@ -143,26 +143,26 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
       {/* Stats row */}
       <div className="flex items-center gap-4 text-xs">
         <div>
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Sharpe</p>
-          <p className={cn("font-bold mt-0.5", sharpeColor(s.published_sharpe))}>
+          <p className="text-[9px] text-t-muted uppercase tracking-wide">Sharpe</p>
+          <p className={cn("font-bold font-mono-t tabular-nums mt-0.5", sharpeColor(s.published_sharpe))}>
             {s.published_sharpe != null ? s.published_sharpe.toFixed(2) : "—"}
           </p>
         </div>
         <div>
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Win Rate</p>
-          <p className="font-bold text-zinc-300 mt-0.5">
+          <p className="text-[9px] text-t-muted uppercase tracking-wide">Win Rate</p>
+          <p className="font-bold font-mono-t tabular-nums text-t-hi mt-0.5">
             {s.win_rate_pub != null ? `${(s.win_rate_pub * 100).toFixed(0)}%` : "—"}
           </p>
         </div>
         <div>
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Max DD</p>
-          <p className="font-bold text-red-400 mt-0.5">
+          <p className="text-[9px] text-t-muted uppercase tracking-wide">Max DD</p>
+          <p className="font-bold font-mono-t tabular-nums text-t-red mt-0.5">
             {s.max_dd_pub != null ? `${(s.max_dd_pub * 100).toFixed(0)}%` : "—"}
           </p>
         </div>
         <div className="ml-auto text-right">
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Asset</p>
-          <p className={cn("font-semibold mt-0.5 capitalize", ASSET_COLOR[s.asset_class] ?? "text-zinc-400")}>
+          <p className="text-[9px] text-t-muted uppercase tracking-wide">Asset</p>
+          <p className={cn("font-semibold mt-0.5 capitalize", ASSET_COLOR[s.asset_class] ?? "text-t-mid2")}>
             {s.asset_class}
           </p>
         </div>
@@ -170,7 +170,7 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
 
       {/* Tags row */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-t-bg2 border border-t-mid text-t-mid2">
           {s.category}
         </span>
         {s.suggested_bot && (
@@ -184,7 +184,7 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
             ? "bg-lime-500/10 border-lime-500/20 text-lime-500"
             : s.decay_risk === "medium"
             ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
-            : "bg-red-500/10 border-red-500/20 text-red-500"
+            : "bg-t-red/10 border-t-red/20 text-t-red"
         )}>
           decay: {s.decay_risk}
         </span>
@@ -201,22 +201,22 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="pt-2 border-t border-zinc-800 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="pt-2 border-t border-t-dim space-y-3" onClick={(e) => e.stopPropagation()}>
           {s.description_md && (
             <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-semibold mb-1">What it does</p>
-              <p className="text-xs text-zinc-300 leading-relaxed">{s.description_md}</p>
+              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-1">What it does</p>
+              <p className="text-xs text-t-hi leading-relaxed">{s.description_md}</p>
             </div>
           )}
           {s.mechanics_md && (
             <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-semibold mb-1">How it works</p>
-              <p className="text-xs text-zinc-400 leading-relaxed">{s.mechanics_md}</p>
+              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-1">How it works</p>
+              <p className="text-xs text-t-mid2 leading-relaxed">{s.mechanics_md}</p>
             </div>
           )}
           {s.paper_citation && (
             <div className="flex items-center gap-2">
-              <p className="text-[10px] text-zinc-600">Source:</p>
+              <p className="text-[10px] text-t-muted">Source:</p>
               {s.source_url ? (
                 <a
                   href={s.source_url}
@@ -229,14 +229,14 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
                   <ExternalLink className="w-2.5 h-2.5" />
                 </a>
               ) : (
-                <p className="text-[10px] text-zinc-500">{s.paper_citation}</p>
+                <p className="text-[10px] text-t-muted">{s.paper_citation}</p>
               )}
             </div>
           )}
 
           {/* Beginner Guide section */}
           {hasBeginnerGuide && (
-            <div className="border-t border-zinc-800 pt-2">
+            <div className="border-t border-t-dim pt-2">
               <button
                 onClick={(e) => { e.stopPropagation(); setBeginnerExpanded((v) => !v); }}
                 className="flex items-center gap-1.5 text-[10px] font-semibold text-lime-400 hover:text-lime-300 transition-colors w-full text-left"
@@ -253,25 +253,25 @@ function StrategyCard({ s }: { s: StrategyEntry }) {
                   {s.beginner_summary && (
                     <div>
                       <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">What it is</p>
-                      <p className="text-xs text-zinc-300 leading-relaxed">{s.beginner_summary}</p>
+                      <p className="text-xs text-t-hi leading-relaxed">{s.beginner_summary}</p>
                     </div>
                   )}
                   {s.how_it_decides && (
                     <div>
                       <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">How it decides</p>
-                      <p className="text-xs text-zinc-400 leading-relaxed">{s.how_it_decides}</p>
+                      <p className="text-xs text-t-mid2 leading-relaxed">{s.how_it_decides}</p>
                     </div>
                   )}
                   {s.why_it_works && (
                     <div>
                       <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">Why it works</p>
-                      <p className="text-xs text-zinc-400 leading-relaxed">{s.why_it_works}</p>
+                      <p className="text-xs text-t-mid2 leading-relaxed">{s.why_it_works}</p>
                     </div>
                   )}
                   {s.when_it_fails && (
                     <div>
                       <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">When it fails</p>
-                      <p className="text-xs text-zinc-400 leading-relaxed">{s.when_it_fails}</p>
+                      <p className="text-xs text-t-mid2 leading-relaxed">{s.when_it_fails}</p>
                     </div>
                   )}
                 </div>
@@ -327,22 +327,22 @@ export default function StrategyLibraryPage() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <div className="animate-page-in max-w-4xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate("/strategy")}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="text-xs text-t-muted hover:text-t-hi transition-colors"
             >
               Strategy Lab
             </button>
-            <span className="text-zinc-700">/</span>
-            <span className="text-xs text-zinc-300 font-semibold">Library</span>
+            <span className="text-t-dim">/</span>
+            <span className="text-xs text-t-hi font-semibold">Library</span>
           </div>
-          <h1 className="text-xl font-bold text-white mt-1">Strategy Library</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">
+          <h1 className="text-xl font-bold text-t-hi mt-1">Strategy Library</h1>
+          <p className="text-xs text-t-muted mt-0.5">
             {total} strategies across {categoryList.length} categories — click any card to expand
           </p>
         </div>
@@ -358,13 +358,13 @@ export default function StrategyLibraryPage() {
       <div className="space-y-3">
         <div className="flex gap-2">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-t-muted" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search strategies…"
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-teal-500/50"
+              className="w-full bg-t-bg1 border border-t-dim rounded-xl pl-9 pr-4 py-2.5 text-sm text-t-hi placeholder-t-muted focus:outline-none focus:border-teal-500/50"
             />
           </div>
           <button
@@ -373,7 +373,7 @@ export default function StrategyLibraryPage() {
               "px-3 py-2 rounded-xl border text-sm font-semibold transition-colors flex items-center gap-1.5",
               showFilters
                 ? "bg-teal-500/15 border-teal-500/40 text-teal-400"
-                : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                : "bg-t-bg1 border-t-dim text-t-muted hover:text-t-hi"
             )}
           >
             <Filter className="w-4 h-4" />
@@ -382,7 +382,7 @@ export default function StrategyLibraryPage() {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-teal-500/50"
+            className="bg-t-bg1 border border-t-dim rounded-xl px-3 py-2 text-sm text-t-hi focus:outline-none focus:border-teal-500/50"
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -391,16 +391,16 @@ export default function StrategyLibraryPage() {
         </div>
 
         {showFilters && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
+          <div className="bg-t-bg1 border border-t-dim rounded-xl p-4 space-y-4">
             {/* Category filter */}
             <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-semibold mb-2">Category</p>
+              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-2">Category</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setCategory("")}
                   className={cn(
                     "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                    !category ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                    !category ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
                   )}
                 >
                   All
@@ -411,10 +411,10 @@ export default function StrategyLibraryPage() {
                     onClick={() => setCategory(cat === category ? "" : cat)}
                     className={cn(
                       "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                      category === cat ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                      category === cat ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
                     )}
                   >
-                    {cat} <span className="text-zinc-700">({categories[cat]})</span>
+                    {cat} <span className="text-t-dim">({categories[cat]})</span>
                   </button>
                 ))}
               </div>
@@ -422,13 +422,13 @@ export default function StrategyLibraryPage() {
 
             {/* Asset class filter */}
             <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-semibold mb-2">Asset Class</p>
+              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-2">Asset Class</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setAssetClass("")}
                   className={cn(
                     "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                    !assetClass ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                    !assetClass ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
                   )}
                 >
                   All
@@ -439,7 +439,7 @@ export default function StrategyLibraryPage() {
                     onClick={() => setAssetClass(a === assetClass ? "" : a)}
                     className={cn(
                       "text-xs px-2.5 py-1 rounded-full border transition-colors capitalize",
-                      assetClass === a ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                      assetClass === a ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
                     )}
                   >
                     {a}
@@ -450,13 +450,13 @@ export default function StrategyLibraryPage() {
 
             {/* Difficulty filter */}
             <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wide font-semibold mb-2">Difficulty</p>
+              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-2">Difficulty</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setDifficulty("")}
                   className={cn(
                     "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                    !difficulty ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                    !difficulty ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
                   )}
                 >
                   All
@@ -467,7 +467,7 @@ export default function StrategyLibraryPage() {
                     onClick={() => setDifficulty(d === difficulty ? "" : d)}
                     className={cn(
                       "text-xs px-2.5 py-1 rounded-full border transition-colors capitalize",
-                      difficulty === d ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                      difficulty === d ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
                     )}
                   >
                     {d}
@@ -480,7 +480,7 @@ export default function StrategyLibraryPage() {
             {(category || assetClass || difficulty || search) && (
               <button
                 onClick={() => { setCategory(""); setAssetClass(""); setDifficulty(""); setSearch(""); }}
-                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                className="text-xs text-t-red hover:text-t-red/80 transition-colors"
               >
                 Clear all filters
               </button>
@@ -493,12 +493,12 @@ export default function StrategyLibraryPage() {
       {isLoading ? (
         <div className="space-y-3">
           {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-28 bg-zinc-900 border border-zinc-800 rounded-2xl animate-pulse" />
+            <div key={i} className="h-28 bg-t-bg1 border border-t-dim rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : strategies.length === 0 ? (
         <div className="py-16 text-center">
-          <p className="text-zinc-500 text-sm">No strategies match your filters.</p>
+          <p className="text-t-muted text-sm">No strategies match your filters.</p>
           <button
             onClick={() => { setCategory(""); setAssetClass(""); setDifficulty(""); setSearch(""); }}
             className="mt-2 text-xs text-teal-400 hover:text-teal-300 underline underline-offset-2"

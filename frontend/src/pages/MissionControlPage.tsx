@@ -84,7 +84,7 @@ function TickerItem({ action }: { action: AutonomousAction }) {
       <span className="font-semibold text-[var(--text-primary)]">{action.asset}</span>
       <span>{action.strategy_id}</span>
       {pnlStr && (
-        <span className={action.outcome_value! >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"}>
+        <span className={cn("font-mono-t tabular-nums", action.outcome_value! >= 0 ? "text-t-green" : "text-t-red")}>
           {pnlStr}
         </span>
       )}
@@ -140,9 +140,9 @@ function ActionCard({
           className={cn(
             "text-[10px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0",
             action.result === "success"
-              ? "text-[#22C55E] bg-[#22C55E]/10"
+              ? "text-t-green bg-t-green/10"
               : action.result === "failed"
-              ? "text-[#EF4444] bg-[#EF4444]/10"
+              ? "text-t-red bg-t-red/10"
               : "text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)]"
           )}
         >
@@ -155,8 +155,8 @@ function ActionCard({
         {action.outcome_value != null && (
           <span
             className={cn(
-              "ml-2 text-xs",
-              action.outcome_value >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"
+              "ml-2 text-xs font-mono-t tabular-nums",
+              action.outcome_value >= 0 ? "text-t-green" : "text-t-red"
             )}
           >
             {action.outcome_value >= 0 ? "+" : ""}
@@ -185,7 +185,7 @@ function SignalFeedCard({ sig, isNew }: { sig: SignalFeedItem; isNew: boolean })
   return (
     <div
       className={cn(
-        "border border-[var(--border-subtle)] rounded-xl p-3 border-l-4 transition-all duration-400",
+        "border border-[var(--border-subtle)] rounded-xl p-3 border-l-4 transition-all duration-400 card-hover",
         isLong ? "border-l-lime-500/60" : isShort ? "border-l-red-500/60" : "border-l-zinc-600",
         isNew && "animate-feed-in"
       )}
@@ -207,7 +207,7 @@ function SignalFeedCard({ sig, isNew }: { sig: SignalFeedItem; isNew: boolean })
           </span>
         </div>
         {confPct && (
-          <span className="text-[10px] font-bold text-[var(--text-secondary)]">{confPct}</span>
+          <span className="text-[10px] font-bold font-mono-t tabular-nums text-[var(--text-secondary)]">{confPct}</span>
         )}
       </div>
       {(sig.strategy || sig.reason) && (
@@ -344,7 +344,7 @@ function SliderField({
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-xs font-medium text-[var(--text-secondary)]">{label}</span>
-        <span className="text-xs font-bold text-[#84cc16]">
+        <span className="text-xs font-bold font-mono-t tabular-nums text-[#84cc16]">
           {value}{unit}
         </span>
       </div>
@@ -358,7 +358,7 @@ function SliderField({
         className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
         style={{ accentColor: "#84cc16" }}
       />
-      <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] mt-0.5">
+      <div className="flex justify-between text-[10px] font-mono-t tabular-nums text-[var(--text-tertiary)] mt-0.5">
         <span>{min}{unit}</span>
         <span>{max}{unit}</span>
       </div>
@@ -386,7 +386,7 @@ function UsageBar({
     <div className="mb-3">
       <div className="flex items-center justify-between mb-1 text-xs">
         <span className="text-[var(--text-tertiary)]">{label}</span>
-        <span style={{ color }} className="font-semibold">
+        <span style={{ color }} className="font-semibold font-mono-t tabular-nums">
           {current}{unit} / {max}{unit}
         </span>
       </div>
@@ -523,9 +523,9 @@ export default function MissionControlPage() {
 
   const marketStatusColor =
     status?.market_status === "open"
-      ? "text-[#22C55E] bg-[#22C55E]/10 border-[#22C55E]/30"
+      ? "text-t-green bg-t-green/10 border-t-green/30"
       : status?.market_status === "after-hours" || status?.market_status === "pre-market"
-      ? "text-amber-400 bg-amber-400/10 border-amber-400/30"
+      ? "text-t-amber bg-t-amber/10 border-t-amber/30"
       : "text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] border-[var(--border-subtle)]";
 
   const marketStatusLabel =
@@ -608,7 +608,7 @@ export default function MissionControlPage() {
     : 0;
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)]">
+    <div className="animate-page-in min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)]">
       {/* Inline CSS for ticker + feed animations */}
       <style>{`
         @keyframes ticker-scroll {
@@ -663,11 +663,11 @@ export default function MissionControlPage() {
 
               <p className="text-sm text-[var(--text-secondary)] mb-0.5">
                 BMG is monitoring{" "}
-                <span className="font-bold text-[#84cc16]">
+                <span className="font-bold font-mono-t tabular-nums text-[#84cc16]">
                   {assetsMonitored.toLocaleString() || "8,212"}
                 </span>{" "}
                 assets across{" "}
-                <span className="font-bold text-[var(--text-primary)]">
+                <span className="font-bold font-mono-t tabular-nums text-[var(--text-primary)]">
                   {strategiesDisplay || 247}
                 </span>{" "}
                 strategies right now
@@ -698,14 +698,14 @@ export default function MissionControlPage() {
                   Resume All
                 </button>
               ) : pauseConfirming ? (
-                <div className="flex items-center gap-2 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-lg px-3 py-2">
-                  <span className="text-xs text-[#EF4444] font-medium">
+                <div className="flex items-center gap-2 bg-t-red/10 border border-t-red/30 rounded-lg px-3 py-2">
+                  <span className="text-xs text-t-red font-medium">
                     Pause all {strategiesDisplay || 247} running strategies?
                   </span>
                   <button
                     onClick={() => pauseMutation.mutate()}
                     disabled={pauseMutation.isPending}
-                    className="px-2.5 py-1 rounded bg-[#EF4444] text-white text-xs font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
+                    className="px-2.5 py-1 rounded bg-[#EF4444] text-t-hi text-xs font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
                   >
                     {pauseMutation.isPending ? "Pausing…" : "Confirm Pause"}
                   </button>
@@ -719,7 +719,7 @@ export default function MissionControlPage() {
               ) : (
                 <button
                   onClick={() => setPauseConfirming(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-sm font-medium text-[var(--text-secondary)] hover:border-[#EF4444]/50 hover:text-[#EF4444] transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-sm font-medium text-[var(--text-secondary)] hover:border-[#EF4444]/50 hover:text-t-red transition-colors"
                 >
                   <Pause size={14} />
                   Pause All Autonomous Activity
@@ -757,13 +757,13 @@ export default function MissionControlPage() {
               {/* Strategies active */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Strategies active</span>
-                <span className="text-lg font-bold text-[#84cc16]">{strategiesDisplay || 247}</span>
+                <span className="text-lg font-bold font-mono-t tabular-nums text-[#84cc16]">{strategiesDisplay || 247}</span>
               </div>
 
               {/* Open positions */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Open positions</span>
-                <span className="text-lg font-bold text-[var(--text-primary)]">
+                <span className="text-lg font-bold font-mono-t tabular-nums text-[var(--text-primary)]">
                   {openPositions}
                 </span>
               </div>
@@ -772,17 +772,17 @@ export default function MissionControlPage() {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Guardrail status</span>
                 {status?.guardrail_status === "ok" ? (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-[#22C55E]">
+                  <span className="flex items-center gap-1 text-xs font-semibold text-t-green">
                     <CheckCircle2 size={12} />
                     All clear
                   </span>
                 ) : status?.guardrail_status === "tripped" ? (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-[#EF4444]">
+                  <span className="flex items-center gap-1 text-xs font-semibold text-t-red">
                     <AlertTriangle size={12} />
                     Tripped
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-amber-400">
+                  <span className="flex items-center gap-1 text-xs font-semibold text-t-amber">
                     <Pause size={12} />
                     Paused
                   </span>
@@ -803,8 +803,8 @@ export default function MissionControlPage() {
                       <span className="font-semibold text-[var(--text-primary)]">{pos.symbol}</span>
                       <span
                         className={cn(
-                          "font-medium",
-                          pos.unrealized_pnl >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"
+                          "font-medium font-mono-t tabular-nums",
+                          pos.unrealized_pnl >= 0 ? "text-t-green" : "text-t-red"
                         )}
                       >
                         {pos.unrealized_pnl >= 0 ? "+" : ""}
@@ -835,7 +835,7 @@ export default function MissionControlPage() {
               {/* Signals fired */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Signals fired</span>
-                <span className="text-lg font-bold text-[#84cc16]">
+                <span className="text-lg font-bold font-mono-t tabular-nums text-[#84cc16]">
                   {stats?.signals_fired ?? "—"}
                 </span>
               </div>
@@ -843,7 +843,7 @@ export default function MissionControlPage() {
               {/* Paper buys */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Paper buys</span>
-                <span className="text-lg font-bold text-[#22C55E]">
+                <span className="text-lg font-bold font-mono-t tabular-nums text-t-green">
                   {stats?.paper_buys ?? "—"}
                 </span>
               </div>
@@ -851,7 +851,7 @@ export default function MissionControlPage() {
               {/* Exits */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Paper exits</span>
-                <span className="text-lg font-bold text-[#3B82F6]">
+                <span className="text-lg font-bold font-mono-t tabular-nums text-[#3B82F6]">
                   {stats?.paper_sells ?? "—"}
                 </span>
               </div>
@@ -859,7 +859,7 @@ export default function MissionControlPage() {
               {/* Stop hits */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Stop hits</span>
-                <span className="text-lg font-bold text-[#EF4444]">
+                <span className="text-lg font-bold font-mono-t tabular-nums text-t-red">
                   {stats?.stop_hits ?? "—"}
                 </span>
               </div>
@@ -870,8 +870,8 @@ export default function MissionControlPage() {
                 {stats != null ? (
                   <span
                     className={cn(
-                      "text-lg font-bold",
-                      stats.pnl_24h >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"
+                      "text-lg font-bold font-mono-t tabular-nums",
+                      stats.pnl_24h >= 0 ? "text-t-green" : "text-t-red"
                     )}
                   >
                     {stats.pnl_24h >= 0 ? "+" : ""}
@@ -884,12 +884,12 @@ export default function MissionControlPage() {
 
               {/* Best action */}
               {stats?.best_action && (
-                <div className="flex items-center gap-2 bg-[#22C55E]/5 border border-[#22C55E]/20 rounded-lg px-2.5 py-1.5">
+                <div className="flex items-center gap-2 bg-t-green/10 border border-t-green/20 rounded-lg px-2.5 py-1.5">
                   <span>🏆</span>
                   <span className="text-xs font-semibold text-[var(--text-primary)]">
                     {stats.best_action.asset}
                   </span>
-                  <span className="text-xs text-[#22C55E] ml-auto font-bold">
+                  <span className="text-xs text-t-green ml-auto font-bold font-mono-t tabular-nums">
                     +{formatCurrency(stats.best_action.pnl)}
                   </span>
                 </div>
@@ -905,7 +905,7 @@ export default function MissionControlPage() {
                     <div key={lab} className="mb-1.5">
                       <div className="flex justify-between text-xs mb-0.5">
                         <span className="text-[var(--text-tertiary)] capitalize">{lab}</span>
-                        <span className="text-[var(--text-secondary)] font-medium">{count}</span>
+                        <span className="text-[var(--text-secondary)] font-medium font-mono-t tabular-nums">{count}</span>
                       </div>
                       <div className="h-1 bg-[var(--bg-elevated-2)] rounded-full overflow-hidden">
                         <div
@@ -1040,7 +1040,7 @@ export default function MissionControlPage() {
                 Risk Guardrails
               </span>
               {guardrails?.autonomous_paused && (
-                <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold text-t-amber bg-t-amber/10 border border-t-amber/20 px-1.5 py-0.5 rounded">
                   PAUSED
                 </span>
               )}
@@ -1069,10 +1069,10 @@ export default function MissionControlPage() {
                 />
                 <div className="flex items-center justify-between text-xs mt-1 pt-3 border-t border-[var(--border-subtle)]">
                   <div className="space-y-1 text-[var(--text-tertiary)]">
-                    <p>Weekly loss limit: <span className="text-[var(--text-secondary)]">{guardrails.weekly_loss_limit_pct}%</span></p>
-                    <p>Max consecutive losses: <span className="text-[var(--text-secondary)]">{guardrails.max_consecutive_losses}</span></p>
+                    <p>Weekly loss limit: <span className="font-mono-t tabular-nums text-[var(--text-secondary)]">{guardrails.weekly_loss_limit_pct}%</span></p>
+                    <p>Max consecutive losses: <span className="font-mono-t tabular-nums text-[var(--text-secondary)]">{guardrails.max_consecutive_losses}</span></p>
                     {guardrails.paused_reason && (
-                      <p className="text-amber-400">Paused reason: {guardrails.paused_reason}</p>
+                      <p className="text-t-amber">Paused reason: {guardrails.paused_reason}</p>
                     )}
                   </div>
                   <button
@@ -1111,7 +1111,7 @@ function NextScanCountdown() {
   }, []);
 
   return (
-    <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+    <div className="flex items-center gap-1.5 text-xs font-mono-t tabular-nums text-[var(--text-secondary)]">
       <Clock size={11} className="text-[var(--text-tertiary)]" />
       in {label}
     </div>

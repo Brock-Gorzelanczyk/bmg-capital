@@ -251,12 +251,12 @@ function SideBadge({ side }: { side: string }) {
   const isShort = side === "sell" || side === "short";
   const label = isLong ? "LONG" : isShort ? "SHORT" : side.toUpperCase();
   const style = isLong
-    ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+    ? "bg-lime-500/15 text-t-green border-lime-500/30"
     : isShort
-    ? "bg-red-500/15 text-red-400 border-red-500/30"
-    : "bg-zinc-800 text-zinc-400 border-zinc-700";
+    ? "bg-red-500/15 text-t-red border-red-500/30"
+    : "bg-t-bg1 text-t-muted border-t-dim";
   return (
-    <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", style)}>
+    <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border font-ui-t", style)}>
       {label}
     </span>
   );
@@ -275,8 +275,8 @@ function EquityCurve({ data, isCrypto }: { data: EquityPoint[]; isCrypto: boolea
 
   if (!data || data.length === 0) {
     return (
-      <div className="h-48 flex items-center justify-center bg-zinc-900/50 rounded-xl border border-zinc-800">
-        <p className="text-zinc-600 text-sm">No equity data yet</p>
+      <div className="h-48 flex items-center justify-center bg-t-bg0/50 rounded-xl border border-t-dim">
+        <p className="text-t-dim text-sm font-ui-t">No equity data yet</p>
       </div>
     );
   }
@@ -302,19 +302,19 @@ function EquityCurve({ data, isCrypto }: { data: EquityPoint[]; isCrypto: boolea
 
 function vixPillClass(regime: string): string {
   const r = regime?.toLowerCase() ?? "";
-  if (r === "low") return "bg-green-500/15 text-green-400 border-green-500/30";
-  if (r === "mid") return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
-  if (r === "high") return "bg-orange-500/15 text-orange-400 border-orange-500/30";
-  if (r === "panic") return "bg-red-500/15 text-red-400 border-red-500/30";
-  return "bg-zinc-800 text-zinc-400 border-zinc-700";
+  if (r === "low") return "bg-green-500/15 text-t-green border-green-500/30";
+  if (r === "mid") return "bg-yellow-500/15 text-t-amber border-yellow-500/30";
+  if (r === "high") return "bg-orange-500/15 text-t-amber border-orange-500/30";
+  if (r === "panic") return "bg-red-500/15 text-t-red border-red-500/30";
+  return "bg-t-bg1 text-t-muted border-t-dim";
 }
 
 function trendPillClass(regime: string): string {
   const r = regime?.toLowerCase() ?? "";
-  if (r === "bull") return "bg-lime-500/15 text-lime-400 border-lime-500/30";
-  if (r === "chop") return "bg-zinc-700/40 text-zinc-400 border-zinc-600";
-  if (r === "bear") return "bg-red-500/15 text-red-400 border-red-500/30";
-  return "bg-zinc-800 text-zinc-400 border-zinc-700";
+  if (r === "bull") return "bg-lime-500/15 text-t-green border-lime-500/30";
+  if (r === "chop") return "bg-t-bg2/40 text-t-muted border-t-mid";
+  if (r === "bear") return "bg-red-500/15 text-t-red border-red-500/30";
+  return "bg-t-bg1 text-t-muted border-t-dim";
 }
 
 function getGatingText(regime: RegimeData | undefined): string {
@@ -335,10 +335,10 @@ function getGatingText(regime: RegimeData | undefined): string {
 function RegimePanel({ regime, isLoading }: { regime: RegimeData | undefined; isLoading: boolean }) {
   if (isLoading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 animate-pulse">
-        <div className="h-3 w-32 bg-zinc-800 rounded mb-3" />
+      <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3 animate-pulse">
+        <div className="h-3 w-32 bg-t-bg1 rounded mb-3" />
         <div className="flex gap-2">
-          {[0, 1, 2].map((i) => <div key={i} className="h-7 w-20 bg-zinc-800 rounded-full" />)}
+          {[0, 1, 2].map((i) => <div key={i} className="h-7 w-20 bg-t-bg1 rounded-full" />)}
         </div>
       </div>
     );
@@ -349,23 +349,23 @@ function RegimePanel({ regime, isLoading }: { regime: RegimeData | undefined; is
   const btcDom = typeof regime?.btc_dominance === "number" ? `${regime.btc_dominance.toFixed(0)}%` : "—";
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-      <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Current Regime</h3>
+    <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3">
+      <h3 className="panel-header mb-2">// Current Regime</h3>
       <div className="flex flex-wrap gap-2">
-        <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border", vixPillClass(vix))}>
+        <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border font-ui-t", vixPillClass(vix))}>
           <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
           VIX {vix}
         </span>
-        <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border", trendPillClass(trend))}>
+        <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border font-ui-t", trendPillClass(trend))}>
           <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
           {trend}
         </span>
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-zinc-800 border-zinc-700 text-zinc-300">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-t-bg1 border-t-dim text-t-mid2 font-ui-t">
           <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
           BTC Dom {btcDom}
         </span>
       </div>
-      <p className="text-xs text-zinc-600 mt-1.5">{getGatingText(regime)}</p>
+      <p className="text-xs text-t-dim mt-1.5 font-ui-t">{getGatingText(regime)}</p>
     </div>
   );
 }
@@ -374,11 +374,11 @@ function RegimePanel({ regime, isLoading }: { regime: RegimeData | undefined; is
 
 function eventTypeColor(type: string): string {
   const t = type?.toLowerCase() ?? "";
-  if (t === "fomc") return "bg-blue-500/15 text-blue-400";
-  if (t === "cpi" || t === "pce") return "bg-orange-500/15 text-orange-400";
-  if (t === "earnings") return "bg-lime-500/15 text-lime-400";
+  if (t === "fomc") return "bg-blue-500/15 text-t-cyan";
+  if (t === "cpi" || t === "pce") return "bg-orange-500/15 text-t-amber";
+  if (t === "earnings") return "bg-lime-500/15 text-t-green";
   if (t === "expiry") return "bg-purple-500/15 text-purple-400";
-  return "bg-zinc-700/40 text-zinc-400";
+  return "bg-t-bg2/40 text-t-muted";
 }
 
 function CatalystCalendar() {
@@ -394,7 +394,7 @@ function CatalystCalendar() {
   if (isLoading) {
     return (
       <div className="space-y-2 animate-pulse">
-        {[0, 1, 2].map((i) => <div key={i} className="h-8 bg-zinc-800 rounded" />)}
+        {[0, 1, 2].map((i) => <div key={i} className="h-8 bg-t-bg1 rounded" />)}
       </div>
     );
   }
@@ -404,13 +404,13 @@ function CatalystCalendar() {
       {events.slice(0, 5).map((evt) => (
         <div
           key={String(evt.id)}
-          className="flex items-center gap-3 py-1.5 border-b border-zinc-800/50 last:border-0"
+          className="flex items-center gap-3 py-1.5 border-b border-t-dim/50 last:border-0"
         >
-          <span className={cn("text-xs font-semibold px-2 py-0.5 rounded", eventTypeColor(evt.event_type))}>
+          <span className={cn("text-xs font-semibold px-2 py-0.5 rounded font-ui-t", eventTypeColor(evt.event_type))}>
             {evt.event_type.toUpperCase()}
           </span>
-          <span className="text-xs text-zinc-400">{evt.symbol ?? (evt.description ?? "Market-wide")}</span>
-          <span className="text-xs text-zinc-600 ml-auto">{formatRelativeTime(evt.event_ts)}</span>
+          <span className="text-xs text-t-muted font-ui-t">{evt.symbol ?? (evt.description ?? "Market-wide")}</span>
+          <span className="text-xs text-t-dim ml-auto font-mono-t">{formatRelativeTime(evt.event_ts)}</span>
         </div>
       ))}
     </div>
@@ -447,49 +447,49 @@ function PositionDetailModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-5"
+        className="relative bg-t-bg0 border border-t-mid rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-5"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h3 className="text-white font-bold text-lg">{pos.symbol}</h3>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-lime-500/15 border border-lime-500/30 text-lime-400">
+            <h3 className="text-t-hi font-bold text-lg font-mono-t">{pos.symbol}</h3>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-lime-500/15 border border-lime-500/30 text-t-green font-ui-t">
               LONG
             </span>
             {pos.is_paper && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-500">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-t-bg1 border border-t-dim text-t-dim font-ui-t">
                 PAPER
               </span>
             )}
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-t-muted hover:text-t-hi transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Key levels */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-zinc-950 rounded-xl p-3 border border-zinc-800">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Entry</p>
-            <p className="text-sm font-bold text-white mt-1">{fmtPrice(entry)}</p>
+          <div className="bg-t-bg0 rounded-xl p-3 border border-t-dim">
+            <p className="text-[10px] text-t-dim uppercase tracking-wide font-ui-t">Entry</p>
+            <p className="text-sm font-bold text-t-hi mt-1 font-mono-t tabular-nums">{fmtPrice(entry)}</p>
           </div>
-          <div className="bg-zinc-950 rounded-xl p-3 border border-red-900/30">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Stop Loss</p>
-            <p className="text-sm font-bold text-red-400 mt-1">
+          <div className="bg-t-bg0 rounded-xl p-3 border border-red-900/30">
+            <p className="text-[10px] text-t-dim uppercase tracking-wide font-ui-t">Stop Loss</p>
+            <p className="text-sm font-bold text-t-red mt-1 font-mono-t tabular-nums">
               {fmtPrice(stopPrice)}
             </p>
             {stopLossPct != null && (
-              <p className="text-[10px] text-zinc-600 mt-0.5">−{stopLossPct}%</p>
+              <p className="text-[10px] text-t-dim mt-0.5 font-mono-t">−{stopLossPct}%</p>
             )}
           </div>
-          <div className="bg-zinc-950 rounded-xl p-3 border border-lime-900/30">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Target</p>
-            <p className="text-sm font-bold text-lime-400 mt-1">
+          <div className="bg-t-bg0 rounded-xl p-3 border border-lime-900/30">
+            <p className="text-[10px] text-t-dim uppercase tracking-wide font-ui-t">Target</p>
+            <p className="text-sm font-bold text-t-green mt-1 font-mono-t tabular-nums">
               {fmtPrice(targetPrice)}
             </p>
             {takeProfitPct != null && (
-              <p className="text-[10px] text-zinc-600 mt-0.5">+{takeProfitPct}%</p>
+              <p className="text-[10px] text-t-dim mt-0.5 font-mono-t">+{takeProfitPct}%</p>
             )}
           </div>
         </div>
@@ -497,46 +497,46 @@ function PositionDetailModal({
         {/* Position info */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <p className="text-xs text-zinc-500">Qty</p>
-            <p className="text-sm font-semibold text-white">{pos.qty}</p>
+            <p className="text-xs text-t-muted font-ui-t">Qty</p>
+            <p className="text-sm font-semibold text-t-hi font-mono-t tabular-nums">{pos.qty}</p>
           </div>
           <div>
-            <p className="text-xs text-zinc-500">Hold Time</p>
-            <p className="text-sm font-semibold text-white">{holdStr}</p>
+            <p className="text-xs text-t-muted font-ui-t">Hold Time</p>
+            <p className="text-sm font-semibold text-t-hi font-mono-t">{holdStr}</p>
           </div>
           <div>
-            <p className="text-xs text-zinc-500">Opened</p>
-            <p className="text-sm font-semibold text-zinc-300">{formatTime(pos.opened_at)}</p>
+            <p className="text-xs text-t-muted font-ui-t">Opened</p>
+            <p className="text-sm font-semibold text-t-mid2 font-mono-t">{formatTime(pos.opened_at)}</p>
           </div>
           <div>
-            <p className="text-xs text-zinc-500">Unrealized P&L</p>
-            <p className="text-sm font-semibold text-zinc-500">—</p>
+            <p className="text-xs text-t-muted font-ui-t">Unrealized P&L</p>
+            <p className="text-sm font-semibold text-t-muted font-mono-t">—</p>
           </div>
         </div>
 
         {/* Why we opened it */}
         {signal && (
-          <div className="bg-zinc-800/60 rounded-xl p-4 space-y-2">
-            <p className="text-xs font-semibold text-zinc-400">Why we opened this</p>
-            <p className="text-xs text-zinc-500">
-              <span className="text-zinc-400">Strategy:</span> {signal.strategy}
+          <div className="bg-t-bg1/60 rounded-xl p-4 space-y-2">
+            <p className="text-xs font-semibold text-t-muted font-ui-t">Why we opened this</p>
+            <p className="text-xs text-t-muted font-ui-t">
+              <span className="text-t-muted">Strategy:</span> {signal.strategy}
             </p>
-            <p className="text-xs text-zinc-300 leading-relaxed">{signal.reason || "No reason recorded"}</p>
+            <p className="text-xs text-t-mid2 leading-relaxed font-ui-t">{signal.reason || "No reason recorded"}</p>
             <div className="flex items-center gap-2 pt-1">
-              <p className="text-xs text-zinc-500">Confidence</p>
-              <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+              <p className="text-xs text-t-muted font-ui-t">Confidence</p>
+              <div className="flex-1 h-1.5 bg-t-bg2 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-lime-500 rounded-full"
                   style={{ width: `${Math.round(signal.confidence * 100)}%` }}
                 />
               </div>
-              <p className="text-xs text-zinc-400">{Math.round(signal.confidence * 100)}%</p>
+              <p className="text-xs text-t-muted font-mono-t tabular-nums">{Math.round(signal.confidence * 100)}%</p>
             </div>
           </div>
         )}
 
         {!signal && (
-          <p className="text-xs text-zinc-600 text-center py-2">
+          <p className="text-xs text-t-dim text-center py-2 font-ui-t">
             No signal record found for this position
           </p>
         )}
@@ -560,12 +560,12 @@ function WhyModal({ signal, onClose }: WhyModalProps) {
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+        className="relative bg-t-bg0 border border-t-mid rounded-2xl p-6 w-full max-w-md shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-white font-semibold text-base">Why did we trade this?</h3>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+          <h3 className="text-t-hi font-semibold text-base font-ui-t">Why did we trade this?</h3>
+          <button onClick={onClose} className="text-t-muted hover:text-t-hi transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -573,39 +573,39 @@ function WhyModal({ signal, onClose }: WhyModalProps) {
         <div className="space-y-4">
           <div className="flex gap-4">
             <div className="flex-1">
-              <p className="text-xs text-zinc-500 mb-1">Symbol</p>
-              <p className="text-sm font-semibold text-white">{signal.symbol}</p>
+              <p className="text-xs text-t-muted mb-1 font-ui-t">Symbol</p>
+              <p className="text-sm font-semibold text-t-hi font-mono-t">{signal.symbol}</p>
             </div>
             <div>
-              <p className="text-xs text-zinc-500 mb-1">Direction</p>
+              <p className="text-xs text-t-muted mb-1 font-ui-t">Direction</p>
               <SideBadge side={signal.side} />
             </div>
           </div>
 
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Strategy</p>
-            <p className="text-sm font-semibold text-white">{signal.strategy}</p>
+            <p className="text-xs text-t-muted mb-1 font-ui-t">Strategy</p>
+            <p className="text-sm font-semibold text-t-hi font-ui-t">{signal.strategy}</p>
           </div>
 
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Signal Reason</p>
-            <p className="text-sm text-zinc-300">{signal.reason || "—"}</p>
+            <p className="text-xs text-t-muted mb-1 font-ui-t">Signal Reason</p>
+            <p className="text-sm text-t-mid2 font-ui-t">{signal.reason || "—"}</p>
           </div>
 
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Confidence</p>
-            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <p className="text-xs text-t-muted mb-1 font-ui-t">Confidence</p>
+            <div className="h-2 bg-t-bg1 rounded-full overflow-hidden">
               <div
                 className="h-2 bg-lime-500 rounded-full transition-all"
                 style={{ width: `${Math.min(100, Math.max(0, signal.confidence * 100))}%` }}
               />
             </div>
-            <p className="text-xs text-zinc-500 mt-0.5">{(signal.confidence * 100).toFixed(0)}%</p>
+            <p className="text-xs text-t-muted mt-0.5 font-mono-t tabular-nums">{(signal.confidence * 100).toFixed(0)}%</p>
           </div>
 
           <div>
-            <p className="text-xs text-zinc-500 mb-1">Signal Time</p>
-            <p className="text-xs text-zinc-400">{formatTime(signal.ts)}</p>
+            <p className="text-xs text-t-muted mb-1 font-ui-t">Signal Time</p>
+            <p className="text-xs text-t-muted font-mono-t">{formatTime(signal.ts)}</p>
           </div>
         </div>
       </div>
@@ -616,10 +616,10 @@ function WhyModal({ signal, onClose }: WhyModalProps) {
 // ─── Analyst helpers ──────────────────────────────────────────────────────────
 
 function ConvictionStars({ score }: { score: number | null }) {
-  if (score == null) return <span className="text-zinc-600 text-xs">—</span>;
+  if (score == null) return <span className="text-t-dim text-xs font-mono-t">—</span>;
   const filled = Math.round(score);
   return (
-    <span className={cn("text-sm font-medium", score >= 4 ? "text-lime-400" : score >= 3 ? "text-yellow-400" : "text-zinc-500")}>
+    <span className={cn("text-sm font-medium font-mono-t", score >= 4 ? "text-t-green" : score >= 3 ? "text-t-amber" : "text-t-muted")}>
       {"★".repeat(filled)}{"☆".repeat(5 - filled)}
     </span>
   );
@@ -629,30 +629,30 @@ function AnalystDrawer({ analysis, onClose }: { analysis: WatchlistAnalysis; onC
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
       <div
-        className="relative h-full w-full max-w-md bg-zinc-950 border-l border-zinc-800 shadow-2xl overflow-y-auto"
+        className="relative h-full w-full max-w-md bg-t-bg0 border-l border-t-dim shadow-2xl overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-zinc-950 border-b border-zinc-800 px-5 py-4 flex items-center justify-between">
+        <div className="sticky top-0 bg-t-bg0 border-b border-t-dim px-5 py-4 flex items-center justify-between">
           <div>
-            <span className="font-bold text-white text-lg mr-2">{analysis.symbol}</span>
+            <span className="font-bold text-t-hi text-lg mr-2 font-mono-t">{analysis.symbol}</span>
             <ConvictionStars score={analysis.conviction_score} />
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-t-muted hover:text-t-hi transition-colors">
             <X size={18} />
           </button>
         </div>
         <div className="p-5 space-y-5">
           <div>
-            <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold mb-2">Thesis</p>
-            <p className="text-sm text-zinc-300 leading-relaxed">{analysis.thesis_md}</p>
+            <p className="panel-header mb-2">// Thesis</p>
+            <p className="text-sm text-t-mid2 leading-relaxed font-ui-t">{analysis.thesis_md}</p>
           </div>
           {analysis.reasons_to_own?.length > 0 && (
             <div>
-              <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold mb-2">Reasons to Own</p>
+              <p className="panel-header mb-2">// Reasons to Own</p>
               <ul className="space-y-1.5">
                 {analysis.reasons_to_own.map((r, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-zinc-300">
-                    <span className="text-lime-400 mt-0.5">✓</span>
+                  <li key={i} className="flex gap-2 text-sm text-t-mid2 font-ui-t">
+                    <span className="text-t-green mt-0.5">✓</span>
                     <span>{r}</span>
                   </li>
                 ))}
@@ -661,11 +661,11 @@ function AnalystDrawer({ analysis, onClose }: { analysis: WatchlistAnalysis; onC
           )}
           {analysis.risks?.length > 0 && (
             <div>
-              <p className="text-xs text-zinc-500 uppercase tracking-wide font-semibold mb-2">Risks</p>
+              <p className="panel-header mb-2">// Risks</p>
               <ul className="space-y-1.5">
                 {analysis.risks.map((r, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-zinc-300">
-                    <span className="text-red-400 mt-0.5">⚠</span>
+                  <li key={i} className="flex gap-2 text-sm text-t-mid2 font-ui-t">
+                    <span className="text-t-red mt-0.5">⚠</span>
                     <span>{r}</span>
                   </li>
                 ))}
@@ -674,17 +674,17 @@ function AnalystDrawer({ analysis, onClose }: { analysis: WatchlistAnalysis; onC
           )}
           <div className="flex gap-4">
             <div>
-              <p className="text-[11px] text-zinc-600">Suggested Hold</p>
-              <p className="text-sm text-zinc-300 font-medium">{analysis.suggested_hold || "—"}</p>
+              <p className="text-[11px] text-t-dim font-ui-t">Suggested Hold</p>
+              <p className="text-sm text-t-mid2 font-medium font-ui-t">{analysis.suggested_hold || "—"}</p>
             </div>
             {analysis.concerns_flag && (
               <div>
-                <p className="text-[11px] text-zinc-600">Flag</p>
-                <p className="text-sm text-red-400 font-medium">⚑ Concerns flagged</p>
+                <p className="text-[11px] text-t-dim font-ui-t">Flag</p>
+                <p className="text-sm text-t-red font-medium font-ui-t">⚑ Concerns flagged</p>
               </div>
             )}
           </div>
-          <p className="text-[10px] text-zinc-700 border-t border-zinc-800 pt-3">
+          <p className="text-[10px] text-t-gdim border-t border-t-dim pt-3 font-ui-t">
             Model: {analysis.model_used ?? "claude-haiku"} · {analysis.ts ? new Date(analysis.ts).toLocaleString() : ""}
             {analysis.cost_usd != null ? ` · $${analysis.cost_usd.toFixed(4)}` : ""}
           </p>
@@ -719,7 +719,7 @@ function GapScale({ current, target, unit, triggered }: {
         <div className="flex-1 h-1 bg-lime-500/20 rounded-full overflow-hidden">
           <div className="h-1 bg-lime-500 rounded-full w-full" />
         </div>
-        <span className="text-[9px] text-lime-500 font-semibold shrink-0">✓ met</span>
+        <span className="text-[9px] text-t-green font-semibold shrink-0">✓ met</span>
       </div>
     );
   }
@@ -739,9 +739,9 @@ function GapScale({ current, target, unit, triggered }: {
   return (
     <div className="mt-2 mb-4">
       <div className="relative h-1.5">
-        <div className="absolute inset-0 bg-zinc-800 rounded-full" />
+        <div className="absolute inset-0 bg-t-bg1 rounded-full" />
         <div
-          className="absolute top-0 h-1.5 bg-zinc-600/40 rounded-full"
+          className="absolute top-0 h-1.5 bg-t-bg2/40 rounded-full"
           style={{
             left: `${Math.min(currentPct, targetPct)}%`,
             width: `${Math.abs(targetPct - currentPct)}%`,
@@ -752,13 +752,13 @@ function GapScale({ current, target, unit, triggered }: {
           style={{ left: `${targetPct}%`, transform: "translateX(-50%)" }}
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-zinc-400 border-2 border-zinc-800"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-t-muted border-2 border-t-bg0"
           style={{ left: `${currentPct}%` }}
         />
       </div>
       <div className="relative h-3.5 mt-0.5">
         <span
-          className="absolute text-[9px] text-zinc-500 -translate-x-1/2 leading-none"
+          className="absolute text-[9px] text-t-muted -translate-x-1/2 leading-none font-mono-t tabular-nums"
           style={{ left: `${clamp(currentPct)}%` }}
         >
           {fmtVal(current)}
@@ -778,10 +778,10 @@ const TIER_ORDER = ["triggered", "about_to_enter", "close", "waiting"] as const;
 type TierKey = typeof TIER_ORDER[number];
 
 const TIER_CFG: Record<TierKey, { icon: string; label: string; headerColor: string; rowBorder: string; rowBg: string }> = {
-  triggered:      { icon: "⚡", label: "Entry Triggered", headerColor: "text-lime-400",   rowBorder: "border-lime-500/50",   rowBg: "bg-lime-500/8" },
-  about_to_enter: { icon: "🟢", label: "About to Enter",  headerColor: "text-lime-400",   rowBorder: "border-lime-500/25",   rowBg: "bg-lime-500/5" },
-  close:          { icon: "🟡", label: "Close",           headerColor: "text-yellow-400", rowBorder: "border-yellow-500/20", rowBg: "bg-zinc-900" },
-  waiting:        { icon: "⚪", label: "Waiting",         headerColor: "text-zinc-500",   rowBorder: "border-zinc-800",      rowBg: "bg-zinc-900" },
+  triggered:      { icon: "⚡", label: "Entry Triggered", headerColor: "text-t-green",  rowBorder: "border-lime-500/50",   rowBg: "bg-lime-500/8" },
+  about_to_enter: { icon: "🟢", label: "About to Enter",  headerColor: "text-t-green",  rowBorder: "border-lime-500/25",   rowBg: "bg-lime-500/5" },
+  close:          { icon: "🟡", label: "Close",           headerColor: "text-t-amber",  rowBorder: "border-yellow-500/20", rowBg: "bg-t-bg0" },
+  waiting:        { icon: "⚪", label: "Waiting",         headerColor: "text-t-muted",  rowBorder: "border-t-dim",         rowBg: "bg-t-bg0" },
 };
 
 // ── Strategy condition trace row ──────────────────────────────────────────────
@@ -792,12 +792,12 @@ function ConditionRow({ cond }: { cond: import("@/api/bots").ConditionTrace }) {
     Math.abs(cond.current_value - cond.required_value) / Math.max(1, Math.abs(cond.required_value)) <= 0.10;
 
   const valueColor = cond.error
-    ? "text-red-400"
+    ? "text-t-red"
     : cond.passed
-    ? "text-lime-400"
+    ? "text-t-green"
     : isVerge
-    ? "text-yellow-400"
-    : "text-zinc-400";
+    ? "text-t-amber"
+    : "text-t-muted";
 
   const fmtVal = (v: number | number[] | null) => {
     if (v == null) return "—";
@@ -806,23 +806,23 @@ function ConditionRow({ cond }: { cond: import("@/api/bots").ConditionTrace }) {
   };
 
   return (
-    <div className={cn("pl-2 border-l-2 mb-2", cond.passed ? "border-lime-500/40" : isVerge ? "border-yellow-500/40" : "border-zinc-700")}>
+    <div className={cn("pl-2 border-l-2 mb-2", cond.passed ? "border-lime-500/40" : isVerge ? "border-yellow-500/40" : "border-t-dim")}>
       <div className="flex items-start gap-1.5">
         {cond.passed
-          ? <CheckCircle2 size={11} className="text-lime-500 mt-0.5 flex-shrink-0" />
-          : <XCircle size={11} className="text-zinc-600 mt-0.5 flex-shrink-0" />}
+          ? <CheckCircle2 size={11} className="text-t-green mt-0.5 flex-shrink-0" />
+          : <XCircle size={11} className="text-t-dim mt-0.5 flex-shrink-0" />}
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] text-zinc-400 leading-tight">{cond.name}</p>
+          <p className="text-[11px] text-t-muted leading-tight font-ui-t">{cond.name}</p>
           {cond.error ? (
-            <p className="text-[10px] text-red-400 mt-0.5">{cond.error}</p>
+            <p className="text-[10px] text-t-red mt-0.5 font-ui-t">{cond.error}</p>
           ) : (
-            <p className={cn("text-[11px] font-mono mt-0.5", valueColor)}>
+            <p className={cn("text-[11px] font-mono-t mt-0.5 tabular-nums", valueColor)}>
               {cond.current_value}{cond.unit ? ` ${cond.unit}` : ""}
-              <span className="text-zinc-600 font-sans mx-1">{cond.operator}</span>
+              <span className="text-t-dim font-ui-t mx-1">{cond.operator}</span>
               {fmtVal(cond.required_value)}{cond.unit ? ` ${cond.unit}` : ""}
             </p>
           )}
-          <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">{cond.to_pass}</p>
+          <p className="text-[10px] text-t-muted mt-0.5 leading-snug font-ui-t">{cond.to_pass}</p>
         </div>
       </div>
     </div>
@@ -834,39 +834,39 @@ function StrategyBlock({ strat }: { strat: StrategyTrace }) {
   return (
     <div className={cn(
       "rounded-xl border px-3 py-2.5 mb-2",
-      fired ? "border-lime-500/30 bg-lime-500/5" : "border-zinc-800 bg-zinc-900/50",
+      fired ? "border-lime-500/30 bg-lime-500/5" : "border-t-dim bg-t-bg0/50",
     )}>
       <div className="flex items-start gap-2 mb-2">
-        <span className={cn("text-sm leading-none mt-0.5", fired ? "text-lime-400" : "text-zinc-600")}>
+        <span className={cn("text-sm leading-none mt-0.5", fired ? "text-t-green" : "text-t-dim")}>
           {fired ? "✓" : "✗"}
         </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={cn("text-xs font-semibold", fired ? "text-lime-300" : "text-zinc-300")}>
+            <span className={cn("text-xs font-semibold font-ui-t", fired ? "text-t-green" : "text-t-mid2")}>
               {strat.name}
             </span>
             {strat.score > 0 && (
-              <span className="text-[10px] text-zinc-500">
+              <span className="text-[10px] text-t-muted font-mono-t tabular-nums">
                 score {(strat.score * 100).toFixed(0)}
               </span>
             )}
             {strat.weight > 0 && (
-              <span className="text-[10px] text-zinc-600">
+              <span className="text-[10px] text-t-dim font-mono-t tabular-nums">
                 w={strat.weight.toFixed(2)}
               </span>
             )}
             {fired && strat.side && (
               <span className={cn(
-                "text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none",
+                "text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none font-ui-t",
                 strat.side === "buy" || strat.side === "long"
-                  ? "bg-lime-500/20 text-lime-400 border border-lime-500/30"
-                  : "bg-orange-500/20 text-orange-400 border border-orange-500/30",
+                  ? "bg-lime-500/20 text-t-green border border-lime-500/30"
+                  : "bg-orange-500/20 text-t-amber border border-orange-500/30",
               )}>
                 {strat.side === "buy" || strat.side === "long" ? "LONG" : "SHORT"}
               </span>
             )}
           </div>
-          <p className="text-[11px] text-zinc-500 mt-0.5 leading-snug">{strat.summary}</p>
+          <p className="text-[11px] text-t-muted mt-0.5 leading-snug font-ui-t">{strat.summary}</p>
         </div>
       </div>
       {strat.conditions.length > 0 && (
@@ -875,7 +875,7 @@ function StrategyBlock({ strat }: { strat: StrategyTrace }) {
         </div>
       )}
       {strat.error && !strat.conditions.length && (
-        <p className="text-[10px] text-red-400 ml-4 mt-1">{strat.error}</p>
+        <p className="text-[10px] text-t-red ml-4 mt-1 font-ui-t">{strat.error}</p>
       )}
     </div>
   );
@@ -894,7 +894,7 @@ function TraceExpandedPanel({ botName, symbol }: { botName: string; symbol: stri
     return (
       <div className="mt-3 space-y-2">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-14 bg-zinc-800/40 rounded-xl animate-pulse" />
+          <div key={i} className="h-14 bg-t-bg1/40 rounded-xl animate-pulse" />
         ))}
       </div>
     );
@@ -902,14 +902,14 @@ function TraceExpandedPanel({ botName, symbol }: { botName: string; symbol: stri
 
   if (error || !data) {
     return (
-      <p className="mt-3 text-xs text-red-400">
+      <p className="mt-3 text-xs text-t-red font-ui-t">
         Failed to load evaluation trace. Backend may be starting up — try again in a moment.
       </p>
     );
   }
 
   if (data.error) {
-    return <p className="mt-3 text-xs text-red-400">{data.error}</p>;
+    return <p className="mt-3 text-xs text-t-red font-ui-t">{data.error}</p>;
   }
 
   const ageStr = data.scan_age_seconds != null
@@ -921,10 +921,10 @@ function TraceExpandedPanel({ botName, symbol }: { botName: string; symbol: stri
   return (
     <div className="mt-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] text-zinc-600">
+        <span className="text-[10px] text-t-dim font-mono-t">
           {data.strategies_firing}/{data.total_strategies} strategies firing
         </span>
-        <span className="text-[10px] text-zinc-600">evaluated {ageStr}</span>
+        <span className="text-[10px] text-t-dim font-mono-t">evaluated {ageStr}</span>
       </div>
       {data.strategies.map((s) => <StrategyBlock key={s.key} strat={s} />)}
     </div>
@@ -968,33 +968,33 @@ function ExpandableWatchlistRow({
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {expanded
-            ? <ChevronDown size={12} className="text-zinc-500 flex-shrink-0" />
-            : <ChevronRight size={12} className="text-zinc-500 flex-shrink-0" />}
-          <span className="font-mono font-bold text-white text-sm">{row.symbol}</span>
+            ? <ChevronDown size={12} className="text-t-muted flex-shrink-0" />
+            : <ChevronRight size={12} className="text-t-muted flex-shrink-0" />}
+          <span className="font-mono-t font-bold text-t-hi text-sm">{row.symbol}</span>
           {isTriggered && (
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500 text-black leading-none">
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500 text-black leading-none font-ui-t">
               ⚡ ENTRY
             </span>
           )}
           {row.tier === "about_to_enter" && !isTriggered && (
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500/15 text-lime-400 border border-lime-500/30 leading-none">
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-lime-500/15 text-t-green border border-lime-500/30 leading-none font-ui-t">
               CLOSE
             </span>
           )}
-          <span className="text-[10px] text-zinc-600 truncate hidden sm:block">
+          <span className="text-[10px] text-t-dim truncate hidden sm:block font-ui-t">
             {row.gap_human || row.criteria_summary}
           </span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="text-right">
-            <span className="text-xs text-zinc-300 tabular-nums">{fmt$(row.current_price)}</span>
-            <span className={cn("text-[10px] ml-1.5 tabular-nums", changePos ? "text-lime-400" : "text-red-400")}>
+            <span className="text-xs text-t-mid2 tabular-nums font-mono-t">{fmt$(row.current_price)}</span>
+            <span className={cn("text-[10px] ml-1.5 tabular-nums font-mono-t", changePos ? "text-t-green" : "text-t-red")}>
               {changePos ? "+" : ""}{row.change_24h_pct.toFixed(2)}%
             </span>
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); navigate(`/chart?symbol=${row.symbol.replace("/", "-")}`); }}
-            className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors px-1.5 py-0.5 rounded border border-zinc-800 hover:border-zinc-600"
+            className="text-[10px] text-t-dim hover:text-t-muted transition-colors px-1.5 py-0.5 rounded border border-t-dim hover:border-t-mid font-ui-t"
           >
             chart
           </button>
@@ -1003,7 +1003,7 @@ function ExpandableWatchlistRow({
 
       {/* Expanded strategy evaluation */}
       {expanded && (
-        <div className="px-4 pb-3 border-t border-zinc-800/60">
+        <div className="px-4 pb-3 border-t border-t-dim/60">
           <TraceExpandedPanel botName={botName} symbol={row.symbol} />
         </div>
       )}
@@ -1060,7 +1060,7 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
     return (
       <div className="space-y-3">
         {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="animate-pulse bg-zinc-800/50 rounded-xl h-16" />
+          <div key={i} className="animate-pulse bg-t-bg1/50 rounded-xl h-16" />
         ))}
       </div>
     );
@@ -1069,8 +1069,8 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
   if (noUniverse || (rows.length === 0 && !isLoading)) {
     return (
       <div className="py-10 text-center">
-        <p className="text-zinc-500 text-sm">No universe configured for this bot yet.</p>
-        <p className="text-zinc-600 text-xs mt-1">
+        <p className="text-t-muted text-sm font-ui-t">No universe configured for this bot yet.</p>
+        <p className="text-t-dim text-xs mt-1 font-ui-t">
           Options bot universes are being wired up — check back after the next deploy.
         </p>
       </div>
@@ -1086,18 +1086,18 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
   return (
     <div ref={containerRef} className="space-y-1">
       {/* Status banner */}
-      <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-xl px-4 py-3 mb-3 sticky top-0 z-10 backdrop-blur-sm">
-        <p className="text-xs text-zinc-300 leading-relaxed">
-          Watching <span className="font-semibold text-white">{rows.length}</span> symbols · {" "}
-          <span className="text-lime-400 font-semibold">{tierCounts.triggered + tierCounts.about_to_enter}</span> close to entry · {" "}
-          <span className="text-yellow-400 font-semibold">{tierCounts.close}</span> watching · {" "}
-          <span className="text-zinc-500">{tierCounts.waiting}</span> waiting
+      <div className="bg-t-bg1/40 border border-t-mid/50 rounded-xl px-4 py-3 mb-3 sticky top-0 z-10 backdrop-blur-sm">
+        <p className="text-xs text-t-mid2 leading-relaxed font-ui-t">
+          Watching <span className="font-semibold text-t-hi">{rows.length}</span> symbols · {" "}
+          <span className="text-t-green font-semibold tabular-nums font-mono-t">{tierCounts.triggered + tierCounts.about_to_enter}</span> close to entry · {" "}
+          <span className="text-t-amber font-semibold tabular-nums font-mono-t">{tierCounts.close}</span> watching · {" "}
+          <span className="text-t-muted tabular-nums font-mono-t">{tierCounts.waiting}</span> waiting
           {closest?.gap_human && (
-            <> · <span className="text-zinc-400">Closest: <span className="text-white font-medium">{closest.symbol}</span> — {closest.gap_human}</span></>
+            <> · <span className="text-t-muted font-ui-t">Closest: <span className="text-t-hi font-medium font-mono-t">{closest.symbol}</span> — {closest.gap_human}</span></>
           )}
         </p>
-        <p className="text-[10px] text-zinc-600 mt-0.5">
-          Scans {cadence} · next scan in {nextScanIn}s · click any row to see why it's not firing
+        <p className="text-[10px] text-t-dim mt-0.5 font-ui-t">
+          Scans {cadence} · next scan in <span className="font-mono-t tabular-nums">{nextScanIn}s</span> · click any row to see why it's not firing
         </p>
       </div>
 
@@ -1109,15 +1109,15 @@ function EntryReadinessTable({ botName, botDisplayName, navigate }: {
           <div key={tier}>
             <div className="flex items-center gap-2 pt-3 pb-1.5 first:pt-0">
               <span className="text-sm leading-none">{cfg.icon}</span>
-              <span className={cn("text-xs font-semibold uppercase tracking-wide", cfg.headerColor)}>
+              <span className={cn("text-xs font-semibold uppercase tracking-wide font-ui-t", cfg.headerColor)}>
                 {cfg.label}
               </span>
-              <span className="text-xs text-zinc-600">({tierCounts[tier]})</span>
-              <div className="flex-1 h-px bg-zinc-800 ml-1" />
+              <span className="text-xs text-t-dim font-mono-t tabular-nums">({tierCounts[tier]})</span>
+              <div className="flex-1 h-px bg-t-dim ml-1" />
             </div>
 
             {tierRows.length === 0 && (
-              <p className="text-[11px] text-zinc-700 pl-2 pb-2 italic">None</p>
+              <p className="text-[11px] text-t-gdim pl-2 pb-2 italic font-ui-t">None</p>
             )}
 
             {tierRows.map((row) => (
@@ -1155,12 +1155,12 @@ function WatchlistPreview({ botName, onViewAll }: { botName: string; onViewAll: 
 
   if (isLoading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+      <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
           <SectionLabel as="h2">Watchlist</SectionLabel>
         </div>
         <div className="space-y-2">
-          {[0, 1, 2].map((i) => <div key={i} className="animate-pulse h-10 bg-zinc-800 rounded-xl" />)}
+          {[0, 1, 2].map((i) => <div key={i} className="animate-pulse h-10 bg-t-bg1 rounded-xl" />)}
         </div>
       </div>
     );
@@ -1175,12 +1175,12 @@ function WatchlistPreview({ botName, onViewAll }: { botName: string; onViewAll: 
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+    <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5">
       <div className="flex items-center justify-between mb-3">
         <SectionLabel as="h2">Watchlist — Closest to Entry</SectionLabel>
         <button
           onClick={onViewAll}
-          className="text-xs text-lime-400 hover:text-lime-300 transition-colors"
+          className="text-xs text-t-green hover:text-t-bright transition-colors font-ui-t"
         >
           See full watchlist →
         </button>
@@ -1193,27 +1193,27 @@ function WatchlistPreview({ botName, onViewAll }: { botName: string; onViewAll: 
             <div
               key={row.symbol}
               className={cn(
-                "flex items-center justify-between rounded-xl border px-4 py-2.5",
+                "flex items-center justify-between rounded-xl border px-4 py-2.5 card-hover",
                 isTriggered
                   ? "border-lime-500/40 bg-lime-500/5"
                   : isClose
                   ? "border-lime-500/30 bg-lime-500/5"
                   : row.distance_color === "yellow"
-                  ? "border-yellow-500/20 bg-zinc-900"
-                  : "border-zinc-800 bg-zinc-900"
+                  ? "border-yellow-500/20 bg-t-bg0"
+                  : "border-t-dim bg-t-bg0"
               )}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <span className="font-semibold text-white text-sm">{row.symbol}</span>
-                <span className="text-xs text-zinc-500 truncate">{row.strategy_being_evaluated}</span>
+                <span className="font-semibold text-t-hi text-sm font-mono-t">{row.symbol}</span>
+                <span className="text-xs text-t-muted truncate font-ui-t">{row.strategy_being_evaluated}</span>
               </div>
               <div className="flex items-center gap-4 flex-shrink-0">
-                <span className="text-xs text-zinc-400">{fmt$(row.current_price)}</span>
+                <span className="text-xs text-t-muted font-mono-t tabular-nums">{fmt$(row.current_price)}</span>
                 <span className={cn(
-                  "text-xs font-semibold",
-                  row.tier === "triggered" ? "text-lime-400" :
-                  row.tier === "about_to_enter" ? "text-lime-300" :
-                  row.tier === "close" ? "text-yellow-400" : "text-zinc-500"
+                  "text-xs font-semibold font-mono-t tabular-nums",
+                  row.tier === "triggered" ? "text-t-green" :
+                  row.tier === "about_to_enter" ? "text-t-bright" :
+                  row.tier === "close" ? "text-t-amber" : "text-t-muted"
                 )}>
                   {row.tier === "triggered" ? "⚡ triggered" : row.gap_human || `${row.distance_to_trigger_pct.toFixed(1)}% away`}
                 </span>
@@ -1250,7 +1250,7 @@ function WatchlistTable({
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-2">
-        {[0, 1, 2, 3].map((i) => <div key={i} className="h-10 bg-zinc-800 rounded" />)}
+        {[0, 1, 2, 3].map((i) => <div key={i} className="h-10 bg-t-bg1 rounded" />)}
       </div>
     );
   }
@@ -1259,7 +1259,7 @@ function WatchlistTable({
 
   if (safeWatchlist.length === 0) {
     return (
-      <p className="text-zinc-600 text-sm py-4 text-center">
+      <p className="text-t-dim text-sm py-4 text-center font-ui-t">
         Score data unavailable — entry-readiness shown above.
       </p>
     );
@@ -1272,30 +1272,30 @@ function WatchlistTable({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-              <th className="text-left pb-2 font-medium w-8">#</th>
-              <th className="text-left pb-2 font-medium">Symbol</th>
-              <th className="text-left pb-2 font-medium w-32">Score</th>
-              <th className="text-left pb-2 font-medium">AI Conviction</th>
-              <th className="text-right pb-2 font-medium">Last Evaluated</th>
+            <tr className="text-xs text-t-dim border-b border-t-dim">
+              <th className="text-left pb-2 font-medium w-8 font-ui-t">#</th>
+              <th className="text-left pb-2 font-medium font-ui-t">Symbol</th>
+              <th className="text-left pb-2 font-medium w-32 font-ui-t">Score</th>
+              <th className="text-left pb-2 font-medium font-ui-t">AI Conviction</th>
+              <th className="text-right pb-2 font-medium font-ui-t">Last Evaluated</th>
             </tr>
           </thead>
           <tbody>
             {displayed.map((item, idx) => {
               const analysis = analysisBySymbol[item.symbol];
               return (
-                <tr key={item.symbol} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
-                  <td className="py-2.5 text-xs text-zinc-600">{item.rank ?? idx + 1}</td>
-                  <td className="py-2.5 font-semibold text-white text-sm">{item.symbol}</td>
+                <tr key={item.symbol} className="border-b border-t-dim/50 last:border-0 hover:bg-t-bg1/20 transition-colors">
+                  <td className="py-2.5 text-xs text-t-dim font-mono-t tabular-nums">{item.rank ?? idx + 1}</td>
+                  <td className="py-2.5 font-semibold text-t-hi text-sm font-mono-t">{item.symbol}</td>
                   <td className="py-2.5 pr-4">
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden min-w-[60px]">
+                      <div className="flex-1 h-1.5 bg-t-bg1 rounded-full overflow-hidden min-w-[60px]">
                         <div
                           className={cn("h-1.5 rounded-full", item.score >= 70 ? "bg-lime-500" : item.score >= 40 ? "bg-yellow-500" : "bg-red-500")}
                           style={{ width: `${Math.min(100, Math.max(0, item.score))}%` }}
                         />
                       </div>
-                      <span className="text-xs text-zinc-400 w-6 text-right">{item.score}</span>
+                      <span className="text-xs text-t-muted w-6 text-right font-mono-t tabular-nums">{item.score}</span>
                     </div>
                   </td>
                   <td className="py-2.5">
@@ -1306,13 +1306,13 @@ function WatchlistTable({
                         title="View AI thesis"
                       >
                         <ConvictionStars score={analysis.conviction_score} />
-                        {analysis.concerns_flag && <span className="text-red-400 text-xs">⚑</span>}
+                        {analysis.concerns_flag && <span className="text-t-red text-xs">⚑</span>}
                       </button>
                     ) : (
-                      <span className="text-zinc-700 text-xs">Not analyzed</span>
+                      <span className="text-t-gdim text-xs font-ui-t">Not analyzed</span>
                     )}
                   </td>
-                  <td className="py-2.5 text-right text-xs text-zinc-500">
+                  <td className="py-2.5 text-right text-xs text-t-muted font-mono-t">
                     {formatRelativeAgo(item.last_evaluated_at)}
                   </td>
                 </tr>
@@ -1324,7 +1324,7 @@ function WatchlistTable({
       {safeWatchlist.length > 20 && (
         <button
           onClick={() => setShowAll((v) => !v)}
-          className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+          className="mt-3 text-xs text-t-muted hover:text-t-mid2 underline underline-offset-2 transition-colors font-ui-t"
         >
           {showAll ? "Show fewer" : `Show all ${safeWatchlist.length} symbols`}
         </button>
@@ -1353,7 +1353,7 @@ function StrategyAttributionChart({ botName, totalPnl }: { botName: string; tota
 
   return (
     <div className="mt-4">
-      <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">Strategy Attribution (Est.)</h3>
+      <h3 className="panel-header mb-3">// Strategy Attribution (Est.)</h3>
       <ResponsiveContainer width="100%" height={120}>
         <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
@@ -1414,39 +1414,39 @@ function BacktestTab({ botName }: { botName: string }) {
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-        <h3 className="text-sm font-semibold text-zinc-300 mb-3">Backtest Parameters</h3>
+      <div className="bg-t-bg0 border border-t-dim rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-t-mid2 mb-3 font-ui-t">Backtest Parameters</h3>
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">Start Date</label>
+            <label className="text-xs text-t-muted mb-1 block font-ui-t">Start Date</label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-lime-500/50"
+              className="bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 text-sm text-t-hi focus:outline-none focus:border-lime-500/50 font-mono-t"
             />
           </div>
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">End Date</label>
+            <label className="text-xs text-t-muted mb-1 block font-ui-t">End Date</label>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-lime-500/50"
+              className="bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 text-sm text-t-hi focus:outline-none focus:border-lime-500/50 font-mono-t"
             />
           </div>
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">Starting Capital ($)</label>
+            <label className="text-xs text-t-muted mb-1 block font-ui-t">Starting Capital ($)</label>
             <input
               type="number"
               value={capital}
               onChange={(e) => setCapital(Number(e.target.value))}
               step={10000}
               min={1000}
-              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white w-32 focus:outline-none focus:border-lime-500/50"
+              className="bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 text-sm text-t-hi w-32 focus:outline-none focus:border-lime-500/50 font-mono-t tabular-nums"
             />
           </div>
-          <div className="px-4 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-xs text-zinc-500">
+          <div className="px-4 py-2.5 rounded-lg bg-t-bg1/50 border border-t-dim/50 text-xs text-t-muted font-ui-t">
             Full backtesting engine coming Q3 — currently disabled to prevent misleading results.
           </div>
         </div>
@@ -1454,27 +1454,27 @@ function BacktestTab({ botName }: { botName: string }) {
 
       {/* Results */}
       {isRunning && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 animate-pulse space-y-3">
+        <div className="bg-t-bg0 border border-t-dim rounded-xl p-4 animate-pulse space-y-3">
           <div className="grid grid-cols-4 gap-3">
             {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-14 bg-zinc-800 rounded-xl" />
+              <div key={i} className="h-14 bg-t-bg1 rounded-xl" />
             ))}
           </div>
-          <div className="h-48 bg-zinc-800 rounded-xl" />
+          <div className="h-48 bg-t-bg1 rounded-xl" />
         </div>
       )}
 
       {!isRunning && hasRun && !result && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center">
-          <p className="text-zinc-500 text-sm">No backtest data returned. Try a different date range.</p>
+        <div className="bg-t-bg0 border border-t-dim rounded-xl p-6 text-center">
+          <p className="text-t-muted text-sm font-ui-t">No backtest data returned. Try a different date range.</p>
         </div>
       )}
 
       {!isRunning && result && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-5">
+        <div className="bg-t-bg0 border border-t-dim rounded-xl p-4 space-y-5">
           {/* Metrics grid */}
           <div>
-            <h3 className="text-sm font-semibold text-zinc-300 mb-3">Performance Metrics</h3>
+            <h3 className="text-sm font-semibold text-t-mid2 mb-3 font-ui-t">Performance Metrics</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: "Sharpe", value: result.sharpe?.toFixed(2) ?? "—" },
@@ -1485,9 +1485,9 @@ function BacktestTab({ botName }: { botName: string }) {
                 { label: "Profit Factor", value: result.profit_factor?.toFixed(2) ?? "—" },
                 { label: "Total Trades", value: result.total_trades ? String(result.total_trades) : "—" },
               ].map((m) => (
-                <div key={m.label} className="bg-zinc-950 rounded-xl px-4 py-3 border border-zinc-800">
-                  <p className="text-zinc-600 text-xs mb-1">{m.label}</p>
-                  <p className="text-lg font-bold text-white">{m.value}</p>
+                <div key={m.label} className="bg-t-bg0 rounded-xl px-4 py-3 border border-t-dim">
+                  <p className="text-t-dim text-xs mb-1 font-ui-t">{m.label}</p>
+                  <p className="text-lg font-bold text-t-hi font-mono-t tabular-nums">{m.value}</p>
                 </div>
               ))}
             </div>
@@ -1496,7 +1496,7 @@ function BacktestTab({ botName }: { botName: string }) {
           {/* Equity curve */}
           {result.equity_curve && result.equity_curve.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-zinc-300 mb-3">Equity Curve</h3>
+              <h3 className="text-sm font-semibold text-t-mid2 mb-3 font-ui-t">Equity Curve</h3>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={result.equity_curve} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
@@ -1521,12 +1521,12 @@ function BacktestTab({ botName }: { botName: string }) {
                 </LineChart>
               </ResponsiveContainer>
               <div className="flex gap-4 mt-2">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                <div className="flex items-center gap-1.5 text-xs text-t-muted font-ui-t">
                   <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
                   Portfolio
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                  <span className="w-3 h-0.5 bg-zinc-600 inline-block rounded" />
+                <div className="flex items-center gap-1.5 text-xs text-t-muted font-ui-t">
+                  <span className="w-3 h-0.5 bg-t-bg2 inline-block rounded" />
                   ${(capital / 1000).toFixed(0)}k Flat
                 </div>
               </div>
@@ -1535,11 +1535,11 @@ function BacktestTab({ botName }: { botName: string }) {
 
           {/* Monte Carlo */}
           {result.monte_carlo && (
-            <div className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3">
-              <p className="text-xs text-zinc-500 mb-1">Monte Carlo Confidence Band</p>
-              <p className="text-sm text-zinc-300">
+            <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3">
+              <p className="text-xs text-t-muted mb-1 font-ui-t">Monte Carlo Confidence Band</p>
+              <p className="text-sm text-t-mid2 font-ui-t">
                 Sharpe 5th–95th percentile:{" "}
-                <span className="font-semibold text-white">
+                <span className="font-semibold text-t-hi font-mono-t tabular-nums">
                   {result.monte_carlo.sharpe_p5?.toFixed(2) ?? "—"} to {result.monte_carlo.sharpe_p95?.toFixed(2) ?? "—"}
                 </span>
               </p>
@@ -1548,8 +1548,8 @@ function BacktestTab({ botName }: { botName: string }) {
 
           {/* Trade list header */}
           <div>
-            <h3 className="text-sm font-semibold text-zinc-300 mb-2">Trade List</h3>
-            <p className="text-xs text-zinc-600 italic">Individual trade breakdown available in v2.</p>
+            <h3 className="text-sm font-semibold text-t-mid2 mb-2 font-ui-t">Trade List</h3>
+            <p className="text-xs text-t-dim italic font-ui-t">Individual trade breakdown available in v2.</p>
           </div>
         </div>
       )}
@@ -1575,16 +1575,16 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 
   return (
     <div className="overflow-x-auto -mx-1">
-      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 min-w-max">
+      <div className="flex gap-1 bg-t-bg0 border border-t-dim rounded-xl p-1 min-w-max">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => onChange(t.key)}
             className={cn(
-              "text-sm font-semibold py-2 px-3 rounded-lg transition-colors whitespace-nowrap",
+              "text-sm font-semibold py-2 px-3 rounded-lg transition-colors whitespace-nowrap font-ui-t",
               active === t.key
-                ? "bg-zinc-700 text-white"
-                : "text-zinc-500 hover:text-zinc-300"
+                ? "bg-t-bg2 text-t-hi"
+                : "text-t-muted hover:text-t-mid2"
             )}
           >
             {t.label}
@@ -1639,10 +1639,10 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
   ];
 
   function resultIcon(result?: string) {
-    if (result === "filled") return <span className="text-lime-400">✓</span>;
-    if (result === "skipped") return <span className="text-zinc-500">✗</span>;
-    if (result === "error") return <span className="text-red-400">!</span>;
-    return <span className="text-zinc-600">⚡</span>;
+    if (result === "filled") return <span className="text-t-green">✓</span>;
+    if (result === "skipped") return <span className="text-t-muted">✗</span>;
+    if (result === "error") return <span className="text-t-red">!</span>;
+    return <span className="text-t-dim">⚡</span>;
   }
 
   return (
@@ -1655,7 +1655,7 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
           placeholder="Search activity…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-teal-500/50"
+          className="flex-1 bg-t-bg1 border border-t-dim rounded-lg px-3 py-2 text-sm text-t-hi placeholder-t-dim focus:outline-none focus:border-t-cyan/50 font-ui-t"
         />
         <div className="flex gap-1">
           {cats.map((c) => (
@@ -1663,10 +1663,10 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
               key={c.key}
               onClick={() => { setCategory(c.key); setPage(1); }}
               className={cn(
-                "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap",
+                "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap font-ui-t",
                 category === c.key
-                  ? "bg-teal-500/15 border-teal-500/30 text-teal-400"
-                  : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                  ? "bg-t-cyan/15 border-t-cyan/30 text-t-cyan"
+                  : "bg-t-bg1 border-t-dim text-t-muted hover:text-t-mid2"
               )}
             >
               {c.label}
@@ -1676,18 +1676,18 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
       </div>
 
       {/* Timeline */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
-          <p className="text-sm font-semibold text-white">Recent Trades</p>
-          <p className="text-xs text-zinc-600">every P&amp;L dollar backed by a trade</p>
+      <div className="bg-t-bg0 border border-t-dim rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-t-dim">
+          <p className="text-sm font-semibold text-t-hi font-ui-t">Recent Trades</p>
+          <p className="text-xs text-t-dim font-ui-t">every P&amp;L dollar backed by a trade</p>
         </div>
         <div className="p-5">
         {isLoading ? (
           <div className="animate-pulse space-y-3">
-            {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-zinc-800 rounded-lg" />)}
+            {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-t-bg1 rounded-lg" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-zinc-600 text-sm py-6 text-center">
+          <p className="text-t-dim text-sm py-6 text-center font-ui-t">
             {isCrypto
               ? "No trades yet. Crypto bots scan continuously — next scan within 1 min."
               : "No trades yet. The execution engine runs during market hours (Mon–Fri 9:30am–4pm ET)."}
@@ -1705,26 +1705,26 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
                   key={item.id}
                   onClick={fillTradeId ? () => navigate(`/strategy/trade/${fillTradeId}`) : undefined}
                   className={cn(
-                    "flex items-center gap-3 py-3 border-b border-zinc-800/60 last:border-0 flex-wrap",
-                    fillTradeId && "cursor-pointer hover:bg-zinc-800/40 -mx-5 px-5 rounded-lg transition-colors"
+                    "flex items-center gap-3 py-3 border-b border-t-dim/60 last:border-0 flex-wrap",
+                    fillTradeId && "cursor-pointer hover:bg-t-bg1/40 -mx-5 px-5 rounded-lg transition-colors"
                   )}
                 >
-                  <span className="text-xs text-zinc-600 w-32 flex-shrink-0">{ts}</span>
-                  <span className="font-semibold text-white text-sm">{item.symbol}</span>
+                  <span className="text-xs text-t-dim w-32 flex-shrink-0 font-mono-t">{ts}</span>
+                  <span className="font-semibold text-t-hi text-sm font-mono-t">{item.symbol}</span>
                   {item.side && (
                     <span className={cn(
-                      "text-xs font-bold px-2 py-0.5 rounded-full border",
+                      "text-xs font-bold px-2 py-0.5 rounded-full border font-ui-t",
                       item.side === "buy" || item.side === "long"
-                        ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+                        ? "bg-lime-500/15 text-t-green border-lime-500/30"
                         : item.side === "sell" || item.side === "short"
-                        ? "bg-red-500/15 text-red-400 border-red-500/30"
-                        : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                        ? "bg-red-500/15 text-t-red border-red-500/30"
+                        : "bg-t-bg1 text-t-muted border-t-dim"
                     )}>
                       {item.side === "buy" || item.side === "long" ? "LONG" : item.side === "sell" || item.side === "short" ? "SHORT" : item.side.toUpperCase()}
                     </span>
                   )}
                   {isFill && item.qty != null && item.fill_price != null ? (
-                    <span className="text-xs text-zinc-400 tabular-nums">
+                    <span className="text-xs text-t-muted tabular-nums font-mono-t">
                       {(() => {
                         const base = item.symbol.includes("/") ? item.symbol.split("/")[0] : item.symbol;
                         const absQty = Math.abs(item.qty);
@@ -1737,17 +1737,17 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
                   ) : (
                     <>
                       {item.strategy && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
+                        <span className="text-xs px-2 py-0.5 rounded bg-t-bg1 border border-t-dim text-t-muted font-ui-t">
                           {item.strategy}
                         </span>
                       )}
                       {item.reason && (
-                        <span className="text-xs text-zinc-500 flex-1 truncate min-w-0">{item.reason}</span>
+                        <span className="text-xs text-t-muted flex-1 truncate min-w-0 font-ui-t">{item.reason}</span>
                       )}
                     </>
                   )}
                   {item.pnl_usd != null && (
-                    <span className={cn("text-xs font-semibold tabular-nums", item.pnl_usd >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    <span className={cn("text-xs font-semibold tabular-nums font-mono-t", item.pnl_usd >= 0 ? "text-t-green" : "text-t-red")}>
                       {item.pnl_usd >= 0 ? "+" : ""}${item.pnl_usd.toFixed(2)}
                     </span>
                   )}
@@ -1763,13 +1763,13 @@ function ActivityTab({ botName, isCrypto, searchRef }: { botName: string; isCryp
       {/* Pagination */}
       {total > PAGE_SIZE && (
         <div className="flex items-center justify-between">
-          <span className="text-xs text-zinc-600">
+          <span className="text-xs text-t-dim font-mono-t tabular-nums">
             Showing {Math.min(page * PAGE_SIZE, total)} of {total}
           </span>
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={page * PAGE_SIZE >= total}
-            className="text-xs font-semibold px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white disabled:opacity-40 transition-colors"
+            className="text-xs font-semibold px-4 py-2 rounded-lg border border-t-dim bg-t-bg1 text-t-mid2 hover:text-t-hi disabled:opacity-40 transition-colors font-ui-t"
           >
             Load more
           </button>
@@ -1881,7 +1881,7 @@ function StrategiesTab({
     return (
       <div className="space-y-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 animate-pulse h-28" />
+          <div key={i} className="bg-t-bg0 border border-t-dim rounded-2xl p-5 animate-pulse h-28" />
         ))}
       </div>
     );
@@ -1905,16 +1905,16 @@ function StrategiesTab({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-zinc-300">
+        <p className="text-sm font-semibold text-t-mid2 font-ui-t">
           Strategy Roster
-          <span className="ml-2 text-xs font-normal text-zinc-600">
+          <span className="ml-2 text-xs font-normal text-t-dim font-ui-t">
             {displayList.length} strategies · ensemble: {BOT_META[botName]?.ensemble ?? "weighted_vote"}
           </span>
         </p>
         <button
           onClick={() => resetMut.mutate()}
           disabled={resetMut.isPending || weights.length === 0}
-          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white transition-colors disabled:opacity-40"
+          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-t-dim bg-t-bg1 text-t-muted hover:text-t-hi transition-colors disabled:opacity-40 font-ui-t"
         >
           {resetMut.isPending ? "Resetting…" : "Reset weights"}
         </button>
@@ -1929,26 +1929,26 @@ function StrategiesTab({
         return (
           <div
             key={w.strategy}
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3"
+            className="bg-t-bg0 border border-t-dim rounded-2xl p-5 space-y-3"
           >
             {/* Header row */}
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm font-semibold text-white">
+                  <h3 className="text-sm font-semibold text-t-hi font-ui-t">
                     {strategyLabel(w.strategy)}
                   </h3>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-teal-400">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-t-cyan/15 border border-t-cyan/30 text-t-cyan font-mono-t tabular-nums">
                     weight {w.weight_pct}%
                   </span>
                   {w.locked && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-t-amber/15 border border-t-amber/30 text-t-amber font-ui-t">
                       locked
                     </span>
                   )}
                 </div>
                 {description && (
-                  <p className="text-xs text-zinc-600 mt-1 leading-relaxed">{description}</p>
+                  <p className="text-xs text-t-dim mt-1 leading-relaxed font-ui-t">{description}</p>
                 )}
               </div>
               <button
@@ -1958,8 +1958,8 @@ function StrategiesTab({
                 className={cn(
                   "p-1.5 rounded-lg border transition-colors flex-shrink-0",
                   w.locked
-                    ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
-                    : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                    ? "bg-t-amber/15 border-t-amber/30 text-t-amber"
+                    : "bg-t-bg1 border-t-dim text-t-muted hover:text-t-mid2"
                 )}
               >
                 {w.locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
@@ -1969,40 +1969,40 @@ function StrategiesTab({
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <p className="text-[10px] text-zinc-600 uppercase tracking-wide">30d W / L</p>
-                <p className="text-xs font-semibold mt-0.5">
-                  <span className="text-lime-400">{w.wins_30d}W</span>
-                  <span className="text-zinc-600 mx-1">/</span>
-                  <span className="text-red-400">{w.losses_30d}L</span>
+                <p className="text-[10px] text-t-dim uppercase tracking-wide font-ui-t">30d W / L</p>
+                <p className="text-xs font-semibold mt-0.5 font-mono-t tabular-nums">
+                  <span className="text-t-green">{w.wins_30d}W</span>
+                  <span className="text-t-dim mx-1">/</span>
+                  <span className="text-t-red">{w.losses_30d}L</span>
                 </p>
               </div>
               <div>
-                <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Win Rate</p>
+                <p className="text-[10px] text-t-dim uppercase tracking-wide font-ui-t">Win Rate</p>
                 <p className={cn(
-                  "text-xs font-semibold mt-0.5",
-                  winRate !== null ? (winRate >= 50 ? "text-lime-400" : "text-red-400") : "text-zinc-500"
+                  "text-xs font-semibold mt-0.5 font-mono-t tabular-nums",
+                  winRate !== null ? (winRate >= 50 ? "text-t-green" : "text-t-red") : "text-t-muted"
                 )}>
                   {winRate !== null ? `${winRate.toFixed(0)}%` : "—"}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Last Signal</p>
+                <p className="text-[10px] text-t-dim uppercase tracking-wide font-ui-t">Last Signal</p>
                 {lastSignal ? (
-                  <p className="text-xs font-semibold mt-0.5">
-                    <span className={lastSignal.side === "buy" || lastSignal.side === "long" ? "text-lime-400" : "text-red-400"}>
+                  <p className="text-xs font-semibold mt-0.5 font-mono-t">
+                    <span className={lastSignal.side === "buy" || lastSignal.side === "long" ? "text-t-green" : "text-t-red"}>
                       {lastSignal.side === "buy" || lastSignal.side === "long" ? "LONG" : lastSignal.side === "sell" || lastSignal.side === "short" ? "SHORT" : lastSignal.side.toUpperCase()}
                     </span>
-                    <span className="text-zinc-500 ml-1">{lastSignal.symbol}</span>
+                    <span className="text-t-muted ml-1">{lastSignal.symbol}</span>
                   </p>
                 ) : (
-                  <p className="text-xs text-zinc-600 mt-0.5">—</p>
+                  <p className="text-xs text-t-dim mt-0.5 font-mono-t">—</p>
                 )}
               </div>
             </div>
 
             {/* Last signal reason */}
             {lastSignal?.reason && (
-              <p className="text-[11px] text-zinc-500 bg-zinc-800/60 rounded-lg px-3 py-2 leading-relaxed">
+              <p className="text-[11px] text-t-muted bg-t-bg1/60 rounded-lg px-3 py-2 leading-relaxed font-ui-t">
                 "{lastSignal.reason}"
               </p>
             )}
@@ -2057,12 +2057,12 @@ function SettingsTab({
   return (
     <div className="space-y-5">
       {/* Capital slider */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+      <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5 space-y-4">
         <SectionLabel as="h2">Paper Allocation</SectionLabel>
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs text-zinc-500">Capital %</label>
-            <span className="text-sm font-bold text-white">{capitalPct}%</span>
+            <label className="text-xs text-t-muted font-ui-t">Capital %</label>
+            <span className="text-sm font-bold text-t-hi font-mono-t tabular-nums">{capitalPct}%</span>
           </div>
           <input
             type="range"
@@ -2073,7 +2073,7 @@ function SettingsTab({
             onChange={(e) => setCapitalPct(Number(e.target.value))}
             className="w-full accent-teal-500"
           />
-          <div className="flex justify-between text-xs text-zinc-700 mt-0.5">
+          <div className="flex justify-between text-xs text-t-gdim mt-0.5 font-mono-t">
             <span>0%</span>
             <span>20%</span>
           </div>
@@ -2081,17 +2081,17 @@ function SettingsTab({
 
         {/* Risk profile */}
         <div>
-          <label className="text-xs text-zinc-500 mb-2 block">Risk Profile</label>
+          <label className="text-xs text-t-muted mb-2 block font-ui-t">Risk Profile</label>
           <div className="flex gap-2">
             {(["conservative", "standard", "aggressive"] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setRiskProfile(r)}
                 className={cn(
-                  "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors capitalize",
+                  "text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors capitalize font-ui-t",
                   riskProfile === r
-                    ? "bg-teal-500/15 border-teal-500/40 text-teal-400"
-                    : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                    ? "bg-t-cyan/15 border-t-cyan/40 text-t-cyan"
+                    : "bg-t-bg1 border-t-dim text-t-muted hover:text-t-mid2"
                 )}
               >
                 {r}
@@ -2103,38 +2103,38 @@ function SettingsTab({
         <button
           onClick={() => allocateMut.mutate()}
           disabled={allocateMut.isPending}
-          className="px-4 py-2 rounded-lg bg-teal-500 text-black text-sm font-bold hover:bg-teal-400 transition-colors disabled:opacity-50"
+          className="px-4 py-2 rounded-lg bg-teal-500 text-black text-sm font-bold hover:bg-teal-400 transition-colors disabled:opacity-50 font-ui-t"
         >
           {allocateMut.isPending ? "Saving…" : "Save Settings"}
         </button>
       </div>
 
       {/* Go Live section */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+      <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5 space-y-3">
         <SectionLabel as="h2">Go Live</SectionLabel>
         <div className="flex items-center gap-3">
           <div className="relative">
             <button
               disabled
-              className="relative inline-flex h-6 w-11 items-center rounded-full bg-zinc-700 cursor-not-allowed opacity-50"
+              className="relative inline-flex h-6 w-11 items-center rounded-full bg-t-bg2 cursor-not-allowed opacity-50"
               title="Live trading coming soon — paper trading only"
             >
-              <span className="translate-x-1 inline-block h-4 w-4 rounded-full bg-white" />
+              <span className="translate-x-1 inline-block h-4 w-4 rounded-full bg-t-hi" />
             </button>
           </div>
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-t-muted font-ui-t">
             Live trading coming soon — paper trading only
           </span>
         </div>
         {notified ? (
-          <p className="text-sm text-lime-400 font-semibold">
+          <p className="text-sm text-t-green font-semibold font-ui-t">
             You're on the waitlist ✓
           </p>
         ) : (
           <button
             onClick={() => waitlistMut.mutate()}
             disabled={waitlistMut.isPending}
-            className="text-sm font-semibold px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
+            className="text-sm font-semibold px-4 py-2 rounded-lg border border-t-amber/30 bg-t-amber/10 text-t-amber hover:bg-t-amber/20 transition-colors font-ui-t"
           >
             {waitlistMut.isPending ? "Joining…" : "Notify me when live unlocks →"}
           </button>
@@ -2148,10 +2148,10 @@ function SettingsTab({
 // ─── Allocation tab ───────────────────────────────────────────────────────────
 
 const TIER_COLORS: Record<string, string> = {
-  T3: "text-emerald-400 bg-emerald-400/10 border-emerald-500/30",
-  T2: "text-blue-400 bg-blue-400/10 border-blue-500/30",
-  T1: "text-yellow-400 bg-yellow-400/10 border-yellow-500/30",
-  T0: "text-zinc-400 bg-zinc-400/10 border-zinc-500/30",
+  T3: "text-t-green bg-t-green/10 border-t-green/30",
+  T2: "text-t-cyan bg-t-cyan/10 border-t-cyan/30",
+  T1: "text-t-amber bg-t-amber/10 border-t-amber/30",
+  T0: "text-t-muted bg-t-muted/10 border-t-mid/30",
 };
 const TIER_LABELS: Record<string, string> = {
   T3: "CORE", T2: "PRODUCTION", T1: "PROBATION", T0: "CANDIDATE",
@@ -2173,15 +2173,15 @@ function AllocationTab({ allocationId }: { allocationId: number }) {
   });
 
   if (!allocationId) {
-    return <p className="text-sm text-zinc-500 py-8 text-center">No allocation found for this bot.</p>;
+    return <p className="text-sm text-t-muted py-8 text-center font-ui-t">No allocation found for this bot.</p>;
   }
 
   if (isLoading) {
-    return <p className="text-sm text-zinc-500 py-8 text-center">Loading allocation data…</p>;
+    return <p className="text-sm text-t-muted py-8 text-center font-ui-t">Loading allocation data…</p>;
   }
 
   if (isError || !data) {
-    return <p className="text-sm text-zinc-500 py-8 text-center">Allocation data unavailable.</p>;
+    return <p className="text-sm text-t-muted py-8 text-center font-ui-t">Allocation data unavailable.</p>;
   }
 
   const tier: string = data.current_tier ?? "T1";
@@ -2195,14 +2195,14 @@ function AllocationTab({ allocationId }: { allocationId: number }) {
   return (
     <div className="space-y-6">
       {/* Current tier card */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="bg-t-bg0 border border-t-dim rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="flex-1">
-          <p className="text-xs text-zinc-500 mb-1 uppercase tracking-wider">Current Tier</p>
-          <span className={cn("inline-block text-sm font-bold px-3 py-1 rounded-full border", tierClass)}>
+          <p className="text-xs text-t-muted mb-1 uppercase tracking-wider font-ui-t">Current Tier</p>
+          <span className={cn("inline-block text-sm font-bold px-3 py-1 rounded-full border font-ui-t", tierClass)}>
             {tier} — {tierLabel}
           </span>
-          <p className="text-xs text-zinc-500 mt-2">
-            Max capital allocation: <span className="text-zinc-200">{maxPct}%</span>
+          <p className="text-xs text-t-muted mt-2 font-ui-t">
+            Max capital allocation: <span className="text-t-mid2 font-mono-t tabular-nums">{maxPct}%</span>
           </p>
         </div>
         {latest && (
@@ -2213,9 +2213,9 @@ function AllocationTab({ allocationId }: { allocationId: number }) {
               { label: "Profit Factor", val: latest.profit_factor != null ? latest.profit_factor.toFixed(2) : "—" },
               { label: "Max DD", val: latest.max_drawdown_pct != null ? `${(latest.max_drawdown_pct * 100).toFixed(1)}%` : "—" },
             ].map(({ label, val }) => (
-              <div key={label} className="bg-zinc-800 rounded-lg px-3 py-2">
-                <p className="text-[10px] text-zinc-500 mb-0.5">{label}</p>
-                <p className="text-sm font-semibold text-white">{val}</p>
+              <div key={label} className="bg-t-bg1 rounded-lg px-3 py-2">
+                <p className="text-[10px] text-t-muted mb-0.5 font-ui-t">{label}</p>
+                <p className="text-sm font-semibold text-t-hi font-mono-t tabular-nums">{val}</p>
               </div>
             ))}
           </div>
@@ -2223,20 +2223,20 @@ function AllocationTab({ allocationId }: { allocationId: number }) {
       </div>
 
       {/* Tier progression */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-        <p className="text-xs text-zinc-500 uppercase tracking-wider mb-4">Tier Ladder</p>
+      <div className="bg-t-bg0 border border-t-dim rounded-xl p-5">
+        <p className="panel-header mb-4">// Tier Ladder</p>
         <div className="flex gap-2 flex-wrap">
           {(["T0", "T1", "T2", "T3"] as const).map((t) => (
             <div
               key={t}
               className={cn(
                 "flex-1 min-w-[70px] rounded-lg border px-3 py-2 text-center transition-all",
-                tier === t ? TIER_COLORS[t] : "border-zinc-700 text-zinc-600"
+                tier === t ? TIER_COLORS[t] : "border-t-dim text-t-dim"
               )}
             >
-              <p className="text-xs font-bold">{t}</p>
-              <p className="text-[10px]">{TIER_LABELS[t]}</p>
-              <p className="text-[10px]">≤ {TIER_MAX_PCT[t]}%</p>
+              <p className="text-xs font-bold font-mono-t">{t}</p>
+              <p className="text-[10px] font-ui-t">{TIER_LABELS[t]}</p>
+              <p className="text-[10px] font-mono-t tabular-nums">≤ {TIER_MAX_PCT[t]}%</p>
             </div>
           ))}
         </div>
@@ -2244,22 +2244,22 @@ function AllocationTab({ allocationId }: { allocationId: number }) {
 
       {/* Tier history */}
       {history.length > 0 && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Tier History</p>
+        <div className="bg-t-bg0 border border-t-dim rounded-xl p-5">
+          <p className="panel-header mb-3">// Tier History</p>
           <div className="space-y-2">
             {history.map((h, i) => (
               <div key={i} className="flex items-start gap-3 text-sm">
-                <span className="text-zinc-500 text-xs tabular-nums whitespace-nowrap pt-0.5">
+                <span className="text-t-muted text-xs tabular-nums whitespace-nowrap pt-0.5 font-mono-t">
                   {h.changed_at ? new Date(h.changed_at).toLocaleDateString() : "—"}
                 </span>
-                <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded border shrink-0", TIER_COLORS[h.previous_tier] ?? TIER_COLORS.T1)}>
+                <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded border shrink-0 font-mono-t", TIER_COLORS[h.previous_tier] ?? TIER_COLORS.T1)}>
                   {h.previous_tier}
                 </span>
-                <span className="text-zinc-500 shrink-0">→</span>
-                <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded border shrink-0", TIER_COLORS[h.new_tier] ?? TIER_COLORS.T1)}>
+                <span className="text-t-muted shrink-0">→</span>
+                <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded border shrink-0 font-mono-t", TIER_COLORS[h.new_tier] ?? TIER_COLORS.T1)}>
                   {h.new_tier}
                 </span>
-                <span className="text-zinc-400 text-xs">{h.reason}</span>
+                <span className="text-t-muted text-xs font-ui-t">{h.reason}</span>
               </div>
             ))}
           </div>
@@ -2292,9 +2292,9 @@ function BotPerformanceTab({ botName }: { botName: string }) {
   });
 
   if (isError) return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-10 text-center">
-      <p className="text-zinc-400 font-semibold mb-1">Performance analytics not enabled</p>
-      <p className="text-zinc-600 text-sm">Set ENABLE_PERFORMANCE_ANALYTICS=true to activate.</p>
+    <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-10 text-center">
+      <p className="text-t-muted font-semibold mb-1 font-ui-t">Performance analytics not enabled</p>
+      <p className="text-t-dim text-sm font-ui-t">Set ENABLE_PERFORMANCE_ANALYTICS=true to activate.</p>
     </div>
   );
 
@@ -2307,16 +2307,16 @@ function BotPerformanceTab({ botName }: { botName: string }) {
     return v < 0 ? `-${s}` : `+${s}`;
   };
   const pclr = (v: number | null | undefined) =>
-    v == null ? "text-zinc-400" : v >= 0 ? "text-emerald-400" : "text-red-400";
+    v == null ? "text-t-muted" : v >= 0 ? "text-t-green" : "text-t-red";
 
   return (
     <div className="space-y-5">
       {/* Period selector */}
-      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-t-bg0 border border-t-dim rounded-xl p-1 w-fit">
         {(["7d","30d","90d","all"] as const).map((p) => (
           <button key={p} onClick={() => setPeriod(p)}
-            className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors uppercase",
-              period === p ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-300")}>
+            className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors uppercase font-ui-t",
+              period === p ? "bg-t-bg2 text-t-hi" : "text-t-muted hover:text-t-mid2")}>
             {p}
           </button>
         ))}
@@ -2324,12 +2324,12 @@ function BotPerformanceTab({ botName }: { botName: string }) {
 
       {isLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[0,1,2,3].map((i) => <div key={i} className="h-20 bg-zinc-900 border border-zinc-800 rounded-2xl animate-pulse" />)}
+          {[0,1,2,3].map((i) => <div key={i} className="h-20 bg-t-bg0 border border-t-dim rounded-2xl animate-pulse" />)}
         </div>
       ) : metrics?.total_trades === 0 ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-10 text-center">
-          <p className="text-zinc-400 font-semibold">No trade data yet</p>
-          <p className="text-zinc-600 text-sm mt-1">Performance appears after the first closed trade.</p>
+        <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-10 text-center">
+          <p className="text-t-muted font-semibold font-ui-t">No trade data yet</p>
+          <p className="text-t-dim text-sm mt-1 font-ui-t">Performance appears after the first closed trade.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -2337,14 +2337,14 @@ function BotPerformanceTab({ botName }: { botName: string }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { label: "Total Return", value: fmtPct(metrics?.total_return_pct), sub: fmtUsd(metrics?.total_return_usd), cls: pclr(metrics?.total_return_pct) },
-              { label: "Sharpe", value: metrics?.sharpe != null ? metrics.sharpe.toFixed(2) : "—", cls: "text-white" },
-              { label: "Max Drawdown", value: fmtPct(metrics?.max_drawdown_pct), cls: "text-red-400" },
-              { label: "Win Rate", value: metrics?.win_rate != null ? `${(metrics.win_rate * 100).toFixed(0)}%` : "—", sub: `${metrics?.total_trades ?? 0} trades`, cls: "text-white" },
+              { label: "Sharpe", value: metrics?.sharpe != null ? metrics.sharpe.toFixed(2) : "—", cls: "text-t-hi" },
+              { label: "Max Drawdown", value: fmtPct(metrics?.max_drawdown_pct), cls: "text-t-red" },
+              { label: "Win Rate", value: metrics?.win_rate != null ? `${(metrics.win_rate * 100).toFixed(0)}%` : "—", sub: `${metrics?.total_trades ?? 0} trades`, cls: "text-t-hi" },
             ].map((card) => (
-              <div key={card.label} className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3">
-                <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-1">{card.label}</p>
-                <p className={cn("text-xl font-bold font-mono", card.cls)}>{card.value}</p>
-                {card.sub && <p className="text-xs text-zinc-500 mt-0.5 font-mono">{card.sub}</p>}
+              <div key={card.label} className="bg-t-bg0 border border-t-dim rounded-2xl px-4 py-3">
+                <p className="text-[10px] font-semibold text-t-dim uppercase tracking-widest mb-1 font-ui-t">{card.label}</p>
+                <p className={cn("text-xl font-bold font-mono-t tabular-nums", card.cls)}>{card.value}</p>
+                {card.sub && <p className="text-xs text-t-muted mt-0.5 font-mono-t tabular-nums">{card.sub}</p>}
               </div>
             ))}
           </div>
@@ -2352,36 +2352,36 @@ function BotPerformanceTab({ botName }: { botName: string }) {
             {[
               { label: "Sortino", value: metrics?.sortino != null ? metrics.sortino.toFixed(2) : "—" },
               { label: "Profit Factor", value: metrics?.profit_factor != null ? metrics.profit_factor.toFixed(2) : "—" },
-              { label: "Best Trade", value: fmtUsd(metrics?.best_trade_usd), cls: "text-emerald-400" },
-              { label: "Worst Trade", value: fmtUsd(metrics?.worst_trade_usd), cls: "text-red-400" },
+              { label: "Best Trade", value: fmtUsd(metrics?.best_trade_usd), cls: "text-t-green" },
+              { label: "Worst Trade", value: fmtUsd(metrics?.worst_trade_usd), cls: "text-t-red" },
             ].map((card) => (
-              <div key={card.label} className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3">
-                <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-1">{card.label}</p>
-                <p className={cn("text-xl font-bold font-mono", (card as any).cls ?? "text-white")}>{card.value}</p>
+              <div key={card.label} className="bg-t-bg0 border border-t-dim rounded-2xl px-4 py-3">
+                <p className="text-[10px] font-semibold text-t-dim uppercase tracking-widest mb-1 font-ui-t">{card.label}</p>
+                <p className={cn("text-xl font-bold font-mono-t tabular-nums", (card as any).cls ?? "text-t-hi")}>{card.value}</p>
               </div>
             ))}
           </div>
 
           {/* Strategy attribution */}
           {attrData && attrData.attribution.length > 0 && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 overflow-x-auto">
-              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-3">// STRATEGY ATTRIBUTION</p>
+            <div className="bg-t-bg0 border border-t-dim rounded-2xl p-4 overflow-x-auto">
+              <p className="panel-header mb-3">// STRATEGY ATTRIBUTION</p>
               <table className="w-full text-xs min-w-max">
                 <thead>
-                  <tr className="border-b border-zinc-800">
+                  <tr className="border-b border-t-dim">
                     {["Strategy","Raw Return %","$ Contribution","Capital","Weight"].map((h) => (
-                      <th key={h} className="text-left text-[10px] text-zinc-600 uppercase py-2 px-2 first:pl-0">{h}</th>
+                      <th key={h} className="text-left text-[10px] text-t-dim uppercase py-2 px-2 first:pl-0 font-ui-t">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {attrData.attribution.map((row) => (
-                    <tr key={row.strategy} className="border-b border-zinc-800/40">
-                      <td className="py-2 pr-4 text-white font-medium">{row.strategy?.replace(/_/g," ") ?? "Unattributed"}</td>
-                      <td className={cn("py-2 px-2 font-mono", pclr(row.raw_return_pct))}>{fmtPct(row.raw_return_pct)}</td>
-                      <td className={cn("py-2 px-2 font-mono", pclr(row.pnl_usd))}>{fmtUsd(row.pnl_usd)}</td>
-                      <td className="py-2 px-2 font-mono text-zinc-400">${(row.capital_deployed_usd ?? 0).toFixed(0)}</td>
-                      <td className="py-2 px-2 font-mono text-zinc-400">{row.weight_pct != null ? `${row.weight_pct.toFixed(1)}%` : "—"}</td>
+                    <tr key={row.strategy} className="border-b border-t-dim/40">
+                      <td className="py-2 pr-4 text-t-hi font-medium font-ui-t">{row.strategy?.replace(/_/g," ") ?? "Unattributed"}</td>
+                      <td className={cn("py-2 px-2 font-mono-t tabular-nums", pclr(row.raw_return_pct))}>{fmtPct(row.raw_return_pct)}</td>
+                      <td className={cn("py-2 px-2 font-mono-t tabular-nums", pclr(row.pnl_usd))}>{fmtUsd(row.pnl_usd)}</td>
+                      <td className="py-2 px-2 font-mono-t tabular-nums text-t-muted">${(row.capital_deployed_usd ?? 0).toFixed(0)}</td>
+                      <td className="py-2 px-2 font-mono-t tabular-nums text-t-muted">{row.weight_pct != null ? `${row.weight_pct.toFixed(1)}%` : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2416,32 +2416,32 @@ function BotWhySection({
   });
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden">
+    <div className="border border-t-dim rounded-xl overflow-hidden">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-zinc-800/40 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-t-bg1/40 transition-colors"
       >
-        <span className="text-xs font-semibold text-zinc-400">Why this bot?</span>
-        <span className="text-zinc-600 text-xs">{expanded ? "▲" : "▼"}</span>
+        <span className="text-xs font-semibold text-t-muted font-ui-t">Why this bot?</span>
+        <span className="text-t-dim text-xs">{expanded ? "▲" : "▼"}</span>
       </button>
       {expanded && (
-        <div className="px-4 pb-4 space-y-3 border-t border-zinc-800">
+        <div className="px-4 pb-4 space-y-3 border-t border-t-dim">
           {description && (
-            <p className="text-xs text-zinc-400 leading-relaxed pt-3">{description}</p>
+            <p className="text-xs text-t-muted leading-relaxed pt-3 font-ui-t">{description}</p>
           )}
           {strategySnippets.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[10px] text-zinc-600 uppercase tracking-wide font-semibold">
+              <p className="text-[10px] text-t-dim uppercase tracking-wide font-semibold font-ui-t">
                 Sample Strategies ({strategies.length} total)
               </p>
               {strategySnippets.map((s) => (
                 <div key={s.name}>
-                  <p className="text-xs font-semibold text-zinc-300">{s.name}</p>
-                  {s.desc && <p className="text-[11px] text-zinc-600 leading-relaxed">{s.desc}</p>}
+                  <p className="text-xs font-semibold text-t-mid2 font-ui-t">{s.name}</p>
+                  {s.desc && <p className="text-[11px] text-t-dim leading-relaxed font-ui-t">{s.desc}</p>}
                 </div>
               ))}
               {strategies.length > 4 && (
-                <p className="text-[11px] text-zinc-600 italic">
+                <p className="text-[11px] text-t-dim italic font-ui-t">
                   +{strategies.length - 4} more strategies — view in the Strategies tab
                 </p>
               )}
@@ -2613,11 +2613,11 @@ export default function BotDetailPage() {
   });
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6 animate-page-in">
       {/* Back nav */}
       <button
         onClick={() => navigate("/strategy")}
-        className="flex items-center gap-1.5 text-zinc-500 hover:text-white text-sm transition-colors"
+        className="flex items-center gap-1.5 text-t-muted hover:text-t-hi text-sm transition-colors font-ui-t"
       >
         <ArrowLeft className="w-4 h-4" />
         Strategy Lab
@@ -2627,26 +2627,26 @@ export default function BotDetailPage() {
       <TabBar active={activeTab} onChange={setActiveTab} />
 
       {/* ── Bot Header Strip — always visible regardless of tab ── */}
-      <BracketFrame className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-4" glow>
+      <BracketFrame className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex flex-wrap items-center gap-4" glow>
         {isLoading ? (
           <div className="animate-pulse flex items-center gap-4 w-full">
-            <div className="h-6 w-40 bg-zinc-800 rounded" />
-            <div className="h-6 w-24 bg-zinc-800 rounded" />
-            <div className="h-6 w-32 bg-zinc-800 rounded ml-auto" />
+            <div className="h-6 w-40 bg-t-bg1 rounded" />
+            <div className="h-6 w-24 bg-t-bg1 rounded" />
+            <div className="h-6 w-32 bg-t-bg1 rounded ml-auto" />
           </div>
         ) : (
           <>
             {/* Name + status */}
             <div className="flex items-center gap-2 min-w-0">
-              <h1 className="text-base font-bold text-white truncate font-mono tracking-wide">
+              <h1 className="text-base font-bold text-t-hi truncate font-mono-t tracking-wide">
                 {meta?.displayName ?? displayName(botName)}
               </h1>
               <span
                 className={cn(
-                  "text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0",
+                  "text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 font-ui-t",
                   isEnabled
-                    ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
-                    : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                    ? "bg-lime-500/15 text-t-green border-lime-500/30"
+                    : "bg-t-bg1 text-t-muted border-t-dim"
                 )}
               >
                 {isEnabled ? "ACTIVE" : "PAUSED"}
@@ -2655,10 +2655,10 @@ export default function BotDetailPage() {
 
             {/* Today P&L */}
             <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-600 uppercase tracking-wide">Today P&L</span>
+              <span className="text-[10px] text-t-dim uppercase tracking-wide font-ui-t">Today P&L</span>
               <span className={cn(
-                "text-lg font-bold",
-                (stats?.today_pnl ?? 0) >= 0 ? "text-lime-400" : "text-red-400"
+                "text-lg font-bold font-mono-t tabular-nums",
+                (stats?.today_pnl ?? 0) >= 0 ? "text-t-green" : "text-t-red"
               )}>
                 {formatPnl(stats?.today_pnl ?? 0)}
               </span>
@@ -2666,11 +2666,11 @@ export default function BotDetailPage() {
 
             {/* Open positions + notional */}
             <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-600 uppercase tracking-wide">Open Positions</span>
-              <span className="text-base font-bold text-white">
+              <span className="text-[10px] text-t-dim uppercase tracking-wide font-ui-t">Open Positions</span>
+              <span className="text-base font-bold text-t-hi font-mono-t tabular-nums">
                 {positions.length}
                 {positions.length > 0 && (
-                  <span className="text-xs text-zinc-500 font-normal ml-1">
+                  <span className="text-xs text-t-muted font-normal ml-1 font-mono-t">
                     / $
                     {positions.reduce((sum, p) => {
                       return sum + (p.market_value ?? (livePrices[p.symbol] ?? (p.avg_cost_cents / 100)) * p.qty);
@@ -2687,10 +2687,10 @@ export default function BotDetailPage() {
                   onClick={() => allocateMut.mutate({ enabled: !isEnabled })}
                   disabled={allocateMut.isPending}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors",
+                    "px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors font-ui-t",
                     isEnabled
-                      ? "border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-red-400"
-                      : "border-lime-600/50 text-lime-400 hover:bg-lime-500/10"
+                      ? "border-t-dim text-t-muted hover:border-red-600 hover:text-t-red"
+                      : "border-lime-600/50 text-t-green hover:bg-lime-500/10"
                   )}
                 >
                   {isEnabled ? "Disable Bot" : "Enable Bot"}
@@ -2699,12 +2699,12 @@ export default function BotDetailPage() {
                   <button
                     onClick={() => waitlistMut.mutate(!isOnWaitlist)}
                     disabled={waitlistMut.isPending}
-                    className="px-3 py-1.5 rounded-lg border border-amber-500/30 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 transition-colors"
+                    className="px-3 py-1.5 rounded-lg border border-t-amber/30 text-xs font-semibold text-t-amber hover:bg-t-amber/10 transition-colors font-ui-t"
                   >
                     Notify when live
                   </button>
                 ) : (
-                  <span className="text-xs text-lime-400 font-semibold">✓ On waitlist</span>
+                  <span className="text-xs text-t-green font-semibold font-ui-t">✓ On waitlist</span>
                 )}
               </div>
             )}
@@ -2716,19 +2716,19 @@ export default function BotDetailPage() {
       {activeTab === "overview" && (
         <div className="space-y-6">
           {/* Open Positions */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5">
             <SectionLabel as="h2" className="mb-4">Open Positions</SectionLabel>
             {isRebalanceOnly && positions.length > 0 && (
-              <p className="text-xs text-zinc-500 mb-3 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2">
+              <p className="text-xs text-t-muted mb-3 bg-t-bg1/50 border border-t-dim/50 rounded-lg px-3 py-2 font-ui-t">
                 Long-term holds — this bot uses larger position sizes by design (weekly DCA / rebalance, fewer trades, longer hold periods).
               </p>
             )}
             {isLoading ? (
               <div className="animate-pulse space-y-2">
-                {[0, 1, 2].map((i) => <div key={i} className="h-10 bg-zinc-800 rounded" />)}
+                {[0, 1, 2].map((i) => <div key={i} className="h-10 bg-t-bg1 rounded" />)}
               </div>
             ) : positions.length === 0 ? (
-              <p className="text-zinc-600 text-sm py-6 text-center leading-relaxed">
+              <p className="text-t-dim text-sm py-6 text-center leading-relaxed font-ui-t">
                 Bot is scanning — open positions will appear here when it enters a trade.{" "}
                 Check the Watchlist tab to see what it&apos;s currently evaluating.
               </p>
@@ -2736,13 +2736,13 @@ export default function BotDetailPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-                      <th className="text-left pb-2 font-medium">Symbol</th>
-                      <th className="text-left pb-2 font-medium">Side</th>
-                      <th className="text-right pb-2 font-medium">Size</th>
-                      <th className="text-right pb-2 font-medium">Current Value</th>
-                      <th className="text-right pb-2 font-medium">Unrealized P&L</th>
-                      <th className="text-right pb-2 font-medium">Time Held</th>
+                    <tr className="text-xs text-t-dim border-b border-t-dim">
+                      <th className="text-left pb-2 font-medium font-ui-t">Symbol</th>
+                      <th className="text-left pb-2 font-medium font-ui-t">Side</th>
+                      <th className="text-right pb-2 font-medium font-ui-t">Size</th>
+                      <th className="text-right pb-2 font-medium font-ui-t">Current Value</th>
+                      <th className="text-right pb-2 font-medium font-ui-t">Unrealized P&L</th>
+                      <th className="text-right pb-2 font-medium font-ui-t">Time Held</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2767,41 +2767,41 @@ export default function BotDetailPage() {
                       return (
                         <tr
                           key={pos.id}
-                          className="border-b border-zinc-800/50 last:border-0 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                          className="border-b border-t-dim/50 last:border-0 cursor-pointer hover:bg-t-bg1/30 transition-colors"
                           onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
                           title={`View ${pos.symbol} chart`}
                         >
                           <td className="py-2.5">
                             <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-white">{pos.symbol}</span>
+                              <span className="font-semibold text-t-hi font-mono-t">{pos.symbol}</span>
                               {isSymbolMismatch(pos.symbol) && (
-                                <span className="text-[10px] text-amber-400 border border-amber-400/30 bg-amber-400/10 px-1 py-0.5 rounded font-medium whitespace-nowrap">⚠️ mismatch</span>
+                                <span className="text-[10px] text-t-amber border border-t-amber/30 bg-t-amber/10 px-1 py-0.5 rounded font-medium whitespace-nowrap font-ui-t">⚠️ mismatch</span>
                               )}
                             </div>
                           </td>
                           <td className="py-2.5">
-                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-t-cyan/15 text-t-cyan border border-t-cyan/20 font-ui-t">
                               LONG
                             </span>
                           </td>
-                          <td className="py-2.5 text-right text-zinc-300 tabular-nums">
+                          <td className="py-2.5 text-right text-t-mid2 tabular-nums font-mono-t">
                             {pos.qty != null && pos.avg_cost_cents != null
                               ? formatTradeSize(pos.qty, pos.symbol, (pos.avg_cost_cents / 100) * Math.abs(pos.qty))
                               : pos.qty != null ? formatQty(pos.qty, pos.symbol) : "—"}
                           </td>
-                          <td className="py-2.5 text-right text-zinc-300 tabular-nums">
+                          <td className="py-2.5 text-right text-t-mid2 tabular-nums font-mono-t">
                             {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
                           </td>
                           <td className={cn(
-                            "py-2.5 text-right text-sm font-medium tabular-nums",
-                            unrealizedPnl == null ? "text-zinc-500"
-                              : unrealizedPnl >= 0 ? "text-lime-400" : "text-red-400"
+                            "py-2.5 text-right text-sm font-medium tabular-nums font-mono-t",
+                            unrealizedPnl == null ? "text-t-muted"
+                              : unrealizedPnl >= 0 ? "text-t-green" : "text-t-red"
                           )}>
                             {unrealizedPnl != null
                               ? `${unrealizedPnl >= 0 ? "+" : ""}$${Math.abs(unrealizedPnl).toFixed(2)}${pnlPct != null ? ` (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%)` : ""}`
                               : "—"}
                           </td>
-                          <td className="py-2.5 text-right text-xs text-zinc-500">{timeHeld}</td>
+                          <td className="py-2.5 text-right text-xs text-t-muted font-mono-t">{timeHeld}</td>
                         </tr>
                       );
                     })}
@@ -2814,7 +2814,7 @@ export default function BotDetailPage() {
           {/* Stats grid + Equity Curve */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* LEFT — Portfolio Summary */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+            <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5 flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: "Starting Capital", value: allocation?.starting_capital_cents ? `$${(allocation.starting_capital_cents / 100).toLocaleString()}` : "—" },
@@ -2838,12 +2838,12 @@ export default function BotDetailPage() {
                     colored: false,
                   },
                 ].map((s) => (
-                  <div key={s.label} className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
-                    <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">{s.label}</p>
+                  <div key={s.label} className="bg-t-bg0 rounded-xl px-3 py-2.5 border border-t-dim">
+                    <p className="text-t-dim text-[10px] uppercase tracking-wide mb-0.5 font-ui-t">{s.label}</p>
                     <p
                       className={cn(
-                        "text-sm font-bold",
-                        s.colored ? (s.positive ? "text-lime-400" : "text-red-400") : "text-white"
+                        "text-sm font-bold font-mono-t tabular-nums",
+                        s.colored ? (s.positive ? "text-t-green" : "text-t-red") : "text-t-hi"
                       )}
                     >
                       {s.value}
@@ -2852,9 +2852,9 @@ export default function BotDetailPage() {
                 ))}
               </div>
               {allocation && (
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-t-muted font-ui-t">
                   Allocated:{" "}
-                  <span className="text-zinc-300 font-semibold">
+                  <span className="text-t-mid2 font-semibold font-mono-t tabular-nums">
                     ${allocation.starting_capital_cents ? (allocation.starting_capital_cents / 100).toLocaleString() : ((allocation.capital_pct / 100) * 100000).toLocaleString()} ({allocation.capital_pct}%)
                   </span>
                 </p>
@@ -2862,11 +2862,11 @@ export default function BotDetailPage() {
             </div>
 
             {/* RIGHT — Equity Curve */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3">
+            <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5 flex flex-col gap-3">
               <SectionLabel as="h2">Equity Curve</SectionLabel>
               {equityCurve.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center min-h-[180px]">
-                  <p className="text-zinc-600 text-sm text-center px-4 leading-relaxed">
+                  <p className="text-t-dim text-sm text-center px-4 leading-relaxed font-ui-t">
                     Bot too new for chart — first data point appears at end of today&apos;s trading session
                   </p>
                 </div>
@@ -2908,7 +2908,7 @@ export default function BotDetailPage() {
                     </AreaChart>
                   </ResponsiveContainer>
                   <div className="flex gap-4">
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                    <div className="flex items-center gap-1.5 text-xs text-t-muted font-ui-t">
                       <span className="w-3 h-0.5 bg-[#84cc16] inline-block rounded" />
                       Portfolio
                     </div>
@@ -2922,20 +2922,20 @@ export default function BotDetailPage() {
           <RegimePanel regime={regime} isLoading={regimeLoading} />
 
           {/* Upcoming Catalysts */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-            <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Upcoming Catalysts</h3>
+          <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3">
+            <h3 className="panel-header mb-2">// Upcoming Catalysts</h3>
             <CatalystCalendar />
           </div>
 
           {/* PDT removal notice for day-trading bots */}
           {(botName === "stock_day" || botName === "crypto_day") && (
-            <div className="flex items-start gap-3 bg-teal-500/10 border border-teal-500/30 rounded-xl px-4 py-3">
-              <span className="text-teal-400 mt-0.5 text-base leading-none">⚡</span>
+            <div className="flex items-start gap-3 bg-t-cyan/10 border border-t-cyan/30 rounded-xl px-4 py-3">
+              <span className="text-t-cyan mt-0.5 text-base leading-none">⚡</span>
               <div>
-                <p className="text-xs font-semibold text-teal-400">PDT Rule Eliminated — June 4, 2026</p>
-                <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                <p className="text-xs font-semibold text-t-cyan font-ui-t">PDT Rule Eliminated — June 4, 2026</p>
+                <p className="text-xs text-t-muted mt-0.5 leading-relaxed font-ui-t">
                   FINRA Notice 26-10 removed the Pattern Day Trader $25,000 minimum. This bot now
-                  trades without account-size restrictions. <span className="text-zinc-400">Paper mode active.</span>
+                  trades without account-size restrictions. <span className="text-t-muted">Paper mode active.</span>
                 </p>
               </div>
             </div>
@@ -2945,7 +2945,7 @@ export default function BotDetailPage() {
           <WatchlistPreview botName={botName} onViewAll={() => setActiveTab("watchlist")} />
 
           {/* Bot Info — full width */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 flex flex-col gap-4">
+          <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5 flex flex-col gap-4">
               <SectionLabel as="h2">Bot Info</SectionLabel>
 
               {/* Description + asset class */}
@@ -2955,46 +2955,46 @@ export default function BotDetailPage() {
                   const isOptions = ac === "options" || botName.includes("options");
                   return (
                     <span className={cn(
-                      "text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 mt-0.5",
+                      "text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 mt-0.5 font-ui-t",
                       isOptions
                         ? "bg-purple-500/15 text-purple-400 border-purple-500/30"
                         : isCrypto
-                          ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
-                          : "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                          ? "bg-orange-500/15 text-t-amber border-orange-500/30"
+                          : "bg-t-cyan/15 text-t-cyan border-t-cyan/30"
                     )}>
                       {isOptions ? "OPTIONS" : isCrypto ? "CRYPTO" : "STOCK"}
                     </span>
                   );
                 })()}
-                <p className="text-sm text-zinc-400 leading-relaxed">
+                <p className="text-sm text-t-muted leading-relaxed font-ui-t">
                   {meta?.description ?? profile?.description ?? "No description available."}
                 </p>
               </div>
 
               {/* Key stats */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
-                  <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Win Rate</p>
+                <div className="bg-t-bg0 rounded-xl px-3 py-2.5 border border-t-dim">
+                  <p className="text-t-dim text-[10px] uppercase tracking-wide mb-0.5 font-ui-t">Win Rate</p>
                   <p className={cn(
-                    "text-sm font-bold",
-                    stats?.win_rate_pct ? ((stats.win_rate_pct ?? 0) >= 50 ? "text-lime-400" : "text-red-400") : "text-zinc-500"
+                    "text-sm font-bold font-mono-t tabular-nums",
+                    stats?.win_rate_pct ? ((stats.win_rate_pct ?? 0) >= 50 ? "text-t-green" : "text-t-red") : "text-t-muted"
                   )}>
                     {stats?.win_rate_pct ? `${(stats.win_rate_pct ?? 0).toFixed(1)}%` : "—"}
                   </p>
                 </div>
-                <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
-                  <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Last Signal</p>
-                  <p className="text-sm font-bold text-zinc-300">
+                <div className="bg-t-bg0 rounded-xl px-3 py-2.5 border border-t-dim">
+                  <p className="text-t-dim text-[10px] uppercase tracking-wide mb-0.5 font-ui-t">Last Signal</p>
+                  <p className="text-sm font-bold text-t-mid2 font-mono-t">
                     {signals.length > 0 ? formatRelativeAgo(signals[0].ts) : "—"}
                   </p>
                 </div>
-                <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
-                  <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Cadence</p>
-                  <p className="text-sm font-bold text-zinc-300 capitalize">{profile?.cadence ? formatCadence(profile.cadence) : "—"}</p>
+                <div className="bg-t-bg0 rounded-xl px-3 py-2.5 border border-t-dim">
+                  <p className="text-t-dim text-[10px] uppercase tracking-wide mb-0.5 font-ui-t">Cadence</p>
+                  <p className="text-sm font-bold text-t-mid2 capitalize font-ui-t">{profile?.cadence ? formatCadence(profile.cadence) : "—"}</p>
                 </div>
-                <div className="bg-zinc-950 rounded-xl px-3 py-2.5 border border-zinc-800">
-                  <p className="text-zinc-600 text-[10px] uppercase tracking-wide mb-0.5">Strategies</p>
-                  <p className="text-sm font-bold text-zinc-300">
+                <div className="bg-t-bg0 rounded-xl px-3 py-2.5 border border-t-dim">
+                  <p className="text-t-dim text-[10px] uppercase tracking-wide mb-0.5 font-ui-t">Strategies</p>
+                  <p className="text-sm font-bold text-t-mid2 font-mono-t tabular-nums">
                     {(meta?.strategies?.length ?? 0) > 0 ? meta!.strategies.length : "—"}
                   </p>
                 </div>
@@ -3005,37 +3005,37 @@ export default function BotDetailPage() {
           </div>
 
           {/* Activity feed below grid */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5">
             <SectionLabel as="h2" className="mb-4">Recent Signals</SectionLabel>
             {signals.length === 0 ? (
-              <p className="text-zinc-600 text-sm py-4 text-center">No signals fired today. Next scan at market open (9:30am ET).</p>
+              <p className="text-t-dim text-sm py-4 text-center font-ui-t">No signals fired today. Next scan at market open (9:30am ET).</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-xs text-zinc-600 border-b border-zinc-800">
-                      <th className="text-left pb-2 font-medium">Time</th>
-                      <th className="text-left pb-2 font-medium">Symbol</th>
-                      <th className="text-left pb-2 font-medium">Side</th>
-                      <th className="text-right pb-2 font-medium">Confidence</th>
-                      <th className="text-left pb-2 font-medium">Strategy</th>
-                      <th className="text-left pb-2 font-medium">Reason</th>
+                    <tr className="text-xs text-t-dim border-b border-t-dim">
+                      <th className="text-left pb-2 font-medium font-ui-t">Time</th>
+                      <th className="text-left pb-2 font-medium font-ui-t">Symbol</th>
+                      <th className="text-left pb-2 font-medium font-ui-t">Side</th>
+                      <th className="text-right pb-2 font-medium font-ui-t">Confidence</th>
+                      <th className="text-left pb-2 font-medium font-ui-t">Strategy</th>
+                      <th className="text-left pb-2 font-medium font-ui-t">Reason</th>
                       <th className="text-right pb-2 font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {signals.map((sig) => (
-                      <tr key={sig.id} className="border-b border-zinc-800/50 last:border-0">
-                        <td className="py-2.5 text-zinc-500 text-xs">{formatTime(sig.ts)}</td>
-                        <td className="py-2.5 font-semibold text-white">{sig.symbol}</td>
+                      <tr key={sig.id} className="border-b border-t-dim/50 last:border-0">
+                        <td className="py-2.5 text-t-muted text-xs font-mono-t">{formatTime(sig.ts)}</td>
+                        <td className="py-2.5 font-semibold text-t-hi font-mono-t">{sig.symbol}</td>
                         <td className="py-2.5"><SideBadge side={sig.side} /></td>
-                        <td className="py-2.5 text-right text-zinc-300">{sig.confidence.toFixed(0)}%</td>
-                        <td className="py-2.5 text-zinc-400 text-xs">{sig.strategy}</td>
-                        <td className="py-2.5 text-zinc-500 text-xs max-w-xs truncate">{sig.reason}</td>
+                        <td className="py-2.5 text-right text-t-mid2 font-mono-t tabular-nums">{sig.confidence.toFixed(0)}%</td>
+                        <td className="py-2.5 text-t-muted text-xs font-ui-t">{sig.strategy}</td>
+                        <td className="py-2.5 text-t-muted text-xs max-w-xs truncate font-ui-t">{sig.reason}</td>
                         <td className="py-2.5 text-right">
                           <button
                             onClick={() => setSelectedSignal(sig)}
-                            className="text-xs text-zinc-500 hover:text-lime-400 underline underline-offset-2 transition-colors"
+                            className="text-xs text-t-muted hover:text-t-green underline underline-offset-2 transition-colors font-ui-t"
                           >
                             Why?
                           </button>
@@ -3054,12 +3054,12 @@ export default function BotDetailPage() {
       {activeTab === "watchlist" && (
         <div className="space-y-4">
           {/* Live entry-readiness feed */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-zinc-300">
+              <h2 className="text-sm font-semibold text-t-mid2 font-ui-t">
                 {meta?.displayName ?? botName} Watchlist
               </h2>
-              <span className="text-[10px] text-zinc-600">Refreshes every 30s</span>
+              <span className="text-[10px] text-t-dim font-ui-t">Refreshes every 30s</span>
             </div>
             <EntryReadinessTable
               botName={botName}
@@ -3070,8 +3070,8 @@ export default function BotDetailPage() {
 
           {/* AI conviction scores (secondary) */}
           {Object.keys(analysisBySymbol).length > 0 && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-              <h2 className="text-sm font-semibold text-zinc-300 mb-4">AI Conviction Scores</h2>
+            <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5">
+              <h2 className="text-sm font-semibold text-t-mid2 mb-4 font-ui-t">AI Conviction Scores</h2>
               <WatchlistTable
                 botName={botName}
                 analysisBySymbol={analysisBySymbol}
@@ -3115,7 +3115,7 @@ export default function BotDetailPage() {
       )}
 
       {/* Footer */}
-      <p className="text-xs text-center text-zinc-600 mt-8">
+      <p className="text-xs text-center text-t-dim mt-8 font-ui-t">
         Paper trading. Not investment advice. Not a registered investment adviser.
       </p>
 

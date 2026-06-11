@@ -25,7 +25,7 @@ function ChangePill({ value, className }: { value: number; className?: string })
   const pos = value >= 0;
   return (
     <span className={cn(
-      "text-xs font-mono font-semibold",
+      "text-xs font-mono-t tabular-nums font-semibold",
       pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]",
       className
     )}>
@@ -89,10 +89,10 @@ function SectorHeatmap() {
                 style={{ backgroundColor: heatColor(s.change_pct) }}
               >
                 <div className="text-[var(--text-primary)] font-semibold text-sm leading-tight">{s.sector}</div>
-                <div className="text-[var(--text-primary)]/70 text-[11px] font-mono">{s.symbol}</div>
+                <div className="text-[var(--text-primary)]/70 text-[11px] font-mono-t tabular-nums">{s.symbol}</div>
                 <div className="flex items-center justify-between mt-auto">
-                  <span className="text-[var(--text-primary)]/80 text-xs font-mono">${s.price.toFixed(2)}</span>
-                  <span className="text-[var(--text-primary)] font-bold text-sm">{fmtPct(s.change_pct)}</span>
+                  <span className="text-[var(--text-primary)]/80 text-xs font-mono-t tabular-nums">${s.price.toFixed(2)}</span>
+                  <span className="text-[var(--text-primary)] font-bold text-sm font-mono-t tabular-nums">{fmtPct(s.change_pct)}</span>
                 </div>
               </div>
             ))}
@@ -122,7 +122,7 @@ const TEXT_MAP: Record<string, string> = {
   blue: "text-blue-400",
   sky: "text-sky-400",
   emerald: "text-[var(--accent-positive)]",
-  amber: "text-amber-400",
+  amber: "text-t-amber",
   orange: "text-orange-400",
   green: "text-green-400",
   rose: "text-[var(--accent-negative)]",
@@ -181,7 +181,7 @@ function ThemeCard({ theme, onTickerClick, highlighted }: { theme: Theme; onTick
     <div
       ref={cardRef}
       className={cn(
-        "border rounded-xl p-4 transition-colors hover:border-opacity-60 cursor-pointer",
+        "border rounded-xl p-4 transition-colors hover:border-opacity-60 cursor-pointer card-hover",
         colorClass,
         highlighted && "ring-2 ring-violet-500 ring-offset-1 ring-offset-transparent animate-pulse-once"
       )}
@@ -197,7 +197,7 @@ function ThemeCard({ theme, onTickerClick, highlighted }: { theme: Theme; onTick
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-right">
-            <div className={cn("font-bold text-sm font-mono", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+            <div className={cn("font-bold text-sm font-mono-t tabular-nums", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
               {fmtPct(theme.avg_change_pct)}
             </div>
             <div className="text-[var(--text-tertiary)] text-[10px]">avg today</div>
@@ -213,7 +213,7 @@ function ThemeCard({ theme, onTickerClick, highlighted }: { theme: Theme; onTick
             key={c.symbol}
             onClick={(e) => { e.stopPropagation(); onTickerClick(c.symbol); }}
             className={cn(
-              "text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border transition-colors",
+              "text-[10px] font-mono-t tabular-nums font-bold px-2 py-0.5 rounded-full border transition-colors",
               c.change_pct >= 0
                 ? "bg-emerald-950/50 border-emerald-800 text-[var(--accent-positive)] hover:bg-emerald-900/50"
                 : "bg-rose-950/50 border-rose-800 text-[var(--accent-negative)] hover:bg-rose-900/50"
@@ -237,7 +237,7 @@ function AIThemeCard({ theme, onTickerClick }: { theme: AITheme; onTickerClick: 
 
   return (
     <div
-      className="border-2 border-violet-600 bg-violet-950/20 rounded-xl p-4 cursor-pointer hover:border-violet-500 transition-colors relative col-span-full sm:col-span-2"
+      className="border-2 border-violet-600 bg-violet-950/20 rounded-xl p-4 cursor-pointer hover:border-violet-500 transition-colors relative col-span-full sm:col-span-2 card-hover"
       onClick={() => setExpanded((e) => !e)}
     >
       {/* AI Generated badge */}
@@ -261,7 +261,7 @@ function AIThemeCard({ theme, onTickerClick }: { theme: AITheme; onTickerClick: 
           <button
             key={ticker}
             onClick={(e) => { e.stopPropagation(); onTickerClick(ticker); }}
-            className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border bg-violet-950/50 border-violet-800 text-violet-300 hover:bg-violet-900/50 transition-colors"
+            className="text-[10px] font-mono-t tabular-nums font-bold px-2 py-0.5 rounded-full border bg-violet-950/50 border-violet-800 text-violet-300 hover:bg-violet-900/50 transition-colors"
           >
             {ticker}
           </button>
@@ -343,7 +343,7 @@ function ThemesTab() {
         <button
           type="submit"
           disabled={!prompt.trim() || generating}
-          className="shrink-0 bg-violet-700 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+          className="shrink-0 bg-violet-700 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed text-t-hi text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5"
         >
           {generating ? (
             <RefreshCw size={13} className="animate-spin" />
@@ -396,7 +396,7 @@ function IPOsTab() {
   const statusColor = (s: string) =>
     s === "upcoming" ? "text-[var(--accent-positive)] bg-emerald-950/50 border-emerald-800"
     : s === "priced" ? "text-blue-400 bg-blue-950/50 border-blue-800"
-    : "text-amber-400 bg-amber-950/50 border-amber-800";
+    : "text-t-amber bg-amber-950/50 border-amber-800";
 
   return (
     <div className="space-y-3">
@@ -425,9 +425,9 @@ function IPOsTab() {
               {ipos.map((ipo, i) => (
                 <tr key={i} className="border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors">
                   <td className="px-4 py-3 text-[var(--text-primary)] font-medium">{ipo.company}</td>
-                  <td className="px-3 py-3 font-mono text-[var(--text-secondary)]">{ipo.symbol}</td>
+                  <td className="px-3 py-3 font-mono-t tabular-nums text-[var(--text-secondary)]">{ipo.symbol}</td>
                   <td className="px-3 py-3 text-[var(--text-tertiary)] hidden sm:table-cell">{ipo.exchange}</td>
-                  <td className="px-3 py-3 text-[var(--text-secondary)] hidden md:table-cell">{ipo.price_range}</td>
+                  <td className="px-3 py-3 font-mono-t tabular-nums text-[var(--text-secondary)] hidden md:table-cell">{ipo.price_range}</td>
                   <td className="px-3 py-3 text-[var(--text-secondary)]">{ipo.date}</td>
                   <td className="px-3 py-3">
                     <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border capitalize", statusColor(ipo.status))}>
@@ -467,14 +467,14 @@ function getSignificance(trade: InsiderTrade): SignificanceLevel {
 function SignificanceBadge({ level }: { level: SignificanceLevel }) {
   if (level === "HIGH")
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" /> HIGH
+      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-t-red">
+        <span className="w-1.5 h-1.5 rounded-full bg-t-red inline-block" /> HIGH
       </span>
     );
   if (level === "MEDIUM")
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" /> MED
+      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-t-amber">
+        <span className="w-1.5 h-1.5 rounded-full bg-t-amber inline-block" /> MED
       </span>
     );
   return (
@@ -540,7 +540,7 @@ function ClusterRow({ cluster, onNavigate }: { cluster: CompanyCluster; onNaviga
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={(e) => { e.stopPropagation(); onNavigate(cluster.symbol); }}
-              className="font-mono font-bold text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors text-sm"
+              className="font-mono-t tabular-nums font-bold text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors text-sm"
             >
               {cluster.symbol}
             </button>
@@ -557,15 +557,15 @@ function ClusterRow({ cluster, onNavigate }: { cluster: CompanyCluster; onNaviga
                 style={{ width: `${buyPct}%` }}
               />
             </div>
-            <span className="text-[10px] text-[var(--text-tertiary)]">{buyPct.toFixed(0)}% buys</span>
+            <span className="text-[10px] font-mono-t tabular-nums text-[var(--text-tertiary)]">{buyPct.toFixed(0)}% buys</span>
           </div>
         </div>
         <div className="text-right shrink-0">
           {cluster.totalBuyValue > 0 && (
-            <div className="text-xs font-mono text-[var(--accent-positive)]">+{fmtValue(cluster.totalBuyValue)}</div>
+            <div className="text-xs font-mono-t tabular-nums text-[var(--accent-positive)]">+{fmtValue(cluster.totalBuyValue)}</div>
           )}
           {cluster.totalSellValue > 0 && (
-            <div className="text-xs font-mono text-[var(--accent-negative)]">-{fmtValue(cluster.totalSellValue)}</div>
+            <div className="text-xs font-mono-t tabular-nums text-[var(--accent-negative)]">-{fmtValue(cluster.totalSellValue)}</div>
           )}
           <div className={cn("text-[10px] font-semibold mt-0.5", netPositive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
             Net {netPositive ? "Buy" : "Sell"}
@@ -598,7 +598,7 @@ function ClusterRow({ cluster, onNavigate }: { cluster: CompanyCluster; onNaviga
                     </span>
                   )}
                   <span className={cn(
-                    "font-mono",
+                    "font-mono-t tabular-nums",
                     sig === "HIGH" && t.transaction === "buy"
                       ? "text-[var(--accent-positive)] font-bold text-sm"
                       : "text-[var(--text-secondary)]"
@@ -670,16 +670,16 @@ function InsidersTab() {
           <div className="flex gap-4 text-right">
             <div>
               <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Total Buys</div>
-              <div className="font-mono font-semibold text-[var(--accent-positive)] text-sm">{fmtValue(totalBuys)}</div>
+              <div className="font-mono-t tabular-nums font-semibold text-[var(--accent-positive)] text-sm">{fmtValue(totalBuys)}</div>
             </div>
             <div>
               <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Total Sells</div>
-              <div className="font-mono font-semibold text-[var(--accent-negative)] text-sm">{fmtValue(totalSells)}</div>
+              <div className="font-mono-t tabular-nums font-semibold text-[var(--accent-negative)] text-sm">{fmtValue(totalSells)}</div>
             </div>
             <div>
               <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Net Flow</div>
               <div className={cn(
-                "font-mono font-bold text-sm",
+                "font-mono-t tabular-nums font-bold text-sm",
                 netPositive ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]"
               )}>
                 {netPositive ? "+" : "-"}{fmtValue(Math.abs(totalBuys - totalSells))}
@@ -784,13 +784,13 @@ function InsidersTab() {
                     key={i}
                     className={cn(
                       "border-b border-[var(--border-subtle)]/50 hover:bg-[var(--bg-elevated-2)]/30 transition-colors",
-                      isHighBuy && "bg-emerald-950/20"
+                      isHighBuy && "bg-t-green/10"
                     )}
                   >
                     <td className="px-4 py-3">
                       <button
                         onClick={() => navigate(`/chart?symbol=${t.symbol}`)}
-                        className="font-mono font-bold text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
+                        className="font-mono-t tabular-nums font-bold text-[var(--text-primary)] hover:text-[var(--text-secondary)] transition-colors"
                       >
                         {t.symbol}
                       </button>
@@ -811,11 +811,11 @@ function InsidersTab() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-[var(--text-secondary)] text-right font-mono text-xs hidden sm:table-cell">
+                    <td className="px-3 py-3 text-[var(--text-secondary)] text-right font-mono-t tabular-nums text-xs hidden sm:table-cell">
                       {t.shares.toLocaleString()}
                     </td>
                     <td className={cn(
-                      "px-3 py-3 text-right font-mono",
+                      "px-3 py-3 text-right font-mono-t tabular-nums",
                       isHighBuy ? "text-[var(--accent-positive)] font-bold text-sm" : "text-[var(--text-secondary)] text-xs"
                     )}>
                       {fmtValue(t.value)}
@@ -848,14 +848,14 @@ function CryptoLaunchCard({ token }: { token: CryptoLaunch }) {
   const pos = token.price_change_24h >= 0;
   const riskColor = !token.risk_score ? "" : token.risk_score >= 7 ? "border-red-800" : token.risk_score >= 4 ? "border-amber-800" : "border-emerald-800";
   return (
-    <div className={cn("bg-[var(--bg-elevated-2)] border rounded-xl p-3 flex items-center gap-3", riskColor || "border-[var(--border)]")}>
+    <div className={cn("bg-[var(--bg-elevated-2)] border rounded-xl p-3 flex items-center gap-3 card-hover", riskColor || "border-[var(--border)]")}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-[var(--text-primary)] font-mono text-sm">{token.symbol}</span>
+          <span className="font-bold text-[var(--text-primary)] font-mono-t tabular-nums text-sm">{token.symbol}</span>
           <span className="text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded">{token.chain}</span>
           <span className="text-[10px] text-[var(--text-tertiary)] hidden sm:inline">{token.dex}</span>
           {token.risk_score !== undefined && token.risk_score >= 7 && (
-            <span className="text-[10px] font-semibold text-red-400 flex items-center gap-0.5"><AlertTriangle size={9} /> High risk</span>
+            <span className="text-[10px] font-semibold text-t-red flex items-center gap-0.5"><AlertTriangle size={9} /> High risk</span>
           )}
         </div>
         <div className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">{token.name}</div>
@@ -864,8 +864,8 @@ function CryptoLaunchCard({ token }: { token: CryptoLaunch }) {
         </div>
       </div>
       <div className="text-right shrink-0">
-        <div className="font-mono text-sm text-[var(--text-primary)]">${token.price_usd < 0.001 ? token.price_usd.toExponential(2) : token.price_usd < 1 ? token.price_usd.toFixed(6) : token.price_usd.toFixed(3)}</div>
-        <div className={cn("text-xs font-mono font-semibold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+        <div className="font-mono-t tabular-nums text-sm text-[var(--text-primary)]">${token.price_usd < 0.001 ? token.price_usd.toExponential(2) : token.price_usd < 1 ? token.price_usd.toFixed(6) : token.price_usd.toFixed(3)}</div>
+        <div className={cn("text-xs font-mono-t tabular-nums font-semibold", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
           {pos ? "+" : ""}{token.price_change_24h.toFixed(1)}%
         </div>
       </div>
@@ -893,7 +893,7 @@ function CryptoLaunchesTab() {
           ))}
         </div>
         {subTab === "meme" && (
-          <div className="text-xs text-amber-400 flex items-center gap-1"><AlertTriangle size={11} />High risk — most memecoins fail</div>
+          <div className="text-xs text-t-amber flex items-center gap-1"><AlertTriangle size={11} />High risk — most memecoins fail</div>
         )}
       </div>
       {isLoading ? (
@@ -923,20 +923,20 @@ function NarrativesTab() {
           {narratives.map((n: Narrative) => {
             const pos = n.avg_pct_24h >= 0;
             return (
-              <div key={n.id} className="bg-[var(--bg-elevated-2)] border border-[var(--border)] rounded-xl p-4">
+              <div key={n.id} className="bg-[var(--bg-elevated-2)] border border-[var(--border)] rounded-xl p-4 card-hover">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">{n.emoji}</span>
                     <span className="font-semibold text-[var(--text-primary)] text-sm">{n.name}</span>
                   </div>
-                  <span className={cn("text-sm font-bold font-mono", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                  <span className={cn("text-sm font-bold font-mono-t tabular-nums", pos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
                     {pos ? "+" : ""}{n.avg_pct_24h.toFixed(2)}%
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {(n.coins_data ?? []).slice(0, 6).map((c) => (
                     <span key={c.id} className={cn(
-                      "text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border",
+                      "text-[10px] font-mono-t tabular-nums font-bold px-2 py-0.5 rounded-full border",
                       (c.pct_24h ?? 0) >= 0 ? "bg-emerald-950/50 border-emerald-800 text-[var(--accent-positive)]" : "bg-rose-950/50 border-rose-800 text-[var(--accent-negative)]"
                     )}>
                       {c.symbol || c.id} {c.pct_24h !== 0 && <span className="opacity-70">{(c.pct_24h >= 0 ? "+" : "")}{c.pct_24h.toFixed(1)}%</span>}
@@ -973,7 +973,7 @@ function IdoCalendarTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-bold text-[var(--text-primary)] text-sm">{e.project}</span>
-                    <span className="font-mono text-xs text-violet-400">{e.token}</span>
+                    <span className="font-mono-t tabular-nums text-xs text-violet-400">{e.token}</span>
                     <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded", e.status==="upcoming"?"bg-violet-950/60 text-violet-400":"bg-[var(--bg-elevated)] text-[var(--text-tertiary)]")}>
                       {e.status === "upcoming" ? "Upcoming" : "Priced"}
                     </span>
@@ -984,10 +984,10 @@ function IdoCalendarTab() {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-xs text-[var(--text-secondary)] font-mono">{e.date}</div>
+                  <div className="text-xs text-[var(--text-secondary)] font-mono-t tabular-nums">{e.date}</div>
                   <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{e.type}</div>
                   <div className="text-[10px] text-[var(--text-tertiary)]">{e.platform}</div>
-                  {e.est_raise_usd && <div className="text-[10px] text-violet-400 mt-1">${(e.est_raise_usd/1_000_000).toFixed(0)}M raise</div>}
+                  {e.est_raise_usd && <div className="text-[10px] text-violet-400 mt-1 font-mono-t tabular-nums">${(e.est_raise_usd/1_000_000).toFixed(0)}M raise</div>}
                 </div>
               </div>
             </div>
@@ -1023,8 +1023,8 @@ function GovernanceTab() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10px] font-semibold text-blue-400 bg-blue-950/40 px-1.5 py-0.5 rounded">{p.space_name}</span>
-                      <span className="text-[10px] text-[var(--text-tertiary)]">{daysLeft}d left</span>
-                      <span className="text-[10px] text-[var(--text-tertiary)]">{p.votes.toLocaleString()} votes</span>
+                      <span className="text-[10px] font-mono-t tabular-nums text-[var(--text-tertiary)]">{daysLeft}d left</span>
+                      <span className="text-[10px] font-mono-t tabular-nums text-[var(--text-tertiary)]">{p.votes.toLocaleString()} votes</span>
                     </div>
                     <div className="font-medium text-sm text-[var(--text-primary)] line-clamp-2 mb-1">{p.title}</div>
                     <div className="text-xs text-[var(--text-tertiary)] line-clamp-2">{p.summary}</div>
@@ -1033,7 +1033,7 @@ function GovernanceTab() {
                         <div className="flex-1 h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
                           <div className="h-full bg-[var(--accent-positive)] rounded-full" style={{width:`${topPct}%`}}/>
                         </div>
-                        <span className="text-[10px] font-mono text-[var(--accent-positive)]">{p.choices[winIdx]} {topPct}%</span>
+                        <span className="text-[10px] font-mono-t tabular-nums text-[var(--accent-positive)]">{p.choices[winIdx]} {topPct}%</span>
                       </div>
                     )}
                   </div>
@@ -1070,7 +1070,7 @@ export default function Discovery() {
   const [aiOpen, setAiOpen] = useState(false);
 
   return (
-    <div className="space-y-5 pb-8">
+    <div className="space-y-5 pb-8 animate-page-in">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">Discovery</h1>
@@ -1078,7 +1078,7 @@ export default function Discovery() {
         </div>
         <button
           onClick={() => setAiOpen(true)}
-          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
+          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-t-hi text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0"
         >
           <Bot size={12} /> Ask AI
         </button>

@@ -59,30 +59,30 @@ function SleeveCard({ id, sleeve }: { id: string; sleeve: DashV2Sleeve }) {
   const pnlPct = starting > 0 ? sleeve.pnl_cents / starting * 100 : 0;
   const isUp = sleeve.pnl_cents >= 0;
   return (
-    <Link to="/strategy" className="block bg-zinc-900 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-700 transition-colors">
+    <Link to="/strategy" className="block bg-t-bg1 border border-t-dim rounded-2xl p-6 hover:border-t-mid card-hover transition-colors">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <span className="text-xl">{meta.emoji}</span>
-          <span className="text-sm font-medium text-zinc-400 capitalize">{meta.name}</span>
+          <span className="text-sm font-medium text-t-mid2 capitalize">{meta.name}</span>
         </div>
-        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", isUp ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
+        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full font-mono-t tabular-nums", isUp ? "bg-t-green/10 text-t-green" : "bg-t-red/10 text-t-red")}>
           {fmtPct(pnlPct)}
         </span>
       </div>
-      <div className="text-2xl font-bold text-white tabular-nums">{fmtUsd(sleeve.value_cents)}</div>
-      <div className={cn("text-sm mt-1 tabular-nums", isUp ? "text-emerald-400" : "text-red-400")}>
+      <div className="text-2xl font-bold text-t-hi tabular-nums font-mono-t">{fmtUsd(sleeve.value_cents)}</div>
+      <div className={cn("text-sm mt-1 tabular-nums font-mono-t", isUp ? "text-t-green" : "text-t-red")}>
         {isUp ? "+" : ""}{fmtUsd(sleeve.pnl_cents)} all time
       </div>
       <div className={cn(
         "inline-flex items-center gap-1.5 text-xs font-bold mt-2 px-2 py-1 rounded-md border",
         isUp
-          ? "bg-emerald-500/8 border-emerald-500/20 text-emerald-400"
-          : "bg-red-500/8 border-red-500/20 text-red-400"
+          ? "bg-emerald-500/8 border-emerald-500/20 text-t-green"
+          : "bg-red-500/8 border-red-500/20 text-t-red"
       )}>
-        <span className="text-zinc-500 font-medium">ALL-TIME</span>
-        <span>{fmtPct(pnlPct)}</span>
+        <span className="text-t-muted font-medium">ALL-TIME</span>
+        <span className="font-mono-t tabular-nums">{fmtPct(pnlPct)}</span>
       </div>
-      <div className="mt-4 pt-4 border-t border-zinc-800 flex justify-between text-xs text-zinc-500">
+      <div className="mt-4 pt-4 border-t border-t-dim flex justify-between text-xs text-t-muted">
         <span>{sleeve.bots_total} bot{sleeve.bots_total !== 1 ? "s" : ""}</span>
         <span>{sleeve.bots_active} active · {sleeve.open_positions} pos · {sleeve.watching} watching</span>
       </div>
@@ -92,22 +92,22 @@ function SleeveCard({ id, sleeve }: { id: string; sleeve: DashV2Sleeve }) {
 
 function SignalRow({ s }: { s: DashboardV2["recent_signals"][number] }) {
   const dotCls = { buy: "bg-emerald-500", long: "bg-emerald-500", sell: "bg-red-500", short: "bg-red-500", hold: "bg-zinc-500" }[s.side] ?? "bg-zinc-500";
-  const textCls = { buy: "text-emerald-400", long: "text-emerald-400", sell: "text-red-400", short: "text-red-400", hold: "text-zinc-400" }[s.side] ?? "text-zinc-400";
+  const textCls = { buy: "text-t-green", long: "text-t-green", sell: "text-t-red", short: "text-t-red", hold: "text-t-mid2" }[s.side] ?? "text-t-mid2";
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-zinc-800 last:border-0">
+    <div className="flex items-center gap-3 py-3 border-b border-t-dim last:border-0">
       <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", dotCls)} />
-      <span className="font-semibold text-white text-sm w-16 flex-shrink-0">{s.symbol}</span>
+      <span className="font-semibold text-t-hi text-sm w-16 flex-shrink-0">{s.symbol}</span>
       <span className={cn("text-xs font-medium uppercase w-8 flex-shrink-0", textCls)}>{s.side}</span>
-      <span className="text-xs text-zinc-500 flex-1 truncate">{s.reason || s.strategy}</span>
-      <span className="text-xs text-zinc-600 flex-shrink-0">{timeAgo(s.ts)}</span>
+      <span className="text-xs text-t-muted flex-1 truncate">{s.reason || s.strategy}</span>
+      <span className="text-xs text-t-muted flex-shrink-0">{timeAgo(s.ts)}</span>
     </div>
   );
 }
 
 const CONVICTION_STYLE: Record<string, string> = {
-  HIGH: "bg-emerald-500/10 text-emerald-400",
+  HIGH: "bg-t-green/10 text-t-green",
   MED: "bg-yellow-500/10 text-yellow-400",
-  LOW: "bg-zinc-700 text-zinc-400",
+  LOW: "bg-zinc-700 text-t-mid2",
 };
 
 const PLACEHOLDER_HIGHLIGHTS: AnalystHighlight[] = [
@@ -175,16 +175,16 @@ export default function Dashboard() {
   const botsEnabled = data ? data.health.status === "ok" : true;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
+    <div className="min-h-screen bg-t-bg0 text-t-hi animate-page-in">
 
       {/* S&P 500 Live Ticker Tape */}
       <TickerTape />
 
       {/* Row 1 – Health Bar */}
-      <div className="sticky top-0 z-10 bg-zinc-900/80 backdrop-blur border-b border-zinc-800 px-6 py-2 flex items-center justify-between text-xs">
+      <div className="sticky top-0 z-10 bg-t-bg1/80 backdrop-blur border-b border-t-dim px-6 py-2 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2">
           <span className={cn("w-1.5 h-1.5 rounded-full", botsEnabled ? "bg-emerald-500" : "bg-yellow-500")} />
-          <span className={botsEnabled ? "text-zinc-300" : "text-yellow-400"}>
+          <span className={botsEnabled ? "text-t-hi" : "text-yellow-400"}>
             {botsEnabled ? "All systems normal" : "Warning: bots may be disabled"}
           </span>
         </div>
@@ -193,14 +193,14 @@ export default function Dashboard() {
             <button
               onClick={() => pauseMut.mutate()}
               disabled={pauseMut.isPending}
-              className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors disabled:opacity-50"
+              className="px-3 py-1 rounded-lg bg-t-bg2 hover:bg-zinc-700 text-t-hi transition-colors disabled:opacity-50"
             >
               Pause All
             </button>
           )}
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("copilot:open", { detail: { query: "Brief me on what's happening with my bots today." } }))}
-            className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 transition-colors"
+            className="px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-t-green transition-colors"
           >
             Brief me
           </button>
@@ -212,38 +212,38 @@ export default function Dashboard() {
         {/* Row 2 – Hero Stats */}
         <BracketFrame className="mb-8 p-5 rounded-xl" glow>
           <SectionLabel as="p" className="mb-3">Portfolio Value</SectionLabel>
-          <div className="text-5xl font-bold tracking-tight tabular-nums font-mono">
-            {totalValue ? fmtUsd(totalValue) : <span className="text-zinc-700">$—</span>}
+          <div className="text-5xl font-bold tracking-tight tabular-nums font-mono-t">
+            {totalValue ? fmtUsd(totalValue) : <span className="text-t-muted">$—</span>}
           </div>
           <div className="flex items-center gap-4 mt-3 flex-wrap">
-            <span className={cn("text-lg font-semibold tabular-nums", isUp ? "text-[var(--bmg-green)]" : "text-red-400")}>
+            <span className={cn("text-lg font-semibold tabular-nums font-mono-t", isUp ? "text-[var(--bmg-green)]" : "text-t-red")}>
               {isUp ? "+" : ""}{fmtUsd(todayPnl)}{" "}
               <span className="text-sm font-normal">({fmtPct(todayPct)} today)</span>
             </span>
-            <span className="text-zinc-600">·</span>
-            <span className={cn("text-sm tabular-nums font-mono", return30d >= 0 ? "text-[var(--bmg-green)]/70" : "text-red-400/70")}>
+            <span className="text-t-muted">·</span>
+            <span className={cn("text-sm tabular-nums font-mono-t", return30d >= 0 ? "text-[var(--bmg-green)]/70" : "text-t-red/70")}>
               {fmtPct(return30d)} 30d
             </span>
           </div>
         </BracketFrame>
 
         {/* Row 3 – Market Regime */}
-        <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <SectionLabel as="h2" className="mb-3 text-zinc-300">Market Regime</SectionLabel>
+        <div className="mb-8 bg-t-bg1 border border-t-dim rounded-2xl p-5">
+          <SectionLabel as="h2" className="mb-3 text-t-hi">Market Regime</SectionLabel>
           {data?.regime ? (
             <>
               <div className="flex items-center gap-3 flex-wrap mb-3">
-                <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
+                <span className="px-3 py-1 rounded-full bg-t-bg2 text-xs text-t-hi font-medium">
                   {data.regime.label}
                 </span>
-                <span className="px-3 py-1 rounded-full bg-zinc-800 text-xs text-zinc-200 font-medium">
-                  BTC.D: {data.regime.btc_dominance.toFixed(1)}%
+                <span className="px-3 py-1 rounded-full bg-t-bg2 text-xs text-t-hi font-medium">
+                  BTC.D: <span className="font-mono-t tabular-nums">{data.regime.btc_dominance.toFixed(1)}%</span>
                 </span>
               </div>
-              <p className="text-xs text-zinc-500">{data.regime.description}</p>
+              <p className="text-xs text-t-muted">{data.regime.description}</p>
             </>
           ) : (
-            <p className="text-xs text-zinc-600">Regime: Scanning markets...</p>
+            <p className="text-xs text-t-muted">Regime: Scanning markets...</p>
           )}
         </div>
 
@@ -258,13 +258,13 @@ export default function Dashboard() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[{ emoji: "📈", name: "Stocks" }, { emoji: "🪙", name: "Crypto" }, { emoji: "⚡", name: "Options" }].map((p) => (
-                <Link key={p.name} to="/strategy" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 hover:border-zinc-700 transition-colors">
+                <Link key={p.name} to="/strategy" className="bg-t-bg1 border border-t-dim rounded-2xl p-6 hover:border-t-mid card-hover transition-colors">
                   <div className="flex items-center gap-2 mb-4">
                     <span className="text-xl">{p.emoji}</span>
-                    <span className="text-sm font-medium text-zinc-400">{p.name}</span>
+                    <span className="text-sm font-medium text-t-mid2">{p.name}</span>
                   </div>
-                  <div className="text-2xl font-bold text-zinc-700">--</div>
-                  <div className="text-sm text-zinc-700 mt-1">--</div>
+                  <div className="text-2xl font-bold text-t-muted font-mono-t tabular-nums">--</div>
+                  <div className="text-sm text-t-muted mt-1">--</div>
                 </Link>
               ))}
             </div>
@@ -274,19 +274,19 @@ export default function Dashboard() {
         {/* Row 5 – Analyst Highlights */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <SectionLabel as="h2" className="text-zinc-300">Analyst Highlights</SectionLabel>
-            <Link to="/strategy/analyst" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">View all →</Link>
+            <SectionLabel as="h2" className="text-t-hi">Analyst Highlights</SectionLabel>
+            <Link to="/strategy/analyst" className="text-xs text-t-muted hover:text-t-hi transition-colors">View all →</Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {highlights.map((h, i) => (
-              <div key={`${h.symbol}-${i}`} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+              <div key={`${h.symbol}-${i}`} className="bg-t-bg1 border border-t-dim rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-bold text-white">{h.symbol}</span>
-                  <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded", CONVICTION_STYLE[h.conviction] ?? "bg-zinc-700 text-zinc-400")}>
+                  <span className="text-sm font-bold text-t-hi">{h.symbol}</span>
+                  <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded", CONVICTION_STYLE[h.conviction] ?? "bg-zinc-700 text-t-mid2")}>
                     {h.conviction}
                   </span>
                 </div>
-                <p className="text-xs text-zinc-500 leading-relaxed">{h.thesis}</p>
+                <p className="text-xs text-t-muted leading-relaxed">{h.thesis}</p>
               </div>
             ))}
           </div>
@@ -295,12 +295,12 @@ export default function Dashboard() {
         {/* Row 6 – Today's Catalysts */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
-            <SectionLabel as="h2" className="text-zinc-300">Catalysts</SectionLabel>
-            <span className="text-xs text-zinc-600">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+            <SectionLabel as="h2" className="text-t-hi">Catalysts</SectionLabel>
+            <span className="text-xs text-t-muted">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
             {PLACEHOLDER_CATALYSTS.map((c: any, i: number) => (
-              <span key={c.id ?? i} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 border border-zinc-700 text-xs text-zinc-200 whitespace-nowrap">
+              <span key={c.id ?? i} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-t-bg2 border border-t-mid text-xs text-t-hi whitespace-nowrap">
                 {c.description && c.description.length <= 2 ? c.description : "📅"} {c.event_type}{c.symbol ? ` · ${c.symbol}` : ""}
               </span>
             ))}
@@ -308,29 +308,29 @@ export default function Dashboard() {
         </div>
 
         {/* Row 7 – Live Activity Feed */}
-        <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <div className="mb-8 bg-t-bg1 border border-t-dim rounded-2xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <SectionLabel as="h2" className="text-zinc-300">Live Activity</SectionLabel>
-            <Link to="/strategy" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">View all →</Link>
+            <SectionLabel as="h2" className="text-t-hi">Live Activity</SectionLabel>
+            <Link to="/strategy" className="text-xs text-t-muted hover:text-t-hi transition-colors">View all →</Link>
           </div>
           {signals.length > 0 ? (
             <div>{signals.map((s, i) => <SignalRow key={`${s.ts}-${s.symbol}-${i}`} s={s} />)}</div>
           ) : (
-            <p className="text-sm text-zinc-600 py-4 text-center">No signals yet</p>
+            <p className="text-sm text-t-muted py-4 text-center">No signals yet</p>
           )}
         </div>
 
         {/* Row 8 – Top Positions */}
-        <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <div className="mb-8 bg-t-bg1 border border-t-dim rounded-2xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <SectionLabel as="h2" className="text-zinc-300">Top Positions</SectionLabel>
-            <span className="text-xs text-zinc-600">{topPositions.length} across all portfolios</span>
+            <SectionLabel as="h2" className="text-t-hi">Top Positions</SectionLabel>
+            <span className="text-xs text-t-muted font-mono-t tabular-nums">{topPositions.length} across all portfolios</span>
           </div>
           {topPositions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-zinc-600 border-b border-zinc-800">
+                  <tr className="text-t-muted border-b border-t-dim">
                     <th className="text-left pb-2 font-medium">Symbol</th>
                     <th className="text-left pb-2 font-medium">Side</th>
                     <th className="text-right pb-2 font-medium">Qty</th>
@@ -340,57 +340,57 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {topPositions.map((pos, i) => (
-                    <tr key={`${pos.symbol}-${i}`} className="border-b border-zinc-800/50 last:border-0">
-                      <td className="py-2 font-semibold text-white">{pos.symbol}</td>
-                      <td className="py-2 text-zinc-400 capitalize">{pos.side}</td>
-                      <td className="py-2 text-right tabular-nums text-zinc-300">{pos.qty}</td>
-                      <td className="py-2 text-right tabular-nums text-zinc-400">{pos.avg_cost ? fmtUsd(pos.avg_cost) : "—"}</td>
-                      <td className="py-2 text-right text-zinc-500 text-xs">{pos.botName.replace(/_/g, " ")}</td>
+                    <tr key={`${pos.symbol}-${i}`} className="border-b border-t-dim/50 last:border-0">
+                      <td className="py-2 font-semibold text-t-hi">{pos.symbol}</td>
+                      <td className="py-2 text-t-mid2 capitalize">{pos.side}</td>
+                      <td className="py-2 text-right tabular-nums font-mono-t text-t-hi">{pos.qty}</td>
+                      <td className="py-2 text-right tabular-nums font-mono-t text-t-mid2">{pos.avg_cost ? fmtUsd(pos.avg_cost) : "—"}</td>
+                      <td className="py-2 text-right text-t-muted text-xs">{pos.botName.replace(/_/g, " ")}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="text-sm text-zinc-600 py-4 text-center">No open positions</p>
+            <p className="text-sm text-t-muted py-4 text-center">No open positions</p>
           )}
         </div>
 
         {/* Row 9 – Strategy Spotlight */}
-        <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <SectionLabel as="h2" className="text-zinc-300 mb-3">Strategy Spotlight</SectionLabel>
+        <div className="mb-8 bg-t-bg1 border border-t-dim rounded-2xl p-5">
+          <SectionLabel as="h2" className="text-t-hi mb-3">Strategy Spotlight</SectionLabel>
           {topBot ? (
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-base font-bold text-white capitalize">{topBot.name.replace(/_/g, " ")}</div>
-                <div className="text-xs text-zinc-500 mt-0.5">30-day leader</div>
+                <div className="text-base font-bold text-t-hi capitalize">{topBot.name.replace(/_/g, " ")}</div>
+                <div className="text-xs text-t-muted mt-0.5">30-day leader</div>
               </div>
-              <span className={cn("text-lg font-bold tabular-nums", topBot.return_30d_pct >= 0 ? "text-emerald-400" : "text-red-400")}>
+              <span className={cn("text-lg font-bold tabular-nums font-mono-t", topBot.return_30d_pct >= 0 ? "text-t-green" : "text-t-red")}>
                 {fmtPct(topBot.return_30d_pct)}
               </span>
             </div>
           ) : (
-            <p className="text-sm text-zinc-600">Scanning top strategies...</p>
+            <p className="text-sm text-t-muted">Scanning top strategies...</p>
           )}
         </div>
 
         {/* Row 10 – Learning Tip */}
-        <div className="mb-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-          <SectionLabel as="h2" className="text-zinc-300 mb-2">Daily Tip</SectionLabel>
-          <p className="text-sm text-zinc-400">💡 {dailyTip}</p>
+        <div className="mb-8 bg-t-bg1 border border-t-dim rounded-2xl p-5">
+          <SectionLabel as="h2" className="text-t-hi mb-2">Daily Tip</SectionLabel>
+          <p className="text-sm text-t-mid2">💡 {dailyTip}</p>
         </div>
 
         {/* Row 11 – Quick Links footer */}
         <div className="mb-4">
-          <div className="flex items-center justify-around flex-wrap gap-4 py-4 border-t border-zinc-800">
+          <div className="flex items-center justify-around flex-wrap gap-4 py-4 border-t border-t-dim">
             {[
               { label: "Strategy Lab", to: "/strategy" },
               { label: "Screener", to: "/screener" },
               { label: "Analytics", to: "/strategy/performance" },
               { label: "Chart", to: "/chart" },
             ].map((link) => (
-              <Link key={link.to} to={link.to} className="text-sm text-zinc-500 hover:text-white transition-colors flex items-center gap-1">
-                {link.label} <span className="text-zinc-700">→</span>
+              <Link key={link.to} to={link.to} className="text-sm text-t-muted hover:text-t-hi transition-colors flex items-center gap-1">
+                {link.label} <span className="text-t-muted">→</span>
               </Link>
             ))}
           </div>

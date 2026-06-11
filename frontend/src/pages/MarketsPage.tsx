@@ -61,14 +61,14 @@ function fmtPct(v: number | null): string {
 }
 
 function pclr(v: number | null): string {
-  if (v == null) return "text-zinc-500";
-  return v >= 0 ? "text-emerald-400" : "text-red-400";
+  if (v == null) return "text-t-muted";
+  return v >= 0 ? "text-t-green" : "text-t-red";
 }
 
 // ── Sparkline SVG ─────────────────────────────────────────────────────────────
 
 function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
-  if (!data || data.length < 2) return <span className="text-zinc-700 text-xs">—</span>;
+  if (!data || data.length < 2) return <span className="text-t-dim text-xs">—</span>;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
@@ -129,69 +129,69 @@ function CryptoTab() {
     <div className="space-y-3">
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-2">
-        <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+        <div className="flex gap-1 bg-t-bg1 border border-t-dim rounded-xl p-1">
           {(["top100","trending","movers"] as CryptoFilter[]).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
               className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors capitalize",
-                filter === f ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-300")}>
+                filter === f ? "bg-t-bg2 text-t-hi" : "text-t-muted hover:text-t-mid2")}>
               {f === "top100" ? "Top 100" : f === "movers" ? "Movers (>5%)" : "Trending"}
             </button>
           ))}
         </div>
         <input value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Search coin…"
-          className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600" />
+          className="flex-1 bg-t-bg1 border border-t-dim rounded-xl px-4 py-2 text-sm text-t-hi placeholder-t-muted focus:outline-none focus:border-t-mid" />
       </div>
 
       {/* Table */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[800px]">
             <thead>
-              <tr className="border-b border-zinc-800 bg-zinc-900/80">
-                <th className="text-left text-[10px] text-zinc-600 uppercase py-2 px-4 w-8">#</th>
-                <th className="text-left text-[10px] text-zinc-600 uppercase py-2 px-2">Coin</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3">Price</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400"
+              <tr className="border-b border-t-dim bg-t-bg1/80">
+                <th className="text-left text-[10px] text-t-muted uppercase py-2 px-4 w-8">#</th>
+                <th className="text-left text-[10px] text-t-muted uppercase py-2 px-2">Coin</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">Price</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
                   onClick={() => setSortCol("pct_24h")}>1H {sortCol === "pct_24h" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3">24H</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400"
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">24H</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
                   onClick={() => setSortCol("pct_7d")}>7D {sortCol === "pct_7d" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400"
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
                   onClick={() => setSortCol("market_cap")}>Mkt Cap {sortCol === "market_cap" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400"
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
                   onClick={() => setSortCol("total_volume")}>Volume {sortCol === "total_volume" ? "▼" : ""}</th>
-                <th className="text-center text-[10px] text-zinc-600 uppercase py-2 px-3">7D Chart</th>
-                <th className="text-center text-[10px] text-zinc-600 uppercase py-2 px-3">Action</th>
+                <th className="text-center text-[10px] text-t-muted uppercase py-2 px-3">7D Chart</th>
+                <th className="text-center text-[10px] text-t-muted uppercase py-2 px-3">Action</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 [0,1,2,3,4,5,6,7,8,9].map((i) => (
-                  <tr key={i} className="border-b border-zinc-800/50">
+                  <tr key={i} className="border-b border-t-dim/50">
                     <td colSpan={10} className="py-3 px-4">
-                      <div className="h-4 bg-zinc-800 rounded animate-pulse" />
+                      <div className="h-4 bg-t-bg2 rounded animate-pulse" />
                     </td>
                   </tr>
                 ))
               ) : coins.map((coin, i) => (
-                <tr key={coin.id} className="border-b border-zinc-800/40 hover:bg-zinc-800/30 transition-colors">
-                  <td className="py-2.5 px-4 text-zinc-600">{i + 1}</td>
+                <tr key={coin.id} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors">
+                  <td className="py-2.5 px-4 text-t-muted">{i + 1}</td>
                   <td className="py-2.5 px-2">
                     <div className="flex items-center gap-2">
                       {coin.image && <img src={coin.image} alt={coin.symbol} className="w-5 h-5 rounded-full" loading="lazy" />}
                       <div>
-                        <span className="text-white font-semibold">{coin.symbol}</span>
-                        <span className="text-zinc-600 ml-1.5 hidden sm:inline">{coin.name}</span>
+                        <span className="text-t-hi font-semibold">{coin.symbol}</span>
+                        <span className="text-t-muted ml-1.5 hidden sm:inline">{coin.name}</span>
                       </div>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-right font-mono text-white">{fmtPrice(coin.current_price)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono", pclr(coin.pct_1h))}>{fmtPct(coin.pct_1h)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono", pclr(coin.pct_24h))}>{fmtPct(coin.pct_24h)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono", pclr(coin.pct_7d))}>{fmtPct(coin.pct_7d)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-zinc-400">{fmtBig(coin.market_cap)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-zinc-400">{fmtBig(coin.total_volume)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-hi">{fmtPrice(coin.current_price)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(coin.pct_1h))}>{fmtPct(coin.pct_1h)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(coin.pct_24h))}>{fmtPct(coin.pct_24h)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(coin.pct_7d))}>{fmtPct(coin.pct_7d)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-mid2">{fmtBig(coin.market_cap)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-mid2">{fmtBig(coin.total_volume)}</td>
                   <td className="py-2.5 px-3 text-center">
                     <Sparkline data={coin.sparkline.slice(-48)} positive={(coin.pct_7d ?? 0) >= 0} />
                   </td>
@@ -202,7 +202,7 @@ function CryptoTab() {
               ))}
               {!isLoading && coins.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-zinc-600 text-sm">No results</td>
+                  <td colSpan={10} className="py-10 text-center text-t-muted text-sm">No results</td>
                 </tr>
               )}
             </tbody>
@@ -239,53 +239,53 @@ function StocksTab() {
       <div className="flex gap-2">
         <input value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Search symbol or company…"
-          className="flex-1 max-w-sm bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600" />
+          className="flex-1 max-w-sm bg-t-bg1 border border-t-dim rounded-xl px-4 py-2 text-sm text-t-hi placeholder-t-muted focus:outline-none focus:border-t-mid" />
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[800px]">
             <thead>
-              <tr className="border-b border-zinc-800 bg-zinc-900/80">
-                <th className="text-left text-[10px] text-zinc-600 uppercase py-2 px-4 w-8">#</th>
-                <th className="text-left text-[10px] text-zinc-600 uppercase py-2 px-2">Symbol</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3">Price</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400"
+              <tr className="border-b border-t-dim bg-t-bg1/80">
+                <th className="text-left text-[10px] text-t-muted uppercase py-2 px-4 w-8">#</th>
+                <th className="text-left text-[10px] text-t-muted uppercase py-2 px-2">Symbol</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">Price</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
                   onClick={() => setSortCol("change_1d")}>1D {sortCol === "change_1d" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3">5D</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400"
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">5D</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
                   onClick={() => setSortCol("change_1m")}>1M {sortCol === "change_1m" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400"
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
                   onClick={() => setSortCol("market_cap")}>Mkt Cap {sortCol === "market_cap" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3">Volume</th>
-                <th className="text-center text-[10px] text-zinc-600 uppercase py-2 px-3">1M Chart</th>
-                <th className="text-center text-[10px] text-zinc-600 uppercase py-2 px-3">Action</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">Volume</th>
+                <th className="text-center text-[10px] text-t-muted uppercase py-2 px-3">1M Chart</th>
+                <th className="text-center text-[10px] text-t-muted uppercase py-2 px-3">Action</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 [0,1,2,3,4,5,6,7,8,9].map((i) => (
-                  <tr key={i} className="border-b border-zinc-800/50">
+                  <tr key={i} className="border-b border-t-dim/50">
                     <td colSpan={10} className="py-3 px-4">
-                      <div className="h-4 bg-zinc-800 rounded animate-pulse" />
+                      <div className="h-4 bg-t-bg2 rounded animate-pulse" />
                     </td>
                   </tr>
                 ))
               ) : stocks.map((stock, i) => (
-                <tr key={stock.symbol} className="border-b border-zinc-800/40 hover:bg-zinc-800/30 transition-colors">
-                  <td className="py-2.5 px-4 text-zinc-600">{i + 1}</td>
+                <tr key={stock.symbol} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors">
+                  <td className="py-2.5 px-4 text-t-muted">{i + 1}</td>
                   <td className="py-2.5 px-2">
                     <div>
-                      <span className="text-white font-semibold">{stock.symbol}</span>
-                      <span className="text-zinc-600 ml-1.5 text-[10px] hidden sm:inline truncate">{stock.name}</span>
+                      <span className="text-t-hi font-semibold">{stock.symbol}</span>
+                      <span className="text-t-muted ml-1.5 text-[10px] hidden sm:inline truncate">{stock.name}</span>
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-right font-mono text-white">{fmtPrice(stock.price)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono", pclr(stock.change_1d))}>{fmtPct(stock.change_1d)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono", pclr(stock.change_5d))}>{fmtPct(stock.change_5d)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono", pclr(stock.change_1m))}>{fmtPct(stock.change_1m)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-zinc-400">{fmtBig(stock.market_cap)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-zinc-400">{fmtBig(stock.volume)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-hi">{fmtPrice(stock.price)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(stock.change_1d))}>{fmtPct(stock.change_1d)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(stock.change_5d))}>{fmtPct(stock.change_5d)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(stock.change_1m))}>{fmtPct(stock.change_1m)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-mid2">{fmtBig(stock.market_cap)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-mid2">{fmtBig(stock.volume)}</td>
                   <td className="py-2.5 px-3 text-center">
                     <Sparkline data={stock.sparkline_1m ?? []} positive={(stock.change_1m ?? 0) >= 0} />
                   </td>
@@ -296,7 +296,7 @@ function StocksTab() {
               ))}
               {!isLoading && stocks.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-zinc-600 text-sm">No results</td>
+                  <td colSpan={10} className="py-10 text-center text-t-muted text-sm">No results</td>
                 </tr>
               )}
             </tbody>
@@ -315,27 +315,27 @@ export default function MarketsPage() {
   const [tab, setTab] = useState<MarketTab>("crypto");
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6 space-y-5">
+    <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6 space-y-5 animate-page-in">
       {/* Header */}
       <div>
-        <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+        <p className="text-[10px] font-semibold text-t-muted uppercase tracking-widest mb-0.5">
           // MARKETS
         </p>
-        <h1 className="text-2xl font-bold text-white">Markets</h1>
-        <p className="text-zinc-500 text-sm mt-1">
+        <h1 className="text-2xl font-bold text-t-hi">Markets</h1>
+        <p className="text-t-muted text-sm mt-1">
           Top crypto and stocks. Click ⚒ Scout to scan any asset with Strategy Scout.
         </p>
       </div>
 
       {/* Tab selector */}
-      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-t-bg1 border border-t-dim rounded-xl p-1 w-fit">
         {([
           { key: "crypto", label: "// CRYPTO" },
           { key: "stocks", label: "// STOCKS" },
         ] as { key: MarketTab; label: string }[]).map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={cn("px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors",
-              tab === t.key ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-300")}>
+              tab === t.key ? "bg-t-bg2 text-t-hi" : "text-t-muted hover:text-t-mid2")}>
             {t.label}
           </button>
         ))}

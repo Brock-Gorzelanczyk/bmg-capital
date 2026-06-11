@@ -248,26 +248,26 @@ function formatCadence(cadence: string): string {
 
 function vixColor(regime: string): string {
   const r = regime.toLowerCase();
-  if (r === "low") return "bg-green-500/15 text-green-400 border-green-500/30";
-  if (r === "mid") return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
-  if (r === "high") return "bg-orange-500/15 text-orange-400 border-orange-500/30";
-  if (r === "panic") return "bg-red-500/15 text-red-400 border-red-500/30";
-  return "bg-zinc-800 text-zinc-400 border-zinc-700";
+  if (r === "low") return "bg-t-green/15 text-t-green border-t-green/30";
+  if (r === "mid") return "bg-t-amber/15 text-t-amber border-t-amber/30";
+  if (r === "high") return "bg-t-amber/10 text-t-amber border-t-amber/30";
+  if (r === "panic") return "bg-t-red/15 text-t-red border-t-red/30";
+  return "bg-t-bg1 text-t-muted border-t-dim";
 }
 
 function trendColor(regime: string): string {
   const r = regime.toLowerCase();
-  if (r === "bull") return "bg-lime-500/15 text-lime-400 border-lime-500/30";
-  if (r === "chop") return "bg-zinc-700/40 text-zinc-400 border-zinc-600";
-  if (r === "bear") return "bg-red-500/15 text-red-400 border-red-500/30";
-  return "bg-zinc-800 text-zinc-400 border-zinc-700";
+  if (r === "bull") return "bg-t-green/15 text-t-green border-t-green/30";
+  if (r === "chop") return "bg-t-bg2/40 text-t-muted border-t-dim";
+  if (r === "bear") return "bg-t-red/15 text-t-red border-t-red/30";
+  return "bg-t-bg1 text-t-muted border-t-dim";
 }
 
 function RegimePill({ dot, label, value, colorClass }: { dot: string; label: string; value: string; colorClass: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border", colorClass)}>
+    <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border font-ui-t", colorClass)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", dot)} />
-      <span className="text-zinc-500">{label}</span>
+      <span className="text-t-dim">{label}</span>
       <span>{value}</span>
     </span>
   );
@@ -278,7 +278,7 @@ function RegimeBar({ regime, isLoading }: { regime: RegimeData | undefined; isLo
     return (
       <div className="flex gap-2 items-center animate-pulse">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-7 w-24 bg-zinc-800 rounded-full" />
+          <div key={i} className="h-7 w-24 bg-t-bg1 rounded-full" />
         ))}
       </div>
     );
@@ -291,20 +291,20 @@ function RegimeBar({ regime, isLoading }: { regime: RegimeData | undefined; isLo
   return (
     <div className="flex flex-wrap gap-2 items-center">
       <RegimePill
-        dot={vix === "LOW" ? "bg-green-400" : vix === "PANIC" ? "bg-red-400" : vix === "HIGH" ? "bg-orange-400" : "bg-yellow-400"}
+        dot={vix === "LOW" ? "bg-t-green" : vix === "PANIC" ? "bg-t-red" : vix === "HIGH" ? "bg-t-amber" : "bg-t-amber"}
         label="VIX"
         value={vix}
         colorClass={vixColor(vix)}
       />
       <RegimePill
-        dot={trend === "BULL" ? "bg-lime-400" : trend === "BEAR" ? "bg-red-400" : "bg-zinc-400"}
+        dot={trend === "BULL" ? "bg-t-green" : trend === "BEAR" ? "bg-t-red" : "bg-t-muted"}
         label="Trend"
         value={trend}
         colorClass={trendColor(trend)}
       />
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-zinc-800 border-zinc-700 text-zinc-300">
-        <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-        <span className="text-zinc-500">BTC Dom</span>
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border bg-t-bg1 border-t-dim text-t-mid2 font-ui-t">
+        <span className="w-1.5 h-1.5 rounded-full bg-t-amber" />
+        <span className="text-t-dim">BTC Dom</span>
         <span>{btcDom}</span>
       </span>
     </div>
@@ -351,14 +351,14 @@ function fmtPrice(price: number | null | undefined): string {
 function PositionRowSkeleton() {
   return (
     <div className="flex items-center gap-2 px-3 py-2.5 animate-pulse">
-      <div className="w-16 h-3.5 bg-zinc-800 rounded" />
-      <div className="w-20 h-5 bg-zinc-800 rounded-full" />
-      <div className="w-10 h-5 bg-zinc-800 rounded-full" />
-      <div className="w-12 h-3 bg-zinc-800 rounded ml-auto" />
-      <div className="w-16 h-3 bg-zinc-800 rounded" />
-      <div className="w-16 h-3 bg-zinc-800 rounded" />
-      <div className="w-20 h-3 bg-zinc-800 rounded" />
-      <div className="w-10 h-3 bg-zinc-800 rounded" />
+      <div className="w-16 h-3.5 bg-t-bg1 rounded" />
+      <div className="w-20 h-5 bg-t-bg1 rounded-full" />
+      <div className="w-10 h-5 bg-t-bg1 rounded-full" />
+      <div className="w-12 h-3 bg-t-bg1 rounded ml-auto" />
+      <div className="w-16 h-3 bg-t-bg1 rounded" />
+      <div className="w-16 h-3 bg-t-bg1 rounded" />
+      <div className="w-20 h-3 bg-t-bg1 rounded" />
+      <div className="w-10 h-3 bg-t-bg1 rounded" />
     </div>
   );
 }
@@ -419,14 +419,14 @@ function OpenPositionsPanel() {
   ];
 
   return (
-    <div className="pt-3 border-t border-zinc-800">
+    <div className="pt-3 border-t border-t-dim">
       {/* Header row */}
       <div className="flex items-center justify-between mb-1.5">
         <SectionLabel as="p">Open Positions</SectionLabel>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortKey)}
-          className="text-[10px] bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-400 cursor-pointer focus:outline-none"
+          className="text-[10px] bg-t-bg0 border border-t-dim rounded px-1.5 py-0.5 text-t-muted cursor-pointer focus:outline-none font-ui-t"
         >
           {SORT_OPTS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>
@@ -436,11 +436,11 @@ function OpenPositionsPanel() {
 
       {/* Summary line */}
       {!isLoading && (
-        <p className="text-[11px] text-zinc-500 mb-2">
+        <p className="text-[11px] text-t-dim mb-2 font-ui-t">
           {totalPos} position{totalPos !== 1 ? "s" : ""} · {distinctBots} bot{distinctBots !== 1 ? "s" : ""}
           {totalPos > 0 && (
             <> · Total unrealized:{" "}
-              <span className={totalIsPos ? "text-lime-400" : "text-red-400"}>
+              <span className={totalIsPos ? "text-t-green" : "text-t-red"}>
                 {totalIsPos ? "+" : "−"}${Math.abs(totalUsd).toFixed(2)}
               </span>
             </>
@@ -456,10 +456,10 @@ function OpenPositionsPanel() {
               key={chip.key}
               onClick={() => setFilterClass(chip.key)}
               className={cn(
-                "text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+                "text-[10px] px-2 py-0.5 rounded-full border transition-colors font-ui-t",
                 filterClass === chip.key
-                  ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
-                  : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-600"
+                  ? "bg-t-green/15 text-t-green border-t-green/30"
+                  : "text-t-dim border-t-dim hover:text-t-mid2 hover:border-t-mid"
               )}
             >
               {chip.label}
@@ -471,7 +471,7 @@ function OpenPositionsPanel() {
 
       {/* Table header */}
       {!isLoading && positions.length > 0 && (
-        <div className="grid gap-x-2 px-3 pb-1 text-[9px] font-semibold text-zinc-600 uppercase tracking-wide"
+        <div className="grid gap-x-2 px-3 pb-1 text-[9px] font-semibold text-t-gdim uppercase tracking-wide font-ui-t"
           style={{ gridTemplateColumns: "5rem 1fr 2.5rem 4rem 4rem 4.5rem 5.5rem 3rem" }}>
           <span>Symbol</span>
           <span>Bot</span>
@@ -493,7 +493,7 @@ function OpenPositionsPanel() {
 
       {/* Empty state */}
       {!isLoading && positions.length === 0 && (
-        <p className="text-zinc-600 text-xs py-4 text-center">
+        <p className="text-t-gdim text-xs py-4 text-center font-ui-t">
           {filterClass !== "all"
             ? `No open ${filterClass} positions.`
             : "No open positions. Bots scan continuously — next signal could land any minute."}
@@ -510,15 +510,15 @@ function OpenPositionsPanel() {
               <Link
                 key={pos.position_id}
                 to={`/strategy/trade/${pos.trade_id}`}
-                className="grid gap-x-2 px-3 py-2 rounded-xl bg-zinc-800/40 hover:bg-zinc-800 border border-zinc-800/60 hover:border-zinc-700 transition-colors items-center"
+                className="grid gap-x-2 px-3 py-2 rounded-xl bg-t-bg1/40 hover:bg-t-bg1 border border-t-dim/60 hover:border-t-mid transition-colors items-center card-hover"
                 style={{ gridTemplateColumns: "5rem 1fr 2.5rem 4rem 4rem 4.5rem 5.5rem 3rem" }}
               >
                 {/* Symbol */}
-                <span className="text-xs font-bold text-white truncate">{pos.symbol}</span>
+                <span className="text-xs font-bold text-t-hi truncate font-mono-t">{pos.symbol}</span>
 
                 {/* Bot pill */}
                 <span
-                  className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full w-fit truncate"
+                  className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full w-fit truncate font-mono-t"
                   style={{ background: `${pos.bot_color}22`, color: pos.bot_color, border: `1px solid ${pos.bot_color}44` }}
                 >
                   {pos.bot_display}
@@ -526,28 +526,28 @@ function OpenPositionsPanel() {
 
                 {/* Side pill */}
                 <span className={cn(
-                  "text-[9px] font-bold px-1.5 py-0.5 rounded-full w-fit",
+                  "text-[9px] font-bold px-1.5 py-0.5 rounded-full w-fit font-ui-t",
                   pos.side === "buy"
-                    ? "bg-lime-500/15 text-lime-400 border border-lime-500/30"
-                    : "bg-red-500/15 text-red-400 border border-red-500/30"
+                    ? "bg-t-green/15 text-t-green border border-t-green/30"
+                    : "bg-t-red/15 text-t-red border border-t-red/30"
                 )}>
                   {pos.side.toUpperCase()}
                 </span>
 
                 {/* Qty */}
-                <span className="text-[11px] text-zinc-400 text-right tabular-nums">
+                <span className="text-[11px] text-t-muted text-right tabular-nums font-mono-t">
                   {fmtQty(pos.qty, pos.symbol)}
                 </span>
 
                 {/* Entry */}
-                <span className="text-[11px] text-zinc-500 text-right tabular-nums">
+                <span className="text-[11px] text-t-dim text-right tabular-nums font-mono-t">
                   {fmtPrice(pos.entry_price)}
                 </span>
 
                 {/* Current Value = qty × current_price */}
-                <span className="text-[11px] text-white text-right tabular-nums flex items-center justify-end gap-0.5">
+                <span className="text-[11px] text-t-hi text-right tabular-nums font-mono-t flex items-center justify-end gap-0.5">
                   {pos.price_source === "stale" && (
-                    <span title="Price last updated — live ticker temporarily unavailable" className="text-[9px] text-amber-400 cursor-help">⚠</span>
+                    <span title="Price last updated — live ticker temporarily unavailable" className="text-[9px] text-t-amber cursor-help">⚠</span>
                   )}
                   ${(pos.current_value_usd ?? pos.current_price * pos.qty).toFixed(2)}
                 </span>
@@ -555,19 +555,19 @@ function OpenPositionsPanel() {
                 {/* Unrealized P&L — two stacked lines */}
                 <div className="text-right">
                   <div className={cn(
-                    "text-[11px] font-semibold tabular-nums leading-tight",
-                    pos.unrealized_pnl_usd > 0 ? "text-[#22c55e]"
-                    : pos.unrealized_pnl_usd < 0 ? "text-[#ef4444]"
-                    : "text-zinc-500"
+                    "text-[11px] font-semibold tabular-nums leading-tight font-mono-t",
+                    pos.unrealized_pnl_usd > 0 ? "text-t-green"
+                    : pos.unrealized_pnl_usd < 0 ? "text-t-red"
+                    : "text-t-dim"
                   )}>
                     {pos.unrealized_pnl_usd > 0 ? "+" : pos.unrealized_pnl_usd < 0 ? "-" : ""}
                     ${Math.abs(pos.unrealized_pnl_usd).toFixed(2)}
                   </div>
                   <div className={cn(
-                    "text-[9px] tabular-nums leading-tight",
-                    pos.unrealized_pnl_pct > 0 ? "text-[#22c55e]/70"
-                    : pos.unrealized_pnl_pct < 0 ? "text-[#ef4444]/70"
-                    : "text-zinc-600"
+                    "text-[9px] tabular-nums leading-tight font-mono-t",
+                    pos.unrealized_pnl_pct > 0 ? "text-t-green/70"
+                    : pos.unrealized_pnl_pct < 0 ? "text-t-red/70"
+                    : "text-t-gdim"
                   )}>
                     {pos.unrealized_pnl_pct > 0 ? "+" : pos.unrealized_pnl_pct < 0 ? "-" : ""}
                     {Math.abs(pos.unrealized_pnl_pct).toFixed(2)}%
@@ -575,7 +575,7 @@ function OpenPositionsPanel() {
                 </div>
 
                 {/* Held */}
-                <span className="text-[10px] text-zinc-600 text-right">
+                <span className="text-[10px] text-t-gdim text-right font-mono-t">
                   {fmtHeld(pos.held_seconds)}
                 </span>
               </Link>
@@ -600,22 +600,22 @@ function dollars(cents: number): string {
 
 function PortfolioHeroSkeleton() {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 animate-pulse space-y-5">
-      <div className="h-4 w-40 bg-zinc-800 rounded" />
+    <div className="bg-t-bg0 border border-t-dim rounded-2xl p-6 animate-pulse space-y-5">
+      <div className="h-4 w-40 bg-t-bg1 rounded" />
       <div className="grid grid-cols-3 gap-6">
         {[0, 1, 2].map((i) => (
           <div key={i} className="space-y-2">
-            <div className="h-8 w-32 bg-zinc-800 rounded" />
-            <div className="h-3 w-24 bg-zinc-800 rounded" />
+            <div className="h-8 w-32 bg-t-bg1 rounded" />
+            <div className="h-3 w-24 bg-t-bg1 rounded" />
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-4 gap-4 pt-4 border-t border-zinc-800">
-        {[0, 1, 2, 3].map((i) => <div key={i} className="h-8 bg-zinc-800 rounded" />)}
+      <div className="grid grid-cols-4 gap-4 pt-4 border-t border-t-dim">
+        {[0, 1, 2, 3].map((i) => <div key={i} className="h-8 bg-t-bg1 rounded" />)}
       </div>
-      <div className="h-28 bg-zinc-800 rounded-xl" />
-      <div className="space-y-2 pt-4 border-t border-zinc-800">
-        {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-9 bg-zinc-800 rounded-xl" />)}
+      <div className="h-28 bg-t-bg1 rounded-xl" />
+      <div className="space-y-2 pt-4 border-t border-t-dim">
+        {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-9 bg-t-bg1 rounded-xl" />)}
       </div>
     </div>
   );
@@ -669,40 +669,40 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
 
   return (
     <>
-    <BracketFrame className="rounded-2xl p-6 space-y-5 bg-zinc-900 border border-zinc-800" glow>
+    <BracketFrame className="rounded-2xl p-6 space-y-5 bg-t-bg0 border border-t-dim" glow>
       {/* Header */}
       <div className="flex items-center justify-between">
         <SectionLabel as="h2">Strategy Lab Portfolio</SectionLabel>
-        <span className="text-[10px] text-zinc-700">Live · refreshes every 60 s</span>
+        <span className="text-[10px] text-t-gdim font-ui-t">Live · refreshes every 60 s</span>
       </div>
 
       {/* Primary metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div>
-          <p className="text-3xl font-bold text-white tabular-nums">
+          <p className="text-3xl font-bold text-t-hi tabular-nums font-mono-t">
             ${totalVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-xs text-zinc-500 mt-1">Total Portfolio Value</p>
+          <p className="text-xs text-t-dim mt-1 font-ui-t">Total Portfolio Value</p>
           {yestVal > 0 && (
-            <p className="text-[11px] text-zinc-600 mt-0.5">
+            <p className="text-[11px] text-t-gdim mt-0.5 font-ui-t">
               from ${yestVal.toLocaleString("en-US", { minimumFractionDigits: 2 })} yesterday
             </p>
           )}
         </div>
         <div>
-          <p className={cn("text-3xl font-bold tabular-nums", todayPos ? "text-lime-400" : "text-red-400")}>
+          <p className={cn("text-3xl font-bold tabular-nums font-mono-t", todayPos ? "text-t-green" : "text-t-red")}>
             {todayPos ? "+" : "−"}${Math.abs(todayPnl).toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </p>
-          <p className="text-xs text-zinc-500 mt-1">Today's P&L</p>
-          <p className="text-[11px] text-zinc-600 mt-0.5">across {p?.leaderboard?.length ?? 6} bots</p>
+          <p className="text-xs text-t-dim mt-1 font-ui-t">Today's P&L</p>
+          <p className="text-[11px] text-t-gdim mt-0.5 font-ui-t">across {p?.leaderboard?.length ?? 6} bots</p>
         </div>
         <div>
-          <p className={cn("text-3xl font-bold tabular-nums", ret30Pos ? "text-lime-400" : "text-red-400")}>
+          <p className={cn("text-3xl font-bold tabular-nums font-mono-t", ret30Pos ? "text-t-green" : "text-t-red")}>
             {formatPct(ret30)}
           </p>
-          <p className="text-xs text-zinc-500 mt-1">30d Return</p>
+          <p className="text-xs text-t-dim mt-1 font-ui-t">30d Return</p>
           {(p?.return_30d_value_cents ?? 0) !== 0 && (
-            <p className="text-[11px] text-zinc-600 mt-0.5">
+            <p className="text-[11px] text-t-gdim mt-0.5 font-ui-t">
               {dollars(Math.abs(p!.return_30d_value_cents))} {ret30Pos ? "gain" : "loss"}
             </p>
           )}
@@ -710,20 +710,20 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
       </div>
 
       {/* Secondary metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-3 border-t border-zinc-800">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-3 border-t border-t-dim">
         {[
-          { label: "All-time Return", val: formatPct(retAll), color: retAll >= 0 ? "text-lime-400" : "text-red-400", onClick: undefined },
-          { label: "Open Positions",  val: String(p?.total_open_positions ?? 0), color: "text-white", onClick: undefined },
+          { label: "All-time Return", val: formatPct(retAll), color: retAll >= 0 ? "text-t-green" : "text-t-red", onClick: undefined },
+          { label: "Open Positions",  val: String(p?.total_open_positions ?? 0), color: "text-t-hi", onClick: undefined },
           {
-            label: "Watchlists", val: `${p?.total_watchlist_count ?? 0} names`, color: "text-lime-400",
+            label: "Watchlists", val: `${p?.total_watchlist_count ?? 0} names`, color: "text-t-green",
             onClick: () => {
               setTimeout(() => tabSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
             },
           },
         ].map(({ label, val, color, onClick }) => (
           <div key={label} onClick={onClick} className={onClick ? "cursor-pointer group" : ""}>
-            <p className="text-[11px] text-zinc-600">{label}</p>
-            <p className={cn("text-sm font-semibold mt-0.5", color, onClick && "group-hover:underline underline-offset-2")}>{val}</p>
+            <p className="text-[11px] text-t-gdim font-ui-t">{label}</p>
+            <p className={cn("text-sm font-semibold mt-0.5 font-mono-t tabular-nums", color, onClick && "group-hover:underline underline-offset-2")}>{val}</p>
           </div>
         ))}
       </div>
@@ -745,7 +745,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
         ];
         if (slices.length === 0) return null;
         return (
-          <div className="pt-3 border-t border-zinc-800">
+          <div className="pt-3 border-t border-t-dim">
             <SectionLabel as="p" className="mb-3">Capital Allocation</SectionLabel>
             <AllocationDonut totalCents={totalCents} slices={slices} />
           </div>
@@ -756,7 +756,7 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
       <OpenPositionsPanel />
 
       {/* Leaderboard */}
-      <div className="pt-3 border-t border-zinc-800">
+      <div className="pt-3 border-t border-t-dim">
         <SectionLabel as="p" className="mb-3">Bot Leaderboard</SectionLabel>
         <div className="space-y-1.5">
           {(p?.leaderboard ?? []).map((entry) => {
@@ -770,20 +770,20 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
               <button
                 key={entry.profile}
                 onClick={() => onNavigateBot(entry.profile)}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 transition-colors text-left"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-t-bg1/50 hover:bg-t-bg1 border border-t-dim/80 hover:border-t-mid transition-colors text-left card-hover"
               >
-                <span className="text-[10px] font-bold text-zinc-600 w-4 flex-shrink-0">
+                <span className="text-[10px] font-bold text-t-gdim w-4 flex-shrink-0 font-mono-t">
                   #{entry.rank}
                 </span>
-                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-orange-400" : entry.profile.includes("quant") ? "bg-violet-400" : "bg-blue-400")} />
-                <span className="flex-1 text-xs font-semibold text-white truncate">{entry.name}</span>
-                <span className={cn("text-xs font-bold w-16 text-right", ret30 != null ? (ePos ? "text-lime-400" : "text-red-400") : "text-zinc-600")}>
+                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-t-amber" : entry.profile.includes("quant") ? "bg-violet-400" : "bg-t-cyan")} />
+                <span className="flex-1 text-xs font-semibold text-t-hi truncate font-ui-t">{entry.name}</span>
+                <span className={cn("text-xs font-bold w-16 text-right tabular-nums font-mono-t", ret30 != null ? (ePos ? "text-t-green" : "text-t-red") : "text-t-gdim")}>
                   {ret30 != null ? `${ret30 >= 0 ? "+" : ""}${ret30.toFixed(3)}%` : "—"}
                 </span>
-                <span className={cn("text-xs w-20 text-right", tPos ? "text-lime-400" : "text-red-400")}>
+                <span className={cn("text-xs w-20 text-right tabular-nums font-mono-t", tPos ? "text-t-green" : "text-t-red")}>
                   {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
                 </span>
-                <span className="text-[10px] text-zinc-600 w-16 text-right flex-shrink-0">
+                <span className="text-[10px] text-t-gdim w-16 text-right flex-shrink-0 font-ui-t">
                   {entry.watchlist_count > 0 ? `${entry.watchlist_count} names` : "—"}
                 </span>
               </button>
@@ -793,24 +793,24 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
       </div>
 
       {/* Watchlist */}
-      <div ref={tabSectionRef} className="pt-3 border-t border-zinc-800">
+      <div ref={tabSectionRef} className="pt-3 border-t border-t-dim">
         <SectionLabel as="p" className="mb-3">
           Watchlist — {watchlistItems.length} name{watchlistItems.length !== 1 ? "s" : ""}
         </SectionLabel>
         {watchlistItems.length === 0 ? (
-          <p className="text-zinc-600 text-xs py-3 text-center">Watchlist rebuilds at 8:30am ET. Check back after market open.</p>
+          <p className="text-t-gdim text-xs py-3 text-center font-ui-t">Watchlist rebuilds at 8:30am ET. Check back after market open.</p>
         ) : (
           <div className="space-y-1">
             {watchlistItems.map((item) => (
               <div
                 key={item.symbol}
                 onClick={() => setChartSymbol(item.symbol)}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-800/80 cursor-pointer hover:bg-zinc-700/50 hover:border-zinc-600 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-t-bg1/50 border border-t-dim/80 cursor-pointer hover:bg-t-bg2/50 hover:border-t-mid transition-colors card-hover"
               >
-                <span className="text-xs font-bold text-white w-14 flex-shrink-0">{item.symbol}</span>
-                <span className="text-[10px] text-zinc-500 flex-1">{item.bots_watching.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
-                <span className="text-[10px] text-zinc-500 w-16 text-right capitalize">{item.status}</span>
-                <span className="text-[10px] text-zinc-500 w-14 text-right">score {item.score.toFixed(2)}</span>
+                <span className="text-xs font-bold text-t-hi w-14 flex-shrink-0 font-mono-t">{item.symbol}</span>
+                <span className="text-[10px] text-t-dim flex-1 font-ui-t">{item.bots_watching.map((b) => b.replace(/_/g, " ")).join(", ")}</span>
+                <span className="text-[10px] text-t-dim w-16 text-right capitalize font-ui-t">{item.status}</span>
+                <span className="text-[10px] text-t-dim w-14 text-right tabular-nums font-mono-t">score {item.score.toFixed(2)}</span>
               </div>
             ))}
           </div>
@@ -833,22 +833,22 @@ function PortfolioTab({ portfolio }: { portfolio: StrategyPortfolio }) {
   return (
     <button
       onClick={() => navigate(`/strategy/portfolio/${portfolio.asset_class}`)}
-      className="flex-1 min-w-0 rounded-2xl border-2 border-zinc-800 bg-zinc-950 p-4 text-left transition-all duration-150 hover:border-zinc-600 hover:bg-zinc-900/60 group"
+      className="flex-1 min-w-0 rounded-2xl border-2 border-t-dim bg-t-bg0 p-4 text-left transition-all duration-150 hover:border-t-mid hover:bg-t-bg1/60 group card-hover"
       style={{ "--accent": portfolio.color_hex } as React.CSSProperties}
     >
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xl">{portfolio.emoji}</span>
-        <span className="font-bold text-white text-sm group-hover:text-white">{portfolio.name}</span>
-        <span className="ml-auto text-zinc-600 group-hover:text-zinc-400 text-xs">→</span>
+        <span className="font-bold text-t-hi text-sm group-hover:text-t-hi font-ui-t">{portfolio.name}</span>
+        <span className="ml-auto text-t-gdim group-hover:text-t-muted text-xs">→</span>
       </div>
-      <div className="text-lg font-bold text-white leading-tight">
+      <div className="text-lg font-bold text-t-hi leading-tight tabular-nums font-mono-t">
         ${currentUsd.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
       </div>
-      <div className={cn("text-xs font-medium mt-0.5", isPositive ? "text-lime-400" : "text-red-400")}>
+      <div className={cn("text-xs font-medium mt-0.5 tabular-nums font-mono-t", isPositive ? "text-t-green" : "text-t-red")}>
         {isPositive ? "+" : ""}{pnlUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         {" "}({isPositive ? "+" : ""}{portfolio.pnl_pct.toFixed(2)}%)
       </div>
-      <div className="text-[11px] text-zinc-600 mt-1">
+      <div className="text-[11px] text-t-gdim mt-1 font-ui-t">
         {portfolio.bots.length} bot{portfolio.bots.length !== 1 ? "s" : ""} · $100k each
       </div>
     </button>
@@ -859,30 +859,30 @@ function PortfolioTab({ portfolio }: { portfolio: StrategyPortfolio }) {
 
 function SkeletonCard() {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 animate-pulse">
+    <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5 animate-pulse">
       <div className="flex items-start justify-between mb-3">
         <div>
-          <div className="h-5 w-32 bg-zinc-800 rounded mb-2" />
-          <div className="h-3 w-48 bg-zinc-800 rounded" />
+          <div className="h-5 w-32 bg-t-bg1 rounded mb-2" />
+          <div className="h-3 w-48 bg-t-bg1 rounded" />
         </div>
-        <div className="h-6 w-6 bg-zinc-800 rounded-full" />
+        <div className="h-6 w-6 bg-t-bg1 rounded-full" />
       </div>
       <div className="flex gap-2 mb-4">
-        <div className="h-5 w-14 bg-zinc-800 rounded-full" />
-        <div className="h-5 w-16 bg-zinc-800 rounded-full" />
-        <div className="h-5 w-16 bg-zinc-800 rounded-full" />
+        <div className="h-5 w-14 bg-t-bg1 rounded-full" />
+        <div className="h-5 w-16 bg-t-bg1 rounded-full" />
+        <div className="h-5 w-16 bg-t-bg1 rounded-full" />
       </div>
       <div className="grid grid-cols-2 gap-3 mb-4">
         {[0, 1, 2, 3].map((i) => (
           <div key={i}>
-            <div className="h-3 w-20 bg-zinc-800 rounded mb-1" />
-            <div className="h-5 w-14 bg-zinc-800 rounded" />
+            <div className="h-3 w-20 bg-t-bg1 rounded mb-1" />
+            <div className="h-5 w-14 bg-t-bg1 rounded" />
           </div>
         ))}
       </div>
       <div className="flex gap-2">
-        <div className="h-8 flex-1 bg-zinc-800 rounded-lg" />
-        <div className="h-8 flex-1 bg-zinc-800 rounded-lg" />
+        <div className="h-8 flex-1 bg-t-bg1 rounded-lg" />
+        <div className="h-8 flex-1 bg-t-bg1 rounded-lg" />
       </div>
     </div>
   );
@@ -898,10 +898,10 @@ interface BotCardProps {
 }
 
 const _TIER_BADGE: Record<string, string> = {
-  T3: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
-  T2: "text-blue-400 border-blue-500/30 bg-blue-500/10",
-  T1: "text-yellow-400 border-yellow-500/30 bg-yellow-500/10",
-  T0: "text-zinc-400 border-zinc-500/30 bg-zinc-500/10",
+  T3: "text-t-green border-t-green/30 bg-t-green/10",
+  T2: "text-t-cyan border-t-cyan/30 bg-t-cyan/10",
+  T1: "text-t-amber border-t-amber/30 bg-t-amber/10",
+  T0: "text-t-muted border-t-mid/30 bg-t-bg2/10",
 };
 
 function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
@@ -958,13 +958,13 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
     : assetClass === "quant"
       ? "border-l-4 border-l-violet-500/60"
       : assetClass === "crypto"
-        ? "border-l-4 border-l-orange-500/60"
-        : "border-l-4 border-l-blue-500/60";
+        ? "border-l-4 border-l-t-amber/60"
+        : "border-l-4 border-l-t-cyan/60";
 
   return (
     <div
       className={cn(
-        "bg-zinc-900 border border-zinc-800 rounded-2xl p-5 cursor-pointer hover:border-zinc-600 transition-colors group",
+        "bg-t-bg0 border border-t-dim rounded-2xl p-5 cursor-pointer hover:border-t-mid transition-colors group card-hover",
         leftBorderClass
       )}
       onClick={() => onNavigate(profile.name)}
@@ -972,21 +972,21 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="text-white font-semibold text-base leading-snug">
+          <h3 className="text-t-hi font-semibold text-base leading-snug font-ui-t">
             {meta?.displayName ?? displayName(profile.name)}
           </h3>
-          <p className="text-zinc-500 text-xs mt-0.5 leading-relaxed">
+          <p className="text-t-dim text-xs mt-0.5 leading-relaxed font-ui-t">
             {meta?.description ?? profile.description}
           </p>
         </div>
         <span
           className={cn(
-            "text-xs font-semibold px-2 py-0.5 rounded-full",
+            "text-xs font-semibold px-2 py-0.5 rounded-full font-ui-t",
             isComingSoon
               ? "bg-purple-500/15 text-purple-400 border border-purple-500/30"
               : isEnabled
-                ? "bg-lime-500/15 text-lime-400 border border-lime-500/30"
-                : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                ? "bg-t-green/15 text-t-green border border-t-green/30"
+                : "bg-t-bg1 text-t-dim border border-t-dim"
           )}
         >
           {isComingSoon ? "COMING SOON" : isEnabled ? "ACTIVE" : "DISABLED"}
@@ -997,21 +997,21 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
       <div className="flex flex-wrap gap-1.5 mb-4">
         <span
           className={cn(
-            "text-xs font-semibold px-2 py-0.5 rounded-full",
+            "text-xs font-semibold px-2 py-0.5 rounded-full font-ui-t",
             assetClass === "stock"
-              ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+              ? "bg-t-cyan/15 text-t-cyan border border-t-cyan/30"
               : assetClass === "quant"
                 ? "bg-violet-500/15 text-violet-400 border border-violet-500/30"
-                : "bg-orange-500/15 text-orange-400 border border-orange-500/30"
+                : "bg-t-amber/15 text-t-amber border border-t-amber/30"
           )}
         >
           {assetClass.toUpperCase()}
         </span>
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-t-bg1 text-t-muted border border-t-dim font-ui-t">
           {formatCadence(profile.cadence)}
         </span>
         {tier && (
-          <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", _TIER_BADGE[tier] ?? _TIER_BADGE.T1)}>
+          <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border font-ui-t", _TIER_BADGE[tier] ?? _TIER_BADGE.T1)}>
             {tier}
           </span>
         )}
@@ -1022,65 +1022,65 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
         <div className={cn(
           "flex items-center justify-between px-3 py-2 rounded-lg mb-3 border",
           stats.all_time_pnl_pct >= 0
-            ? "bg-emerald-500/5 border-emerald-500/20"
-            : "bg-red-500/5 border-red-500/20"
+            ? "bg-t-green/5 border-t-green/20"
+            : "bg-t-red/5 border-t-red/20"
         )}>
-          <span className="text-xs font-medium text-zinc-500">ALL-TIME</span>
+          <span className="text-xs font-medium text-t-dim font-ui-t">ALL-TIME</span>
           <span className={cn(
-            "text-sm font-bold tabular-nums",
-            stats.all_time_pnl_pct >= 0 ? "text-emerald-400" : "text-red-400"
+            "text-sm font-bold tabular-nums font-mono-t",
+            stats.all_time_pnl_pct >= 0 ? "text-t-green" : "text-t-red"
           )}>
             {stats.all_time_pnl_pct >= 0 ? "+" : ""}{stats.all_time_pnl_pct.toFixed(2)}%
           </span>
           {stats.all_time_pnl_usd != null && (
             <span className={cn(
-              "text-xs tabular-nums",
-              stats.all_time_pnl_usd >= 0 ? "text-emerald-500/70" : "text-red-500/70"
+              "text-xs tabular-nums font-mono-t",
+              stats.all_time_pnl_usd >= 0 ? "text-t-green/70" : "text-t-red/70"
             )}>
               {formatPnl(stats.all_time_pnl_usd)}
             </span>
           )}
         </div>
       ) : (
-        <div className="flex items-center justify-between px-3 py-2 rounded-lg mb-3 border border-zinc-800 bg-zinc-900/40">
-          <span className="text-xs font-medium text-zinc-500">ALL-TIME</span>
-          <span className="text-xs text-zinc-600 italic">Not live yet</span>
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg mb-3 border border-t-dim bg-t-bg0/40">
+          <span className="text-xs font-medium text-t-dim font-ui-t">ALL-TIME</span>
+          <span className="text-xs text-t-gdim italic font-ui-t">Not live yet</span>
         </div>
       )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div>
-          <p className="text-zinc-600 text-xs mb-0.5">Today P&L (paper)</p>
+          <p className="text-t-gdim text-xs mb-0.5 font-ui-t">Today P&L (paper)</p>
           <p
             className={cn(
-              "text-sm font-semibold",
-              pnlPositive ? "text-lime-400" : "text-red-400"
+              "text-sm font-semibold tabular-nums font-mono-t",
+              pnlPositive ? "text-t-green" : "text-t-red"
             )}
           >
             {formatPnl(stats?.today_pnl ?? 0)}
           </p>
         </div>
         <div>
-          <p className="text-zinc-600 text-xs mb-0.5">30d Return</p>
+          <p className="text-t-gdim text-xs mb-0.5 font-ui-t">30d Return</p>
           <p
             className={cn(
-              "text-sm font-semibold",
-              returnPositive ? "text-lime-400" : "text-red-400"
+              "text-sm font-semibold tabular-nums font-mono-t",
+              returnPositive ? "text-t-green" : "text-t-red"
             )}
           >
             {formatPct(stats?.return_30d_pct ?? 0)}
           </p>
         </div>
         <div>
-          <p className="text-zinc-600 text-xs mb-0.5">Open Positions</p>
-          <p className="text-sm font-semibold text-white">
+          <p className="text-t-gdim text-xs mb-0.5 font-ui-t">Open Positions</p>
+          <p className="text-sm font-semibold text-t-hi tabular-nums font-mono-t">
             {stats?.open_positions ?? 0}
           </p>
         </div>
         <div>
-          <p className="text-zinc-600 text-xs mb-0.5">Capital Allocated</p>
-          <p className="text-sm font-semibold text-white">
+          <p className="text-t-gdim text-xs mb-0.5 font-ui-t">Capital Allocated</p>
+          <p className="text-sm font-semibold text-t-hi tabular-nums font-mono-t">
             {allocation ? `${allocation.capital_pct}%` : "—"}
           </p>
         </div>
@@ -1094,10 +1094,10 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
               onClick={() => allocateMut.mutate(!isEnabled)}
               disabled={allocateMut.isPending}
               className={cn(
-                "flex-1 text-xs font-semibold py-2 rounded-lg border transition-colors",
+                "flex-1 text-xs font-semibold py-2 rounded-lg border transition-colors font-ui-t",
                 isEnabled
-                  ? "bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-red-700 hover:text-red-400"
-                  : "bg-lime-500/10 border-lime-500/30 text-lime-400 hover:bg-lime-500/20"
+                  ? "bg-t-bg1 border-t-dim text-t-mid2 hover:border-t-red/70 hover:text-t-red"
+                  : "bg-t-green/10 border-t-green/30 text-t-green hover:bg-t-green/20"
               )}
             >
               {allocateMut.isPending ? "…" : isEnabled ? "Disable" : "Enable"}
@@ -1106,7 +1106,7 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
               <button
                 onClick={() => runNowMut.mutate()}
                 disabled={runNowMut.isPending}
-                className="text-xs font-semibold py-2 px-3 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                className="text-xs font-semibold py-2 px-3 rounded-lg border border-t-cyan/30 bg-t-cyan/10 text-t-cyan hover:bg-t-cyan/20 transition-colors disabled:opacity-50 font-ui-t"
                 title="Manually trigger a trade cycle"
               >
                 {runNowMut.isPending ? "…" : "▶ Run"}
@@ -1118,10 +1118,10 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
           onClick={() => waitlistMut.mutate(!isOnWaitlist)}
           disabled={waitlistMut.isPending}
           className={cn(
-            "flex-1 text-xs font-semibold py-2 rounded-lg border transition-colors",
+            "flex-1 text-xs font-semibold py-2 rounded-lg border transition-colors font-ui-t",
             isOnWaitlist
-              ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
-              : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-amber-600 hover:text-amber-400"
+              ? "bg-t-amber/10 border-t-amber/30 text-t-amber hover:bg-t-amber/20"
+              : "bg-t-bg1 border-t-dim text-t-muted hover:border-t-amber/60 hover:text-t-amber"
           )}
         >
           {waitlistMut.isPending ? "…" : isOnWaitlist ? "✓ Notified" : "Notify when live"}
@@ -1189,12 +1189,12 @@ function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; ti
     const active = sortKey === colKey;
     return (
       <th
-        className="text-left pb-2 font-medium cursor-pointer select-none hover:text-zinc-300 transition-colors"
+        className="text-left pb-2 font-medium cursor-pointer select-none hover:text-t-mid2 transition-colors font-ui-t"
         onClick={() => handleSort(colKey)}
       >
         <span className="flex items-center gap-1">
           {label}
-          <span className="text-zinc-600">
+          <span className="text-t-gdim">
             {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
           </span>
         </span>
@@ -1203,12 +1203,12 @@ function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; ti
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-      <h2 className="text-sm font-semibold text-zinc-300 mb-4">Side-by-Side Comparison</h2>
+    <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5">
+      <h2 className="panel-header mb-4">// Side-by-Side Comparison</h2>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-xs text-zinc-600 border-b border-zinc-800">
+            <tr className="text-xs text-t-gdim border-b border-t-dim">
               <SortHeader label="Bot" colKey="name" />
               <SortHeader label="Status" colKey="status" />
               <SortHeader label="Tier" colKey="name" />
@@ -1226,39 +1226,39 @@ function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; ti
               const assetClass = BOT_META[item.profile.name]?.assetClass ?? item.profile.asset_class;
 
               return (
-                <tr key={item.profile.name} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 transition-colors">
+                <tr key={item.profile.name} className="border-b border-t-dim/50 last:border-0 hover:bg-t-bg1/20 transition-colors">
                   <td className="py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", item.profile.name.includes("options") ? "bg-purple-400" : assetClass === "quant" ? "bg-violet-400" : assetClass === "crypto" ? "bg-orange-400" : "bg-blue-400")} />
-                      <span className="font-semibold text-white text-xs">{displayName(item.profile.name)}</span>
+                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", item.profile.name.includes("options") ? "bg-purple-400" : assetClass === "quant" ? "bg-violet-400" : assetClass === "crypto" ? "bg-t-amber" : "bg-t-cyan")} />
+                      <span className="font-semibold text-t-hi text-xs font-ui-t">{displayName(item.profile.name)}</span>
                     </div>
                   </td>
                   <td className="py-2.5">
                     <span className={cn(
-                      "text-xs font-bold px-1.5 py-0.5 rounded-full border",
+                      "text-xs font-bold px-1.5 py-0.5 rounded-full border font-ui-t",
                       isEnabled
-                        ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
-                        : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                        ? "bg-t-green/15 text-t-green border-t-green/30"
+                        : "bg-t-bg1 text-t-dim border-t-dim"
                     )}>
                       {isEnabled ? "ACTIVE" : "OFF"}
                     </span>
                   </td>
                   <td className="py-2.5">
                     {item.allocation?.id != null && tierByAllocId[item.allocation.id] ? (
-                      <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded-full border", _TIER_BADGE[tierByAllocId[item.allocation.id]] ?? _TIER_BADGE.T1)}>
+                      <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded-full border font-ui-t", _TIER_BADGE[tierByAllocId[item.allocation.id]] ?? _TIER_BADGE.T1)}>
                         {tierByAllocId[item.allocation.id]}
                       </span>
                     ) : (
-                      <span className="text-xs text-zinc-600">—</span>
+                      <span className="text-xs text-t-gdim font-ui-t">—</span>
                     )}
                   </td>
-                  <td className={cn("py-2.5 font-semibold text-xs", ret30 >= 0 ? "text-lime-400" : "text-red-400")}>
+                  <td className={cn("py-2.5 font-semibold text-xs tabular-nums font-mono-t", ret30 >= 0 ? "text-t-green" : "text-t-red")}>
                     {formatPct(ret30)}
                   </td>
-                  <td className="py-2.5 text-xs text-red-400">
+                  <td className="py-2.5 text-xs text-t-red tabular-nums font-mono-t">
                     {maxDd != null ? `-${maxDd}%` : "—"}
                   </td>
-                  <td className="py-2.5 text-xs text-zinc-300">
+                  <td className="py-2.5 text-xs text-t-mid2 tabular-nums font-mono-t">
                     {winRate > 0 ? `${winRate.toFixed(1)}%` : "—"}
                   </td>
                 </tr>
@@ -1287,8 +1287,8 @@ interface CandidateEntry {
 }
 
 const _ASSET_CHIP: Record<CandidateAssetClass, string> = {
-  equity: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  crypto: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  equity: "bg-t-cyan/10 text-t-cyan border-t-cyan/20",
+  crypto: "bg-t-amber/10 text-t-amber border-t-amber/20",
   multi:  "bg-violet-500/10 text-violet-400 border-violet-500/20",
 };
 const _ASSET_LABEL: Record<CandidateAssetClass, string> = {
@@ -1297,13 +1297,13 @@ const _ASSET_LABEL: Record<CandidateAssetClass, string> = {
   multi:  "Multi-Asset",
 };
 const _STYLE_CHIP: Record<CandidateStyle, string> = {
-  momentum:             "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  mean_reversion:       "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  event_driven:         "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+  momentum:             "bg-t-green/10 text-t-green border-t-green/20",
+  mean_reversion:       "bg-t-cyan/10 text-t-cyan border-t-cyan/20",
+  event_driven:         "bg-t-amber/10 text-t-amber border-t-amber/20",
   arbitrage:            "bg-pink-500/10 text-pink-400 border-pink-500/20",
   cross_asset_momentum: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  quality_momentum:     "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  short_volatility:     "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  quality_momentum:     "bg-t-bright/10 text-t-bright border-t-bright/20",
+  short_volatility:     "bg-t-red/10 text-t-red border-t-red/20",
 };
 const _STYLE_LABEL: Record<CandidateStyle, string> = {
   momentum:             "Momentum",
@@ -1317,46 +1317,46 @@ const _STYLE_LABEL: Record<CandidateStyle, string> = {
 
 function CandidateCard({ c }: { c: CandidateEntry }) {
   return (
-    <div className="relative rounded-2xl border border-dashed border-zinc-700/60 bg-zinc-950/60 p-4 flex flex-col gap-3 hover:border-zinc-600/80 transition-colors">
+    <div className="relative rounded-2xl border border-dashed border-t-dim/60 bg-t-bg0/60 p-4 flex flex-col gap-3 hover:border-t-mid/80 transition-colors">
       {/* Watermark */}
-      <div className="absolute top-2 right-3 text-[9px] font-bold tracking-widest text-zinc-700 uppercase select-none">
+      <div className="absolute top-2 right-3 text-[9px] font-bold tracking-widest text-t-gdim uppercase select-none font-ui-t">
         INCUBATING
       </div>
 
       {/* Header */}
       <div className="flex items-start gap-2 pr-16">
         <div>
-          <p className="text-sm font-semibold text-zinc-200 leading-snug">{c.name}</p>
-          <p className="text-[10px] text-zinc-600 mt-0.5 font-mono">{c.reference}</p>
+          <p className="text-sm font-semibold text-t-mid2 leading-snug font-ui-t">{c.name}</p>
+          <p className="text-[10px] text-t-gdim mt-0.5 font-mono-t">{c.reference}</p>
         </div>
       </div>
 
       {/* Chips */}
       <div className="flex flex-wrap gap-1.5">
-        <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border", _ASSET_CHIP[c.assetClass])}>
+        <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border font-ui-t", _ASSET_CHIP[c.assetClass])}>
           {_ASSET_LABEL[c.assetClass]}
         </span>
-        <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border", _STYLE_CHIP[c.style])}>
+        <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border font-ui-t", _STYLE_CHIP[c.style])}>
           {_STYLE_LABEL[c.style]}
         </span>
-        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">
+        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-t-amber/10 text-t-amber border-t-amber/20 font-ui-t">
           T0 CANDIDATE
         </span>
       </div>
 
       {/* Description */}
-      <p className="text-xs text-zinc-500 leading-relaxed">{c.description}</p>
+      <p className="text-xs text-t-dim leading-relaxed font-ui-t">{c.description}</p>
 
       {/* Sharpe range */}
       <div className="flex items-center justify-between text-[10px]">
-        <span className="text-zinc-600">Expected Sharpe</span>
-        <span className="font-mono text-zinc-400">{c.expectedSharpe}</span>
+        <span className="text-t-gdim font-ui-t">Expected Sharpe</span>
+        <span className="font-mono-t tabular-nums text-t-muted">{c.expectedSharpe}</span>
       </div>
 
       {/* Promotion criteria */}
-      <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2">
-        <p className="text-[9px] font-semibold text-zinc-600 uppercase tracking-wider mb-0.5">Promotes to T1 when</p>
-        <p className="text-[10px] text-zinc-500">30 days live · 20 trades · Sharpe &gt; 0.3</p>
+      <div className="rounded-lg bg-t-bg0/60 border border-t-dim px-3 py-2">
+        <p className="text-[9px] font-semibold text-t-gdim uppercase tracking-wider mb-0.5 font-ui-t">Promotes to T1 when</p>
+        <p className="text-[10px] text-t-dim font-ui-t">30 days live · 20 trades · Sharpe &gt; 0.3</p>
       </div>
     </div>
   );
@@ -1367,13 +1367,13 @@ function CandidatesSection() {
     <div>
       {/* Section header */}
       <div className="flex items-center gap-3 mb-3">
-        <div className="flex-1 h-px border-t border-dashed border-zinc-800" />
-        <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest whitespace-nowrap">
+        <div className="flex-1 h-px border-t border-dashed border-t-dim" />
+        <p className="text-[10px] font-semibold text-t-dim uppercase tracking-widest whitespace-nowrap font-ui-t">
           // CANDIDATES (paper-shadow, not live)
         </p>
-        <div className="flex-1 h-px border-t border-dashed border-zinc-800" />
+        <div className="flex-1 h-px border-t border-dashed border-t-dim" />
       </div>
-      <p className="text-xs text-zinc-600 mb-4">
+      <p className="text-xs text-t-gdim mb-4 font-ui-t">
         {CANDIDATE_META.length} strategies in incubation. Tracked in paper mode only.
         Manual graduation required to promote to live trading.
       </p>
@@ -1448,12 +1448,12 @@ function ActivityRail({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">
+        <span className="text-xs font-semibold text-t-muted uppercase tracking-wide font-ui-t">
           Activity
         </span>
         <button
           onClick={onClose}
-          className="text-zinc-600 hover:text-white text-xs transition-colors"
+          className="text-t-gdim hover:text-t-hi text-xs transition-colors font-ui-t"
         >
           ‹ Hide
         </button>
@@ -1461,31 +1461,31 @@ function ActivityRail({ onClose }: { onClose: () => void }) {
       {isLoading ? (
         <div className="space-y-2 animate-pulse">
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-10 bg-zinc-800 rounded-lg" />
+            <div key={i} className="h-10 bg-t-bg1 rounded-lg" />
           ))}
         </div>
       ) : feed.length === 0 ? (
-        <p className="text-zinc-600 text-xs text-center py-6">No activity yet. The execution engine runs daily at 10 AM ET on weekdays.</p>
+        <p className="text-t-gdim text-xs text-center py-6 font-ui-t">No activity yet. The execution engine runs daily at 10 AM ET on weekdays.</p>
       ) : (
         <div className="space-y-1 overflow-y-auto flex-1">
           {feed.slice(0, 20).map((item: AutopilotAction) => (
             <div
               key={item.id}
-              className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs"
+              className="bg-t-bg0 border border-t-dim rounded-lg px-3 py-2 text-xs"
             >
               <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 font-medium text-xs">
+                <span className="px-1.5 py-0.5 rounded bg-t-bg1 border border-t-dim text-t-muted font-medium text-xs font-ui-t">
                   {item.category?.replace(/_/g, " ")}
                 </span>
                 {item.asset && (
-                  <span className="font-semibold text-white">{item.asset}</span>
+                  <span className="font-semibold text-t-hi font-mono-t">{item.asset}</span>
                 )}
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-zinc-500 truncate">
+                <span className="text-t-dim truncate font-ui-t">
                   {item.action_type?.replace(/_/g, " ")}
                 </span>
-                <span className="text-zinc-700 whitespace-nowrap flex-shrink-0">
+                <span className="text-t-gdim whitespace-nowrap flex-shrink-0 font-mono-t">
                   {timeAgo(item.created_at)}
                 </span>
               </div>
@@ -1522,10 +1522,10 @@ function TodaysQuestions({ onAskCoPilot }: TodaysQuestionsProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-zinc-300">
+        <h2 className="text-sm font-semibold text-t-mid2 font-ui-t">
           Today's questions for you
           {visible.length > 0 && (
-            <span className="ml-2 text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400">
+            <span className="ml-2 text-xs font-bold px-1.5 py-0.5 rounded-full bg-t-amber/15 border border-t-amber/30 text-t-amber font-ui-t">
               {visible.length}
             </span>
           )}
@@ -1533,9 +1533,9 @@ function TodaysQuestions({ onAskCoPilot }: TodaysQuestionsProps) {
       </div>
 
       {visible.length === 0 ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-6 text-center">
-          <p className="text-zinc-500 text-sm">No questions today ✓</p>
-          <p className="text-zinc-600 text-xs mt-1">All borderline signals have been reviewed.</p>
+        <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-6 text-center">
+          <p className="text-t-dim text-sm font-ui-t">No questions today ✓</p>
+          <p className="text-t-gdim text-xs mt-1 font-ui-t">All borderline signals have been reviewed.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -1554,19 +1554,19 @@ function TodaysQuestions({ onAskCoPilot }: TodaysQuestionsProps) {
             return (
               <div
                 key={r.id}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3"
+                className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3"
               >
-                <p className="text-sm text-zinc-300 mb-2">
-                  <span className="font-semibold text-white">{display}</span> considered{" "}
+                <p className="text-sm text-t-mid2 mb-2 font-ui-t">
+                  <span className="font-semibold text-t-hi">{display}</span> considered{" "}
                   {r.side === "buy" ? "buying" : "selling"}{" "}
-                  <span className="font-semibold text-white">{r.symbol}</span> at {timeStr} —{" "}
+                  <span className="font-semibold text-t-hi font-mono-t">{r.symbol}</span> at {timeStr} —{" "}
                   confidence{" "}
-                  <span className="text-amber-400 font-semibold">{confPct}%</span>. Review?
+                  <span className="text-t-amber font-semibold tabular-nums font-mono-t">{confPct}%</span>. Review?
                 </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => dismiss(r.id)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-t-dim bg-t-bg1 text-t-mid2 hover:text-t-hi transition-colors font-ui-t"
                   >
                     Looks good
                   </button>
@@ -1575,7 +1575,7 @@ function TodaysQuestions({ onAskCoPilot }: TodaysQuestionsProps) {
                       dismiss(r.id);
                       onAskCoPilot(coPilotQ);
                     }}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 text-teal-300 hover:bg-teal-500/20 transition-colors"
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-t-cyan/30 bg-t-cyan/10 text-t-cyan hover:bg-t-cyan/20 transition-colors font-ui-t"
                   >
                     Ask Co-Pilot
                   </button>
@@ -1597,10 +1597,10 @@ interface BottomNavProps {
 }
 
 function ConvictionStars({ score }: { score: number | null }) {
-  if (score == null) return <span className="text-zinc-600 text-xs">—</span>;
+  if (score == null) return <span className="text-t-gdim text-xs">—</span>;
   const filled = Math.round(score);
   return (
-    <span className={score >= 4 ? "text-lime-400" : score >= 3 ? "text-yellow-400" : "text-zinc-500"}>
+    <span className={score >= 4 ? "text-t-green" : score >= 3 ? "text-t-amber" : "text-t-dim"}>
       {"★".repeat(filled)}{"☆".repeat(5 - filled)}
     </span>
   );
@@ -1616,10 +1616,10 @@ function AnalystHighlights() {
 
   if (isLoading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 animate-pulse">
-        <div className="h-4 w-40 bg-zinc-800 rounded mb-4" />
+      <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5 animate-pulse">
+        <div className="h-4 w-40 bg-t-bg1 rounded mb-4" />
         <div className="grid grid-cols-3 gap-3">
-          {[0, 1, 2].map(i => <div key={i} className="h-16 bg-zinc-800 rounded-xl" />)}
+          {[0, 1, 2].map(i => <div key={i} className="h-16 bg-t-bg1 rounded-xl" />)}
         </div>
       </div>
     );
@@ -1633,31 +1633,31 @@ function AnalystHighlights() {
 
   function SummaryCard({ item, flag }: { item: AnalystSummaryItem; flag?: boolean }) {
     return (
-      <Link to="/strategy/analyst" className="block bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3 hover:border-zinc-600 transition-colors">
+      <Link to="/strategy/analyst" className="block bg-t-bg1/50 border border-t-dim/50 rounded-xl p-3 hover:border-t-mid transition-colors card-hover">
         <div className="flex items-center justify-between mb-1">
-          <span className="font-semibold text-white text-sm">{item.symbol}</span>
+          <span className="font-semibold text-t-hi text-sm font-mono-t">{item.symbol}</span>
           {flag
-            ? <span className="text-xs text-red-400 font-semibold">⚑ Flagged</span>
+            ? <span className="text-xs text-t-red font-semibold font-ui-t">⚑ Flagged</span>
             : <ConvictionStars score={item.conviction_score} />}
         </div>
-        <p className="text-[11px] text-zinc-500 leading-tight line-clamp-2">{item.thesis_preview}</p>
-        <p className="text-[10px] text-zinc-600 mt-1">{item.bot_name.replace(/_/g, " ")} · {item.suggested_hold}</p>
+        <p className="text-[11px] text-t-dim leading-tight line-clamp-2 font-ui-t">{item.thesis_preview}</p>
+        <p className="text-[10px] text-t-gdim mt-1 font-ui-t">{item.bot_name.replace(/_/g, " ")} · {item.suggested_hold}</p>
       </Link>
     );
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+    <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-zinc-300">AI Analyst Highlights</h3>
-        <Link to="/strategy/analyst" className="text-xs text-lime-400 hover:text-lime-300 underline underline-offset-2">
+        <h3 className="panel-header">// AI Analyst Highlights</h3>
+        <Link to="/strategy/analyst" className="text-xs text-t-green hover:text-t-green/80 underline underline-offset-2 font-ui-t">
           Full report →
         </Link>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {picks.length > 0 && (
           <div>
-            <p className="text-[11px] text-zinc-500 uppercase tracking-wide font-semibold mb-2">Top Picks</p>
+            <p className="text-[11px] text-t-dim uppercase tracking-wide font-semibold mb-2 font-ui-t">Top Picks</p>
             <div className="space-y-2">
               {picks.slice(0, 3).map(p => <SummaryCard key={p.id} item={p} />)}
             </div>
@@ -1665,7 +1665,7 @@ function AnalystHighlights() {
         )}
         {concerns.length > 0 && (
           <div>
-            <p className="text-[11px] text-zinc-500 uppercase tracking-wide font-semibold mb-2">Concerns</p>
+            <p className="text-[11px] text-t-dim uppercase tracking-wide font-semibold mb-2 font-ui-t">Concerns</p>
             <div className="space-y-2">
               {concerns.slice(0, 3).map(c => <SummaryCard key={c.id} item={c} flag />)}
             </div>
@@ -1679,35 +1679,35 @@ function AnalystHighlights() {
 function BottomNav({ onOpenActivity, onOpenCoPilot }: BottomNavProps) {
   const navigate = useNavigate();
   return (
-    <nav className="fixed bottom-0 inset-x-0 bg-slate-900 border-t border-slate-700 md:hidden z-40">
+    <nav className="fixed bottom-0 inset-x-0 bg-t-bg0 border-t border-t-mid md:hidden z-40">
       <div className="grid grid-cols-4 h-16">
         <button
           onClick={() => navigate("/strategy")}
-          className="flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-white transition-colors"
+          className="flex flex-col items-center justify-center gap-1 text-t-muted hover:text-t-hi transition-colors"
         >
           <span className="text-lg">⊞</span>
-          <span className="text-[10px] font-medium">Bots</span>
+          <span className="text-[10px] font-medium font-ui-t">Bots</span>
         </button>
         <button
           onClick={onOpenActivity}
-          className="flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-white transition-colors"
+          className="flex flex-col items-center justify-center gap-1 text-t-muted hover:text-t-hi transition-colors"
         >
           <span className="text-lg">⚡</span>
-          <span className="text-[10px] font-medium">Activity</span>
+          <span className="text-[10px] font-medium font-ui-t">Activity</span>
         </button>
         <button
           onClick={onOpenCoPilot}
-          className="flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-white transition-colors"
+          className="flex flex-col items-center justify-center gap-1 text-t-muted hover:text-t-hi transition-colors"
         >
           <span className="text-lg">⌘</span>
-          <span className="text-[10px] font-medium">Co-Pilot</span>
+          <span className="text-[10px] font-medium font-ui-t">Co-Pilot</span>
         </button>
         <button
           onClick={() => navigate("/settings")}
-          className="flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-white transition-colors"
+          className="flex flex-col items-center justify-center gap-1 text-t-muted hover:text-t-hi transition-colors"
         >
           <span className="text-lg">⚙</span>
-          <span className="text-[10px] font-medium">Settings</span>
+          <span className="text-[10px] font-medium font-ui-t">Settings</span>
         </button>
       </div>
     </nav>
@@ -1902,14 +1902,14 @@ export default function StrategyLab() {
   return (
     <>
       {/* Outer layout: content area + optional right rail */}
-      <div className={cn("flex gap-6 max-w-7xl mx-auto px-4 py-6 pb-20 md:pb-6")}>
+      <div className={cn("flex gap-6 max-w-7xl mx-auto px-4 py-6 pb-20 md:pb-6 animate-page-in")}>
         {/* Main content */}
         <div className="flex-1 min-w-0 space-y-6">
           {/* Title row */}
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-2xl font-bold text-white">Strategy Lab</h1>
-              <p className="text-zinc-500 text-sm mt-1">
+              <h1 className="text-2xl font-bold text-t-hi font-ui-t">Strategy Lab</h1>
+              <p className="text-t-dim text-sm mt-1 font-ui-t">
                 Four independent portfolios — Stocks, Crypto, Options, and Quant — each running dedicated bots on real market data.
               </p>
             </div>
@@ -1917,21 +1917,21 @@ export default function StrategyLab() {
               {/* Strategy Library link */}
               <Link
                 to="/strategy/library"
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-400 hover:bg-teal-500/25 transition-colors whitespace-nowrap"
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-t-cyan/15 border border-t-cyan/30 text-t-cyan hover:bg-t-cyan/25 transition-colors whitespace-nowrap font-ui-t"
               >
                 Strategy Library →
               </Link>
               {/* Portfolio View link */}
               <Link
                 to="/net-portfolio"
-                className="text-xs text-teal-400 hover:text-teal-300 underline underline-offset-2 transition-colors whitespace-nowrap"
+                className="text-xs text-t-cyan hover:text-t-cyan/80 underline underline-offset-2 transition-colors whitespace-nowrap font-ui-t"
               >
                 Portfolio View →
               </Link>
               {/* Activity rail toggle (desktop) */}
               <button
                 onClick={() => setRailOpen((v) => !v)}
-                className="hidden md:inline-flex text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors whitespace-nowrap"
+                className="hidden md:inline-flex text-xs text-t-muted hover:text-t-hi border border-t-dim rounded-lg px-3 py-1.5 transition-colors whitespace-nowrap font-ui-t"
               >
                 {railOpen ? "‹ Activity" : "Activity ›"}
               </button>
@@ -1939,7 +1939,7 @@ export default function StrategyLab() {
                 <button
                   onClick={() => activateAllMut.mutate()}
                   disabled={activateAllMut.isPending}
-                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50 shadow-lg shadow-lime-500/20"
+                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-t-green text-black text-sm font-bold hover:bg-t-green/80 transition-colors disabled:opacity-50 shadow-lg shadow-t-green/20 font-ui-t"
                 >
                   {activateAllMut.isPending ? "Activating…" : "Activate All 9 Bots"}
                 </button>
@@ -1948,7 +1948,7 @@ export default function StrategyLab() {
                 <button
                   onClick={() => resumeAllMut.mutate()}
                   disabled={isPauseOrResumePending}
-                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-lime-500 text-black text-sm font-bold hover:bg-lime-400 transition-colors disabled:opacity-50 shadow-lg shadow-lime-500/20"
+                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-t-green text-black text-sm font-bold hover:bg-t-green/80 transition-colors disabled:opacity-50 shadow-lg shadow-t-green/20 font-ui-t"
                 >
                   {resumeAllMut.isPending ? "Resuming…" : "Resume All Bots"}
                 </button>
@@ -1956,7 +1956,7 @@ export default function StrategyLab() {
                 <button
                   onClick={() => pauseAllMut.mutate()}
                   disabled={isPauseOrResumePending}
-                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-500 transition-colors disabled:opacity-50 shadow-lg shadow-red-600/20"
+                  className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-t-red text-t-hi text-sm font-bold hover:bg-t-red/80 transition-colors disabled:opacity-50 shadow-lg shadow-t-red/20 font-ui-t"
                 >
                   {pauseAllMut.isPending ? "Pausing…" : "Pause All Bots"}
                 </button>
@@ -1965,16 +1965,16 @@ export default function StrategyLab() {
           </div>
 
           {/* Paper-only banner */}
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
-            <span className="text-amber-400 text-sm font-semibold">📄 Paper trading only.</span>
-            <span className="text-amber-300 text-xs">
+          <div className="bg-t-amber/10 border border-t-amber/30 rounded-xl px-4 py-3 flex items-center gap-3">
+            <span className="text-t-amber text-sm font-semibold font-ui-t">📄 Paper trading only.</span>
+            <span className="text-t-amber/80 text-xs font-ui-t">
               Currently in beta — all trades are simulated. No real money is at risk.
             </span>
           </div>
 
           {/* Regime status bar */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-            <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wide mb-2">Market Regime</p>
+          <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3">
+            <p className="panel-header mb-2">// Market Regime</p>
             <RegimeBar regime={regime} isLoading={regimeLoading} />
           </div>
 
@@ -1982,7 +1982,7 @@ export default function StrategyLab() {
           {portfoliosLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-28 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
+                <div key={i} className="h-28 rounded-2xl bg-t-bg0 border border-t-dim animate-pulse" />
               ))}
             </div>
           ) : portfolios.length > 0 ? (
@@ -1994,22 +1994,22 @@ export default function StrategyLab() {
           ) : null}
 
           {/* Strategy Scout entry card */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+              <p className="panel-header mb-0.5">
                 // STRATEGY SCOUT
               </p>
-              <p className="text-sm text-zinc-300">
+              <p className="text-sm text-t-mid2 font-ui-t">
                 Match strategies to tickers, fire personal signals when setups arm.
               </p>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
-              <span className="text-xs text-zinc-500 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 whitespace-nowrap">
-                Active setups: <span className="text-white font-semibold">{activeScoutCount}</span>
+              <span className="text-xs text-t-dim bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 whitespace-nowrap font-ui-t">
+                Active setups: <span className="text-t-hi font-semibold font-mono-t">{activeScoutCount}</span>
               </span>
               <Link
                 to="/strategy/scout"
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-400 hover:bg-violet-500/25 transition-colors whitespace-nowrap"
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-400 hover:bg-violet-500/25 transition-colors whitespace-nowrap font-ui-t"
               >
                 Open Scout →
               </Link>
@@ -2017,22 +2017,22 @@ export default function StrategyLab() {
           </div>
 
           {/* The Forge entry card */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+              <p className="panel-header mb-0.5">
                 // THE FORGE
               </p>
-              <p className="text-sm text-zinc-300">
+              <p className="text-sm text-t-mid2 font-ui-t">
                 Forge your own quant bot — combine strategies, set your watchlist, allocate capital.
               </p>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
-              <span className="text-xs text-zinc-500 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 whitespace-nowrap">
-                Active bots: <span className="text-white font-semibold">{activeForgeCount}</span>
+              <span className="text-xs text-t-dim bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 whitespace-nowrap font-ui-t">
+                Active bots: <span className="text-t-hi font-semibold font-mono-t">{activeForgeCount}</span>
               </span>
               <Link
                 to="/strategy/forge"
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-orange-500/15 border border-orange-500/30 text-orange-400 hover:bg-orange-500/25 transition-colors whitespace-nowrap"
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-t-amber/15 border border-t-amber/30 text-t-amber hover:bg-t-amber/25 transition-colors whitespace-nowrap font-ui-t"
               >
                 Open Forge →
               </Link>
@@ -2040,36 +2040,36 @@ export default function StrategyLab() {
           </div>
 
           {/* Performance Analytics entry card */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+              <p className="panel-header mb-0.5">
                 // PERFORMANCE ANALYTICS
               </p>
-              <p className="text-sm text-zinc-300">
+              <p className="text-sm text-t-mid2 font-ui-t">
                 Sharpe, drawdown, win rate — every bot, measured against the data.
               </p>
             </div>
             <Link
               to="/strategy/performance"
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 transition-colors whitespace-nowrap flex-shrink-0"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-t-green/15 border border-t-green/30 text-t-green hover:bg-t-green/25 transition-colors whitespace-nowrap flex-shrink-0 font-ui-t"
             >
               Open Analytics →
             </Link>
           </div>
 
           {/* Strategy Leaderboard entry card */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-0.5">
+              <p className="panel-header mb-0.5">
                 // STRATEGY LEADERBOARD
               </p>
-              <p className="text-sm text-zinc-300">
+              <p className="text-sm text-t-mid2 font-ui-t">
                 Dollar-weighted rankings — see which strategies are actually printing across every bot.
               </p>
             </div>
             <Link
               to="/strategy/leaderboard"
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 transition-colors whitespace-nowrap flex-shrink-0"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-t-cyan/15 border border-t-cyan/30 text-t-cyan hover:bg-t-cyan/25 transition-colors whitespace-nowrap flex-shrink-0 font-ui-t"
             >
               View Leaderboard →
             </Link>
@@ -2079,7 +2079,7 @@ export default function StrategyLab() {
           {isLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-                <div key={i} className="h-36 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
+                <div key={i} className="h-36 rounded-2xl bg-t-bg0 border border-t-dim animate-pulse" />
               ))}
             </div>
           ) : (
@@ -2108,22 +2108,22 @@ export default function StrategyLab() {
           {mySignals.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">
+                <p className="panel-header">
                   // MY SIGNALS
                 </p>
                 <div className="flex gap-2">
-                  <Link to="/strategy/scout" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Scout →</Link>
-                  <Link to="/strategy/forge" className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Forge →</Link>
+                  <Link to="/strategy/scout" className="text-xs text-t-gdim hover:text-t-muted transition-colors font-ui-t">Scout →</Link>
+                  <Link to="/strategy/forge" className="text-xs text-t-gdim hover:text-t-muted transition-colors font-ui-t">Forge →</Link>
                 </div>
               </div>
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-800">
-                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-12">Source</span>
-                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-10">Side</span>
-                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-20">Ticker</span>
-                  <span className="text-[10px] font-semibold text-zinc-600 uppercase flex-1">Strategy</span>
-                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-10 text-right">Conf</span>
-                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-14 text-right">When</span>
+              <div className="bg-t-bg0 border border-t-dim rounded-2xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2 border-b border-t-dim">
+                  <span className="text-[10px] font-semibold text-t-gdim uppercase w-12 font-ui-t">Source</span>
+                  <span className="text-[10px] font-semibold text-t-gdim uppercase w-10 font-ui-t">Side</span>
+                  <span className="text-[10px] font-semibold text-t-gdim uppercase w-20 font-ui-t">Ticker</span>
+                  <span className="text-[10px] font-semibold text-t-gdim uppercase flex-1 font-ui-t">Strategy</span>
+                  <span className="text-[10px] font-semibold text-t-gdim uppercase w-10 text-right font-ui-t">Conf</span>
+                  <span className="text-[10px] font-semibold text-t-gdim uppercase w-14 text-right font-ui-t">When</span>
                 </div>
                 {mySignals.map((sig) => {
                   const isLong = sig.side === "buy" || sig.side === "long" || sig.side === "cover";
@@ -2133,27 +2133,27 @@ export default function StrategyLab() {
                   const ago = mins < 1 ? "now" : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`;
                   const displayName = sig.display_name;
                   return (
-                    <div key={`${sig.source}-${sig.id}`} className="flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/40 transition-colors border-b border-zinc-800/50 last:border-0">
+                    <div key={`${sig.source}-${sig.id}`} className="flex items-center gap-2 px-4 py-2.5 hover:bg-t-bg1/40 transition-colors border-b border-t-dim/50 last:border-0 card-hover">
                       <span className={cn(
-                        "text-[10px] font-semibold px-1.5 py-0.5 rounded border w-12 text-center",
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded border w-12 text-center font-ui-t",
                         sig.source === "scout"
                           ? "bg-violet-500/10 border-violet-500/20 text-violet-400"
-                          : "bg-orange-500/10 border-orange-500/20 text-orange-400"
+                          : "bg-t-amber/10 border-t-amber/20 text-t-amber"
                       )}>
                         {sig.source === "scout" ? "SCOUT" : "FORGE"}
                       </span>
                       <span className={cn(
-                        "text-xs font-bold w-10 uppercase",
-                        isLong ? "text-emerald-400" : isShort ? "text-red-400" : "text-zinc-400"
+                        "text-xs font-bold w-10 uppercase font-mono-t",
+                        isLong ? "text-t-green" : isShort ? "text-t-red" : "text-t-muted"
                       )}>
                         {sig.side}
                       </span>
-                      <span className="text-xs font-mono text-white w-20 truncate">{sig.ticker}</span>
-                      <span className="text-xs text-zinc-400 flex-1 truncate">{displayName}</span>
-                      <span className="text-xs font-semibold text-white w-10 text-right">
+                      <span className="text-xs font-mono-t text-t-hi w-20 truncate">{sig.ticker}</span>
+                      <span className="text-xs text-t-muted flex-1 truncate font-ui-t">{displayName}</span>
+                      <span className="text-xs font-semibold text-t-hi w-10 text-right tabular-nums font-mono-t">
                         {Math.round(sig.confidence * 100)}%
                       </span>
-                      <span className="text-xs text-zinc-600 w-14 text-right">{ago}</span>
+                      <span className="text-xs text-t-gdim w-14 text-right font-mono-t">{ago}</span>
                     </div>
                   );
                 })}
@@ -2177,14 +2177,14 @@ export default function StrategyLab() {
 
           {/* Footer */}
           <div className="flex items-center justify-between mt-8">
-            <p className="text-xs text-zinc-600">
+            <p className="text-xs text-t-gdim font-ui-t">
               Paper trading. Not investment advice. Not a registered investment adviser.
             </p>
             <button
               onClick={() => migrateMut.mutate()}
               disabled={migrateMut.isPending}
               title="Import open positions and watchlist from the old Strategy Lab into Stock Swing & Crypto Swing"
-              className="text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors disabled:opacity-40"
+              className="text-xs text-t-dim hover:text-t-mid2 underline underline-offset-2 transition-colors disabled:opacity-40 font-ui-t"
             >
               {migrateMut.isPending ? "Importing…" : "Import legacy positions →"}
             </button>
@@ -2193,7 +2193,7 @@ export default function StrategyLab() {
 
         {/* Right rail (desktop only) */}
         {railOpen && (
-          <aside className="hidden md:flex flex-col w-72 flex-shrink-0 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 self-start sticky top-20 max-h-[calc(100vh-6rem)] overflow-hidden">
+          <aside className="hidden md:flex flex-col w-72 flex-shrink-0 bg-t-bg0 border border-t-dim rounded-2xl p-4 self-start sticky top-20 max-h-[calc(100vh-6rem)] overflow-hidden">
             <ActivityRail onClose={() => setRailOpen(false)} />
           </aside>
         )}

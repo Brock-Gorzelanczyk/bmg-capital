@@ -380,7 +380,7 @@ export default function Screener() {
   const openInfoPreset = PRESET_CATEGORIES.flatMap((c) => c.presets).find((p) => p.key === infoOpen);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-in">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-[var(--text-primary)]">Stock Screener</h2>
         <div className="flex items-center gap-3">
@@ -396,7 +396,7 @@ export default function Screener() {
           </div>
           <button
             onClick={() => setAiOpen(true)}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-t-hi text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
             <Bot size={12} /> Ask AI
           </button>
@@ -459,7 +459,7 @@ export default function Screener() {
         {PRESET_CATEGORIES.map((cat) => {
           const Icon = cat.icon;
           return (
-            <div key={cat.label} className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl p-4 space-y-3">
+            <div key={cat.label} className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl p-4 space-y-3 card-hover">
               <div className="flex items-center gap-2">
                 <Icon size={14} style={{ color: cat.color }} />
                 <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: cat.color }}>
@@ -477,7 +477,7 @@ export default function Screener() {
                         className={cn(
                           "w-full text-left px-3 py-2 pr-8 rounded-lg border transition-all text-sm",
                           isActive
-                            ? "border-zinc-600 bg-[#334155] text-[var(--text-primary)]"
+                            ? "border-t-mid bg-[#334155] text-[var(--text-primary)]"
                             : "border-transparent hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-elevated-2)] text-[var(--text-secondary)]"
                         )}
                       >
@@ -520,14 +520,14 @@ export default function Screener() {
             <select
               value={f.field}
               onChange={(e) => updateFilter(i, { field: e.target.value })}
-              className="bg-[#020617] text-[var(--text-primary)] text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] focus:outline-none focus:border-zinc-600"
+              className="bg-[#020617] text-[var(--text-primary)] text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] focus:outline-none focus:border-t-mid"
             >
               {FIELDS.map((ff) => <option key={ff.value} value={ff.value}>{ff.label}</option>)}
             </select>
             <select
               value={f.operator}
               onChange={(e) => updateFilter(i, { operator: e.target.value })}
-              className="bg-[#020617] text-[var(--text-primary)] text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-16 focus:outline-none focus:border-zinc-600"
+              className="bg-[#020617] text-[var(--text-primary)] text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-16 focus:outline-none focus:border-t-mid"
             >
               {OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -535,7 +535,7 @@ export default function Screener() {
               type="number"
               value={f.value as number}
               onChange={(e) => updateFilter(i, { value: parseFloat(e.target.value) })}
-              className="bg-[#020617] text-[var(--text-primary)] text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-24 focus:outline-none focus:border-zinc-600"
+              className="bg-[#020617] text-[var(--text-primary)] font-mono-t tabular-nums text-base md:text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-24 focus:outline-none focus:border-t-mid"
             />
             <button onClick={() => removeFilter(i)} className="text-[var(--text-tertiary)] hover:text-[var(--accent-negative)]">
               <Trash2 size={15} />
@@ -569,7 +569,7 @@ export default function Screener() {
               value={saveNameInput}
               onChange={(e) => setSaveNameInput(e.target.value)}
               placeholder="Screen name…"
-              className="bg-[#020617] text-[var(--text-primary)] text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-40 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+              className="bg-[#020617] text-[var(--text-primary)] text-sm px-2 py-1.5 rounded border border-[var(--border-emphasis)] w-40 placeholder-t-muted focus:outline-none focus:border-t-mid"
             />
             <button
               onClick={() => { if (saveNameInput.trim()) saveMut.mutate(); }}
@@ -665,10 +665,10 @@ export default function Screener() {
                       style={{ backgroundColor: heatColor(s.change_pct, max) }}
                     >
                       <div className="text-[var(--text-primary)] font-semibold text-sm leading-tight">{s.sector}</div>
-                      <div className="text-[var(--text-primary)]/70 text-[11px] font-mono">{s.symbol}</div>
+                      <div className="text-[var(--text-primary)]/70 text-[11px] font-mono-t tabular-nums">{s.symbol}</div>
                       <div className="flex items-center justify-between mt-auto">
-                        <span className="text-[var(--text-primary)]/80 text-xs font-mono">${s.price.toFixed(2)}</span>
-                        <span className="text-[var(--text-primary)] font-bold text-sm">
+                        <span className="text-[var(--text-primary)]/80 text-xs font-mono-t tabular-nums">${s.price.toFixed(2)}</span>
+                        <span className="text-[var(--text-primary)] font-bold text-sm font-mono-t tabular-nums">
                           {(s.change_pct >= 0 ? "+" : "") + s.change_pct.toFixed(2) + "%"}
                         </span>
                       </div>
@@ -685,7 +685,7 @@ export default function Screener() {
         <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-[var(--text-primary)]">{results.length} results</span>
+              <span className="text-sm font-semibold text-[var(--text-primary)] font-mono-t tabular-nums">{results.length} results</span>
               {activePresetMeta && (
                 <span className="text-xs text-[var(--text-tertiary)]">· {activePresetMeta.label}</span>
               )}
@@ -747,7 +747,7 @@ export default function Screener() {
                           className="w-full flex items-center justify-between px-4 py-3 hover:bg-[var(--bg-elevated-2)] transition-colors text-left"
                         >
                           <span className="text-xs text-[var(--text-secondary)]">{s.label}</span>
-                          <span className="text-xs font-semibold text-[var(--accent-positive)] shrink-0 ml-4">
+                          <span className="text-xs font-semibold text-[var(--accent-positive)] shrink-0 ml-4 font-mono-t tabular-nums">
                             {s.count} match{s.count !== 1 ? "es" : ""}
                           </span>
                         </button>
@@ -767,8 +767,8 @@ export default function Screener() {
                   className="cursor-pointer rounded-lg p-2 flex flex-col justify-between min-h-[60px] hover:opacity-90 transition-opacity"
                   style={{ backgroundColor: heatColor(r.change_pct) }}
                 >
-                  <span className="text-white font-bold text-sm leading-tight">{r.symbol}</span>
-                  <span className="text-white/80 text-xs">
+                  <span className="text-t-hi font-bold text-sm leading-tight">{r.symbol}</span>
+                  <span className="text-t-hi/80 text-xs font-mono-t tabular-nums">
                     {r.change_pct >= 0 ? "+" : ""}
                     {r.change_pct.toFixed(2)}%
                   </span>
@@ -805,10 +805,10 @@ export default function Screener() {
                         )}
                         <SectorPill symbol={r.symbol} className="mt-0.5" />
                       </td>
-                      <td className="px-4 py-3 text-right text-[var(--text-primary)]">{formatCurrency(r.price)}</td>
+                      <td className="px-4 py-3 text-right font-mono-t tabular-nums text-[var(--text-primary)]">{formatCurrency(r.price)}</td>
                       <td
                         className={cn(
-                          "px-4 py-3 text-right font-medium",
+                          "px-4 py-3 text-right font-medium font-mono-t tabular-nums",
                           r.change_pct >= 0 ? "text-[#26a69a]" : "text-[#ef5350]",
                         )}
                       >
@@ -817,19 +817,19 @@ export default function Screener() {
                       </td>
                       <td
                         className={cn(
-                          "px-4 py-3 text-right font-medium hidden sm:table-cell",
+                          "px-4 py-3 text-right font-medium font-mono-t tabular-nums hidden sm:table-cell",
                           (r.change_5d ?? 0) >= 0 ? "text-[#26a69a]" : "text-[#ef5350]",
                         )}
                       >
                         {(r.change_5d ?? 0) >= 0 ? "+" : ""}
                         {formatPercent(r.change_5d ?? 0)}
                       </td>
-                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] hidden sm:table-cell">
+                      <td className="px-4 py-3 text-right font-mono-t tabular-nums text-[var(--text-secondary)] hidden sm:table-cell">
                         {formatVolume(r.volume)}
                       </td>
                       <td
                         className={cn(
-                          "px-4 py-3 text-right font-medium",
+                          "px-4 py-3 text-right font-medium font-mono-t tabular-nums",
                           (r.rel_volume ?? 1) >= 1.5 ? "text-[#26a69a]" : "text-[var(--text-secondary)]",
                         )}
                       >

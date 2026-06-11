@@ -11,6 +11,7 @@ import ExplainButton from "@/components/explain/ExplainButton";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import ReadingLevelSlider, { type ReadingLevel } from "@/components/ui/ReadingLevelSlider";
 import client from "@/api/client";
+import { EmptyState } from "@/components/design";
 
 // Labels that have glossary entries — gets an ExplainButton
 const EXPLAINABLE = new Set([
@@ -22,15 +23,15 @@ const EXPLAINABLE = new Set([
 function StatCard({ label, value, sub }: { label: string; value: string | null; sub?: string }) {
   if (value == null) return null;
   return (
-    <div className="bg-[var(--bg-elevated-2)]/50 rounded-lg p-3">
-      <div className="flex items-center gap-1 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mb-1">
+    <div className="bg-t-bg2/50 rounded-lg p-3">
+      <div className="flex items-center gap-1 text-[10px] text-t-muted uppercase tracking-wider mb-1 font-ui-t">
         <span>{label}</span>
         {EXPLAINABLE.has(label) && (
           <ExplainButton term={label} context="Research fundamentals panel" />
         )}
       </div>
-      <div className="text-[var(--text-primary)] font-semibold text-sm">{value}</div>
-      {sub && <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5">{sub}</div>}
+      <div className="text-t-hi font-semibold text-sm font-mono-t tabular-nums">{value}</div>
+      {sub && <div className="text-[10px] text-t-muted mt-0.5 font-ui-t">{sub}</div>}
     </div>
   );
 }
@@ -95,7 +96,11 @@ function pctChange(current: number | null, prior: number | null): number | null 
 function FinancialsTab({ financials }: FinancialsTabProps) {
   if (!financials || !financials.quarterly || financials.quarterly.length === 0) {
     return (
-      <div className="py-12 text-center text-[var(--text-tertiary)]">Financial data unavailable.</div>
+      <EmptyState
+        icon="📊"
+        title="NO FINANCIAL DATA"
+        description="Financial statement data is unavailable for this symbol."
+      />
     );
   }
 
@@ -110,24 +115,24 @@ function FinancialsTab({ financials }: FinancialsTabProps) {
   ];
 
   return (
-    <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
-        <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Income Statement — Last {quarters.length} Quarters</h2>
+    <div className="bg-t-bg1 border border-t-dim rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-t-dim">
+        <h2 className="text-xs font-semibold text-t-muted uppercase tracking-widest font-ui-t">Income Statement — Last {quarters.length} Quarters</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-[var(--border-subtle)] text-[11px] text-[var(--text-tertiary)] uppercase tracking-wide">
+            <tr className="border-b border-t-dim text-[11px] text-t-muted uppercase tracking-wide font-ui-t">
               <th className="text-left px-4 py-2 whitespace-nowrap">Metric</th>
               {quarters.map((q) => (
-                <th key={q.period} className="text-right px-4 py-2 whitespace-nowrap">{q.period}</th>
+                <th key={q.period} className="text-right px-4 py-2 whitespace-nowrap font-mono-t">{q.period}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map(({ key, label, fmt }) => (
-              <tr key={key} className="border-b border-[var(--border-subtle)]/50">
-                <td className="px-4 py-3 text-[var(--text-tertiary)] text-xs font-medium whitespace-nowrap">{label}</td>
+              <tr key={key} className="border-b border-t-dim/50">
+                <td className="px-4 py-3 text-t-muted text-xs font-medium whitespace-nowrap font-ui-t">{label}</td>
                 {quarters.map((q, qi) => {
                   const val = q[key] as number | null;
                   const prior = quarters[qi + 1]?.[key] as number | null | undefined;
@@ -137,13 +142,13 @@ function FinancialsTab({ financials }: FinancialsTabProps) {
                   return (
                     <td key={q.period} className="px-4 py-3 text-right">
                       <div className={cn(
-                        "font-semibold text-sm",
-                        isUp ? "text-[#26a69a]" : isDown ? "text-[#ef5350]" : "text-[var(--text-primary)]"
+                        "font-semibold text-sm font-mono-t tabular-nums",
+                        isUp ? "text-t-green" : isDown ? "text-t-red" : "text-t-hi"
                       )}>
                         {fmt(val)}
                       </div>
                       {chg != null && (
-                        <div className={cn("text-[10px] mt-0.5", isUp ? "text-[#26a69a]" : "text-[#ef5350]")}>
+                        <div className={cn("text-[10px] mt-0.5 font-mono-t tabular-nums", isUp ? "text-t-green" : "text-t-red")}>
                           {isUp ? "+" : ""}{chg.toFixed(1)}% YoY
                         </div>
                       )}
@@ -160,11 +165,11 @@ function FinancialsTab({ financials }: FinancialsTabProps) {
 }
 
 const RECOMMENDATION_COLOR: Record<string, string> = {
-  "strong_buy": "text-[var(--accent-positive)]",
-  "buy": "text-green-400",
-  "hold": "text-yellow-400",
-  "sell": "text-[var(--accent-negative)]",
-  "strong_sell": "text-red-600",
+  "strong_buy": "text-t-green",
+  "buy": "text-t-green",
+  "hold": "text-t-amber",
+  "sell": "text-t-red",
+  "strong_sell": "text-t-red",
 };
 
 async function rewriteContent(content: string, level: ReadingLevel, context: string): Promise<string> {
@@ -215,22 +220,22 @@ function BmgScoreBadge({
         style={{ borderColor: color, backgroundColor: `${color}18` }}
         title={tooltipLines}
       >
-        <span className="text-lg font-bold leading-none" style={{ color }}>{score.toFixed(1)}</span>
-        <span className="text-[10px] font-semibold leading-none mt-0.5" style={{ color }}>{grade}</span>
+        <span className="text-lg font-bold leading-none font-mono-t tabular-nums" style={{ color }}>{score.toFixed(1)}</span>
+        <span className="text-[10px] font-semibold leading-none mt-0.5 font-ui-t" style={{ color }}>{grade}</span>
       </div>
       {/* Hover tooltip */}
       <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-10 pointer-events-none">
-        <div className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-lg p-3 shadow-xl min-w-[160px]">
-          <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider mb-2">BMG Score</div>
+        <div className="bg-t-bg1 border border-t-mid rounded-lg p-3 shadow-xl min-w-[160px]">
+          <div className="text-[11px] font-semibold text-t-muted uppercase tracking-wider mb-2 font-ui-t">BMG Score</div>
           {Object.entries(components).map(([k, v]) => (
             <div key={k} className="flex items-center justify-between gap-4 text-xs py-0.5">
-              <span className="text-[var(--text-secondary)]">{COMPONENT_LABELS[k] ?? k}</span>
-              <span className="font-semibold text-[var(--text-primary)]">{v}/2</span>
+              <span className="text-t-mid2 font-ui-t">{COMPONENT_LABELS[k] ?? k}</span>
+              <span className="font-semibold text-t-hi font-mono-t tabular-nums">{v}/2</span>
             </div>
           ))}
-          <div className="border-t border-[var(--border-subtle)] mt-2 pt-2 flex items-center justify-between text-xs font-bold">
-            <span className="text-[var(--text-secondary)]">Total</span>
-            <span style={{ color }}>{score.toFixed(1)}/10 &nbsp;{grade}</span>
+          <div className="border-t border-t-dim mt-2 pt-2 flex items-center justify-between text-xs font-bold">
+            <span className="text-t-mid2 font-ui-t">Total</span>
+            <span className="font-mono-t tabular-nums" style={{ color }}>{score.toFixed(1)}/10 &nbsp;{grade}</span>
           </div>
         </div>
       </div>
@@ -319,79 +324,84 @@ export default function Research() {
   const isPos = (changePct ?? 0) >= 0;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6 animate-page-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[var(--text-primary)]">Company Research</h1>
+        <h1 className="text-xl font-bold text-t-hi font-ui-t">// COMPANY RESEARCH</h1>
         <ReadingLevelSlider level={level} onChange={setLevel} />
       </div>
 
       <form onSubmit={handleSearch} className="flex items-center gap-2">
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-t-muted" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
             placeholder="Symbol (e.g. AAPL)"
-            className="bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-base md:text-sm pl-9 pr-4 py-2 rounded-lg placeholder-zinc-600 focus:outline-none focus:border-zinc-600 uppercase w-44 md:w-52"
+            className="bg-t-bg1 border border-t-mid text-t-hi text-base md:text-sm pl-9 pr-4 py-2 rounded-lg placeholder-t-dim focus:outline-none focus:border-t-hot uppercase w-44 md:w-52 font-mono-t"
           />
         </div>
         <button
           type="submit"
-          className="bg-[var(--accent-positive)] text-[var(--text-primary)] font-semibold text-sm px-4 py-2 rounded-lg hover:brightness-110"
+          className="bg-t-green/20 text-t-green border border-t-green/30 font-semibold text-sm px-4 py-2 rounded-lg hover:brightness-110 font-ui-t"
         >
           Research
         </button>
       </form>
 
       {!activeSymbol && (
-        <div className="text-center py-20 text-[var(--text-tertiary)]">
-          <Building2 size={40} className="mx-auto mb-4 text-zinc-800" />
-          <p>Enter a stock symbol to view fundamentals, financials, and news</p>
-        </div>
+        <EmptyState
+          icon="🏢"
+          title="ENTER A SYMBOL"
+          description="Search for a stock symbol to view fundamentals, financials, and news"
+          size="lg"
+        />
       )}
 
       {isLoading && (
         <div className="space-y-4">
-          <div className="h-28 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl animate-pulse" />
+          <div className="h-28 bg-t-bg1 border border-t-dim rounded-xl animate-pulse" />
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {[...Array(8)].map((_, i) => <div key={i} className="h-16 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg animate-pulse" />)}
+            {[...Array(8)].map((_, i) => <div key={i} className="h-16 bg-t-bg1 border border-t-dim rounded-lg animate-pulse" />)}
           </div>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 text-[var(--accent-negative)] text-sm">
+        <div className="bg-t-red/10 border border-t-red/30 rounded-xl p-4 text-t-red text-sm font-ui-t">
           Could not load data for <strong>{activeSymbol}</strong>. Check the symbol and try again.
         </div>
       )}
 
       {!isLoading && !error && !fund && activeSymbol && (
-        <div className="text-center py-16 text-[var(--text-tertiary)]">
-          <Building2 size={36} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No data found for <strong className="text-[var(--text-secondary)]">{activeSymbol}</strong>.</p>
-          <p className="text-xs mt-1">Check the symbol and try again, or tap Retry below.</p>
-          <button
-            onClick={() => navigate(`/research?symbol=${activeSymbol}`, { replace: true })}
-            className="mt-4 text-xs text-[var(--accent-positive)] hover:brightness-110 font-semibold"
-          >
-            Retry ↺
-          </button>
-        </div>
+        <EmptyState
+          icon="🔍"
+          title={`NO DATA FOR ${activeSymbol}`}
+          description="Check the symbol and try again, or tap Retry below."
+          size="lg"
+          cta={
+            <button
+              onClick={() => navigate(`/research?symbol=${activeSymbol}`, { replace: true })}
+              className="text-xs text-t-green hover:brightness-110 font-semibold font-ui-t"
+            >
+              Retry ↺
+            </button>
+          }
+        />
       )}
 
       {fund && !error && (
         <div className="space-y-5">
           {/* Tab row */}
-          <div className="flex items-center gap-1 border-b border-[var(--border-subtle)] pb-0">
+          <div className="flex items-center gap-1 border-b border-t-dim pb-0">
             {(["overview", "financials", "news"] as ResearchTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
-                  "px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors",
+                  "px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors font-ui-t",
                   activeTab === tab
-                    ? "border-[var(--accent-positive)] text-[var(--text-primary)]"
-                    : "border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                    ? "border-t-green text-t-hi"
+                    : "border-transparent text-t-muted hover:text-t-mid2"
                 )}
               >
                 {tab}
@@ -402,29 +412,29 @@ export default function Research() {
           {/* ── OVERVIEW TAB ── */}
           {activeTab === "overview" && <>
           {/* Header */}
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <div className="bg-t-bg1 border border-t-dim rounded-xl p-5">
             <div className="flex items-start justify-between gap-4 flex-wrap sm:flex-nowrap">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-3xl font-bold text-[var(--text-primary)] font-mono">{fund.symbol}</span>
+                  <span className="text-3xl font-bold text-t-hi font-mono-t tabular-nums">{fund.symbol}</span>
                   <SectorPill symbol={fund.symbol} className="text-xs" />
                 </div>
-                <div className="text-[var(--text-secondary)] text-sm">{fund.name}</div>
-                {fund.industry && <div className="text-[var(--text-tertiary)] text-xs mt-0.5">{fund.industry}</div>}
+                <div className="text-t-mid2 text-sm font-ui-t">{fund.name}</div>
+                {fund.industry && <div className="text-t-muted text-xs mt-0.5 font-ui-t">{fund.industry}</div>}
                 <div className="flex items-center gap-3 mt-2 flex-wrap">
                   {fund.country && (
-                    <span className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
+                    <span className="flex items-center gap-1 text-xs text-t-muted font-ui-t">
                       <Globe size={11} /> {fund.country}
                     </span>
                   )}
                   {fund.employees && (
-                    <span className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
+                    <span className="flex items-center gap-1 text-xs text-t-muted font-ui-t">
                       <Users size={11} /> {fund.employees.toLocaleString()} employees
                     </span>
                   )}
                   {fund.website && (
                     <a href={fund.website} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
+                      className="flex items-center gap-1 text-xs text-t-muted hover:text-t-hi transition-colors font-ui-t">
                       <ExternalLink size={11} /> Website
                     </a>
                   )}
@@ -432,10 +442,10 @@ export default function Research() {
               </div>
               <div className="text-right">
                 {price && (
-                  <div className="text-3xl font-bold text-[var(--text-primary)]">{formatCurrency(price)}</div>
+                  <div className="text-3xl font-bold text-t-hi font-mono-t tabular-nums">{formatCurrency(price)}</div>
                 )}
                 {changePct != null && (
-                  <div className={cn("text-sm font-medium mt-1", isPos ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                  <div className={cn("text-sm font-medium mt-1 font-mono-t tabular-nums", isPos ? "text-t-green" : "text-t-red")}>
                     {formatPercent(changePct)}
                     {change != null && <span className="ml-1 text-xs opacity-75">({change >= 0 ? "+" : ""}{change.toFixed(2)})</span>}
                   </div>
@@ -443,13 +453,13 @@ export default function Research() {
                 <div className="mt-2 flex items-center gap-2 justify-end">
                   <button
                     onClick={() => navigate(`/chart?symbol=${fund.symbol}`)}
-                    className="flex items-center gap-1.5 bg-[var(--accent-positive)] text-[var(--text-primary)] text-xs font-semibold px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors"
+                    className="flex items-center gap-1.5 bg-t-green/20 text-t-green border border-t-green/30 text-xs font-semibold px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-ui-t"
                   >
                     <LineChart size={12} /> View Chart
                   </button>
                   <button
                     onClick={() => setAiOpen(true)}
-                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                    className="flex items-center gap-1.5 bg-t-cyan/20 hover:bg-t-cyan/30 text-t-cyan border border-t-cyan/30 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors font-ui-t"
                   >
                     <Bot size={12} /> Ask AI
                   </button>
@@ -467,7 +477,7 @@ export default function Research() {
 
           {/* Key stats */}
           <div>
-            <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Key Statistics</h2>
+            <h2 className="text-xs font-semibold text-t-muted uppercase tracking-widest mb-3 font-ui-t">Key Statistics</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               <StatCard label="Market Cap" value={fmtLarge(fund.market_cap)} />
               <StatCard label="P/E Ratio" value={fmtNum(fund.pe_ratio)} sub={`Forward: ${fmtNum(fund.forward_pe) ?? "—"}`} />
@@ -490,24 +500,24 @@ export default function Research() {
 
           {/* Analyst ratings */}
           {(fund.recommendation || fund.analyst_target) && (
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
-              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Analyst Consensus</h2>
+            <div className="bg-t-bg1 border border-t-dim rounded-xl p-4">
+              <h2 className="text-xs font-semibold text-t-muted uppercase tracking-widest mb-3 font-ui-t">Analyst Consensus</h2>
               <div className="flex items-center gap-6 flex-wrap">
                 {fund.recommendation && (
                   <div>
-                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Rating</div>
-                    <div className={cn("text-lg font-bold uppercase", RECOMMENDATION_COLOR[fund.recommendation] ?? "text-[var(--text-secondary)]")}>
+                    <div className="text-[10px] text-t-muted uppercase tracking-wide mb-1 font-ui-t">Rating</div>
+                    <div className={cn("text-lg font-bold uppercase font-ui-t", RECOMMENDATION_COLOR[fund.recommendation] ?? "text-t-mid2")}>
                       {fund.recommendation.replace(/_/g, " ")}
                     </div>
-                    {fund.num_analysts && <div className="text-xs text-[var(--text-tertiary)] mt-0.5">{fund.num_analysts} analysts</div>}
+                    {fund.num_analysts && <div className="text-xs text-t-muted mt-0.5 font-ui-t">{fund.num_analysts} analysts</div>}
                   </div>
                 )}
                 {fund.analyst_target && (
                   <div>
-                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Price Target</div>
-                    <div className="text-lg font-bold text-[var(--text-primary)]">{formatCurrency(fund.analyst_target)}</div>
+                    <div className="text-[10px] text-t-muted uppercase tracking-wide mb-1 font-ui-t">Price Target</div>
+                    <div className="text-lg font-bold text-t-hi font-mono-t tabular-nums">{formatCurrency(fund.analyst_target)}</div>
                     {fund.analyst_low && fund.analyst_high && (
-                      <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                      <div className="text-xs text-t-muted mt-0.5 font-mono-t tabular-nums">
                         {formatCurrency(fund.analyst_low)} – {formatCurrency(fund.analyst_high)}
                       </div>
                     )}
@@ -515,8 +525,8 @@ export default function Research() {
                 )}
                 {price && fund.analyst_target && (
                   <div>
-                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">Upside</div>
-                    <div className={cn("text-lg font-bold", ((fund.analyst_target - price) / price) >= 0 ? "text-[var(--accent-positive)]" : "text-[var(--accent-negative)]")}>
+                    <div className="text-[10px] text-t-muted uppercase tracking-wide mb-1 font-ui-t">Upside</div>
+                    <div className={cn("text-lg font-bold font-mono-t tabular-nums", ((fund.analyst_target - price) / price) >= 0 ? "text-t-green" : "text-t-red")}>
                       {formatPercent(((fund.analyst_target - price) / price) * 100)}
                     </div>
                   </div>
@@ -527,8 +537,8 @@ export default function Research() {
 
           {/* Short interest */}
           {(fund.short_ratio || fund.short_percent) && (
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
-              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">Short Interest</h2>
+            <div className="bg-t-bg1 border border-t-dim rounded-xl p-4">
+              <h2 className="text-xs font-semibold text-t-muted uppercase tracking-widest mb-3 font-ui-t">Short Interest</h2>
               <div className="flex items-center gap-6">
                 {fund.short_percent && (
                   <StatCard label="Short % of Float" value={fmtPct(fund.short_percent)} />
@@ -542,10 +552,10 @@ export default function Research() {
 
           {/* Description */}
           {fund.description && (
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4">
-              <h2 className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">About</h2>
+            <div className="bg-t-bg1 border border-t-dim rounded-xl p-4">
+              <h2 className="text-xs font-semibold text-t-muted uppercase tracking-widest mb-3 font-ui-t">About</h2>
               <p className={cn(
-                "text-[var(--text-secondary)] text-sm leading-relaxed line-clamp-6",
+                "text-t-mid2 text-sm leading-relaxed line-clamp-6 font-ui-t",
                 rewritingDesc && "opacity-50 animate-pulse"
               )}>
                 {rewritingDesc ? "Rewriting…" : displayDescription}
@@ -563,7 +573,11 @@ export default function Research() {
           {activeTab === "news" && (
             <div className="space-y-2">
               {news.length === 0 ? (
-                <div className="py-12 text-center text-[var(--text-tertiary)]">No recent news found.</div>
+                <EmptyState
+                  icon="📰"
+                  title="NO RECENT NEWS"
+                  description={`No news articles found for ${activeSymbol}`}
+                />
               ) : (
                 news.map((a: any) => (
                   <a
@@ -571,17 +585,17 @@ export default function Research() {
                     href={a.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-start gap-3 p-3 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg hover:border-[var(--border-emphasis)] transition-colors group"
+                    className="flex items-start gap-3 p-3 bg-t-bg1 border border-t-dim rounded-lg hover:border-t-mid transition-colors group card-hover"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-[var(--text-primary)] font-medium line-clamp-2">{a.headline}</div>
-                      <div className="flex items-center gap-2 mt-1 text-[11px] text-[var(--text-tertiary)]">
+                      <div className="text-sm text-t-hi font-medium line-clamp-2 font-ui-t">{a.headline}</div>
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-t-muted font-ui-t">
                         <span>{a.source}</span>
                         <span>·</span>
                         <span>{timeAgo(a.published_at)}</span>
                       </div>
                     </div>
-                    <ExternalLink size={13} className="text-[var(--text-tertiary)] shrink-0 mt-0.5" />
+                    <ExternalLink size={13} className="text-t-muted shrink-0 mt-0.5" />
                   </a>
                 ))
               )}

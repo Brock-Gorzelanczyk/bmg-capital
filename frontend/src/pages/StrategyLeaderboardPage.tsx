@@ -29,12 +29,12 @@ function fmtPct(v: number | null) {
 }
 
 function pctColor(v: number | null) {
-  if (v == null) return "text-zinc-400";
-  return v >= 0 ? "text-emerald-400" : "text-red-400";
+  if (v == null) return "text-t-muted";
+  return v >= 0 ? "text-t-green" : "text-t-red";
 }
 
 function usdColor(v: number) {
-  return v >= 0 ? "text-emerald-400" : "text-red-400";
+  return v >= 0 ? "text-t-green" : "text-t-red";
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ function StrategyDetailModal({ row, onClose }: ModalProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <BracketFrame className="w-full max-w-lg bg-zinc-950 rounded-2xl p-6" bracketSize={14}>
+      <BracketFrame className="w-full max-w-lg bg-t-bg0 rounded-2xl p-6" bracketSize={14}>
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-6">
           <div className="min-w-0">
@@ -80,11 +80,11 @@ function StrategyDetailModal({ row, onClose }: ModalProps) {
               // STRATEGY DETAIL — {row.strategy_name}
             </SectionLabel>
             <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
+              <span className="font-mono-t text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-t-bg1 text-t-mid2 border border-t-dim">
                 {sourceLabel}
               </span>
               {row.category && (
-                <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-zinc-800/50 text-zinc-500 border border-zinc-800">
+                <span className="font-mono-t text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-t-bg1/50 text-t-muted border border-t-dim">
                   {row.category}
                 </span>
               )}
@@ -92,7 +92,7 @@ function StrategyDetailModal({ row, onClose }: ModalProps) {
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 text-zinc-500 hover:text-white transition-colors text-lg leading-none mt-0.5"
+            className="shrink-0 text-t-muted hover:text-t-hi transition-colors text-lg leading-none mt-0.5"
             aria-label="Close"
           >
             ×
@@ -101,32 +101,32 @@ function StrategyDetailModal({ row, onClose }: ModalProps) {
 
         {/* 3-stat row */}
         <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-center">
-            <SectionLabel className="block mb-1 text-zinc-600">$ P&amp;L</SectionLabel>
-            <span className={cn("font-mono text-lg font-semibold tabular-nums", usdColor(row.total_pnl_usd))}>
+          <div className="bg-t-bg1 border border-t-dim rounded-xl px-4 py-3 text-center">
+            <SectionLabel className="block mb-1 text-t-gdim">$ P&amp;L</SectionLabel>
+            <span className={cn("font-mono-t text-lg font-semibold tabular-nums", usdColor(row.total_pnl_usd))}>
               {fmtUsd(row.total_pnl_usd)}
             </span>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-center">
-            <SectionLabel className="block mb-1 text-zinc-600">Return %</SectionLabel>
-            <span className={cn("font-mono text-lg font-semibold tabular-nums", pctColor(row.weighted_return_pct))}>
+          <div className="bg-t-bg1 border border-t-dim rounded-xl px-4 py-3 text-center">
+            <SectionLabel className="block mb-1 text-t-gdim">Return %</SectionLabel>
+            <span className={cn("font-mono-t text-lg font-semibold tabular-nums", pctColor(row.weighted_return_pct))}>
               {fmtPct(row.weighted_return_pct)}
             </span>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-center">
-            <SectionLabel className="block mb-1 text-zinc-600">Win Rate</SectionLabel>
-            <span className={cn("font-mono text-lg font-semibold tabular-nums", pctColor(row.win_rate))}>
+          <div className="bg-t-bg1 border border-t-dim rounded-xl px-4 py-3 text-center">
+            <SectionLabel className="block mb-1 text-t-gdim">Win Rate</SectionLabel>
+            <span className={cn("font-mono-t text-lg font-semibold tabular-nums", pctColor(row.win_rate))}>
               {row.win_rate != null ? `${(row.win_rate * 100).toFixed(1)}%` : "—"}
             </span>
           </div>
         </div>
 
         {/* Bots note */}
-        <p className="text-xs text-zinc-500 font-mono mb-6">
+        <p className="text-xs text-t-muted font-mono-t mb-6">
           Runs in{" "}
-          <span className="text-zinc-300 font-semibold">{row.bots_using}</span>{" "}
+          <span className="text-t-mid2 font-semibold">{row.bots_using}</span>{" "}
           {row.bots_using === 1 ? "bot" : "bots"} &middot;{" "}
-          <span className="text-zinc-400">{row.total_trades.toLocaleString()} total trades</span>
+          <span className="text-t-muted">{row.total_trades.toLocaleString()} total trades</span>
         </p>
 
         {/* CTA */}
@@ -157,14 +157,14 @@ interface KpiCardProps {
 
 function KpiCard({ label, name, value, valueClass }: KpiCardProps) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 min-w-0">
-      <SectionLabel as="p" className="mb-1 text-zinc-600">
+    <div className="bg-t-bg1 border border-t-dim rounded-2xl px-4 py-3 min-w-0">
+      <SectionLabel as="p" className="mb-1 text-t-gdim">
         {label}
       </SectionLabel>
       {name && (
-        <p className="text-xs text-zinc-400 font-mono truncate mb-0.5">{name}</p>
+        <p className="text-xs text-t-muted font-mono-t truncate mb-0.5">{name}</p>
       )}
-      <p className={cn("font-mono text-lg font-semibold tabular-nums", valueClass ?? "text-white")}>
+      <p className={cn("font-mono-t text-lg font-semibold tabular-nums", valueClass ?? "text-t-hi")}>
         {value}
       </p>
     </div>
@@ -184,10 +184,10 @@ function PillButton({ active, onClick, children }: PillButtonProps) {
     <button
       onClick={onClick}
       className={cn(
-        "px-3 py-1.5 rounded-lg font-mono text-[11px] uppercase tracking-widest transition-all duration-150",
+        "px-3 py-1.5 rounded-lg font-mono-t text-[11px] uppercase tracking-widest transition-all duration-150",
         active
-          ? "bg-zinc-700 text-white"
-          : "bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700"
+          ? "bg-t-bg2 text-t-hi"
+          : "bg-t-bg1 border border-t-dim text-t-muted hover:text-t-mid2 hover:border-t-mid"
       )}
     >
       {children}
@@ -203,7 +203,7 @@ function SkeletonRows() {
       {Array.from({ length: 5 }).map((_, i) => (
         <div
           key={i}
-          className="h-12 rounded-xl bg-zinc-900 border border-zinc-800 animate-pulse"
+          className="h-12 rounded-xl bg-t-bg1 border border-t-dim animate-pulse"
         />
       ))}
     </div>
@@ -213,10 +213,10 @@ function SkeletonRows() {
 // ── Tier badge helpers ────────────────────────────────────────────────────────
 
 const TIER_BADGE: Record<string, string> = {
-  T3: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
-  T2: "text-blue-400 border-blue-500/30 bg-blue-500/10",
-  T1: "text-yellow-400 border-yellow-500/30 bg-yellow-500/10",
-  T0: "text-zinc-400 border-zinc-500/30 bg-zinc-500/10",
+  T3: "text-t-green border-t-green/30 bg-t-green/10",
+  T2: "text-t-cyan border-t-cyan/30 bg-t-cyan/10",
+  T1: "text-t-amber border-t-amber/30 bg-t-amber/10",
+  T0: "text-t-muted border-t-muted/30 bg-t-muted/10",
 };
 
 const BOT_LB_SORTS: { label: string; value: BotLbSort }[] = [
@@ -227,9 +227,9 @@ const BOT_LB_SORTS: { label: string; value: BotLbSort }[] = [
 ];
 
 const RANK_RING: Record<number, string> = {
-  1: "ring-1 ring-yellow-500/50",
-  2: "ring-1 ring-zinc-400/40",
-  3: "ring-1 ring-orange-600/40",
+  1: "ring-1 ring-t-amber/50",
+  2: "ring-1 ring-t-muted/40",
+  3: "ring-1 ring-t-amber/30",
 };
 
 function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
@@ -244,7 +244,7 @@ function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
 
   if (isLoading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
         <SkeletonRows />
       </div>
     );
@@ -252,29 +252,29 @@ function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
 
   if (isError) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
-        <SectionLabel as="p" className="mb-2 text-zinc-600">// Bot Ranking</SectionLabel>
-        <p className="text-white font-semibold mb-1">Could not load bot rankings</p>
-        <p className="text-zinc-500 text-sm">Check that bots are enabled and try again.</p>
+      <div className="bg-t-bg1 border border-t-dim rounded-2xl px-5 py-12 text-center">
+        <SectionLabel as="p" className="mb-2 text-t-gdim">// Bot Ranking</SectionLabel>
+        <p className="text-t-hi font-semibold mb-1">Could not load bot rankings</p>
+        <p className="text-t-muted text-sm">Check that bots are enabled and try again.</p>
       </div>
     );
   }
 
   if (!rows.length) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
-        <SectionLabel as="p" className="mb-2 text-zinc-600">// Bot Ranking</SectionLabel>
-        <p className="text-white font-semibold mb-1">No bot data yet</p>
-        <p className="text-zinc-500 text-sm">Enable bots and wait for the first nightly rollup (2am ET).</p>
+      <div className="bg-t-bg1 border border-t-dim rounded-2xl px-5 py-12 text-center">
+        <SectionLabel as="p" className="mb-2 text-t-gdim">// Bot Ranking</SectionLabel>
+        <p className="text-t-hi font-semibold mb-1">No bot data yet</p>
+        <p className="text-t-muted text-sm">Enable bots and wait for the first nightly rollup (2am ET).</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-      <div className="grid grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px] gap-2 px-4 py-2 border-b border-zinc-800">
+    <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
+      <div className="grid grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px] gap-2 px-4 py-2 border-b border-t-dim">
         {["#", "Bot", "Tier", "Start $", "Now $", "All-Time %", "Sharpe", "Win %", "Trades", "Days"].map((h) => (
-          <span key={h} className="text-[10px] uppercase tracking-widest text-zinc-600 font-mono">{h}</span>
+          <span key={h} className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">{h}</span>
         ))}
       </div>
       <div>
@@ -285,37 +285,37 @@ function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
               key={row.allocation_id}
               to={`/strategy/${row.bot_id}`}
               className={cn(
-                "w-full text-left grid grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px] gap-2 px-4 py-3 border-b border-zinc-800/50 last:border-b-0 hover:bg-zinc-800/40 transition-colors duration-100 rounded-none",
+                "w-full text-left grid grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px] gap-2 px-4 py-3 border-b border-t-dim/50 last:border-b-0 hover:bg-t-bg2/40 transition-colors duration-100 rounded-none card-hover",
                 RANK_RING[row.rank]
               )}
             >
-              <span className="font-mono text-sm text-zinc-500 tabular-nums self-center">{row.rank}</span>
+              <span className="font-mono-t text-sm text-t-muted tabular-nums self-center">{row.rank}</span>
               <div className="min-w-0 self-center">
-                <p className="text-white font-semibold text-sm truncate leading-tight">{row.strategy_name}</p>
-                {!row.enabled && <p className="text-zinc-600 text-[10px]">disabled</p>}
+                <p className="text-t-hi font-semibold text-sm truncate leading-tight">{row.strategy_name}</p>
+                {!row.enabled && <p className="text-t-gdim text-[10px]">disabled</p>}
               </div>
               <div className="self-center">
                 <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full border", TIER_BADGE[row.tier] ?? TIER_BADGE.T0)}>
                   {row.tier}
                 </span>
               </div>
-              <span className="font-mono text-xs tabular-nums text-zinc-400 self-center">
+              <span className="font-mono-t text-xs tabular-nums text-t-muted self-center">
                 ${row.starting_capital >= 1000 ? `${(row.starting_capital / 1000).toFixed(0)}k` : row.starting_capital.toFixed(0)}
               </span>
-              <span className="font-mono text-xs tabular-nums text-white self-center">
+              <span className="font-mono-t text-xs tabular-nums text-t-hi self-center">
                 ${row.current_equity >= 1000 ? `${(row.current_equity / 1000).toFixed(1)}k` : row.current_equity.toFixed(0)}
               </span>
-              <span className={cn("font-mono text-sm font-bold tabular-nums self-center", isUp ? "text-emerald-400" : "text-red-400")}>
+              <span className={cn("font-mono-t text-sm font-bold tabular-nums self-center", isUp ? "text-t-green" : "text-t-red")}>
                 {isUp ? "+" : ""}{row.all_time_pnl_pct.toFixed(2)}%
               </span>
-              <span className={cn("font-mono text-xs tabular-nums self-center", row.sharpe_30d == null ? "text-zinc-600" : row.sharpe_30d >= 0 ? "text-zinc-300" : "text-red-400")}>
+              <span className={cn("font-mono-t text-xs tabular-nums self-center", row.sharpe_30d == null ? "text-t-gdim" : row.sharpe_30d >= 0 ? "text-t-mid2" : "text-t-red")}>
                 {row.sharpe_30d != null ? row.sharpe_30d.toFixed(2) : "—"}
               </span>
-              <span className={cn("font-mono text-xs tabular-nums self-center", row.win_rate == null ? "text-zinc-600" : row.win_rate >= 0.5 ? "text-emerald-400" : "text-zinc-400")}>
+              <span className={cn("font-mono-t text-xs tabular-nums self-center", row.win_rate == null ? "text-t-gdim" : row.win_rate >= 0.5 ? "text-t-green" : "text-t-muted")}>
                 {row.win_rate != null ? `${(row.win_rate * 100).toFixed(0)}%` : "—"}
               </span>
-              <span className="font-mono text-xs tabular-nums text-zinc-400 self-center">{row.trades_count.toLocaleString()}</span>
-              <span className="font-mono text-xs tabular-nums text-zinc-600 self-center">{row.days_live}d</span>
+              <span className="font-mono-t text-xs tabular-nums text-t-muted self-center">{row.trades_count.toLocaleString()}</span>
+              <span className="font-mono-t text-xs tabular-nums text-t-gdim self-center">{row.days_live}d</span>
             </Link>
           );
         })}
@@ -368,7 +368,7 @@ export default function StrategyLeaderboardPage() {
   }, [data]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
+    <div className="min-h-screen bg-t-bg0 text-t-hi animate-page-in">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -377,7 +377,7 @@ export default function StrategyLeaderboardPage() {
             <SectionLabel as="h1" className="text-base mb-1">
               // STRATEGY LEADERBOARD
             </SectionLabel>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-t-muted">
               {tab === "bots"
                 ? "Per-bot all-time P&L ranking."
                 : "Dollar-weighted performance across every strategy in every bot."}
@@ -396,13 +396,13 @@ export default function StrategyLeaderboardPage() {
               Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 h-20 animate-pulse"
+                  className="bg-t-bg1 border border-t-dim rounded-2xl px-4 py-3 h-20 animate-pulse"
                 />
               ))
             ) : isError || !kpi ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 h-20 flex items-center justify-center">
-                  <span className="text-zinc-700 font-mono text-xs">—</span>
+                <div key={i} className="bg-t-bg1 border border-t-dim rounded-2xl px-4 py-3 h-20 flex items-center justify-center">
+                  <span className="text-t-gdim font-mono-t text-xs">—</span>
                 </div>
               ))
             ) : (
@@ -411,7 +411,7 @@ export default function StrategyLeaderboardPage() {
                   label="Best $ P&L"
                   name={kpi.bestPnl.strategy_name}
                   value={fmtUsd(kpi.bestPnl.total_pnl_usd)}
-                  valueClass="text-emerald-400"
+                  valueClass="text-t-green"
                 />
                 <KpiCard
                   label="Best Return"
@@ -423,13 +423,13 @@ export default function StrategyLeaderboardPage() {
                   label="Worst $ P&L"
                   name={kpi.worstPnl.strategy_name}
                   value={fmtUsd(kpi.worstPnl.total_pnl_usd)}
-                  valueClass="text-red-400"
+                  valueClass="text-t-red"
                 />
                 <KpiCard
                   label="Most Deployed"
                   name={kpi.mostDeployed.strategy_name}
                   value={`${kpi.mostDeployed.bots_using} bots`}
-                  valueClass="text-zinc-200"
+                  valueClass="text-t-dim"
                 />
               </>
             )}
@@ -440,7 +440,7 @@ export default function StrategyLeaderboardPage() {
         {tab === "bots" && (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-zinc-600 font-mono uppercase tracking-widest">Sort by</span>
+              <span className="text-xs text-t-gdim font-mono-t uppercase tracking-widest">Sort by</span>
               {BOT_LB_SORTS.map((s) => (
                 <PillButton key={s.value} active={botSort === s.value} onClick={() => setBotSort(s.value)}>
                   {s.label}
@@ -463,7 +463,7 @@ export default function StrategyLeaderboardPage() {
             ))}
           </div>
 
-          <div className="w-px h-6 bg-zinc-800 hidden sm:block" />
+          <div className="w-px h-6 bg-t-dim hidden sm:block" />
 
           {/* Category */}
           <div className="flex items-center gap-1 flex-wrap">
@@ -474,7 +474,7 @@ export default function StrategyLeaderboardPage() {
             ))}
           </div>
 
-          <div className="w-px h-6 bg-zinc-800 hidden sm:block" />
+          <div className="w-px h-6 bg-t-dim hidden sm:block" />
 
           {/* Sort */}
           <div className="flex items-center gap-1">
@@ -488,29 +488,29 @@ export default function StrategyLeaderboardPage() {
 
         {/* ── Table ───────────────────────────────────────────────────────── */}
         {isLoading ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+          <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
             <SkeletonRows />
           </div>
         ) : isError ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
-            <SectionLabel as="p" className="mb-2 text-zinc-600">// Strategy Attribution</SectionLabel>
-            <p className="text-white font-semibold mb-1">No strategy data yet</p>
-            <p className="text-zinc-500 text-sm">
+          <div className="bg-t-bg1 border border-t-dim rounded-2xl px-5 py-12 text-center">
+            <SectionLabel as="p" className="mb-2 text-t-gdim">// Strategy Attribution</SectionLabel>
+            <p className="text-t-hi font-semibold mb-1">No strategy data yet</p>
+            <p className="text-t-muted text-sm">
               Strategy attribution populates after the first nightly rollup (2am ET) once bots are active.
             </p>
           </div>
         ) : rows.length === 0 ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
-            <SectionLabel as="p" className="mb-2 text-zinc-600">// No Data</SectionLabel>
-            <p className="text-white font-semibold mb-1">No strategy data yet</p>
-            <p className="text-zinc-500 text-sm">Strategies from active bots will appear here.</p>
+          <div className="bg-t-bg1 border border-t-dim rounded-2xl px-5 py-12 text-center">
+            <SectionLabel as="p" className="mb-2 text-t-gdim">// No Data</SectionLabel>
+            <p className="text-t-hi font-semibold mb-1">No strategy data yet</p>
+            <p className="text-t-muted text-sm">Strategies from active bots will appear here.</p>
           </div>
         ) : (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+          <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
             {/* Column headers */}
-            <div className="grid grid-cols-[40px_1fr_120px_110px_100px_90px_70px_60px] gap-2 px-4 py-2 border-b border-zinc-800">
+            <div className="grid grid-cols-[40px_1fr_120px_110px_100px_90px_70px_60px] gap-2 px-4 py-2 border-b border-t-dim">
               {["Rank", "Strategy", "Category", "$ P&L", "Return %", "Win Rate", "Trades", "Bots"].map((h) => (
-                <span key={h} className="text-[10px] uppercase tracking-widest text-zinc-600 font-mono">
+                <span key={h} className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">
                   {h}
                 </span>
               ))}
@@ -522,16 +522,16 @@ export default function StrategyLeaderboardPage() {
                 <button
                   key={row.strategy_id}
                   onClick={() => setSelected(row)}
-                  className="w-full text-left grid grid-cols-[40px_1fr_120px_110px_100px_90px_70px_60px] gap-2 px-4 py-3 border-b border-zinc-800/50 last:border-b-0 hover:bg-zinc-800/40 cursor-pointer transition-colors duration-100"
+                  className="w-full text-left grid grid-cols-[40px_1fr_120px_110px_100px_90px_70px_60px] gap-2 px-4 py-3 border-b border-t-dim/50 last:border-b-0 hover:bg-t-bg2/40 cursor-pointer transition-colors duration-100 card-hover"
                 >
                   {/* Rank */}
-                  <span className="font-mono text-sm text-zinc-500 tabular-nums self-center">
+                  <span className="font-mono-t text-sm text-t-muted tabular-nums self-center">
                     {idx + 1}
                   </span>
 
                   {/* Strategy */}
                   <div className="min-w-0 self-center">
-                    <p className="text-white font-semibold text-sm truncate leading-tight">
+                    <p className="text-t-hi font-semibold text-sm truncate leading-tight">
                       {row.strategy_name}
                     </p>
                   </div>
@@ -539,18 +539,18 @@ export default function StrategyLeaderboardPage() {
                   {/* Category */}
                   <div className="self-center">
                     {row.category ? (
-                      <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 whitespace-nowrap">
+                      <span className="font-mono-t text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-t-bg2 text-t-muted border border-t-mid whitespace-nowrap">
                         {row.category}
                       </span>
                     ) : (
-                      <span className="text-zinc-600 text-xs">—</span>
+                      <span className="text-t-gdim text-xs">—</span>
                     )}
                   </div>
 
                   {/* $ P&L */}
                   <span
                     className={cn(
-                      "font-mono text-sm tabular-nums self-center",
+                      "font-mono-t text-sm tabular-nums self-center",
                       usdColor(row.total_pnl_usd)
                     )}
                   >
@@ -560,7 +560,7 @@ export default function StrategyLeaderboardPage() {
                   {/* Return % */}
                   <span
                     className={cn(
-                      "font-mono text-sm tabular-nums self-center",
+                      "font-mono-t text-sm tabular-nums self-center",
                       pctColor(row.weighted_return_pct)
                     )}
                   >
@@ -570,7 +570,7 @@ export default function StrategyLeaderboardPage() {
                   {/* Win Rate */}
                   <span
                     className={cn(
-                      "font-mono text-sm tabular-nums self-center",
+                      "font-mono-t text-sm tabular-nums self-center",
                       pctColor(row.win_rate)
                     )}
                   >
@@ -580,12 +580,12 @@ export default function StrategyLeaderboardPage() {
                   </span>
 
                   {/* Trades */}
-                  <span className="font-mono text-sm tabular-nums text-zinc-300 self-center">
+                  <span className="font-mono-t text-sm tabular-nums text-t-mid2 self-center">
                     {row.total_trades.toLocaleString()}
                   </span>
 
                   {/* Bots */}
-                  <span className="font-mono text-sm tabular-nums text-zinc-400 self-center">
+                  <span className="font-mono-t text-sm tabular-nums text-t-muted self-center">
                     {row.bots_using}
                   </span>
                 </button>
