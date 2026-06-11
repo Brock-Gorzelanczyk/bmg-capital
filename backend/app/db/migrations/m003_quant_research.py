@@ -38,23 +38,46 @@ def run(conn) -> None:
 
     logger.info("[m003] Starting quant research migration")
 
-    # ── 1. Add columns to strategy_meta (try/except for idempotency) ─────────
-    _alter_ddls = [
-        "ALTER TABLE strategy_meta ADD COLUMN t_stat FLOAT",
-        "ALTER TABLE strategy_meta ADD COLUMN evidence_tier VARCHAR(20)",
-        "ALTER TABLE strategy_meta ADD COLUMN haircut_pct INTEGER NOT NULL DEFAULT 30",
-        "ALTER TABLE strategy_meta ADD COLUMN oos_verified INTEGER NOT NULL DEFAULT 0",
-    ]
-    for ddl in _alter_ddls:
+    # ── 0. Check if strategy_meta table exists (ORM creates it via create_all) ─
+    try:
+        result = conn.execute(text(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='strategy_meta'"
+        ))
+        strategy_meta_exists = result.fetchone() is not None
+    except Exception:
+        # PostgreSQL fallback
         try:
-            _exec(ddl)
-            logger.info("[m003] DDL OK: %s", ddl[:60])
-        except Exception as exc:
-            logger.debug("[m003] DDL skipped (already exists): %s — %s", ddl[:40], exc)
+            result = conn.execute(text(
+                "SELECT 1 FROM information_schema.tables WHERE table_name='strategy_meta'"
+            ))
+            strategy_meta_exists = result.fetchone() is not None
+        except Exception:
+            strategy_meta_exists = False
+
+    if not strategy_meta_exists:
+        logger.info("[m003] strategy_meta table not yet created — skipping ALTER/seed steps (ORM will create it fresh)")
+        # Still create signal_outcomes and finish
+    else:
+        logger.info("[m003] strategy_meta table found — running ALTER + seed steps")
+
+    # ── 1. Add columns to strategy_meta (skip if table doesn't exist yet) ──────
+    if strategy_meta_exists:
+        _alter_ddls = [
+            "ALTER TABLE strategy_meta ADD COLUMN t_stat FLOAT",
+            "ALTER TABLE strategy_meta ADD COLUMN evidence_tier VARCHAR(20)",
+            "ALTER TABLE strategy_meta ADD COLUMN haircut_pct INTEGER NOT NULL DEFAULT 30",
+            "ALTER TABLE strategy_meta ADD COLUMN oos_verified INTEGER NOT NULL DEFAULT 0",
+        ]
+        for ddl in _alter_ddls:
             try:
-                conn.rollback()
-            except Exception:
-                pass
+                _exec(ddl)
+                logger.info("[m003] DDL OK: %s", ddl[:60])
+            except Exception as exc:
+                logger.debug("[m003] DDL skipped (already exists): %s — %s", ddl[:40], exc)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
     # ── 2. Create signal_outcomes table (split statements for SQLite compat) ──
     _create_stmts = [
@@ -87,7 +110,12 @@ def run(conn) -> None:
             logger.warning("[m003] signal_outcomes DDL skipped: %s", exc)
     logger.info("[m003] signal_outcomes table ensured")
 
-    # ── 3. Seed evidence_tier for known strategies ────────────────────────────
+    # ── 3. Seed evidence_tier for known strategies (skip if table not ready) ────
+    if not strategy_meta_exists:
+        logger.info("[m003] Skipping evidence_tier seeds — strategy_meta not created yet")
+        logger.info("[m003] Migration complete (partial — re-runs on next boot once ORM creates strategy_meta)")
+        return
+
     for module_name, tier, haircut in _EVIDENCE_SEEDS:
         try:
             _exec(
