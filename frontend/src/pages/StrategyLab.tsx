@@ -84,6 +84,33 @@ const CANDIDATE_META = [
     expectedSharpe: "0.4–0.9",
     description: "Buys when RSI(2) < 10 above the 200-day MA. Exits when RSI(2) closes above 70.",
   },
+  {
+    id: "cash_and_carry",
+    name: "Cash-and-Carry Basis",
+    assetClass: "crypto" as const,
+    style: "arbitrage" as const,
+    reference: "Futures basis trade",
+    expectedSharpe: "1.0–2.5",
+    description: "Delta-neutral: long spot + short perp. Collects positive funding rate as carry.",
+  },
+  {
+    id: "liquidation_cascade",
+    name: "Liquidation Cascade",
+    assetClass: "crypto" as const,
+    style: "event_driven" as const,
+    reference: "Coinglass heatmap + Binance forceOrders",
+    expectedSharpe: "0.6–1.4",
+    description: "Ride mode follows cascades at heatmap clusters; fade mode fades exhausted cascades.",
+  },
+  {
+    id: "insider_cluster_buying",
+    name: "Insider Cluster Buying",
+    assetClass: "equity" as const,
+    style: "event_driven" as const,
+    reference: "Lakonishok & Lee (2001) — SEC Form 4",
+    expectedSharpe: "0.5–1.1",
+    description: "Detects 3+ insiders buying open-market (≥$500k) within a 30-day window.",
+  },
 ];
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
@@ -1220,7 +1247,7 @@ function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; ti
 // ─── Candidate cards ──────────────────────────────────────────────────────────
 
 type CandidateAssetClass = "equity" | "crypto" | "multi";
-type CandidateStyle = "momentum" | "mean_reversion" | "event_driven";
+type CandidateStyle = "momentum" | "mean_reversion" | "event_driven" | "arbitrage";
 
 interface CandidateEntry {
   id: string;
@@ -1246,11 +1273,13 @@ const _STYLE_CHIP: Record<CandidateStyle, string> = {
   momentum:       "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   mean_reversion: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
   event_driven:   "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+  arbitrage:      "bg-pink-500/10 text-pink-400 border-pink-500/20",
 };
 const _STYLE_LABEL: Record<CandidateStyle, string> = {
   momentum:       "Momentum",
   mean_reversion: "Mean Rev",
   event_driven:   "Event",
+  arbitrage:      "Arbitrage",
 };
 
 function CandidateCard({ c }: { c: CandidateEntry }) {

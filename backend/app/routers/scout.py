@@ -58,13 +58,23 @@ def _cache_set(key: str, value: Any) -> None:
 # ── Bar fetching ──────────────────────────────────────────────────────────────
 
 def _fetch_bars_for_ticker(ticker: str, period: str = "1y") -> list[dict]:
-    """Fetch daily OHLCV bars for a single ticker, return as list of bar dicts."""
-    from app.screener.runner import _fetch_bars_sync
+    """Fetch daily OHLCV bars for a single ticker via yfinance Ticker.history().
+
+    Uses Ticker.history() instead of yf.download() because the latter returns
+    a MultiIndex DataFrame for single-symbol calls (yfinance ≥ 0.2), causing
+    column-name mismatches. Ticker.history() always returns a flat DataFrame.
+    """
     try:
-        raw = _fetch_bars_sync([ticker], period=period)
-        df = raw.get(ticker)
-        if df is None or df.empty:
+        import yfinance as yf
+        hist = yf.Ticker(ticker).history(period=period, interval="1d", auto_adjust=True)
+        if hist is None or hist.empty:
             return []
+        hist.columns = [str(c).lower() for c in hist.columns]
+        needed = ["open", "high", "low", "close", "volume"]
+        if any(c not in hist.columns for c in needed):
+            logger.warning("[scout] unexpected columns for %s: %s", ticker, list(hist.columns))
+            return []
+        hist = hist[needed].dropna()
         return [
             {
                 "c": float(row["close"]),
@@ -72,9 +82,9 @@ def _fetch_bars_for_ticker(ticker: str, period: str = "1y") -> list[dict]:
                 "h": float(row["high"]),
                 "l": float(row["low"]),
                 "v": float(row.get("volume", 0) or 0),
-                "ts": row.name.isoformat() if hasattr(row.name, "isoformat") else str(row.name),
+                "ts": idx.isoformat() if hasattr(idx, "isoformat") else str(idx),
             }
-            for _, row in df.iterrows()
+            for idx, row in hist.iterrows()
         ]
     except Exception as exc:
         logger.warning("[scout] bar fetch failed for %s: %s", ticker, exc)

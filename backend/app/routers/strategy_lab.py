@@ -90,6 +90,7 @@ def _seed_demo_allocations(db: Session, user_id: int) -> None:
                 paper_mode=True,
                 enabled=True,
                 starting_capital_cents=cfg["starting_cents"],
+                tier="T2",
             )
             db.add(alloc)
             db.flush()
@@ -168,6 +169,36 @@ _CANDIDATE_CATALOG = [
         "expected_sharpe": "0.4–0.9",
         "description": "Buys stocks where RSI(2) drops below 10 while price is above the 200-day MA. Exits when RSI(2) closes above 70.",
         "promotion_criteria": "30 days live + 20 trades + Sharpe > 0.3",
+    },
+    {
+        "file": "cash_and_carry",
+        "name": "Cash-and-Carry Basis",
+        "asset_class": "crypto",
+        "style": "arbitrage",
+        "reference": "Classic futures basis trade",
+        "expected_sharpe": "1.0–2.5",
+        "description": "Delta-neutral: long spot + short perp. Collects positive funding rate as carry. Exits when funding collapses.",
+        "promotion_criteria": "30 days live + 10 trades + Sharpe > 0.5",
+    },
+    {
+        "file": "liquidation_cascade",
+        "name": "Liquidation Cascade",
+        "asset_class": "crypto",
+        "style": "event_driven",
+        "reference": "Coinglass heatmap + Binance forceOrders",
+        "expected_sharpe": "0.6–1.4",
+        "description": "Ride mode follows cascading liquidations at heatmap clusters; fade mode fades exhausted cascades with decelerating volume.",
+        "promotion_criteria": "30 days live + 15 trades + Sharpe > 0.4",
+    },
+    {
+        "file": "insider_cluster_buying",
+        "name": "Insider Cluster Buying",
+        "asset_class": "equity",
+        "style": "event_driven",
+        "reference": "Lakonishok & Lee (2001) — SEC EDGAR Form 4",
+        "expected_sharpe": "0.5–1.1",
+        "description": "Detects clusters of 3+ insiders buying on the open market (≥$500k combined) within a 30-day window.",
+        "promotion_criteria": "30 days live + 10 trades + Sharpe > 0.4",
     },
 ]
 

@@ -293,11 +293,12 @@ function ScanTickerTab() {
   const [scanTicker_, setScanTicker] = useState<string | null>(null);
   const qc = useQueryClient();
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isError } = useQuery({
     queryKey: ["scout-scan", scanTicker_],
     queryFn: () => (scanTicker_ ? scanTicker(scanTicker_) : null),
     enabled: !!scanTicker_,
     staleTime: 60_000,
+    retry: 0,
   });
 
   const applyMut = useMutation({
@@ -334,7 +335,14 @@ function ScanTickerTab() {
 
       {isFetching && (
         <div className="text-center py-8 font-mono text-xs text-zinc-500 animate-pulse">
-          Running {Object.keys({}).length || "30+"} strategies…
+          Running 30+ strategies on {scanTicker_}…
+        </div>
+      )}
+
+      {isError && scanTicker_ && !isFetching && (
+        <div className="text-center py-8 bg-zinc-900/60 border border-zinc-800 rounded-2xl">
+          <p className="text-red-400 text-sm font-semibold mb-1">Could not fetch bar data for {scanTicker_}</p>
+          <p className="text-zinc-500 text-xs">Check the symbol and try again. Crypto pairs should use BTC/USD format.</p>
         </div>
       )}
 
