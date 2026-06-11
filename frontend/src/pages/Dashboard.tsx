@@ -73,6 +73,15 @@ function SleeveCard({ id, sleeve }: { id: string; sleeve: DashV2Sleeve }) {
       <div className={cn("text-sm mt-1 tabular-nums", isUp ? "text-emerald-400" : "text-red-400")}>
         {isUp ? "+" : ""}{fmtUsd(sleeve.pnl_cents)} all time
       </div>
+      <div className={cn(
+        "inline-flex items-center gap-1.5 text-xs font-bold mt-2 px-2 py-1 rounded-md border",
+        isUp
+          ? "bg-emerald-500/8 border-emerald-500/20 text-emerald-400"
+          : "bg-red-500/8 border-red-500/20 text-red-400"
+      )}>
+        <span className="text-zinc-500 font-medium">ALL-TIME</span>
+        <span>{fmtPct(pnlPct)}</span>
+      </div>
       <div className="mt-4 pt-4 border-t border-zinc-800 flex justify-between text-xs text-zinc-500">
         <span>{sleeve.bots_total} bot{sleeve.bots_total !== 1 ? "s" : ""}</span>
         <span>{sleeve.bots_active} active · {sleeve.open_positions} pos · {sleeve.watching} watching</span>

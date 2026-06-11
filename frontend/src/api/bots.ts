@@ -35,6 +35,10 @@ export interface BotListItem {
     open_positions: number;
     total_trades: number;
     win_rate_pct: number;
+    all_time_pnl_pct: number | null;
+    all_time_pnl_usd: number | null;
+    starting_capital_usd: number | null;
+    current_equity_usd: number | null;
   };
 }
 
@@ -306,6 +310,10 @@ function _rawBotToListItem(b: any): BotListItem {
       open_positions: Array.isArray(b.open_positions) ? b.open_positions.length : 0,
       total_trades: b.total_trades ?? 0,
       win_rate_pct: b.win_rate_pct ?? 0,
+      all_time_pnl_pct: b.all_time_pnl_pct ?? b.all_time_return_pct ?? null,
+      all_time_pnl_usd: b.all_time_pnl_usd ?? null,
+      starting_capital_usd: b.starting_capital_usd ?? null,
+      current_equity_usd: b.current_equity_usd ?? null,
     },
   };
 }

@@ -43,6 +43,7 @@ from app.routers.performance import router as performance_router
 from app.routers.markets import router as markets_router
 from app.routers import symbols as symbols_router
 from app.routers import chart_layouts as chart_layouts_router
+from app.routers.leaderboard import router as leaderboard_router
 from app.routers.learning import router as learning_router
 from app.routers import notification_channels as notification_channels_router
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
@@ -333,6 +334,7 @@ app.include_router(performance_router)
 app.include_router(markets_router)
 app.include_router(symbols_router.router)
 app.include_router(chart_layouts_router.router)
+app.include_router(leaderboard_router)
 
 
 @app.get("/health", tags=["health"])

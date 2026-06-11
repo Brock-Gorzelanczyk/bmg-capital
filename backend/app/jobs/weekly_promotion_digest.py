@@ -13,7 +13,7 @@ import httpx
 
 from app.db.session import SessionLocal
 from app.db.models.bots import BotAllocation, BotProfile
-from app.db.models.allocation import BotTierHistory
+from app.db.models.allocation import BotTierHistory, BotPerformanceStats
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,37 @@ def run() -> dict:
             .all()
         )
 
+        # Build all-time P&L leaderboard (all allocations for any user, sorted by perf)
+        all_allocs = db.query(BotAllocation).all()
+        all_profile_ids = list({a.profile_id for a in all_allocs})
+        all_profiles = db.query(BotProfile).filter(BotProfile.id.in_(all_profile_ids)).all() if all_profile_ids else []
+        all_profile_map: dict[int, BotProfile] = {p.id: p for p in all_profiles}
+
+        lb_rows = []
+        for alloc in all_allocs:
+            try:
+                from app.core.canonical import compute_bot_snapshot
+                prof = all_profile_map.get(alloc.profile_id)
+                snap = compute_bot_snapshot(alloc, prof, db)
+                stats = (
+                    db.query(BotPerformanceStats)
+                    .filter(BotPerformanceStats.allocation_id == alloc.id)
+                    .order_by(BotPerformanceStats.stat_date.desc())
+                    .first()
+                )
+                lb_rows.append({
+                    "name": _DISPLAY_NAMES.get(prof.name if prof else "", prof.name if prof else f"alloc_{alloc.id}"),
+                    "tier": alloc.tier or "T0",
+                    "all_time_pct": snap.all_time_return_pct or 0.0,
+                    "sharpe": stats.sharpe_ratio if stats else None,
+                    "total_trades": stats.total_trades if stats else 0,
+                    "win_rate": stats.win_rate if stats else None,
+                    "enabled": alloc.enabled,
+                })
+            except Exception:
+                pass
+        lb_rows.sort(key=lambda r: -r["all_time_pct"])
+
         if not recent_changes:
             logger.info("[weekly_digest] No tier changes in past 7 days — skipping digest")
             return {"changes": 0}
@@ -129,6 +160,23 @@ def run() -> dict:
             fields.append({
                 "name": f"📉 Demotions ({len(demotions)})",
                 "value": "\n".join(lines) or "—",
+                "inline": False,
+            })
+
+        # Leaderboard field
+        if lb_rows:
+            lb_lines = []
+            for row in lb_rows[:10]:
+                tier_e = _TIER_EMOJI.get(row["tier"], "")
+                pct = row["all_time_pct"]
+                pct_str = f"+{pct:.2f}%" if pct >= 0 else f"{pct:.2f}%"
+                sharpe_str = f"  S:{row['sharpe']:.2f}" if row["sharpe"] is not None else ""
+                wr_str = f"  WR:{row['win_rate']*100:.0f}%" if row["win_rate"] is not None else ""
+                status = "" if row["enabled"] else " (disabled)"
+                lb_lines.append(f"{tier_e} **{row['name']}**  `{pct_str}`{sharpe_str}{wr_str}{status}")
+            fields.append({
+                "name": "📊 ALL-TIME LEADERBOARD (top 10)",
+                "value": "\n".join(lb_lines) or "—",
                 "inline": False,
             })
 

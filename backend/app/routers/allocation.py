@@ -64,6 +64,10 @@ def get_allocation_overview(
         stats = _latest_stats(db, alloc.id)
         tier = alloc.tier or "T0"
         tier_info = TIERS.get(tier, TIERS["T0"])
+        starting = alloc.starting_capital_cents or 0
+        current_val = stats.current_value_cents if stats else starting
+        pnl_usd = round((current_val - starting) / 100, 2) if starting else 0.0
+        all_time_pct = round((current_val - starting) / starting * 100, 2) if starting else 0.0
         rows.append({
             "allocation_id": alloc.id,
             "bot_name": profile.name if profile else "",
@@ -75,6 +79,10 @@ def get_allocation_overview(
             "tier_label": tier_info["label"],
             "tier_color": tier_info["color"],
             "max_capital_pct": tier_info["max_capital_pct"],
+            "starting_capital_usd": round(starting / 100, 2),
+            "current_equity_usd": round(current_val / 100, 2),
+            "all_time_pnl_usd": pnl_usd,
+            "all_time_pnl_pct": all_time_pct,
             "stats": {
                 "return_30d_pct": stats.return_30d_pct if stats else None,
                 "win_rate": stats.win_rate if stats else None,

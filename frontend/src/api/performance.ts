@@ -3,6 +3,25 @@ import client from "./client";
 export type Period = "7d" | "30d" | "90d" | "all";
 export type LeaderboardMetric = "sharpe" | "total_return_pct" | "win_rate" | "profit_factor" | "today_pnl_usd";
 export type StratSort = "pnl" | "return" | "win_rate" | "trades" | "sharpe";
+export type BotLbSort = "pnl" | "sharpe" | "drawdown" | "win_rate";
+
+export interface BotLeaderboardRow {
+  rank: number;
+  bot_id: string;
+  strategy_name: string;
+  allocation_id: number;
+  tier: string;
+  enabled: boolean;
+  starting_capital: number;
+  current_equity: number;
+  all_time_pnl_usd: number;
+  all_time_pnl_pct: number;
+  sharpe_30d: number | null;
+  max_drawdown_pct: number | null;
+  win_rate: number | null;
+  trades_count: number;
+  days_live: number;
+}
 
 export interface BotMetrics {
   allocation_id: number;
@@ -141,6 +160,11 @@ export const getBotTimeOfDay = (botName: string): Promise<{ time_of_day: TimeOfD
 
 export const getBotRegimeBreakdown = (botName: string): Promise<{ regimes: RegimeRow[] }> =>
   client.get(`${BASE}/bots/${botName}/regime-breakdown`).then((r) => r.data);
+
+export const getBotLeaderboardRanking = (
+  sort: BotLbSort = "pnl",
+): Promise<{ strategies: BotLeaderboardRow[]; total: number; sort: string }> =>
+  client.get("/leaderboard/strategies", { params: { sort } }).then((r) => r.data);
 
 export const getStrategyLeaderboard = (
   period: Period = "30d",

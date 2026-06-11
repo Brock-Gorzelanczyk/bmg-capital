@@ -6,7 +6,10 @@ import { BracketFrame, SectionLabel, BMGButton } from "@/components/design";
 import { cn } from "@/lib/utils";
 import {
   getStrategyLeaderboard,
+  getBotLeaderboardRanking,
   type StrategyLeaderboardRow,
+  type BotLeaderboardRow,
+  type BotLbSort,
   type Period,
   type StratSort,
 } from "@/api/performance";
@@ -207,12 +210,117 @@ function SkeletonRows() {
   );
 }
 
+// ── Tier badge helpers ────────────────────────────────────────────────────────
+
+const TIER_BADGE: Record<string, string> = {
+  T3: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+  T2: "text-blue-400 border-blue-500/30 bg-blue-500/10",
+  T1: "text-yellow-400 border-yellow-500/30 bg-yellow-500/10",
+  T0: "text-zinc-400 border-zinc-500/30 bg-zinc-500/10",
+};
+
+const BOT_LB_SORTS: { label: string; value: BotLbSort }[] = [
+  { label: "All-Time %", value: "pnl" },
+  { label: "Sharpe", value: "sharpe" },
+  { label: "Win Rate", value: "win_rate" },
+  { label: "Drawdown", value: "drawdown" },
+];
+
+const RANK_RING: Record<number, string> = {
+  1: "ring-1 ring-yellow-500/50",
+  2: "ring-1 ring-zinc-400/40",
+  3: "ring-1 ring-orange-600/40",
+};
+
+function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["bot-leaderboard-ranking", sort],
+    queryFn: () => getBotLeaderboardRanking(sort),
+    staleTime: 120_000,
+    retry: 0,
+  });
+
+  const rows = data?.strategies ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <SkeletonRows />
+      </div>
+    );
+  }
+
+  if (!rows.length) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
+        <p className="text-white font-semibold mb-1">No bot data yet</p>
+        <p className="text-zinc-500 text-sm">Enable bots to see ranking.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+      <div className="grid grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px] gap-2 px-4 py-2 border-b border-zinc-800">
+        {["#", "Bot", "Tier", "Start $", "Now $", "All-Time %", "Sharpe", "Win %", "Trades", "Days"].map((h) => (
+          <span key={h} className="text-[10px] uppercase tracking-widest text-zinc-600 font-mono">{h}</span>
+        ))}
+      </div>
+      <div>
+        {rows.map((row) => {
+          const isUp = row.all_time_pnl_pct >= 0;
+          return (
+            <Link
+              key={row.allocation_id}
+              to={`/strategy/${row.bot_id}`}
+              className={cn(
+                "w-full text-left grid grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px] gap-2 px-4 py-3 border-b border-zinc-800/50 last:border-b-0 hover:bg-zinc-800/40 transition-colors duration-100 rounded-none",
+                RANK_RING[row.rank]
+              )}
+            >
+              <span className="font-mono text-sm text-zinc-500 tabular-nums self-center">{row.rank}</span>
+              <div className="min-w-0 self-center">
+                <p className="text-white font-semibold text-sm truncate leading-tight">{row.strategy_name}</p>
+                {!row.enabled && <p className="text-zinc-600 text-[10px]">disabled</p>}
+              </div>
+              <div className="self-center">
+                <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full border", TIER_BADGE[row.tier] ?? TIER_BADGE.T0)}>
+                  {row.tier}
+                </span>
+              </div>
+              <span className="font-mono text-xs tabular-nums text-zinc-400 self-center">
+                ${row.starting_capital >= 1000 ? `${(row.starting_capital / 1000).toFixed(0)}k` : row.starting_capital.toFixed(0)}
+              </span>
+              <span className="font-mono text-xs tabular-nums text-white self-center">
+                ${row.current_equity >= 1000 ? `${(row.current_equity / 1000).toFixed(1)}k` : row.current_equity.toFixed(0)}
+              </span>
+              <span className={cn("font-mono text-sm font-bold tabular-nums self-center", isUp ? "text-emerald-400" : "text-red-400")}>
+                {isUp ? "+" : ""}{row.all_time_pnl_pct.toFixed(2)}%
+              </span>
+              <span className={cn("font-mono text-xs tabular-nums self-center", row.sharpe_30d == null ? "text-zinc-600" : row.sharpe_30d >= 0 ? "text-zinc-300" : "text-red-400")}>
+                {row.sharpe_30d != null ? row.sharpe_30d.toFixed(2) : "—"}
+              </span>
+              <span className={cn("font-mono text-xs tabular-nums self-center", row.win_rate == null ? "text-zinc-600" : row.win_rate >= 0.5 ? "text-emerald-400" : "text-zinc-400")}>
+                {row.win_rate != null ? `${(row.win_rate * 100).toFixed(0)}%` : "—"}
+              </span>
+              <span className="font-mono text-xs tabular-nums text-zinc-400 self-center">{row.trades_count.toLocaleString()}</span>
+              <span className="font-mono text-xs tabular-nums text-zinc-600 self-center">{row.days_live}d</span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function StrategyLeaderboardPage() {
+  const [tab, setTab] = useState<"bots" | "strategies">("bots");
   const [period, setPeriod] = useState<Period>("30d");
   const [category, setCategory] = useState("All");
   const [sort, setSort] = useState<StratSort>("pnl");
+  const [botSort, setBotSort] = useState<BotLbSort>("pnl");
   const [selected, setSelected] = useState<StrategyLeaderboardRow | null>(null);
 
   const { data, isLoading, isError } = useQuery({
@@ -271,13 +379,21 @@ export default function StrategyLeaderboardPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div>
-          <SectionLabel as="h1" className="text-base mb-1">
-            // STRATEGY LEADERBOARD
-          </SectionLabel>
-          <p className="text-sm text-zinc-500">
-            Dollar-weighted performance across every strategy in every bot.
-          </p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <SectionLabel as="h1" className="text-base mb-1">
+              // STRATEGY LEADERBOARD
+            </SectionLabel>
+            <p className="text-sm text-zinc-500">
+              {tab === "bots"
+                ? "Per-bot all-time P&L ranking."
+                : "Dollar-weighted performance across every strategy in every bot."}
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            <PillButton active={tab === "bots"} onClick={() => setTab("bots")}>Bots</PillButton>
+            <PillButton active={tab === "strategies"} onClick={() => setTab("strategies")}>Strategies</PillButton>
+          </div>
         </div>
 
         {/* ── KPI Cards ───────────────────────────────────────────────────── */}
@@ -319,7 +435,23 @@ export default function StrategyLeaderboardPage() {
           )}
         </div>
 
-        {/* ── Filter Row ──────────────────────────────────────────────────── */}
+        {/* ── Bot Leaderboard (primary tab) ─────────────────────────────── */}
+        {tab === "bots" && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-zinc-600 font-mono uppercase tracking-widest">Sort by</span>
+              {BOT_LB_SORTS.map((s) => (
+                <PillButton key={s.value} active={botSort === s.value} onClick={() => setBotSort(s.value)}>
+                  {s.label}
+                </PillButton>
+              ))}
+            </div>
+            <BotLeaderboardTable sort={botSort} />
+          </>
+        )}
+
+        {/* ── Strategy attribution tab ─────────────────────────────────── */}
+        {tab === "strategies" && (<>
         <div className="flex flex-wrap items-center gap-2">
           {/* Period */}
           <div className="flex items-center gap-1">
@@ -457,6 +589,7 @@ export default function StrategyLeaderboardPage() {
             </div>
           </div>
         )}
+        </>)} {/* end strategies tab */}
       </div>
 
       {/* ── Detail Modal ──────────────────────────────────────────────────── */}

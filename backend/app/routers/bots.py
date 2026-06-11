@@ -373,6 +373,11 @@ def list_bots(
             row["open_positions_count"] = snap.open_positions_count
             row["portfolio_value_cents"] = snap.portfolio_value_cents
             row["all_time_return_pct"] = snap.all_time_return_pct
+            starting = allocation.starting_capital_cents or 0
+            row["starting_capital_usd"] = round(starting / 100, 2)
+            row["current_equity_usd"] = round(snap.portfolio_value_cents / 100, 2)
+            row["all_time_pnl_usd"] = round((snap.portfolio_value_cents - starting) / 100, 2)
+            row["all_time_pnl_pct"] = snap.all_time_return_pct
         else:
             row["demo"] = True
             row["return_30d_pct"] = None
@@ -381,6 +386,10 @@ def list_bots(
             row["open_positions_count"] = len(row["open_positions"])
             row["portfolio_value_cents"] = None
             row["all_time_return_pct"] = None
+            row["starting_capital_usd"] = None
+            row["current_equity_usd"] = None
+            row["all_time_pnl_usd"] = None
+            row["all_time_pnl_pct"] = None
 
         result.append(row)
 
