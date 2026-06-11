@@ -20,6 +20,7 @@ import logging
 from datetime import datetime, timedelta
 
 from strategy_lab.core.signals import Signal
+from strategy_lab.core.regime.regime_router import advisory_vix_scale
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,18 @@ MIN_OPTION_PREMIUM_PCT = 0.005   # must yield at least 0.5% premium / notional
 
 def generate_signals(bars: dict, profile_config: dict, regime: dict) -> list[Signal]:
     """Scan bars for options-eligible symbols; gate entries on IV Rank."""
+    # VIX safety floor — hard kill switch when VIX > 40; never sell premium in crisis
+    _vix: float | None = None
+    if regime:
+        _vix = regime.get("vix_level") or (
+            (regime.get("signals_breakdown") or {}).get("vix", {}).get("level")
+        )
+    if _vix is not None and advisory_vix_scale(float(_vix)) == 0.0:
+        logger.warning(
+            "[ivr-filter] VIX=%.1f > 40 — crisis kill switch active, returning []", _vix
+        )
+        return []
+
     signals = []
 
     for symbol, bar_list in bars.items():
@@ -61,6 +74,8 @@ def generate_signals(bars: dict, profile_config: dict, regime: dict) -> list[Sig
 
             ivr, atm_iv, expiry = _compute_ivr(symbol, closes)
             if ivr is None:
+                # Fail-closed: no IV data → skip symbol, never fall through to full-size
+                logger.warning("[ivr-filter] %s: IV data unavailable — skipping (fail-closed)", symbol)
                 continue
 
             size_multiplier = _ivr_size_multiplier(ivr)

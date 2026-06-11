@@ -464,36 +464,18 @@ class RegimePersistenceFilter:
 # ---------------------------------------------------------------------------
 
 
-def advisory_vix_scale(
-    signals: list,
-    profile_name: str,
-    regime: dict,
-) -> tuple[list, float]:
+def advisory_vix_scale(vix_level: float) -> float:
     """
-    Scale signal size_hints by VIX regime — advisory only.
+    Return a size multiplier based on VIX level — advisory only.
 
     Strategies call this explicitly if they want VIX-aware sizing.
     It is never applied globally in the scan loop.
 
-    Delegates to ``strategy_lab.core.vix_regime_allocator.apply_vix_scaling``.
+    Returns 0.0 when VIX > 40 (hard kill switch — never sell premium in crisis).
+    Returns 0.5 when VIX > 25 (elevated vol, half-size).
+    Returns 1.0 otherwise (normal conditions).
 
-    Parameters
-    ----------
-    signals:
-        List of Signal objects from a strategy's ``generate_signals()``.
-    profile_name:
-        Bot profile key (e.g. ``"stock_swing"``). Determines whether this
-        profile is classified as momentum, mean-reversion, or carry/income,
-        which controls the scaling direction.
-    regime:
-        Regime dict from ``RegimeRouter.detect_regime()`` or the live
-        ``RegimeSnapshot``; must contain ``"vix"`` or ``"vix_value"``.
-
-    Returns
-    -------
-    (scaled_signals, multiplier_applied)
-        ``multiplier_applied`` is ``1.0`` when no scaling occurs (VIX below
-        threshold, unknown profile type, or missing VIX data).
+    Smoke-test: advisory_vix_scale(45.0) == 0.0; advisory_vix_scale(15.0) == 1.0
 
     Example
     -------
@@ -501,9 +483,11 @@ def advisory_vix_scale(
 
         from strategy_lab.core.regime.regime_router import advisory_vix_scale
 
-        raw = _build_signals(bars)
-        scaled, mult = advisory_vix_scale(raw, profile_config["name"], regime)
-        return scaled
+        if advisory_vix_scale(current_vix) == 0.0:
+            return []  # crisis — no new positions
     """
-    from strategy_lab.core.vix_regime_allocator import apply_vix_scaling
-    return apply_vix_scaling(signals, profile_name, regime)
+    if vix_level > 40:
+        return 0.0
+    if vix_level > 25:
+        return 0.5
+    return 1.0
