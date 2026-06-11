@@ -1,3 +1,6 @@
+/* ── Fonts ─────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -60,6 +63,40 @@
     /* effects */
     --glow-md:  0 0 16px var(--bmg-green-glow);
     --glow-sm:  0 0 8px  var(--bmg-green-glow);
+
+    /* ── Terminal design system (2026 spec) ─────────────────────── */
+    /* surfaces */
+    --bg-0:          #040804;
+    --bg-1:          #060c06;
+    --bg-2:          #0a120a;
+    --border-dim:    rgba(74,222,128,0.12);
+    --border-mid:    rgba(74,222,128,0.25);
+    --border-hot:    #4ade80;
+
+    /* signal colors */
+    --green:         #4ade80;
+    --green-bright:  #86efac;
+    --green-dim:     #2d6b45;
+    --red:           #f87171;
+    --amber:         #fbbf24;
+    --cyan:          #22d3ee;
+
+    /* text */
+    --text-hi:       #d7ecd9;
+    --text-mid:      #8aa88e;
+    --text-dim:      #5a7a5e;
+
+    /* type */
+    --font-mono-t:   'JetBrains Mono', 'Geist Mono', ui-monospace, monospace;
+    --font-ui-t:     'Inter', 'Geist', system-ui, sans-serif;
+
+    /* spacing */
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+
+    --radius-t:      4px;
+    --glow:          0 0 18px rgba(74,222,128,0.25);
+    --glow-intense:  0 0 32px rgba(74,222,128,0.40);
   }
 }
 
@@ -86,6 +123,54 @@
     outline: 1.5px solid var(--accent-positive);
     outline-offset: 2px;
   }
+}
+
+/* ── Page transitions ───────────────────────────────────────────────────── */
+.page-enter {
+  animation: pageIn 0.15s ease-out both;
+}
+
+/* ── Card hover lift ────────────────────────────────────────────────────── */
+.card-hover {
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-mid);
+  box-shadow: var(--glow);
+}
+
+/* ── Number flash on update ─────────────────────────────────────────────── */
+.flash-up   { animation: flashGreen 0.4s ease-out; }
+.flash-down { animation: flashRed   0.4s ease-out; }
+
+/* ── Tabular numbers everywhere ─────────────────────────────────────────── */
+.font-mono-t, .font-mono { font-variant-numeric: tabular-nums; }
+
+/* ── Terminal panel header ──────────────────────────────────────────────── */
+.panel-header {
+  font-family: var(--font-mono-t);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.panel-header::before { content: '// '; }
+
+/* ── Scanline overlay (subtle, on hero panels only) ────────────────────── */
+.scanline::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  border-radius: inherit;
 }
 
 /* ── Utility: card gradient overlay ──────────────────────────────────────── */

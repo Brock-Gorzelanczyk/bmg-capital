@@ -8,9 +8,11 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['Bricolage Grotesque', 'system-ui', 'sans-serif'],
-        sans:    ['Geist', 'system-ui', '-apple-system', 'sans-serif'],
-        mono:    ['Geist Mono', 'ui-monospace', 'monospace'],
+        display:  ['Bricolage Grotesque', 'system-ui', 'sans-serif'],
+        sans:     ['Geist', 'system-ui', '-apple-system', 'sans-serif'],
+        mono:     ['Geist Mono', 'ui-monospace', 'monospace'],
+        "mono-t": ["'JetBrains Mono'", "'Geist Mono'", 'ui-monospace', 'monospace'],
+        "ui-t":   ["'Inter'", "'Geist'", 'system-ui', 'sans-serif'],
       },
       colors: {
         // ── shadcn compatibility layer ────────────────────────────
@@ -84,6 +86,29 @@ export default {
           dim:     "rgba(74,222,128,0.15)",
           border:  "rgba(74,222,128,0.3)",
         },
+
+        // ── Terminal design system 2026 ──────────────────────────
+        t: {
+          // Surfaces
+          bg0:    "#040804",
+          bg1:    "#060c06",
+          bg2:    "#0a120a",
+          // Borders
+          dim:    "rgba(74,222,128,0.12)",
+          mid:    "rgba(74,222,128,0.25)",
+          hot:    "#4ade80",
+          // Text
+          hi:     "#d7ecd9",
+          mid2:   "#8aa88e",   // 'mid' is taken by border
+          muted:  "#5a7a5e",
+          // Signal
+          green:  "#4ade80",
+          bright: "#86efac",
+          gdim:   "#2d6b45",
+          red:    "#f87171",
+          amber:  "#fbbf24",
+          cyan:   "#22d3ee",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -98,6 +123,10 @@ export default {
         'count-up':    'countUp 0.6s ease-out',
         'fade-in':     'fadeIn 0.2s ease-out',
         'pulse-once':  'pulseOnce 1.4s ease-in-out',
+        'page-in':     'pageIn 0.15s ease-out',
+        'flash-green': 'flashGreen 0.4s ease-out',
+        'flash-red':   'flashRed 0.4s ease-out',
+        'card-rise':   'cardRise 0.15s ease-out',
       },
       keyframes: {
         countUp: {
@@ -112,6 +141,22 @@ export default {
           '0%, 100%': { boxShadow: '0 0 0 0 rgba(139,92,246,0)' },
           '40%':      { boxShadow: '0 0 0 6px rgba(139,92,246,0.35)' },
           '70%':      { boxShadow: '0 0 0 10px rgba(139,92,246,0.10)' },
+        },
+        pageIn: {
+          '0%':   { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        flashGreen: {
+          '0%':   { backgroundColor: 'rgba(74,222,128,0.25)' },
+          '100%': { backgroundColor: 'transparent' },
+        },
+        flashRed: {
+          '0%':   { backgroundColor: 'rgba(248,113,113,0.25)' },
+          '100%': { backgroundColor: 'transparent' },
+        },
+        cardRise: {
+          '0%':   { transform: 'translateY(0)' },
+          '100%': { transform: 'translateY(-2px)' },
         },
       },
       transitionDuration: {
