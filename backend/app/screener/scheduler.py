@@ -1060,3 +1060,13 @@ def setup_scheduler() -> None:
         max_instances=1,
         coalesce=True,
     )
+
+    # IC metrics rollup — 2:30 AM ET daily (after bot stats at 2:00 AM)
+    from app.jobs.compute_ic_metrics import run as run_compute_ic_metrics
+    scheduler.add_job(
+        run_compute_ic_metrics,
+        CronTrigger(hour=2, minute=30, timezone=ET),
+        id="compute_ic_metrics_daily",
+        replace_existing=True,
+        max_instances=1,
+    )
