@@ -73,24 +73,6 @@ function mapDetailToResult(detail: BacktestDetailResponse, capital: number): Bac
   };
 }
 
-  const wins2   = trades.filter((t) => t.pnl > 0);
-  const losses2 = trades.filter((t) => t.pnl < 0);
-
-  return {
-    totalReturn:     Math.round(adjustedRet),
-    cagr:            Math.round(adjustedCagr * 10) / 10,
-    sharpe:          p.sharpe,
-    maxDrawdown:     p.dd,
-    winRate:         p.wr,
-    totalTrades:     trades.length,
-    avgWin:          wins2.length   ? Math.round(wins2.reduce((s, t) => s + t.pct, 0)   / wins2.length   * 10) / 10 : 0,
-    avgLoss:         losses2.length ? Math.round(losses2.reduce((s, t) => s + t.pct, 0) / losses2.length * 10) / 10 : 0,
-    benchmarkReturn: 34,
-    equityCurve:     curve,
-    trades,
-  };
-}
-
 // ── Monte Carlo ────────────────────────────────────────────────────────────────
 
 interface MCResult {
