@@ -21,11 +21,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
 from app.db.models.autonomous import AutonomousAction, AutonomousGuardrail, AutonomousDigest
-from app.db.models.bots import BotAllocation, BotPosition, BotProfile
+from app.db.models.bots import BotAllocation, BotDailyPnL, BotPosition, BotProfile, BotTrade
 from app.services.autonomous_logger import log_action
 from app.services.guardrail_checker import get_or_create_guardrail
 
@@ -522,6 +523,62 @@ def get_stats_24h(
     """Aggregate stats for the last 24 hours."""
     try:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        today = date.today()
+
+        # ── User's allocations (same pattern as dashboard) ────────────────────
+        allocs = (
+            db.query(BotAllocation)
+            .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
+            .filter(
+                BotAllocation.user_id == current_user.id,
+                BotProfile.enabled.is_(True),
+            )
+            .all()
+        )
+        alloc_ids = [a.id for a in allocs]
+
+        # ── Today's P&L from BotDailyPnL — same source as Dashboard ─────────
+        today_pnl_cents = 0
+        if alloc_ids:
+            pnl_rows = (
+                db.query(BotDailyPnL)
+                .filter(
+                    BotDailyPnL.allocation_id.in_(alloc_ids),
+                    BotDailyPnL.date == today,
+                )
+                .all()
+            )
+            today_pnl_cents = sum(r.realized_cents + r.unrealized_cents for r in pnl_rows)
+
+        # ── Trade counts from bot_trades (not stale rollup table) ─────────────
+        paper_buys = 0
+        paper_sells = 0
+        stop_hits = 0
+        if alloc_ids:
+            trade_rows = (
+                db.query(BotTrade)
+                .filter(
+                    BotTrade.allocation_id.in_(alloc_ids),
+                    BotTrade.is_paper.is_(True),
+                    func.date(BotTrade.ts) == today,
+                )
+                .all()
+            )
+            paper_buys = sum(1 for t in trade_rows if t.side == "buy")
+            paper_sells = sum(1 for t in trade_rows if t.side == "sell")
+
+            stop_hits = (
+                db.query(BotPosition)
+                .filter(
+                    BotPosition.allocation_id.in_(alloc_ids),
+                    BotPosition.is_paper.is_(True),
+                    func.date(BotPosition.closed_at) == today,
+                    BotPosition.exit_reason.ilike("%stop%"),
+                )
+                .count()
+            )
+
+        # ── Autonomous action feed (signals, best/worst, lab breakdown) ───────
         actions = (
             db.query(AutonomousAction)
             .filter(
@@ -532,18 +589,12 @@ def get_stats_24h(
         )
 
         signals_fired = sum(1 for a in actions if a.action_type == "signal_fired")
-        paper_buys = sum(1 for a in actions if a.action_type == "paper_buy")
-        paper_sells = sum(1 for a in actions if a.action_type == "paper_sell")
-        stop_hits = sum(1 for a in actions if a.action_type == "stop_hit")
         target_hits = sum(1 for a in actions if a.action_type == "target_hit")
 
         pnl_actions = [a for a in actions if a.outcome_value is not None]
-        pnl_24h = sum(a.outcome_value or 0 for a in pnl_actions)
-
         best = max(pnl_actions, key=lambda a: a.outcome_value or 0, default=None)
         worst = min(pnl_actions, key=lambda a: a.outcome_value or 0, default=None)
 
-        # By lab
         by_lab: dict[str, int] = {}
         for a in actions:
             if a.lab:
@@ -555,7 +606,7 @@ def get_stats_24h(
             "paper_sells": paper_sells,
             "stop_hits": stop_hits,
             "target_hits": target_hits,
-            "pnl_24h": round(pnl_24h, 2),
+            "pnl_24h": round(today_pnl_cents / 100, 2),
             "best_action": {"asset": best.asset, "pnl": best.outcome_value} if best else None,
             "worst_action": {"asset": worst.asset, "pnl": worst.outcome_value} if worst else None,
             "by_lab": by_lab,

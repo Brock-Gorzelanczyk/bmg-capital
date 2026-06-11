@@ -555,8 +555,10 @@ export default function MissionControlPage() {
     );
   }
   function isCryptoStrategy(strategyId: string, lab: string): boolean {
+    if (lab === "crypto") return true;
     const s = (strategyId + " " + lab).toLowerCase();
-    return s.includes("crypto") || s.includes("btc") || s.includes("eth");
+    return s.includes("crypto") || s.includes("btc") || s.includes("eth") ||
+      s.includes("stablecoin") || s.includes("defi") || s.includes("onchain");
   }
   function isStockStrategy(strategyId: string, lab: string): boolean {
     const s = (strategyId + " " + lab).toLowerCase();
