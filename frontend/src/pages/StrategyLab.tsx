@@ -36,6 +36,56 @@ import { getAnalystSummary, type AnalystSummaryItem } from "@/api/analyst";
 import { cn } from "@/lib/utils";
 import { useIsViewer } from "@/store/authStore";
 
+// ─── Candidate metadata ───────────────────────────────────────────────────────
+
+const CANDIDATE_META = [
+  {
+    id: "cross_sectional_momentum",
+    name: "Cross-Sectional Momentum",
+    assetClass: "equity" as const,
+    style: "momentum" as const,
+    reference: "Jegadeesh & Titman (1993)",
+    expectedSharpe: "0.4–0.8",
+    description: "Ranks universe by 12-1M return, buys top quintile, sells bottom quintile.",
+  },
+  {
+    id: "time_series_momentum",
+    name: "Time-Series Momentum",
+    assetClass: "multi" as const,
+    style: "momentum" as const,
+    reference: "Moskowitz, Ooi & Pedersen (2012)",
+    expectedSharpe: "0.5–1.0",
+    description: "Each asset evaluated independently; long if 12M trailing return positive. Sized by inverse vol.",
+  },
+  {
+    id: "crypto_dual_momentum",
+    name: "Crypto Dual Momentum",
+    assetClass: "crypto" as const,
+    style: "momentum" as const,
+    reference: "Liu & Tsyvinski (2021) + Antonacci (2014)",
+    expectedSharpe: "0.6–1.2",
+    description: "Combines absolute momentum vs. cash with relative momentum across top-N crypto. Long-only.",
+  },
+  {
+    id: "overnight_gap_fade",
+    name: "Overnight Gap Fade",
+    assetClass: "equity" as const,
+    style: "mean_reversion" as const,
+    reference: "Branch & Ma (2008)",
+    expectedSharpe: "0.3–0.7",
+    description: "Fades overnight gaps > 1.5%. Gap-up stocks tend to pull back; gap-down stocks tend to recover.",
+  },
+  {
+    id: "rsi2_mean_reversion",
+    name: "RSI-2 Mean Reversion",
+    assetClass: "equity" as const,
+    style: "mean_reversion" as const,
+    reference: "Connors & Alvarez (2009)",
+    expectedSharpe: "0.4–0.9",
+    description: "Buys when RSI(2) < 10 above the 200-day MA. Exits when RSI(2) closes above 70.",
+  },
+];
+
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
 
 const BOT_META: Record<
@@ -1167,6 +1217,113 @@ function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; ti
   );
 }
 
+// ─── Candidate cards ──────────────────────────────────────────────────────────
+
+type CandidateAssetClass = "equity" | "crypto" | "multi";
+type CandidateStyle = "momentum" | "mean_reversion" | "event_driven";
+
+interface CandidateEntry {
+  id: string;
+  name: string;
+  assetClass: CandidateAssetClass;
+  style: CandidateStyle;
+  reference: string;
+  expectedSharpe: string;
+  description: string;
+}
+
+const _ASSET_CHIP: Record<CandidateAssetClass, string> = {
+  equity: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  crypto: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  multi:  "bg-violet-500/10 text-violet-400 border-violet-500/20",
+};
+const _ASSET_LABEL: Record<CandidateAssetClass, string> = {
+  equity: "Equity",
+  crypto: "Crypto",
+  multi:  "Multi-Asset",
+};
+const _STYLE_CHIP: Record<CandidateStyle, string> = {
+  momentum:       "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  mean_reversion: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+  event_driven:   "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+};
+const _STYLE_LABEL: Record<CandidateStyle, string> = {
+  momentum:       "Momentum",
+  mean_reversion: "Mean Rev",
+  event_driven:   "Event",
+};
+
+function CandidateCard({ c }: { c: CandidateEntry }) {
+  return (
+    <div className="relative rounded-2xl border border-dashed border-zinc-700/60 bg-zinc-950/60 p-4 flex flex-col gap-3 hover:border-zinc-600/80 transition-colors">
+      {/* Watermark */}
+      <div className="absolute top-2 right-3 text-[9px] font-bold tracking-widest text-zinc-700 uppercase select-none">
+        INCUBATING
+      </div>
+
+      {/* Header */}
+      <div className="flex items-start gap-2 pr-16">
+        <div>
+          <p className="text-sm font-semibold text-zinc-200 leading-snug">{c.name}</p>
+          <p className="text-[10px] text-zinc-600 mt-0.5 font-mono">{c.reference}</p>
+        </div>
+      </div>
+
+      {/* Chips */}
+      <div className="flex flex-wrap gap-1.5">
+        <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border", _ASSET_CHIP[c.assetClass])}>
+          {_ASSET_LABEL[c.assetClass]}
+        </span>
+        <span className={cn("text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border", _STYLE_CHIP[c.style])}>
+          {_STYLE_LABEL[c.style]}
+        </span>
+        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">
+          T0 CANDIDATE
+        </span>
+      </div>
+
+      {/* Description */}
+      <p className="text-xs text-zinc-500 leading-relaxed">{c.description}</p>
+
+      {/* Sharpe range */}
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-zinc-600">Expected Sharpe</span>
+        <span className="font-mono text-zinc-400">{c.expectedSharpe}</span>
+      </div>
+
+      {/* Promotion criteria */}
+      <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2">
+        <p className="text-[9px] font-semibold text-zinc-600 uppercase tracking-wider mb-0.5">Promotes to T1 when</p>
+        <p className="text-[10px] text-zinc-500">30 days live · 20 trades · Sharpe &gt; 0.3</p>
+      </div>
+    </div>
+  );
+}
+
+function CandidatesSection() {
+  return (
+    <div>
+      {/* Section header */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex-1 h-px border-t border-dashed border-zinc-800" />
+        <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest whitespace-nowrap">
+          // CANDIDATES (paper-shadow, not live)
+        </p>
+        <div className="flex-1 h-px border-t border-dashed border-zinc-800" />
+      </div>
+      <p className="text-xs text-zinc-600 mb-4">
+        {CANDIDATE_META.length} strategies in incubation. Tracked in paper mode only.
+        Manual graduation required to promote to live trading.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {CANDIDATE_META.map((c) => (
+          <CandidateCard key={c.id} c={c} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Fallback bot list (when API returns null/error) ──────────────────────────
 
 function makeFallbackBots(): BotListItem[] {
@@ -1881,6 +2038,9 @@ export default function StrategyLab() {
               ))}
             </div>
           )}
+
+          {/* Candidates in incubation */}
+          <CandidatesSection />
 
           {/* My Signals feed — Scout + Forge combined */}
           {mySignals.length > 0 && (
