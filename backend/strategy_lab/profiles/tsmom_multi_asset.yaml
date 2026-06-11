@@ -1,0 +1,41 @@
+name: tsmom_multi_asset
+asset_class: quant
+broker: alpaca_paper_stocks
+universe:
+  source: static
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - EFA
+    - EEM
+    - TLT
+    - IEF
+    - GLD
+    - USO
+    - DBC
+    - BTC/USD
+    - ETH/USD
+cadence: "0 17 * * 5"  # Friday 5PM ET weekly rebalance
+scan_lookback_period: "2y"
+strategies:
+  - tsmom_multi_asset
+ensemble: any_above_threshold
+confidence_threshold: 0.40
+position_cap: 12
+position_size_pct: 8.0
+stop_loss_pct: 15.0
+take_profit_pct: 25.0
+hold_max_days: 180
+strategy_type: momentum
+risk_overlay:
+  daily_loss_limit_pct: 5.0
+  portfolio_drawdown_circuit_pct: 20
+  pdt_enforce: false
+paper_only: true
+starting_capital_cents: 10000000
+tier: T0
+enabled: false
+notes: "Moskowitz, Ooi & Pedersen (2012) TSMOM. ~1.0 Sharpe claimed, 30% haircut → ~0.7 expected. Inv-vol weights, vol targeting per Barroso & Santa-Clara (2015)."
+discord:
+  channel: quant-signals
