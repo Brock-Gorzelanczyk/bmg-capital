@@ -914,28 +914,33 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
       </div>
 
       {/* All-time P&L banner */}
-      {stats?.all_time_pnl_pct != null && (
+      {stats?.all_time_pnl_pct != null ? (
         <div className={cn(
           "flex items-center justify-between px-3 py-2 rounded-lg mb-3 border",
-          (stats.all_time_pnl_pct ?? 0) >= 0
+          stats.all_time_pnl_pct >= 0
             ? "bg-emerald-500/5 border-emerald-500/20"
             : "bg-red-500/5 border-red-500/20"
         )}>
           <span className="text-xs font-medium text-zinc-500">ALL-TIME</span>
           <span className={cn(
             "text-sm font-bold tabular-nums",
-            (stats.all_time_pnl_pct ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"
+            stats.all_time_pnl_pct >= 0 ? "text-emerald-400" : "text-red-400"
           )}>
-            {(stats.all_time_pnl_pct ?? 0) >= 0 ? "+" : ""}{(stats.all_time_pnl_pct ?? 0).toFixed(2)}%
+            {stats.all_time_pnl_pct >= 0 ? "+" : ""}{stats.all_time_pnl_pct.toFixed(2)}%
           </span>
           {stats.all_time_pnl_usd != null && (
             <span className={cn(
               "text-xs tabular-nums",
-              (stats.all_time_pnl_usd ?? 0) >= 0 ? "text-emerald-500/70" : "text-red-500/70"
+              stats.all_time_pnl_usd >= 0 ? "text-emerald-500/70" : "text-red-500/70"
             )}>
-              {formatPnl(stats.all_time_pnl_usd ?? 0)}
+              {formatPnl(stats.all_time_pnl_usd)}
             </span>
           )}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg mb-3 border border-zinc-800 bg-zinc-900/40">
+          <span className="text-xs font-medium text-zinc-500">ALL-TIME</span>
+          <span className="text-xs text-zinc-600 italic">Not live yet</span>
         </div>
       )}
 
@@ -1185,6 +1190,10 @@ function makeFallbackBots(): BotListItem[] {
       open_positions: 0,
       total_trades: 0,
       win_rate_pct: 0,
+      all_time_pnl_pct: null,
+      all_time_pnl_usd: null,
+      starting_capital_usd: null,
+      current_equity_usd: null,
     },
   }));
 }
