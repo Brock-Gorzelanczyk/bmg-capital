@@ -315,3 +315,25 @@ class PortfolioDailyPnL(Base):
     unrealized_cents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     value_eod_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     __table_args__ = (UniqueConstraint("portfolio_id", "date"),)
+
+
+class SignalOutcome(Base):
+    """Outcome tracking for individual signals — links entry to exit for attribution."""
+    __tablename__ = "signal_outcomes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    signal_id: Mapped[int] = mapped_column(Integer, ForeignKey("bot_signals.id"), nullable=False, index=True)
+    allocation_id: Mapped[int] = mapped_column(Integer, ForeignKey("bot_allocations.id"), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    entry_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    exit_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    entry_ts: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    exit_ts: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    hold_bars: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)    # number of bars held
+    pnl_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pnl_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    regime_at_entry: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string of regime dict
+    exit_reason: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # stop_hit|target_hit|time_stop|manual|reversed
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
