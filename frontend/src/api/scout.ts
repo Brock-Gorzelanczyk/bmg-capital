@@ -28,6 +28,8 @@ export interface ScanResult {
   ticker: string;
   bar_count: number;
   results: EvaluateResult[];
+  conflict_warning: string | null;
+  message: string | null;
 }
 
 export interface ScoutSetup {

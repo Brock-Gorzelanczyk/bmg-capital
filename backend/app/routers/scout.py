@@ -55,6 +55,140 @@ def _cache_set(key: str, value: Any) -> None:
     _SCAN_CACHE[key] = (time.time(), value)
 
 
+# ── Scout-specific confidence calculators ─────────────────────────────────────
+# Strategy modules are shared with the bot runner (different sensitivity needs).
+# Scout needs tighter thresholds and recency weighting to avoid every large-cap
+# stock returning the same Golden Cross / RSI-2 / VWAP results at 90%.
+
+def _mean(arr: list[float]) -> float:
+    return sum(arr) / len(arr) if arr else 0.0
+
+
+def _atr14(bars: list[dict]) -> float:
+    if len(bars) < 2:
+        return bars[-1]["c"] * 0.02 if bars else 1.0
+    n = min(14, len(bars) - 1)
+    trs = []
+    for i in range(-n, 0):
+        b, prev_c = bars[i], bars[i - 1]["c"]
+        trs.append(max(b["h"] - b["l"], abs(b["h"] - prev_c), abs(b["l"] - prev_c)))
+    return sum(trs) / len(trs) if trs else bars[-1]["c"] * 0.02
+
+
+def _golden_cross_scout(bars: list[dict]) -> tuple[str, float] | None:
+    """Confidence driven by recency of the actual SMA50/SMA200 cross event.
+    A cross that happened 200 days ago is NOT a 90% entry — it's a hold.
+    """
+    if len(bars) < 210:
+        return None
+    closes = [b["c"] for b in bars]
+    sma50 = [_mean(closes[i - 50:i]) for i in range(200, len(closes))]
+    sma200 = [_mean(closes[i - 200:i]) for i in range(200, len(closes))]
+    if not sma50:
+        return None
+    current_above = sma50[-1] > sma200[-1]
+    side = "buy" if current_above else "sell"
+    cross_days_ago: int | None = None
+    for i in range(len(sma50) - 1, 0, -1):
+        prev_above = sma50[i - 1] > sma200[i - 1]
+        is_above = sma50[i] > sma200[i]
+        if is_above != prev_above and is_above == current_above:
+            cross_days_ago = len(sma50) - 1 - i
+            break
+    if cross_days_ago is None:
+        cross_days_ago = 999
+    if cross_days_ago <= 5:
+        return (side, 0.90)
+    if cross_days_ago <= 15:
+        return (side, 0.78)
+    if cross_days_ago <= 30:
+        return (side, 0.65)
+    if cross_days_ago <= 63:
+        return (side, 0.52)
+    return None  # cross is stale — not an actionable entry
+
+
+def _rsi2_scout(bars: list[dict]) -> tuple[str, float] | None:
+    """Tighter thresholds. RSI(2) < 10 fires too broadly. Use < 5 for real signal."""
+    if len(bars) < 3:
+        return None
+    closes = [b["c"] for b in bars]
+    gains = [max(0.0, closes[i] - closes[i - 1]) for i in range(-2, 0)]
+    losses = [max(0.0, closes[i - 1] - closes[i]) for i in range(-2, 0)]
+    avg_gain, avg_loss = sum(gains) / 2, sum(losses) / 2
+    rsi2 = 100.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+    if rsi2 < 2:
+        return ("buy", 0.88)
+    if rsi2 < 5:
+        return ("buy", 0.72)
+    if rsi2 < 10:
+        return ("buy", 0.52)
+    if rsi2 > 95:
+        return ("sell", 0.86)
+    if rsi2 > 90:
+        return ("sell", 0.72)
+    if rsi2 > 65:
+        return ("sell", 0.48)
+    return None
+
+
+def _vwap_reversion_scout(bars: list[dict]) -> tuple[str, float] | None:
+    """VWAP is an intraday concept — meaningless across a full year of daily bars.
+    Use rolling 20-bar VWAP; confidence scaled by deviation in ATR units.
+    """
+    if len(bars) < 20:
+        return None
+    recent = bars[-20:]
+    cum_tp_vol = sum(((b["h"] + b["l"] + b["c"]) / 3.0) * (b.get("v") or 0) for b in recent)
+    cum_vol = sum((b.get("v") or 0) for b in recent)
+    if cum_vol <= 0:
+        return None
+    vwap = cum_tp_vol / cum_vol
+    atr_val = _atr14(bars)
+    if atr_val <= 0:
+        return None
+    dev_atrs = (bars[-1]["c"] - vwap) / atr_val
+    if dev_atrs < -1.5:
+        return ("buy", round(min(0.88, 0.50 + abs(dev_atrs) * 0.10), 3))
+    if dev_atrs > 1.5:
+        return ("sell", round(min(0.88, 0.50 + dev_atrs * 0.10), 3))
+    return None
+
+
+_SCOUT_CONFIDENCE_OVERRIDES: dict[str, Any] = {
+    "golden_cross": _golden_cross_scout,
+    "rsi2_mean_reversion": _rsi2_scout,
+    "vwap_reversion": _vwap_reversion_scout,
+}
+
+
+def _build_override_reason(strategy_id: str, bars: list[dict], side: str, conf: float) -> str:
+    last = bars[-1]["c"] if bars else 0
+    if strategy_id == "golden_cross":
+        closes = [b["c"] for b in bars]
+        sma50 = _mean(closes[-50:])
+        sma200 = _mean(closes[-200:]) if len(closes) >= 200 else _mean(closes)
+        spread = (sma50 - sma200) / sma200 * 100 if sma200 else 0
+        label = "Golden" if side == "buy" else "Death"
+        return f"{label} cross: SMA50={sma50:.2f}, SMA200={sma200:.2f} (spread {spread:+.1f}%)"
+    if strategy_id == "rsi2_mean_reversion":
+        closes = [b["c"] for b in bars]
+        gains = [max(0.0, closes[i] - closes[i - 1]) for i in range(-2, 0)]
+        losses = [max(0.0, closes[i - 1] - closes[i]) for i in range(-2, 0)]
+        avg_gain, avg_loss = sum(gains) / 2, sum(losses) / 2
+        rsi2 = 100.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+        label = "oversold" if side == "buy" else "overbought"
+        return f"RSI(2)={rsi2:.1f} — extreme {label} reading"
+    if strategy_id == "vwap_reversion":
+        recent = bars[-20:]
+        cum_tp_vol = sum(((b["h"] + b["l"] + b["c"]) / 3.0) * (b.get("v") or 0) for b in recent)
+        cum_vol = sum((b.get("v") or 0) for b in recent)
+        vwap = cum_tp_vol / cum_vol if cum_vol > 0 else 0
+        label = "below" if side == "buy" else "above"
+        return f"Price {last:.2f} is {label} 20-bar VWAP {vwap:.2f}"
+    return f"Setup detected ({conf*100:.0f}% confidence)"
+
+
 # ── Bar fetching ──────────────────────────────────────────────────────────────
 
 def _fetch_bars_for_ticker(ticker: str, period: str = "1y") -> list[dict]:
@@ -101,6 +235,37 @@ def _run_strategy(strategy_id: str, ticker: str, bars: list[dict]) -> dict | Non
     if len(bars) < meta.get("min_bars", 1):
         return None
 
+    last_close = bars[-1]["c"] if bars else None
+    threshold = meta["confidence_threshold"]
+
+    # Scout-specific overrides produce real, per-ticker differentiated confidence.
+    # The generic strategy modules use confidence formulas that saturate at 0.9
+    # for all large-cap stocks in a bull market — these overrides fix that.
+    if strategy_id in _SCOUT_CONFIDENCE_OVERRIDES:
+        result = _SCOUT_CONFIDENCE_OVERRIDES[strategy_id](bars)
+        if result is None:
+            return None
+        side, conf = result
+        if conf < threshold:
+            return None
+        is_buy = side in ("buy", "cover")
+        return {
+            "strategy_id": strategy_id,
+            "display_name": meta["display_name"],
+            "category": meta["category"],
+            "setup_quality": min(100, int(conf * 100)),
+            "confidence": round(conf, 4),
+            "side": side,
+            "threshold": threshold,
+            "armed": conf >= threshold,
+            "entry": last_close,
+            "stop": round(last_close * (0.93 if is_buy else 1.07), 4) if last_close else None,
+            "target": round(last_close * (1.15 if is_buy else 0.85), 4) if last_close else None,
+            "reason": _build_override_reason(strategy_id, bars, side, conf),
+            "indicators": {},
+        }
+
+    # Generic path: import and run the strategy module
     try:
         mod = importlib.import_module(meta["module"])
     except ImportError as exc:
@@ -120,7 +285,6 @@ def _run_strategy(strategy_id: str, ticker: str, bars: list[dict]) -> dict | Non
         logger.debug("[scout] %s strategy raised: %s", strategy_id, exc)
         return None
 
-    # Pick the signal for our ticker (skip holds)
     sig = next(
         (s for s in signals if s.symbol == ticker and s.side != "hold"),
         next((s for s in signals if s.symbol == ticker), None),
@@ -129,37 +293,26 @@ def _run_strategy(strategy_id: str, ticker: str, bars: list[dict]) -> dict | Non
         return None
 
     conf = float(sig.confidence or 0)
+    # Cap non-override strategies at 0.85 — prevents blanket saturation at 0.90
+    conf = min(0.85, conf)
     side = sig.side or "neutral"
-    threshold = meta["confidence_threshold"]
 
-    # Setup quality 0-100
-    if side == "hold":
-        quality = max(0, int(conf * 40))
-    else:
-        quality = min(100, int(conf * 100))
+    if conf < threshold or side == "hold":
+        return None
 
-    # Entry / stop / target heuristics from bar data
-    last_close = bars[-1]["c"] if bars else None
-    entry = last_close
-    stop = None
-    target = None
-    if last_close:
-        is_buy = side in ("buy", "cover")
-        stop = round(last_close * (0.93 if is_buy else 1.07), 4)
-        target = round(last_close * (1.15 if is_buy else 0.85), 4)
-
+    is_buy = side in ("buy", "cover")
     return {
         "strategy_id": strategy_id,
         "display_name": meta["display_name"],
         "category": meta["category"],
-        "setup_quality": quality,
+        "setup_quality": min(100, int(conf * 100)),
         "confidence": round(conf, 4),
         "side": side,
         "threshold": threshold,
-        "armed": conf >= threshold and side != "hold",
-        "entry": entry,
-        "stop": stop,
-        "target": target,
+        "armed": conf >= threshold,
+        "entry": last_close,
+        "stop": round(last_close * (0.93 if is_buy else 1.07), 4) if last_close else None,
+        "target": round(last_close * (1.15 if is_buy else 0.85), 4) if last_close else None,
         "reason": getattr(sig, "reason", "") or "",
         "indicators": {},
     }
@@ -238,7 +391,39 @@ def scan_ticker(
     results.sort(key=lambda x: (-x["setup_quality"], -x["confidence"]))
     top10 = results[:10]
 
-    response = {"ticker": ticker, "bar_count": len(bars), "results": top10}
+    # Empty state — no strategies firing for this ticker right now
+    if not top10:
+        response = {
+            "ticker": ticker,
+            "bar_count": len(bars),
+            "results": [],
+            "conflict_warning": None,
+            "message": f"No high-confidence setups currently for {ticker}. "
+                       f"Market conditions don't favor any tracked strategy right now.",
+        }
+        _cache_set(ticker, response)
+        return response
+
+    # Conflict detection — flag when both meaningful long and short signals exist
+    buy_high = [r for r in top10 if r["side"] in ("buy", "cover") and r["confidence"] >= 0.55]
+    sell_high = [r for r in top10 if r["side"] in ("sell", "short") and r["confidence"] >= 0.55]
+    conflict_warning = None
+    if buy_high and sell_high:
+        top_buy_conf = buy_high[0]["confidence"] * 100
+        top_sell_conf = sell_high[0]["confidence"] * 100
+        conflict_warning = (
+            f"Conflicting signals: {buy_high[0]['display_name']} ({top_buy_conf:.0f}% long) "
+            f"vs {sell_high[0]['display_name']} ({top_sell_conf:.0f}% short). "
+            f"Mixed-regime conditions — size down or wait for resolution."
+        )
+
+    response = {
+        "ticker": ticker,
+        "bar_count": len(bars),
+        "results": top10,
+        "conflict_warning": conflict_warning,
+        "message": None,
+    }
     _cache_set(ticker, response)
     return response
 

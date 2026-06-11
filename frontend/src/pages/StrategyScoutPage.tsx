@@ -348,15 +348,26 @@ function ScanTickerTab() {
 
       {data && (
         <BMGCard padding="none">
-          <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-t-dim flex items-center justify-between">
             <SectionLabel>Top strategies for {data.ticker}</SectionLabel>
-            <span className="font-mono text-[10px] text-zinc-600">{data.bar_count} bars</span>
+            <span className="font-mono-t text-[10px] text-t-gdim">{data.bar_count} bars</span>
           </div>
-          <div className="divide-y divide-zinc-800/60">
+
+          {data.conflict_warning && (
+            <div className="mx-4 mt-3 px-3 py-2.5 bg-t-amber/10 border border-t-amber/30 rounded-lg flex items-start gap-2">
+              <span className="text-t-amber text-xs mt-0.5 shrink-0">⚠</span>
+              <p className="text-t-amber text-xs font-ui-t leading-relaxed">{data.conflict_warning}</p>
+            </div>
+          )}
+
+          <div className="divide-y divide-t-dim/60">
             {data.results.length === 0 && (
-              <p className="px-4 py-6 text-sm text-zinc-500 text-center">
-                No signals above threshold for {data.ticker}
-              </p>
+              <div className="px-4 py-8 text-center">
+                <p className="text-t-mid2 text-sm font-mono-t mb-1">No setups detected</p>
+                <p className="text-t-muted text-xs font-ui-t">
+                  {data.message || `No high-confidence setups currently for ${data.ticker}.`}
+                </p>
+              </div>
             )}
             {data.results.map((r) => {
               const sideLabel =
