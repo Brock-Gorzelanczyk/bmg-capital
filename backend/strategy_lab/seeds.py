@@ -86,22 +86,25 @@ def seed_bot_profiles(db: Session) -> None:
         asset_class = config.get("asset_class", "stock")
         description = _PROFILE_DESCRIPTIONS.get(name, f"{name} trading bot profile")
 
+        # Respect the YAML enabled flag; default True if absent (existing bots have no field)
+        yaml_enabled = bool(config.get("enabled", True))
+
         existing = db.query(BotProfile).filter(BotProfile.name == name).first()
         if existing:
             existing.description = description
             existing.asset_class = asset_class
             existing.config_json = config
-            existing.enabled = True
-            logger.debug("Updated BotProfile: %s", name)
+            existing.enabled = yaml_enabled
+            logger.debug("Updated BotProfile: %s (enabled=%s)", name, yaml_enabled)
         else:
             db.add(BotProfile(
                 name=name,
                 description=description,
                 asset_class=asset_class,
                 config_json=config,
-                enabled=True,
+                enabled=yaml_enabled,
             ))
-            logger.info("Seeded BotProfile: %s", name)
+            logger.info("Seeded BotProfile: %s (enabled=%s)", name, yaml_enabled)
 
     try:
         db.commit()

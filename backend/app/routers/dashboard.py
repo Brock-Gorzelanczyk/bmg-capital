@@ -74,7 +74,17 @@ def get_dashboard_v2(
     cutoff_30d = (now - timedelta(days=30)).date()
 
     # ── Load allocations + profiles ──────────────────────────────────────────
-    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == current_user.id).all()
+    # Join to BotProfile so disabled profiles (YAML enabled: false) are excluded.
+    # This prevents bots that have never traded from inflating portfolio value/counts.
+    allocs = (
+        db.query(BotAllocation)
+        .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotProfile.enabled.is_(True),
+        )
+        .all()
+    )
     alloc_ids = [a.id for a in allocs]
     profile_ids = list({a.profile_id for a in allocs})
 
@@ -145,10 +155,17 @@ def get_dashboard_v2(
         profile_wl_count[wl.profile_id] = profile_wl_count.get(wl.profile_id, 0) + 1
 
     # ── Portfolio totals ──────────────────────────────────────────────────────
+    # allocs is already filtered to enabled profiles only (see query above).
     total_starting = sum(a.starting_capital_cents or 0 for a in allocs)
     total_realized = sum(total_realized_by_alloc.values())
     total_today_pnl = sum(today_pnl_by_alloc.values())
-    total_value = total_starting + total_realized
+    # Include today's unrealized so open positions are reflected in portfolio value.
+    total_unrealized_today = sum(
+        row.unrealized_cents
+        for row in pnl_rows
+        if row.date == today and row.allocation_id in set(alloc_ids)
+    )
+    total_value = total_starting + total_realized + total_unrealized_today
     prev_value = total_value - total_today_pnl
     today_pct = round(total_today_pnl / prev_value * 100, 2) if prev_value > 0 else 0.0
     total_30d_pnl = sum(pnl_30d_by_alloc.values())
@@ -269,7 +286,10 @@ def get_dashboard_v2(
             "return_30d_pct": round(pnl30 / start * 100, 2) if start else 0.0,
             "today_pnl_cents": today_pnl_by_alloc.get(alloc.id, 0),
             "watchlist_count": profile_wl_count.get(alloc.profile_id, 0),
-            "portfolio_value_cents": start + total_realized_by_alloc.get(alloc.id, 0),
+            "portfolio_value_cents": start + total_realized_by_alloc.get(alloc.id, 0) + sum(
+            r.unrealized_cents for r in pnl_rows
+            if r.allocation_id == alloc.id and r.date == today
+        ),
         })
     leaderboard.sort(key=lambda x: x["return_30d_pct"], reverse=True)
     for i, e in enumerate(leaderboard, 1):
