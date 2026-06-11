@@ -1,518 +1,355 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Search, Star, ExternalLink, TrendingUp, Clock, BarChart2, Zap, Filter, BookOpen, ChevronDown, ChevronUp } from "lucide-react";
-import client from "@/api/client";
+import { Search, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SectionLabel } from "@/components/design";
+import { getBotLeaderboardRanking, type BotLeaderboardRow } from "@/api/performance";
+import { listCandidates, type Candidate } from "@/api/candidates";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ── Style / difficulty mappings ───────────────────────────────────────────────
 
-interface StrategyEntry {
-  id: number;
-  module_name: string;
-  display_name: string;
-  tagline: string;
-  category: string;
-  asset_class: string;
-  time_horizon: string;
-  difficulty: string;
-  risk_profile: string;
-  published_sharpe: number | null;
-  win_rate_pub: number | null;
-  max_dd_pub: number | null;
-  decay_risk: string;
-  source_url: string | null;
-  paper_citation: string | null;
-  suggested_bot: string | null;
-  is_top_pick: boolean;
-  description_md: string | null;
-  mechanics_md: string | null;
-  beginner_summary: string | null;
-  how_it_decides: string | null;
-  why_it_works: string | null;
-  when_it_fails: string | null;
-}
+const BOT_STYLE: Record<string, string> = {
+  stock_swing:                 "Momentum",
+  stock_day:                   "Momentum",
+  stock_lt:                    "Trend",
+  crypto_swing:                "Momentum",
+  crypto_day:                  "Momentum",
+  crypto_lt:                   "Trend",
+  crypto_onchain:              "Event-Driven",
+  crypto_quant_aggressive:     "Momentum",
+  crypto_quant_mean_reversion: "Mean Reversion",
+  crypto_quant_scalper:        "Mean Reversion",
+  options_income:              "Carry",
+  options_directional:         "Volatility",
+};
 
-interface LibraryResponse {
-  strategies: StrategyEntry[];
-  total: number;
-  categories: Record<string, number>;
-}
+const BOT_DIFFICULTY: Record<string, string> = {
+  stock_swing: "Intermediate", stock_day: "Intermediate",
+  stock_lt: "Beginner",        crypto_swing: "Intermediate",
+  crypto_day: "Advanced",      crypto_lt: "Beginner",
+  crypto_onchain: "Advanced",  crypto_quant_aggressive: "Advanced",
+  crypto_quant_mean_reversion: "Advanced", crypto_quant_scalper: "Advanced",
+  options_income: "Intermediate", options_directional: "Advanced",
+};
 
-// ─── API ──────────────────────────────────────────────────────────────────────
-
-function getStrategyLibrary(params?: {
-  category?: string;
-  asset_class?: string;
-  difficulty?: string;
-  search?: string;
-  sort?: string;
-}): Promise<LibraryResponse> {
-  const q = new URLSearchParams();
-  if (params?.category) q.set("category", params.category);
-  if (params?.asset_class) q.set("asset_class", params.asset_class);
-  if (params?.difficulty) q.set("difficulty", params.difficulty);
-  if (params?.search) q.set("search", params.search);
-  if (params?.sort) q.set("sort", params.sort);
-  return client
-    .get<LibraryResponse>(`/strategy-library?${q}`)
-    .then((r) => r.data ?? { strategies: [], total: 0, categories: {} })
-    .catch(() => ({ strategies: [], total: 0, categories: {} }));
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const STYLE_COLOR: Record<string, string> = {
+  Momentum:       "bg-t-green/15 text-t-green border-t-green/30",
+  "Mean Reversion": "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  Trend:          "bg-slate-500/15 text-slate-400 border-slate-500/30",
+  Arbitrage:      "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  Volatility:     "bg-t-red/15 text-t-red border-t-red/30",
+  Carry:          "bg-t-amber/15 text-t-amber border-t-amber/30",
+  "Event-Driven": "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  "Cross-Asset":  "bg-teal-500/15 text-teal-400 border-teal-500/30",
+};
 
 const DIFFICULTY_COLOR: Record<string, string> = {
-  beginner: "bg-lime-500/15 text-lime-400 border-lime-500/30",
-  intermediate: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  advanced: "bg-t-red/15 text-t-red border-t-red/30",
+  Beginner:     "bg-lime-500/15 text-lime-400 border-lime-500/30",
+  Intermediate: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  Advanced:     "bg-t-red/15 text-t-red border-t-red/30",
 };
 
-const HORIZON_ICON: Record<string, typeof TrendingUp> = {
-  intraday: Zap,
-  swing: BarChart2,
-  position: TrendingUp,
-  long_term: Clock,
+const TIER_BADGE: Record<string, string> = {
+  T3: "text-t-green border-t-green/30 bg-t-green/10",
+  T2: "text-t-cyan border-t-cyan/30 bg-t-cyan/10",
+  T1: "text-t-amber border-t-amber/30 bg-t-amber/10",
+  T0: "text-t-muted border-t-muted/30 bg-t-muted/10",
 };
 
-const ASSET_COLOR: Record<string, string> = {
-  stocks: "text-blue-400",
-  crypto: "text-orange-400",
-  options: "text-purple-400",
-  multi: "text-teal-400",
+const STATE_COLOR: Record<string, string> = {
+  CANDIDATE:       "text-t-muted bg-t-bg2 border-t-dim",
+  BACKTEST_QUEUED: "text-t-amber bg-t-amber/10 border-t-amber/30",
+  BACKTEST_DONE:   "text-blue-400 bg-blue-400/10 border-blue-400/30",
+  WFA_QUEUED:      "text-t-amber bg-t-amber/10 border-t-amber/30",
+  WFA_DONE:        "text-purple-400 bg-purple-400/10 border-purple-400/30",
+  SHADOW_PAPER:    "text-t-cyan bg-t-cyan/10 border-t-cyan/30",
+  PROMOTED:        "text-t-green bg-t-green/10 border-t-green/30",
+  RETIRED:         "text-t-red bg-t-red/10 border-t-red/30",
 };
 
-const BOT_LABEL: Record<string, string> = {
-  stock_swing: "Stock Swing",
-  stock_day: "Stock Day",
-  stock_lt: "Stock LT",
-  crypto_swing: "Crypto Swing",
-  crypto_day: "Crypto Day",
-  crypto_lt: "Crypto LT",
-  options_income: "Options Income",
-  options_directional: "Options Directional",
-};
+// ── Sub-components ────────────────────────────────────────────────────────────
 
-function sharpeColor(v: number | null): string {
-  if (v == null) return "text-t-muted";
-  if (v >= 2) return "text-lime-400";
-  if (v >= 1) return "text-yellow-400";
-  return "text-t-red";
-}
-
-// ─── Strategy Card ────────────────────────────────────────────────────────────
-
-function StrategyCard({ s }: { s: StrategyEntry }) {
-  const [expanded, setExpanded] = useState(false);
-  const [beginnerExpanded, setBeginnerExpanded] = useState(false);
-  const navigate = useNavigate();
-  const HorizonIcon = HORIZON_ICON[s.time_horizon] ?? TrendingUp;
-  const hasBeginnerGuide = !!(s.beginner_summary || s.how_it_decides || s.why_it_works || s.when_it_fails);
-
+function Metric({ label, value, tag }: { label: string; value: string; tag?: string }) {
   return (
-    <div
-      className={cn(
-        "bg-t-bg1 border rounded-2xl p-5 space-y-3 transition-all cursor-pointer card-hover",
-        s.is_top_pick ? "border-teal-500/40" : "border-t-dim"
-      )}
-      onClick={() => setExpanded((v) => !v)}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            {s.is_top_pick && (
-              <Star className="w-3.5 h-3.5 text-teal-400 fill-teal-400 flex-shrink-0" />
-            )}
-            <h3 className="text-sm font-bold text-t-hi truncate">{s.display_name}</h3>
-            <span className={cn(
-              "text-[10px] font-semibold px-1.5 py-0.5 rounded-full border",
-              DIFFICULTY_COLOR[s.difficulty] ?? "bg-t-bg2 text-t-mid2 border-t-mid"
-            )}>
-              {s.difficulty}
-            </span>
-          </div>
-          <p className="text-xs text-t-muted mt-0.5 leading-relaxed">{s.tagline}</p>
-        </div>
-        <div className="flex items-center gap-1 text-t-muted flex-shrink-0">
-          <HorizonIcon className="w-3.5 h-3.5" />
-          <span className="text-[10px]">{s.time_horizon}</span>
-        </div>
-      </div>
-
-      {/* Stats row */}
-      <div className="flex items-center gap-4 text-xs">
-        <div>
-          <p className="text-[9px] text-t-muted uppercase tracking-wide">Sharpe</p>
-          <p className={cn("font-bold font-mono-t tabular-nums mt-0.5", sharpeColor(s.published_sharpe))}>
-            {s.published_sharpe != null ? s.published_sharpe.toFixed(2) : "—"}
-          </p>
-        </div>
-        <div>
-          <p className="text-[9px] text-t-muted uppercase tracking-wide">Win Rate</p>
-          <p className="font-bold font-mono-t tabular-nums text-t-hi mt-0.5">
-            {s.win_rate_pub != null ? `${(s.win_rate_pub * 100).toFixed(0)}%` : "—"}
-          </p>
-        </div>
-        <div>
-          <p className="text-[9px] text-t-muted uppercase tracking-wide">Max DD</p>
-          <p className="font-bold font-mono-t tabular-nums text-t-red mt-0.5">
-            {s.max_dd_pub != null ? `${(s.max_dd_pub * 100).toFixed(0)}%` : "—"}
-          </p>
-        </div>
-        <div className="ml-auto text-right">
-          <p className="text-[9px] text-t-muted uppercase tracking-wide">Asset</p>
-          <p className={cn("font-semibold mt-0.5 capitalize", ASSET_COLOR[s.asset_class] ?? "text-t-mid2")}>
-            {s.asset_class}
-          </p>
-        </div>
-      </div>
-
-      {/* Tags row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-t-bg2 border border-t-mid text-t-mid2">
-          {s.category}
-        </span>
-        {s.suggested_bot && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/20 text-teal-500">
-            {BOT_LABEL[s.suggested_bot] ?? s.suggested_bot}
-          </span>
-        )}
-        <span className={cn(
-          "text-[10px] px-2 py-0.5 rounded-full border",
-          s.decay_risk === "low"
-            ? "bg-lime-500/10 border-lime-500/20 text-lime-500"
-            : s.decay_risk === "medium"
-            ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
-            : "bg-t-red/10 border-t-red/20 text-t-red"
-        )}>
-          decay: {s.decay_risk}
-        </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/screener?preset=${s.module_name}`);
-          }}
-          className="ml-auto text-[10px] font-semibold text-blue-400 hover:text-blue-300 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 px-2 py-0.5 rounded-full transition-colors flex-shrink-0"
-        >
-          Run as Screen →
-        </button>
-      </div>
-
-      {/* Expanded detail */}
-      {expanded && (
-        <div className="pt-2 border-t border-t-dim space-y-3" onClick={(e) => e.stopPropagation()}>
-          {s.description_md && (
-            <div>
-              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-1">What it does</p>
-              <p className="text-xs text-t-hi leading-relaxed">{s.description_md}</p>
-            </div>
-          )}
-          {s.mechanics_md && (
-            <div>
-              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-1">How it works</p>
-              <p className="text-xs text-t-mid2 leading-relaxed">{s.mechanics_md}</p>
-            </div>
-          )}
-          {s.paper_citation && (
-            <div className="flex items-center gap-2">
-              <p className="text-[10px] text-t-muted">Source:</p>
-              {s.source_url ? (
-                <a
-                  href={s.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {s.paper_citation}
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              ) : (
-                <p className="text-[10px] text-t-muted">{s.paper_citation}</p>
-              )}
-            </div>
-          )}
-
-          {/* Beginner Guide section */}
-          {hasBeginnerGuide && (
-            <div className="border-t border-t-dim pt-2">
-              <button
-                onClick={(e) => { e.stopPropagation(); setBeginnerExpanded((v) => !v); }}
-                className="flex items-center gap-1.5 text-[10px] font-semibold text-lime-400 hover:text-lime-300 transition-colors w-full text-left"
-              >
-                <BookOpen className="w-3 h-3 flex-shrink-0" />
-                Beginner Guide
-                {beginnerExpanded
-                  ? <ChevronUp className="w-3 h-3 ml-auto" />
-                  : <ChevronDown className="w-3 h-3 ml-auto" />
-                }
-              </button>
-              {beginnerExpanded && (
-                <div className="mt-2 space-y-2 bg-lime-500/5 border border-lime-500/15 rounded-xl p-3">
-                  {s.beginner_summary && (
-                    <div>
-                      <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">What it is</p>
-                      <p className="text-xs text-t-hi leading-relaxed">{s.beginner_summary}</p>
-                    </div>
-                  )}
-                  {s.how_it_decides && (
-                    <div>
-                      <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">How it decides</p>
-                      <p className="text-xs text-t-mid2 leading-relaxed">{s.how_it_decides}</p>
-                    </div>
-                  )}
-                  {s.why_it_works && (
-                    <div>
-                      <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">Why it works</p>
-                      <p className="text-xs text-t-mid2 leading-relaxed">{s.why_it_works}</p>
-                    </div>
-                  )}
-                  {s.when_it_fails && (
-                    <div>
-                      <p className="text-[9px] text-lime-600 uppercase tracking-wide font-semibold mb-0.5">When it fails</p>
-                      <p className="text-xs text-t-mid2 leading-relaxed">{s.when_it_fails}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] text-t-gdim font-mono-t uppercase tracking-widest">{label}</span>
+      <span className="text-sm font-bold text-t-hi font-mono-t tabular-nums">{value}</span>
+      {tag && <span className="text-[9px] text-t-gdim font-mono-t">({tag})</span>}
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-const SORT_OPTIONS = [
-  { value: "sharpe", label: "Best Sharpe" },
-  { value: "top_pick", label: "Top Picks First" },
-  { value: "alphabetical", label: "A → Z" },
-];
-
-const ASSET_OPTIONS = ["stocks", "crypto", "options", "multi"];
-const DIFFICULTY_OPTIONS = ["beginner", "intermediate", "advanced"];
-
-export default function StrategyLibraryPage() {
-  const navigate = useNavigate();
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
-  const [assetClass, setAssetClass] = useState("");
-  const [difficulty, setDifficulty] = useState("");
-  const [sort, setSort] = useState("sharpe");
-  const [showFilters, setShowFilters] = useState(false);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["strategy-library", search, category, assetClass, difficulty, sort],
-    queryFn: () =>
-      getStrategyLibrary({
-        search: search || undefined,
-        category: category || undefined,
-        asset_class: assetClass || undefined,
-        difficulty: difficulty || undefined,
-        sort,
-      }),
-    staleTime: 60_000,
-  });
-
-  const strategies = Array.isArray(data?.strategies) ? data.strategies : [];
-  const categories = data?.categories ?? {};
-  const total = data?.total ?? 0;
-
-  const categoryList = useMemo(
-    () => Object.keys(categories).sort((a, b) => categories[b] - categories[a]),
-    [categories]
-  );
+function BotCard({ row, onClick }: { row: BotLeaderboardRow; onClick: () => void }) {
+  const style = BOT_STYLE[row.bot_id] ?? "Other";
+  const difficulty = BOT_DIFFICULTY[row.bot_id] ?? "Intermediate";
+  const isVerified = row.tier === "T2" || row.tier === "T3";
+  const hasLiveData = row.trades_count > 0;
 
   return (
-    <div className="animate-page-in max-w-4xl mx-auto px-4 py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate("/strategy")}
-              className="text-xs text-t-muted hover:text-t-hi transition-colors"
-            >
-              Strategy Lab
-            </button>
-            <span className="text-t-dim">/</span>
-            <span className="text-xs text-t-hi font-semibold">Library</span>
-          </div>
-          <h1 className="text-xl font-bold text-t-hi mt-1">Strategy Library</h1>
-          <p className="text-xs text-t-muted mt-0.5">
-            {total} strategies across {categoryList.length} categories — click any card to expand
-          </p>
+    <button
+      onClick={onClick}
+      className="bg-t-bg1 border border-t-dim rounded-2xl p-5 text-left hover:border-t-mid hover:bg-t-bg2/30 transition-all duration-150 space-y-3 w-full"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-t-hi font-semibold text-sm leading-tight font-ui-t truncate">{row.strategy_name}</p>
+          <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full border mt-1 inline-block font-mono-t", TIER_BADGE[row.tier] ?? TIER_BADGE.T0)}>
+            {row.tier}
+          </span>
         </div>
-        <button
-          onClick={() => navigate("/strategy/library/custom-bot")}
-          className="px-4 py-2 rounded-xl bg-teal-500/15 border border-teal-500/30 text-teal-400 text-sm font-semibold hover:bg-teal-500/25 transition-colors flex-shrink-0"
-        >
-          + Custom Bot
-        </button>
+        {isVerified && (
+          <span className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-t-green/10 border border-t-green/30 text-[10px] font-bold text-t-green font-mono-t whitespace-nowrap">
+            <CheckCircle2 size={10} /> VERIFIED
+          </span>
+        )}
       </div>
 
-      {/* Search + filter bar */}
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-t-muted" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search strategies…"
-              className="w-full bg-t-bg1 border border-t-dim rounded-xl pl-9 pr-4 py-2.5 text-sm text-t-hi placeholder-t-muted focus:outline-none focus:border-teal-500/50"
+      <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold font-mono-t", STYLE_COLOR[style] ?? "bg-t-bg2 text-t-muted border-t-dim")}>
+        {style}
+      </span>
+
+      <div className="grid grid-cols-3 gap-2">
+        {hasLiveData ? (
+          <>
+            <Metric label="SHARPE" value={row.sharpe_30d != null ? row.sharpe_30d.toFixed(2) : "—"} tag="live" />
+            <Metric label="WIN" value={row.win_rate != null ? `${(row.win_rate * 100).toFixed(0)}%` : "—"} tag="live" />
+            <Metric label="MAX DD" value={row.max_drawdown_pct != null ? `${(row.max_drawdown_pct * 100).toFixed(1)}%` : "—"} tag="live" />
+          </>
+        ) : (
+          <div className="col-span-3 text-t-gdim text-xs font-mono-t">No live data yet</div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-2 pt-1 border-t border-t-dim">
+        <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-mono-t font-bold", DIFFICULTY_COLOR[difficulty])}>
+          {difficulty}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={cn("w-1.5 h-1.5 rounded-full", row.enabled ? "bg-t-green" : "bg-t-muted")} />
+          <span className="text-[10px] text-t-muted font-mono-t">
+            {row.enabled ? `LIVE · ${row.days_live}d deployed` : `OFF · ${row.days_live}d`}
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function CandidateCard({ c, onClick }: { c: Candidate; onClick: () => void }) {
+  const style = c.style ?? "Other";
+  const hasBacktest = c.latest_backtest != null && c.latest_backtest.net_sharpe != null;
+  const isActive = c.state === "SHADOW_PAPER";
+  const isRetired = c.state === "RETIRED";
+
+  return (
+    <button
+      onClick={onClick}
+      className="bg-t-bg1 border border-t-dim rounded-2xl p-5 text-left hover:border-t-mid hover:bg-t-bg2/30 transition-all duration-150 space-y-3 w-full"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-t-hi font-semibold text-sm leading-tight font-ui-t truncate min-w-0 capitalize">
+          {c.name.replace(/_/g, " ")}
+        </p>
+        <span className={cn("shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono-t whitespace-nowrap", STATE_COLOR[c.state])}>
+          {c.state.replace(/_/g, " ")}
+        </span>
+      </div>
+
+      <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold font-mono-t", STYLE_COLOR[style] ?? "bg-t-bg2 text-t-muted border-t-dim")}>
+        {style}
+      </span>
+
+      <div className="grid grid-cols-3 gap-2">
+        {hasBacktest ? (
+          <>
+            <Metric label="SHARPE" value={c.latest_backtest!.net_sharpe!.toFixed(2)} tag="backtest" />
+            <Metric
+              label="WIN"
+              value={c.latest_backtest!.win_rate != null ? `${(c.latest_backtest!.win_rate * 100).toFixed(0)}%` : "—"}
+              tag="backtest"
             />
-          </div>
-          <button
-            onClick={() => setShowFilters((v) => !v)}
-            className={cn(
-              "px-3 py-2 rounded-xl border text-sm font-semibold transition-colors flex items-center gap-1.5",
-              showFilters
-                ? "bg-teal-500/15 border-teal-500/40 text-teal-400"
-                : "bg-t-bg1 border-t-dim text-t-muted hover:text-t-hi"
-            )}
-          >
-            <Filter className="w-4 h-4" />
-            Filters
-          </button>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="bg-t-bg1 border border-t-dim rounded-xl px-3 py-2 text-sm text-t-hi focus:outline-none focus:border-teal-500/50"
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+            <Metric
+              label="MAX DD"
+              value={c.latest_backtest!.max_drawdown_pct != null ? `${c.latest_backtest!.max_drawdown_pct.toFixed(1)}%` : "—"}
+              tag="backtest"
+            />
+          </>
+        ) : (
+          <div className="col-span-3 text-t-gdim text-xs font-mono-t">Not backtested</div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5 pt-1 border-t border-t-dim">
+        <span className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-t-cyan" : isRetired ? "bg-t-red" : "bg-t-muted")} />
+        <span className="text-[10px] text-t-muted font-mono-t">
+          {isActive ? "SHADOW PAPER" : isRetired ? "RETIRED" : "NOT LIVE"}
+        </span>
+        {c.asset_class && (
+          <span className="ml-auto text-[10px] text-t-gdim font-mono-t uppercase">{c.asset_class}</span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function StrategyLibraryPage() {
+  const [filter, setFilter] = useState("All");
+  const [search, setSearch] = useState("");
+  const navigate = useNavigate();
+
+  const { data: lbData, isLoading: botsLoading, isError: botsError } = useQuery({
+    queryKey: ["bot-leaderboard-ranking", "pnl"],
+    queryFn: () => getBotLeaderboardRanking("pnl"),
+    staleTime: 120_000,
+    retry: 1,
+  });
+
+  const { data: candidateData, isLoading: cLoading, isError: cError } = useQuery({
+    queryKey: ["candidates-list"],
+    queryFn: listCandidates,
+    staleTime: 120_000,
+    retry: 1,
+  });
+
+  const bots = lbData?.strategies ?? [];
+  const allCandidates = candidateData?.candidates ?? [];
+  const candidates = allCandidates.filter((c) => c.state !== "PROMOTED" && c.state !== "RETIRED");
+
+  const nTotal = bots.length + allCandidates.length;
+  const nVerified = bots.filter((b) => b.tier === "T2" || b.tier === "T3").length;
+  const nCandidates = candidates.length;
+
+  const styleCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const b of bots) {
+      const s = BOT_STYLE[b.bot_id] ?? "Other";
+      counts[s] = (counts[s] ?? 0) + 1;
+    }
+    for (const c of candidates) {
+      const s = c.style ?? "Other";
+      counts[s] = (counts[s] ?? 0) + 1;
+    }
+    return counts;
+  }, [bots, candidates]);
+
+  const styleChips = ["All", ...Object.keys(styleCounts).sort()];
+
+  const filtered = useMemo(() => {
+    type Item =
+      | { kind: "bot"; b: BotLeaderboardRow }
+      | { kind: "candidate"; c: Candidate };
+
+    const all: Item[] = [
+      ...bots.map((b) => ({ kind: "bot" as const, b })),
+      ...candidates.map((c) => ({ kind: "candidate" as const, c })),
+    ];
+
+    const q = search.toLowerCase();
+    return all.filter((item) => {
+      if (filter !== "All") {
+        const s = item.kind === "bot" ? BOT_STYLE[item.b.bot_id] : item.c.style;
+        if (s !== filter) return false;
+      }
+      if (q) {
+        const name = item.kind === "bot" ? item.b.strategy_name : item.c.name;
+        if (!name.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [bots, candidates, filter, search]);
+
+  const isLoading = botsLoading || cLoading;
+  const isError = botsError && cError;
+
+  return (
+    <div className="min-h-screen bg-t-bg0 text-t-hi animate-page-in">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+        {/* Paper trading notice */}
+        <div className="flex items-center gap-2 bg-t-amber/10 border border-t-amber/30 rounded-xl px-4 py-2.5 text-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-t-amber shrink-0" />
+          <span className="font-mono-t text-t-amber tracking-wide font-bold">
+            PAPER TRADING ONLY — SIMULATED FILLS, NO REAL CAPITAL AT RISK
+          </span>
         </div>
 
-        {showFilters && (
-          <div className="bg-t-bg1 border border-t-dim rounded-xl p-4 space-y-4">
-            {/* Category filter */}
-            <div>
-              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-2">Category</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setCategory("")}
-                  className={cn(
-                    "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                    !category ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
-                  )}
-                >
-                  All
-                </button>
-                {categoryList.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setCategory(cat === category ? "" : cat)}
-                    className={cn(
-                      "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                      category === cat ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
-                    )}
-                  >
-                    {cat} <span className="text-t-dim">({categories[cat]})</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Header */}
+        <div>
+          <SectionLabel as="h1" className="text-base mb-1">// STRATEGY LIBRARY</SectionLabel>
+          {!isLoading && !isError && (
+            <p className="text-sm text-t-muted font-mono-t">
+              {nTotal} strategies &middot; {nVerified} verified &amp; deployed &middot; {nCandidates} in incubation
+            </p>
+          )}
+        </div>
 
-            {/* Asset class filter */}
-            <div>
-              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-2">Asset Class</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setAssetClass("")}
-                  className={cn(
-                    "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                    !assetClass ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
-                  )}
-                >
-                  All
-                </button>
-                {ASSET_OPTIONS.map((a) => (
-                  <button
-                    key={a}
-                    onClick={() => setAssetClass(a === assetClass ? "" : a)}
-                    className={cn(
-                      "text-xs px-2.5 py-1 rounded-full border transition-colors capitalize",
-                      assetClass === a ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
-                    )}
-                  >
-                    {a}
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Filter chips + search */}
+        <div className="flex flex-wrap items-center gap-2">
+          {styleChips.map((s) => (
+            <button
+              key={s}
+              onClick={() => setFilter(s)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-mono-t text-[11px] uppercase tracking-widest transition-all duration-150",
+                filter === s
+                  ? "bg-t-bg2 text-t-hi"
+                  : "bg-t-bg1 border border-t-dim text-t-muted hover:text-t-mid2 hover:border-t-mid"
+              )}
+            >
+              {s}{s !== "All" ? ` (${styleCounts[s] ?? 0})` : ""}
+            </button>
+          ))}
+          <div className="flex items-center gap-2 ml-auto bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5">
+            <Search size={12} className="text-t-muted shrink-0" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search..."
+              className="bg-transparent text-xs text-t-hi placeholder-t-muted outline-none w-32 font-mono-t"
+            />
+          </div>
+        </div>
 
-            {/* Difficulty filter */}
-            <div>
-              <p className="text-[10px] text-t-muted uppercase tracking-wide font-semibold mb-2">Difficulty</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setDifficulty("")}
-                  className={cn(
-                    "text-xs px-2.5 py-1 rounded-full border transition-colors",
-                    !difficulty ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
-                  )}
-                >
-                  All
-                </button>
-                {DIFFICULTY_OPTIONS.map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => setDifficulty(d === difficulty ? "" : d)}
-                    className={cn(
-                      "text-xs px-2.5 py-1 rounded-full border transition-colors capitalize",
-                      difficulty === d ? "bg-teal-500/15 border-teal-500/40 text-teal-400" : "border-t-mid text-t-muted hover:text-t-hi"
-                    )}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Clear all */}
-            {(category || assetClass || difficulty || search) && (
-              <button
-                onClick={() => { setCategory(""); setAssetClass(""); setDifficulty(""); setSearch(""); }}
-                className="text-xs text-t-red hover:text-t-red/80 transition-colors"
-              >
-                Clear all filters
-              </button>
+        {/* Content */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-48 bg-t-bg1 border border-t-dim rounded-2xl animate-pulse" />
+            ))}
+          </div>
+        ) : isError ? (
+          <div className="text-center py-16 text-t-muted font-mono-t text-sm">
+            Strategy data unavailable. Retry.
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 text-t-muted font-mono-t text-sm">
+            {filter !== "All"
+              ? `No ${filter} strategies in library yet. Add candidates via the pipeline.`
+              : "No strategies match your search."}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filtered.map((item, idx) =>
+              item.kind === "bot" ? (
+                <BotCard
+                  key={`bot-${idx}`}
+                  row={item.b}
+                  onClick={() => navigate(`/strategy/${item.b.bot_id}`)}
+                />
+              ) : (
+                <CandidateCard
+                  key={`cand-${idx}`}
+                  c={item.c}
+                  onClick={() => navigate(`/candidates/${item.c.name}`)}
+                />
+              )
             )}
           </div>
         )}
       </div>
-
-      {/* Results */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-28 bg-t-bg1 border border-t-dim rounded-2xl animate-pulse" />
-          ))}
-        </div>
-      ) : strategies.length === 0 ? (
-        <div className="py-16 text-center">
-          <p className="text-t-muted text-sm">No strategies match your filters.</p>
-          <button
-            onClick={() => { setCategory(""); setAssetClass(""); setDifficulty(""); setSearch(""); }}
-            className="mt-2 text-xs text-teal-400 hover:text-teal-300 underline underline-offset-2"
-          >
-            Clear filters
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {strategies.map((s) => (
-            <StrategyCard key={s.id} s={s} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

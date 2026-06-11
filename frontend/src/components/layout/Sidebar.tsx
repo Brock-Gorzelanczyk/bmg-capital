@@ -9,6 +9,7 @@ import {
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
   Grid3X3, Zap, Globe, Eye, TestTube2, Cpu, SlidersHorizontal, Beaker,
+  Radar, Hammer,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -60,6 +61,11 @@ const NAV_TRADE = [
 
 const NAV_LABS = [
   { to: "/strategy", label: "Strategy Lab", Icon: FlaskConical },
+];
+
+const NAV_BUILD = [
+  { to: "/strategy/scout", label: "Strategy Scout", Icon: Radar  },
+  { to: "/strategy/forge", label: "The Forge",      Icon: Hammer },
 ];
 
 const NAV_MARKETS = [
@@ -479,6 +485,8 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
         />
 
         <NavSection label="Labs" items={NAV_LABS} expanded={expanded} />
+
+        <NavSection label="Build" items={NAV_BUILD} expanded={expanded} />
 
         <NavSection label="Markets" items={NAV_MARKETS} expanded={expanded} />
 

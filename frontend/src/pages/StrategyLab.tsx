@@ -1964,6 +1964,30 @@ export default function StrategyLab() {
             </div>
           </div>
 
+          {/* LAB MODULES launchpad */}
+          <div>
+            <p className="panel-header mb-2">// LAB MODULES</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {([
+                { to: "/strategy/scout",       label: "SCOUT",       badge: `${activeScoutCount} armed`,    Icon: null },
+                { to: "/strategy/forge",        label: "FORGE",       badge: `${activeForgeCount} active`,   Icon: null },
+                { to: "/strategy/performance",  label: "ANALYTICS",   badge: null,                           Icon: null },
+                { to: "/strategy/leaderboard",  label: "LEADERBOARD", badge: null,                           Icon: null },
+              ] as const).map(({ to, label, badge }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  className="bg-t-bg1 border border-t-dim rounded-xl px-4 py-3 hover:border-t-mid hover:bg-t-bg2/40 transition-all duration-150 flex flex-col gap-1.5"
+                >
+                  <span className="font-mono-t text-[10px] uppercase tracking-widest text-t-gdim">// {label}</span>
+                  {badge !== null && (
+                    <span className="font-mono-t text-sm font-bold text-t-hi tabular-nums">{badge}</span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+
           {/* Regime status bar */}
           <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3">
             <p className="panel-header mb-2">// Market Regime</p>
