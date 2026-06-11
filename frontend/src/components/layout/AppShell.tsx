@@ -147,21 +147,6 @@ export default function AppShell() {
             </span>
           </div>
         )}
-        {/* Paper-trading banner — permanent */}
-        <div className="flex items-center bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs text-amber-400 shrink-0">
-          <span className="flex items-center gap-2 flex-wrap">
-            <span>📄</span>
-            <span>
-              <span className="font-semibold text-amber-300">Paper Trading Only</span>
-              {" — "}
-              All trades are simulated. No real money is at risk. Not investment advice.
-              {" "}
-              <Link to="/terms" className="underline hover:text-amber-200">Terms</Link>
-              {" · "}
-              <Link to="/privacy" className="underline hover:text-amber-200">Privacy</Link>
-            </span>
-          </span>
-        </div>
         {!isChart && <TopBar onMenuToggle={() => setSidebarOpen((o) => !o)} />}
         <main
           className={

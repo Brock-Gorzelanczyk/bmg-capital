@@ -1964,14 +1964,6 @@ export default function StrategyLab() {
             </div>
           </div>
 
-          {/* Paper-only banner */}
-          <div className="bg-t-amber/10 border border-t-amber/30 rounded-xl px-4 py-3 flex items-center gap-3">
-            <span className="text-t-amber text-sm font-semibold font-ui-t">📄 Paper trading only.</span>
-            <span className="text-t-amber/80 text-xs font-ui-t">
-              Currently in beta — all trades are simulated. No real money is at risk.
-            </span>
-          </div>
-
           {/* Regime status bar */}
           <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3">
             <p className="panel-header mb-2">// Market Regime</p>
