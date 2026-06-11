@@ -1015,3 +1015,35 @@ def setup_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
     )
+
+    # ── Safety layer jobs ─────────────────────────────────────────────────────
+
+    # Portfolio equity snapshot — every 5 min during market hours, M-F
+    from app.jobs.portfolio_equity_snapshot import record as record_equity_snapshot
+    scheduler.add_job(
+        record_equity_snapshot,
+        CronTrigger(day_of_week="mon-fri", hour="9-16", minute="*/5", timezone=ET),
+        id="portfolio_equity_snapshot",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Drawdown circuit breaker — every 5 min during market hours, M-F
+    from app.jobs.drawdown_breaker import check as check_drawdown
+    scheduler.add_job(
+        check_drawdown,
+        CronTrigger(day_of_week="mon-fri", hour="9-16", minute="*/5", timezone=ET),
+        id="drawdown_circuit_breaker",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Blackout calendar populate — 5:00 AM ET daily
+    from app.jobs.populate_blackouts import run as run_populate_blackouts
+    scheduler.add_job(
+        run_populate_blackouts,
+        CronTrigger(hour=5, minute=0, timezone=ET),
+        id="populate_blackouts_daily",
+        replace_existing=True,
+        max_instances=1,
+    )
