@@ -360,6 +360,7 @@ function AppInner() {
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
+        <Route path="/candidates" element={<CandidatesPage />} />
         <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/portfolio" element={<Page component={Portfolio} />} />
