@@ -200,6 +200,36 @@ _CANDIDATE_CATALOG = [
         "description": "Detects clusters of 3+ insiders buying on the open market (≥$500k combined) within a 30-day window.",
         "promotion_criteria": "30 days live + 10 trades + Sharpe > 0.4",
     },
+    {
+        "file": "cross_asset_momentum",
+        "name": "Cross-Asset Momentum",
+        "asset_class": "multi",
+        "style": "cross_asset_momentum",
+        "reference": "Antonacci (2014) Global Equities Momentum",
+        "expected_sharpe": "0.7–1.0",
+        "description": "10-ETF monthly rotation: buys top-3 by blended 1/3/12M momentum only when each passes an absolute return filter. Credit spread gate cuts sizing in stress.",
+        "promotion_criteria": "60 days live + 30 trades + Sharpe > 0.5",
+    },
+    {
+        "file": "earnings_vol_premium",
+        "name": "Earnings Vol Premium",
+        "asset_class": "equity",
+        "style": "short_volatility",
+        "reference": "Augustin, Brenner & Subrahmanyam (2014)",
+        "expected_sharpe": "1.0–1.6",
+        "description": "Sells iron condors 7 days before earnings on stocks where IV rank ≥ 70% and implied move ≥ 5%. Harvests post-earnings IV crush.",
+        "promotion_criteria": "60 days live + 30 trades + Sharpe > 0.7",
+    },
+    {
+        "file": "quality_momentum_screen",
+        "name": "Quality Momentum Screen",
+        "asset_class": "equity",
+        "style": "quality_momentum",
+        "reference": "Asness, Frazzini & Pedersen (2019) QMJ",
+        "expected_sharpe": "0.7–1.5",
+        "description": "Monthly rebalance into top-25 stocks ranked by composite quality (SimFin fundamentals) + 12-1M momentum + low beta. Flattens to cash when credit spreads are red.",
+        "promotion_criteria": "60 days live + 30 trades + Sharpe > 0.5",
+    },
 ]
 
 

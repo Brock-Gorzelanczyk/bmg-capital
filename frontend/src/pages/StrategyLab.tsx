@@ -111,6 +111,33 @@ const CANDIDATE_META = [
     expectedSharpe: "0.5–1.1",
     description: "Detects 3+ insiders buying open-market (≥$500k) within a 30-day window.",
   },
+  {
+    id: "cross_asset_momentum",
+    name: "Cross-Asset Momentum",
+    assetClass: "multi" as const,
+    style: "cross_asset_momentum" as const,
+    reference: "Antonacci (2014) Global Equities Momentum",
+    expectedSharpe: "0.7–1.0",
+    description: "10-ETF monthly rotation into top-3 by blended momentum. Only holds assets above absolute trend filter. Credit spread gate cuts sizing in stress.",
+  },
+  {
+    id: "earnings_vol_premium",
+    name: "Earnings Vol Premium",
+    assetClass: "equity" as const,
+    style: "short_volatility" as const,
+    reference: "Augustin, Brenner & Subrahmanyam (2014)",
+    expectedSharpe: "1.0–1.6",
+    description: "Sells iron condors 7 days before earnings on stocks where IV rank ≥ 70% and implied move ≥ 5%. Captures post-earnings IV crush.",
+  },
+  {
+    id: "quality_momentum_screen",
+    name: "Quality Momentum Screen",
+    assetClass: "equity" as const,
+    style: "quality_momentum" as const,
+    reference: "Asness, Frazzini & Pedersen (2019) QMJ",
+    expectedSharpe: "0.7–1.5",
+    description: "Monthly rebalance into top-25 stocks ranked by QMJ quality (SimFin), 12-1M momentum, and low beta. Flattens to cash when credit spreads are red.",
+  },
 ];
 
 // ─── Bot metadata ─────────────────────────────────────────────────────────────
@@ -1247,7 +1274,7 @@ function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; ti
 // ─── Candidate cards ──────────────────────────────────────────────────────────
 
 type CandidateAssetClass = "equity" | "crypto" | "multi";
-type CandidateStyle = "momentum" | "mean_reversion" | "event_driven" | "arbitrage";
+type CandidateStyle = "momentum" | "mean_reversion" | "event_driven" | "arbitrage" | "cross_asset_momentum" | "quality_momentum" | "short_volatility";
 
 interface CandidateEntry {
   id: string;
@@ -1270,16 +1297,22 @@ const _ASSET_LABEL: Record<CandidateAssetClass, string> = {
   multi:  "Multi-Asset",
 };
 const _STYLE_CHIP: Record<CandidateStyle, string> = {
-  momentum:       "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  mean_reversion: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  event_driven:   "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-  arbitrage:      "bg-pink-500/10 text-pink-400 border-pink-500/20",
+  momentum:             "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  mean_reversion:       "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+  event_driven:         "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+  arbitrage:            "bg-pink-500/10 text-pink-400 border-pink-500/20",
+  cross_asset_momentum: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+  quality_momentum:     "bg-sky-500/10 text-sky-400 border-sky-500/20",
+  short_volatility:     "bg-rose-500/10 text-rose-400 border-rose-500/20",
 };
 const _STYLE_LABEL: Record<CandidateStyle, string> = {
-  momentum:       "Momentum",
-  mean_reversion: "Mean Rev",
-  event_driven:   "Event",
-  arbitrage:      "Arbitrage",
+  momentum:             "Momentum",
+  mean_reversion:       "Mean Rev",
+  event_driven:         "Event",
+  arbitrage:            "Arbitrage",
+  cross_asset_momentum: "Cross-Asset",
+  quality_momentum:     "Quality",
+  short_volatility:     "Short Vol",
 };
 
 function CandidateCard({ c }: { c: CandidateEntry }) {

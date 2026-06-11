@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/performance", tags=["performance"])
 
 
 def _flag():
-    if os.getenv("ENABLE_PERFORMANCE_ANALYTICS", "false").strip().lower() != "true":
+    if os.getenv("ENABLE_PERFORMANCE_ANALYTICS", "true").strip().lower() != "true":
         raise HTTPException(status_code=404, detail="Performance analytics not enabled")
 
 

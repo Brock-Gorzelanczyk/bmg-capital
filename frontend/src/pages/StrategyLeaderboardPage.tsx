@@ -233,7 +233,7 @@ const RANK_RING: Record<number, string> = {
 };
 
 function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["bot-leaderboard-ranking", sort],
     queryFn: () => getBotLeaderboardRanking(sort),
     staleTime: 120_000,
@@ -250,11 +250,22 @@ function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
+        <SectionLabel as="p" className="mb-2 text-zinc-600">// Bot Ranking</SectionLabel>
+        <p className="text-white font-semibold mb-1">Could not load bot rankings</p>
+        <p className="text-zinc-500 text-sm">Check that bots are enabled and try again.</p>
+      </div>
+    );
+  }
+
   if (!rows.length) {
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
+        <SectionLabel as="p" className="mb-2 text-zinc-600">// Bot Ranking</SectionLabel>
         <p className="text-white font-semibold mb-1">No bot data yet</p>
-        <p className="text-zinc-500 text-sm">Enable bots to see ranking.</p>
+        <p className="text-zinc-500 text-sm">Enable bots and wait for the first nightly rollup (2am ET).</p>
       </div>
     );
   }
@@ -356,24 +367,6 @@ export default function StrategyLeaderboardPage() {
     return { bestPnl, worstPnl, bestReturn, mostDeployed };
   }, [data]);
 
-  // ── Error state (treat as 404 / feature not enabled) ─────────────────────
-  if (isError) {
-    return (
-      <div className="min-h-screen bg-zinc-950 text-white p-6 flex items-start justify-center pt-20">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-10 text-center max-w-md w-full">
-          <SectionLabel as="p" className="mb-3 text-zinc-600">
-            // Performance Analytics
-          </SectionLabel>
-          <p className="text-white font-semibold mb-2">Performance analytics not enabled</p>
-          <p className="text-zinc-500 text-sm">
-            Strategy performance tracking requires an active bot with trades. Enable the analytics
-            feature flag or start a bot to see data here.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
@@ -396,44 +389,52 @@ export default function StrategyLeaderboardPage() {
           </div>
         </div>
 
-        {/* ── KPI Cards ───────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {isLoading || !kpi ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 h-20 animate-pulse"
-              />
-            ))
-          ) : (
-            <>
-              <KpiCard
-                label="Best $ P&L"
-                name={kpi.bestPnl.strategy_name}
-                value={fmtUsd(kpi.bestPnl.total_pnl_usd)}
-                valueClass="text-emerald-400"
-              />
-              <KpiCard
-                label="Best Return"
-                name={kpi.bestReturn.strategy_name}
-                value={fmtPct(kpi.bestReturn.weighted_return_pct)}
-                valueClass={pctColor(kpi.bestReturn.weighted_return_pct)}
-              />
-              <KpiCard
-                label="Worst $ P&L"
-                name={kpi.worstPnl.strategy_name}
-                value={fmtUsd(kpi.worstPnl.total_pnl_usd)}
-                valueClass="text-red-400"
-              />
-              <KpiCard
-                label="Most Deployed"
-                name={kpi.mostDeployed.strategy_name}
-                value={`${kpi.mostDeployed.bots_using} bots`}
-                valueClass="text-zinc-200"
-              />
-            </>
-          )}
-        </div>
+        {/* ── KPI Cards (strategy-attribution only — hidden when flag off) ── */}
+        {tab === "strategies" && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 h-20 animate-pulse"
+                />
+              ))
+            ) : isError || !kpi ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 h-20 flex items-center justify-center">
+                  <span className="text-zinc-700 font-mono text-xs">—</span>
+                </div>
+              ))
+            ) : (
+              <>
+                <KpiCard
+                  label="Best $ P&L"
+                  name={kpi.bestPnl.strategy_name}
+                  value={fmtUsd(kpi.bestPnl.total_pnl_usd)}
+                  valueClass="text-emerald-400"
+                />
+                <KpiCard
+                  label="Best Return"
+                  name={kpi.bestReturn.strategy_name}
+                  value={fmtPct(kpi.bestReturn.weighted_return_pct)}
+                  valueClass={pctColor(kpi.bestReturn.weighted_return_pct)}
+                />
+                <KpiCard
+                  label="Worst $ P&L"
+                  name={kpi.worstPnl.strategy_name}
+                  value={fmtUsd(kpi.worstPnl.total_pnl_usd)}
+                  valueClass="text-red-400"
+                />
+                <KpiCard
+                  label="Most Deployed"
+                  name={kpi.mostDeployed.strategy_name}
+                  value={`${kpi.mostDeployed.bots_using} bots`}
+                  valueClass="text-zinc-200"
+                />
+              </>
+            )}
+          </div>
+        )}
 
         {/* ── Bot Leaderboard (primary tab) ─────────────────────────────── */}
         {tab === "bots" && (
@@ -490,16 +491,19 @@ export default function StrategyLeaderboardPage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
             <SkeletonRows />
           </div>
-        ) : rows.length === 0 ? (
-          /* Empty state */
+        ) : isError ? (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
-            <SectionLabel as="p" className="mb-2 text-zinc-600">
-              // No Data
-            </SectionLabel>
+            <SectionLabel as="p" className="mb-2 text-zinc-600">// Strategy Attribution</SectionLabel>
             <p className="text-white font-semibold mb-1">No strategy data yet</p>
             <p className="text-zinc-500 text-sm">
-              Strategies from active bots will appear here.
+              Strategy attribution populates after the first nightly rollup (2am ET) once bots are active.
             </p>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-12 text-center">
+            <SectionLabel as="p" className="mb-2 text-zinc-600">// No Data</SectionLabel>
+            <p className="text-white font-semibold mb-1">No strategy data yet</p>
+            <p className="text-zinc-500 text-sm">Strategies from active bots will appear here.</p>
           </div>
         ) : (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">

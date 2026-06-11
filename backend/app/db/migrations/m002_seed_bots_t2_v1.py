@@ -33,12 +33,23 @@ _PRODUCTION_PROFILES = [
 def run(conn) -> None:
     """Promote production bot allocations from T0 → T2. Runs every startup.
 
-    Only touches rows where tier IS NULL or tier = 'T0' — never downgrades
-    anything already at T1, T2, or T3.
+    Self-heals: adds the tier column if run_migrations() hasn't done so yet.
+    History INSERT is best-effort — its failure never aborts the tier UPDATE.
     """
-    now_iso = datetime.now(timezone.utc).isoformat()
+    # Ensure tier column exists before we try to query it
+    try:
+        cols = {r[1] for r in conn.execute(text("PRAGMA table_info(bot_allocations)")).fetchall()}
+        if "tier" not in cols:
+            conn.execute(text("ALTER TABLE bot_allocations ADD COLUMN tier TEXT NOT NULL DEFAULT 'T0'"))
+            conn.commit()
+            logger.info("[m002] added missing tier column to bot_allocations")
+    except Exception as exc:
+        logger.warning("[m002] cannot ensure tier column: %s — aborting", exc)
+        return
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     promoted = 0
+
     for profile_name in _PRODUCTION_PROFILES:
         try:
             profile_row = conn.execute(
@@ -49,15 +60,12 @@ def run(conn) -> None:
                 logger.debug("[m002] profile not found: %s", profile_name)
                 continue
 
-            profile_id = profile_row[0]
-
-            # Only grab allocations still at T0 (or NULL) — never touch T1/T2/T3
             alloc_rows = conn.execute(
                 text(
                     "SELECT id FROM bot_allocations "
                     "WHERE profile_id = :pid AND (tier IS NULL OR tier = 'T0')"
                 ),
-                {"pid": profile_id},
+                {"pid": profile_row[0]},
             ).fetchall()
 
             for (alloc_id,) in alloc_rows:
@@ -65,22 +73,24 @@ def run(conn) -> None:
                     text("UPDATE bot_allocations SET tier = 'T2' WHERE id = :id"),
                     {"id": alloc_id},
                 )
-                conn.execute(
-                    text(
-                        "INSERT INTO bot_tier_history "
-                        "(allocation_id, changed_at, previous_tier, new_tier, "
-                        " reason, triggered_by, "
-                        " return_30d_pct_at_change, win_rate_at_change, "
-                        " max_drawdown_at_change, trade_count_at_change) "
-                        "VALUES "
-                        "(:aid, :ts, NULL, 'T2', "
-                        " 'initial seed — existing production bot', 'manual_seed', "
-                        " NULL, NULL, NULL, 0)"
-                    ),
-                    {"aid": alloc_id, "ts": now_iso},
-                )
                 promoted += 1
                 logger.info("[m002] alloc %d (%s): T0 → T2", alloc_id, profile_name)
+                # Audit trail — failure must not abort the tier update
+                try:
+                    conn.execute(
+                        text(
+                            "INSERT INTO bot_tier_history "
+                            "(allocation_id, changed_at, previous_tier, new_tier, "
+                            " reason, triggered_by, return_30d_pct_at_change, "
+                            " win_rate_at_change, max_drawdown_at_change, trade_count_at_change) "
+                            "VALUES (:aid, :ts, NULL, 'T2', "
+                            " 'initial seed — existing production bot', 'manual_seed', "
+                            " NULL, NULL, NULL, 0)"
+                        ),
+                        {"aid": alloc_id, "ts": now_iso},
+                    )
+                except Exception:
+                    pass
 
         except Exception as exc:
             logger.warning("[m002] failed for %s: %s", profile_name, exc)
