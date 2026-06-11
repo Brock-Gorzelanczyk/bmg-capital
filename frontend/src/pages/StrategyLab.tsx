@@ -790,9 +790,17 @@ interface BotCardProps {
   item: BotListItem;
   onNavigate: (name: string) => void;
   isViewer?: boolean;
+  tier?: string;
 }
 
-function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
+const _TIER_BADGE: Record<string, string> = {
+  T3: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+  T2: "text-blue-400 border-blue-500/30 bg-blue-500/10",
+  T1: "text-yellow-400 border-yellow-500/30 bg-yellow-500/10",
+  T0: "text-zinc-400 border-zinc-500/30 bg-zinc-500/10",
+};
+
+function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
   const { profile, allocation, stats } = item;
   const meta = BOT_META[profile.name];
   const qc = useQueryClient();
@@ -898,6 +906,11 @@ function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
           {formatCadence(profile.cadence)}
         </span>
+        {tier && (
+          <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", _TIER_BADGE[tier] ?? _TIER_BADGE.T1)}>
+            {tier}
+          </span>
+        )}
       </div>
 
       {/* Stats */}
@@ -988,7 +1001,7 @@ function BotCard({ item, onNavigate, isViewer }: BotCardProps) {
 type CompSortKey = "name" | "status" | "return_30d" | "sharpe" | "max_dd" | "uptime";
 type SortDir = "asc" | "desc";
 
-function ComparisonTable({ bots }: { bots: BotListItem[] }) {
+function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; tierByAllocId?: Record<number, string> }) {
   const [sortKey, setSortKey] = useState<CompSortKey>("return_30d");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -1063,6 +1076,7 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
             <tr className="text-xs text-zinc-600 border-b border-zinc-800">
               <SortHeader label="Bot" colKey="name" />
               <SortHeader label="Status" colKey="status" />
+              <SortHeader label="Tier" colKey="name" />
               <SortHeader label="30d Return" colKey="return_30d" />
               <SortHeader label="Max DD" colKey="max_dd" />
               <SortHeader label="Uptime" colKey="uptime" />
@@ -1093,6 +1107,15 @@ function ComparisonTable({ bots }: { bots: BotListItem[] }) {
                     )}>
                       {isEnabled ? "ACTIVE" : "OFF"}
                     </span>
+                  </td>
+                  <td className="py-2.5">
+                    {item.allocation?.id != null && tierByAllocId[item.allocation.id] ? (
+                      <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded-full border", _TIER_BADGE[tierByAllocId[item.allocation.id]] ?? _TIER_BADGE.T1)}>
+                        {tierByAllocId[item.allocation.id]}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-zinc-600">—</span>
+                    )}
                   </td>
                   <td className={cn("py-2.5 font-semibold text-xs", ret30 >= 0 ? "text-lime-400" : "text-red-400")}>
                     {formatPct(ret30)}
@@ -1458,6 +1481,20 @@ export default function StrategyLab() {
     retry: 1,
   });
 
+  // Allocation tier overview — keyed by allocation_id
+  const { data: allocOverview } = useQuery({
+    queryKey: ["bots-allocation-overview"],
+    queryFn: () =>
+      fetch("/api/bots/allocation", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("920wp_token") ?? ""}` },
+      }).then((r) => r.json()).catch(() => ({ allocations: [] })),
+    staleTime: 300_000,
+    retry: 0,
+  });
+  const tierByAllocId: Record<number, string> = Object.fromEntries(
+    (allocOverview?.allocations ?? []).map((a: { allocation_id: number; tier: string }) => [a.allocation_id, a.tier])
+  );
+
   // Setup portfolios on mount (idempotent)
   useEffect(() => {
     setupPortfolios().catch(() => {});
@@ -1804,6 +1841,7 @@ export default function StrategyLab() {
                   item={item}
                   onNavigate={(name) => navigate(`/strategy/${name}`)}
                   isViewer={isViewer}
+                  tier={item.allocation?.id != null ? tierByAllocId[item.allocation.id] : undefined}
                 />
               ))}
             </div>
@@ -1870,7 +1908,7 @@ export default function StrategyLab() {
           <PortfolioHero onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
 
           {/* Comparison table */}
-          {!isLoading && bots.length > 0 && <ComparisonTable bots={bots} />}
+          {!isLoading && bots.length > 0 && <ComparisonTable bots={bots} tierByAllocId={tierByAllocId} />}
 
           {/* AI Analyst highlights */}
           <AnalystHighlights />
