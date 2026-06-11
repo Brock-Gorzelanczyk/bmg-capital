@@ -16,6 +16,8 @@ type MarketState = "open" | "after-hours" | "closed";
 
 // Routes where the market is always 24/7 live (crypto, DeFi, bot strategy pages)
 const ALWAYS_LIVE_PREFIXES = ["/crypto", "/defi", "/security", "/strategy/portfolio/crypto", "/strategy"];
+// Static/historical strategy pages that don't consume a live feed
+const STATIC_STRATEGY_PATHS = ["/strategy/library", "/strategy/leaderboard", "/strategy/performance", "/strategy/candidates"];
 
 function useEquityMarketStatus(): MarketState {
   return useMemo(() => {
@@ -49,7 +51,8 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   const isAdmin = useIsAdmin();
   const wsStatus = useWsStore((s) => s.status);
   const equityStatus = useEquityMarketStatus();
-  const isCryptoRoute = ALWAYS_LIVE_PREFIXES.some((p) => pathname.startsWith(p));
+  const isCryptoRoute = ALWAYS_LIVE_PREFIXES.some((p) => pathname.startsWith(p)) &&
+    !STATIC_STRATEGY_PATHS.some((p) => pathname.startsWith(p));
   const marketStatus: MarketState = isCryptoRoute ? "open" : equityStatus;
   const mode = useUiStore((s) => s.mode);
   const toggleMode = useUiStore((s) => s.toggleMode);
