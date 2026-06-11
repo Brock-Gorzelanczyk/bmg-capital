@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, LineChart, BookMarked, Briefcase, BookOpen, BarChart2,
   FlaskConical, Layers, Bitcoin, PenTool, Radio,
-  Filter, Newspaper, Calendar, Microscope, Compass,
+  Filter, Newspaper, Microscope, Compass,
   Droplets, ShieldCheck, Activity,
   GraduationCap, Users, ScanSearch, Scale, Award,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
@@ -71,10 +71,8 @@ const NAV_BUILD = [
 const NAV_MARKETS = [
   { to: "/screener",  label: "Screener",  Icon: Filter },
   { to: "/news",      label: "News",      Icon: Newspaper },
-  { to: "/earnings",  label: "Earnings",  Icon: Calendar },
   { to: "/research",  label: "Research",  Icon: Microscope },
   { to: "/discovery", label: "Discovery", Icon: Compass },
-  { to: "/alerts",    label: "Alerts",    Icon: Bell },
 ];
 
 const NAV_CRYPTO_PLUS = [

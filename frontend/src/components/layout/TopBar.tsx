@@ -159,13 +159,11 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
         )}
         {/* Market status pill */}
         <div className="flex items-center gap-1.5 text-xs px-2.5 py-1 border" style={{ background: 'var(--bg-2)', borderColor: 'var(--border-dim)', fontFamily: 'var(--font-mono-t)', letterSpacing: '0.06em' }}>
-          {wsStatus !== "connected" ? (
+          {wsStatus !== "connected" && isCryptoRoute ? (
             <>
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--amber)' }} />
               <WifiOff size={11} style={{ color: 'var(--amber)' }} />
-              <span className="hidden sm:block" style={{ color: 'var(--amber)' }}>
-                {isCryptoRoute ? "FEED OFFLINE" : "OFFLINE"}
-              </span>
+              <span className="hidden sm:block" style={{ color: 'var(--amber)' }}>FEED OFFLINE</span>
             </>
           ) : marketStatus === "open" ? (
             <>

@@ -18,7 +18,7 @@ import {
   type AutonomousAction,
   type AutonomousGuardrail,
 } from "@/api/autonomous";
-import { getSignalsFeed, type SignalFeedItem } from "@/api/bots";
+import { getSignalsFeed, getOpenPositions, type SignalFeedItem } from "@/api/bots";
 import client from "@/api/client";
 import { formatCurrency, timeAgo, cn } from "@/lib/utils";
 import type { PaperAccount } from "@/api/paper";
@@ -439,7 +439,13 @@ export default function MissionControlPage() {
 
   const { data: paperAccount } = useQuery<PaperAccount>({
     queryKey: ["paper-account"],
-    queryFn: () => client.get<PaperAccount>("/api/paper/account").then(r => r.data),
+    queryFn: () => client.get<PaperAccount>("/paper/account").then(r => r.data),
+    refetchInterval: 30_000,
+  });
+
+  const { data: openPosData } = useQuery({
+    queryKey: ["open-positions"],
+    queryFn: getOpenPositions,
     refetchInterval: 30_000,
   });
 
@@ -518,7 +524,7 @@ export default function MissionControlPage() {
   const isPaused = status?.autonomous_paused ?? false;
   const engineRunning = status?.engine_running ?? false;
   const strategiesActive = status?.strategies_active ?? 0;
-  const strategiesDisplay = strategiesActive * 13; // pitch multiplier
+  const strategiesDisplay = strategiesActive;
   const assetsMonitored = status?.total_assets_monitored ?? 0;
 
   const marketStatusColor =
@@ -602,7 +608,7 @@ export default function MissionControlPage() {
 
   // ── Guardrail usage estimates (mock current exposure vs limits) ────────────
 
-  const openPositions = paperAccount?.positions?.length ?? status?.open_positions ?? 0;
+  const openPositions = openPosData?.position_count ?? paperAccount?.positions?.length ?? 0;
   const dayPnlPct = paperAccount
     ? (paperAccount.day_pnl / (paperAccount.equity || 1)) * 100
     : 0;
@@ -622,6 +628,12 @@ export default function MissionControlPage() {
           to   { transform: translateY(0);    opacity: 1; }
         }
       `}</style>
+
+      {/* Simulated data banner */}
+      <div className="w-full px-4 py-2 text-center text-xs font-mono font-bold tracking-widest"
+        style={{ background: 'rgba(251,191,36,0.08)', borderBottom: '1px solid rgba(251,191,36,0.25)', color: '#fbbf24' }}>
+        ⚠ PAPER TRADING — Simulated positions and P&amp;L. No real capital at risk.
+      </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
@@ -668,7 +680,7 @@ export default function MissionControlPage() {
                 </span>{" "}
                 assets across{" "}
                 <span className="font-bold font-mono-t tabular-nums text-[var(--text-primary)]">
-                  {strategiesDisplay || 247}
+                  {strategiesDisplay}
                 </span>{" "}
                 strategies right now
               </p>
@@ -700,7 +712,7 @@ export default function MissionControlPage() {
               ) : pauseConfirming ? (
                 <div className="flex items-center gap-2 bg-t-red/10 border border-t-red/30 rounded-lg px-3 py-2">
                   <span className="text-xs text-t-red font-medium">
-                    Pause all {strategiesDisplay || 247} running strategies?
+                    Pause all {strategiesDisplay} running strategies?
                   </span>
                   <button
                     onClick={() => pauseMutation.mutate()}
@@ -757,7 +769,7 @@ export default function MissionControlPage() {
               {/* Strategies active */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--text-tertiary)]">Strategies active</span>
-                <span className="text-lg font-bold font-mono-t tabular-nums text-[#4ade80]">{strategiesDisplay || 247}</span>
+                <span className="text-lg font-bold font-mono-t tabular-nums text-[#4ade80]">{strategiesDisplay}</span>
               </div>
 
               {/* Open positions */}
