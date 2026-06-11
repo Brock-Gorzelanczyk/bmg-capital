@@ -902,7 +902,7 @@ function MySetupsView() {
                 placeholder="or type: AAPL, ETH/USD…"
                 value={selTicker}
                 onChange={(e) => setSelTicker(e.target.value.toUpperCase())}
-                style={{ ...selectStyle, placeholder: C.faint }}
+                style={selectStyle}
               />
             </div>
 
