@@ -1,0 +1,49 @@
+name: crypto_meanrev_2163
+asset_class: quant
+broker: alpaca_paper_crypto
+universe:
+  source: top_crypto_20
+  symbols:
+    - BTC/USD
+    - ETH/USD
+    - SOL/USD
+    - BNB/USD
+    - XRP/USD
+    - ADA/USD
+    - AVAX/USD
+    - DOT/USD
+    - LINK/USD
+    - MATIC/USD
+    - UNI/USD
+    - ATOM/USD
+    - LTC/USD
+    - DOGE/USD
+    - SHIB/USD
+    - TRX/USD
+    - FTM/USD
+    - NEAR/USD
+    - ALGO/USD
+    - XLM/USD
+cadence: "0 */4 * * *"  # every 4 hours, 24/7
+scan_lookback_period: "90d"
+strategies:
+  - crypto_mr_zscore_30d
+ensemble: weighted_vote
+confidence_threshold: 0.55
+position_cap: 5
+position_size_pct: 15.0
+stop_loss_pct: 8.0
+take_profit_pct: 12.0
+hold_max_days: 5
+strategy_type: mean_reversion
+risk_overlay:
+  daily_loss_limit_pct: 4.0
+  portfolio_drawdown_circuit_pct: 15
+  pdt_enforce: false
+paper_only: true
+starting_capital_cents: 10000000
+tier: T0
+enabled: false
+notes: "21-63 day mean reversion on top-20 crypto. 30d z-score entry (z < -2), exit z > -0.5 or 5-day time stop. Falling knife filter: skip if 21d trend < -30%."
+discord:
+  channel: quant-signals
