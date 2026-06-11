@@ -148,10 +148,10 @@ function NavItem({
       onMouseEnter={prefetchFn}
       className={({ isActive }) =>
         cn(
-          "relative flex items-center gap-3 py-2 pl-3 pr-3 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer",
+          "relative flex items-center gap-3 py-1.5 pl-3 pr-3 text-sm font-medium transition-colors duration-150 cursor-pointer",
           isActive
-            ? "bg-[var(--bg-elevated-2)] text-[var(--text-primary)]"
-            : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+            ? "text-[var(--green)]"
+            : "text-[var(--text-mid)] hover:text-[var(--text-hi)] hover:bg-[rgba(74,222,128,0.04)]"
         )
       }
     >
@@ -159,16 +159,16 @@ function NavItem({
         <>
           {/* Left accent bar */}
           {isActive && (
-            <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-[var(--accent-positive)] rounded-full" />
+            <span className="absolute left-0 top-1 bottom-1 w-[3px] bg-[var(--green)]" />
           )}
           {/* Icon wrapper with optional dot */}
           <span className="relative shrink-0">
-            <Icon size={16} />
+            <Icon size={15} />
             {pulseDot && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#84cc16] animate-pulse" />
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[var(--green)] animate-pulse" />
             )}
             {staticDot && !pulseDot && (
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#84cc16]" />
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[var(--green)]" />
             )}
           </span>
           <span className={cn("flex-1 truncate", show(expanded))}>{label}</span>
@@ -205,8 +205,8 @@ function NavSection({
   return (
     <div>
       <div className={cn("px-3 mb-1 flex items-center justify-between", show(expanded))}>
-        <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-[0.08em]">
-          {label}
+        <span style={{ fontFamily: 'var(--font-mono-t)', fontSize: 9, letterSpacing: '0.15em', color: 'var(--text-dim)', textTransform: 'uppercase' }}>
+          // {label}
         </span>
         {headerRight}
       </div>
@@ -285,11 +285,11 @@ function AvatarDropdown({
       {/* Dropdown menu — opens upward */}
       {open && (
         <div className={cn(
-          "absolute left-0 right-0 bottom-full mb-2 bg-[var(--bg-elevated)] border border-[var(--border-emphasis)] rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50",
+          "absolute left-0 right-0 bottom-full mb-2 border border-[var(--border-mid)] shadow-2xl shadow-black/60 overflow-hidden z-50",
           expanded ? "w-full" : "w-52 left-0"
-        )}>
+        )} style={{ background: 'var(--bg-2)' }}>
           {/* User identity header */}
-          <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+          <div className="px-4 py-3 border-b border-[var(--border-dim)]">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--accent-positive)] to-[#A78BFA] flex items-center justify-center text-xs font-bold text-white shrink-0">
                 {initials}
@@ -311,7 +311,7 @@ function AvatarDropdown({
             <DropdownItem icon={HelpCircle} label="Help & Support" onClick={() => go("/support")} />
           </div>
 
-          <div className="border-t border-[var(--border-subtle)] py-1">
+          <div className="border-t border-[var(--border-dim)] py-1">
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-2 text-sm text-[var(--accent-negative)] hover:bg-[var(--accent-negative)]/8 transition-colors cursor-pointer"
@@ -432,36 +432,21 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
 
   return (
     <aside className={cn(
-      "h-screen bg-[var(--bg-base)] border-r border-[var(--border-subtle)] flex flex-col py-4 shrink-0 transition-[width] duration-300",
+      "h-screen border-r border-[var(--border-subtle)] flex flex-col py-4 shrink-0 transition-[width] duration-300",
       expanded ? "w-56" : "w-14 lg:w-56"
-    )}>
-      {/* Logo */}
-      {/* Fixed-height crop box removes the dark padding built into the PNG */}
-      <div
-        className={cn("relative overflow-hidden mb-3 px-2", show(expanded))}
-        style={{ height: 44 }}
-      >
-        <img
-          src="/logo.png"
-          alt="BMG Capital"
-          style={{
-            position: "absolute",
-            width: "100%",
-            top: "50%",
-            transform: "translateY(-50%)",
-          }}
-        />
+    )} style={{ background: '#060a06' }}>
+      {/* Logo — text wordmark */}
+      <div className={cn("px-3 mb-4 flex items-center gap-1.5 h-9", show(expanded))}>
+        <span style={{ fontFamily: 'var(--font-mono-t)', fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--green)' }}>
+          // BMG CAPITAL
+        </span>
+        <span style={{ display: 'inline-block', width: 2, height: 13, background: 'var(--green)', animation: 'bmg-pulse 1.2s steps(1) infinite' }} />
       </div>
-      {/* Icon mark — shown on tablet collapsed (md to lg, not expanded) */}
-      <div className={cn("px-2 mb-3", expanded ? "hidden" : "block lg:hidden")}>
-        <svg
-          viewBox="0 0 32 32"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="w-8 h-8 shrink-0"
-        >
-          <polyline points="3,25 9,17 14,21 22,8" stroke="#3ECF8E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="22" cy="8" r="3" fill="#3ECF8E" />
+      {/* Icon mark — collapsed */}
+      <div className={cn("px-3 mb-4 h-9 flex items-center", expanded ? "hidden" : "block lg:hidden")}>
+        <svg viewBox="0 0 32 32" fill="none" className="w-7 h-7 shrink-0">
+          <polyline points="3,25 9,17 14,21 22,8" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="22" cy="8" r="3" fill="#4ade80" />
         </svg>
       </div>
 
@@ -469,14 +454,15 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
       <div className="px-2 mb-4">
         <button
           onClick={onOpenPalette}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-elevated)]/80 border border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] transition-colors duration-150 text-xs cursor-pointer"
+          className="w-full flex items-center gap-2 px-3 py-2 border border-[var(--border-dim)] text-[var(--text-dim)] hover:text-[var(--text-mid)] hover:border-[var(--border-mid)] transition-colors duration-150 text-xs cursor-pointer"
+          style={{ background: 'var(--bg-2)', fontFamily: 'var(--font-mono-t)' }}
         >
-          <Search size={13} className="shrink-0" />
-          <span className={cn("flex-1 text-left", show(expanded))}>Ask BMG Intelligence…</span>
+          <Search size={12} className="shrink-0" />
+          <span className={cn("flex-1 text-left truncate", show(expanded))}>ask bmg…</span>
           <kbd className={cn(
-            "text-[10px] bg-[var(--bg-elevated-2)] border border-[var(--border-emphasis)] px-1.5 py-0.5 rounded font-mono text-[var(--accent-positive)] font-semibold",
+            "text-[10px] border border-[var(--border-dim)] px-1.5 py-0.5 font-mono",
             show(expanded)
-          )}>⌘K</kbd>
+          )} style={{ background: 'var(--bg-1)', color: 'var(--green)' }}>⌘K</kbd>
         </button>
       </div>
 
@@ -513,21 +499,22 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
       </nav>
 
       {/* Bottom: Upgrade + Avatar */}
-      <div className="px-2 pt-3 border-t border-[var(--border-subtle)] space-y-1.5">
+      <div className="px-2 pt-3 border-t border-[var(--border-dim)] space-y-1.5">
         {/* Upgrade button — only for non-premium users */}
         {tier !== "premium" && (
           <NavLink
             to="/upgrade"
             className={({ isActive }) => cn(
-              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer w-full",
+              "flex items-center gap-2.5 px-3 py-2 text-xs font-bold transition-all cursor-pointer w-full border border-[var(--border-mid)] hover:border-[var(--border-hot)] hover:bg-[rgba(74,222,128,0.06)]",
               isActive
-                ? "bg-[var(--accent-positive)]/15 text-[var(--accent-positive)]"
-                : "bg-[var(--accent-positive)]/8 text-[var(--accent-positive)] hover:bg-[var(--accent-positive)]/15"
+                ? "bg-[rgba(74,222,128,0.10)] text-[var(--green)] border-[var(--border-hot)]"
+                : "text-[var(--green)]"
             )}
+            style={{ fontFamily: 'var(--font-mono-t)', letterSpacing: '0.08em' }}
           >
-            <Crown size={15} className="shrink-0" />
+            <Crown size={13} className="shrink-0" />
             <span className={show(expanded)}>
-              {tier === "plus" ? "Upgrade to Premium" : "Upgrade to Plus"}
+              {tier === "plus" ? "// UPGRADE → PREMIUM" : "// UPGRADE → PLUS"}
             </span>
           </NavLink>
         )}

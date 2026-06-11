@@ -117,7 +117,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
         onSelect={(s) => navigate(`/chart?symbol=${s}`)}
         placeholder="Search ticker (e.g. AAPL)"
         className="flex-1 max-w-xs"
-        inputClassName="w-full h-9 bg-[var(--bg-elevated)] text-[var(--text-primary)] text-sm px-3 rounded-l border border-[var(--border-subtle)] focus:outline-none focus:border-[#3B82F6] focus:bg-[var(--bg-elevated)] placeholder-[#475569] transition-colors duration-150"
+        inputClassName="w-full h-9 bg-[var(--bg-2)] text-[var(--text-hi)] text-sm px-3 border border-[var(--border-dim)] focus:outline-none focus:border-[var(--green)] placeholder-[var(--text-dim)] transition-colors duration-150 font-mono"
       />
 
       <div className="flex items-center gap-2 md:gap-3 ml-auto">
@@ -126,7 +126,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
           <button
             onClick={() => pauseMut.mutate()}
             disabled={pauseMut.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors"
           >
             {pauseMut.isPending ? "Pausing..." : "⏸ Pause All"}
           </button>
@@ -134,7 +134,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
         {/* Demo mode pill */}
         {DEMO_MODE && <DemoPill />}
         {/* Regime chip */}
-        <div className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${regimeChip.cls}`}>
+        <div className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 border font-bold ${regimeChip.cls}`} style={{ fontFamily: 'var(--font-mono-t)', letterSpacing: '0.08em' }}>
           {regimeChip.icon}
           <span className="sm:hidden">{regimeChip.abbr}</span>
           <span className="hidden sm:inline">{regimeChip.label}</span>
@@ -143,10 +143,11 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
         {showTrialBadge && (
           <Link
             to="/pricing"
-            className="hidden sm:flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-medium px-3 py-1.5 rounded-full hover:bg-blue-500/20 transition-colors whitespace-nowrap"
+            className="hidden sm:flex items-center gap-1.5 text-xs font-bold border transition-colors whitespace-nowrap px-3 py-1"
+            style={{ background: 'rgba(251,191,36,0.08)', borderColor: 'rgba(251,191,36,0.30)', color: '#fbbf24', fontFamily: 'var(--font-mono-t)', letterSpacing: '0.06em' }}
           >
-            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-            Pro+ trial · {trialDaysLeft}d left
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#fbbf24' }} />
+            TRIAL · {trialDaysLeft}d
           </Link>
         )}
         {/* Stale data indicator */}
@@ -154,32 +155,32 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
           <span className="text-[9px] text-[#F59E0B] px-1.5 py-0.5 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/20">Data delayed</span>
         )}
         {/* Market status pill */}
-        <div className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
+        <div className="flex items-center gap-1.5 text-xs px-2.5 py-1 border" style={{ background: 'var(--bg-2)', borderColor: 'var(--border-dim)', fontFamily: 'var(--font-mono-t)', letterSpacing: '0.06em' }}>
           {wsStatus !== "connected" ? (
             <>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
-              <WifiOff size={12} className="text-[#F59E0B]" />
-              <span className="text-[#F59E0B] hidden sm:block font-medium">
-                {isCryptoRoute ? "Feed Offline" : "Offline"}
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--amber)' }} />
+              <WifiOff size={11} style={{ color: 'var(--amber)' }} />
+              <span className="hidden sm:block" style={{ color: 'var(--amber)' }}>
+                {isCryptoRoute ? "FEED OFFLINE" : "OFFLINE"}
               </span>
             </>
           ) : marketStatus === "open" ? (
             <>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
-              <Wifi size={12} className="text-[var(--accent-positive)]" />
-              <span className="text-[var(--accent-positive)] hidden sm:block font-medium">{isCryptoRoute ? "OPEN 24/7" : "Live"}</span>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--green)' }} />
+              <Wifi size={11} style={{ color: 'var(--green)' }} />
+              <span className="hidden sm:block" style={{ color: 'var(--green)' }}>{isCryptoRoute ? "24/7 LIVE" : "LIVE"}</span>
             </>
           ) : marketStatus === "after-hours" ? (
             <>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
-              <Clock size={12} className="text-[#F59E0B]" />
-              <span className="text-[#F59E0B] hidden sm:block font-medium">AFTER HOURS</span>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--amber)' }} />
+              <Clock size={11} style={{ color: 'var(--amber)' }} />
+              <span className="hidden sm:block" style={{ color: 'var(--amber)' }}>AH</span>
             </>
           ) : (
             <>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
-              <Moon size={12} className="text-[#F59E0B]" />
-              <span className="text-[#F59E0B] hidden sm:block font-medium">CLOSED</span>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--text-dim)' }} />
+              <Moon size={11} style={{ color: 'var(--text-dim)' }} />
+              <span className="hidden sm:block" style={{ color: 'var(--text-dim)' }}>CLOSED</span>
             </>
           )}
         </div>
@@ -188,20 +189,20 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
         <button
           onClick={toggleMode}
           title={mode === "simple" ? "Switch to Pro Mode" : "Switch to Simple Mode"}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors duration-150 border cursor-pointer ${
-            mode === "pro"
-              ? "bg-[rgba(59,130,246,0.12)] border-[#3B82F6]/30 text-[var(--text-primary)]"
-              : "bg-transparent border-[var(--border-subtle)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:border-[var(--border-emphasis)]"
-          }`}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold transition-colors duration-150 border cursor-pointer"
+          style={mode === "pro"
+            ? { background: 'rgba(251,191,36,0.08)', borderColor: 'rgba(251,191,36,0.30)', color: '#fbbf24', fontFamily: 'var(--font-mono-t)', letterSpacing: '0.08em' }
+            : { background: 'transparent', borderColor: 'var(--border-dim)', color: 'var(--text-dim)', fontFamily: 'var(--font-mono-t)', letterSpacing: '0.08em' }
+          }
         >
-          {mode === "pro" ? <Zap size={12} className="text-[#F59E0B]" /> : <LayoutGrid size={12} />}
-          <span className="hidden sm:block">{mode === "pro" ? "Pro" : "Simple"}</span>
+          {mode === "pro" ? <Zap size={11} color="#fbbf24" /> : <LayoutGrid size={11} />}
+          <span className="hidden sm:block">{mode === "pro" ? "PRO" : "SIM"}</span>
         </button>
 
-        <button onClick={openPanel} className="relative text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150 cursor-pointer p-1">
-          <Bell size={18} />
+        <button onClick={openPanel} className="relative transition-colors duration-150 cursor-pointer p-1" style={{ color: 'var(--text-mid)' }}>
+          <Bell size={17} />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 bg-[#EF4444] text-[var(--text-primary)] text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="absolute -top-0.5 -right-0.5 text-[var(--bg-base)] text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center" style={{ background: 'var(--red)' }}>
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}

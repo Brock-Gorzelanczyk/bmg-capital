@@ -21,13 +21,13 @@ import { cn } from "@/lib/utils";
 function ContentSkeleton() {
   return (
     <div className="p-4 md:p-6 space-y-4 animate-pulse">
-      <div className="h-8 w-64 bg-zinc-800 rounded-lg" />
-      <div className="h-4 w-96 bg-zinc-800/60 rounded" />
+      <div className="h-8 w-64 rounded" style={{ background: 'var(--bg-2)' }} />
+      <div className="h-4 w-96 rounded" style={{ background: 'var(--bg-1)' }} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-        {[0, 1, 2].map(i => <div key={i} className="h-32 bg-zinc-800 rounded-xl" />)}
+        {[0, 1, 2].map(i => <div key={i} className="h-32 rounded" style={{ background: 'var(--bg-2)' }} />)}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[0, 1, 2, 3].map(i => <div key={i} className="h-24 bg-zinc-800 rounded-xl" />)}
+        {[0, 1, 2, 3].map(i => <div key={i} className="h-24 rounded" style={{ background: 'var(--bg-2)' }} />)}
       </div>
     </div>
   );
@@ -113,7 +113,7 @@ export default function AppShell() {
   }, [pathname]);
 
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden">
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div
@@ -140,11 +140,9 @@ export default function AppShell() {
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         {/* Viewer banner — shown only to non-admin accounts */}
         {isViewer && (
-          <div className="flex items-center gap-2 bg-blue-500/10 border-b border-blue-500/20 px-4 py-2 text-xs text-blue-300 shrink-0">
-            <span>👀</span>
-            <span>
-              You're viewing BMG Capital in demo mode. Browse anything — you can't make changes. Like what you see? Ask the admin for full access.
-            </span>
+          <div className="flex items-center gap-2 border-b px-4 py-2 text-xs shrink-0" style={{ background: 'rgba(74,222,128,0.05)', borderColor: 'var(--border-mid)', color: 'var(--text-mid)', fontFamily: 'var(--font-mono-t)', letterSpacing: '0.04em' }}>
+            <span style={{ color: 'var(--green)' }}>// DEMO MODE</span>
+            <span>— browse anything; changes are disabled. ask the admin for full access.</span>
           </div>
         )}
         {!isChart && <TopBar onMenuToggle={() => setSidebarOpen((o) => !o)} />}
@@ -184,25 +182,25 @@ export default function AppShell() {
               className={({ isActive }) =>
                 cn(
                   "flex-1 flex flex-col items-center gap-1 py-3 text-[10px] transition-colors relative min-h-[52px] justify-center",
-                  isActive ? "text-[#3B82F6]" : "text-[var(--text-tertiary)]"
+                  isActive ? "text-[var(--green)]" : "text-[var(--text-dim)]"
                 )
               }
             >
               {({ isActive }) => (
                 <>
                   {isActive && (
-                    <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#3B82F6] rounded-full" />
+                    <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-[var(--green)]" />
                   )}
                   <span className="relative">
                     <Icon size={20} />
                     {showChallengeDot && (
-                      <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#3B82F6]" />
+                      <span className="absolute top-1.5 right-3 w-1.5 h-1.5 rounded-full bg-[var(--green)]" />
                     )}
                     {showAutonomousDot && (
-                      <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#84cc16] animate-pulse" />
+                      <span className="absolute top-1.5 right-3 w-1.5 h-1.5 rounded-full bg-[var(--green)] animate-pulse" />
                     )}
                     {showDigestDot && (
-                      <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[#84cc16]" />
+                      <span className="absolute top-1.5 right-3 w-1.5 h-1.5 rounded-full bg-[var(--green)]" />
                     )}
                   </span>
                   <span className="font-medium">{label}</span>
