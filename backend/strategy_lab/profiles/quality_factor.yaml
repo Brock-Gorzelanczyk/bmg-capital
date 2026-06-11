@@ -1,0 +1,28 @@
+name: quality_factor
+asset_class: stocks
+broker: alpaca_paper_stocks
+universe:
+  source: sp500
+  symbols: []  # populated dynamically from SP500 screener
+  top_n_for_signals: 25
+cadence: "0 10 1-7 * 2"  # first Tuesday of month 10AM ET (quarterly via logic in strategy)
+scan_lookback_period: "1y"
+strategies:
+  - quality_factor_zscore
+ensemble: factor_rank
+confidence_threshold: 0.50
+position_cap: 25
+position_size_pct: 4.0
+hold_max_days: 92
+strategy_type: other
+risk_overlay:
+  daily_loss_limit_pct: 3.0
+  portfolio_drawdown_circuit_pct: 15
+  pdt_enforce: false
+paper_only: true
+starting_capital_cents: 10000000
+tier: T0
+enabled: false
+notes: "Novy-Marx (2013) Gross Profitability + ROE + low D/E. ~0.7 Sharpe claimed, 30% haircut → ~0.5. Quarterly rebalance. Proxy data: FMP free tier or Alpaca fundamentals."
+discord:
+  channel: quant-signals
