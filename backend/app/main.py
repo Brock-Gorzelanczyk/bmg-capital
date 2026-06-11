@@ -364,6 +364,7 @@ app.include_router(ic_router)
 
 
 @app.get("/health", tags=["health"])
+@app.get("/api/health", tags=["health"])
 async def health():
     """Simple liveness check."""
     return {"status": "ok"}
@@ -380,5 +381,8 @@ if _STATIC_DIR.exists():
         candidate = _STATIC_DIR / full_path
         if candidate.exists() and candidate.is_file():
             return FileResponse(str(candidate))
-        # Everything else → SPA index
-        return FileResponse(str(_STATIC_DIR / "index.html"))
+        # SPA index — must never be cached so chunk hashes always match
+        return FileResponse(
+            str(_STATIC_DIR / "index.html"),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
