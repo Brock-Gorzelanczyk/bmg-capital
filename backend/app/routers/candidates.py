@@ -81,6 +81,7 @@ def _candidate_detail(c: StrategyCandidate, db: Session) -> dict:
         "retired_at": c.retired_at.isoformat() if c.retired_at else None,
         "created_at": c.created_at.isoformat(),
         "updated_at": c.updated_at.isoformat(),
+        "metadata_json": c.metadata_json,
         "latest_backtest": {
             "job_id": latest_bt.job_id,
             "completed_at": latest_bt.completed_at.isoformat() if latest_bt.completed_at else None,
@@ -310,6 +311,145 @@ def retire_candidate(name: str, db: Session = Depends(get_db), current_user: Use
     c.retired_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}
+
+
+# ── GET /{name}/backtest-history ─────────────────────────────────────────────
+
+@router.get("/{name}/backtest-history")
+def backtest_history(name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+    c = db.query(StrategyCandidate).filter(StrategyCandidate.name == name).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    runs = (
+        db.query(BacktestRun)
+        .filter(BacktestRun.candidate_id == c.id)
+        .order_by(BacktestRun.started_at.desc())
+        .all()
+    )
+    return {"runs": [
+        {
+            "job_id": r.job_id,
+            "status": r.status,
+            "started_at": r.started_at.isoformat(),
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+            "start_date": r.start_date,
+            "end_date": r.end_date,
+            "gross_sharpe": r.gross_sharpe,
+            "net_sharpe": r.net_sharpe,
+            "max_drawdown_pct": r.max_drawdown_pct,
+            "win_rate": r.win_rate,
+            "profit_factor": r.profit_factor,
+            "n_trades": r.n_trades,
+            "total_cost_pct": r.total_cost_pct,
+            "error_message": r.error_message,
+        }
+        for r in runs
+    ]}
+
+
+# ── GET /{name}/wfa-history ───────────────────────────────────────────────────
+
+@router.get("/{name}/wfa-history")
+def wfa_history(name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+    c = db.query(StrategyCandidate).filter(StrategyCandidate.name == name).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    runs = (
+        db.query(WfaRun)
+        .filter(WfaRun.candidate_id == c.id)
+        .order_by(WfaRun.started_at.desc())
+        .all()
+    )
+    return {"runs": [
+        {
+            "job_id": r.job_id,
+            "status": r.status,
+            "started_at": r.started_at.isoformat(),
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+            "is_years": r.is_years,
+            "oos_years": r.oos_years,
+            "embargo_days": r.embargo_days,
+            "wfe": r.wfe,
+            "pbo": r.pbo,
+            "dsr": r.dsr,
+            "aggregate_oos_sharpe": r.aggregate_oos_sharpe,
+            "aggregate_is_sharpe": r.aggregate_is_sharpe,
+            "n_walks": r.n_walks,
+            "error_message": r.error_message,
+        }
+        for r in runs
+    ]}
+
+
+# ── GET /{name}/backtest/{job_id} ─────────────────────────────────────────────
+
+@router.get("/{name}/backtest/{job_id}")
+def get_backtest_result(name: str, job_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+    c = db.query(StrategyCandidate).filter(StrategyCandidate.name == name).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    r = db.query(BacktestRun).filter(BacktestRun.candidate_id == c.id, BacktestRun.job_id == job_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Backtest run not found")
+    prev = (
+        db.query(BacktestRun)
+        .filter(BacktestRun.candidate_id == c.id, BacktestRun.status == "done", BacktestRun.id < r.id)
+        .order_by(BacktestRun.completed_at.desc())
+        .first()
+    )
+    return {
+        "job_id": r.job_id,
+        "status": r.status,
+        "started_at": r.started_at.isoformat(),
+        "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+        "start_date": r.start_date,
+        "end_date": r.end_date,
+        "params_json": r.params_json,
+        "gross_sharpe": r.gross_sharpe,
+        "net_sharpe": r.net_sharpe,
+        "max_drawdown_pct": r.max_drawdown_pct,
+        "win_rate": r.win_rate,
+        "profit_factor": r.profit_factor,
+        "beta_spy": r.beta_spy,
+        "total_cost_pct": r.total_cost_pct,
+        "n_trades": r.n_trades,
+        "equity_curve_json": r.equity_curve_json,
+        "error_message": r.error_message,
+        "previous_run": {
+            "net_sharpe": prev.net_sharpe,
+            "max_drawdown_pct": prev.max_drawdown_pct,
+            "win_rate": prev.win_rate,
+        } if prev else None,
+    }
+
+
+# ── GET /{name}/wfa/{job_id} ──────────────────────────────────────────────────
+
+@router.get("/{name}/wfa/{job_id}")
+def get_wfa_result(name: str, job_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+    c = db.query(StrategyCandidate).filter(StrategyCandidate.name == name).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    r = db.query(WfaRun).filter(WfaRun.candidate_id == c.id, WfaRun.job_id == job_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="WFA run not found")
+    return {
+        "job_id": r.job_id,
+        "status": r.status,
+        "started_at": r.started_at.isoformat(),
+        "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+        "is_years": r.is_years,
+        "oos_years": r.oos_years,
+        "embargo_days": r.embargo_days,
+        "wfe": r.wfe,
+        "pbo": r.pbo,
+        "dsr": r.dsr,
+        "aggregate_oos_sharpe": r.aggregate_oos_sharpe,
+        "aggregate_is_sharpe": r.aggregate_is_sharpe,
+        "n_walks": r.n_walks,
+        "walks_json": r.walks_json,
+        "error_message": r.error_message,
+    }
 
 
 # ── POST /run-all-backtests ───────────────────────────────────────────────────

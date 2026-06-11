@@ -92,3 +92,62 @@ export const retireCandidate = (name: string) =>
 
 export const runAllBacktests = () =>
   client.post<{ enqueued: number; job_ids: string[] }>("/api/candidates/run-all-backtests").then((r) => r.data);
+
+export type RunStatus = "queued" | "running" | "done" | "failed";
+
+export interface BacktestRunSummary {
+  job_id: string;
+  status: RunStatus;
+  started_at: string;
+  completed_at: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  gross_sharpe: number | null;
+  net_sharpe: number | null;
+  max_drawdown_pct: number | null;
+  win_rate: number | null;
+  profit_factor: number | null;
+  n_trades: number | null;
+  total_cost_pct: number | null;
+  error_message: string | null;
+}
+
+export interface BacktestRunDetail extends BacktestRunSummary {
+  params_json: string | null;
+  beta_spy: number | null;
+  equity_curve_json: string | null;
+  previous_run: { net_sharpe: number | null; max_drawdown_pct: number | null; win_rate: number | null } | null;
+}
+
+export interface WfaRunSummary {
+  job_id: string;
+  status: RunStatus;
+  started_at: string;
+  completed_at: string | null;
+  is_years: number | null;
+  oos_years: number | null;
+  embargo_days: number | null;
+  wfe: number | null;
+  pbo: number | null;
+  dsr: number | null;
+  aggregate_oos_sharpe: number | null;
+  aggregate_is_sharpe: number | null;
+  n_walks: number | null;
+  error_message: string | null;
+}
+
+export interface WfaRunDetail extends WfaRunSummary {
+  walks_json: string | null;
+}
+
+export const getBacktestHistory = (name: string) =>
+  client.get<{ runs: BacktestRunSummary[] }>(`/api/candidates/${name}/backtest-history`).then((r) => r.data);
+
+export const getWfaHistory = (name: string) =>
+  client.get<{ runs: WfaRunSummary[] }>(`/api/candidates/${name}/wfa-history`).then((r) => r.data);
+
+export const getBacktestResult = (name: string, jobId: string) =>
+  client.get<BacktestRunDetail>(`/api/candidates/${name}/backtest/${jobId}`).then((r) => r.data);
+
+export const getWfaResult = (name: string, jobId: string) =>
+  client.get<WfaRunDetail>(`/api/candidates/${name}/wfa/${jobId}`).then((r) => r.data);
