@@ -118,6 +118,66 @@ def _seed_demo_allocations(db: Session, user_id: int) -> None:
         logger.error("Demo seed failed for user %d: %s", user_id, exc)
 
 
+_CANDIDATE_CATALOG = [
+    {
+        "file": "cross_sectional_momentum",
+        "name": "Cross-Sectional Momentum",
+        "asset_class": "equity",
+        "style": "momentum",
+        "reference": "Jegadeesh & Titman (1993)",
+        "expected_sharpe": "0.4–0.8",
+        "description": "Ranks universe by 12-1M return (skip-month), buys top quintile, sells bottom quintile.",
+        "promotion_criteria": "30 days live + 20 trades + Sharpe > 0.3",
+    },
+    {
+        "file": "time_series_momentum",
+        "name": "Time-Series Momentum",
+        "asset_class": "multi",
+        "style": "momentum",
+        "reference": "Moskowitz, Ooi & Pedersen (2012)",
+        "expected_sharpe": "0.5–1.0",
+        "description": "Each asset evaluated independently — go long if 12M trailing return is positive, short if negative. Sized by inverse realised volatility.",
+        "promotion_criteria": "30 days live + 20 trades + Sharpe > 0.3",
+    },
+    {
+        "file": "crypto_dual_momentum",
+        "name": "Crypto Dual Momentum",
+        "asset_class": "crypto",
+        "style": "momentum",
+        "reference": "Liu & Tsyvinski (2021) + Antonacci (2014)",
+        "expected_sharpe": "0.6–1.2",
+        "description": "Combines absolute momentum (vs. cash) with relative momentum (top-N crypto by 3M return). Long-only.",
+        "promotion_criteria": "30 days live + 20 trades + Sharpe > 0.3",
+    },
+    {
+        "file": "overnight_gap_fade",
+        "name": "Overnight Gap Fade",
+        "asset_class": "equity",
+        "style": "mean_reversion",
+        "reference": "Branch & Ma (2008) + Berkman et al. (2012)",
+        "expected_sharpe": "0.3–0.7",
+        "description": "Fades overnight gaps > 1.5%. Stocks gapping up tend to pull back intraday; stocks gapping down tend to recover.",
+        "promotion_criteria": "30 days live + 20 trades + Sharpe > 0.3",
+    },
+    {
+        "file": "rsi2_mean_reversion",
+        "name": "RSI-2 Mean Reversion",
+        "asset_class": "equity",
+        "style": "mean_reversion",
+        "reference": "Connors & Alvarez (2009)",
+        "expected_sharpe": "0.4–0.9",
+        "description": "Buys stocks where RSI(2) drops below 10 while price is above the 200-day MA. Exits when RSI(2) closes above 70.",
+        "promotion_criteria": "30 days live + 20 trades + Sharpe > 0.3",
+    },
+]
+
+
+@router.get("/candidates")
+def get_candidates() -> dict:
+    """Return the list of strategy candidates currently in incubation."""
+    return {"candidates": _CANDIDATE_CATALOG}
+
+
 @router.get("/portfolio")
 def get_portfolio(
     db: Session = Depends(get_db),
