@@ -52,23 +52,14 @@ const PREFETCH_MAP: Record<string, (qc: QueryClient) => void> = {
 // ─── Nav item definitions ─────────────────────────────────────────────────────
 
 const NAV_TRADE = [
-  { to: "/",                 label: "Dashboard",       Icon: LayoutDashboard },
-  { to: "/mission-control",  label: "Mission Control", Icon: Cpu },
-  { to: "/autopilot",        label: "Autopilot",       Icon: Zap },
-  { to: "/chart",            label: "Chart",           Icon: LineChart },
-  { to: "/portfolio",        label: "Portfolio",       Icon: Briefcase },
-  { to: "/pods",             label: "Capital Pods",    Icon: Layers },
-  { to: "/watchlist",        label: "Watchlist",       Icon: BookMarked },
-  { to: "/journal",          label: "Trade Journal",   Icon: BookOpen },
-  { to: "/analytics",        label: "Analytics",       Icon: BarChart2 },
+  { to: "/",                label: "Dashboard",       Icon: LayoutDashboard },
+  { to: "/mission-control", label: "Mission Control", Icon: Cpu },
+  { to: "/portfolio",       label: "Portfolio",       Icon: Briefcase },
+  { to: "/markets",         label: "Markets",         Icon: Globe },
 ];
 
 const NAV_LABS = [
-  { to: "/strategy", label: "Strategy Lab",  Icon: FlaskConical },
-  { to: "/signals",  label: "My Signals",    Icon: Radio },
-  { to: "/options",  label: "Options Lab",   Icon: Layers },
-  { to: "/crypto",   label: "Crypto Lab",    Icon: Bitcoin },
-  { to: "/workshop", label: "TA Workshop",   Icon: PenTool },
+  { to: "/strategy", label: "Strategy Lab", Icon: FlaskConical },
 ];
 
 const NAV_MARKETS = [
