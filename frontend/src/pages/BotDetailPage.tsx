@@ -1559,7 +1559,7 @@ function BacktestTab({ botName }: { botName: string }) {
 
 // ─── Tab system ───────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "watchlist" | "backtest" | "activity" | "strategies" | "performance" | "allocation" | "settings";
+type Tab = "overview" | "watchlist" | "backtest" | "activity" | "strategies" | "signal_quality" | "performance" | "allocation" | "settings";
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { key: Tab; label: string }[] = [
@@ -1568,6 +1568,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
     { key: "backtest", label: "Backtest" },
     { key: "activity", label: "Recent Trades" },
     { key: "strategies", label: "Strategies" },
+    { key: "signal_quality", label: "Signal Quality" },
     { key: "performance", label: "Performance" },
     { key: "allocation", label: "Allocation" },
     { key: "settings", label: "Settings" },
@@ -2009,6 +2010,105 @@ function StrategiesTab({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Signal Quality tab ───────────────────────────────────────────────────────
+
+function SignalQualityTab({ botName }: { botName: string }) {
+  const token = localStorage.getItem("bmg_token");
+  const { data, isLoading } = useQuery({
+    queryKey: ["ic-history", botName],
+    queryFn: async () => {
+      const r = await fetch(`/api/ic/strategies/${encodeURIComponent(botName)}/history?days=180`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return null;
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const latest = data?.latest;
+  const history: { snapshot_date: string; ic_spearman: number }[] = data?.history ?? [];
+
+  const classColor = (cls: string) =>
+    cls === "STRONG" ? "text-emerald-400" :
+    cls === "MARGINAL" ? "text-amber-400" :
+    cls === "NOISE" ? "text-rose-400" :
+    cls === "INVERTED" ? "text-purple-400" :
+    "text-zinc-500";
+
+  return (
+    <div className="space-y-5 pt-2">
+      {isLoading ? (
+        <div className="text-t-muted text-sm py-8 text-center">Loading signal quality data…</div>
+      ) : !latest ? (
+        <div className="text-t-muted text-sm py-8 text-center">No IC data yet — runs nightly at 2:30 AM ET after the stats rollup.</div>
+      ) : (
+        <>
+          {/* Current metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "IC (63d)", value: latest.ic_63d != null ? `${(latest.ic_63d > 0 ? "+" : "")}${(latest.ic_63d * 100).toFixed(2)}%` : "—" },
+              { label: "p-value", value: latest.p_value != null ? latest.p_value.toFixed(3) : "—" },
+              { label: "Signals (n)", value: latest.n_signals ?? "—" },
+              { label: "Hit Rate", value: latest.direction_hit_rate != null ? `${(latest.direction_hit_rate * 100).toFixed(1)}%` : "—" },
+            ].map((m) => (
+              <div key={m.label} className="bg-t-bg1 border border-t-dim rounded-xl px-4 py-3 text-center">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-t-gdim mb-1">{m.label}</div>
+                <div className="text-lg font-bold font-mono text-t-hi">{String(m.value)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Classification + recommendation */}
+          <div className="bg-t-bg1 border border-t-dim rounded-xl px-5 py-4 flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div className="text-[10px] text-t-gdim uppercase tracking-widest mb-1">Classification</div>
+              <div className={`text-xl font-black ${classColor(latest.classification ?? "")}`}>
+                {latest.classification ?? "—"}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-t-gdim uppercase tracking-widest mb-1">Recommendation</div>
+              <div className="text-sm font-bold text-t-hi">{latest.recommendation ?? "—"}</div>
+            </div>
+          </div>
+
+          {/* IC sparkline (SVG) */}
+          {history.length >= 3 && (
+            <div className="bg-t-bg1 border border-t-dim rounded-xl p-4">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-t-gdim mb-3">IC Trend (180 days)</div>
+              <svg viewBox="0 0 400 80" className="w-full h-auto">
+                {(() => {
+                  const vals = history.map((h) => h.ic_spearman);
+                  const minV = Math.min(...vals, -0.1);
+                  const maxV = Math.max(...vals, 0.1);
+                  const xS = (i: number) => 10 + (i / (history.length - 1)) * 380;
+                  const yS = (v: number) => 70 - ((v - minV) / (maxV - minV)) * 60;
+                  const zeroY = yS(0);
+                  const pts = history.map((h, i) => `${xS(i)},${yS(h.ic_spearman)}`).join(" ");
+                  return (
+                    <>
+                      <line x1={10} y1={zeroY} x2={390} y2={zeroY} stroke="#ffffff18" strokeWidth={1} strokeDasharray="3 3" />
+                      <polyline points={pts} fill="none" stroke="#22c55e" strokeWidth={1.5} />
+                    </>
+                  );
+                })()}
+              </svg>
+            </div>
+          )}
+
+          {/* Honest disclosure */}
+          <div className="bg-t-bg0 border border-t-dim/50 rounded-xl px-5 py-4 text-[11px] text-t-gdim space-y-1.5">
+            <div className="font-bold text-t-muted uppercase tracking-widest text-[10px] mb-2">How this works · Limitations</div>
+            <p>IC measures the Spearman rank correlation between this strategy's confidence values and the realized direction-signed returns of its signals over a rolling window.</p>
+            <p>Limitations: (1) Measures linear-monotonic predictive power only — non-linear edge can show low IC with real alpha. (2) Composite IC per strategy, not per signal component. (3) Minimum 30 signals required for any classification — new strategies correctly show INSUFFICIENT. (4) IC can drop temporarily during regime changes without indicating real decay.</p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3095,6 +3195,8 @@ export default function BotDetailPage() {
 
       {/* Strategies tab */}
       {activeTab === "strategies" && <StrategiesTab botName={botName} signals={signals} />}
+
+      {activeTab === "signal_quality" && <SignalQualityTab botName={botName} />}
 
       {/* Settings tab */}
       {activeTab === "performance" && (

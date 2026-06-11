@@ -326,6 +326,14 @@ function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+interface IcSnapshot {
+  strategy_name: string;
+  ic_63d: number | null;
+  classification: string | null;
+  recommendation: string | null;
+  n_signals: number;
+}
+
 export default function StrategyLeaderboardPage() {
   const [tab, setTab] = useState<"bots" | "strategies">("bots");
   const [period, setPeriod] = useState<Period>("30d");
@@ -333,6 +341,20 @@ export default function StrategyLeaderboardPage() {
   const [sort, setSort] = useState<StratSort>("pnl");
   const [botSort, setBotSort] = useState<BotLbSort>("pnl");
   const [selected, setSelected] = useState<StrategyLeaderboardRow | null>(null);
+
+  const { data: icData } = useQuery({
+    queryKey: ["ic-strategies"],
+    queryFn: async () => {
+      try {
+        const r = await fetch("/api/ic/strategies", { headers: { Authorization: `Bearer ${localStorage.getItem("bmg_token")}` } });
+        if (!r.ok) return [] as IcSnapshot[];
+        const json = await r.json();
+        return (json as IcSnapshot[]);
+      } catch { return [] as IcSnapshot[]; }
+    },
+    staleTime: 60_000,
+  });
+  const icMap = Object.fromEntries((icData ?? []).map((s) => [s.strategy_name, s]));
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["strategy-leaderboard", period, sort],
@@ -508,8 +530,8 @@ export default function StrategyLeaderboardPage() {
         ) : (
           <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
             {/* Column headers */}
-            <div className="grid grid-cols-[40px_1fr_120px_110px_100px_90px_70px_60px] gap-2 px-4 py-2 border-b border-t-dim">
-              {["Rank", "Strategy", "Category", "$ P&L", "Return %", "Win Rate", "Trades", "Bots"].map((h) => (
+            <div className="grid grid-cols-[40px_1fr_120px_110px_100px_90px_90px_70px_60px] gap-2 px-4 py-2 border-b border-t-dim">
+              {["Rank", "Strategy", "Category", "$ P&L", "Return %", "Win Rate", "IC (63d)", "Trades", "Bots"].map((h) => (
                 <span key={h} className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">
                   {h}
                 </span>
@@ -522,7 +544,7 @@ export default function StrategyLeaderboardPage() {
                 <button
                   key={row.strategy_id}
                   onClick={() => setSelected(row)}
-                  className="w-full text-left grid grid-cols-[40px_1fr_120px_110px_100px_90px_70px_60px] gap-2 px-4 py-3 border-b border-t-dim/50 last:border-b-0 hover:bg-t-bg2/40 cursor-pointer transition-colors duration-100 card-hover"
+                  className="w-full text-left grid grid-cols-[40px_1fr_120px_110px_100px_90px_90px_70px_60px] gap-2 px-4 py-3 border-b border-t-dim/50 last:border-b-0 hover:bg-t-bg2/40 cursor-pointer transition-colors duration-100 card-hover"
                 >
                   {/* Rank */}
                   <span className="font-mono-t text-sm text-t-muted tabular-nums self-center">
@@ -578,6 +600,25 @@ export default function StrategyLeaderboardPage() {
                       ? `${(row.win_rate * 100).toFixed(1)}%`
                       : "—"}
                   </span>
+
+                  {/* IC (63d) */}
+                  <div className="self-center">
+                    {(() => {
+                      const ic = icMap[row.strategy_id ?? row.strategy_name ?? ""];
+                      if (!ic || ic.ic_63d == null) return <span className="text-[10px] text-zinc-600">—</span>;
+                      const cls = ic.classification ?? "INSUFFICIENT";
+                      const color = cls === "STRONG" ? "text-emerald-400 bg-emerald-900/30" :
+                                    cls === "MARGINAL" ? "text-amber-400 bg-amber-900/30" :
+                                    cls === "NOISE" ? "text-rose-400 bg-rose-900/30" :
+                                    cls === "INVERTED" ? "text-purple-400 bg-purple-900/30" :
+                                    "text-zinc-500 bg-zinc-800/40";
+                      return (
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${color}`}>
+                          {ic.ic_63d > 0 ? "+" : ""}{(ic.ic_63d * 100).toFixed(1)}%
+                        </span>
+                      );
+                    })()}
+                  </div>
 
                   {/* Trades */}
                   <span className="font-mono-t text-sm tabular-nums text-t-mid2 self-center">

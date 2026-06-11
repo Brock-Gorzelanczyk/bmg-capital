@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -426,6 +426,46 @@ def scan_ticker(
     }
     _cache_set(ticker, response)
     return response
+
+
+@router.get("/screen")
+def screen_strategy(
+    strategy: str = Query(..., description="Strategy ID from catalog"),
+    universe: str = Query("sp500_plus_top_crypto", description="Symbol universe preset"),
+    limit: int = Query(25, ge=1, le=100),
+    _: None = Depends(_scout_enabled),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Screen an entire universe for tickers matching a strategy's entry conditions."""
+    if strategy not in SCOUT_CATALOG:
+        raise HTTPException(status_code=422, detail=f"Unknown strategy: {strategy}")
+
+    valid_universes = {"sp500", "russell1000", "crypto_top50", "sp500_plus_top_crypto", "watchlist"}
+    if universe not in valid_universes:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown universe: {universe}. Valid: {sorted(valid_universes)}",
+        )
+
+    from app.services.scout_screener import run_screen
+
+    # For watchlist universe, pull the user's watchlist symbols from DB
+    watchlist_symbols: list[str] = []
+    if universe == "watchlist":
+        try:
+            from app.db.models.bots import BotAllocation  # noqa: F401
+            # Use existing watchlist data if available, otherwise empty
+            watchlist_symbols = []  # placeholder — populate from user's saved symbols if the model exists
+        except Exception:
+            pass
+
+    try:
+        result = run_screen(strategy, universe, limit=limit, watchlist_symbols=watchlist_symbols)
+        return result
+    except Exception as exc:
+        logger.error("[scout] screen failed for %s/%s: %s", strategy, universe, exc)
+        raise HTTPException(status_code=500, detail="Screener error — please try again")
 
 
 @router.get("/setups")
