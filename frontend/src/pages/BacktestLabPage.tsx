@@ -1,7 +1,17 @@
-import { useState, useMemo } from "react";
-import { Bot, FlaskConical, Play, TrendingUp, TrendingDown, BarChart3, ChevronDown, ChevronUp, Shuffle } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Bot, FlaskConical, Play, TrendingUp, TrendingDown, BarChart3, ChevronDown, ChevronUp, Shuffle, RefreshCw, Clock } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { cn } from "@/lib/utils";
+import {
+  getBacktestStatus,
+  runBacktest as apiRunBacktest,
+  getBacktestDetail,
+  STRATEGY_LABELS,
+  STRATEGY_KEYS,
+  type BacktestDetailResponse,
+} from "@/api/backtest";
+
+const INITIAL_CAPITAL = 100_000;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -19,85 +29,49 @@ interface BacktestResult {
   trades: { entry: string; exit: string; ticker: string; pnl: number; pct: number; signal: string }[];
 }
 
-// ── Mock backtest engine ───────────────────────────────────────────────────────
+function mapDetailToResult(detail: BacktestDetailResponse, capital: number): BacktestResult {
+  const m = detail.metrics;
 
-function runBacktest(
-  signal: string,
-  universe: string,
-  capital: number,
-  commission: number,
-  slippage: number,
-  borrowCost: number
-): BacktestResult {
-  const profiles: Record<string, { ret: number; cagr: number; sharpe: number; dd: number; wr: number }> = {
-    "RSI Oversold (< 30)":       { ret: 142, cagr: 18.4, sharpe: 1.42, dd: 18.2, wr: 68 },
-    "Golden Cross (50/200 MA)":  { ret: 98,  cagr: 14.2, sharpe: 1.18, dd: 22.4, wr: 61 },
-    "MACD Crossover":            { ret: 118, cagr: 16.1, sharpe: 1.31, dd: 20.1, wr: 64 },
-    "Bollinger Band Breakout":   { ret: 87,  cagr: 12.8, sharpe: 1.09, dd: 25.8, wr: 58 },
-    "EMA 20/50 Cross":           { ret: 107, cagr: 15.2, sharpe: 1.24, dd: 21.3, wr: 62 },
-    "VCP Breakout":              { ret: 168, cagr: 21.3, sharpe: 1.67, dd: 16.4, wr: 72 },
-    "Cup & Handle":              { ret: 134, cagr: 17.8, sharpe: 1.55, dd: 17.9, wr: 69 },
-    "Opening Range Breakout":    { ret: 94,  cagr: 13.6, sharpe: 1.14, dd: 23.1, wr: 59 },
-    "Gap-and-Go":                { ret: 122, cagr: 16.7, sharpe: 1.38, dd: 19.6, wr: 63 },
-    "Insider Cluster":           { ret: 155, cagr: 20.1, sharpe: 1.61, dd: 15.8, wr: 71 },
-    "Sector Rotation":           { ret: 103, cagr: 14.9, sharpe: 1.22, dd: 20.7, wr: 60 },
-    "PEAD Drift":                { ret: 129, cagr: 17.2, sharpe: 1.44, dd: 18.5, wr: 66 },
-    "Mean Reversion 2-Sigma":    { ret: 78,  cagr: 11.6, sharpe: 0.98, dd: 27.3, wr: 55 },
-    "RSI Divergence":            { ret: 111, cagr: 15.6, sharpe: 1.29, dd: 21.8, wr: 63 },
-    "Bollinger Squeeze":         { ret: 96,  cagr: 13.9, sharpe: 1.16, dd: 24.2, wr: 60 },
-  };
-  const p = profiles[signal] ?? profiles["Golden Cross (50/200 MA)"];
-
-  // Cost drag: each trade costs commission + slippage*2 (in+out) + borrowCost prorated
-  // Express all as % impact per trade
-  const perTradeCostPct = (commission / (capital / 10)) * 100 + slippage * 2 + borrowCost / 12;
-  const numTrades = 24;
-  const costDrag = perTradeCostPct * numTrades / 100;
-
-  const adjustedRet  = Math.max(0, p.ret  - p.ret  * Math.min(costDrag, 0.3));
-  const adjustedCagr = Math.max(0, p.cagr - p.cagr * Math.min(costDrag, 0.3));
-
-  // Generate equity curve (monthly, 3 years)
-  const months = 36;
-  const curve: BacktestResult["equityCurve"] = [];
-  let port = capital, bench = capital;
-  const portMoReturn = Math.pow(1 + adjustedCagr / 100, 1 / 12);
+  // Build benchmark from equity curve start date at 10% CAGR
+  const curve = detail.equity_curve;
   const benchMoReturn = Math.pow(1.10, 1 / 12);
-  const now = new Date(2025, 4); // May 2025
-  for (let i = months; i >= 0; i--) {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() - i);
-    const noise = 1 + (Math.sin(i * 2.7 + signal.length) * 0.04);
-    curve.push({
-      date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-      portfolio: Math.round(port * noise),
-      benchmark: Math.round(bench),
-    });
-    port  *= portMoReturn  * (1 + (Math.sin(i * 3.1 + signal.charCodeAt(0)) * 0.015));
-    bench *= benchMoReturn * (1 + (Math.sin(i * 2.3) * 0.01));
-  }
-
-  const tickers = universe === "S&P 500"         ? ["AAPL","MSFT","NVDA","GOOGL","META","AMZN","TSLA","JPM"]
-                : universe === "NASDAQ 100"       ? ["NVDA","META","AMD","NFLX","AMZN","TSLA","AVGO","INTC"]
-                : ["PLTR","COIN","SOFI","ARKK","GME","AMC","MSTR","RIOT"];
-  const signalNames = ["RSI bounce","MA cross","MACD signal","BB touch","Volume surge","Trend break","Gap fill","Momentum"];
-
-  const trades: BacktestResult["trades"] = Array.from({ length: numTrades }, (_, i) => {
-    const wins = Math.round(numTrades * p.wr / 100);
-    const isWin = i < wins;
-    const baseWin  = +(Math.sin(i * 5.3 + signal.length)  * 5  + 7).toFixed(2);
-    const baseLoss = +(Math.sin(i * 4.7 + signal.charCodeAt(0)) * 2.5 + 4).toFixed(2);
-    const pnlPct = isWin ? baseWin : -baseLoss;
-    const entryCapital = capital / 10;
+  let bench = capital;
+  const equityCurve = curve.map((pt, i) => {
+    if (i > 0) bench *= benchMoReturn ** (1 / 4); // weekly samples
     return {
-      ticker: tickers[i % tickers.length],
-      entry: `${2022 + Math.floor(i / 9)}-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
-      exit:  `${2022 + Math.floor(i / 9)}-${String((i % 12) + 2).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
-      pnl:  Math.round(entryCapital * pnlPct / 100),
-      pct:  pnlPct,
-      signal: signalNames[i % signalNames.length],
+      date: pt.date,
+      portfolio: Math.round((pt.value / INITIAL_CAPITAL) * capital),
+      benchmark: Math.round(bench),
     };
-  }).sort((a, b) => a.entry.localeCompare(b.entry));
+  });
+
+  // Benchmark return over period
+  const spyAnnual = 0.10;
+  const benchmarkReturn = Math.round(((Math.pow(1 + spyAnnual, detail.period_years) - 1) * 100));
+
+  const trades = detail.trades.map((t) => ({
+    ticker: t.symbol,
+    entry: t.entry_date,
+    exit: t.exit_date ?? "—",
+    pnl: Math.round((t.pnl / INITIAL_CAPITAL) * capital),
+    pct: t.pnl_pct,
+    signal: t.exit_reason ?? "signal",
+  }));
+
+  return {
+    totalReturn: m.total_return_pct,
+    cagr: m.cagr,
+    sharpe: m.sharpe_ratio,
+    maxDrawdown: m.max_drawdown_pct,
+    winRate: m.win_rate,
+    totalTrades: m.total_trades,
+    avgWin: m.avg_win_pct,
+    avgLoss: m.avg_loss_pct,
+    benchmarkReturn,
+    equityCurve,
+    trades,
+  };
+}
 
   const wins2   = trades.filter((t) => t.pnl > 0);
   const losses2 = trades.filter((t) => t.pnl < 0);
@@ -328,26 +302,8 @@ const STRESS_SCENARIOS = [
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-const SIGNALS = [
-  "RSI Oversold (< 30)",
-  "Golden Cross (50/200 MA)",
-  "MACD Crossover",
-  "Bollinger Band Breakout",
-  "EMA 20/50 Cross",
-  "VCP Breakout",
-  "Cup & Handle",
-  "Opening Range Breakout",
-  "Gap-and-Go",
-  "Insider Cluster",
-  "Sector Rotation",
-  "PEAD Drift",
-  "Mean Reversion 2-Sigma",
-  "RSI Divergence",
-  "Bollinger Squeeze",
-];
-
-const UNIVERSES = ["S&P 500", "NASDAQ 100", "High Beta / Small Cap"];
-const CAPITALS  = [10000, 25000, 50000, 100000, 250000];
+const UNIVERSES = ["150-Stock Liquid Universe"];
+const CAPITALS  = [10_000, 25_000, 50_000, 100_000, 250_000];
 
 const COMMISSION_OPTIONS   = [{ label: "$0",  value: 0 }, { label: "$1",  value: 1 }, { label: "$5",  value: 5 }];
 const SLIPPAGE_OPTIONS     = [
@@ -359,28 +315,91 @@ const SLIPPAGE_OPTIONS     = [
 const BORROW_COST_OPTIONS  = [{ label: "0%", value: 0 }, { label: "1%", value: 1 }, { label: "5%", value: 5 }];
 
 export default function BacktestLabPage() {
-  const [signal,      setSignal]      = useState(SIGNALS[0]);
-  const [universe,    setUniverse]    = useState(UNIVERSES[0]);
-  const [capital,     setCapital]     = useState(10000);
+  const [strategyKey, setStrategyKey] = useState(STRATEGY_KEYS[0]);
+  const [capital,     setCapital]     = useState(100000);
   const [commission,  setCommission]  = useState(0);
   const [slippage,    setSlippage]    = useState(0);
   const [borrowCost,  setBorrowCost]  = useState(0);
 
-  const [hasRun,      setHasRun]      = useState(false);
-  const [running,     setRunning]     = useState(false);
-  const [result,      setResult]      = useState<BacktestResult | null>(null);
-  const [aiOpen,      setAiOpen]      = useState(false);
-  const [tab,         setTab]         = useState<"chart" | "trades" | "montecarlo">("chart");
-  const [advOpen,     setAdvOpen]     = useState(false);
-  const [stressOpen,  setStressOpen]  = useState(false);
+  const [hasRun,       setHasRun]       = useState(false);
+  const [running,      setRunning]      = useState(false);
+  const [runStatus,    setRunStatus]    = useState("");
+  const [cacheDate,    setCacheDate]    = useState<string | null>(null);
+  const [result,       setResult]       = useState<BacktestResult | null>(null);
+  const [aiOpen,       setAiOpen]       = useState(false);
+  const [tab,          setTab]          = useState<"chart" | "trades" | "montecarlo">("chart");
+  const [advOpen,      setAdvOpen]      = useState(false);
+  const [stressOpen,   setStressOpen]   = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  function handleRun() {
+  useEffect(() => {
+    getBacktestStatus().then((s) => {
+      if (s.run_date) setCacheDate(s.run_date);
+    }).catch(() => {});
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  async function handleRun() {
     setRunning(true);
-    setTimeout(() => {
-      setResult(runBacktest(signal, universe, capital, commission, slippage, borrowCost));
-      setHasRun(true);
+    setRunStatus("Checking cache…");
+    try {
+      const status = await getBacktestStatus();
+      if (status.available && !status.running) {
+        // Use cached results directly
+        setRunStatus("Loading results…");
+        const detail = await getBacktestDetail(strategyKey);
+        setResult(mapDetailToResult(detail, capital));
+        setCacheDate(detail.run_date);
+        setHasRun(true);
+        setRunning(false);
+        return;
+      }
+
+      // Kick off a new backtest run
+      setRunStatus("Starting backtest (1–3 min)…");
+      await apiRunBacktest(3);
+
+      pollRef.current = setInterval(async () => {
+        try {
+          const s = await getBacktestStatus();
+          if (s.running) {
+            setRunStatus("Running across 150 stocks…");
+          } else if (s.available) {
+            clearInterval(pollRef.current!);
+            setRunStatus("Loading results…");
+            const detail = await getBacktestDetail(strategyKey);
+            setResult(mapDetailToResult(detail, capital));
+            setCacheDate(detail.run_date);
+            setHasRun(true);
+            setRunning(false);
+            setRunStatus("");
+          }
+        } catch {
+          clearInterval(pollRef.current!);
+          setRunning(false);
+          setRunStatus("Error — try again");
+        }
+      }, 4000);
+    } catch {
       setRunning(false);
-    }, 900);
+      setRunStatus("Failed to start — check connection");
+    }
+  }
+
+  async function handleRefreshStrategy() {
+    if (!cacheDate) return;
+    setRunning(true);
+    setRunStatus("Loading…");
+    try {
+      const detail = await getBacktestDetail(strategyKey);
+      setResult(mapDetailToResult(detail, capital));
+      setHasRun(true);
+    } catch {
+      setRunStatus("Error loading strategy");
+    } finally {
+      setRunning(false);
+      setRunStatus("");
+    }
   }
 
   const alpha = result ? result.totalReturn - result.benchmarkReturn : null;
@@ -414,32 +433,40 @@ export default function BacktestLabPage() {
         </button>
       </div>
 
+      {/* Cache banner */}
+      {cacheDate && (
+        <div className="flex items-center gap-2 text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl px-4 py-2">
+          <Clock size={11} />
+          <span>Backtest cache from {new Date(cacheDate).toLocaleDateString()} — results load instantly.</span>
+        </div>
+      )}
+
       {/* Builder */}
       <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-2xl p-5">
         <div className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)] mb-4">Strategy Builder</div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <div>
-            <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-2">Entry Signal</label>
+            <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-2">Strategy</label>
             <select
-              value={signal}
-              onChange={(e) => setSignal(e.target.value)}
+              value={strategyKey}
+              onChange={(e) => setStrategyKey(e.target.value)}
               className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs rounded-lg px-3 py-2.5 outline-none focus:border-[var(--border-emphasis)] cursor-pointer"
             >
-              {SIGNALS.map((s) => <option key={s} value={s}>{s}</option>)}
+              {STRATEGY_KEYS.map((k) => <option key={k} value={k}>{STRATEGY_LABELS[k]}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-2">Universe</label>
             <select
-              value={universe}
-              onChange={(e) => setUniverse(e.target.value)}
-              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs rounded-lg px-3 py-2.5 outline-none focus:border-[var(--border-emphasis)] cursor-pointer"
+              value={UNIVERSES[0]}
+              disabled
+              className="w-full bg-[var(--bg-elevated-2)] border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs rounded-lg px-3 py-2.5 outline-none cursor-not-allowed opacity-70"
             >
               {UNIVERSES.map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-2">Starting Capital</label>
+            <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-2">Display Capital</label>
             <select
               value={capital}
               onChange={(e) => setCapital(Number(e.target.value))}
@@ -452,15 +479,13 @@ export default function BacktestLabPage() {
 
         {/* Config summary */}
         <div className="mt-4 flex flex-wrap items-center gap-3 text-[10px] text-[var(--text-tertiary)]">
-          <span>Period: Jan 2022 – May 2025 (3 years)</span>
+          <span>Period: 3 years · 150-stock universe</span>
           <span>·</span>
-          <span>Position sizing: 10% per trade</span>
+          <span>$5K per position · 20 max concurrent</span>
           <span>·</span>
-          <span>Stop loss: 8%</span>
+          <span>Stop -8% · Target +20% · 30-day max hold</span>
           <span>·</span>
-          <span>Take profit: 20%</span>
-          <span>·</span>
-          <span>Benchmark: SPY</span>
+          <span>Benchmark: SPY (10% CAGR)</span>
         </div>
 
         {/* Advanced Settings */}
@@ -508,14 +533,27 @@ export default function BacktestLabPage() {
           )}
         </div>
 
-        <button
-          onClick={handleRun}
-          disabled={running}
-          className="mt-4 flex items-center gap-2 px-5 py-2.5 bg-[var(--accent-positive)] hover:opacity-90 disabled:opacity-60 text-[#0a0a0a] text-sm font-bold rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
-        >
-          <Play size={14} className={running ? "animate-spin" : ""} />
-          {running ? "Running backtest…" : "Run Backtest"}
-        </button>
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <button
+            onClick={handleRun}
+            disabled={running}
+            className="flex items-center gap-2 px-5 py-2.5 bg-[var(--accent-positive)] hover:opacity-90 disabled:opacity-60 text-[#0a0a0a] text-sm font-bold rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
+          >
+            <Play size={14} className={running ? "animate-spin" : ""} />
+            {running ? (runStatus || "Working…") : (cacheDate ? "Load Results" : "Run Backtest")}
+          </button>
+          {hasRun && !running && (
+            <button
+              onClick={handleRefreshStrategy}
+              className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border-subtle)] hover:border-[var(--border-emphasis)] text-[var(--text-secondary)] text-xs font-semibold rounded-xl transition-all cursor-pointer"
+            >
+              <RefreshCw size={12} /> Switch Strategy
+            </button>
+          )}
+          {running && runStatus && (
+            <span className="text-[11px] text-[var(--text-tertiary)]">{runStatus}</span>
+          )}
+        </div>
       </div>
 
       {/* Results */}
@@ -665,10 +703,10 @@ export default function BacktestLabPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated-2)]/40">
-                      {["Ticker", "Entry Date", "Exit Date", "Signal", "P&L", "Return"].map((h) => (
+                      {["Ticker", "Entry Date", "Exit Date", "Exit Reason", "P&L", "Return"].map((h) => (
                         <th key={h} className={cn(
                           "px-4 py-2.5 font-semibold text-[var(--text-tertiary)] tracking-wider",
-                          ["Ticker", "Signal"].includes(h) ? "text-left" : "text-right"
+                          ["Ticker", "Exit Reason"].includes(h) ? "text-left" : "text-right"
                         )}>{h}</th>
                       ))}
                     </tr>

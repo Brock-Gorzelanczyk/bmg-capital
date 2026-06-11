@@ -82,3 +82,33 @@ export const deleteSetup = (id: number) =>
 
 export const getSignals = () =>
   client.get<{ signals: ScoutSignal[] }>("/scout/signals").then((r) => r.data);
+
+export interface ScreenResult {
+  rank: number;
+  symbol: string;
+  asset_class: "equity" | "crypto";
+  direction: "LONG" | "SHORT";
+  confidence: number;
+  setup_quality: number;
+  current_price: number | null;
+  key_metrics: Record<string, unknown>;
+  summary: string;
+}
+
+export interface ScreenResponse {
+  strategy_id: string;
+  universe: string;
+  scanned_count: number;
+  match_count: number;
+  cached: boolean;
+  results: ScreenResult[];
+}
+
+export async function screenStrategy(
+  strategy: string,
+  universe: string,
+  limit = 25,
+): Promise<ScreenResponse> {
+  const params = new URLSearchParams({ strategy, universe, limit: String(limit) });
+  return client.get<ScreenResponse>(`/scout/screen?${params}`).then((r) => r.data);
+}
