@@ -668,6 +668,75 @@ def run_migrations(engine: Engine) -> None:
             _create_allocation_tier_tables(conn)
         except Exception as _e:
             logger.warning("_create_allocation_tier_tables failed (non-fatal): %s", _e)
+        try:
+            _create_safety_layer_tables(conn)
+        except Exception as _e:
+            logger.warning("_create_safety_layer_tables failed (non-fatal): %s", _e)
+
+
+def _create_safety_layer_tables(conn) -> None:
+    """Create trading gate, blackout, and equity snapshot tables."""
+    MIGRATION_NAME = "safety_layer_v1"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS trading_gate_state (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            is_open INTEGER NOT NULL DEFAULT 1,
+            halt_reason TEXT,
+            halted_at TIMESTAMP,
+            halted_by TEXT,
+            reopened_at TIMESTAMP,
+            reopened_by TEXT
+        )
+    """))
+    conn.execute(text(
+        "INSERT OR IGNORE INTO trading_gate_state (id, is_open, halt_reason) VALUES (1, 1, NULL)"
+    ))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS trading_gate_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event TEXT NOT NULL,
+            reason TEXT,
+            symbol TEXT,
+            bot_id TEXT,
+            metadata TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS trading_blackouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            blackout_type TEXT NOT NULL,
+            event_date DATE NOT NULL,
+            blackout_start TIMESTAMP NOT NULL,
+            blackout_end TIMESTAMP NOT NULL,
+            source TEXT,
+            notes TEXT,
+            UNIQUE(symbol, blackout_type, event_date)
+        )
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_blackouts_symbol_dates
+            ON trading_blackouts(symbol, blackout_start, blackout_end)
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_blackouts_dates
+            ON trading_blackouts(blackout_start, blackout_end)
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS portfolio_equity_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            snapshot_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            equity_usd REAL NOT NULL,
+            cash_usd REAL,
+            positions_value_usd REAL
+        )
+    """))
+    conn.commit()
+    _record_migration(conn, MIGRATION_NAME)
+    logger.info("_create_safety_layer_tables: tables created")
 
 
 def _create_allocation_tier_tables(conn) -> None:
