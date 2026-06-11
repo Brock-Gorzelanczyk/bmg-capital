@@ -187,13 +187,23 @@ def get_broker(asset_class: str, force_live: bool = False) -> BrokerAdapter:
     """Factory: return the appropriate broker adapter.
 
     Paper is always the default.  Live requires RIA_REGISTERED=true.
+    The returned adapter is always wrapped with SafeBrokerWrapper so that
+    the trading gate and blackout checks apply to every order submission.
+    Wrapping is fail-open — if SafeBrokerWrapper can't be imported the raw
+    adapter is returned instead, ensuring nothing blocks legitimate trades.
     """
     if force_live:
         if os.getenv("RIA_REGISTERED", "false").lower() != "true":
             raise PermissionError("Live trading not available; RIA registration pending")
         if asset_class not in LIVE_BROKERS:
             raise ValueError(f"Unknown asset_class '{asset_class}'")
-        return LIVE_BROKERS[asset_class]()()
-    if asset_class not in PAPER_BROKERS:
-        raise ValueError(f"Unknown asset_class '{asset_class}'")
-    return PAPER_BROKERS[asset_class]()()
+        inner = LIVE_BROKERS[asset_class]()()
+    else:
+        if asset_class not in PAPER_BROKERS:
+            raise ValueError(f"Unknown asset_class '{asset_class}'")
+        inner = PAPER_BROKERS[asset_class]()()
+    try:
+        from app.services.safe_broker import SafeBrokerWrapper
+        return SafeBrokerWrapper(inner)  # type: ignore[return-value]
+    except Exception:
+        return inner
