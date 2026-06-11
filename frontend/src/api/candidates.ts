@@ -151,3 +151,17 @@ export const getBacktestResult = (name: string, jobId: string) =>
 
 export const getWfaResult = (name: string, jobId: string) =>
   client.get<WfaRunDetail>(`/api/candidates/${name}/wfa/${jobId}`).then((r) => r.data);
+
+export interface CatalogCandidate {
+  file: string;
+  name: string;
+  asset_class: string;
+  style: string;
+  reference?: string;
+  expected_sharpe?: string;
+  description?: string;
+  promotion_criteria?: string;
+}
+
+export const listCandidateCatalog = () =>
+  client.get<{ candidates: CatalogCandidate[] }>("/api/strategy-lab/candidates").then((r) => r.data);

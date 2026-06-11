@@ -5,7 +5,7 @@ import { Search, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionLabel } from "@/components/design";
 import { getBotLeaderboardRanking, type BotLeaderboardRow } from "@/api/performance";
-import { listCandidates, type Candidate } from "@/api/candidates";
+import { listCandidateCatalog, type CatalogCandidate } from "@/api/candidates";
 
 // ── Style / difficulty mappings ───────────────────────────────────────────────
 
@@ -136,11 +136,8 @@ function BotCard({ row, onClick }: { row: BotLeaderboardRow; onClick: () => void
   );
 }
 
-function CandidateCard({ c, onClick }: { c: Candidate; onClick: () => void }) {
+function CandidateCard({ c, onClick }: { c: CatalogCandidate; onClick: () => void }) {
   const style = c.style ?? "Other";
-  const hasBacktest = c.latest_backtest != null && c.latest_backtest.net_sharpe != null;
-  const isActive = c.state === "SHADOW_PAPER";
-  const isRetired = c.state === "RETIRED";
 
   return (
     <button
@@ -148,11 +145,11 @@ function CandidateCard({ c, onClick }: { c: Candidate; onClick: () => void }) {
       className="bg-t-bg1 border border-t-dim rounded-2xl p-5 text-left hover:border-t-mid hover:bg-t-bg2/30 transition-all duration-150 space-y-3 w-full"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-t-hi font-semibold text-sm leading-tight font-ui-t truncate min-w-0 capitalize">
-          {c.name.replace(/_/g, " ")}
+        <p className="text-t-hi font-semibold text-sm leading-tight font-ui-t truncate min-w-0">
+          {c.name}
         </p>
-        <span className={cn("shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono-t whitespace-nowrap", STATE_COLOR[c.state])}>
-          {c.state.replace(/_/g, " ")}
+        <span className={cn("shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono-t whitespace-nowrap", STATE_COLOR.CANDIDATE)}>
+          CANDIDATE
         </span>
       </div>
 
@@ -160,31 +157,16 @@ function CandidateCard({ c, onClick }: { c: Candidate; onClick: () => void }) {
         {style}
       </span>
 
-      <div className="grid grid-cols-3 gap-2">
-        {hasBacktest ? (
-          <>
-            <Metric label="SHARPE" value={c.latest_backtest!.net_sharpe!.toFixed(2)} tag="backtest" />
-            <Metric
-              label="WIN"
-              value={c.latest_backtest!.win_rate != null ? `${(c.latest_backtest!.win_rate * 100).toFixed(0)}%` : "—"}
-              tag="backtest"
-            />
-            <Metric
-              label="MAX DD"
-              value={c.latest_backtest!.max_drawdown_pct != null ? `${c.latest_backtest!.max_drawdown_pct.toFixed(1)}%` : "—"}
-              tag="backtest"
-            />
-          </>
-        ) : (
-          <div className="col-span-3 text-t-gdim text-xs font-mono-t">Not backtested</div>
+      <div className="grid grid-cols-1 gap-1">
+        <div className="col-span-1 text-t-gdim text-xs font-mono-t">Not backtested</div>
+        {c.expected_sharpe && (
+          <div className="text-[10px] text-t-gdim font-mono-t">Expected Sharpe: {c.expected_sharpe}</div>
         )}
       </div>
 
       <div className="flex items-center gap-1.5 pt-1 border-t border-t-dim">
-        <span className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-t-cyan" : isRetired ? "bg-t-red" : "bg-t-muted")} />
-        <span className="text-[10px] text-t-muted font-mono-t">
-          {isActive ? "SHADOW PAPER" : isRetired ? "RETIRED" : "NOT LIVE"}
-        </span>
+        <span className="w-1.5 h-1.5 rounded-full bg-t-muted" />
+        <span className="text-[10px] text-t-muted font-mono-t">NOT LIVE</span>
         {c.asset_class && (
           <span className="ml-auto text-[10px] text-t-gdim font-mono-t uppercase">{c.asset_class}</span>
         )}
@@ -208,17 +190,16 @@ export default function StrategyLibraryPage() {
   });
 
   const { data: candidateData, isLoading: cLoading, isError: cError } = useQuery({
-    queryKey: ["candidates-list"],
-    queryFn: listCandidates,
+    queryKey: ["strategy-lab-candidates"],
+    queryFn: listCandidateCatalog,
     staleTime: 120_000,
     retry: 1,
   });
 
   const bots = lbData?.strategies ?? [];
-  const allCandidates = candidateData?.candidates ?? [];
-  const candidates = allCandidates.filter((c) => c.state !== "PROMOTED" && c.state !== "RETIRED");
+  const candidates = candidateData?.candidates ?? [];
 
-  const nTotal = bots.length + allCandidates.length;
+  const nTotal    = bots.length + candidates.length;
   const nVerified = bots.filter((b) => b.tier === "T2" || b.tier === "T3").length;
   const nCandidates = candidates.length;
 
@@ -240,7 +221,7 @@ export default function StrategyLibraryPage() {
   const filtered = useMemo(() => {
     type Item =
       | { kind: "bot"; b: BotLeaderboardRow }
-      | { kind: "candidate"; c: Candidate };
+      | { kind: "candidate"; c: CatalogCandidate };
 
     const all: Item[] = [
       ...bots.map((b) => ({ kind: "bot" as const, b })),
@@ -343,7 +324,7 @@ export default function StrategyLibraryPage() {
                 <CandidateCard
                   key={`cand-${idx}`}
                   c={item.c}
-                  onClick={() => navigate(`/candidates/${item.c.name}`)}
+                  onClick={() => navigate(`/candidates/${item.c.file}`)}
                 />
               )
             )}
