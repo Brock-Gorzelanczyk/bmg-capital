@@ -68,6 +68,13 @@ notes: "Requires Alpaca Level 2-3 options approval. PDT eliminated FINRA Notice 
 discord:
   channel: options-signals
 
+ivr_gate:
+  minimum_ivr: 50        # only sell premium when IV Rank > 50%
+  proxy: vix_pctile_252  # fallback when per-symbol IV history not available
+  label_in_reason: true  # include "IVR: XX% (proxy|actual)" in reason string
+risk_caps:
+  max_risk_per_position_pct: 5.0   # hard cap: max risk 5% of bot equity
+  max_aggregate_short_vol_pct: 25.0  # aggregate short-vol exposure cap
 risk:
   deployment_target_pct: 0.50    # target: deploy 50% of bot capital → ~$6,250/trade at $100k
   target_position_count: 8
