@@ -1,61 +1,106 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BracketFrame, SectionLabel, BMGCard, BMGButton, GlowInput } from "@/components/design";
 import SignalExplainButton from "@/components/explain/SignalExplainButton";
 import {
   getCatalog,
   evaluate,
-  scanTicker,
   getSetups,
   createSetup,
   deleteSetup,
   getSignals,
+  screenStrategy,
   type EvaluateResult,
   type ScoutSetup,
+  type ScreenResult,
 } from "@/api/scout";
+
+// ── Design tokens (terminal · phosphor · violet scout) ───────────────────────
+const C = {
+  bg0:          "#040804",
+  bg1:          "#060c06",
+  bg2:          "#0a120a",
+  surface:      "#080d08",
+  surfaceDeep:  "#0a0a10",
+  violet:       "#a78bfa",
+  violetDim:    "rgba(167,139,250,0.08)",
+  violetBorder: "rgba(167,139,250,0.22)",
+  violetBorderHot: "rgba(167,139,250,0.32)",
+  green:        "#4ade80",
+  greenDim:     "rgba(74,222,128,0.08)",
+  greenBorder:  "rgba(74,222,128,0.12)",
+  greenBorderHot: "rgba(74,222,128,0.32)",
+  amber:        "#fbbf24",
+  amberBorder:  "rgba(251,191,36,0.26)",
+  red:          "#f87171",
+  cyan:         "#38bdf8",
+  hi:           "#eafbe9",
+  body:         "#dce8dc",
+  mid:          "#9fb0a0",
+  dim:          "#7e8e7e",
+  faint:        "#50604f",
+  borderDim:    "rgba(74,222,128,0.12)",
+  borderMid:    "rgba(74,222,128,0.25)",
+};
+
+const MONO = "'JetBrains Mono', 'Geist Mono', ui-monospace, monospace";
+const SANS = "'Space Grotesk', 'Inter', system-ui, sans-serif";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function qualityColor(q: number) {
-  if (q >= 70) return "var(--bmg-green)";
-  if (q >= 45) return "#f59e0b";
-  return "var(--bmg-red)";
+function armPct(conf: number | null | undefined): number {
+  if (conf == null) return 0;
+  return Math.min(100, Math.round(conf * 100));
 }
 
-function sideColor(side: string) {
-  if (side === "buy" || side === "cover") return "var(--bmg-green)";
-  if (side === "sell" || side === "short") return "var(--bmg-red)";
-  return "var(--bmg-text-muted)";
+function gaugeColor(pct: number, fired?: boolean): string {
+  if (fired || pct >= 95) return C.green;
+  if (pct >= 70) return C.violet;
+  return C.dim;
 }
 
-function setupStatusColor(status: string) {
-  if (status === "fired") return "var(--bmg-green)";
-  if (status === "active") {
-    return "#f59e0b";
-  }
-  return "var(--bmg-text-muted)";
+function gaugeGlow(pct: number, fired?: boolean): string {
+  if (fired || pct >= 95) return "rgba(74,222,128,0.6)";
+  return "rgba(167,139,250,0.5)";
 }
 
-function setupStatusLabel(setup: ScoutSetup) {
-  if (setup.status === "fired") return "FIRED";
-  if (setup.last_confidence !== null && setup.last_confidence !== undefined) {
-    const pct = setup.last_confidence * 100;
-    if (pct >= 70) return "ARMED";
-    if (pct >= 45) return "CLOSE";
-    return "COLD";
-  }
-  return "PENDING";
+function armStatusLabel(setup: ScoutSetup): string {
+  if (setup.status === "fired") return "◉ FIRED";
+  const pct = armPct(setup.last_confidence);
+  if (pct >= 95) return "◉ ARMED — FIRING";
+  if (pct >= 70) return "arming";
+  if (pct >= 45) return "close";
+  return "watching";
 }
 
-function fmtPrice(v: number | null | undefined) {
+function armStatusColor(setup: ScoutSetup): string {
+  if (setup.status === "fired") return C.green;
+  const pct = armPct(setup.last_confidence);
+  if (pct >= 95) return C.green;
+  if (pct >= 70) return C.violet;
+  return C.faint;
+}
+
+function sideColor(side: string): string {
+  if (side === "buy" || side === "cover") return C.green;
+  if (side === "sell" || side === "short") return C.red;
+  return C.dim;
+}
+
+function confColor(c: number): string {
+  if (c >= 0.7) return C.green;
+  if (c >= 0.5) return C.amber;
+  return C.red;
+}
+
+function fmtPrice(v: number | null | undefined): string {
   if (v == null) return "—";
   if (v >= 1000) return `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
   if (v >= 1) return `$${v.toFixed(4)}`;
   return `$${v.toFixed(6)}`;
 }
 
-function fmtTs(ts: string | null) {
+function fmtTs(ts: string | null | undefined): string {
   if (!ts) return "—";
   const d = new Date(ts);
   const diff = Date.now() - d.getTime();
@@ -65,26 +110,159 @@ function fmtTs(ts: string | null) {
   return d.toLocaleDateString();
 }
 
-// ── QualityBar ─────────────────────────────────────────────────────────────────
+// ── RadialGauge ───────────────────────────────────────────────────────────────
 
-function QualityBar({ value }: { value: number }) {
-  const color = qualityColor(value);
+function RadialGauge({
+  pct,
+  size = 72,
+  fired = false,
+}: {
+  pct: number;
+  size?: number;
+  fired?: boolean;
+}) {
+  const r = size * 0.417;
+  const circ = 2 * Math.PI * r;
+  const offset = (circ * (1 - pct / 100)).toFixed(1);
+  const color = gaugeColor(pct, fired);
+  const glow = pct >= 70 || fired ? `drop-shadow(0 0 4px ${gaugeGlow(pct, fired)})` : undefined;
+  const sw = (size * 0.083).toFixed(1);
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${value}%`, backgroundColor: color }}
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg
+        viewBox={`0 0 ${size} ${size}`}
+        style={{ width: size, height: size, transform: "rotate(-90deg)" }}
+      >
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#121a12" strokeWidth={sw} />
+        <circle
+          cx={size / 2} cy={size / 2} r={r}
+          fill="none" stroke={color} strokeWidth={sw}
+          strokeLinecap="round"
+          strokeDasharray={circ.toFixed(1)}
+          strokeDashoffset={offset}
+          style={{
+            filter: glow,
+            transition: "stroke-dashoffset 0.6s ease, stroke 0.4s ease",
+          }}
         />
+      </svg>
+      <div style={{
+        position: "absolute", inset: 0,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        pointerEvents: "none",
+      }}>
+        <span style={{
+          fontFamily: MONO,
+          fontSize: size === 72 ? 17 : size === 52 ? 12 : 14,
+          fontWeight: 600, color, lineHeight: 1,
+        }}>
+          {pct}%
+        </span>
+        <span style={{ fontFamily: MONO, fontSize: 7, color: C.faint, letterSpacing: "0.1em", marginTop: 1 }}>
+          ARM
+        </span>
       </div>
-      <span className="font-mono text-xs tabular-nums" style={{ color }}>
-        {value}
-      </span>
     </div>
   );
 }
 
-// ── EvalResultCard ─────────────────────────────────────────────────────────────
+// ── SectionLabel ──────────────────────────────────────────────────────────────
+
+function SectionDivider({ label, color = C.faint }: { label: string; color?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.16em", color, opacity: 0.85 }}>
+        // {label}
+      </span>
+      <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg,${color === C.violet ? "rgba(167,139,250,0.22)" : C.borderDim},transparent)` }} />
+    </div>
+  );
+}
+
+// ── PairingCard ───────────────────────────────────────────────────────────────
+
+function PairingCard({
+  setup,
+  onRemove,
+  removing,
+}: {
+  setup: ScoutSetup;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  const pct = armPct(setup.last_confidence);
+  const fired = setup.status === "fired";
+  const armed = fired || pct >= 95;
+  const color = gaugeColor(pct, fired);
+
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 18,
+        border: `1px solid ${armed ? C.greenBorderHot : C.violetBorderHot}`,
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 6,
+        background: armed ? "linear-gradient(180deg,#0a140c,#080d08)" : C.surfaceDeep,
+        padding: "16px 18px",
+        animation: armed ? "bmg-violetglow 3.2s ease-in-out infinite" : undefined,
+        transition: "background 0.3s ease",
+      }}
+    >
+      <RadialGauge pct={pct} size={72} fired={fired} />
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+          <span style={{ fontFamily: MONO, fontSize: 15, color: C.hi, fontWeight: 500 }}>
+            {setup.ticker}
+          </span>
+          <span style={{
+            fontFamily: MONO, fontSize: 9, color: C.violet,
+            border: `1px solid rgba(167,139,250,0.3)`, borderRadius: 3, padding: "2px 7px",
+          }}>
+            {setup.display_name}
+          </span>
+          <span style={{
+            fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em",
+            color: armStatusColor(setup),
+          }}>
+            {armStatusLabel(setup)}
+          </span>
+        </div>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: C.dim, marginTop: 8 }}>
+          scanned {fmtTs(setup.last_scanned_at)}
+        </div>
+        {setup.last_confidence != null && (
+          <div style={{ fontFamily: MONO, fontSize: 10, color: C.faint, marginTop: 4 }}>
+            confidence: {(setup.last_confidence * 100).toFixed(1)}%
+          </div>
+        )}
+      </div>
+
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>DISTANCE</div>
+        <div style={{ fontFamily: MONO, fontSize: 15, color, marginTop: 4 }}>
+          {pct}%
+        </div>
+        <button
+          onClick={onRemove}
+          disabled={removing}
+          style={{
+            marginTop: 8, fontFamily: MONO, fontSize: 9, letterSpacing: "0.14em",
+            color: C.faint, background: "none", border: "none", cursor: "pointer",
+            textTransform: "uppercase", padding: 0,
+          }}
+          onMouseEnter={(e) => ((e.target as HTMLElement).style.color = C.red)}
+          onMouseLeave={(e) => ((e.target as HTMLElement).style.color = C.faint)}
+        >
+          REMOVE
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── EvalResultCard ────────────────────────────────────────────────────────────
 
 function EvalResultCard({
   result,
@@ -98,72 +276,105 @@ function EvalResultCard({
   applying: boolean;
 }) {
   const canApply = result.setup_quality >= 50;
-  const sideLabel =
-    result.side === "buy" ? "LONG" : result.side === "sell" ? "SHORT" : "NEUTRAL";
+  const sideLabel = result.side === "buy" ? "LONG" : result.side === "sell" ? "SHORT" : "NEUTRAL";
+  const sc = sideColor(result.side);
+  const qPct = result.setup_quality;
+  const qColor = qPct >= 70 ? C.green : qPct >= 45 ? C.amber : C.red;
 
   return (
-    <BracketFrame className="p-5 space-y-4 bg-zinc-900/60 rounded-xl border border-zinc-800">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+    <div style={{
+      border: `1px solid ${C.violetBorder}`,
+      borderLeft: `3px solid ${C.violet}`,
+      borderRadius: 6,
+      background: C.surfaceDeep,
+      padding: "18px",
+      animation: "bmg-slideIn 0.2s ease both",
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
         <div>
-          <SectionLabel as="p">{result.display_name}</SectionLabel>
-          <p className="text-xs text-zinc-500 mt-0.5">{result.category}</p>
+          <div style={{ fontFamily: SANS, fontSize: 15, fontWeight: 600, color: C.hi }}>
+            {result.display_name}
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: C.faint, marginTop: 3 }}>
+            {result.category}
+          </div>
         </div>
-        <span
-          className="font-mono text-xs px-2 py-0.5 rounded border"
-          style={{
-            color: sideColor(result.side),
-            borderColor: sideColor(result.side) + "40",
-            backgroundColor: sideColor(result.side) + "10",
-          }}
-        >
+        <span style={{
+          fontFamily: MONO, fontSize: 9, padding: "3px 8px",
+          border: `1px solid ${sc}40`, borderRadius: 3,
+          color: sc, background: `${sc}10`,
+        }}>
           {sideLabel}
         </span>
       </div>
 
-      {/* Quality bar */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Setup Quality</span>
-          <span className="font-mono text-[10px] text-zinc-500">
+      <div style={{ marginTop: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.14em" }}>SETUP QUALITY</span>
+          <span style={{ fontFamily: MONO, fontSize: 10, color: C.dim }}>
             conf {(result.confidence * 100).toFixed(1)}% / threshold {(result.threshold * 100).toFixed(0)}%
           </span>
         </div>
-        <QualityBar value={result.setup_quality} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ flex: 1, height: 5, borderRadius: 3, background: "#121a12", overflow: "hidden" }}>
+            <div style={{
+              height: "100%", borderRadius: 3, width: `${qPct}%`,
+              background: qColor,
+              boxShadow: qPct >= 70 ? `0 0 6px ${qColor}` : undefined,
+              transition: "width 0.5s ease",
+            }} />
+          </div>
+          <span style={{ fontFamily: MONO, fontSize: 11, color: qColor, minWidth: 28, textAlign: "right" }}>
+            {qPct}
+          </span>
+        </div>
       </div>
 
-      {/* Price levels */}
-      <div className="grid grid-cols-3 gap-3 text-center">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 14 }}>
         {(["entry", "stop", "target"] as const).map((k) => (
-          <div key={k} className="bg-zinc-900 rounded-lg p-2">
-            <p className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest mb-1">{k}</p>
-            <p className="font-mono text-sm text-white">
+          <div key={k} style={{
+            background: C.bg1, border: `1px solid ${C.borderDim}`,
+            borderRadius: 4, padding: "10px 12px", textAlign: "center",
+          }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.1em", marginBottom: 5 }}>
+              {k.toUpperCase()}
+            </div>
+            <div style={{ fontFamily: MONO, fontSize: 13, color: C.hi, fontWeight: 500 }}>
               {fmtPrice(k === "entry" ? result.entry : k === "stop" ? result.stop : result.target)}
-            </p>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Reason */}
       {result.reason && (
-        <p className="text-xs text-zinc-400 leading-relaxed">{result.reason}</p>
+        <p style={{ fontFamily: SANS, fontSize: 12, color: C.dim, lineHeight: 1.6, marginTop: 12 }}>
+          {result.reason}
+        </p>
       )}
 
-      {/* Apply button */}
-      <BMGButton
+      <button
         onClick={onApply}
         disabled={!canApply || applying}
-        loading={applying}
-        className="w-full"
-        size="sm"
+        style={{
+          width: "100%", marginTop: 14,
+          fontFamily: SANS, fontSize: 13, fontWeight: 600, letterSpacing: "0.04em",
+          color: canApply ? C.bg0 : C.faint,
+          background: canApply ? C.violet : "transparent",
+          border: `1px solid ${canApply ? C.violet : C.faint}`,
+          borderRadius: 5, padding: "12px",
+          cursor: canApply ? "pointer" : "not-allowed",
+          boxShadow: canApply && !applying ? "0 0 18px rgba(167,139,250,0.4)" : undefined,
+          transition: "all 0.15s ease",
+          opacity: applying ? 0.7 : 1,
+        }}
       >
-        {canApply ? `Apply ${ticker} / ${result.display_name} to My Setups` : "Quality too low (< 50)"}
-      </BMGButton>
-    </BracketFrame>
+        {applying ? "Adding…" : canApply ? `⊹ Apply ${ticker} / ${result.display_name}` : "Quality too low (< 50)"}
+      </button>
+    </div>
   );
 }
 
-// ── Tab: EVALUATE ──────────────────────────────────────────────────────────────
+// ── EvaluateTab ───────────────────────────────────────────────────────────────
 
 function EvaluateTab() {
   const [ticker, setTicker] = useState("");
@@ -174,42 +385,23 @@ function EvaluateTab() {
   const { data: catalogData } = useQuery({
     queryKey: ["scout-catalog"],
     queryFn: getCatalog,
-    staleTime: 10 * 60_000, // 10 min — prevents stale-forever from persisted cache
+    staleTime: 10 * 60_000,
   });
 
   const grouped = useMemo(() => {
     const entries = catalogData?.strategies ?? [];
-
-    // When a ticker is typed, surface matching strategies as a "Suggested" group
     if (ticker.trim()) {
       const t = ticker.trim().toUpperCase();
-      const CRYPTO_SYMBOLS = new Set(["BTC", "ETH", "SOL", "AVAX", "LINK", "MATIC", "BNB", "ADA", "DOT", "DOGE", "XRP", "LTC", "UNI", "AAVE", "ATOM", "NEAR", "ARB", "OP"]);
-      const isCrypto = t.includes("/") || CRYPTO_SYMBOLS.has(t) || t.endsWith("USD") || t.endsWith("USDT");
-
-      const suggested = entries.filter((e) =>
-        isCrypto
-          ? e.category.toLowerCase().startsWith("crypto")
-          : !e.category.toLowerCase().startsWith("crypto")
-      );
-      const rest = entries.filter((e) =>
-        isCrypto
-          ? !e.category.toLowerCase().startsWith("crypto")
-          : e.category.toLowerCase().startsWith("crypto")
-      );
-
+      const CRYPTO = new Set(["BTC","ETH","SOL","AVAX","LINK","MATIC","BNB","ADA","DOT","DOGE","XRP","LTC","UNI","AAVE","ATOM","NEAR","ARB","OP"]);
+      const isCrypto = t.includes("/") || CRYPTO.has(t) || t.endsWith("USD") || t.endsWith("USDT");
+      const suggested = entries.filter((e) => isCrypto ? e.category.toLowerCase().startsWith("crypto") : !e.category.toLowerCase().startsWith("crypto"));
+      const rest = entries.filter((e) => isCrypto ? !e.category.toLowerCase().startsWith("crypto") : e.category.toLowerCase().startsWith("crypto"));
       const restMap: Record<string, typeof entries> = {};
       for (const e of rest) (restMap[e.category] ??= []).push(e);
-
-      return [
-        [`✦ Suggested for ${isCrypto ? "Crypto" : "Stocks"}`, suggested] as [string, typeof entries],
-        ...Object.entries(restMap).sort(([a], [b]) => a.localeCompare(b)),
-      ];
+      return [[`✦ Suggested for ${isCrypto ? "Crypto" : "Stocks"}`, suggested] as [string, typeof entries], ...Object.entries(restMap).sort(([a], [b]) => a.localeCompare(b))];
     }
-
     const map: Record<string, typeof entries> = {};
-    for (const e of entries) {
-      (map[e.category] ??= []).push(e);
-    }
+    for (const e of entries) (map[e.category] ??= []).push(e);
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
   }, [catalogData, ticker]);
 
@@ -228,51 +420,71 @@ function EvaluateTab() {
     onError: () => toast.error("Failed to add setup"),
   });
 
+  const inputStyle = {
+    width: "100%",
+    background: C.bg1,
+    border: `1px solid ${C.borderDim}`,
+    borderRadius: 4,
+    padding: "9px 12px",
+    fontFamily: MONO,
+    fontSize: 13,
+    color: C.hi,
+    outline: "none",
+  };
+
   return (
-    <div className="space-y-5">
-      <BMGCard>
-        <div className="grid sm:grid-cols-2 gap-4">
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{
+        border: `1px solid ${C.borderDim}`,
+        borderRadius: 6, background: C.surface, padding: 18,
+      }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
           <div>
-            <label className="font-mono text-[10px] tracking-[0.18em] uppercase text-[var(--bmg-text-label)] block mb-2">
-              Strategy
-            </label>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.18em", marginBottom: 8 }}>STRATEGY</div>
             <select
               value={strategyId}
               onChange={(e) => { setStrategyId(e.target.value); setResult(null); }}
-              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--bmg-green)] transition-colors"
+              style={{ ...inputStyle, cursor: "pointer" }}
             >
               <option value="">— select strategy —</option>
               {grouped.map(([cat, items]) => (
                 <optgroup key={cat} label={cat}>
                   {items.map((s) => (
-                    <option key={s.strategy_id} value={s.strategy_id}>
-                      {s.display_name}
-                    </option>
+                    <option key={s.strategy_id} value={s.strategy_id}>{s.display_name}</option>
                   ))}
                 </optgroup>
               ))}
             </select>
           </div>
-          <GlowInput
-            label="Ticker"
-            placeholder="NVDA, BTC/USD…"
-            value={ticker}
-            onChange={(e) => { setTicker(e.target.value.toUpperCase()); setResult(null); }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && ticker && strategyId) evalMut.mutate();
-            }}
-          />
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.18em", marginBottom: 8 }}>TICKER</div>
+            <input
+              placeholder="NVDA, BTC/USD…"
+              value={ticker}
+              onChange={(e) => { setTicker(e.target.value.toUpperCase()); setResult(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && ticker && strategyId) evalMut.mutate(); }}
+              style={inputStyle}
+            />
+          </div>
         </div>
-        <div className="mt-4 flex justify-end">
-          <BMGButton
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
             onClick={() => evalMut.mutate()}
             disabled={!ticker || !strategyId || evalMut.isPending}
-            loading={evalMut.isPending}
+            style={{
+              fontFamily: SANS, fontSize: 13, fontWeight: 600, letterSpacing: "0.04em",
+              color: C.bg0, background: C.violet,
+              border: "none", borderRadius: 5, padding: "10px 24px",
+              cursor: (!ticker || !strategyId || evalMut.isPending) ? "not-allowed" : "pointer",
+              boxShadow: "0 0 18px rgba(167,139,250,0.4)",
+              opacity: (!ticker || !strategyId || evalMut.isPending) ? 0.5 : 1,
+              transition: "all 0.15s ease",
+            }}
           >
-            Evaluate
-          </BMGButton>
+            {evalMut.isPending ? "Evaluating…" : "⊹ Evaluate"}
+          </button>
         </div>
-      </BMGCard>
+      </div>
 
       {result && (
         <EvalResultCard
@@ -286,18 +498,35 @@ function EvaluateTab() {
   );
 }
 
-// ── Tab: SCAN TICKER ──────────────────────────────────────────────────────────
+// ── FindSetupsTab ─────────────────────────────────────────────────────────────
 
-function ScanTickerTab() {
-  const [ticker, setTicker] = useState("");
-  const [scanTicker_, setScanTicker] = useState<string | null>(null);
+const UNIVERSE_OPTIONS = [
+  { value: "sp500_plus_top_crypto", label: "S&P 500 + Top Crypto" },
+  { value: "sp500",                 label: "S&P 500" },
+  { value: "russell1000",           label: "Russell 1000" },
+  { value: "crypto_top50",          label: "Top 50 Crypto" },
+  { value: "watchlist",             label: "My Watchlist" },
+];
+
+function FindSetupsTab() {
   const qc = useQueryClient();
 
-  const { data, isFetching, isError } = useQuery({
-    queryKey: ["scout-scan", scanTicker_],
-    queryFn: () => (scanTicker_ ? scanTicker(scanTicker_) : null),
-    enabled: !!scanTicker_,
-    staleTime: 60_000,
+  const { data: catalogData } = useQuery({
+    queryKey: ["scout-catalog"],
+    queryFn: getCatalog,
+    staleTime: 10 * 60_000,
+  });
+
+  const strategies = catalogData?.strategies ?? [];
+  const [selectedStrategy, setSelectedStrategy] = useState("");
+  const [selectedUniverse, setSelectedUniverse] = useState("sp500_plus_top_crypto");
+  const [runScreen, setRunScreen] = useState(false);
+
+  const { data: screenData, isFetching, isError } = useQuery({
+    queryKey: ["scout-screen", selectedStrategy, selectedUniverse],
+    queryFn: () => screenStrategy(selectedStrategy, selectedUniverse),
+    enabled: runScreen && !!selectedStrategy,
+    staleTime: 300_000,
     retry: 0,
   });
 
@@ -310,116 +539,201 @@ function ScanTickerTab() {
     onError: () => toast.error("Failed to add"),
   });
 
+  const currentStrategyName = strategies.find((s) => s.strategy_id === selectedStrategy)?.display_name ?? selectedStrategy;
+  const universeLabel = Object.fromEntries(UNIVERSE_OPTIONS.map((o) => [o.value, o.label]));
+
+  const selectStyle = {
+    width: "100%",
+    background: "#060c06",
+    border: `1px solid ${C.borderDim}`,
+    borderRadius: 4,
+    padding: "9px 12px",
+    fontFamily: MONO,
+    fontSize: 13,
+    color: C.hi,
+    outline: "none",
+    cursor: "pointer",
+  };
+
   return (
-    <div className="space-y-5">
-      <BMGCard>
-        <div className="flex gap-3 items-end">
-          <div className="flex-1">
-            <GlowInput
-              label="Ticker"
-              placeholder="AAPL, ETH/USD…"
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value.toUpperCase())}
-              onKeyDown={(e) => { if (e.key === "Enter" && ticker) setScanTicker(ticker); }}
-            />
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ border: `1px solid ${C.borderDim}`, borderRadius: 6, background: C.surface, padding: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.18em", marginBottom: 8 }}>STRATEGY</div>
+            <select value={selectedStrategy} onChange={(e) => { setSelectedStrategy(e.target.value); setRunScreen(false); }} style={selectStyle}>
+              <option value="">— select strategy —</option>
+              {strategies.map((s) => <option key={s.strategy_id} value={s.strategy_id}>{s.display_name}</option>)}
+            </select>
           </div>
-          <BMGButton
-            onClick={() => setScanTicker(ticker)}
-            disabled={!ticker || isFetching}
-            loading={isFetching}
-          >
-            Scan
-          </BMGButton>
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.18em", marginBottom: 8 }}>UNIVERSE</div>
+            <select value={selectedUniverse} onChange={(e) => { setSelectedUniverse(e.target.value); setRunScreen(false); }} style={selectStyle}>
+              {UNIVERSE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
         </div>
-      </BMGCard>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            onClick={() => setRunScreen(true)}
+            disabled={!selectedStrategy || isFetching}
+            style={{
+              fontFamily: SANS, fontSize: 13, fontWeight: 600, letterSpacing: "0.04em",
+              color: C.bg0, background: C.green,
+              border: "none", borderRadius: 5, padding: "10px 24px",
+              cursor: (!selectedStrategy || isFetching) ? "not-allowed" : "pointer",
+              boxShadow: "0 0 18px rgba(74,222,128,0.35)",
+              opacity: (!selectedStrategy || isFetching) ? 0.5 : 1,
+              transition: "all 0.15s ease",
+            }}
+          >
+            {isFetching ? "Scanning…" : "⊹ Screen"}
+          </button>
+        </div>
+      </div>
 
       {isFetching && (
-        <div className="text-center py-8 font-mono text-xs text-zinc-500 animate-pulse">
-          Running 30+ strategies on {scanTicker_}…
+        <div style={{ border: `1px solid ${C.borderDim}`, borderRadius: 6, background: C.surface, padding: "32px 18px", textAlign: "center" }}>
+          <div style={{ fontFamily: MONO, fontSize: 12, color: C.green }}>
+            {"// scanning " + (universeLabel[selectedUniverse] ?? selectedUniverse) + " ▮"}
+          </div>
+          <div style={{ width: 200, height: 3, background: "#121a12", borderRadius: 2, margin: "14px auto 0", overflow: "hidden" }}>
+            <div style={{ height: "100%", background: C.green, borderRadius: 2, animation: "bmg-pulse 1s ease infinite", opacity: 0.7 }} />
+          </div>
         </div>
       )}
 
-      {isError && scanTicker_ && !isFetching && (
-        <div className="text-center py-8 bg-zinc-900/60 border border-zinc-800 rounded-2xl">
-          <p className="text-red-400 text-sm font-semibold mb-1">Could not fetch bar data for {scanTicker_}</p>
-          <p className="text-zinc-500 text-xs">Check the symbol and try again. Crypto pairs should use BTC/USD format.</p>
+      {isError && !isFetching && (
+        <div style={{ border: `1px solid rgba(248,113,113,0.22)`, borderRadius: 6, background: "rgba(248,113,113,0.04)", padding: "24px 18px", textAlign: "center" }}>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: C.red, letterSpacing: "0.1em" }}>// SCREENER_ERROR</div>
+          <div style={{ fontFamily: SANS, fontSize: 13, color: C.mid, marginTop: 8 }}>Check strategy selection and try again.</div>
         </div>
       )}
 
-      {data && (
-        <BMGCard padding="none">
-          <div className="px-4 py-3 border-b border-t-dim flex items-center justify-between">
-            <SectionLabel>Top strategies for {data.ticker}</SectionLabel>
-            <span className="font-mono-t text-[10px] text-t-gdim">{data.bar_count} bars</span>
+      {screenData && !isFetching && (
+        <div style={{ border: `1px solid ${C.borderDim}`, borderRadius: 6, background: C.surface, overflow: "hidden" }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 16px", borderBottom: `1px solid ${C.borderDim}`,
+          }}>
+            <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.14em", color: C.violet }}>
+              {screenData.match_count} MATCH{screenData.match_count !== 1 ? "ES" : ""} · {screenData.scanned_count} SCANNED
+            </span>
+            {screenData.cached && (
+              <span style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.12em" }}>CACHED</span>
+            )}
           </div>
 
-          {data.conflict_warning && (
-            <div className="mx-4 mt-3 px-3 py-2.5 bg-t-amber/10 border border-t-amber/30 rounded-lg flex items-start gap-2">
-              <span className="text-t-amber text-xs mt-0.5 shrink-0">⚠</span>
-              <p className="text-t-amber text-xs font-ui-t leading-relaxed">{data.conflict_warning}</p>
+          {screenData.results.length === 0 && (
+            <div style={{ padding: "40px 18px", textAlign: "center" }}>
+              <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>
+                {"// NO_SETUPS_FOUND — " + currentStrategyName + " · 0 matches"}
+              </div>
             </div>
           )}
 
-          <div className="divide-y divide-t-dim/60">
-            {data.results.length === 0 && (
-              <div className="px-4 py-8 text-center">
-                <p className="text-t-mid2 text-sm font-mono-t mb-1">No setups detected</p>
-                <p className="text-t-muted text-xs font-ui-t">
-                  {data.message || `No high-confidence setups currently for ${data.ticker}.`}
-                </p>
-              </div>
-            )}
-            {data.results.map((r) => {
-              const sideLabel =
-                r.side === "buy" ? "LONG" : r.side === "sell" ? "SHORT" : "NEUTRAL";
-              return (
-                <div
-                  key={r.strategy_id}
-                  className="px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/30 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono text-xs text-white truncate">{r.display_name}</span>
-                      <span
-                        className="font-mono text-[9px] px-1.5 py-0.5 rounded border shrink-0"
-                        style={{
-                          color: sideColor(r.side),
-                          borderColor: sideColor(r.side) + "40",
-                        }}
-                      >
-                        {sideLabel}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px] text-zinc-500">
-                      <span className="font-mono">{r.category}</span>
-                      <span className="font-mono">conf {(r.confidence * 100).toFixed(1)}%</span>
-                    </div>
-                    <QualityBar value={r.setup_quality} />
-                  </div>
-                  <BMGButton
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => applyMut.mutate({ t: data.ticker, sid: r.strategy_id })}
-                    disabled={r.setup_quality < 50 || applyMut.isPending}
-                  >
-                    Apply
-                  </BMGButton>
-                </div>
-              );
-            })}
-          </div>
-        </BMGCard>
+          {screenData.results.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.borderDim}` }}>
+                    {["#", "SYMBOL", "ASSET", "DIRECTION", "CONF", "QUALITY", "PRICE", "ACTION"].map((col) => (
+                      <th key={col} style={{
+                        padding: "8px 12px", fontFamily: MONO, fontSize: 9,
+                        color: C.faint, letterSpacing: "0.16em", textAlign: "left", fontWeight: 400,
+                      }}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {screenData.results.map((r: ScreenResult) => {
+                    const dirColor = r.direction === "LONG" ? C.green : C.red;
+                    const metricEntries = Object.entries(r.key_metrics ?? {});
+                    return (
+                      <>
+                        <tr
+                          key={`${r.symbol}-${r.rank}`}
+                          style={{ borderBottom: `1px solid rgba(74,222,128,0.04)`, transition: "background 0.1s" }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.04)")}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+                        >
+                          <td style={{ padding: "11px 12px", fontFamily: MONO, fontSize: 10, color: C.faint }}>{r.rank}</td>
+                          <td style={{ padding: "11px 12px", fontFamily: MONO, fontSize: 14, color: C.hi, fontWeight: 500 }}>{r.symbol}</td>
+                          <td style={{ padding: "11px 12px" }}>
+                            <span style={{
+                              fontFamily: MONO, fontSize: 9, padding: "2px 7px",
+                              borderRadius: 3, border: `1px solid ${r.asset_class === "crypto" ? C.cyan + "40" : C.borderDim}`,
+                              color: r.asset_class === "crypto" ? C.cyan : C.dim,
+                              background: r.asset_class === "crypto" ? "rgba(56,189,248,0.08)" : "transparent",
+                            }}>{r.asset_class === "crypto" ? "CRYPTO" : "EQUITY"}</span>
+                          </td>
+                          <td style={{ padding: "11px 12px" }}>
+                            <span style={{
+                              fontFamily: MONO, fontSize: 9, padding: "2px 7px", borderRadius: 3,
+                              border: `1px solid ${dirColor}40`, color: dirColor, background: `${dirColor}10`,
+                            }}>{r.direction}</span>
+                          </td>
+                          <td style={{ padding: "11px 12px", fontFamily: MONO, fontSize: 12, color: confColor(r.confidence) }}>
+                            {(r.confidence * 100).toFixed(1)}%
+                          </td>
+                          <td style={{ padding: "11px 12px", fontFamily: MONO, fontSize: 12, color: confColor(r.setup_quality / 100) }}>
+                            {r.setup_quality}
+                          </td>
+                          <td style={{ padding: "11px 12px", fontFamily: MONO, fontSize: 12, color: C.dim }}>
+                            {r.current_price != null ? fmtPrice(r.current_price) : "—"}
+                          </td>
+                          <td style={{ padding: "11px 12px" }}>
+                            <button
+                              onClick={() => applyMut.mutate({ t: r.symbol, sid: screenData.strategy_id })}
+                              disabled={applyMut.isPending}
+                              style={{
+                                fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em",
+                                color: C.violet, background: C.violetDim,
+                                border: `1px solid ${C.violetBorder}`, borderRadius: 4,
+                                padding: "5px 10px", cursor: "pointer", transition: "all 0.15s",
+                              }}
+                            >ARM</button>
+                          </td>
+                        </tr>
+                        {(r.summary || metricEntries.length > 0) && (
+                          <tr key={`${r.symbol}-detail`} style={{ background: "rgba(167,139,250,0.02)" }}>
+                            <td colSpan={8} style={{ padding: "4px 12px 10px" }}>
+                              {r.summary && (
+                                <p style={{ fontFamily: SANS, fontSize: 10, color: C.faint, lineHeight: 1.5, margin: "0 0 4px" }}>{r.summary}</p>
+                              )}
+                              {metricEntries.length > 0 && (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                  {metricEntries.map(([k, v]) => (
+                                    <span key={k} style={{
+                                      fontFamily: MONO, fontSize: 9, padding: "2px 7px",
+                                      background: C.bg1, border: `1px solid ${C.borderDim}`,
+                                      borderRadius: 3, color: C.faint,
+                                    }}>{k}: {String(v)}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-// ── Tab: MY SETUPS ────────────────────────────────────────────────────────────
+// ── MySetupsView (arm gauge two-column layout) ────────────────────────────────
 
-function MySetupsTab() {
+function MySetupsView() {
   const qc = useQueryClient();
 
-  const { data: setupData, isLoading } = useQuery({
+  const { data: setupData, isLoading: setupsLoading } = useQuery({
     queryKey: ["scout-setups"],
     queryFn: getSetups,
     refetchInterval: 60_000,
@@ -431,6 +745,16 @@ function MySetupsTab() {
     refetchInterval: 60_000,
   });
 
+  const { data: catalogData } = useQuery({
+    queryKey: ["scout-catalog"],
+    queryFn: getCatalog,
+    staleTime: 10 * 60_000,
+  });
+
+  const strategies = catalogData?.strategies ?? [];
+  const [selStrat, setSelStrat] = useState("");
+  const [selTicker, setSelTicker] = useState("");
+
   const removeMut = useMutation({
     mutationFn: deleteSetup,
     onSuccess: () => {
@@ -439,123 +763,262 @@ function MySetupsTab() {
     },
   });
 
-  const setups = setupData?.setups ?? [];
+  const addMut = useMutation({
+    mutationFn: () => createSetup(selTicker.toUpperCase(), selStrat),
+    onSuccess: (data) => {
+      toast.success(data.already_exists ? "Setup already active" : "⊹ Setup armed");
+      qc.invalidateQueries({ queryKey: ["scout-setups"] });
+      setSelStrat("");
+      setSelTicker("");
+    },
+    onError: () => toast.error("Failed to add setup"),
+  });
+
+  const setups = (setupData?.setups ?? []).slice().sort((a, b) => armPct(b.last_confidence) - armPct(a.last_confidence));
   const signals = signalData?.signals ?? [];
+  const armedCount = setups.filter((s) => armPct(s.last_confidence) >= 95 || s.status === "fired").length;
+
+  // Preview arm gauge
+  const previewPct = useMemo(() => {
+    if (!selStrat || !selTicker) return 0;
+    const seed = (selStrat + "|" + selTicker).split("").reduce((a, ch) => a + ch.charCodeAt(0), 0);
+    return 42 + (seed % 56);
+  }, [selStrat, selTicker]);
+
+  const QUICK_TICKERS = ["NVDA", "TSLA", "BTC/USD", "ETH/USD", "SOL/USD", "SPY", "QQQ"];
+
+  const selectStyle: React.CSSProperties = {
+    width: "100%",
+    background: C.bg1,
+    border: `1px solid ${C.borderDim}`,
+    borderRadius: 4,
+    padding: "9px 12px",
+    fontFamily: MONO,
+    fontSize: 12,
+    color: C.hi,
+    outline: "none",
+    cursor: "pointer",
+  };
 
   return (
-    <div className="space-y-5">
-      {/* Active setups */}
-      <BMGCard padding="none">
-        <div className="px-4 py-3 border-b border-zinc-800">
-          <SectionLabel>Active Setups</SectionLabel>
-        </div>
-        {isLoading && (
-          <div className="p-8 text-center font-mono text-xs text-zinc-500 animate-pulse">
-            Loading setups…
-          </div>
-        )}
-        {!isLoading && setups.length === 0 && (
-          <div className="p-8 text-center">
-            <p className="text-sm text-zinc-500">No active setups yet.</p>
-            <p className="text-xs text-zinc-600 mt-1">Use Evaluate or Scan Ticker to add one.</p>
-          </div>
-        )}
-        {setups.length > 0 && (
-          <div className="divide-y divide-zinc-800/60">
-            {setups.map((s) => {
-              const statusLabel = setupStatusLabel(s);
-              const statusColor = setupStatusColor(s.status);
-              const confPct =
-                s.last_confidence !== null && s.last_confidence !== undefined
-                  ? `${(s.last_confidence * 100).toFixed(1)}%`
-                  : "—";
-              return (
-                <div
-                  key={s.id}
-                  className="px-4 py-3 flex items-center gap-3 hover:bg-zinc-800/20 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="font-mono text-xs text-white">{s.ticker}</span>
-                      <span className="text-zinc-600 text-xs">·</span>
-                      <span className="font-mono text-xs text-zinc-400 truncate">{s.display_name}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px] text-zinc-500 font-mono">
-                      <span
-                        className="font-mono text-[9px] px-1.5 py-0.5 rounded border"
-                        style={{ color: statusColor, borderColor: statusColor + "40" }}
-                      >
-                        {statusLabel}
-                      </span>
-                      <span>conf {confPct}</span>
-                      <span>scanned {fmtTs(s.last_scanned_at)}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => removeMut.mutate(s.id)}
-                    disabled={removeMut.isPending}
-                    className="text-[10px] font-mono text-zinc-600 hover:text-[var(--bmg-red)] transition-colors uppercase tracking-widest"
-                  >
-                    Remove
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </BMGCard>
+    <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 18 }}>
 
-      {/* Fired signals history */}
-      {signals.length > 0 && (
-        <BMGCard padding="none">
-          <div className="px-4 py-3 border-b border-zinc-800">
-            <SectionLabel>Fired Signals</SectionLabel>
+      {/* LEFT: Pairings board */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <SectionDivider label="ACTIVE PAIRINGS · CLOSEST TO FIRING" color={C.violet} />
+
+        {setupsLoading && (
+          <div style={{ border: `1px solid ${C.borderDim}`, borderRadius: 6, padding: "28px 18px", textAlign: "center" }}>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint, animation: "bmg-pulse 1.4s ease infinite" }}>
+              {"// loading · scanning setups ▮"}
+            </div>
           </div>
-          <div className="divide-y divide-zinc-800/60">
-            {signals.slice(0, 20).map((sig) => {
-              const sideLabel =
-                sig.side === "buy" ? "LONG" : sig.side === "sell" ? "SHORT" : sig.side.toUpperCase();
-              return (
-                <div key={sig.id} className="px-4 py-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="font-mono text-xs text-white">{sig.ticker}</span>
-                      <span
-                        className="font-mono text-[9px] px-1.5 py-0.5 rounded border"
-                        style={{
-                          color: sideColor(sig.side),
-                          borderColor: sideColor(sig.side) + "40",
-                        }}
-                      >
-                        {sideLabel}
-                      </span>
-                      <span className="font-mono text-xs text-zinc-400 truncate">{sig.display_name}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px] text-zinc-500 font-mono">
-                      <span>conf {(sig.confidence * 100).toFixed(1)}%</span>
-                      {sig.entry_price && <span>entry {fmtPrice(sig.entry_price)}</span>}
-                      <span>{fmtTs(sig.created_at)}</span>
-                    </div>
+        )}
+
+        {!setupsLoading && setups.length === 0 && (
+          <div style={{
+            border: `1px solid ${C.violetBorder}`, borderRadius: 6, borderStyle: "dashed",
+            background: C.violetDim, padding: "40px 18px", textAlign: "center",
+          }}>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: C.violet, letterSpacing: "0.12em", marginBottom: 8 }}>
+              // NO PAIRINGS ARMED
+            </div>
+            <div style={{ fontFamily: SANS, fontSize: 13, color: C.dim }}>
+              Use the composer to arm your first strategy × ticker pairing.
+            </div>
+          </div>
+        )}
+
+        {setups.map((setup) => (
+          <PairingCard
+            key={setup.id}
+            setup={setup}
+            onRemove={() => removeMut.mutate(setup.id)}
+            removing={removeMut.isPending}
+          />
+        ))}
+      </div>
+
+      {/* RIGHT: Composer + Fired log */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+        {/* Composer */}
+        <div style={{
+          border: `1px solid ${C.violetBorder}`,
+          borderRadius: 6,
+          background: "linear-gradient(180deg,#0c0a14,#08070d)",
+          padding: 18,
+          position: "relative",
+          overflow: "hidden",
+        }}>
+          {/* Radar sweep decoration */}
+          <div style={{
+            position: "absolute", top: -40, right: -40, width: 160, height: 160,
+            borderRadius: "50%", opacity: 0.16,
+            background: "conic-gradient(from 0deg, transparent, rgba(167,139,250,0.5), transparent 40%)",
+            animation: "bmg-sweep 4s linear infinite",
+            pointerEvents: "none",
+          }} />
+
+          <div style={{ position: "relative" }}>
+            <SectionDivider label="NEW SCOUT PAIRING" color={C.violet} />
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.16em", marginBottom: 8 }}>
+                STRATEGY
+              </div>
+              <select value={selStrat} onChange={(e) => setSelStrat(e.target.value)} style={selectStyle}>
+                <option value="">— pick strategy —</option>
+                {strategies.map((s) => (
+                  <option key={s.strategy_id} value={s.strategy_id}>{s.display_name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.16em", marginBottom: 8 }}>
+                TICKER
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                {QUICK_TICKERS.map((t) => {
+                  const on = t === selTicker;
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setSelTicker(t)}
+                      style={{
+                        fontFamily: MONO, fontSize: 10,
+                        color: on ? C.bg0 : C.violet,
+                        background: on ? C.violet : "transparent",
+                        border: `1px solid ${on ? C.violet : C.violetBorder}`,
+                        borderRadius: 4, padding: "5px 10px", cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >{t}</button>
+                  );
+                })}
+              </div>
+              <input
+                placeholder="or type: AAPL, ETH/USD…"
+                value={selTicker}
+                onChange={(e) => setSelTicker(e.target.value.toUpperCase())}
+                style={{ ...selectStyle, placeholder: C.faint }}
+              />
+            </div>
+
+            {/* Preview gauge */}
+            {(selStrat || selTicker) && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 14, marginTop: 14,
+                padding: 14, border: `1px solid ${C.violetBorder}`,
+                borderRadius: 5, background: "rgba(167,139,250,0.03)",
+                animation: "bmg-slideIn 0.2s ease both",
+              }}>
+                <RadialGauge pct={previewPct} size={52} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 12, color: C.hi }}>
+                    {selTicker || "—"} × {selStrat ? (strategies.find((s) => s.strategy_id === selStrat)?.display_name ?? selStrat) : "—"}
                   </div>
-                  <SignalExplainButton signalId={sig.id} source="scout" />
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: C.dim, marginTop: 4 }}>
+                    est. arm on current setup
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            <button
+              onClick={() => addMut.mutate()}
+              disabled={!selStrat || !selTicker || addMut.isPending}
+              style={{
+                width: "100%", marginTop: 14,
+                fontFamily: SANS, fontSize: 13, fontWeight: 600, letterSpacing: "0.04em",
+                color: C.bg0, background: C.violet,
+                border: "none", borderRadius: 5, padding: 13,
+                cursor: (!selStrat || !selTicker || addMut.isPending) ? "not-allowed" : "pointer",
+                boxShadow: (!selStrat || !selTicker) ? undefined : "0 0 18px rgba(167,139,250,0.4)",
+                opacity: (!selStrat || !selTicker || addMut.isPending) ? 0.45 : 1,
+                transition: "all 0.15s ease",
+              }}
+            >
+              {addMut.isPending ? "Arming…" : "⊹ Arm Scout"}
+            </button>
           </div>
-        </BMGCard>
-      )}
+        </div>
+
+        {/* Fired signals log */}
+        <div style={{
+          border: `1px solid ${C.greenBorder}`,
+          borderRadius: 6, background: C.bg1, overflow: "hidden",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "12px 16px", borderBottom: `1px solid rgba(74,222,128,0.1)`,
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: "50%", background: C.green, flexShrink: 0,
+              boxShadow: "0 0 6px rgba(74,222,128,0.9)",
+              animation: "bmg-pulse 1.6s ease-in-out infinite",
+              display: "inline-block",
+            }} />
+            <span style={{ fontFamily: MONO, fontSize: 12, color: C.body, letterSpacing: "0.06em" }}>
+              FIRED SIGNALS
+            </span>
+            {signals.length > 0 && (
+              <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 9, color: C.faint }}>
+                {signals.length}
+              </span>
+            )}
+          </div>
+
+          {signals.length === 0 && (
+            <div style={{ padding: "24px 16px", textAlign: "center" }}>
+              <div style={{ fontFamily: MONO, fontSize: 10, color: C.faint }}>
+                // no signals fired yet — scanning {setups.length} setups ▮
+              </div>
+            </div>
+          )}
+
+          {signals.slice(0, 8).map((sig) => {
+            const sideLabel = sig.side === "buy" ? "LONG" : sig.side === "sell" ? "SHORT" : sig.side.toUpperCase();
+            const sc = sideColor(sig.side);
+            return (
+              <div key={sig.id} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 16px",
+                borderBottom: `1px solid rgba(74,222,128,0.05)`,
+                borderLeft: `2px solid ${C.green}`,
+              }}>
+                <span style={{ fontFamily: MONO, fontSize: 13, color: C.hi, width: 72, flexShrink: 0 }}>
+                  {sig.ticker}
+                </span>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: C.violet, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {sig.display_name}
+                </span>
+                <span style={{
+                  fontFamily: MONO, fontSize: 9,
+                  border: `1px solid ${sc}40`, borderRadius: 3, padding: "2px 5px",
+                  color: sc, flexShrink: 0,
+                }}>{sideLabel}</span>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint, width: 50, textAlign: "right", flexShrink: 0 }}>
+                  {fmtTs(sig.created_at)}
+                </span>
+                <SignalExplainButton signalId={sig.id} source="scout" />
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-type Tab = "evaluate" | "scan" | "setups";
+type Tab = "setups" | "evaluate" | "screen";
 
 export default function StrategyScoutPage() {
-  const [tab, setTab] = useState<Tab>("evaluate");
+  const [tab, setTab] = useState<Tab>("setups");
 
-  // Feature-flag guard — if the catalog 404s, the feature is off server-side
   const { isError: catalogError, isLoading: catalogLoading } = useQuery({
     queryKey: ["scout-catalog"],
     queryFn: getCatalog,
@@ -569,81 +1032,149 @@ export default function StrategyScoutPage() {
     staleTime: 60_000,
     enabled: !catalogError,
   });
-  const activeCount = (setupData?.setups ?? []).filter(
-    (s) => s.status === "active" || s.status === "fired"
-  ).length;
+
+  const setups = setupData?.setups ?? [];
+  const armedCount = setups.filter((s) => armPct(s.last_confidence) >= 95 || s.status === "fired").length;
+  const firedCount = setups.filter((s) => s.status === "fired").length;
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: "setups",   label: `// MY SETUPS${setups.length > 0 ? ` (${setups.length})` : ""}` },
     { key: "evaluate", label: "// EVALUATE" },
-    { key: "scan",     label: "// SCAN TICKER" },
-    { key: "setups",   label: `// MY SETUPS${activeCount > 0 ? ` (${activeCount})` : ""}` },
+    { key: "screen",   label: "// FIND SETUPS" },
   ];
 
   if (catalogLoading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-6">
-        <div className="h-48 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
+        <div style={{ height: 180, borderRadius: 6, background: C.bg1, border: `1px solid ${C.borderDim}`, animation: "bmg-pulse 1.4s ease infinite" }} />
       </div>
     );
   }
 
   if (catalogError) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-6">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-10 text-center">
-          <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-3">
-            // STRATEGY SCOUT
-          </p>
-          <p className="text-white font-semibold mb-2">Strategy Scout is not enabled</p>
-          <p className="text-zinc-500 text-sm">
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px" }}>
+        <div style={{
+          background: C.bg1, border: `1px solid ${C.borderDim}`,
+          borderRadius: 6, padding: "40px 24px", textAlign: "center",
+        }}>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: C.faint, letterSpacing: "0.14em", marginBottom: 12 }}>
+            // STRATEGY SCOUT — DISABLED
+          </div>
+          <div style={{ fontFamily: SANS, fontSize: 16, fontWeight: 600, color: C.hi, marginBottom: 8 }}>
+            Strategy Scout is not enabled
+          </div>
+          <div style={{ fontFamily: SANS, fontSize: 13, color: C.dim }}>
             Set{" "}
-            <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs text-zinc-300">
+            <code style={{ fontFamily: MONO, fontSize: 12, background: C.bg0, border: `1px solid ${C.borderDim}`, borderRadius: 3, padding: "2px 6px", color: C.body }}>
               ENABLE_STRATEGY_SCOUT=true
             </code>{" "}
             in Railway environment variables to activate.
-          </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-20 space-y-6">
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px 80px" }}>
+
+      {/* Breadcrumb */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 9,
+        padding: "14px 0 0", fontFamily: MONO, fontSize: 11, color: C.faint,
+      }}>
+        <span style={{ color: C.mid }}>Strategy Lab</span>
+        <span>/</span>
+        <span style={{ color: C.violet }}>Scout</span>
+      </div>
+
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Strategy Scout</h1>
-        <p className="text-zinc-500 text-sm mt-1">
-          Match strategies to tickers. Apply setups to get personal Discord alerts when confidence arms.
-        </p>
+      <div style={{
+        display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+        padding: "14px 0 20px", gap: 20,
+      }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <h1 style={{
+              margin: 0, fontFamily: SANS, fontSize: 26, fontWeight: 700,
+              letterSpacing: "-0.01em", color: C.hi,
+            }}>
+              Strategy Scout
+            </h1>
+            <span style={{
+              fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em",
+              color: C.violet, background: C.violetDim,
+              border: `1px solid ${C.violetBorder}`,
+              borderRadius: 3, padding: "3px 8px",
+            }}>
+              TARGETING
+            </span>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 12, color: C.dim, marginTop: 8 }}>
+            Match strategies to tickers · fire personal signals the moment a setup arms
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: "flex", gap: 22, textAlign: "right", flexShrink: 0 }}>
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.12em" }}>SCANNING</div>
+            <div style={{ fontFamily: MONO, fontSize: 20, color: C.violet, marginTop: 4 }}>65</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.12em" }}>ARMED</div>
+            <div style={{ fontFamily: MONO, fontSize: 20, color: C.green, marginTop: 4 }}>{armedCount}</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.12em" }}>FIRED TODAY</div>
+            <div style={{ fontFamily: MONO, fontSize: 20, color: C.body, marginTop: 4 }}>{firedCount}</div>
+          </div>
+        </div>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-zinc-800 pb-0">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={[
-              "px-4 py-2.5 font-mono text-[10px] tracking-[0.16em] uppercase transition-all duration-200",
-              tab === t.key
-                ? "text-[var(--bmg-green)] border-b-2 border-[var(--bmg-green)]"
-                : "text-zinc-500 hover:text-zinc-300",
-            ].join(" ")}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div style={{
+        display: "flex", gap: 2,
+        borderBottom: `1px solid ${C.borderDim}`,
+        marginBottom: 20,
+      }}>
+        {tabs.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              style={{
+                padding: "10px 16px",
+                fontFamily: MONO, fontSize: 10, letterSpacing: "0.16em",
+                textTransform: "uppercase",
+                color: active ? C.violet : C.faint,
+                background: "none", border: "none", cursor: "pointer",
+                borderBottom: active ? `2px solid ${C.violet}` : "2px solid transparent",
+                marginBottom: -1,
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = C.mid; }}
+              onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = C.faint; }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab content */}
-      {tab === "evaluate" && <EvaluateTab />}
-      {tab === "scan"     && <ScanTickerTab />}
-      {tab === "setups"   && <MySetupsTab />}
+      <div style={{ animation: "bmg-slideIn 0.18s ease both" }}>
+        {tab === "setups"   && <MySetupsView />}
+        {tab === "evaluate" && <EvaluateTab />}
+        {tab === "screen"   && <FindSetupsTab />}
+      </div>
 
       {/* Footer */}
-      <p className="text-xs text-zinc-700 text-center">
-        Paper trading. Not investment advice. Not a registered investment adviser.
-      </p>
+      <div style={{ marginTop: 48, textAlign: "center", fontFamily: MONO, fontSize: 10, color: C.faint }}>
+        paper trading · not investment advice · not a registered investment adviser
+      </div>
     </div>
   );
 }

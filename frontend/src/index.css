@@ -1,5 +1,5 @@
 /* ── Fonts ─────────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -97,6 +97,15 @@
     --radius-t:      4px;
     --glow:          0 0 18px rgba(74,222,128,0.25);
     --glow-intense:  0 0 32px rgba(74,222,128,0.40);
+
+    /* Scout violet accent */
+    --violet:        #a78bfa;
+    --violet-dim:    rgba(167,139,250,0.08);
+    --violet-border: rgba(167,139,250,0.22);
+    --violet-glow:   0 0 18px rgba(167,139,250,0.35);
+
+    /* Font: Space Grotesk (prose in terminal screens) */
+    --font-grotesk:  'Space Grotesk', 'Inter', system-ui, sans-serif;
   }
 }
 
@@ -124,6 +133,15 @@
     outline-offset: 2px;
   }
 }
+
+/* ── Scout / terminal animations ───────────────────────────────────────── */
+@keyframes bmg-pulse    { 0%,100%{opacity:1} 50%{opacity:0.35} }
+@keyframes bmg-violetglow {
+  0%,100%{ box-shadow:0 0 24px rgba(167,139,250,0.22), inset 0 0 22px rgba(167,139,250,0.04) }
+  50%{ box-shadow:0 0 40px rgba(167,139,250,0.38), inset 0 0 26px rgba(167,139,250,0.08) }
+}
+@keyframes bmg-sweep    { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+@keyframes bmg-slideIn  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
 /* ── Page transitions ───────────────────────────────────────────────────── */
 .page-enter {
