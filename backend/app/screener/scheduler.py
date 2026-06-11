@@ -1047,3 +1047,16 @@ def setup_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
     )
+
+
+    # Candidate pipeline worker — every 60s, picks up queued backtest/WFA jobs
+    from app.jobs.candidate_pipeline_worker import tick as candidate_pipeline_tick
+    scheduler.add_job(
+        candidate_pipeline_tick,
+        'interval',
+        seconds=60,
+        id="candidate_pipeline_worker",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
