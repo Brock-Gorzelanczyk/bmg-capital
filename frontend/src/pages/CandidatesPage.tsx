@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FlaskConical, Play, TrendingUp, RefreshCw, ChevronRight, CheckCircle, XCircle, AlertCircle, Clock } from "lucide-react";
@@ -84,13 +85,14 @@ function GateCell({ name }: { name: string }) {
 
 function ActionButtons({ candidate }: { candidate: Candidate }) {
   const qc = useQueryClient();
-  const [showDetail, setShowDetail] = useState(false);
+  const navigate = useNavigate();
 
   const btMut = useMutation({
     mutationFn: () => runBacktest(candidate.name, "2021-01-01", "2024-12-31"),
     onSuccess: (d) => {
-      toast.success(`Backtest enqueued (job: ${d.job_id.slice(0, 8)}…)`);
+      toast.success("Backtest queued");
       qc.invalidateQueries({ queryKey: ["candidates"] });
+      navigate(`/candidates/${candidate.name}/backtest/${d.job_id}`);
     },
     onError: () => toast.error("Failed to enqueue backtest"),
   });
@@ -108,7 +110,7 @@ function ActionButtons({ candidate }: { candidate: Candidate }) {
   const canWfa = candidate.state === "BACKTEST_DONE";
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="flex items-center gap-1.5">
       <button
         onClick={(e) => { e.stopPropagation(); btMut.mutate(); }}
         disabled={!canBt || btMut.isPending}
@@ -251,9 +253,13 @@ export default function CandidatesPage() {
                     >
                       {/* Name */}
                       <td className="px-4 py-3">
-                        <div className="font-mono font-semibold text-[var(--text-primary)] text-[11px]">
+                        <Link
+                          to={`/candidates/${c.name}`}
+                          className="font-mono font-semibold text-[var(--text-primary)] text-[11px] hover:text-blue-400 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {c.name.replace(/_/g, " ")}
-                        </div>
+                        </Link>
                         <div className="text-[9px] text-[var(--text-tertiary)] mt-0.5 font-mono truncate max-w-[160px]">
                           {c.file_path.split("/").pop()}
                         </div>
@@ -313,7 +319,16 @@ export default function CandidatesPage() {
 
                       {/* Actions */}
                       <td className="px-4 py-3">
-                        <ActionButtons candidate={c} />
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <ActionButtons candidate={c} />
+                          <Link
+                            to={`/candidates/${c.name}`}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/60 cursor-pointer transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ChevronRight size={9} /> Detail
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );

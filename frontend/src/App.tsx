@@ -88,6 +88,9 @@ const CFPBookingPage = lazy(() => import("@/pages/CFPBookingPage"));
 const StakingPage = lazy(() => import("@/pages/StakingPage"));
 const DCABasketsPage = lazy(() => import("@/pages/DCABasketsPage"));
 const BotDetailPage = lazy(() => import("@/pages/BotDetailPage"));
+const CandidateDetailPage = lazy(() => import("@/pages/CandidateDetailPage"));
+const BacktestResultPage = lazy(() => import("@/pages/BacktestResultPage"));
+const WfaResultPage = lazy(() => import("@/pages/WfaResultPage"));
 const TradeDetailPage = lazy(() => import("@/pages/TradeDetailPage"));
 const AnalystPage = lazy(() => import("@/pages/AnalystPage"));
 const PortfolioDetailPage = lazy(() => import("@/pages/PortfolioDetailPage"));
@@ -361,6 +364,9 @@ function AppInner() {
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
         <Route path="/candidates" element={<CandidatesPage />} />
+        <Route path="/candidates/:candidateName" element={<CandidateDetailPage />} />
+        <Route path="/candidates/:candidateName/backtest/:jobId" element={<BacktestResultPage />} />
+        <Route path="/candidates/:candidateName/wfa/:jobId" element={<WfaResultPage />} />
         <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/portfolio" element={<Page component={Portfolio} />} />
