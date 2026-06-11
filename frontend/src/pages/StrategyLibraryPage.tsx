@@ -50,6 +50,24 @@ const DIFFICULTY_COLOR: Record<string, string> = {
   Advanced:     "bg-t-red/15 text-t-red border-t-red/30",
 };
 
+// Catalog API returns UPPER_SNAKE_CASE; bots use Title Case. Normalize to canonical.
+const _STYLE_NORM: Record<string, string> = {
+  MOMENTUM:       "Momentum",
+  MEAN_REVERSION: "Mean Reversion",
+  TREND:          "Trend",
+  ARBITRAGE:      "Arbitrage",
+  VOLATILITY:     "Volatility",
+  CARRY:          "Carry",
+  EVENT_DRIVEN:   "Event-Driven",
+  CROSS_ASSET:    "Cross-Asset",
+};
+function normalizeStyle(raw: string | null | undefined): string {
+  if (!raw) return "Other";
+  if (raw in STYLE_COLOR) return raw; // already canonical
+  const key = raw.toUpperCase().replace(/[\s-]+/g, "_");
+  return _STYLE_NORM[key] ?? raw;
+}
+
 const TIER_BADGE: Record<string, string> = {
   T3: "text-t-green border-t-green/30 bg-t-green/10",
   T2: "text-t-cyan border-t-cyan/30 bg-t-cyan/10",
@@ -137,7 +155,7 @@ function BotCard({ row, onClick }: { row: BotLeaderboardRow; onClick: () => void
 }
 
 function CandidateCard({ c, onClick }: { c: CatalogCandidate; onClick: () => void }) {
-  const style = c.style ?? "Other";
+  const style = normalizeStyle(c.style);
 
   return (
     <button
@@ -210,7 +228,7 @@ export default function StrategyLibraryPage() {
       counts[s] = (counts[s] ?? 0) + 1;
     }
     for (const c of candidates) {
-      const s = c.style ?? "Other";
+      const s = normalizeStyle(c.style);
       counts[s] = (counts[s] ?? 0) + 1;
     }
     return counts;
@@ -231,7 +249,7 @@ export default function StrategyLibraryPage() {
     const q = search.toLowerCase();
     return all.filter((item) => {
       if (filter !== "All") {
-        const s = item.kind === "bot" ? BOT_STYLE[item.b.bot_id] : item.c.style;
+        const s = item.kind === "bot" ? BOT_STYLE[item.b.bot_id] : normalizeStyle(item.c.style);
         if (s !== filter) return false;
       }
       if (q) {
