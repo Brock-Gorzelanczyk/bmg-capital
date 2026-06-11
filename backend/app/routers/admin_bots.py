@@ -28,6 +28,7 @@ _BOT_IDS = [
     "crypto_quant_scalper",
     "crypto_quant_aggressive",
     "crypto_quant_mean_reversion",
+    "crypto_meanrev_2163",
     "crypto_day",
     "crypto_swing",
     "crypto_lt",
@@ -43,6 +44,7 @@ _BOT_CATEGORIES = {
     "crypto_quant_scalper": "quant",
     "crypto_quant_aggressive": "quant",
     "crypto_quant_mean_reversion": "quant",
+    "crypto_meanrev_2163": "quant",
     "crypto_day": "crypto",
     "crypto_swing": "crypto",
     "crypto_lt": "crypto",
@@ -270,7 +272,7 @@ def list_bots(
     db: Session = Depends(get_db),
     admin: User = Depends(require_bot_admin),
 ):
-    """List all 12 bots with status and open position count."""
+    """List all production bots with status and open position count."""
     from app.db.models.bot_config import BotConfigOverride
 
     result = []

@@ -292,7 +292,7 @@ function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
               <span className="font-mono-t text-sm text-t-muted tabular-nums self-center">{row.rank}</span>
               <div className="min-w-0 self-center">
                 <p className="text-t-hi font-semibold text-sm truncate leading-tight">{row.strategy_name}</p>
-                {!row.enabled && <p className="text-t-gdim text-[10px]">disabled</p>}
+                {!row.enabled && <p className="text-amber-500/70 text-[10px] font-mono">frozen · historical</p>}
               </div>
               <div className="self-center">
                 <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full border", TIER_BADGE[row.tier] ?? TIER_BADGE.T0)}>

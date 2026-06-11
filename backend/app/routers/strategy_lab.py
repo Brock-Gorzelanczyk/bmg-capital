@@ -230,6 +230,16 @@ _CANDIDATE_CATALOG = [
         "description": "Monthly rebalance into top-25 stocks ranked by composite quality (SimFin fundamentals) + 12-1M momentum + low beta. Flattens to cash when credit spreads are red.",
         "promotion_criteria": "60 days live + 30 trades + Sharpe > 0.5",
     },
+    {
+        "file": "options_iv_premium_filter",
+        "name": "Options IV Premium Filter",
+        "asset_class": "options",
+        "style": "short_volatility",
+        "reference": "Israelov & Nielsen (2014)",
+        "expected_sharpe": "0.7–1.1 (with IVR filter; 0.2 blind)",
+        "description": "Sells cash-secured puts or covered calls only when IV Rank ≥ 50. Half-size at IVR 30–49; skips entirely below 30. Harvests premium when implied vol is rich.",
+        "promotion_criteria": "60 days live + 30 trades + annualised premium yield ≥ 12%",
+    },
 ]
 
 

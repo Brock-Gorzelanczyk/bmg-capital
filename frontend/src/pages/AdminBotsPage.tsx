@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { listBots, type BotListItem } from "@/api/adminBots";
-import { getOpenPositions } from "@/api/bots";
 import { cn } from "@/lib/utils";
 import { BracketFrame, SectionLabel, BMGCard } from "@/components/design";
 
@@ -63,12 +62,6 @@ export default function AdminBotsPage() {
     staleTime: 30_000,
   });
 
-  const { data: openPosData } = useQuery({
-    queryKey: ["open-positions"],
-    queryFn: getOpenPositions,
-    staleTime: 30_000,
-  });
-
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <BracketFrame className="mb-8 p-5 rounded-xl" glow>
@@ -95,9 +88,9 @@ export default function AdminBotsPage() {
           {/* Summary strip */}
           <div className="flex gap-4 mb-5 text-xs text-[var(--bmg-text-muted)] font-mono">
             <span><span className="text-[var(--bmg-green)]">{data.bots.filter(b => b.enabled && !b.paused).length}</span> active</span>
-            <span><span className="text-yellow-400">{data.bots.filter(b => b.paused).length}</span> paused</span>
+            <span><span className="text-yellow-400">{data.bots.filter(b => b.paused && b.enabled).length}</span> paused</span>
             <span><span className="text-red-400">{data.bots.filter(b => !b.enabled).length}</span> disabled</span>
-            <span><span className="text-white">{openPosData?.position_count ?? 0}</span> open positions</span>
+            <span><span className="text-white">{data.bots.reduce((s, b) => s + b.open_positions, 0)}</span> open positions</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
