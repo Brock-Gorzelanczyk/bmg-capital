@@ -1559,7 +1559,7 @@ function BacktestTab({ botName }: { botName: string }) {
 
 // ─── Tab system ───────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "watchlist" | "backtest" | "activity" | "strategies" | "settings" | "performance";
+type Tab = "overview" | "watchlist" | "backtest" | "activity" | "strategies" | "performance" | "allocation" | "settings";
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { key: Tab; label: string }[] = [
@@ -1569,6 +1569,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
     { key: "activity", label: "Recent Trades" },
     { key: "strategies", label: "Strategies" },
     { key: "performance", label: "Performance" },
+    { key: "allocation", label: "Allocation" },
     { key: "settings", label: "Settings" },
   ];
 
@@ -2140,6 +2141,130 @@ function SettingsTab({
         )}
       </div>
 
+    </div>
+  );
+}
+
+// ─── Allocation tab ───────────────────────────────────────────────────────────
+
+const TIER_COLORS: Record<string, string> = {
+  T3: "text-emerald-400 bg-emerald-400/10 border-emerald-500/30",
+  T2: "text-blue-400 bg-blue-400/10 border-blue-500/30",
+  T1: "text-yellow-400 bg-yellow-400/10 border-yellow-500/30",
+  T0: "text-zinc-400 bg-zinc-400/10 border-zinc-500/30",
+};
+const TIER_LABELS: Record<string, string> = {
+  T3: "CORE", T2: "PRODUCTION", T1: "PROBATION", T0: "CANDIDATE",
+};
+const TIER_MAX_PCT: Record<string, number> = {
+  T3: 20, T2: 12, T1: 3, T0: 0,
+};
+
+function AllocationTab({ allocationId }: { allocationId: number }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["bot-allocation-perf", allocationId],
+    queryFn: () =>
+      fetch(`/api/bots/${allocationId}/performance?days=90`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("920wp_token") ?? ""}` },
+      }).then((r) => r.json()),
+    staleTime: 300_000,
+    retry: 0,
+    enabled: !!allocationId,
+  });
+
+  if (!allocationId) {
+    return <p className="text-sm text-zinc-500 py-8 text-center">No allocation found for this bot.</p>;
+  }
+
+  if (isLoading) {
+    return <p className="text-sm text-zinc-500 py-8 text-center">Loading allocation data…</p>;
+  }
+
+  if (isError || !data) {
+    return <p className="text-sm text-zinc-500 py-8 text-center">Allocation data unavailable.</p>;
+  }
+
+  const tier: string = data.current_tier ?? "T1";
+  const tierClass = TIER_COLORS[tier] ?? TIER_COLORS.T1;
+  const tierLabel = TIER_LABELS[tier] ?? tier;
+  const maxPct = TIER_MAX_PCT[tier] ?? 3;
+  const history: Array<{ changed_at: string; previous_tier: string; new_tier: string; reason: string }> =
+    data.tier_history ?? [];
+  const latest = data.time_series?.[data.time_series.length - 1];
+
+  return (
+    <div className="space-y-6">
+      {/* Current tier card */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex-1">
+          <p className="text-xs text-zinc-500 mb-1 uppercase tracking-wider">Current Tier</p>
+          <span className={cn("inline-block text-sm font-bold px-3 py-1 rounded-full border", tierClass)}>
+            {tier} — {tierLabel}
+          </span>
+          <p className="text-xs text-zinc-500 mt-2">
+            Max capital allocation: <span className="text-zinc-200">{maxPct}%</span>
+          </p>
+        </div>
+        {latest && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-center">
+            {[
+              { label: "30d Return", val: latest.return_30d_pct != null ? `${latest.return_30d_pct.toFixed(2)}%` : "—" },
+              { label: "Win Rate", val: latest.win_rate != null ? `${(latest.win_rate * 100).toFixed(0)}%` : "—" },
+              { label: "Profit Factor", val: latest.profit_factor != null ? latest.profit_factor.toFixed(2) : "—" },
+              { label: "Max DD", val: latest.max_drawdown_pct != null ? `${(latest.max_drawdown_pct * 100).toFixed(1)}%` : "—" },
+            ].map(({ label, val }) => (
+              <div key={label} className="bg-zinc-800 rounded-lg px-3 py-2">
+                <p className="text-[10px] text-zinc-500 mb-0.5">{label}</p>
+                <p className="text-sm font-semibold text-white">{val}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tier progression */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <p className="text-xs text-zinc-500 uppercase tracking-wider mb-4">Tier Ladder</p>
+        <div className="flex gap-2 flex-wrap">
+          {(["T0", "T1", "T2", "T3"] as const).map((t) => (
+            <div
+              key={t}
+              className={cn(
+                "flex-1 min-w-[70px] rounded-lg border px-3 py-2 text-center transition-all",
+                tier === t ? TIER_COLORS[t] : "border-zinc-700 text-zinc-600"
+              )}
+            >
+              <p className="text-xs font-bold">{t}</p>
+              <p className="text-[10px]">{TIER_LABELS[t]}</p>
+              <p className="text-[10px]">≤ {TIER_MAX_PCT[t]}%</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tier history */}
+      {history.length > 0 && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Tier History</p>
+          <div className="space-y-2">
+            {history.map((h, i) => (
+              <div key={i} className="flex items-start gap-3 text-sm">
+                <span className="text-zinc-500 text-xs tabular-nums whitespace-nowrap pt-0.5">
+                  {h.changed_at ? new Date(h.changed_at).toLocaleDateString() : "—"}
+                </span>
+                <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded border shrink-0", TIER_COLORS[h.previous_tier] ?? TIER_COLORS.T1)}>
+                  {h.previous_tier}
+                </span>
+                <span className="text-zinc-500 shrink-0">→</span>
+                <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded border shrink-0", TIER_COLORS[h.new_tier] ?? TIER_COLORS.T1)}>
+                  {h.new_tier}
+                </span>
+                <span className="text-zinc-400 text-xs">{h.reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2974,6 +3099,10 @@ export default function BotDetailPage() {
       {/* Settings tab */}
       {activeTab === "performance" && (
         <BotPerformanceTab botName={botName} />
+      )}
+
+      {activeTab === "allocation" && (
+        <AllocationTab allocationId={allocation?.id ?? 0} />
       )}
 
       {activeTab === "settings" && (
