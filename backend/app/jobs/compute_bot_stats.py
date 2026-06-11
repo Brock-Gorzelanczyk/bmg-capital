@@ -175,7 +175,7 @@ def run() -> dict:
                 db.flush()
 
                 # Evaluate tier
-                current_tier = getattr(alloc, "tier", "T1") or "T1"
+                current_tier = alloc.tier or "T0"
                 metrics = BotMetrics(
                     allocation_id=alloc.id,
                     current_tier=current_tier,
@@ -201,11 +201,7 @@ def run() -> dict:
                         trade_count_at_change=total_trades,
                     )
                     db.add(history)
-                    # Update tier on allocation if the column exists
-                    try:
-                        alloc.tier = new_tier  # type: ignore[attr-defined]
-                    except AttributeError:
-                        pass
+                    alloc.tier = new_tier
                     if new_tier > current_tier:
                         promoted += 1
                         logger.info(

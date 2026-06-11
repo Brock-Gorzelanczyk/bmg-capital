@@ -62,8 +62,8 @@ def get_allocation_overview(
     for alloc in allocs:
         profile = profile_map.get(alloc.profile_id)
         stats = _latest_stats(db, alloc.id)
-        tier = getattr(alloc, "tier", "T1") or "T1"
-        tier_info = TIERS.get(tier, TIERS["T1"])
+        tier = alloc.tier or "T0"
+        tier_info = TIERS.get(tier, TIERS["T0"])
         rows.append({
             "allocation_id": alloc.id,
             "bot_name": profile.name if profile else "",
@@ -129,12 +129,12 @@ def get_bot_performance(
         .all()
     )
 
-    current_tier = getattr(alloc, "tier", "T1") or "T1"
+    current_tier = alloc.tier or "T0"
 
     return {
         "allocation_id": bot_id,
         "current_tier": current_tier,
-        "tier_label": TIERS.get(current_tier, TIERS["T1"])["label"],
+        "tier_label": TIERS.get(current_tier, TIERS["T0"])["label"],
         "time_series": [
             {
                 "date": s.stat_date.isoformat(),
@@ -189,7 +189,7 @@ def get_promotion_candidates(
         stats = _latest_stats(db, alloc.id)
         if not stats:
             continue
-        tier = getattr(alloc, "tier", "T1") or "T1"
+        tier = alloc.tier or "T0"
         metrics = BotMetrics(
             allocation_id=alloc.id,
             current_tier=tier,

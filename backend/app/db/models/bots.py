@@ -50,6 +50,7 @@ class BotAllocation(Base):
     )
     portfolio_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("strategy_portfolios.id"), nullable=True, index=True)
     capital_cents_within_portfolio: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tier: Mapped[str] = mapped_column(String, nullable=False, default="T0")
 
 
 class BotSignal(Base):

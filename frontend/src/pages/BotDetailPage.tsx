@@ -2165,7 +2165,7 @@ function AllocationTab({ allocationId }: { allocationId: number }) {
     queryKey: ["bot-allocation-perf", allocationId],
     queryFn: () =>
       fetch(`/api/bots/${allocationId}/performance?days=90`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("920wp_token") ?? ""}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("bmg_token") ?? ""}` },
       }).then((r) => r.json()),
     staleTime: 300_000,
     retry: 0,

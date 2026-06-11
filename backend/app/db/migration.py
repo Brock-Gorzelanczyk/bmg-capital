@@ -205,6 +205,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("card_config",                      "TEXT"),
         ("portfolio_id",                     "INTEGER"),
         ("capital_cents_within_portfolio",   "INTEGER"),
+        ("tier",                             "TEXT NOT NULL DEFAULT 'T0'"),
     ],
     "bot_signals": [
         ("entry_price",          "FLOAT"),
@@ -585,6 +586,46 @@ def _recreate_sentinel_tables(conn) -> None:
     logger.info("Migration: recreated sentinel tables with INTEGER primary keys")
 
 
+def _seed_initial_bot_performance_stats(conn) -> None:
+    """Insert a zeroed stats row for every bot_allocation that has no stats yet.
+
+    Runs once at startup so the allocation endpoints return real rows rather
+    than empty lists. The nightly compute_bot_stats job will overwrite these
+    with real numbers.
+    """
+    MIGRATION_NAME = "bot_performance_stats.seed_zeroed_rows_v1"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        today = datetime.now(timezone.utc).date().isoformat()
+        conn.execute(text("""
+            INSERT OR IGNORE INTO bot_performance_stats
+                (allocation_id, stat_date, total_return_pct, return_30d_pct, return_7d_pct,
+                 win_rate, profit_factor, max_drawdown_pct, sharpe_ratio,
+                 total_trades, winning_trades, losing_trades,
+                 starting_capital_cents, current_value_cents, realized_pnl_cents)
+            SELECT
+                ba.id,
+                :today,
+                0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0, 0, 0,
+                ba.starting_capital_cents,
+                ba.starting_capital_cents,
+                0
+            FROM bot_allocations ba
+            WHERE NOT EXISTS (
+                SELECT 1 FROM bot_performance_stats ps WHERE ps.allocation_id = ba.id
+            )
+        """), {"today": today})
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_seed_initial_bot_performance_stats: zeroed rows seeded")
+    except Exception as exc:
+        logger.warning("_seed_initial_bot_performance_stats: %s", exc)
+        conn.rollback()
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -672,6 +713,10 @@ def run_migrations(engine: Engine) -> None:
             _create_safety_layer_tables(conn)
         except Exception as _e:
             logger.warning("_create_safety_layer_tables failed (non-fatal): %s", _e)
+        try:
+            _seed_initial_bot_performance_stats(conn)
+        except Exception as _e:
+            logger.warning("_seed_initial_bot_performance_stats failed (non-fatal): %s", _e)
 
 
 def _create_safety_layer_tables(conn) -> None:

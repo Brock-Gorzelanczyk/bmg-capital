@@ -45,6 +45,7 @@ from app.db.models.bots import BotProfile, BotAllocation, BotSignal, BotPosition
 from app.db.models.learning import LearningTrack, LearningModule, LearningLesson, UserLessonProgress, UserCertificate  # noqa: F401
 from app.db.models.smart_money import SmartMoneyCongressTrade  # noqa: F401
 from app.db.models.sentinel import AgentEvent, AgentFix, AgentCircuitBreaker, AgentEscalation  # noqa: F401
+from app.db.models.allocation import BotPerformanceStats, BotTierHistory  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -88,4 +89,5 @@ __all__ = [
     "LearningTrack", "LearningModule", "LearningLesson", "UserLessonProgress", "UserCertificate",
     "SmartMoneyCongressTrade",
     "AgentEvent", "AgentFix", "AgentCircuitBreaker", "AgentEscalation",
+    "BotPerformanceStats", "BotTierHistory",
 ]

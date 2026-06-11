@@ -1486,7 +1486,7 @@ export default function StrategyLab() {
     queryKey: ["bots-allocation-overview"],
     queryFn: () =>
       fetch("/api/bots/allocation", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("920wp_token") ?? ""}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("bmg_token") ?? ""}` },
       }).then((r) => r.json()).catch(() => ({ allocations: [] })),
     staleTime: 300_000,
     retry: 0,
