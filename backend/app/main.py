@@ -267,6 +267,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+class AgentReadOnlyMiddleware(BaseHTTPMiddleware):
+    """Block non-GET requests when the agent-fleet service token is used."""
+    async def dispatch(self, request: Request, call_next):
+        import os as _os
+        agent_token = _os.getenv("AGENT_APP_AUTH_TOKEN", "")
+        if agent_token:
+            auth = request.headers.get("Authorization", "")
+            if auth == f"Bearer {agent_token}" and request.method != "GET":
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Agent fleet token is read-only — GET requests only"},
+                )
+        return await call_next(request)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -281,6 +297,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AgentReadOnlyMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

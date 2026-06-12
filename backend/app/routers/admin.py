@@ -764,3 +764,44 @@ def get_bot_risk_status(
     status = get_risk_status(alloc, profile, capital_usd, db)
     status["flag_enabled"] = flag_enabled
     return status
+
+
+@router.post("/agent-token/generate")
+def generate_agent_token(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate a 365-day JWT for the agent-fleet service account.
+    Admin-only. Run once after deploy, copy the token into Railway
+    as AGENT_APP_AUTH_TOKEN.
+    """
+    if not current_user.is_admin and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    agent_user = db.query(User).filter(User.email == "agents@bmgcapital.internal").first()
+    if not agent_user:
+        raise HTTPException(
+            status_code=404,
+            detail="agent-fleet service account not found — run migrations first",
+        )
+
+    from app.config import settings
+    from jose import jwt as _jwt
+    expire = datetime.now(timezone.utc) + timedelta(days=365)
+    payload = {
+        "sub": str(agent_user.id),
+        "email": agent_user.email,
+        "username": agent_user.username,
+        "role": agent_user.role,
+        "exp": expire,
+    }
+    token = _jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return {
+        "token": token,
+        "expires": expire.isoformat(),
+        "instructions": (
+            "Add this to Railway env vars as AGENT_APP_AUTH_TOKEN. "
+            "The agent fleet will use it for read-only API access."
+        ),
+    }

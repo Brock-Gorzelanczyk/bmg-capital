@@ -914,6 +914,14 @@ def run_migrations(engine: Engine) -> None:
             _ensure_daily_budget_tables(conn)
         except Exception as _e:
             logger.warning("_ensure_daily_budget_tables failed (non-fatal): %s", _e)
+        try:
+            _ensure_agent_app_access_log(conn)
+        except Exception as _e:
+            logger.warning("_ensure_agent_app_access_log failed (non-fatal): %s", _e)
+        try:
+            _ensure_agent_service_account(conn)
+        except Exception as _e:
+            logger.warning("_ensure_agent_service_account failed (non-fatal): %s", _e)
 
 
 def _ensure_fund_team_chat_state_table(conn) -> None:
@@ -927,6 +935,52 @@ def _ensure_fund_team_chat_state_table(conn) -> None:
     """))
     conn.commit()
     logger.info("Migration: fund_team_chat_state table ensured")
+
+
+def _ensure_agent_app_access_log(conn) -> None:
+    """Create audit log for all agent HTTP calls to the app API (idempotent)."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS agent_app_access_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id    TEXT,
+            endpoint    TEXT,
+            status_code INTEGER,
+            response_ms INTEGER,
+            called_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.commit()
+    logger.info("Migration: agent_app_access_log table ensured")
+
+
+def _ensure_agent_service_account(conn) -> None:
+    """
+    Ensure the agent-fleet read-only service account exists.
+    Creates it on first run. Token is generated via
+    POST /api/admin/agent-token/generate (admin-only) after deploy.
+    """
+    try:
+        row = conn.execute(
+            text("SELECT id FROM users WHERE email = 'agents@bmgcapital.internal'")
+        ).fetchone()
+        if row is not None:
+            return  # already exists
+
+        import bcrypt as _bcrypt, secrets
+        random_pw = secrets.token_hex(32)
+        hashed = _bcrypt.hashpw(random_pw.encode(), _bcrypt.gensalt()).decode()
+        conn.execute(text("""
+            INSERT INTO users (email, username, hashed_password, is_active, is_admin, role, is_test_account)
+            VALUES ('agents@bmgcapital.internal', 'agent-fleet', :pw, true, false, 'read_only_service_account', true)
+        """), {"pw": hashed})
+        conn.commit()
+        logger.info("Migration: agent-fleet service account created")
+    except Exception as exc:
+        logger.warning("_ensure_agent_service_account failed (non-fatal): %s", exc)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def _ensure_daily_budget_tables(conn) -> None:

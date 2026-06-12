@@ -238,4 +238,24 @@ def run_operations_reconciliation(db: Session) -> dict:
     except Exception:
         pass
 
+    # App API cross-check: verify dashboard open position count matches DB
+    try:
+        import asyncio as _aio
+        from agents.app_client import get_client as _get_client
+        _client = _get_client("operations")
+        if _client.available:
+            snapshot = _aio.get_event_loop().run_until_complete(_client.portfolio_snapshot())
+            api_open = snapshot.get("open_positions") or snapshot.get("total_open_positions")
+            db_open = positions["open_count"]
+            if api_open is not None and abs(int(api_open) - db_open) > 2:
+                logger.warning(
+                    "[operations] position count mismatch: API=%s DB=%d — possible frontend drift",
+                    api_open, db_open,
+                )
+                result["api_cross_check"] = {"mismatch": True, "api_open": api_open, "db_open": db_open}
+            else:
+                result["api_cross_check"] = {"mismatch": False, "db_open": db_open}
+    except Exception as _exc:
+        logger.debug("[operations] app_client cross-check skipped: %s", _exc)
+
     return result
