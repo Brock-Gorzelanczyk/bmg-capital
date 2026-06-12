@@ -952,6 +952,32 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job operations (6 PM ET Mon-Fri)")
 
     # ------------------------------------------------------------------
+    # Proposal reaction handler: every 60s — polls Discord for CIO reactions
+    # on #queen-proposals messages and routes to executors.
+    # ------------------------------------------------------------------
+    def _run_proposal_handler():
+        from app.db.session import SessionLocal
+        from agents.proposal_handler import run_proposal_handler
+        db = SessionLocal()
+        try:
+            run_proposal_handler(db)
+        except Exception as exc:
+            logger.debug("[proposal_handler] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_proposal_handler,
+        IntervalTrigger(seconds=60),
+        id="proposal_reaction_handler",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),
+    )
+    logger.warning("[startup-trace] registered job proposal_reaction_handler (every 60s)")
+
+    # ------------------------------------------------------------------
     # Fleet heartbeat: every 30s — keeps /fund status dashboard live.
     # Publishes a lightweight "alive" tick to agent_heartbeats for each
     # deployed agent so /api/agents/status can report active/degraded/offline.

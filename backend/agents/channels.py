@@ -36,6 +36,9 @@ QUANT_CANDIDATE    = "quant.candidate"     # new WFA candidate promoted
 # Operations / Back Office
 OPS_REPORT         = "ops.report"          # daily ops / reconciliation digest
 
+# Proposals
+PROPOSALS          = "proposals"           # Queen → CIO proposal awaiting approval
+
 # System
 SYSTEM_HEARTBEAT   = "system.heartbeat"    # periodic ping from each agent
 AGENT_HEARTBEATS   = "agent_heartbeats"    # fleet liveness ticks (every 30s)

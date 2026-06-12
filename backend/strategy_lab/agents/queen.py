@@ -14,13 +14,15 @@ Event-driven:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from typing import Literal
 
 import httpx
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +344,461 @@ def _build_regime_alert_embed(alert: dict, now: datetime) -> dict:
     }
 
 
+# ── Tier B Proposal Flow ──────────────────────────────────────────────────────
+
+# Allocation delta used when generating IC-driven proposals
+_PROPOSAL_REDUCE_PCT  = 1.5   # reduce by this much when IC degrading
+_PROPOSAL_INCREASE_PCT = 1.5  # increase by this much when IC strong + regime favorable
+
+# Proposal cooldowns
+_REJECTION_COOLDOWN_HOURS = 24
+_APPROVAL_COOLDOWN_HOURS  = 6
+
+
+def _get_proposals_channel() -> tuple[str, str]:
+    """Return (token, channel_id) for #queen-proposals, fall back to dev-log."""
+    token = os.getenv("DISCORD_BOT_TOKEN", "")
+    try:
+        from app.config import settings
+        token = settings.discord_bot_token or token
+    except Exception:
+        pass
+    proposals_ch = os.getenv("DISCORD_CH_QUEEN_PROPOSALS", "")
+    fallback_ch  = os.getenv("DISCORD_CH_DEV_LOG", "")
+    return token, proposals_ch or fallback_ch
+
+
+def _is_proposals_fallback() -> bool:
+    return not os.getenv("DISCORD_CH_QUEEN_PROPOSALS", "").strip()
+
+
+def _next_proposal_id(db: Session) -> str:
+    today = date.today().strftime("%Y%m%d")
+    try:
+        count = db.execute(
+            text("SELECT COUNT(*) FROM proposal_audit WHERE DATE(generated_ts) = :d"),
+            {"d": date.today().isoformat()},
+        ).scalar() or 0
+    except Exception:
+        count = 0
+    return f"PROP-{today}-{count + 1:03d}"
+
+
+def _check_proposal_cooldown(db: Session, proposal_class: str) -> tuple[bool, str]:
+    """
+    Returns (blocked, reason). Blocked if the same class was:
+    - rejected/auto_rejected in the last 24h, or
+    - approved and executed in the last 6h.
+    """
+    try:
+        rejection_cutoff = (datetime.now(timezone.utc) - timedelta(hours=_REJECTION_COOLDOWN_HOURS)).isoformat()
+        approval_cutoff  = (datetime.now(timezone.utc) - timedelta(hours=_APPROVAL_COOLDOWN_HOURS)).isoformat()
+
+        rejected = db.execute(
+            text("""
+                SELECT 1 FROM proposal_audit
+                WHERE proposal_type = :cls
+                  AND decision IN ('rejected', 'auto_rejected')
+                  AND decision_ts >= :cutoff
+                LIMIT 1
+            """),
+            {"cls": proposal_class, "cutoff": rejection_cutoff},
+        ).fetchone()
+        if rejected:
+            return True, f"24h rejection cooldown active for {proposal_class}"
+
+        approved = db.execute(
+            text("""
+                SELECT 1 FROM proposal_audit
+                WHERE proposal_type = :cls
+                  AND decision = 'approved'
+                  AND executed_ts >= :cutoff
+                LIMIT 1
+            """),
+            {"cls": proposal_class, "cutoff": approval_cutoff},
+        ).fetchone()
+        if approved:
+            return True, f"6h post-approval cooldown active for {proposal_class}"
+
+        return False, ""
+    except Exception:
+        return False, ""
+
+
+def _check_conflict_veto(db: Session, bot_name: str) -> tuple[bool, str]:
+    """
+    Auto-reject if Risk Sentinel has a RED/YELLOW alert in last 30 min,
+    or Data Quality Watcher has a CRITICAL alert in last 2 hours.
+    """
+    try:
+        sentinel_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+        dq_cutoff       = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+
+        cro_alert = db.execute(
+            text("""
+                SELECT 1 FROM agent_messages
+                WHERE from_agent = 'risk_sentinel'
+                  AND msg_type IN ('health', 'breach')
+                  AND created_at >= :cutoff
+                LIMIT 1
+            """),
+            {"cutoff": sentinel_cutoff},
+        ).fetchone()
+        if cro_alert:
+            return True, "vetoed by CRO — Risk Sentinel has active alert"
+
+        dq_alert = db.execute(
+            text("""
+                SELECT 1 FROM agent_messages
+                WHERE from_agent = 'data_quality_watcher'
+                  AND msg_type = 'dq_alert'
+                  AND created_at >= :cutoff
+                LIMIT 1
+            """),
+            {"cutoff": dq_cutoff},
+        ).fetchone()
+        if dq_alert:
+            return True, "vetoed by DQW — data quality compromise on affected feed"
+
+        return False, ""
+    except Exception:
+        return False, ""
+
+
+def _get_bot_allocations(db: Session) -> dict[str, float]:
+    """Return {bot_name: capital_pct} for all enabled bots."""
+    try:
+        rows = db.execute(text("""
+            SELECT bp.name, ba.capital_pct
+            FROM bot_allocations ba
+            JOIN bot_profiles bp ON bp.id = ba.profile_id
+            WHERE ba.enabled = 1
+        """)).fetchall()
+        return {r[0]: float(r[1]) for r in rows}
+    except Exception:
+        return {}
+
+
+def _get_recent_finding_id(db: Session) -> list[int]:
+    """Get IDs of researcher findings from last 24h."""
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        rows = db.execute(
+            text("""
+                SELECT id FROM agent_messages
+                WHERE from_agent = 'researcher' AND msg_type = 'findings'
+                  AND created_at >= :c
+                ORDER BY created_at DESC LIMIT 3
+            """),
+            {"c": cutoff},
+        ).fetchall()
+        return [r[0] for r in rows]
+    except Exception:
+        return []
+
+
+def _build_proposal_embed(
+    proposal_id: str,
+    bot_name: str,
+    direction: str,   # "reduce" | "increase"
+    current_pct: float,
+    proposed_pct: float,
+    ic: float | None,
+    regime_name: str,
+    finding_ids: list[int],
+    is_fallback: bool,
+) -> dict:
+    delta = proposed_pct - current_pct
+    delta_str = f"{delta:+.1f}%"
+    arrow = "↓" if delta < 0 else "↑"
+    color = 0xF59E0B  # amber for pending proposals
+
+    title_prefix = "[QUEUED-PROPOSAL] " if is_fallback else ""
+    ic_str = f"{ic:.3f}" if ic is not None else "N/A"
+
+    reduce_rationale = (
+        f"IC={ic_str} is below the {0.02} degradation threshold over the 63-day rolling window. "
+        f"Regime: {regime_name}. Reducing exposure to protect capital in a degraded signal environment."
+    )
+    increase_rationale = (
+        f"IC={ic_str} exceeds the {0.05} strong-signal threshold. "
+        f"Regime: {regime_name} is favourable for this bot. Increasing allocation to capture alpha."
+    )
+    rationale = reduce_rationale if direction == "reduce" else increase_rationale
+
+    alternative = (
+        "Hold current allocation and observe for 7 more days "
+        f"(risk: {'continued deployment in degraded signal env' if direction == 'reduce' else 'missed alpha in favourable regime'})"
+    )
+
+    fields = [
+        {
+            "name": "📋 PROPOSAL",
+            "value": (
+                f"{arrow} {bot_name} `capital_pct`: `{current_pct:.1f}%` → `{proposed_pct:.1f}%` "
+                f"(`{delta_str}`)"
+            ),
+            "inline": False,
+        },
+        {
+            "name": "🧠 RATIONALE",
+            "value": rationale,
+            "inline": False,
+        },
+        {
+            "name": "📊 DERIVED FROM",
+            "value": (
+                ", ".join(f"researcher.findings #{fid}" for fid in finding_ids)
+                or "researcher.findings (today's run)"
+            ),
+            "inline": False,
+        },
+        {
+            "name": "🔀 ALTERNATIVES CONSIDERED",
+            "value": alternative,
+            "inline": False,
+        },
+        {
+            "name": "✅ ON APPROVAL",
+            "value": (
+                f"1. Execute: `{bot_name}.capital_pct` → `{proposed_pct:.1f}%`\n"
+                "2. Notify Risk Sentinel\n3. Log to proposal_audit"
+            ),
+            "inline": False,
+        },
+        {
+            "name": "❌ ON REJECTION",
+            "value": f"24h cooldown on `{bot_name}` allocation proposals. Logged to proposal_audit.",
+            "inline": False,
+        },
+        {
+            "name": "React to decide",
+            "value": "✅ approve  ❌ reject  🕐 defer",
+            "inline": False,
+        },
+    ]
+
+    return {
+        "author":    {"name": f"BMG Capital — Queen Agent · Proposal"},
+        "title":     f"{title_prefix}{proposal_id} | {'Reduce' if direction == 'reduce' else 'Increase'} {bot_name} allocation",
+        "color":     color,
+        "fields":    fields,
+        "footer":    {"text": "Tier B · Awaiting CIO approval · Queen Agent"},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _write_proposal_audit(
+    db: Session,
+    proposal_id: str,
+    proposal_type: str,
+    proposed_change: dict,
+    rationale: str,
+    finding_ids: list[int],
+    decision: str = "pending",
+    decision_reason: str | None = None,
+) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        db.execute(
+            text("""
+                INSERT OR IGNORE INTO proposal_audit
+                    (proposal_id, proposal_type, generated_ts, proposed_change,
+                     rationale, derived_from_finding_ids, decision, decision_reason)
+                VALUES (:pid, :ptype, :ts, :change, :rationale, :fids, :decision, :dreason)
+            """),
+            {
+                "pid":      proposal_id,
+                "ptype":    proposal_type,
+                "ts":       now,
+                "change":   json.dumps(proposed_change),
+                "rationale": rationale,
+                "fids":     json.dumps(finding_ids),
+                "decision": decision,
+                "dreason":  decision_reason,
+            },
+        )
+        db.commit()
+    except Exception as exc:
+        logger.warning("[queen] proposal_audit write failed: %s", exc)
+
+
+def _post_proposal(channel_id: str, token: str, embed: dict) -> str | None:
+    """Post proposal embed to Discord. Returns message_id or None."""
+    if not channel_id or not token:
+        return None
+    try:
+        resp = httpx.post(
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            headers={
+                "Authorization": f"Bot {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (https://github.com/BMG-Capital/bmg-capital, 1.0.0)",
+            },
+            json={"embeds": [embed]},
+            timeout=10,
+        )
+        if resp.is_success:
+            return str(resp.json().get("id", ""))
+        logger.warning("[queen] proposal Discord post failed: %s", resp.status_code)
+        return None
+    except Exception as exc:
+        logger.warning("[queen] proposal post error: %s", exc)
+        return None
+
+
+def _generate_proposals(db: Session, *, research: dict, health: dict) -> list[dict]:
+    """
+    Generate Tier B proposals based on current research findings.
+    Called after the morning briefing. Returns list of proposal dicts.
+    """
+    now = datetime.now(timezone.utc)
+    ic_summary   = research.get("signal_ic", [])
+    regime       = research.get("regime", {})
+    regime_name  = regime.get("name", "unknown")
+    allocations  = _get_bot_allocations(db)
+    finding_ids  = _get_recent_finding_id(db)
+    token, proposals_ch = _get_proposals_channel()
+    is_fallback  = _is_proposals_fallback()
+
+    proposals_posted: list[dict] = []
+
+    for ic_entry in ic_summary:
+        bot      = ic_entry.get("bot", "")
+        ic_val   = ic_entry.get("ic")
+        status   = ic_entry.get("status", "")
+        current_pct = allocations.get(bot)
+
+        if current_pct is None:
+            continue  # bot not in active allocations
+
+        direction = None
+        if status == "degrading":
+            direction = "reduce"
+        elif status == "strong":
+            from strategy_lab.agents.researcher import _REGIME_BEST_BOTS
+            if bot in _REGIME_BEST_BOTS.get(regime_name, []):
+                direction = "increase"
+
+        if direction is None:
+            continue
+
+        proposed_pct = round(
+            current_pct - _PROPOSAL_REDUCE_PCT if direction == "reduce"
+            else current_pct + _PROPOSAL_INCREASE_PCT,
+            2,
+        )
+        # Clamp to sane bounds
+        proposed_pct = max(0.5, min(85.0, proposed_pct))
+
+        delta = abs(proposed_pct - current_pct)
+        proposal_class = f"allocation_change_{direction}"
+        proposal_id = _next_proposal_id(db)
+
+        # Pre-flight: Tier C hard cap
+        from agents.executors.execute_allocation_change import MAX_SINGLE_CHANGE_PCT
+        if delta > MAX_SINGLE_CHANGE_PCT:
+            _write_proposal_audit(
+                db, proposal_id, proposal_class,
+                {"type": "allocation_change", "bot": bot,
+                 "current_value": current_pct, "proposed_value": proposed_pct},
+                f"Auto-rejected: delta {delta:.2f}% > Tier C cap {MAX_SINGLE_CHANGE_PCT}%",
+                finding_ids, decision="auto_rejected",
+                decision_reason=f"Tier C hard cap: delta {delta:.2f}% > {MAX_SINGLE_CHANGE_PCT}%",
+            )
+            logger.info("[queen] proposal auto-rejected (tier_c): %s %s", bot, direction)
+            continue
+
+        # Pre-flight: cooldown
+        blocked, reason = _check_proposal_cooldown(db, proposal_class)
+        if blocked:
+            logger.info("[queen] proposal skipped (cooldown): %s — %s", bot, reason)
+            continue
+
+        # Pre-flight: conflict veto
+        vetoed, veto_reason = _check_conflict_veto(db, bot)
+        if vetoed:
+            _write_proposal_audit(
+                db, proposal_id, proposal_class,
+                {"type": "allocation_change", "bot": bot,
+                 "current_value": current_pct, "proposed_value": proposed_pct},
+                veto_reason, finding_ids,
+                decision="auto_rejected", decision_reason=veto_reason,
+            )
+            logger.info("[queen] proposal auto-rejected (veto): %s — %s", bot, veto_reason)
+            continue
+
+        # Write pending record first
+        proposed_change = {
+            "type": "allocation_change",
+            "bot": bot,
+            "field": "capital_pct",
+            "current_value": current_pct,
+            "proposed_value": proposed_pct,
+            "delta": round(proposed_pct - current_pct, 2),
+        }
+        rationale_text = (
+            f"IC={ic_val:.3f} degrading (threshold {0.02}); regime={regime_name}" if direction == "reduce"
+            else f"IC={ic_val:.3f} strong (threshold {0.05}); regime={regime_name} favours {bot}"
+        )
+        _write_proposal_audit(
+            db, proposal_id, proposal_class, proposed_change,
+            rationale_text, finding_ids,
+        )
+
+        # Post to Discord
+        embed = _build_proposal_embed(
+            proposal_id, bot, direction, current_pct, proposed_pct,
+            ic_val, regime_name, finding_ids, is_fallback,
+        )
+        message_id = _post_proposal(proposals_ch, token, embed)
+
+        # Record message_id in audit table
+        if message_id:
+            try:
+                db.execute(
+                    text("""
+                        UPDATE proposal_audit
+                        SET posted_message_id = :mid, posted_channel_id = :cid
+                        WHERE proposal_id = :pid
+                    """),
+                    {"mid": message_id, "cid": proposals_ch, "pid": proposal_id},
+                )
+                db.commit()
+            except Exception as exc:
+                logger.warning("[queen] proposal message_id update failed: %s", exc)
+
+        # Publish to bus
+        try:
+            from agents.bus import publish as _pub
+            from agents.channels import PROPOSALS
+            _pub(
+                db, channel=PROPOSALS, from_agent="queen",
+                msg_type="proposal",
+                subject=f"{proposal_id}: {direction} {bot} {current_pct:.1f}%→{proposed_pct:.1f}%",
+                payload={"proposal_id": proposal_id, "proposed_change": proposed_change},
+                priority=7,
+            )
+        except Exception:
+            pass
+
+        proposals_posted.append({
+            "proposal_id": proposal_id,
+            "bot": bot,
+            "direction": direction,
+            "current_pct": current_pct,
+            "proposed_pct": proposed_pct,
+            "posted": message_id is not None,
+            "fallback_channel": is_fallback,
+        })
+        logger.warning(
+            "[queen] proposal posted: %s %s %.1f%%→%.1f%% (msg_id=%s)",
+            proposal_id, bot, current_pct, proposed_pct, message_id,
+        )
+
+    return proposals_posted
+
+
 # ── Entry points ──────────────────────────────────────────────────────────────
 
 def run_queen_daily(db: Session, session: Session_t = "morning") -> None:
@@ -411,6 +868,15 @@ def run_queen_daily(db: Session, session: Session_t = "morning") -> None:
         sum(1 for b in health.get("bots", []) if b.get("status") == "STALE"),
         len(health.get("alerts", [])),
     )
+
+    # Proposal generation — morning session only
+    if session == "morning":
+        try:
+            generated = _generate_proposals(db, research=research, health=health)
+            if generated:
+                logger.warning("[queen] generated %d proposal(s) this morning", len(generated))
+        except Exception as exc:
+            logger.error("[queen] proposal generation failed: %s", exc)
 
     try:
         from agents.bus import publish as _bus_publish

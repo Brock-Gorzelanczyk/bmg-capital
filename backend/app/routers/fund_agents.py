@@ -133,6 +133,25 @@ def _sentinel_devops_activity(db: Session) -> dict:
         return {"last_activity": None, "today_count": 0, "recent_activity": []}
 
 
+def _get_proposal_stats(db: Session) -> dict:
+    """Today's proposal counters for the Portfolio Manager /fund card."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    try:
+        def _count(where: str, params: dict) -> int:
+            return db.execute(
+                text(f"SELECT COUNT(*) FROM proposal_audit WHERE {where}"),
+                {**params},
+            ).scalar() or 0
+        return {
+            "proposals_generated_today": _count("generated_ts >= :c", {"c": cutoff}),
+            "pending_cio_approval":      _count("decision = 'pending'", {}),
+            "approved_today":            _count("decision = 'approved' AND decision_ts >= :c", {"c": cutoff}),
+            "rejected_today":            _count("decision IN ('rejected','auto_rejected') AND decision_ts >= :c", {"c": cutoff}),
+        }
+    except Exception:
+        return {"proposals_generated_today": 0, "pending_cio_approval": 0, "approved_today": 0, "rejected_today": 0}
+
+
 def _get_agent_today_count(db: Session, from_agent: str) -> int:
     """Count messages published today by an agent (any channel)."""
     try:
@@ -222,6 +241,7 @@ def get_agents_status(db: Session = Depends(get_db)):
                 "api_cost_usd": 0.0,
                 "api_budget_usd": 2.0,
                 "messages_sent": queen_activity["today_count"],
+                **_get_proposal_stats(db),
             },
             "recent_activity": queen_activity["recent_activity"],
         },

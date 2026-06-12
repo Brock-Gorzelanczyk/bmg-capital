@@ -695,6 +695,45 @@ def _ensure_agent_memory_table(conn) -> None:
         logger.warning("_ensure_agent_memory_table failed: %s", exc)
 
 
+def _ensure_proposal_audit_table(conn) -> None:
+    """Create the proposal_audit table for Queen Tier B approval flow (idempotent)."""
+    MIGRATION_NAME = "proposal_audit.table_v1_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS proposal_audit (
+                id                        INTEGER  PRIMARY KEY AUTOINCREMENT,
+                proposal_id               VARCHAR  NOT NULL UNIQUE,
+                proposal_type             VARCHAR  NOT NULL DEFAULT 'allocation_change',
+                generated_ts              DATETIME NOT NULL,
+                posted_message_id         VARCHAR,
+                posted_channel_id         VARCHAR,
+                proposed_change           TEXT     NOT NULL DEFAULT '{}',
+                rationale                 TEXT,
+                derived_from_finding_ids  TEXT     NOT NULL DEFAULT '[]',
+                decision                  VARCHAR  NOT NULL DEFAULT 'pending',
+                decision_ts               DATETIME,
+                decision_reason           TEXT,
+                executed_ts               DATETIME,
+                executor_result           TEXT
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_proposal_audit_decision "
+            "ON proposal_audit(decision)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_proposal_audit_generated "
+            "ON proposal_audit(generated_ts)"
+        ))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration: proposal_audit table created")
+    except Exception as exc:
+        logger.warning("_ensure_proposal_audit_table failed: %s", exc)
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -806,6 +845,10 @@ def run_migrations(engine: Engine) -> None:
             _ensure_agent_memory_table(conn)
         except Exception as _e:
             logger.warning("_ensure_agent_memory_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_proposal_audit_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_proposal_audit_table failed (non-fatal): %s", _e)
 
 
 def _create_safety_layer_tables(conn) -> None:
