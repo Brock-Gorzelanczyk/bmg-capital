@@ -146,7 +146,11 @@ function BotCard({ row, onClick }: { row: BotLeaderboardRow; onClick: () => void
         <div className="flex items-center gap-1.5">
           <span className={cn("w-1.5 h-1.5 rounded-full", row.enabled ? "bg-t-green" : "bg-t-muted")} />
           <span className="text-[10px] text-t-muted font-mono-t">
-            {row.enabled ? `LIVE · ${row.days_live}d deployed` : `OFF · ${row.days_live}d`}
+            {row.enabled
+              ? `LIVE · ${row.days_live}d deployed`
+              : (row.paused_reason === "admin_lock" || row.paused_reason === "health_halt" || row.is_admin_locked)
+                ? "DISABLED · frozen · historical"
+                : `OFF · ${row.days_live}d`}
           </span>
         </div>
       </div>

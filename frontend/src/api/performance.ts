@@ -12,6 +12,8 @@ export interface BotLeaderboardRow {
   allocation_id: number;
   tier: string;
   enabled: boolean;
+  paused_reason?: string | null;
+  is_admin_locked?: boolean;
   starting_capital: number;
   current_equity: number;
   all_time_pnl_usd: number;
