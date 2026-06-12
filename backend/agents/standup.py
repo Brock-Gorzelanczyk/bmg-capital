@@ -252,7 +252,7 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
                 "model": "claude-haiku-4-5-20251001",
                 "max_tokens": 1200,
                 "system": (
-                    "You are the Queen, portfolio manager at BMG Capital. "
+                    "You are Brick, portfolio manager at BMG Capital. "
                     "Based on your agents' morning standup contributions, write today's trading plan. "
                     "Respond ONLY with a valid JSON object with these keys: "
                     "focus_areas (list of 3 strings), bots_to_watch (list of strings), "
@@ -352,7 +352,7 @@ def _post_plan(channel_id: str, token: str, plan: dict, contributions: list[dict
         return "\n".join(f"• {item}" for item in items[:max_items]) or "• None"
 
     embed = {
-        "author":    {"name": "👑 Queen — BMG Capital"},
+        "author":    {"name": "👑 Brick — BMG Capital"},
         "title":     f"📋 BMG Capital — Daily Plan · {today_str}",
         "color":     0x6366F1,
         "description": plan.get("summary", ""),

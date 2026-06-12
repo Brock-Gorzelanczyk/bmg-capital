@@ -445,7 +445,7 @@ def _check_conflict_veto(db: Session, bot_name: str) -> tuple[bool, str]:
             {"cutoff": sentinel_cutoff},
         ).fetchone()
         if cro_alert:
-            return True, "vetoed by CRO — Risk Sentinel has active alert"
+            return True, "vetoed by Dick (CRO) — active risk alert"
 
         dq_alert = db.execute(
             text("""
@@ -562,7 +562,7 @@ def _build_proposal_embed(
             "name": "✅ ON APPROVAL",
             "value": (
                 f"1. Execute: `{bot_name}.capital_pct` → `{proposed_pct:.1f}%`\n"
-                "2. Notify Risk Sentinel\n3. Log to proposal_audit"
+                "2. Notify Dick (CRO)\n3. Log to proposal_audit"
             ),
             "inline": False,
         },
@@ -583,7 +583,7 @@ def _build_proposal_embed(
         "title":     f"{title_prefix}{proposal_id} | {'Reduce' if direction == 'reduce' else 'Increase'} {bot_name} allocation",
         "color":     color,
         "fields":    fields,
-        "footer":    {"text": "Tier B · Awaiting CIO approval · Queen Agent"},
+        "footer":    {"text": "Tier B · Awaiting CIO approval · Brick"},
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -961,7 +961,7 @@ def run_queen_daily(db: Session, session: Session_t = "morning") -> None:
             channel=_SESSION_CHANNEL.get(session, f"queen.{session}"),
             from_agent="queen",
             msg_type="brief",
-            subject=f"Queen {session} brief — {now.strftime('%Y-%m-%d')}",
+            subject=f"Brick {session} brief — {now.strftime('%Y-%m-%d')}",
             payload={
                 "session":          session,
                 "health_status":    health.get("status"),
