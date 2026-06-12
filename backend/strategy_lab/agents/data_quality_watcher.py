@@ -23,7 +23,8 @@ SIGNAL_STALE_HOURS   = 6    # No signals from any bot in 6h → alert (non-weeke
 def _get_channel() -> tuple[str, str]:
     token = os.getenv("DISCORD_BOT_TOKEN", "")
     channel_id = (
-        os.getenv("DISCORD_CH_MONITORING", "")
+        os.getenv("DISCORD_CH_BMG_MONITORING", "")
+        or os.getenv("DISCORD_CH_MONITORING", "")
         or os.getenv("DISCORD_CH_DEV_LOG", "")
     )
     try:
@@ -184,5 +185,15 @@ def run_data_quality_check(db: Session) -> dict:
                          payload=result, priority=7)
     except Exception as exc:
         logger.debug("[dq_watcher] bus publish skipped: %s", exc)
+
+    # Proactive observation: any issues detected
+    try:
+        from agents.bus import observe as _obs
+        if has_issues:
+            _obs(db, agent_id="data_quality_watcher",
+                 content=f"Data quality degraded: {len(all_issues)} issue(s) detected. Feed reliability compromised — proposals may be based on stale data.",
+                 context={"issues": all_issues[:3]})
+    except Exception:
+        pass
 
     return result

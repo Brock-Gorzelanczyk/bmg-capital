@@ -110,10 +110,10 @@ def _get_discord_channel() -> tuple[str, str]:
         from app.config import settings
         token      = settings.discord_bot_token or ""
         channel_id = (
-            settings.discord_ch_dev_log
+            os.getenv("DISCORD_CH_QUEEN_BRIEFINGS", "")
             or os.getenv("QUEEN_BRIEF_CHANNEL_ID", "")
+            or settings.discord_ch_dev_log
             or os.getenv("DISCORD_CH_DEV_LOG", "")
-            or os.getenv("DISCORD_CH_SENTINEL_OPS", "")
         )
         return token, channel_id
     except Exception:

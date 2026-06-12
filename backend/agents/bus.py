@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
@@ -22,6 +23,84 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
+
+_AGENT_DISPLAY = {
+    "queen":                ("👑 Brick (PM)",           ""),
+    "researcher":           ("🔬 Researcher",            ""),
+    "risk_sentinel":        ("🛡️ Dick (CRO)",            ""),
+    "data_quality_watcher": ("📊 Data Quality",          ""),
+    "execution_auditor":    ("⚡ Execution Auditor",     ""),
+    "operations":           ("🏦 Operations",            ""),
+    "sentinel_devops":      ("🖥️ Sentinel DevOps",       ""),
+}
+
+_last_observe_ts: dict[str, datetime] = {}
+_OBSERVE_COOLDOWN_MINUTES = 15
+
+
+def _chat_webhook_url() -> str:
+    return os.getenv("DISCORD_WH_FUND_TEAM_CHAT", "").strip()
+
+
+def _agent_display(agent_id: str) -> tuple[str, str]:
+    return _AGENT_DISPLAY.get(agent_id, (agent_id.replace("_", " ").title(), ""))
+
+
+def _post_to_team_chat(from_agent: str, to_agent, content: str, msg_type: str, reply_to_content: str = "") -> None:
+    url = _chat_webhook_url()
+    if not url:
+        return
+    display_name, avatar_url = _agent_display(from_agent)
+
+    if to_agent and to_agent != from_agent:
+        to_display, _ = _agent_display(to_agent)
+        prefix = f"→ **{to_display}**  "
+    else:
+        prefix = ""
+
+    quote = ""
+    if reply_to_content:
+        trimmed = reply_to_content[:120].replace("\n", " ")
+        quote = f"> {trimmed}\n"
+
+    badge = {"query": "❓", "query_response": "💬", "observation": "👁️"}.get(msg_type, "📨")
+
+    full_text = f"{badge} {prefix}{quote}{content}"[:2000]
+
+    payload = {"username": display_name, "content": full_text}
+    if avatar_url:
+        payload["avatar_url"] = avatar_url
+
+    try:
+        import httpx as _hx
+        _hx.post(url, json=payload, timeout=5)
+    except Exception as exc:
+        logger.debug("[bus] team chat post failed: %s", exc)
+
+
+def observe(db: Session, *, agent_id: str, content: str, context: dict | None = None) -> None:
+    """Post an unsolicited observation. Throttled to 1 per agent per 15 min."""
+    now = datetime.now(timezone.utc)
+    last = _last_observe_ts.get(agent_id)
+    if last and (now - last).total_seconds() < _OBSERVE_COOLDOWN_MINUTES * 60:
+        logger.debug("[bus] observe throttled for %s", agent_id)
+        return
+    _last_observe_ts[agent_id] = now
+
+    try:
+        publish(
+            db,
+            channel="agent_observations",
+            from_agent=agent_id,
+            msg_type="observation",
+            subject=content[:200],
+            payload={"content": content, "context": context or {}},
+            priority=3,
+        )
+    except Exception as exc:
+        logger.debug("[bus] observe bus publish failed: %s", exc)
+
+    _post_to_team_chat(agent_id, None, content, "observation")
 
 _CHANNEL = "bmg_agent_bus"   # Postgres NOTIFY channel name
 
@@ -82,6 +161,14 @@ def publish(
                 db.commit()
             except Exception:
                 pass  # SQLite / non-Postgres — pg_notify not available
+
+        # Mirror queries and responses to #fund-team-chat
+        if msg_type in ("query", "query_response"):
+            reply_content = ""
+            if msg_type == "query_response" and subject:
+                reply_content = subject.replace("Re: ", "", 1)
+            chat_content = subject or (json.dumps(payload)[:300] if payload else "")
+            _post_to_team_chat(from_agent, to_agent, chat_content, msg_type, reply_content)
 
         return msg_id
     except Exception as exc:

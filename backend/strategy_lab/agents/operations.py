@@ -222,4 +222,20 @@ def run_operations_reconciliation(db: Session) -> dict:
     except Exception as exc:
         logger.debug("[operations] bus publish skipped: %s", exc)
 
+    # Proactive observation: any stale positions or quarantine spikes
+    try:
+        from agents.bus import observe as _obs
+        stale = positions.get("stale_count", 0)
+        q_today = quarantine.get("quarantined_today", 0)
+        if stale > 0:
+            _obs(db, agent_id="operations",
+                 content=f"{stale} position(s) stale (open >{STALE_POSITION_DAYS}d). Manual review recommended before next capital rebalance.",
+                 context={"stale_count": stale})
+        elif q_today > 3:
+            _obs(db, agent_id="operations",
+                 content=f"Quarantine spike: {q_today} positions quarantined today. Possible data or execution anomaly.",
+                 context={"quarantined_today": q_today})
+    except Exception:
+        pass
+
     return result

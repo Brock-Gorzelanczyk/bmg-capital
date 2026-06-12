@@ -906,6 +906,23 @@ def run_migrations(engine: Engine) -> None:
             _ensure_bot_profiles_halt_columns(conn)
         except Exception as _e:
             logger.warning("_ensure_bot_profiles_halt_columns failed (non-fatal): %s", _e)
+        try:
+            _ensure_fund_team_chat_state_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_fund_team_chat_state_table failed (non-fatal): %s", _e)
+
+
+def _ensure_fund_team_chat_state_table(conn) -> None:
+    """Create key-value state table used by the intro conversation one-shot flag (idempotent)."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS fund_team_chat_state (
+            key    VARCHAR(80) PRIMARY KEY,
+            value  TEXT,
+            set_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.commit()
+    logger.info("Migration: fund_team_chat_state table ensured")
 
 
 def _ensure_bot_profiles_halt_columns(conn) -> None:

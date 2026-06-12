@@ -333,3 +333,48 @@ def force_agent_summary(agent_name: str, force: bool = False, db: Session = Depe
         raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found or does not support force summary")
     result = dispatch[agent_name]()
     return {"ok": True, "agent": agent_name, "result": result}
+
+
+@router.post("/observation/trigger")
+def trigger_observation(agent: str = "risk_sentinel", force: bool = False, db: Session = Depends(get_db)):
+    """Force an agent to post a test observation to #fund-team-chat."""
+    from agents.bus import observe as _obs
+    content_map = {
+        "risk_sentinel":        "Test observation from Dick (CRO) — fleet metrics nominal, watching for drawdown signals.",
+        "researcher":           "Test observation from Researcher — no high-conviction signals at this time, regime classification stable.",
+        "data_quality_watcher": "Test observation from Data Quality — all feeds reporting within normal latency bounds.",
+        "execution_auditor":    "Test observation from Execution Auditor — fill quality nominal, slippage within baseline.",
+        "operations":           "Test observation from Operations — reconciliation pass, no position mismatches detected.",
+    }
+    content = content_map.get(agent, f"Test observation from {agent}.")
+    _obs(db, agent_id=agent, content=content, context={"force": force})
+    return {"ok": True, "agent": agent, "content": content}
+
+
+@router.post("/cross-query/test")
+def test_cross_query(
+    from_agent: str = "risk_sentinel",
+    to_agent: str = "researcher",
+    db: Session = Depends(get_db),
+):
+    """Fire a test cross-agent query and wait for it to appear in #fund-team-chat."""
+    from agents.bus import ask_agent
+    msg_id = ask_agent(
+        db,
+        from_agent=from_agent,
+        to_agent=to_agent,
+        question=f"[TEST] {from_agent} → {to_agent}: What is the current regime classification and are there any bots showing edge degradation?",
+    )
+    return {"ok": True, "from": from_agent, "to": to_agent, "message_id": str(msg_id)}
+
+
+@router.post("/intro-conversation/run")
+def run_intro_conversation(force: bool = False, db: Session = Depends(get_db)):
+    """
+    Fire the one-time team intro sequence in #fund-team-chat.
+    7 agents post Claude-generated intros 30s apart, then Brick wraps.
+    Returns {"already_run": true} immediately if already completed (unless force=true).
+    """
+    from agents.intro_conversation import run_intro_conversation as _run
+    result = _run(db, force=force)
+    return result

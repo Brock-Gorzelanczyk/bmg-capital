@@ -384,4 +384,22 @@ def run_daily_research(db: Session) -> dict:
     except Exception as _de:
         logger.debug("[researcher] Discord digest post skipped: %s", _de)
 
+    # Proactive observation: surface any finding with high conviction
+    try:
+        from agents.bus import observe as _obs
+        strong = [i for i in ic_summary if i.get("status") == "strong"]
+        degrading = [i for i in ic_summary if i.get("status") == "degrading"]
+        if strong:
+            bots = ", ".join(i["bot"] for i in strong[:3])
+            _obs(db, agent_id="researcher",
+                 content=f"High-conviction signal: {bots} showing strong IC above threshold. Flagging for Brick's attention.",
+                 context={"strong_bots": [i["bot"] for i in strong]})
+        elif degrading:
+            bots = ", ".join(i["bot"] for i in degrading[:3])
+            _obs(db, agent_id="researcher",
+                 content=f"Edge degradation detected: {bots} IC falling below threshold. May warrant allocation review.",
+                 context={"degrading_bots": [i["bot"] for i in degrading]})
+    except Exception:
+        pass
+
     return result

@@ -46,3 +46,4 @@ AGENT_HEARTBEATS   = "agent_heartbeats"    # fleet liveness ticks (every 30s)
 # Standup / cross-agent
 STANDUP            = "standup"             # daily 7 AM standup summary from Queen
 AGENT_QUERIES      = "agent_queries"       # cross-agent query/response messages
+AGENT_OBSERVATIONS = "agent_observations"  # unsolicited agent observations

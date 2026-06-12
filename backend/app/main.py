@@ -235,6 +235,24 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_sentinel_loop())
     asyncio.create_task(_railway_watcher_loop())
 
+    # One-time intro conversation — fires if #fund-team-chat webhook is set and never run before
+    async def _maybe_run_intro():
+        import asyncio as _aio
+        await _aio.sleep(15)  # wait for scheduler + agents to settle
+        try:
+            from agents.intro_conversation import has_run_intro, run_intro_conversation as _run_intro
+            from app.dependencies import get_db as _get_db
+            _db = next(_get_db())
+            try:
+                if not has_run_intro(_db):
+                    logger.info("[startup] firing first-run intro conversation")
+                    _run_intro(_db)
+            finally:
+                _db.close()
+        except Exception as _exc:
+            logger.warning("[startup] intro conversation failed (non-fatal): %s", _exc)
+    asyncio.create_task(_maybe_run_intro())
+
     yield
 
     # Graceful shutdown

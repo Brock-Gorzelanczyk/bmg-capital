@@ -212,4 +212,15 @@ def run_execution_audit(db: Session) -> dict:
     except Exception as exc:
         logger.debug("[exec_auditor] bus publish skipped: %s", exc)
 
+    # Proactive observation: any elevated slippage
+    try:
+        from agents.bus import observe as _obs
+        avg_slip = stats.get("avg_slippage_bps", 0) or 0
+        if avg_slip > 10:
+            _obs(db, agent_id="execution_auditor",
+                 content=f"Slippage elevated: avg {avg_slip:.1f} bps across {stats.get('trade_count', 0)} trades. Watching for fill quality deterioration.",
+                 context={"avg_slippage_bps": avg_slip})
+    except Exception:
+        pass
+
     return result

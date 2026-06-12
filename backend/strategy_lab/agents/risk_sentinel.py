@@ -334,4 +334,16 @@ def run_risk_health_check(db: Session) -> dict:
     except Exception as exc:
         logger.debug("[risk_sentinel] bus publish skipped: %s", exc)
 
+    # Proactive observation: if any metric is within 20% of a threshold, observe
+    try:
+        from agents.bus import observe as _obs
+        fleet_pnl = summary.get("fleet_pnl_30d_pct", 0)
+        WARN_THRESHOLD = -0.4  # 80% of the -0.5% alert threshold
+        if fleet_pnl <= WARN_THRESHOLD and level == "GREEN":
+            _obs(db, agent_id="risk_sentinel",
+                 content=f"Fleet P&L approaching threshold: {fleet_pnl:.2f}% (alert at -0.5%). No action needed yet — monitoring.",
+                 context={"fleet_pnl_30d_pct": fleet_pnl})
+    except Exception:
+        pass
+
     return summary
