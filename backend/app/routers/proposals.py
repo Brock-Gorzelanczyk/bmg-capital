@@ -89,19 +89,29 @@ def get_proposal_stats(db: Session = Depends(get_db)):
 
 
 @router.post("/generate-test")
-def generate_test_proposal(db: Session = Depends(get_db)):
+def generate_test_proposal(
+    db: Session = Depends(get_db),
+    force_synthetic: bool = False,
+):
     """
-    Manually trigger one proposal generation cycle for testing.
-    Runs the same logic as the morning Queen session proposal step.
+    Manually trigger one proposal generation cycle.
+
+    ?force_synthetic=true — bypasses IC threshold and posts a hardcoded test
+    proposal immediately, so the full Discord→reaction→executor path can be
+    verified without waiting for a real bot to drift into a proposal window.
     """
     try:
         from strategy_lab.agents.queen import _generate_proposals
         from strategy_lab.agents.researcher import run_daily_research
         from strategy_lab.agents.strategy_monitor import run_strategy_health_check
 
-        health   = run_strategy_health_check(db)
-        research = run_daily_research(db)
-        results  = _generate_proposals(db, research=research, health=health)
+        if force_synthetic:
+            results = _generate_proposals(db, research={}, health={}, synthetic=True)
+        else:
+            health   = run_strategy_health_check(db)
+            research = run_daily_research(db)
+            results  = _generate_proposals(db, research=research, health=health)
+
         return {"ok": True, "proposals_generated": len(results), "proposals": results}
     except Exception as exc:
         logger.warning("[proposals] test generation failed: %s", exc)

@@ -647,11 +647,78 @@ def _post_proposal(channel_id: str, token: str, embed: dict) -> str | None:
         return None
 
 
-def _generate_proposals(db: Session, *, research: dict, health: dict) -> list[dict]:
+def _generate_synthetic_proposal(db: Session) -> list[dict]:
+    """Post one hardcoded test proposal so the full Discord→reaction→executor path can be verified."""
+    allocations = _get_bot_allocations(db)
+    token, proposals_ch = _get_proposals_channel()
+    is_fallback = _is_proposals_fallback()
+
+    # Pick the first available bot; fall back to a placeholder name if none configured.
+    bot = next(iter(allocations), "crypto_quant_aggressive")
+    current_pct = allocations.get(bot, 10.0)
+    proposed_pct = round(min(85.0, current_pct + 2.0), 2)
+    direction = "increase"
+    ic_val = 0.072  # synthetic IC above strong threshold
+    regime_name = "bull_crypto"
+
+    finding_ids = _get_recent_finding_id(db)
+    proposal_id = _next_proposal_id(db)
+
+    proposed_change = {
+        "type": "allocation_change",
+        "bot": bot,
+        "field": "capital_pct",
+        "current_value": current_pct,
+        "proposed_value": proposed_pct,
+        "delta": round(proposed_pct - current_pct, 2),
+        "synthetic": True,
+    }
+    rationale = f"[SYNTHETIC TEST] IC={ic_val:.3f} strong; regime={regime_name}; force_synthetic=true"
+    _write_proposal_audit(db, proposal_id, "allocation_change_increase", proposed_change, rationale, finding_ids)
+
+    embed = _build_proposal_embed(
+        proposal_id, bot, direction, current_pct, proposed_pct,
+        ic_val, regime_name, finding_ids, is_fallback,
+    )
+    message_id = _post_proposal(proposals_ch, token, embed)
+
+    if message_id:
+        try:
+            db.execute(
+                text("""
+                    UPDATE proposal_audit
+                    SET posted_message_id = :mid, posted_channel_id = :cid
+                    WHERE proposal_id = :pid
+                """),
+                {"mid": message_id, "cid": proposals_ch, "pid": proposal_id},
+            )
+            db.commit()
+        except Exception as exc:
+            logger.warning("[queen] synthetic proposal message_id update failed: %s", exc)
+
+    result = {
+        "proposal_id": proposal_id,
+        "bot": bot,
+        "direction": direction,
+        "current_pct": current_pct,
+        "proposed_pct": proposed_pct,
+        "synthetic": True,
+        "posted": message_id is not None,
+        "channel": proposals_ch,
+    }
+    logger.info("[queen] synthetic proposal posted: %s", proposal_id)
+    return [result]
+
+
+def _generate_proposals(db: Session, *, research: dict, health: dict, synthetic: bool = False) -> list[dict]:
     """
     Generate Tier B proposals based on current research findings.
     Called after the morning briefing. Returns list of proposal dicts.
+    Pass synthetic=True to bypass IC threshold and post a hardcoded test proposal.
     """
+    if synthetic:
+        return _generate_synthetic_proposal(db)
+
     now = datetime.now(timezone.utc)
     ic_summary   = research.get("signal_ic", [])
     regime       = research.get("regime", {})
