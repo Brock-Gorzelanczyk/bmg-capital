@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.db.client import get_db
+from app.dependencies import get_db
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
