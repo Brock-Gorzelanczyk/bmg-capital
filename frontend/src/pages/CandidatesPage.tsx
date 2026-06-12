@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -154,6 +154,13 @@ export default function CandidatesPage() {
   });
 
   const candidates = data?.candidates ?? [];
+
+  useEffect(() => {
+    if (!isLoading && !error && candidates.length === 0 && !syncMut.isPending) {
+      syncMut.mutate();
+    }
+  }, [isLoading]);
+
   const filtered = filter === "ALL" ? candidates : candidates.filter((c) => c.state === filter);
 
   const stateCounts = candidates.reduce<Record<string, number>>((acc, c) => {

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, TrendingDown, Layers, Activity } from "lucide-react";
-import { getStrategyLabPortfolio, getPortfolios, getOpenPositions } from "@/api/bots";
+import { getStrategyLabPortfolio, getPortfolios } from "@/api/bots";
 import { getDashboardV2 } from "@/api/dashboard";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import AllocationDonut from "@/components/ui/AllocationDonut";
@@ -90,7 +90,7 @@ export default function Portfolio() {
     retry: 0,
   });
 
-  const { data: agg } = useQuery({
+  const { data: agg, isLoading: aggLoading } = useQuery({
     queryKey: ["strategy-lab-portfolio"],
     queryFn: getStrategyLabPortfolio,
     staleTime: 30_000,
@@ -102,13 +102,6 @@ export default function Portfolio() {
     staleTime: 30_000,
   });
 
-  const { data: openPosData } = useQuery({
-    queryKey: ["open-positions"],
-    queryFn: getOpenPositions,
-    staleTime: 30_000,
-    retry: 0,
-  });
-
   // Use dashboardV2 for headline numbers — it's the canonical live source
   const headlineLoading = dashLoading;
   const totalValue = dash?.portfolio?.total_value_cents ?? agg?.total_value_cents ?? 0;
@@ -116,7 +109,10 @@ export default function Portfolio() {
   const todayPct = dash?.portfolio?.today_pnl_pct ?? agg?.today_pnl_pct ?? 0;
   const ret30 = dash?.portfolio?.return_30d_pct ?? agg?.return_30d_pct ?? 0;
   const retAll = agg?.return_all_time_pct ?? 0;
-  const openPos = agg?.total_open_positions ?? openPosData?.position_count ?? (openPosData?.positions?.length ?? 0);
+  const sleeveOpenPos = dash?.sleeves
+    ? dash.sleeves.stocks.open_positions + dash.sleeves.crypto.open_positions + dash.sleeves.options.open_positions
+    : null;
+  const openPos = sleeveOpenPos ?? agg?.total_open_positions ?? 0;
   const isUp = todayPnl >= 0;
   const loading = portsLoading;
 
@@ -152,12 +148,13 @@ export default function Portfolio() {
           </div>
         </div>
 
-        {/* Allocation donut — deployed by asset class vs cash */}
+        {/* Allocation donut — capital split by asset class */}
         {totalValue > 0 && (() => {
           const byClass: Record<string, number> = {};
-          for (const pos of openPosData?.positions ?? []) {
-            const cls = pos.asset_class ?? "other";
-            byClass[cls] = (byClass[cls] ?? 0) + Math.round((pos.current_value_usd ?? 0) * 100);
+          if (dash?.sleeves) {
+            if (dash.sleeves.stocks.value_cents > 0)  byClass["stocks"]  = dash.sleeves.stocks.value_cents;
+            if (dash.sleeves.crypto.value_cents > 0)  byClass["crypto"]  = dash.sleeves.crypto.value_cents;
+            if (dash.sleeves.options.value_cents > 0) byClass["options"] = dash.sleeves.options.value_cents;
           }
           const deployedCents = Object.values(byClass).reduce((s, v) => s + v, 0);
           const cashCents = Math.max(0, totalValue - deployedCents);
@@ -194,8 +191,8 @@ export default function Portfolio() {
           />
           <StatCard
             label="All-Time Return"
-            value={`${retAll >= 0 ? "+" : ""}${retAll.toFixed(2)}%`}
-            positive={retAll >= 0}
+            value={aggLoading ? "—" : `${retAll >= 0 ? "+" : ""}${retAll.toFixed(2)}%`}
+            positive={aggLoading ? undefined : retAll >= 0}
           />
         </div>
 

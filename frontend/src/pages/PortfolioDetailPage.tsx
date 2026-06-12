@@ -66,8 +66,8 @@ const BOT_META: Record<string, { displayName: string; description: string }> = {
   stock_lt:           { displayName: "Stock Long-Term",     description: "S&P 500 factor model, monthly rebalance" },
   crypto_swing:       { displayName: "Crypto Swing",        description: "Top 20 crypto by mcap, 1–30 day holds" },
   crypto_day:         { displayName: "Crypto Day",          description: "BTC/ETH/SOL intraday momentum, 8h force-close" },
-  crypto_lt:          { displayName: "Crypto L-T DCA",      description: "BTC/ETH + majors, weekly DCA & monthly rebalance" },
-  crypto_onchain:     { displayName: "Crypto OnChain",      description: "On-chain flow — large wallet moves, DEX volume anomalies, L2 bridge activity" },
+  crypto_lt:          { displayName: "Crypto Long-Term",     description: "BTC/ETH + majors, weekly DCA & monthly rebalance" },
+  crypto_onchain:     { displayName: "Crypto On-Chain",     description: "On-chain flow — large wallet moves, DEX volume anomalies, L2 bridge activity" },
   options_income:     { displayName: "Options Income",      description: "Wheel, covered calls, CSPs, iron condors" },
   options_directional:{ displayName: "Options Directional", description: "Credit spreads, debit spreads, LEAPS" },
   crypto_quant_aggressive:   { displayName: "Quant Aggressive",    description: "8-strategy quant stack, 5m bars, 20-coin universe" },
@@ -95,6 +95,7 @@ function BotCard({
   const qc = useQueryClient();
   const meta = BOT_META[profile.name];
   const isEnabled = allocation?.enabled ?? false;
+  const isAdminLocked = allocation?.paused_reason === "admin_lock" || allocation?.paused_reason === "health_halt";
   const ret30 = stats?.return_30d_pct ?? 0;
   const todayPnl = stats?.today_pnl ?? 0;
   const openPositions = stats?.open_positions ?? 0;
@@ -133,11 +134,13 @@ function BotCard({
         </div>
         <span className={cn(
           "text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ml-2",
-          isEnabled
-            ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
-            : "bg-zinc-800 text-zinc-500 border-zinc-700"
+          isAdminLocked
+            ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+            : isEnabled
+              ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+              : "bg-zinc-800 text-zinc-500 border-zinc-700"
         )}>
-          {isEnabled ? "ACTIVE" : "DISABLED"}
+          {isAdminLocked ? "frozen · historical" : isEnabled ? "ACTIVE" : "DISABLED"}
         </span>
       </div>
 

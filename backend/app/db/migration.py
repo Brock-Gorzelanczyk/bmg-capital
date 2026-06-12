@@ -717,6 +717,10 @@ def run_migrations(engine: Engine) -> None:
             _seed_initial_bot_performance_stats(conn)
         except Exception as _e:
             logger.warning("_seed_initial_bot_performance_stats failed (non-fatal): %s", _e)
+        try:
+            _backfill_admin_lock_paused_reason(conn)
+        except Exception as _e:
+            logger.warning("_backfill_admin_lock_paused_reason failed (non-fatal): %s", _e)
 
 
 def _create_safety_layer_tables(conn) -> None:
@@ -2173,3 +2177,26 @@ def _quarantine_cooldown_dupe_positions(conn) -> None:
         _record_migration(conn, MIGRATION_NAME)
     except Exception as exc:
         logger.warning("_quarantine_cooldown_dupe_positions failed: %s", exc)
+
+
+def _backfill_admin_lock_paused_reason(conn) -> None:
+    """Set paused_reason='admin_lock' on allocations disabled before the paused_reason
+    sync was added. Without this, _ensure_portfolios_for_user's auto-re-enable guard
+    (which skips rows where paused_reason IN {'health_halt','admin_lock'}) would keep
+    re-enabling admin-disabled bots on every portfolio load.
+    """
+    MIGRATION_NAME = "backfill_admin_lock_paused_reason_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        result = conn.execute(text("""
+            UPDATE bot_allocations
+            SET paused_reason = 'admin_lock'
+            WHERE enabled = 0
+              AND (paused_reason IS NULL OR paused_reason = '')
+        """))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_backfill_admin_lock_paused_reason: updated %d rows", result.rowcount)
+    except Exception as exc:
+        logger.warning("_backfill_admin_lock_paused_reason failed: %s", exc)

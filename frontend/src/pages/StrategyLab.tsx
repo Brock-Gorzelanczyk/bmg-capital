@@ -957,6 +957,7 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
 
   const isEnabled = allocation?.enabled ?? false;
   const isComingSoon = allocation?.paused_reason === "coming_soon";
+  const isAdminLocked = allocation?.paused_reason === "admin_lock" || allocation?.paused_reason === "health_halt";
   const isOnWaitlist = allocation?.go_live_requested ?? false;
 
   const pnlPositive = (stats?.today_pnl ?? 0) >= 0;
@@ -994,12 +995,14 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
             "text-xs font-semibold px-2 py-0.5 rounded-full font-ui-t",
             isComingSoon
               ? "bg-purple-500/15 text-purple-400 border border-purple-500/30"
-              : isEnabled
-                ? "bg-t-green/15 text-t-green border border-t-green/30"
-                : "bg-t-bg1 text-t-dim border border-t-dim"
+              : isAdminLocked
+                ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                : isEnabled
+                  ? "bg-t-green/15 text-t-green border border-t-green/30"
+                  : "bg-t-bg1 text-t-dim border border-t-dim"
           )}
         >
-          {isComingSoon ? "COMING SOON" : isEnabled ? "ACTIVE" : "DISABLED"}
+          {isComingSoon ? "COMING SOON" : isAdminLocked ? "frozen · historical" : isEnabled ? "ACTIVE" : "DISABLED"}
         </span>
       </div>
 

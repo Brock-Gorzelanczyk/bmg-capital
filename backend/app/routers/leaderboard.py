@@ -142,6 +142,7 @@ def get_strategy_leaderboard(
             "allocation_id": alloc.id,
             "tier": alloc.tier or "T0",
             "enabled": alloc.enabled,
+            "paused_reason": alloc.paused_reason,
             "starting_capital": round(starting / 100, 2),
             "current_equity": current_equity_usd,
             "all_time_pnl_usd": all_time_pnl_usd,

@@ -7,6 +7,22 @@ import { BracketFrame, SectionLabel, BMGCard } from "@/components/design";
 
 const ADMIN_EMAIL = "32bgorzelanczyk@gmail.com";
 
+const BOT_LABELS: Record<string, string> = {
+  stock_swing:                 "Stock Swing",
+  stock_day:                   "Stock Day",
+  stock_lt:                    "Stock Long-Term",
+  crypto_swing:                "Crypto Swing",
+  crypto_day:                  "Crypto Day",
+  crypto_lt:                   "Crypto Long-Term",
+  crypto_onchain:              "Crypto On-Chain",
+  crypto_quant_aggressive:     "Quant Aggressive",
+  crypto_quant_mean_reversion: "Quant Mean Rev",
+  crypto_quant_scalper:        "Quant Scalper",
+  options_income:              "Options Income",
+  options_directional:         "Options Directional",
+  crypto_meanrev_2163:         "Mean Rev 2163",
+};
+
 const CATEGORY_COLORS: Record<string, string> = {
   quant:   "bg-violet-500/20 text-violet-300 border-violet-500/30",
   crypto:  "bg-amber-500/20 text-amber-300 border-amber-500/30",
@@ -21,7 +37,7 @@ function StatusPill({ enabled, paused }: { enabled: boolean; paused: boolean }) 
 }
 
 function BotCard({ bot }: { bot: BotListItem }) {
-  const label = bot.bot_id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const label = BOT_LABELS[bot.bot_id] ?? bot.bot_id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   return (
     <BMGCard padding="sm" className="flex flex-col gap-3 hover:border-[var(--bmg-green)]/50 transition-colors">
       <div className="flex items-start justify-between gap-2">
