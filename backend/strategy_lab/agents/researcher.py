@@ -195,6 +195,15 @@ def run_daily_research(db: Session) -> dict:
     except Exception:
         pass
 
+    # Load prior observations — injected into research context for continuity
+    try:
+        from agents.memory import get_context_for_research as _ctx
+        _mem_context = _ctx(db)
+        if _mem_context:
+            logger.info("[researcher] loaded memory context (%d chars)", len(_mem_context))
+    except Exception:
+        _mem_context = ""
+
     regime = _regime_from_db(db)
 
     bot_ics: dict[str, Optional[float]] = {b: _compute_bot_ic(db, b) for b in ACTIVE_BOTS}
@@ -228,6 +237,29 @@ def run_daily_research(db: Session) -> dict:
         regime["name"], len([i for i in ic_summary if i["ic"] is not None]),
         len(candidates), len(recommendations),
     )
+
+    # Persist observations for future runs
+    try:
+        from agents.memory import save_memory as _sm
+        _sm(db, agent_id="researcher", memory_type="regime_observation",
+            key=f"regime_{datetime.now(timezone.utc).date().isoformat()}",
+            value={"name": regime["name"], "vix": regime.get("vix_value"),
+                   "trend": regime.get("trend_regime"), "vix_regime": regime.get("vix_regime")},
+            ttl_days=90)
+        degrading = [i["bot"] for i in ic_summary if i.get("status") == "degrading"]
+        strong    = [i["bot"] for i in ic_summary if i.get("status") == "strong"]
+        if degrading:
+            _sm(db, agent_id="researcher", memory_type="bot_observation",
+                key="degrading_bots", value=degrading, ttl_days=14)
+        if strong:
+            _sm(db, agent_id="researcher", memory_type="bot_observation",
+                key="strong_bots", value=strong, ttl_days=14)
+        if candidates:
+            top = [c.get("symbol", "") for c in candidates[:5]]
+            _sm(db, agent_id="researcher", memory_type="candidate_note",
+                key="top_candidates", value=top, ttl_days=7)
+    except Exception as _me:
+        logger.debug("[researcher] memory save skipped: %s", _me)
 
     try:
         from agents.bus import publish as _bus_publish

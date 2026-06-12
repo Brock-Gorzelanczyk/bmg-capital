@@ -663,6 +663,38 @@ def _ensure_agent_bus_table(conn) -> None:
         logger.warning("_ensure_agent_bus_table failed: %s", exc)
 
 
+def _ensure_agent_memory_table(conn) -> None:
+    """Create the agent_memory persistent key/value store (idempotent)."""
+    MIGRATION_NAME = "agent_memory.table_v1_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS agent_memory (
+                id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+                agent_id    VARCHAR  NOT NULL,
+                memory_type VARCHAR  NOT NULL,
+                key         VARCHAR  NOT NULL,
+                value       TEXT     NOT NULL DEFAULT '{}',
+                created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                expires_at  DATETIME
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_agent_memory_agent ON agent_memory(agent_id)"
+        ))
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_memory_key "
+            "ON agent_memory(agent_id, memory_type, key)"
+        ))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration: agent_memory table created")
+    except Exception as exc:
+        logger.warning("_ensure_agent_memory_table failed: %s", exc)
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -770,6 +802,10 @@ def run_migrations(engine: Engine) -> None:
             _ensure_agent_bus_table(conn)
         except Exception as _e:
             logger.warning("_ensure_agent_bus_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_agent_memory_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_agent_memory_table failed (non-fatal): %s", _e)
 
 
 def _create_safety_layer_tables(conn) -> None:

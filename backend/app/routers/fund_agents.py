@@ -21,7 +21,6 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 _NOT_BUILT = {
     "quant_researcher": 6,
     "macro_strategist": 6,
-    "operations": 6,
 }
 
 # Map agent bus from_agent values to role IDs
@@ -194,6 +193,7 @@ def get_agents_status(db: Session = Depends(get_db)):
     risk_hb_status,      risk_hb_ts      = _get_heartbeat_status(db, "risk_sentinel")
     dq_hb_status,        dq_hb_ts        = _get_heartbeat_status(db, "data_quality_watcher")
     exec_hb_status,      exec_hb_ts      = _get_heartbeat_status(db, "execution_auditor")
+    ops_hb_status,       ops_hb_ts       = _get_heartbeat_status(db, "operations")
 
     queen_activity = _get_agent_activity(db, "queen")
     queen_stats = _queen_today_stats(db)
@@ -202,6 +202,7 @@ def get_agents_status(db: Session = Depends(get_db)):
     risk_today = _get_agent_today_count(db, "risk_sentinel")
     dq_today   = _get_agent_today_count(db, "data_quality_watcher")
     exec_today = _get_agent_today_count(db, "execution_auditor")
+    ops_today  = _get_agent_today_count(db, "operations")
 
     agents = [
         {
@@ -266,6 +267,13 @@ def get_agents_status(db: Session = Depends(get_db)):
             "status": exec_hb_status,
             "last_activity": exec_hb_ts,
             "today": {"audits_run": exec_today, "api_cost_usd": 0.0, "api_budget_usd": 0.0},
+            "recent_activity": [],
+        },
+        {
+            "id": "operations",
+            "status": ops_hb_status,
+            "last_activity": ops_hb_ts,
+            "today": {"reconciliations_run": ops_today, "api_cost_usd": 0.0, "api_budget_usd": 0.0},
             "recent_activity": [],
         },
         *[

@@ -928,6 +928,29 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job execution_auditor (5 PM ET Mon-Fri)")
 
+    # Operations: 6 PM ET Mon-Fri — back-office reconciliation after execution audit
+    def _run_operations():
+        from app.db.session import SessionLocal
+        from strategy_lab.agents.operations import run_operations_reconciliation
+        db = SessionLocal()
+        try:
+            run_operations_reconciliation(db)
+        except Exception as exc:
+            logger.error("[operations] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_operations,
+        CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=ET),
+        id="operations",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job operations (6 PM ET Mon-Fri)")
+
     # ------------------------------------------------------------------
     # Fleet heartbeat: every 30s — keeps /fund status dashboard live.
     # Publishes a lightweight "alive" tick to agent_heartbeats for each
@@ -944,6 +967,7 @@ def setup_bot_scheduler(scheduler) -> None:
             heartbeat(db, agent_id="risk_sentinel")
             heartbeat(db, agent_id="data_quality_watcher")
             heartbeat(db, agent_id="execution_auditor")
+            heartbeat(db, agent_id="operations")
         except Exception as exc:
             logger.debug("[fleet_heartbeat] failed: %s", exc)
         finally:
