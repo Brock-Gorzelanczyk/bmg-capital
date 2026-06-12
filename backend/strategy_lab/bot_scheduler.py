@@ -785,6 +785,45 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
 
+    # ------------------------------------------------------------------
+    # Queen Agent — 4 posts per day to #dev-log
+    #   morning  07:00 AM ET  Intelligence brief (regime, IC, directives)
+    #   midday   12:00 PM ET  Intraday pulse (P&L so far, signals)
+    #   close    04:30 PM ET  EOD report (full day P&L, winners/losers)
+    #   evening  09:00 PM ET  Crypto/overnight watch (runs daily, covers crypto)
+    # ------------------------------------------------------------------
+    def _make_queen_job(session_name: str):
+        def _job():
+            from app.db.session import SessionLocal
+            from strategy_lab.agents.queen import run_queen_daily
+            db = SessionLocal()
+            try:
+                run_queen_daily(db, session=session_name)
+            except Exception as exc:
+                logger.error("[queen-%s] job failed: %s", session_name, exc)
+            finally:
+                db.close()
+        _job.__name__ = f"_queen_{session_name}"
+        return _job
+
+    _queen_schedules = [
+        ("morning", dict(day_of_week="mon-fri", hour=7,  minute=0,  timezone=ET)),
+        ("midday",  dict(day_of_week="mon-fri", hour=12, minute=0,  timezone=ET)),
+        ("close",   dict(day_of_week="mon-fri", hour=16, minute=30, timezone=ET)),
+        ("evening", dict(hour=21, minute=0, timezone=ET)),
+    ]
+    for _session, _cron_kwargs in _queen_schedules:
+        scheduler.add_job(
+            _make_queen_job(_session),
+            CronTrigger(**_cron_kwargs),
+            id=f"queen_{_session}",
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=1800,
+            coalesce=True,
+        )
+        logger.warning("[startup-trace] registered job queen_%s", _session)
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
@@ -792,5 +831,6 @@ def setup_bot_scheduler(scheduler) -> None:
         "options_income options_directional position_monitor dead_mans_switch "
         "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan "
         "strategy_forge_scan signal_explain_pregen "
-        "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp"
+        "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp "
+        "queen_morning queen_midday queen_close queen_evening"
     )

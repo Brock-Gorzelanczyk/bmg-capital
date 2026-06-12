@@ -53,6 +53,14 @@ def _fmt_pnl(cents: int) -> str:
     return f"{sign}${abs(usd):,.2f}"
 
 
+def _fmt_usd(val: float) -> str:
+    if val >= 1_000_000:
+        return f"${val / 1_000_000:.2f}M"
+    if val >= 1_000:
+        return f"${val / 1_000:.1f}k"
+    return f"${val:,.2f}"
+
+
 def _post_embed(channel_id: str, token: str, embed: dict) -> bool:
     if not channel_id or not token:
         return False
@@ -148,14 +156,14 @@ def _build_morning_embed(health: dict, research: dict, now: datetime) -> dict:
     alp        = health.get("alpaca", {})
     alp_val    = f"**{alp.get('status','?')}**"
     if alp.get("equity_usd") is not None:
-        alp_val += f" | equity ${alp['equity_usd']:,.0f} | BP ${alp.get('buying_power_usd',0):,.0f}"
+        alp_val += f" | equity {_fmt_usd(alp['equity_usd'])} | BP {_fmt_usd(alp.get('buying_power_usd', 0))}"
     alerts = health.get("alerts", [])
     fields = [
-        {"name": f"{s_icon} System Status", "value": status,                "inline": True},
-        {"name": "Market Regime",           "value": _regime_line(research), "inline": False},
-        {"name": "Bot Execution",           "value": _bot_summary(health),   "inline": False},
-        {"name": "Signals",                 "value": _signal_line(health),   "inline": False},
-        {"name": "Alpaca Account",          "value": alp_val,                "inline": False},
+        {"name": f"{s_icon} System Status",   "value": status,                "inline": True},
+        {"name": "Market Regime",             "value": _regime_line(research), "inline": False},
+        {"name": "Bot Execution",             "value": _bot_summary(health),   "inline": False},
+        {"name": "Signals",                   "value": _signal_line(health),   "inline": False},
+        {"name": "Alpaca (stocks sleeve)",    "value": alp_val,                "inline": False},
         {"name": "Signal IC Health",        "value": ic_val,                 "inline": False},
         {"name": "WFA Pipeline",            "value": cand_val,               "inline": False},
         {"name": "Research Directives",     "value": recs_val,               "inline": False},
