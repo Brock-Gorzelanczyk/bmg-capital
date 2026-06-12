@@ -356,6 +356,12 @@ def enable_bot(
 ):
     _require_bot(bot_id)
     _write_override(db, bot_id, "enabled", True, admin.email)
+    # Also sync alloc.enabled so all downstream endpoints see correct state
+    from app.db.models.bots import BotAllocation, BotProfile
+    bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
+    if bp:
+        db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({"enabled": True})
+        db.commit()
     return {"ok": True, "bot_id": bot_id, "enabled": True}
 
 
@@ -367,6 +373,12 @@ def disable_bot(
 ):
     _require_bot(bot_id)
     _write_override(db, bot_id, "enabled", False, admin.email)
+    # Also sync alloc.enabled so all downstream endpoints see correct state
+    from app.db.models.bots import BotAllocation, BotProfile
+    bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
+    if bp:
+        db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({"enabled": False})
+        db.commit()
     return {"ok": True, "bot_id": bot_id, "enabled": False}
 
 

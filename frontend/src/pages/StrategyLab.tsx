@@ -19,6 +19,7 @@ import {
   setupPortfolios,
   getPendingReviews,
   getStrategyLabPortfolio,
+  getStrategyLabCandidates,
   getOpenPositions,
   runBotNow,
   type BotListItem,
@@ -137,6 +138,15 @@ const CANDIDATE_META = [
     reference: "Asness, Frazzini & Pedersen (2019) QMJ",
     expectedSharpe: "0.7–1.5",
     description: "Monthly rebalance into top-25 stocks ranked by QMJ quality (SimFin), 12-1M momentum, and low beta. Flattens to cash when credit spreads are red.",
+  },
+  {
+    id: "options_iv_premium_filter",
+    name: "Options IV Premium Filter",
+    assetClass: "equity" as const,
+    style: "short_volatility" as const,
+    reference: "Israelov & Nielsen (2014)",
+    expectedSharpe: "0.7–1.1",
+    description: "Sells cash-secured puts or covered calls only when IV Rank ≥ 50. Captures the volatility risk premium with an IVR gate to avoid selling into low-vol regimes.",
   },
 ];
 
@@ -1363,6 +1373,14 @@ function CandidateCard({ c }: { c: CandidateEntry }) {
 }
 
 function CandidatesSection() {
+  const { data: candidatesData } = useQuery({
+    queryKey: ["strategy-lab-candidates"],
+    queryFn: getStrategyLabCandidates,
+    staleTime: 300_000,
+    retry: 0,
+  });
+  const incubationCount = candidatesData?.candidates?.length ?? CANDIDATE_META.length;
+
   return (
     <div>
       {/* Section header */}
@@ -1374,7 +1392,7 @@ function CandidatesSection() {
         <div className="flex-1 h-px border-t border-dashed border-t-dim" />
       </div>
       <p className="text-xs text-t-gdim mb-4 font-ui-t">
-        {CANDIDATE_META.length} strategies in incubation. Tracked in paper mode only.
+        {incubationCount} strategies in incubation. Tracked in paper mode only.
         Manual graduation required to promote to live trading.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

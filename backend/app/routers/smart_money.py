@@ -17,7 +17,7 @@ _last_congress_refresh: Optional[datetime] = None
 
 
 @router.get("/congress")
-async def get_congress_trades(
+def get_congress_trades(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     ticker: Optional[str] = Query(None),
@@ -53,7 +53,7 @@ async def get_congress_trades(
 
 
 @router.get("/summary")
-async def get_summary(
+def get_summary(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):

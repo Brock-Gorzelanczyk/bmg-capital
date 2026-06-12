@@ -73,6 +73,7 @@ const BOT_META: Record<string, { displayName: string; description: string }> = {
   crypto_quant_aggressive:   { displayName: "Quant Aggressive",    description: "8-strategy quant stack, 5m bars, 20-coin universe" },
   crypto_quant_scalper:      { displayName: "Quant Scalper",       description: "1m scalping, 5-strategy ensemble, liquid majors only" },
   crypto_quant_mean_reversion: { displayName: "Quant Mean Reversion", description: "5m mean-reversion, 6-strategy fade stack, mid-cap alts" },
+  crypto_meanrev_2163:         { displayName: "Mean Rev 2163",        description: "Experimental mean-reversion variant, paper-only deployment" },
 };
 
 function resolveDisplayName(name: string, fromApi?: string): string {
@@ -216,9 +217,9 @@ function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<
   const stats = [
     { label: "Starting Capital", value: `$${startingUsd.toLocaleString()}` },
     { label: "Current Value",    value: `$${currentUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { label: "All-Time P&L",     value: `${isPositive ? "+" : ""}$${Math.abs(pnlUsd).toFixed(2)}`, positive: isPositive, hasSign: true },
-    { label: "All-Time Return",  value: `${isPositive ? "+" : ""}${portfolio.pnl_pct.toFixed(2)}%`, positive: isPositive, hasSign: true },
-    { label: "Today P&L",        value: `${todayPositive ? "+" : ""}$${Math.abs(todayPnlUsd).toFixed(2)}`, positive: todayPositive, hasSign: true },
+    { label: "All-Time P&L",     value: `${isPositive ? "+" : "-"}$${Math.abs(pnlUsd).toFixed(2)}`, positive: isPositive, hasSign: true },
+    { label: "All-Time Return",  value: `${isPositive ? "+" : "-"}${Math.abs(portfolio.pnl_pct).toFixed(2)}%`, positive: isPositive, hasSign: true },
+    { label: "Today P&L",        value: `${todayPositive ? "+" : "-"}$${Math.abs(todayPnlUsd).toFixed(2)}`, positive: todayPositive, hasSign: true },
     { label: "Active Bots",      value: `${portfolio.bots.filter((b: any) => b.allocation?.enabled).length} / ${portfolio.bots.length}` },
   ];
 

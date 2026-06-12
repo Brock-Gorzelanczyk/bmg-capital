@@ -144,7 +144,6 @@ def get_open_positions(
             BotPosition.quarantined_at.is_(None),
         )
         .order_by(BotPosition.opened_at.desc())
-        .limit(50)
         .all()
     )
 

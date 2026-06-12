@@ -626,6 +626,9 @@ export const getStrategyLabPortfolio = (): Promise<PortfolioData> =>
       };
     });
 
+export const getStrategyLabCandidates = (): Promise<{ candidates: Array<{ file: string; name: string }> }> =>
+  client.get("/strategy-lab/candidates").then((r) => r.data).catch(() => ({ candidates: [] }));
+
 export interface TradeDetail {
   trade_id: number;
   position_id: number | null;

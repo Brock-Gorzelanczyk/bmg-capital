@@ -42,7 +42,7 @@ class CandidateBacktestBody(BaseModel):
 
 
 @router.get("/status")
-async def backtest_status(current_user: User = Depends(get_current_user)):
+def backtest_status(current_user: User = Depends(get_current_user)):
     """Return whether a backtest is running and when the last one completed."""
     cache = load_cache()
     return {
@@ -100,7 +100,7 @@ async def trigger_backtest(
 
 
 @router.get("/results")
-async def backtest_results(current_user: User = Depends(get_current_user)):
+def backtest_results(current_user: User = Depends(get_current_user)):
     """Return summary metrics for all strategies from the last completed backtest."""
     cache = load_cache()
     if not cache:
@@ -126,7 +126,7 @@ async def backtest_results(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/results/{strategy_key}")
-async def backtest_detail(
+def backtest_detail(
     strategy_key: str,
     current_user: User = Depends(get_current_user),
 ):

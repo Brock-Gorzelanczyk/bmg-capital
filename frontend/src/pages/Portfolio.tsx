@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, TrendingDown, Layers, Activity } from "lucide-react";
 import { getStrategyLabPortfolio, getPortfolios, getOpenPositions } from "@/api/bots";
+import { getDashboardV2 } from "@/api/dashboard";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import AllocationDonut from "@/components/ui/AllocationDonut";
 
@@ -82,7 +83,14 @@ function BotRow({ bot }: { bot: any }) {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function Portfolio() {
-  const { data: agg, isLoading: aggLoading } = useQuery({
+  const { data: dash, isLoading: dashLoading } = useQuery({
+    queryKey: ["dashboard-v2"],
+    queryFn: getDashboardV2,
+    staleTime: 30_000,
+    retry: 0,
+  });
+
+  const { data: agg } = useQuery({
     queryKey: ["strategy-lab-portfolio"],
     queryFn: getStrategyLabPortfolio,
     staleTime: 30_000,
@@ -101,14 +109,16 @@ export default function Portfolio() {
     retry: 0,
   });
 
-  const loading = aggLoading || portsLoading;
-  const totalValue = agg?.total_value_cents ?? 0;
-  const todayPnl = agg?.today_pnl_cents ?? 0;
-  const todayPct = agg?.today_pnl_pct ?? 0;
-  const ret30 = agg?.return_30d_pct ?? 0;
+  // Use dashboardV2 for headline numbers — it's the canonical live source
+  const headlineLoading = dashLoading;
+  const totalValue = dash?.portfolio?.total_value_cents ?? agg?.total_value_cents ?? 0;
+  const todayPnl = dash?.portfolio?.today_pnl_cents ?? agg?.today_pnl_cents ?? 0;
+  const todayPct = dash?.portfolio?.today_pnl_pct ?? agg?.today_pnl_pct ?? 0;
+  const ret30 = dash?.portfolio?.return_30d_pct ?? agg?.return_30d_pct ?? 0;
   const retAll = agg?.return_all_time_pct ?? 0;
-  const openPos = agg?.total_open_positions ?? 0;
+  const openPos = openPosData?.position_count ?? (openPosData?.positions?.length ?? 0);
   const isUp = todayPnl >= 0;
+  const loading = portsLoading;
 
   const portfolios = portfoliosData?.portfolios ?? [];
 
@@ -122,7 +132,7 @@ export default function Portfolio() {
           <div className="flex items-end gap-4 flex-wrap">
             <div>
               <p className="text-5xl font-bold tracking-tight font-mono-t tabular-nums">
-                {loading ? <span className="text-t-dim">$—</span> : fmtUsd(totalValue)}
+                {headlineLoading ? <span className="text-t-dim">$—</span> : fmtUsd(totalValue)}
               </p>
               <div className="flex items-center gap-3 mt-2 flex-wrap">
                 <span className={cn("flex items-center gap-1 text-lg font-semibold font-mono-t tabular-nums", isUp ? "text-t-green" : "text-t-red")}>

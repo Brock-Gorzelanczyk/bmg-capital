@@ -97,11 +97,12 @@ _PORTFOLIO_DEFS = [
      "starting_capital_cents": 20_000_000,
      "bots": {"options_income": _BOT_CAPITAL, "options_directional": _BOT_CAPITAL}},
     {"asset_class": "quant",   "name": "Quant",   "emoji": "∑",  "color_hex": "#a78bfa",
-     "starting_capital_cents": 10_000_000,
+     "starting_capital_cents": 13_000_000,
      "bots": {
-         "crypto_quant_aggressive":   4_000_000,   # $40k
-         "crypto_quant_scalper":      3_000_000,   # $30k
-         "crypto_quant_mean_reversion": 3_000_000, # $30k
+         "crypto_quant_aggressive":     4_000_000,   # $40k
+         "crypto_quant_scalper":        3_000_000,   # $30k
+         "crypto_quant_mean_reversion": 3_000_000,   # $30k
+         "crypto_meanrev_2163":         3_000_000,   # $30k
      }},
 ]
 
@@ -1793,11 +1794,11 @@ def get_bot(
         row["today_pnl_pct"] = snap.today_pnl_pct
         row["equity_curve"] = snap.equity_curve
 
-        # win_rate_pct fix: compute actual win rate from closed positions
+        # win_rate_pct fix: compute actual win rate from closed positions (cap at 500 for perf)
         closed_positions = db.query(BotPosition).filter(
             BotPosition.allocation_id == allocation.id,
             BotPosition.closed_at.isnot(None),
-        ).all()
+        ).order_by(BotPosition.closed_at.desc()).limit(500).all()
         wins = 0
         losses = 0
         for pos in closed_positions:

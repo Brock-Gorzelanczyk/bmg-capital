@@ -33,6 +33,7 @@ _DISPLAY_NAMES: dict[str, str] = {
     "crypto_quant_scalper":        "Quant Scalper",
     "options_income":              "Options Income",
     "options_directional":         "Options Directional",
+    "crypto_meanrev_2163":         "Mean Rev 2163",
 }
 
 _SORT_FIELDS = {
