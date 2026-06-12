@@ -158,6 +158,25 @@ def scan_and_execute(
     except Exception:
         pass
 
+    # ── 5b. Regime routing multiplier (feature-flagged, default OFF) ──────────
+    regime_multiplier_map: Dict[str, float] = {}
+    try:
+        from strategy_lab.core.regime.regime_router_v2 import (
+            REGIME_ROUTING_ENABLED, get_current_regime, get_multiplier,
+        )
+        if REGIME_ROUTING_ENABLED:
+            try:
+                current = get_current_regime(db)
+                confirmed_regime = current.get("regime", "CHOPPY")
+                logger.debug("[scan:%s] regime_routing ON — confirmed regime: %s", profile_name, confirmed_regime)
+                regime["playbook_regime"] = confirmed_regime
+                regime["playbook_regime_confidence"] = current.get("confidence")
+            except Exception:
+                confirmed_regime = "CHOPPY"
+            regime_multiplier_map["_confirmed_regime"] = confirmed_regime  # type: ignore[assignment]
+    except Exception:
+        pass
+
     # ── 6. Run each strategy module ───────────────────────────────────────────
     strategy_names: List[str] = profile.get("strategies", [])
     strategies_executed = 0
@@ -174,6 +193,28 @@ def scan_and_execute(
         try:
             sigs = mod.generate_signals(bars, profile, regime) or []
             strategies_executed += 1
+
+            # Apply regime multiplier to size_hint when REGIME_ROUTING_ENABLED
+            confirmed_regime = regime_multiplier_map.get("_confirmed_regime", "CHOPPY")
+            if confirmed_regime and confirmed_regime != "CHOPPY":
+                candidate_config = getattr(mod, "CANDIDATE_CONFIG", {})
+                strategy_type = candidate_config.get("strategy_type") or profile.get("strategy_type", "other")
+                try:
+                    from strategy_lab.core.regime.regime_router_v2 import get_multiplier, REGIME_ROUTING_ENABLED
+                    if REGIME_ROUTING_ENABLED:
+                        mult = get_multiplier(strategy_type, confirmed_regime)
+                        sigs = [
+                            type(sig)(
+                                symbol=sig.symbol, side=sig.side,
+                                confidence=sig.confidence,
+                                size_hint=float(getattr(sig, "size_hint", 0.1) or 0.1) * mult,
+                                reason=sig.reason, strategy=sig.strategy,
+                            ) if mult != 1.0 else sig
+                            for sig in sigs
+                        ] if mult != 1.0 else sigs
+                except Exception:
+                    pass
+
             for sig in sigs:
                 results.append({
                     "symbol": sig.symbol,

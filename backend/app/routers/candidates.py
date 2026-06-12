@@ -105,9 +105,21 @@ def _candidate_detail(c: StrategyCandidate, db: Session) -> dict:
 
 # ── POST /sync ────────────────────────────────────────────────────────────────
 
+def _read_candidate_config(path: Path) -> dict:
+    """Import a candidate file and return its CANDIDATE_CONFIG dict (if present)."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return getattr(mod, "CANDIDATE_CONFIG", {}) or {}
+    except Exception:
+        return {}
+
+
 @router.post("/sync")
 def sync_candidates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
-    """Scan candidates/ folder and upsert strategy_candidates rows."""
+    """Scan candidates/ folder and upsert strategy_candidates rows, reading CANDIDATE_CONFIG."""
     if not _CANDIDATES_DIR.exists():
         return {"synced": 0, "message": "candidates/ directory not found"}
 
@@ -116,15 +128,23 @@ def sync_candidates(db: Session = Depends(get_db), current_user: User = Depends(
         if path.name.startswith("_"):
             continue
         name = path.stem
+        cfg = _read_candidate_config(path)
         existing = db.query(StrategyCandidate).filter(StrategyCandidate.name == name).first()
         if existing:
             existing.file_path = str(path)
             existing.updated_at = datetime.now(timezone.utc)
+            if cfg:
+                existing.asset_class = cfg.get("asset_class") or existing.asset_class
+                existing.style = cfg.get("strategy_type") or existing.style
+                existing.metadata_json = json.dumps(cfg)
         else:
             candidate = StrategyCandidate(
                 name=name,
                 file_path=str(path),
                 state="CANDIDATE",
+                asset_class=cfg.get("asset_class"),
+                style=cfg.get("strategy_type"),
+                metadata_json=json.dumps(cfg) if cfg else None,
             )
             db.add(candidate)
             synced += 1
@@ -450,6 +470,102 @@ def get_wfa_result(name: str, job_id: str, db: Session = Depends(get_db), curren
         "walks_json": r.walks_json,
         "error_message": r.error_message,
     }
+
+
+# ── GET /{name}/traffic-light ─────────────────────────────────────────────────
+
+@router.get("/{name}/traffic-light")
+def get_traffic_light(name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+    """Return GREEN/YELLOW/RED/PENDING traffic-light status for a candidate."""
+    from strategy_lab.core.pipeline.scorer import compute_traffic_light
+
+    c = db.query(StrategyCandidate).filter(StrategyCandidate.name == name).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    bt = (
+        db.query(BacktestRun)
+        .filter(BacktestRun.candidate_id == c.id, BacktestRun.status == "done")
+        .order_by(BacktestRun.completed_at.desc())
+        .first()
+    )
+    bt_dict = {"net_sharpe": bt.net_sharpe, "max_drawdown_pct": bt.max_drawdown_pct} if bt else {}
+
+    shadow_days = 0
+    if c.state == "SHADOW_PAPER" and c.updated_at:
+        shadow_days = (datetime.now(timezone.utc) - c.updated_at).days
+
+    # Compute live performance from shadow_trades if any exist
+    live_sharpe: float | None = None
+    live_max_dd: float | None = None
+    try:
+        from sqlalchemy import text as _text
+        rows = db.execute(
+            _text("SELECT pnl_pct FROM shadow_trades WHERE candidate_name = :name AND closed_at IS NOT NULL"),
+            {"name": name},
+        ).fetchall()
+        if rows:
+            pnls = [float(r[0]) for r in rows if r[0] is not None]
+            if len(pnls) >= 5:
+                import statistics
+                mean = statistics.mean(pnls)
+                std = statistics.stdev(pnls) if len(pnls) > 1 else 1.0
+                live_sharpe = (mean / std * (252 ** 0.5)) if std > 0 else 0.0
+                cumulative = 0.0
+                peak = 0.0
+                max_dd_val = 0.0
+                for p in pnls:
+                    cumulative += p
+                    peak = max(peak, cumulative)
+                    dd = peak - cumulative
+                    max_dd_val = max(max_dd_val, dd)
+                live_max_dd = max_dd_val
+    except Exception:
+        pass
+
+    result = compute_traffic_light(bt_dict, shadow_days, live_sharpe, live_max_dd)
+    return {
+        "candidate_name": name,
+        "status": result.status,
+        "reason": result.reason,
+        "shadow_days": result.shadow_days,
+        "live_sharpe": result.live_sharpe,
+        "backtest_sharpe": result.backtest_sharpe,
+        "live_max_dd": result.live_max_dd,
+        "backtest_max_dd": result.backtest_max_dd,
+    }
+
+
+# ── GET /traffic-lights ───────────────────────────────────────────────────────
+
+@router.get("/traffic-lights")
+def get_all_traffic_lights(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+    """Return traffic-light status for all active (non-retired) candidates."""
+    from strategy_lab.core.pipeline.scorer import compute_traffic_light
+    from sqlalchemy import text as _text
+
+    candidates = db.query(StrategyCandidate).filter(StrategyCandidate.state != "RETIRED").all()
+    results = []
+    for c in candidates:
+        bt = (
+            db.query(BacktestRun)
+            .filter(BacktestRun.candidate_id == c.id, BacktestRun.status == "done")
+            .order_by(BacktestRun.completed_at.desc())
+            .first()
+        )
+        bt_dict = {"net_sharpe": bt.net_sharpe, "max_drawdown_pct": bt.max_drawdown_pct} if bt else {}
+        shadow_days = 0
+        if c.state == "SHADOW_PAPER" and c.updated_at:
+            shadow_days = (datetime.now(timezone.utc) - c.updated_at).days
+        tl = compute_traffic_light(bt_dict, shadow_days)
+        results.append({
+            "candidate_name": c.name,
+            "state": c.state,
+            "status": tl.status,
+            "reason": tl.reason,
+            "shadow_days": tl.shadow_days,
+        })
+    return {"traffic_lights": results}
 
 
 # ── POST /run-all-backtests ───────────────────────────────────────────────────

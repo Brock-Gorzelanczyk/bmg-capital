@@ -721,6 +721,14 @@ def run_migrations(engine: Engine) -> None:
             _backfill_admin_lock_paused_reason(conn)
         except Exception as _e:
             logger.warning("_backfill_admin_lock_paused_reason failed (non-fatal): %s", _e)
+        try:
+            _ensure_candidate_pipeline_tables(conn)
+        except Exception as _e:
+            logger.warning("_ensure_candidate_pipeline_tables failed (non-fatal): %s", _e)
+        try:
+            _ensure_regime_history_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_regime_history_table failed (non-fatal): %s", _e)
 
 
 def _create_safety_layer_tables(conn) -> None:
@@ -2200,3 +2208,54 @@ def _backfill_admin_lock_paused_reason(conn) -> None:
         logger.info("_backfill_admin_lock_paused_reason: updated %d rows", result.rowcount)
     except Exception as exc:
         logger.warning("_backfill_admin_lock_paused_reason failed: %s", exc)
+
+
+def _ensure_candidate_pipeline_tables(conn) -> None:
+    """Create shadow_trades table for candidate paper-trading in SHADOW_PAPER state."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS shadow_trades (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            candidate_name   TEXT NOT NULL,
+            symbol           TEXT NOT NULL,
+            side             TEXT NOT NULL,
+            confidence       REAL,
+            entry_price      REAL,
+            exit_price       REAL,
+            size_hint        REAL,
+            pnl_pct          REAL,
+            reason           TEXT,
+            strategy         TEXT,
+            regime_at_entry  TEXT,
+            opened_at        TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+            closed_at        TIMESTAMP
+        )
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_shadow_trades_candidate
+        ON shadow_trades (candidate_name)
+    """))
+    conn.commit()
+
+
+def _ensure_regime_history_table(conn) -> None:
+    """Create regime_snapshots table for daily regime persistence."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS regime_snapshots (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            snapshot_date    DATE NOT NULL UNIQUE,
+            regime           TEXT NOT NULL,
+            raw_regime       TEXT,
+            confidence       REAL,
+            vix_level        REAL,
+            spx_vs_200ma     REAL,
+            hy_spread_proxy  REAL,
+            vix_ts_slope     REAL,
+            signals_json     TEXT,
+            created_at       TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+        )
+    """))
+    conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_regime_snapshots_date
+        ON regime_snapshots (snapshot_date)
+    """))
+    conn.commit()

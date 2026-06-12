@@ -1,0 +1,62 @@
+# Regime Routing Matrix — BMG Capital Playbook
+# Per regime, per strategy_type → allocation multiplier
+# Multiplier 0 = no new entries (exits unaffected)
+# Edit this file to update regime-based sizing without code changes.
+#
+# Regimes: BULL_TRENDING, BEAR_TRENDING, CHOPPY, CRISIS, LOW_VOL, RECOVERY
+# Strategy types: momentum, mean_reversion, carry, long_vol, trend_following, options_income, other
+
+regimes:
+  BULL_TRENDING:
+    momentum:        1.5
+    mean_reversion:  0.3
+    carry:           1.0
+    long_vol:        0.5
+    trend_following: 1.5
+    options_income:  0.8
+    other:           1.0
+
+  BEAR_TRENDING:
+    momentum:        0.8
+    mean_reversion:  0.5
+    carry:           0.3
+    long_vol:        1.5
+    trend_following: 0.8
+    options_income:  0.4
+    other:           0.7
+
+  CHOPPY:
+    momentum:        0.5
+    mean_reversion:  1.5
+    carry:           1.0
+    long_vol:        0.8
+    trend_following: 0.3
+    options_income:  1.2
+    other:           1.0
+
+  CRISIS:
+    momentum:        0.0
+    mean_reversion:  0.2
+    carry:           0.0
+    long_vol:        1.5
+    trend_following: 0.5
+    options_income:  0.0
+    other:           0.3
+
+  LOW_VOL:
+    momentum:        1.2
+    mean_reversion:  0.8
+    carry:           1.3
+    long_vol:        0.3
+    trend_following: 1.0
+    options_income:  1.5
+    other:           1.0
+
+  RECOVERY:
+    momentum:        1.3
+    mean_reversion:  1.0
+    carry:           0.8
+    long_vol:        0.8
+    trend_following: 1.2
+    options_income:  1.0
+    other:           1.0

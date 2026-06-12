@@ -10,8 +10,11 @@ import {
   runBacktest,
   runWfa,
   getPromotionEval,
+  getAllTrafficLights,
   type Candidate,
   type CandidateState,
+  type TrafficLight,
+  type TrafficLightStatus,
 } from "@/api/candidates";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -81,6 +84,26 @@ function GateCell({ name }: { name: string }) {
   return <GateBadge passes={data.passes} score={data.score} />;
 }
 
+// ── Traffic Light badge ───────────────────────────────────────────────────────
+
+const TL_CONFIG: Record<TrafficLightStatus, { dot: string; label: string; text: string }> = {
+  GREEN:   { dot: "bg-emerald-400",  label: "GREEN",   text: "text-emerald-400" },
+  YELLOW:  { dot: "bg-amber-400",    label: "YELLOW",  text: "text-amber-400" },
+  RED:     { dot: "bg-red-400 animate-pulse", label: "RED", text: "text-red-400" },
+  PENDING: { dot: "bg-zinc-600",     label: "PENDING", text: "text-zinc-500" },
+};
+
+function TrafficLightBadge({ tl }: { tl: TrafficLight | undefined }) {
+  if (!tl) return <span className="text-[10px] text-zinc-600">—</span>;
+  const cfg = TL_CONFIG[tl.status];
+  return (
+    <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold font-mono", cfg.text)} title={tl.reason}>
+      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", cfg.dot)} />
+      {cfg.label}
+    </span>
+  );
+}
+
 // ── Action buttons ─────────────────────────────────────────────────────────────
 
 function ActionButtons({ candidate }: { candidate: Candidate }) {
@@ -143,6 +166,16 @@ export default function CandidatesPage() {
     staleTime: 30_000,
     refetchInterval: 15_000,
   });
+
+  const { data: tlData } = useQuery({
+    queryKey: ["traffic-lights"],
+    queryFn: getAllTrafficLights,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+  const tlMap = Object.fromEntries(
+    (tlData?.traffic_lights ?? []).map((tl) => [tl.candidate_name, tl])
+  );
 
   const syncMut = useMutation({
     mutationFn: syncCandidates,
@@ -238,7 +271,7 @@ export default function CandidatesPage() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated-2)]/40">
-                  {["Name", "State", "Backtest", "WFE", "DSR", "OOS Sharpe", "Gate", "Actions"].map((h) => (
+                  {["Name", "State", "Traffic", "Backtest", "WFE", "DSR", "OOS Sharpe", "Gate", "Actions"].map((h) => (
                     <th key={h} className={cn(
                       "px-4 py-3 font-semibold text-[var(--text-tertiary)] tracking-wider uppercase text-[10px]",
                       h === "Name" || h === "Actions" ? "text-left" : "text-center"
@@ -275,6 +308,11 @@ export default function CandidatesPage() {
                       {/* State */}
                       <td className="px-4 py-3 text-center">
                         <StateBadge state={c.state} />
+                      </td>
+
+                      {/* Traffic light */}
+                      <td className="px-4 py-3 text-center">
+                        <TrafficLightBadge tl={tlMap[c.name]} />
                       </td>
 
                       {/* Backtest (net sharpe) */}

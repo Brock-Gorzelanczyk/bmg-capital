@@ -518,3 +518,29 @@ def get_portfolio_snapshot(
             "by_sleeve":                  {"stocks": empty_sleeve, "crypto": empty_sleeve, "options": empty_sleeve, "quant": empty_sleeve},
             "bots":                       [],
         }
+
+
+@router.get("/regime/current")
+def get_current_playbook_regime(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return the most recent confirmed playbook regime from regime_snapshots table."""
+    try:
+        from strategy_lab.core.regime.regime_router_v2 import (
+            get_current_regime,
+            REGIME_ROUTING_ENABLED,
+        )
+        regime_data = get_current_regime(db)
+        return {
+            "regime": regime_data.get("regime", "CHOPPY"),
+            "confidence": regime_data.get("confidence"),
+            "snapshot_date": regime_data.get("snapshot_date"),
+            "days_in_regime": regime_data.get("days_in_regime", 0),
+            "days_since_snapshot": regime_data.get("days_since_snapshot"),
+            "vix_level": regime_data.get("vix_level"),
+            "routing_enabled": REGIME_ROUTING_ENABLED,
+        }
+    except Exception as exc:
+        logger.warning("get_current_playbook_regime failed: %s", exc)
+        return {"regime": "CHOPPY", "confidence": None, "days_in_regime": 0, "routing_enabled": False}

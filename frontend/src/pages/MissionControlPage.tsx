@@ -438,6 +438,16 @@ export default function MissionControlPage() {
     queryFn: getGuardrails,
   });
 
+  const { data: regimeData } = useQuery({
+    queryKey: ["playbook-regime"],
+    queryFn: () => client.get<{
+      regime: string; confidence: number | null; days_in_regime: number;
+      snapshot_date: string | null; routing_enabled: boolean; vix_level: number | null;
+    }>("/portfolio/regime/current").then(r => r.data),
+    staleTime: 300_000,
+    refetchInterval: 900_000,
+  });
+
   const { data: paperAccount } = useQuery<PaperAccount>({
     queryKey: ["paper-account"],
     queryFn: () => client.get<PaperAccount>("/paper/account").then(r => r.data),
@@ -1044,6 +1054,45 @@ export default function MissionControlPage() {
             )}
           </div>
         </div>
+
+        {/* ── PLAYBOOK REGIME PANEL ────────────────────────────────────────── */}
+        {regimeData && (
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
+              <span className="text-sm font-semibold text-[var(--text-primary)]">Market Regime</span>
+              {regimeData.routing_enabled ? (
+                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-900/30 border border-emerald-500/30 px-1.5 py-0.5 rounded">ROUTING ON</span>
+              ) : (
+                <span className="text-[9px] font-bold text-zinc-500 bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded">ROUTING OFF</span>
+              )}
+            </div>
+            <div className="px-4 py-3 grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wider font-semibold mb-0.5">Current</p>
+                <p className="font-mono font-bold text-sm text-[var(--text-primary)]">{regimeData.regime}</p>
+              </div>
+              <div>
+                <p className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wider font-semibold mb-0.5">Days in Regime</p>
+                <p className="font-mono font-bold text-sm text-[var(--text-primary)]">{regimeData.days_in_regime}d</p>
+              </div>
+              {regimeData.confidence != null && (
+                <div>
+                  <p className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wider font-semibold mb-0.5">Confidence</p>
+                  <p className="font-mono text-sm text-[var(--text-primary)]">{(regimeData.confidence * 100).toFixed(0)}%</p>
+                </div>
+              )}
+              {regimeData.vix_level != null && (
+                <div>
+                  <p className="text-[9px] text-[var(--text-tertiary)] uppercase tracking-wider font-semibold mb-0.5">VIX</p>
+                  <p className="font-mono text-sm text-[var(--text-primary)]">{regimeData.vix_level.toFixed(1)}</p>
+                </div>
+              )}
+            </div>
+            {!regimeData.snapshot_date && (
+              <p className="text-[10px] text-zinc-600 px-4 pb-3 font-mono">No regime history yet — run daily regime job to populate</p>
+            )}
+          </div>
+        )}
 
         {/* ── GUARDRAIL PANEL ──────────────────────────────────────────────── */}
         <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">

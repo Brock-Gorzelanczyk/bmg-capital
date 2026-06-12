@@ -165,3 +165,23 @@ export interface CatalogCandidate {
 
 export const listCandidateCatalog = () =>
   client.get<{ candidates: CatalogCandidate[] }>("/strategy-lab/candidates").then((r) => r.data);
+
+export type TrafficLightStatus = "GREEN" | "YELLOW" | "RED" | "PENDING";
+
+export interface TrafficLight {
+  candidate_name: string;
+  state?: string;
+  status: TrafficLightStatus;
+  reason: string;
+  shadow_days: number;
+  live_sharpe?: number | null;
+  backtest_sharpe?: number | null;
+  live_max_dd?: number | null;
+  backtest_max_dd?: number | null;
+}
+
+export const getTrafficLight = (name: string) =>
+  client.get<TrafficLight>(`/candidates/${name}/traffic-light`).then((r) => r.data);
+
+export const getAllTrafficLights = () =>
+  client.get<{ traffic_lights: TrafficLight[] }>("/candidates/traffic-lights").then((r) => r.data);
