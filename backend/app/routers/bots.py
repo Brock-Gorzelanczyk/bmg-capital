@@ -70,8 +70,8 @@ _DISPLAY_NAMES: dict[str, str] = {
     "crypto_swing":         "Crypto Swing",
     "crypto_day":           "Crypto Day",
     "crypto_lt":            "Crypto Long-Term",
-    "options_income":       "Options Income",
-    "options_directional":  "Options Directional",
+    "options_income":       "Equity Income",
+    "options_directional":  "Equity Directional",
 }
 
 _DEMO_SYMBOLS = {
@@ -88,14 +88,15 @@ _BOT_CAPITAL = 10_000_000  # $100,000 per bot in cents
 
 _PORTFOLIO_DEFS = [
     {"asset_class": "stocks",  "name": "Stocks",  "emoji": "📈", "color_hex": "#A3E635",
-     "starting_capital_cents": 30_000_000,
-     "bots": {"stock_swing": _BOT_CAPITAL, "stock_day": _BOT_CAPITAL, "stock_lt": _BOT_CAPITAL}},
+     "starting_capital_cents": 50_000_000,
+     "bots": {"stock_swing": _BOT_CAPITAL, "stock_day": _BOT_CAPITAL, "stock_lt": _BOT_CAPITAL,
+              "options_income": _BOT_CAPITAL, "options_directional": _BOT_CAPITAL}},
     {"asset_class": "crypto",  "name": "Crypto",  "emoji": "🪙", "color_hex": "#F59E0B",
      "starting_capital_cents": 40_000_000,
      "bots": {"crypto_swing": _BOT_CAPITAL, "crypto_day": _BOT_CAPITAL, "crypto_lt": _BOT_CAPITAL, "crypto_onchain": _BOT_CAPITAL}},
     {"asset_class": "options", "name": "Options", "emoji": "⚡", "color_hex": "#8B5CF6",
-     "starting_capital_cents": 20_000_000,
-     "bots": {"options_income": _BOT_CAPITAL, "options_directional": _BOT_CAPITAL}},
+     "starting_capital_cents": 0,
+     "bots": {}},
     {"asset_class": "quant",   "name": "Quant",   "emoji": "∑",  "color_hex": "#a78bfa",
      "starting_capital_cents": 13_000_000,
      "bots": {
@@ -808,7 +809,7 @@ _BOT_DISPLAY_NAMES = {
     "crypto_quant_aggressive": "Crypto Quant Aggressive",
     "crypto_quant_scalper": "Crypto Quant Scalper",
     "crypto_quant_mean_reversion": "Crypto Quant Mean Reversion",
-    "options_income": "Options Income", "options_directional": "Options Directional",
+    "options_income": "Equity Income", "options_directional": "Equity Directional",
 }
 
 
@@ -1768,7 +1769,10 @@ def get_bot(
     row["display_name"] = _DISPLAY_NAMES.get(profile.name, profile.name.replace("_", " ").title())
 
     # BUG E fix: derive display_asset_class from name when profile.asset_class is missing/wrong
-    if "options" in profile.name.lower():
+    _EQUITY_BOT_IDS = {"options_income", "options_directional"}
+    if profile.name in _EQUITY_BOT_IDS:
+        display_asset_class = "stocks"
+    elif "options" in profile.name.lower():
         display_asset_class = "options"
     else:
         display_asset_class = profile.asset_class or "stock"
@@ -3331,8 +3335,8 @@ _BOT_DISPLAY_NAMES = {
     "crypto_swing": "Crypto Swing",
     "crypto_day": "Crypto Day",
     "crypto_lt": "Crypto L-T DCA",
-    "options_income": "Options Income",
-    "options_directional": "Options Directional",
+    "options_income": "Equity Income",
+    "options_directional": "Equity Directional",
 }
 
 

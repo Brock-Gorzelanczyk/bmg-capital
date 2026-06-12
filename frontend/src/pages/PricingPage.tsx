@@ -115,7 +115,7 @@ const PORTFOLIO_SIZES = [
 const STRATEGIES = [
   { label: "Stock Swing",    returnPct: 5.15, period: "30d" },
   { label: "Crypto Swing",   returnPct: 8.20, period: "30d" },
-  { label: "Options Income", returnPct: 3.10, period: "30d" },
+  { label: "Equity Income",  returnPct: 3.10, period: "30d" },
 ];
 
 // ── FAQ data ──────────────────────────────────────────────────────────────────

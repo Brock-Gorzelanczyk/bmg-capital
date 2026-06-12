@@ -197,13 +197,13 @@ const BOT_META: Record<
     assetClass: "crypto",
   },
   options_income: {
-    displayName: "Options Income",
-    description: "Wheel, covered calls, CSPs, iron condors — premium collection",
+    displayName: "Equity Income",
+    description: "Equity income — quality stocks, dividend + growth focus",
     assetClass: "stock",
   },
   options_directional: {
-    displayName: "Options Directional",
-    description: "Credit spreads, debit spreads, LEAPS — directional options plays",
+    displayName: "Equity Directional",
+    description: "Equity directional — tactical momentum & mean-reversion",
     assetClass: "stock",
   },
 };
@@ -775,7 +775,8 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
             const tPnl = entry.today_pnl_cents / 100;
             const tPos = tPnl >= 0;
             const isCrypto = entry.profile.includes("crypto");
-            const isOptions = entry.profile.includes("options");
+            const _EQUITY_BOT_IDS = new Set(["options_income", "options_directional"]);
+            const isOptions = entry.profile.includes("options") && !_EQUITY_BOT_IDS.has(entry.profile);
             return (
               <button
                 key={entry.profile}
@@ -964,7 +965,7 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
   const returnPositive = (stats?.return_30d_pct ?? 0) >= 0;
 
   // Left border color by asset class
-  const leftBorderClass = profile.name.includes("options")
+  const leftBorderClass = assetClass === "options"
     ? "border-l-4 border-l-purple-500/60"
     : assetClass === "quant"
       ? "border-l-4 border-l-violet-500/60"
@@ -1242,7 +1243,7 @@ function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; ti
                 <tr key={item.profile.name} className="border-b border-t-dim/50 last:border-0 hover:bg-t-bg1/20 transition-colors">
                   <td className="py-2.5">
                     <div className="flex items-center gap-2">
-                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", item.profile.name.includes("options") ? "bg-purple-400" : assetClass === "quant" ? "bg-violet-400" : assetClass === "crypto" ? "bg-t-amber" : "bg-t-cyan")} />
+                      <span className={cn("w-2 h-2 rounded-full flex-shrink-0", assetClass === "options" ? "bg-purple-400" : assetClass === "quant" ? "bg-violet-400" : assetClass === "crypto" ? "bg-t-amber" : "bg-t-cyan")} />
                       <span className="font-semibold text-t-hi text-xs font-ui-t">{displayName(item.profile.name)}</span>
                     </div>
                   </td>

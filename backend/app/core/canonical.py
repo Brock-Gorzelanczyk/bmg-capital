@@ -76,8 +76,8 @@ DISPLAY_NAMES: dict[str, str] = {
     "crypto_quant_scalper":         "Quant Scalper",
     "crypto_quant_mean_reversion":  "Quant Mean Reversion",
     "crypto_meanrev_2163":          "Mean Rev 2163",
-    "options_income":               "Options Income",
-    "options_directional":          "Options Directional",
+    "options_income":               "Equity Income",
+    "options_directional":          "Equity Directional",
 }
 
 

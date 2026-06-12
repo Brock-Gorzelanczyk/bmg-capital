@@ -265,8 +265,8 @@ _BOT_DISPLAY = {
     "crypto_quant_scalper":       "Quant Scalper",
     "crypto_quant_mean_reversion":"Quant Mean Reversion",
     "crypto_meanrev_2163":        "Mean Rev 2163",
-    "options_income":             "Options Income",
-    "options_directional":        "Options Directional",
+    "options_income":             "Equity Income",
+    "options_directional":        "Equity Directional",
 }
 
 _BOT_CATEGORY = {
@@ -281,8 +281,8 @@ _BOT_CATEGORY = {
     "crypto_quant_scalper":       "quant",
     "crypto_quant_mean_reversion":"quant",
     "crypto_meanrev_2163":        "quant",
-    "options_income":             "options",
-    "options_directional":        "options",
+    "options_income":             "stocks",
+    "options_directional":        "stocks",
 }
 
 _BOT_DESCRIPTIONS = {
@@ -297,8 +297,8 @@ _BOT_DESCRIPTIONS = {
     "crypto_quant_scalper":       "1m scalping, 5-strategy ensemble, liquid majors only",
     "crypto_quant_mean_reversion":"5m mean-reversion, 6-strategy fade stack, mid-cap alts",
     "crypto_meanrev_2163":        "Experimental mean-reversion variant, paper-only",
-    "options_income":             "Wheel, covered calls, CSPs, iron condors",
-    "options_directional":        "Credit spreads, debit spreads, LEAPS",
+    "options_income":             "Equity income — quality stocks, dividend + growth focus",
+    "options_directional":        "Equity directional — tactical momentum & mean-reversion",
 }
 
 

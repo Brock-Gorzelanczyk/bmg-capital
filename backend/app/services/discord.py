@@ -21,8 +21,8 @@ BOT_DISPLAY = {
     "crypto_swing":         "Crypto Swing",
     "crypto_day":           "Crypto Day",
     "crypto_lt":            "Crypto Long-Term",
-    "options_income":       "Options Income",
-    "options_directional":  "Options Directional",
+    "options_income":       "Equity Income",
+    "options_directional":  "Equity Directional",
 }
 
 

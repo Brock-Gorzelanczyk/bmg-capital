@@ -84,13 +84,13 @@ BOT_DISPLAY = {
     "crypto_quant_aggressive":      "Crypto Quant Aggressive",
     "crypto_quant_scalper":         "Crypto Quant Scalper",
     "crypto_quant_mean_reversion":  "Crypto Quant Mean Reversion",
-    "options_income":               "Options Income",
-    "options_directional":       "Options Directional",
+    "options_income":               "Equity Income",
+    "options_directional":          "Equity Directional",
 }
 
-_STOCKS_BOTS  = {"stock_swing", "stock_day", "stock_lt"}
+_STOCKS_BOTS  = {"stock_swing", "stock_day", "stock_lt", "options_income", "options_directional"}
 _CRYPTO_BOTS  = {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"}
-_OPTIONS_BOTS = {"options_income", "options_directional"}
+_OPTIONS_BOTS: set = set()  # no live options bots yet
 _QUANT_BOTS   = {"crypto_quant_aggressive", "crypto_quant_scalper", "crypto_quant_mean_reversion"}
 
 

@@ -71,8 +71,8 @@ const BOT_META: Record<string, { displayName: string; description: string }> = {
   crypto_day:         { displayName: "Crypto Day",          description: "BTC/ETH/SOL intraday momentum, 8h force-close" },
   crypto_lt:          { displayName: "Crypto Long-Term",     description: "BTC/ETH + majors, weekly DCA & monthly rebalance" },
   crypto_onchain:     { displayName: "Crypto On-Chain",     description: "On-chain flow — large wallet moves, DEX volume anomalies, L2 bridge activity" },
-  options_income:     { displayName: "Options Income",      description: "Wheel, covered calls, CSPs, iron condors" },
-  options_directional:{ displayName: "Options Directional", description: "Credit spreads, debit spreads, LEAPS" },
+  options_income:     { displayName: "Equity Income",      description: "Equity income — quality stocks, dividend + growth focus" },
+  options_directional:{ displayName: "Equity Directional", description: "Equity directional — tactical momentum & mean-reversion" },
   crypto_quant_aggressive:   { displayName: "Quant Aggressive",    description: "8-strategy quant stack, 5m bars, 20-coin universe" },
   crypto_quant_scalper:      { displayName: "Quant Scalper",       description: "1m scalping, 5-strategy ensemble, liquid majors only" },
   crypto_quant_mean_reversion: { displayName: "Quant Mean Reversion", description: "5m mean-reversion, 6-strategy fade stack, mid-cap alts" },
@@ -476,24 +476,34 @@ export default function PortfolioDetailPage() {
           <Activity size={14} style={{ color: portfolio.color_hex }} />
           <h2 className="text-sm font-semibold text-zinc-300">Active Bots</h2>
         </div>
-        <div className={cn(
-          "grid gap-4",
-          portfolio.bots.length === 2
-            ? "grid-cols-1 sm:grid-cols-2"
-            : portfolio.bots.length === 4
-              ? "grid-cols-2 lg:grid-cols-4"
-              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-        )}>
-          {portfolio.bots.map((item) => (
-            <BotCard
-              key={item.profile.name}
-              item={item}
-              portfolioStarting={portfolio.starting_capital_cents}
-              onNavigate={(name) => navigate(`/strategy/${name}`)}
-              snapBot={snapBotMap[item.profile.name]}
-            />
-          ))}
-        </div>
+        {portfolio.bots.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center border border-dashed border-zinc-800 rounded-xl bg-zinc-900/30">
+            <p className="text-zinc-400 font-semibold text-sm">No active bots in this sleeve</p>
+            <p className="text-zinc-600 text-xs max-w-xs">
+              Real options bots are being built as candidates.
+              Visit <a href="/candidates" className="text-blue-400 hover:underline">/candidates</a> to track their progress through the pipeline.
+            </p>
+          </div>
+        ) : (
+          <div className={cn(
+            "grid gap-4",
+            portfolio.bots.length === 2
+              ? "grid-cols-1 sm:grid-cols-2"
+              : portfolio.bots.length === 4
+                ? "grid-cols-2 lg:grid-cols-4"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+          )}>
+            {portfolio.bots.map((item) => (
+              <BotCard
+                key={item.profile.name}
+                item={item}
+                portfolioStarting={portfolio.starting_capital_cents}
+                onNavigate={(name) => navigate(`/strategy/${name}`)}
+                snapBot={snapBotMap[item.profile.name]}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Activity */}

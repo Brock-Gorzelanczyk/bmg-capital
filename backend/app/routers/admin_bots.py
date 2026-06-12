@@ -52,8 +52,8 @@ _BOT_CATEGORIES = {
     "stock_day": "stocks",
     "stock_swing": "stocks",
     "stock_lt": "stocks",
-    "options_directional": "options",
-    "options_income": "options",
+    "options_directional": "stocks",
+    "options_income": "stocks",
 }
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
