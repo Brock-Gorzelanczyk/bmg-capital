@@ -11,6 +11,9 @@ import {
   type StrategyPortfolio,
   type BotListItem,
 } from "@/api/bots";
+import { usePortfolioSnapshot } from "@/hooks/usePortfolioSnapshot";
+import { botStatusBadge, BADGE_CLASSES } from "@/lib/botStatus";
+import type { BotSnap } from "@/api/portfolioSnapshot";
 import client from "@/api/client";
 import { cn } from "@/lib/utils";
 import { formatTradeSize } from "@/lib/formatTradeSize";
@@ -86,18 +89,21 @@ function BotCard({
   item,
   portfolioStarting,
   onNavigate,
+  snapBot,
 }: {
   item: BotListItem;
   portfolioStarting: number;
   onNavigate: (n: string) => void;
+  snapBot?: BotSnap;
 }) {
   const { profile, allocation, stats } = item;
   const qc = useQueryClient();
   const meta = BOT_META[profile.name];
-  const isEnabled = allocation?.enabled ?? false;
-  const isAdminLocked = allocation?.paused_reason === "admin_lock" || allocation?.paused_reason === "health_halt";
-  const ret30 = stats?.return_30d_pct ?? 0;
-  const todayPnl = stats?.today_pnl ?? 0;
+  const isEnabled = snapBot ? snapBot.enabled : (allocation?.enabled ?? false);
+  const badge = snapBot ? botStatusBadge(snapBot) : null;
+  const isAdminLocked = snapBot ? snapBot.is_admin_locked : (allocation?.paused_reason === "admin_lock" || allocation?.paused_reason === "health_halt");
+  const ret30 = snapBot ? snapBot.return_30d_pct : (stats?.return_30d_pct ?? 0);
+  const todayPnl = snapBot ? (snapBot.today_pnl_cents / 100) : (stats?.today_pnl ?? 0);
   const openPositions = stats?.open_positions ?? 0;
 
   // Capital within portfolio
@@ -132,16 +138,22 @@ function BotCard({
           <p className="font-bold text-white text-sm">{meta?.displayName ?? resolveDisplayName(profile.name)}</p>
           <p className="text-xs text-zinc-500 mt-0.5">{meta?.description ?? profile.description}</p>
         </div>
-        <span className={cn(
-          "text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ml-2",
-          isAdminLocked
-            ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-            : isEnabled
-              ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
-              : "bg-zinc-800 text-zinc-500 border-zinc-700"
-        )}>
-          {isAdminLocked ? "frozen · historical" : isEnabled ? "ACTIVE" : "DISABLED"}
-        </span>
+        {badge ? (
+          <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ml-2", BADGE_CLASSES[badge.variant])}>
+            {badge.subtitle ?? badge.text}
+          </span>
+        ) : (
+          <span className={cn(
+            "text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ml-2",
+            isAdminLocked
+              ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+              : isEnabled
+                ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
+                : "bg-zinc-800 text-zinc-500 border-zinc-700"
+          )}>
+            {isAdminLocked ? "frozen · historical" : isEnabled ? "ACTIVE" : "DISABLED"}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -372,12 +384,16 @@ export default function PortfolioDetailPage() {
   const { assetClass } = useParams<{ assetClass: string }>();
   const navigate = useNavigate();
 
+  // activity-only: keep getPortfolios for sibling metadata (emoji/color_hex) + RecentActivity portfolioId
   const { data, isLoading } = useQuery({
     queryKey: ["strategy-portfolios"],
     queryFn: getPortfolios,
     staleTime: 60_000,
     retry: 0,
   });
+
+  const { snap } = usePortfolioSnapshot();
+  const snapBotMap = Object.fromEntries(snap.bots.map((b) => [b.id, b]));
 
   const portfolios = data?.portfolios ?? [];
   const portfolio = portfolios.find((p) => p.asset_class === assetClass) ?? null;
@@ -439,8 +455,20 @@ export default function PortfolioDetailPage() {
         </div>
       </div>
 
-      {/* Portfolio hero */}
-      <PortfolioHeader portfolio={portfolio as any} />
+      {/* Portfolio hero — enrich with canonical snapshot values when available */}
+      {(() => {
+        const sleeveKey = assetClass as keyof typeof snap.by_sleeve;
+        const sleeve = snap.by_sleeve[sleeveKey];
+        const enriched = sleeve ? {
+          ...portfolio,
+          starting_capital_cents: sleeve.starting_capital_cents || (portfolio as any).starting_capital_cents,
+          current_value_cents: sleeve.current_value_cents || (portfolio as any).current_value_cents,
+          pnl_cents: sleeve.alltime_pnl_cents,
+          pnl_pct: sleeve.alltime_return_pct,
+          today_pnl_cents: sleeve.today_pnl_cents,
+        } : portfolio;
+        return <PortfolioHeader portfolio={enriched as any} />;
+      })()}
 
       {/* Bot grid */}
       <div>
@@ -462,6 +490,7 @@ export default function PortfolioDetailPage() {
               item={item}
               portfolioStarting={portfolio.starting_capital_cents}
               onNavigate={(name) => navigate(`/strategy/${name}`)}
+              snapBot={snapBotMap[item.profile.name]}
             />
           ))}
         </div>

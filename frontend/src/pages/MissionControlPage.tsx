@@ -18,7 +18,8 @@ import {
   type AutonomousAction,
   type AutonomousGuardrail,
 } from "@/api/autonomous";
-import { getSignalsFeed, getOpenPositions, getStrategyLabPortfolio, type SignalFeedItem } from "@/api/bots";
+import { getSignalsFeed, getOpenPositions, type SignalFeedItem } from "@/api/bots";
+import { usePortfolioSnapshot } from "@/hooks/usePortfolioSnapshot";
 import client from "@/api/client";
 import { formatCurrency, timeAgo, cn } from "@/lib/utils";
 import type { PaperAccount } from "@/api/paper";
@@ -449,12 +450,7 @@ export default function MissionControlPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: aggData } = useQuery({
-    queryKey: ["strategy-lab-portfolio"],
-    queryFn: getStrategyLabPortfolio,
-    staleTime: 30_000,
-    retry: 0,
-  });
+  const { snap } = usePortfolioSnapshot();
 
   // ── Kill switch mutations ─────────────────────────────────────────────────────
 
@@ -617,7 +613,7 @@ export default function MissionControlPage() {
 
   // ── Guardrail usage estimates (mock current exposure vs limits) ────────────
 
-  const openPositions = aggData?.total_open_positions ?? openPosData?.position_count ?? paperAccount?.positions?.length ?? 0;
+  const openPositions = snap.total_open_positions || openPosData?.position_count || paperAccount?.positions?.length || 0;
   const dayPnlPct = paperAccount
     ? (paperAccount.day_pnl / (paperAccount.equity || 1)) * 100
     : 0;

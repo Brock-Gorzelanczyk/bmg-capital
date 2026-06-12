@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { usePortfolioSnapshot } from "@/hooks/usePortfolioSnapshot";
+import { botStatusBadge, BADGE_CLASSES } from "@/lib/botStatus";
 import { BracketFrame, SectionLabel, BMGButton } from "@/components/design";
 import { cn } from "@/lib/utils";
 import {
@@ -232,7 +234,7 @@ const RANK_RING: Record<number, string> = {
   3: "ring-1 ring-t-amber/30",
 };
 
-function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
+function BotLeaderboardTable({ sort, snapBotMap }: { sort: BotLbSort; snapBotMap: Record<string, import("@/api/portfolioSnapshot").BotSnap> }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["bot-leaderboard-ranking", sort],
     queryFn: () => getBotLeaderboardRanking(sort),
@@ -290,10 +292,19 @@ function BotLeaderboardTable({ sort }: { sort: BotLbSort }) {
               )}
             >
               <span className="font-mono-t text-sm text-t-muted tabular-nums self-center">{row.rank}</span>
-              <div className="min-w-0 self-center">
-                <p className="text-t-hi font-semibold text-sm truncate leading-tight">{row.strategy_name}</p>
-                {(!row.enabled || row.paused_reason === "admin_lock" || row.paused_reason === "health_halt") && <p className="text-amber-500/70 text-[10px] font-mono">frozen · historical</p>}
-              </div>
+              {(() => {
+                const snapBot = snapBotMap[row.bot_id];
+                const badge = snapBot ? botStatusBadge(snapBot) : null;
+                const showFrozen = badge
+                  ? badge.variant === "amber"
+                  : (!row.enabled || row.paused_reason === "admin_lock" || row.paused_reason === "health_halt");
+                return (
+                  <div className="min-w-0 self-center">
+                    <p className="text-t-hi font-semibold text-sm truncate leading-tight">{row.strategy_name}</p>
+                    {showFrozen && <p className="text-amber-500/70 text-[10px] font-mono">frozen · historical</p>}
+                  </div>
+                );
+              })()}
               <div className="self-center">
                 <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full border", TIER_BADGE[row.tier] ?? TIER_BADGE.T0)}>
                   {row.tier}
@@ -341,6 +352,9 @@ export default function StrategyLeaderboardPage() {
   const [sort, setSort] = useState<StratSort>("pnl");
   const [botSort, setBotSort] = useState<BotLbSort>("pnl");
   const [selected, setSelected] = useState<StrategyLeaderboardRow | null>(null);
+
+  const { snap } = usePortfolioSnapshot();
+  const snapBotMap = Object.fromEntries(snap.bots.map((b) => [b.id, b]));
 
   const { data: icData } = useQuery({
     queryKey: ["ic-strategies"],
@@ -469,7 +483,7 @@ export default function StrategyLeaderboardPage() {
                 </PillButton>
               ))}
             </div>
-            <BotLeaderboardTable sort={botSort} />
+            <BotLeaderboardTable sort={botSort} snapBotMap={snapBotMap} />
           </>
         )}
 

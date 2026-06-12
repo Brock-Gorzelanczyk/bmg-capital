@@ -249,3 +249,272 @@ def _empty_response() -> dict:
         "distinct_bots":        0,
         "fetched_at":           datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ── /snapshot canonical endpoint ─────────────────────────────────────────────
+
+_BOT_DISPLAY = {
+    "stock_swing":                "Stock Swing",
+    "stock_day":                  "Stock Day",
+    "stock_lt":                   "Stock Long-Term",
+    "crypto_swing":               "Crypto Swing",
+    "crypto_day":                 "Crypto Day",
+    "crypto_lt":                  "Crypto Long-Term",
+    "crypto_onchain":             "Crypto Onchain",
+    "crypto_quant_aggressive":    "Quant Aggressive",
+    "crypto_quant_scalper":       "Quant Scalper",
+    "crypto_quant_mean_reversion":"Quant Mean Reversion",
+    "crypto_meanrev_2163":        "Mean Rev 2163",
+    "options_income":             "Options Income",
+    "options_directional":        "Options Directional",
+}
+
+_BOT_CATEGORY = {
+    "stock_swing":                "stocks",
+    "stock_day":                  "stocks",
+    "stock_lt":                   "stocks",
+    "crypto_swing":               "crypto",
+    "crypto_day":                 "crypto",
+    "crypto_lt":                  "crypto",
+    "crypto_onchain":             "crypto",
+    "crypto_quant_aggressive":    "quant",
+    "crypto_quant_scalper":       "quant",
+    "crypto_quant_mean_reversion":"quant",
+    "crypto_meanrev_2163":        "quant",
+    "options_income":             "options",
+    "options_directional":        "options",
+}
+
+_BOT_DESCRIPTIONS = {
+    "stock_swing":                "Russell 1000 momentum, 1–30 day holds",
+    "stock_day":                  "Intraday gappers & earnings momentum, EOD flat",
+    "stock_lt":                   "S&P 500 factor model, monthly rebalance",
+    "crypto_swing":               "Top 20 crypto by mcap, 1–30 day holds",
+    "crypto_day":                 "BTC/ETH/SOL intraday momentum, 8h force-close",
+    "crypto_lt":                  "BTC/ETH + majors, weekly DCA & monthly rebalance",
+    "crypto_onchain":             "On-chain flow — large wallet moves, DEX volume anomalies",
+    "crypto_quant_aggressive":    "8-strategy quant stack, 5m bars, 20-coin universe",
+    "crypto_quant_scalper":       "1m scalping, 5-strategy ensemble, liquid majors only",
+    "crypto_quant_mean_reversion":"5m mean-reversion, 6-strategy fade stack, mid-cap alts",
+    "crypto_meanrev_2163":        "Experimental mean-reversion variant, paper-only",
+    "options_income":             "Wheel, covered calls, CSPs, iron condors",
+    "options_directional":        "Credit spreads, debit spreads, LEAPS",
+}
+
+
+def _compute_bot_status(alloc) -> str:
+    if alloc is None:
+        return "unknown"
+    pr = alloc.paused_reason or ""
+    if pr in ("admin_lock", "health_halt"):
+        return "admin_locked"
+    if not alloc.enabled:
+        return "disabled"
+    if pr:
+        return "paused"
+    return "active"
+
+
+def _empty_sleeve() -> dict:
+    return {
+        "starting_capital_cents": 0,
+        "current_value_cents":    0,
+        "open_positions":         0,
+        "today_pnl_cents":        0,
+        "alltime_pnl_cents":      0,
+        "alltime_return_pct":     0.0,
+        "return_30d_pct":         0.0,
+        "active_bots":            0,
+        "total_bots":             0,
+        "bot_ids":                [],
+    }
+
+
+@router.get("/snapshot")
+def get_portfolio_snapshot(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Single canonical endpoint: total metrics + per-sleeve + all-bot rows."""
+    try:
+        from app.routers.bots import _ensure_portfolios_for_user
+        try:
+            _ensure_portfolios_for_user(db, current_user.id)
+            db.commit()
+        except Exception as init_exc:
+            logger.warning("snapshot: portfolio init failed (non-fatal): %s", init_exc)
+            db.rollback()
+
+        from app.db.models.bots import StrategyPortfolio, BotAllocation, BotProfile
+        from app.core.canonical import compute_portfolio_snapshot
+
+        portfolios = (
+            db.query(StrategyPortfolio)
+            .filter(StrategyPortfolio.user_id == current_user.id)
+            .order_by(StrategyPortfolio.id)
+            .all()
+        )
+
+        all_allocs = (
+            db.query(BotAllocation)
+            .filter(BotAllocation.user_id == current_user.id)
+            .all()
+        )
+        profile_ids = list({a.profile_id for a in all_allocs})
+        profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+        profile_map = {p.id: p for p in profiles}
+
+        # Build per-portfolio snapshots
+        port_snaps = {}
+        for port in portfolios:
+            port_allocs = [a for a in all_allocs if a.portfolio_id == port.id]
+            pairs = [(a, profile_map[a.profile_id]) for a in port_allocs if a.profile_id in profile_map]
+            snap = compute_portfolio_snapshot(port, pairs, db)
+            port_snaps[port.asset_class] = (port, snap)
+
+        # Aggregate totals
+        total_value = sum(s.portfolio_value_cents for _, s in port_snaps.values())
+        total_starting = sum(s.starting_capital_cents for _, s in port_snaps.values())
+        total_open_pos = sum(s.open_positions_count for _, s in port_snaps.values())
+        total_today_pnl = sum(s.today_pnl_cents for _, s in port_snaps.values())
+        total_alltime_pnl = total_value - total_starting
+
+        return_alltime_pct = round(
+            (total_value - total_starting) / total_starting * 100, 2
+        ) if total_starting else 0.0
+
+        return_30d_pct = 0.0
+        if total_starting:
+            return_30d_pct = round(
+                sum(
+                    s.return_30d_pct * s.starting_capital_cents
+                    for _, s in port_snaps.values()
+                    if s.starting_capital_cents
+                ) / total_starting,
+                2,
+            )
+
+        # Capital allocation percents
+        def sleeve_pct(key: str) -> float:
+            if total_value <= 0:
+                return 0.0
+            val = port_snaps[key][1].portfolio_value_cents if key in port_snaps else 0
+            return round(val / total_value * 100, 2)
+
+        sleeve_keys = ["stocks", "crypto", "options", "quant"]
+        sleeve_sum = sum(
+            port_snaps[k][1].portfolio_value_cents for k in sleeve_keys if k in port_snaps
+        )
+        cash_cents = max(0, total_value - sleeve_sum)
+        cash_pct = round(cash_cents / total_value * 100, 2) if total_value > 0 else 100.0
+
+        capital_allocation = {
+            "stocks_pct":  sleeve_pct("stocks"),
+            "crypto_pct":  sleeve_pct("crypto"),
+            "options_pct": sleeve_pct("options"),
+            "quant_pct":   sleeve_pct("quant"),
+            "cash_pct":    cash_pct,
+        }
+
+        # Per-sleeve breakdown
+        by_sleeve: dict = {}
+        for key in sleeve_keys:
+            if key not in port_snaps:
+                by_sleeve[key] = _empty_sleeve()
+                continue
+            _, snap = port_snaps[key]
+            bot_ids_in_sleeve = [
+                bot.profile_name for bot in snap.bots
+            ]
+            by_sleeve[key] = {
+                "starting_capital_cents": snap.starting_capital_cents,
+                "current_value_cents":    snap.portfolio_value_cents,
+                "open_positions":         snap.open_positions_count,
+                "today_pnl_cents":        snap.today_pnl_cents,
+                "alltime_pnl_cents":      snap.portfolio_value_cents - snap.starting_capital_cents,
+                "alltime_return_pct":     snap.all_time_return_pct,
+                "return_30d_pct":         snap.return_30d_pct,
+                "active_bots":            snap.bots_active,
+                "total_bots":             snap.bots_total,
+                "bot_ids":                bot_ids_in_sleeve,
+            }
+
+        # Alloc map for status lookups
+        alloc_by_profile_name: dict = {}
+        for alloc in all_allocs:
+            prof = profile_map.get(alloc.profile_id)
+            if prof:
+                alloc_by_profile_name[prof.name] = alloc
+
+        # Build flat bots list
+        bots_out = []
+        for key in sleeve_keys:
+            if key not in port_snaps:
+                continue
+            _, snap = port_snaps[key]
+            for bot_snap in snap.bots:
+                profile_name = bot_snap.profile_name
+                alloc = alloc_by_profile_name.get(profile_name)
+                tier = getattr(alloc, "tier", None) if alloc else None
+                status = _compute_bot_status(alloc)
+                is_admin_locked = status == "admin_locked"
+                category = _BOT_CATEGORY.get(profile_name, key)
+                display_name = _BOT_DISPLAY.get(profile_name, profile_name.replace("_", " ").title())
+
+                # allocation_pct_of_sleeve
+                sleeve_val = port_snaps[key][1].portfolio_value_cents if key in port_snaps else 0
+                alloc_pct = round(
+                    bot_snap.portfolio_value_cents / sleeve_val * 100, 2
+                ) if sleeve_val > 0 else 0.0
+
+                bots_out.append({
+                    "id":                     profile_name,
+                    "display_name":           display_name,
+                    "category":               category,
+                    "tier":                   tier,
+                    "status":                 status,
+                    "enabled":                bot_snap.enabled,
+                    "is_admin_locked":        is_admin_locked,
+                    "open_positions":         bot_snap.open_positions_count,
+                    "today_pnl_cents":        bot_snap.today_pnl_cents,
+                    "alltime_pnl_cents":      bot_snap.portfolio_value_cents - bot_snap.starting_capital_cents,
+                    "return_30d_pct":         bot_snap.return_30d_pct,
+                    "return_alltime_pct":     bot_snap.all_time_return_pct,
+                    "starting_capital_cents": bot_snap.starting_capital_cents,
+                    "current_value_cents":    bot_snap.portfolio_value_cents,
+                    "allocation_pct_of_sleeve": alloc_pct,
+                    "description":            _BOT_DESCRIPTIONS.get(profile_name, ""),
+                })
+
+        return {
+            "as_of":                      datetime.now(timezone.utc).isoformat(),
+            "user_id":                    current_user.id,
+            "total_value_cents":          total_value,
+            "total_starting_capital_cents": total_starting,
+            "total_open_positions":       total_open_pos,
+            "total_pnl_today_cents":      total_today_pnl,
+            "total_pnl_alltime_cents":    total_alltime_pnl,
+            "return_30d_pct":             return_30d_pct,
+            "return_alltime_pct":         return_alltime_pct,
+            "capital_allocation":         capital_allocation,
+            "by_sleeve":                  by_sleeve,
+            "bots":                       bots_out,
+        }
+
+    except Exception as exc:
+        logger.error("portfolio snapshot failed for user %s: %s", current_user.id, exc, exc_info=True)
+        empty_sleeve = _empty_sleeve()
+        return {
+            "as_of":                      datetime.now(timezone.utc).isoformat(),
+            "user_id":                    current_user.id,
+            "total_value_cents":          0,
+            "total_starting_capital_cents": 0,
+            "total_open_positions":       0,
+            "total_pnl_today_cents":      0,
+            "total_pnl_alltime_cents":    0,
+            "return_30d_pct":             0.0,
+            "return_alltime_pct":         0.0,
+            "capital_allocation":         {"stocks_pct": 0.0, "crypto_pct": 0.0, "options_pct": 0.0, "quant_pct": 0.0, "cash_pct": 100.0},
+            "by_sleeve":                  {"stocks": empty_sleeve, "crypto": empty_sleeve, "options": empty_sleeve, "quant": empty_sleeve},
+            "bots":                       [],
+        }

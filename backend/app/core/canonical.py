@@ -65,16 +65,19 @@ def _cached_live_prices(symbols: list[str]) -> dict[str, float]:
 # ── Display names (single source of truth) ────────────────────────────────────
 
 DISPLAY_NAMES: dict[str, str] = {
-    "stock_swing":          "Stock Swing",
-    "stock_day":            "Stock Day",
-    "stock_lt":             "Stock Long-Term",
-    "crypto_swing":         "Crypto Swing",
-    "crypto_day":           "Crypto Day",
-    "crypto_lt":            "Crypto Long-Term",
-    "crypto_onchain":       "Crypto Onchain",
-    "crypto_quant_aggressive": "Crypto Quant Aggressive",
-    "options_income":       "Options Income",
-    "options_directional":  "Options Directional",
+    "stock_swing":                  "Stock Swing",
+    "stock_day":                    "Stock Day",
+    "stock_lt":                     "Stock Long-Term",
+    "crypto_swing":                 "Crypto Swing",
+    "crypto_day":                   "Crypto Day",
+    "crypto_lt":                    "Crypto Long-Term",
+    "crypto_onchain":               "Crypto Onchain",
+    "crypto_quant_aggressive":      "Quant Aggressive",
+    "crypto_quant_scalper":         "Quant Scalper",
+    "crypto_quant_mean_reversion":  "Quant Mean Reversion",
+    "crypto_meanrev_2163":          "Mean Rev 2163",
+    "options_income":               "Options Income",
+    "options_directional":          "Options Directional",
 }
 
 
