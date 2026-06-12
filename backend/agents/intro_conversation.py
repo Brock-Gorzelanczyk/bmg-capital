@@ -206,9 +206,12 @@ def _generate_intro(agent: dict, live_data: dict, db=None) -> str:
     user_prompt = (
         f"{prev_tag}Introduce yourself to the BMG Capital fund team in #fund-team-chat. "
         f"Be brief (3-5 sentences). State your role, what you do daily, one concrete "
-        f"metric or signal you own right now (use real data if provided below), and "
-        f"acknowledge {agent['mentions'] or 'the team'} briefly.{next_tag}\n\n"
-        f"Live data snapshot:\n{_format_live_data(live_data)}\n\n"
+        f"metric from the LIVE DATA below (use the exact numbers given — do NOT invent or "
+        f"change any figures), and acknowledge {agent['mentions'] or 'the team'} briefly.{next_tag}\n\n"
+        f"LIVE DATA (ground truth — use exactly as shown, do not paraphrase or round differently):\n"
+        f"{_format_live_data(live_data)}\n\n"
+        f"IMPORTANT: Only cite numbers that appear in the live data above. "
+        f"Do not invent bot counts, position counts, or P&L figures.\n\n"
         f"Reply with ONLY the message text — no quotes, no formatting, no prefix."
     )
 
@@ -344,12 +347,18 @@ def _get_live_data(db: Session) -> dict:
         except Exception:
             pass
     try:
+        # Count distinct bot profiles (not allocations) — allocations are per-user,
+        # so a raw COUNT(*) on bot_allocations returns user × bot combinations, not bot count
         row = db.execute(text("""
-            SELECT COUNT(*) FROM bot_allocations WHERE enabled=1
+            SELECT COUNT(DISTINCT profile_id) FROM bot_allocations WHERE enabled=1
         """)).scalar()
         data["active_bots"] = str(row or 0)
     except Exception:
-        pass
+        try:
+            row = db.execute(text("SELECT COUNT(*) FROM bot_profiles")).scalar()
+            data["active_bots"] = str(row or 0)
+        except Exception:
+            pass
     try:
         row = db.execute(text("""
             SELECT payload FROM agent_messages
