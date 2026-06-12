@@ -189,6 +189,12 @@ def run_daily_research(db: Session) -> dict:
 
     Returns dict with keys: regime, signal_ic, candidates, recommendations.
     """
+    try:
+        from agents.bus import heartbeat as _hb
+        _hb(db, agent_id="researcher")
+    except Exception:
+        pass
+
     regime = _regime_from_db(db)
 
     bot_ics: dict[str, Optional[float]] = {b: _compute_bot_ic(db, b) for b in ACTIVE_BOTS}

@@ -185,6 +185,22 @@ def query_recent(
         return []
 
 
+def heartbeat(db: Session, *, agent_id: str, status: str = "active") -> None:
+    """Publish a lightweight liveness tick. Called every 30s by fleet_heartbeat job."""
+    try:
+        publish(
+            db,
+            channel="agent_heartbeats",
+            from_agent=agent_id,
+            msg_type="heartbeat",
+            subject=f"{agent_id} alive",
+            payload={"status": status},
+            priority=1,
+        )
+    except Exception as exc:
+        logger.debug("[bus] heartbeat failed (agent=%s): %s", agent_id, exc)
+
+
 def mark_read(db: Session, *, msg_id: int, agent: str) -> None:
     """Record that `agent` has acknowledged message `msg_id`."""
     try:

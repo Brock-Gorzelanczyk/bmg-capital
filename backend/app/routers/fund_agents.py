@@ -137,30 +137,56 @@ def _sentinel_devops_activity(db: Session) -> dict:
         return {"last_activity": None, "today_count": 0, "recent_activity": []}
 
 
+def _get_heartbeat_status(db: Session, agent_id: str) -> tuple:
+    """
+    Read the most recent heartbeat from agent_heartbeats channel.
+      active   — last beat < 90s ago
+      degraded — 90-300s ago
+      offline  — >300s or never
+    Returns (status_str, last_ts_str | None).
+    """
+    try:
+        row = db.execute(
+            text("""
+                SELECT created_at FROM agent_messages
+                WHERE channel = 'agent_heartbeats' AND from_agent = :agent
+                ORDER BY created_at DESC LIMIT 1
+            """),
+            {"agent": agent_id},
+        ).fetchone()
+        if not row or not row[0]:
+            return "offline", None
+        ts_raw = row[0]
+        if isinstance(ts_raw, str):
+            last = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+        else:
+            last = ts_raw
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        age_secs = (datetime.now(timezone.utc) - last).total_seconds()
+        if age_secs < 90:
+            status = "active"
+        elif age_secs < 300:
+            status = "degraded"
+        else:
+            status = "offline"
+        return status, str(row[0])
+    except Exception:
+        return "offline", None
+
+
 @router.get("/status")
 def get_agents_status(db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
+
+    queen_hb_status,     queen_hb_ts     = _get_heartbeat_status(db, "queen")
+    researcher_hb_status, researcher_hb_ts = _get_heartbeat_status(db, "researcher")
+    sentinel_hb_status,  sentinel_hb_ts  = _get_heartbeat_status(db, "sentinel_devops")
 
     queen_activity = _get_agent_activity(db, "queen")
     queen_stats = _queen_today_stats(db)
     researcher_activity = _get_agent_activity(db, "researcher")
     sentinel_activity = _sentinel_devops_activity(db)
-
-    def _status_from_last(last_ts_str) -> str:
-        if not last_ts_str:
-            return "offline"
-        try:
-            last = datetime.fromisoformat(str(last_ts_str).replace("Z", "+00:00"))
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
-            hours_ago = (now - last).total_seconds() / 3600
-            if hours_ago < 26:   # within expected 24h window
-                return "active"
-            if hours_ago < 72:   # missed a day
-                return "degraded"
-            return "offline"
-        except Exception:
-            return "offline"
 
     agents = [
         {
@@ -172,8 +198,8 @@ def get_agents_status(db: Session = Depends(get_db)):
         },
         {
             "id": "portfolio_manager",
-            "status": _status_from_last(queen_activity["last_activity"]),
-            "last_activity": queen_activity["last_activity"],
+            "status": queen_hb_status,
+            "last_activity": queen_hb_ts or queen_activity["last_activity"],
             "today": {
                 "briefings_sent": queen_stats["briefings_sent"],
                 "proposals_generated": queen_stats["proposals_generated"],
@@ -185,8 +211,8 @@ def get_agents_status(db: Session = Depends(get_db)):
         },
         {
             "id": "equity_researcher",
-            "status": _status_from_last(researcher_activity["last_activity"]),
-            "last_activity": researcher_activity["last_activity"],
+            "status": researcher_hb_status,
+            "last_activity": researcher_hb_ts or researcher_activity["last_activity"],
             "today": {
                 "briefings_sent": researcher_activity["today_count"],
                 "proposals_generated": 0,
@@ -197,8 +223,8 @@ def get_agents_status(db: Session = Depends(get_db)):
         },
         {
             "id": "sentinel_devops",
-            "status": _status_from_last(sentinel_activity["last_activity"]) if sentinel_activity["today_count"] > 0 else "active",
-            "last_activity": sentinel_activity["last_activity"],
+            "status": sentinel_hb_status,
+            "last_activity": sentinel_hb_ts or sentinel_activity["last_activity"],
             "today": {
                 "events_processed": sentinel_activity["today_count"],
                 "api_cost_usd": 0.0,

@@ -353,6 +353,12 @@ def run_queen_daily(db: Session, session: Session_t = "morning") -> None:
     logger.warning("[queen] %s session starting — %s", session, now.isoformat())
 
     try:
+        from agents.bus import heartbeat as _hb
+        _hb(db, agent_id="queen")
+    except Exception:
+        pass
+
+    try:
         from strategy_lab.agents.strategy_monitor import (
             run_strategy_health_check, get_pnl_snapshot,
             get_weekend_pnl, get_weekly_pnl,
@@ -442,6 +448,12 @@ def run_regime_alert_check(db: Session) -> None:
     Posts immediately to Discord when a regime alert fires.
     24-hour cooldown per signal prevents spam.
     """
+    try:
+        from agents.bus import heartbeat as _hb
+        _hb(db, agent_id="queen")
+    except Exception:
+        pass
+
     try:
         from strategy_lab.agents.strategy_monitor import check_regime_alert_signals
         alerts = check_regime_alert_signals(db)

@@ -10,6 +10,7 @@ from datetime import datetime
 
 import pytz
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -851,6 +852,35 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
     logger.warning("[startup-trace] registered job queen_regime_alert_check (every 30 min)")
+
+    # ------------------------------------------------------------------
+    # Fleet heartbeat: every 30s — keeps /fund status dashboard live.
+    # Publishes a lightweight "alive" tick to agent_heartbeats for each
+    # deployed agent so /api/agents/status can report active/degraded/offline.
+    # ------------------------------------------------------------------
+    def _fleet_heartbeat():
+        from app.db.session import SessionLocal
+        from agents.bus import heartbeat
+        db = SessionLocal()
+        try:
+            heartbeat(db, agent_id="queen")
+            heartbeat(db, agent_id="researcher")
+            heartbeat(db, agent_id="sentinel_devops")
+        except Exception as exc:
+            logger.debug("[fleet_heartbeat] failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _fleet_heartbeat,
+        IntervalTrigger(seconds=30),
+        id="fleet_heartbeat",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),
+    )
+    logger.warning("[startup-trace] registered job fleet_heartbeat (every 30s, fires immediately)")
 
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
