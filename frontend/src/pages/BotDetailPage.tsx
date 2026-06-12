@@ -2760,7 +2760,7 @@ export default function BotDetailPage() {
                     : "bg-t-bg1 text-t-muted border-t-dim"
                 )}
               >
-                {isEnabled ? "ACTIVE" : "PAUSED"}
+                {isEnabled ? "ACTIVE" : "DISABLED"}
               </span>
             </div>
 

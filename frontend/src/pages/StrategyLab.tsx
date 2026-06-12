@@ -1253,7 +1253,7 @@ function ComparisonTable({ bots, tierByAllocId = {} }: { bots: BotListItem[]; ti
                         ? "bg-t-green/15 text-t-green border-t-green/30"
                         : "bg-t-bg1 text-t-dim border-t-dim"
                     )}>
-                      {isEnabled ? "ACTIVE" : "OFF"}
+                      {isEnabled ? "ACTIVE" : "DISABLED"}
                     </span>
                   </td>
                   <td className="py-2.5">
