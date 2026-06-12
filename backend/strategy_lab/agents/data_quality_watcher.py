@@ -114,6 +114,12 @@ def run_data_quality_check(db: Session) -> dict:
     """
     now = datetime.now(timezone.utc)
 
+    try:
+        from agents.bus import heartbeat as _hb
+        _hb(db, agent_id="data_quality_watcher")
+    except Exception:
+        pass
+
     regime   = _check_regime_snapshot(db)
     signals  = _check_signal_freshness(db)
     nulls    = _check_null_data(db)

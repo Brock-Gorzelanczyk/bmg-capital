@@ -854,6 +854,81 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job queen_regime_alert_check (every 30 min)")
 
     # ------------------------------------------------------------------
+    # Deploy 2 — Tier A monitor agents
+    # ------------------------------------------------------------------
+
+    # Risk Sentinel: every 30 min — fleet drawdown + consecutive loss watchdog
+    def _run_risk_sentinel():
+        from app.db.session import SessionLocal
+        from strategy_lab.agents.risk_sentinel import run_risk_health_check
+        db = SessionLocal()
+        try:
+            run_risk_health_check(db)
+        except Exception as exc:
+            logger.error("[risk_sentinel] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_risk_sentinel,
+        CronTrigger(minute="*/30"),
+        id="risk_sentinel",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),
+    )
+    logger.warning("[startup-trace] registered job risk_sentinel (every 30 min, fires immediately)")
+
+    # Data Quality Watcher: every hour — regime snapshot + signal freshness
+    def _run_data_quality_watcher():
+        from app.db.session import SessionLocal
+        from strategy_lab.agents.data_quality_watcher import run_data_quality_check
+        db = SessionLocal()
+        try:
+            run_data_quality_check(db)
+        except Exception as exc:
+            logger.error("[data_quality_watcher] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_data_quality_watcher,
+        CronTrigger(minute=0),
+        id="data_quality_watcher",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),
+    )
+    logger.warning("[startup-trace] registered job data_quality_watcher (hourly, fires immediately)")
+
+    # Execution Auditor: 5 PM ET Mon-Fri — fill quality + slippage after market close
+    def _run_execution_auditor():
+        from app.db.session import SessionLocal
+        from strategy_lab.agents.execution_auditor import run_execution_audit
+        db = SessionLocal()
+        try:
+            run_execution_audit(db)
+        except Exception as exc:
+            logger.error("[execution_auditor] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_execution_auditor,
+        CronTrigger(day_of_week="mon-fri", hour=17, minute=0, timezone=ET),
+        id="execution_auditor",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job execution_auditor (5 PM ET Mon-Fri)")
+
+    # ------------------------------------------------------------------
     # Fleet heartbeat: every 30s — keeps /fund status dashboard live.
     # Publishes a lightweight "alive" tick to agent_heartbeats for each
     # deployed agent so /api/agents/status can report active/degraded/offline.
@@ -866,6 +941,9 @@ def setup_bot_scheduler(scheduler) -> None:
             heartbeat(db, agent_id="queen")
             heartbeat(db, agent_id="researcher")
             heartbeat(db, agent_id="sentinel_devops")
+            heartbeat(db, agent_id="risk_sentinel")
+            heartbeat(db, agent_id="data_quality_watcher")
+            heartbeat(db, agent_id="execution_auditor")
         except Exception as exc:
             logger.debug("[fleet_heartbeat] failed: %s", exc)
         finally:

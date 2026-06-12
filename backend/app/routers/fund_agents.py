@@ -19,9 +19,6 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 # Agents not yet deployed — static metadata
 _NOT_BUILT = {
-    "chief_risk_officer": 2,
-    "data_quality_watcher": 2,
-    "execution_auditor": 2,
     "quant_researcher": 6,
     "macro_strategist": 6,
     "operations": 6,
@@ -137,6 +134,18 @@ def _sentinel_devops_activity(db: Session) -> dict:
         return {"last_activity": None, "today_count": 0, "recent_activity": []}
 
 
+def _get_agent_today_count(db: Session, from_agent: str) -> int:
+    """Count messages published today by an agent (any channel)."""
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=_TODAY_WINDOW_HOURS)).isoformat()
+        return db.execute(
+            text("SELECT COUNT(*) FROM agent_messages WHERE from_agent=:a AND created_at>=:c"),
+            {"a": from_agent, "c": cutoff},
+        ).scalar() or 0
+    except Exception:
+        return 0
+
+
 def _get_heartbeat_status(db: Session, agent_id: str) -> tuple:
     """
     Read the most recent heartbeat from agent_heartbeats channel.
@@ -182,11 +191,17 @@ def get_agents_status(db: Session = Depends(get_db)):
     queen_hb_status,     queen_hb_ts     = _get_heartbeat_status(db, "queen")
     researcher_hb_status, researcher_hb_ts = _get_heartbeat_status(db, "researcher")
     sentinel_hb_status,  sentinel_hb_ts  = _get_heartbeat_status(db, "sentinel_devops")
+    risk_hb_status,      risk_hb_ts      = _get_heartbeat_status(db, "risk_sentinel")
+    dq_hb_status,        dq_hb_ts        = _get_heartbeat_status(db, "data_quality_watcher")
+    exec_hb_status,      exec_hb_ts      = _get_heartbeat_status(db, "execution_auditor")
 
     queen_activity = _get_agent_activity(db, "queen")
     queen_stats = _queen_today_stats(db)
     researcher_activity = _get_agent_activity(db, "researcher")
     sentinel_activity = _sentinel_devops_activity(db)
+    risk_today = _get_agent_today_count(db, "risk_sentinel")
+    dq_today   = _get_agent_today_count(db, "data_quality_watcher")
+    exec_today = _get_agent_today_count(db, "execution_auditor")
 
     agents = [
         {
@@ -231,6 +246,27 @@ def get_agents_status(db: Session = Depends(get_db)):
                 "api_budget_usd": 1.0,
             },
             "recent_activity": sentinel_activity["recent_activity"],
+        },
+        {
+            "id": "chief_risk_officer",
+            "status": risk_hb_status,
+            "last_activity": risk_hb_ts,
+            "today": {"checks_run": risk_today, "api_cost_usd": 0.0, "api_budget_usd": 0.0},
+            "recent_activity": [],
+        },
+        {
+            "id": "data_quality_watcher",
+            "status": dq_hb_status,
+            "last_activity": dq_hb_ts,
+            "today": {"checks_run": dq_today, "api_cost_usd": 0.0, "api_budget_usd": 0.0},
+            "recent_activity": [],
+        },
+        {
+            "id": "execution_auditor",
+            "status": exec_hb_status,
+            "last_activity": exec_hb_ts,
+            "today": {"audits_run": exec_today, "api_cost_usd": 0.0, "api_budget_usd": 0.0},
+            "recent_activity": [],
         },
         *[
             {

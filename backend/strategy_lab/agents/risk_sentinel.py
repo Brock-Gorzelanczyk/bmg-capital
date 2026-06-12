@@ -175,6 +175,12 @@ def run_risk_health_check(db: Session) -> dict:
     """
     now = datetime.now(timezone.utc)
 
+    try:
+        from agents.bus import heartbeat as _hb
+        _hb(db, agent_id="risk_sentinel")
+    except Exception:
+        pass
+
     drawdown  = _get_fleet_drawdown(db)
     streaks   = _get_consecutive_losses(db)
     stale     = _get_stale_bots(db)
