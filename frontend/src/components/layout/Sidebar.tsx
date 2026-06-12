@@ -9,7 +9,7 @@ import {
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
   Grid3X3, Zap, Globe, Eye, TestTube2, Cpu, SlidersHorizontal, Beaker,
-  Radar, Hammer,
+  Radar, Hammer, ShieldAlert,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -55,6 +55,7 @@ const PREFETCH_MAP: Record<string, (qc: QueryClient) => void> = {
 const NAV_TRADE = [
   { to: "/",                label: "Dashboard",       Icon: LayoutDashboard },
   { to: "/mission-control", label: "Mission Control", Icon: Cpu },
+  { to: "/risk-console",    label: "Risk Console",    Icon: ShieldAlert },
   { to: "/portfolio",       label: "Portfolio",       Icon: Briefcase },
   { to: "/markets",         label: "Markets",         Icon: Globe },
 ];

@@ -72,6 +72,7 @@ const RiskQuizPage = lazy(() => import("@/pages/RiskQuizPage"));
 const GoalsPage = lazy(() => import("@/pages/GoalsPage"));
 const DirectIndexingPage = lazy(() => import("@/pages/DirectIndexingPage"));
 const MissionControlPage = lazy(() => import("@/pages/MissionControlPage"));
+const RiskConsolePage = lazy(() => import("@/pages/RiskConsolePage"));
 const AutopilotPage = lazy(() => import("@/pages/AutopilotPage"));
 const AutopilotPromisePage = lazy(() => import("@/pages/AutopilotPromisePage"));
 const PlaybookPage = lazy(() => import("@/pages/PlaybookPage"));
@@ -423,6 +424,7 @@ function AppInner() {
         <Route path="/robo/goals" element={<GoalsPage />} />
         <Route path="/robo/direct-index" element={<DirectIndexingPage />} />
         <Route path="/mission-control" element={<Page component={MissionControlPage} />} />
+        <Route path="/risk-console" element={<Page component={RiskConsolePage} />} />
         <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
         <Route path="/autopilot/promise" element={<AutopilotPromisePage />} />
