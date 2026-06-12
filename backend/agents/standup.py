@@ -240,6 +240,14 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
         return _fallback_plan(contributions)
 
     try:
+        from agents.bus import is_budget_capped as _capped
+        if _capped(db):
+            logger.info("[standup] daily budget cap hit — skipping LLM call")
+            return {"ok": False, "reason": "budget_cap", "plan": [], "theme": "Budget cap — LLM synthesis skipped", "action_items": []}
+    except Exception:
+        pass
+
+    try:
         import httpx
         response = httpx.post(
             "https://api.anthropic.com/v1/messages",
@@ -288,6 +296,11 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
             plan.setdefault("risks", [])
             plan.setdefault("proposed_actions", [])
             plan.setdefault("summary", "")
+            try:
+                from agents.bus import charge_api_usage as _charge
+                _charge(db, "queen", 0.002)
+            except Exception:
+                pass
             return plan
         else:
             logger.warning("[standup] Claude API returned %d — using fallback", response.status_code)

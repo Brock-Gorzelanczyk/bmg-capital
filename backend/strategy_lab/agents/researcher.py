@@ -254,6 +254,14 @@ def run_daily_research(db: Session) -> dict:
     Returns dict with keys: regime, signal_ic, candidates, recommendations.
     """
     try:
+        from agents.bus import is_budget_capped as _capped
+        if _capped(db):
+            logger.info("[researcher] daily budget cap hit — skipping LLM call")
+            return {"ok": False, "reason": "budget_cap", "signal_ic": [], "findings": []}
+    except Exception:
+        pass
+
+    try:
         from agents.bus import heartbeat as _hb
         _hb(db, agent_id="researcher")
     except Exception:

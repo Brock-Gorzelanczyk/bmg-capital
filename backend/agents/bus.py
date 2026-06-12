@@ -387,3 +387,25 @@ def mark_read(db: Session, *, msg_id: int, agent: str) -> None:
             db.commit()
     except Exception as exc:
         logger.warning("[bus] mark_read failed (msg_id=%d agent=%s): %s", msg_id, agent, exc)
+
+
+def charge_api_usage(db: Session, agent_id: str, cost_usd: float) -> bool:
+    """
+    Record an API spend and return True if the call should proceed.
+    Returns False when the daily cap has been hit — callers must skip the LLM call.
+    """
+    try:
+        from agents.budget import charge as _charge
+        return _charge(db, agent_id, cost_usd)
+    except Exception as exc:
+        logger.warning("[bus] charge_api_usage failed (non-fatal, allowing call): %s", exc)
+        return True  # fail open — don't block on budget errors
+
+
+def is_budget_capped(db: Session) -> bool:
+    """Return True if today's API budget cap has been hit."""
+    try:
+        from agents.budget import is_capped as _is_capped
+        return _is_capped(db)
+    except Exception:
+        return False

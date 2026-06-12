@@ -910,6 +910,10 @@ def run_migrations(engine: Engine) -> None:
             _ensure_fund_team_chat_state_table(conn)
         except Exception as _e:
             logger.warning("_ensure_fund_team_chat_state_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_daily_budget_tables(conn)
+        except Exception as _e:
+            logger.warning("_ensure_daily_budget_tables failed (non-fatal): %s", _e)
 
 
 def _ensure_fund_team_chat_state_table(conn) -> None:
@@ -923,6 +927,31 @@ def _ensure_fund_team_chat_state_table(conn) -> None:
     """))
     conn.commit()
     logger.info("Migration: fund_team_chat_state table ensured")
+
+
+def _ensure_daily_budget_tables(conn) -> None:
+    """Create daily_budget_state and agent_api_spend tables for API spend tracking (idempotent)."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS daily_budget_state (
+            date            DATE PRIMARY KEY,
+            total_spent_usd DECIMAL(10,4) DEFAULT 0,
+            cap_hit         BOOLEAN DEFAULT false,
+            cap_hit_at      TIMESTAMP,
+            warn_sent       BOOLEAN DEFAULT false,
+            resumed_manual  BOOLEAN DEFAULT false
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS agent_api_spend (
+            date            DATE        NOT NULL,
+            agent_id        VARCHAR(40) NOT NULL,
+            total_spent_usd DECIMAL(10,4) DEFAULT 0,
+            call_count      INTEGER DEFAULT 0,
+            PRIMARY KEY (date, agent_id)
+        )
+    """))
+    conn.commit()
+    logger.info("Migration: daily_budget_state and agent_api_spend tables ensured")
 
 
 def _ensure_bot_profiles_halt_columns(conn) -> None:

@@ -181,7 +181,7 @@ def _post_webhook(name: str, content: str) -> bool:
 
 # ── Claude intro generation ───────────────────────────────────────────────────
 
-def _generate_intro(agent: dict, live_data: dict) -> str:
+def _generate_intro(agent: dict, live_data: dict, db=None) -> str:
     """Call Claude to generate one agent's intro. Falls back to hardcoded if no API key."""
     try:
         from app.config import settings
@@ -191,6 +191,14 @@ def _generate_intro(agent: dict, live_data: dict) -> str:
 
     if not api_key:
         return _fallback_intro(agent, live_data)
+
+    try:
+        from agents.bus import is_budget_capped as _capped
+        if db is not None and _capped(db):
+            logger.info("[intro] daily budget cap hit — skipping LLM call")
+            return _fallback_intro(agent, live_data)
+    except Exception:
+        pass
 
     next_tag = f" {agent['next_agent']}, you're up." if agent["next_agent"] else ""
     prev_tag = f"The previous speaker was {agent['mentions']}. " if agent["mentions"] else "You are opening the meeting. "
@@ -213,7 +221,14 @@ def _generate_intro(agent: dict, live_data: dict) -> str:
             system=agent["personality"],
             messages=[{"role": "user", "content": user_prompt}],
         )
-        return (msg.content[0].text or "").strip()
+        result = (msg.content[0].text or "").strip()
+        try:
+            from agents.bus import charge_api_usage as _charge
+            if db is not None:
+                _charge(db, "intro", 0.001)
+        except Exception:
+            pass
+        return result
     except Exception as exc:
         logger.warning("[intro] Claude call failed for %s: %s", agent["id"], exc)
         return _fallback_intro(agent, live_data)
@@ -380,7 +395,7 @@ def run_intro_conversation(db: Session, *, force: bool = False) -> dict:
     posted = 0
     for agent in _AGENTS:
         logger.info("[intro] generating intro for %s", agent["id"])
-        text_content = _generate_intro(agent, live_data)
+        text_content = _generate_intro(agent, live_data, db=db)
         ok = _post_webhook(agent["name"], text_content)
         if ok:
             posted += 1

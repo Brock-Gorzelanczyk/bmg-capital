@@ -956,9 +956,24 @@ def run_queen_daily(db: Session, session: Session_t = "morning") -> None:
     # Proposal generation — morning session only
     if session == "morning":
         try:
-            generated = _generate_proposals(db, research=research, health=health)
-            if generated:
-                logger.warning("[queen] generated %d proposal(s) this morning", len(generated))
+            _proposal_capped = False
+            try:
+                from agents.bus import is_budget_capped as _capped
+                if _capped(db):
+                    logger.info("[queen] daily budget cap hit — skipping LLM call")
+                    _proposal_capped = True
+            except Exception:
+                pass
+
+            if not _proposal_capped:
+                generated = _generate_proposals(db, research=research, health=health)
+                if generated:
+                    logger.warning("[queen] generated %d proposal(s) this morning", len(generated))
+                    try:
+                        from agents.bus import charge_api_usage as _charge
+                        _charge(db, "queen", 0.001)
+                    except Exception:
+                        pass
         except Exception as exc:
             logger.error("[queen] proposal generation failed: %s", exc)
 

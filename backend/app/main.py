@@ -54,6 +54,7 @@ from app.routers.cost import router as cost_router
 from app.routers.ic import router as ic_router
 from app.routers.fund_agents import router as fund_agents_router
 from app.routers.proposals import router as proposals_router
+from app.routers.budget_router import router as budget_router
 from app.routers import notification_channels as notification_channels_router
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
 
@@ -246,7 +247,7 @@ async def lifespan(app: FastAPI):
             try:
                 if not has_run_intro(_db):
                     logger.info("[startup] firing first-run intro conversation")
-                    _run_intro(_db)
+                    await _aio.to_thread(_run_intro, _db)
             finally:
                 _db.close()
         except Exception as _exc:
@@ -383,6 +384,7 @@ app.include_router(cost_router)
 app.include_router(ic_router)
 app.include_router(fund_agents_router)
 app.include_router(proposals_router)
+app.include_router(budget_router)
 
 
 @app.get("/health", tags=["health"])

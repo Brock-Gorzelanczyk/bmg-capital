@@ -7,6 +7,15 @@ import type { FundRole, AgentStatus } from "@/data/fundRoles";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+type BudgetStatus = {
+  cap_usd: number;
+  spent_today_usd: number;
+  remaining_usd: number;
+  pct_used: number;
+  cap_hit: boolean;
+  reset_at: string;
+};
+
 type LiveAgentData = {
   id: string;
   status: AgentStatus | "not_built";
@@ -23,10 +32,88 @@ type AgentsStatusResponse = {
 
 // ── API ────────────────────────────────────────────────────────────────────────
 
+async function fetchBudgetStatus(): Promise<BudgetStatus> {
+  const res = await fetch("/api/budget/status");
+  if (!res.ok) throw new Error("Budget status unavailable");
+  return res.json();
+}
+
 async function fetchAgentStatus(): Promise<AgentsStatusResponse> {
   const res = await fetch("/api/agents/status");
   if (!res.ok) throw new Error("Failed to fetch agent status");
   return res.json();
+}
+
+// ── Budget Chip ────────────────────────────────────────────────────────────────
+
+function timeUntilMidnightUTC(resetAt: string): string {
+  const diff = new Date(resetAt).getTime() - Date.now();
+  if (diff <= 0) return "soon";
+  const totalMinutes = Math.floor(diff / 60_000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+
+function BudgetChip() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["budget-status"],
+    queryFn: fetchBudgetStatus,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+
+  if (isLoading || isError || !data) return null;
+
+  const { cap_usd, spent_today_usd, pct_used, cap_hit, reset_at } = data;
+
+  const barColor = cap_hit
+    ? "bg-zinc-600"
+    : pct_used > 80
+    ? "bg-red-500"
+    : pct_used > 50
+    ? "bg-[var(--amber)]"
+    : "bg-[var(--green)]";
+
+  const labelColor = cap_hit
+    ? "text-red-400"
+    : pct_used > 80
+    ? "text-red-400"
+    : pct_used > 50
+    ? "text-[var(--amber)]"
+    : "text-[var(--green)]";
+
+  return (
+    <div
+      className="border border-[var(--border-dim)] px-2.5 py-1.5 min-w-[140px]"
+      style={{ fontFamily: "var(--font-mono-t)" }}
+    >
+      <p className="text-[9px] font-bold tracking-widest text-[var(--text-dim)] uppercase mb-1">
+        DAILY API BUDGET
+      </p>
+      <p className={cn("text-[10px] font-medium mb-1", labelColor)}>
+        ${spent_today_usd.toFixed(2)} / ${cap_usd.toFixed(2)}
+      </p>
+      {/* Progress bar */}
+      <div className="w-full h-1 bg-[var(--bg-2)] border border-[var(--border-dim)] mb-1">
+        <div
+          className={cn("h-full transition-all duration-500", barColor)}
+          style={{ width: `${Math.min(pct_used, 100)}%` }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <span className={cn("text-[9px]", labelColor)}>{Math.round(pct_used)}%</span>
+        {cap_hit ? (
+          <span className="text-[9px] text-red-400">LLM PAUSED · resets midnight UTC</span>
+        ) : (
+          <span className="text-[9px] text-[var(--text-dim)]">
+            resets in {timeUntilMidnightUTC(reset_at)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -512,6 +599,7 @@ export default function FundPage() {
               {activeCount} of {totalAgents} active
             </span>
           )}
+          <BudgetChip />
         </div>
       </div>
 
