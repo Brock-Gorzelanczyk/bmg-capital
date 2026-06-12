@@ -106,7 +106,11 @@ function SleeveCard({ sleeveKey, sleeve, bots }: { sleeveKey: string; sleeve: Sl
       </div>
       <div className="px-5 py-2">
         {bots.length === 0 ? (
-          <p className="py-4 text-sm text-t-muted text-center">No bots configured</p>
+          <p className="py-4 text-sm text-t-muted text-center">
+            {sleeve.reserved_capital_cents > 0
+              ? `0 dedicated bots · ${fmtUsd(sleeve.reserved_capital_cents)} reserved for future ${sleeveKey} bots`
+              : "No bots configured"}
+          </p>
         ) : (
           bots.map((bot) => <BotRow key={bot.id} bot={bot} />)
         )}
@@ -129,13 +133,21 @@ export default function Portfolio() {
   const openPos = snap.total_open_positions;
   const isUp = todayPnl >= 0;
 
-  // Build donut slices from by_sleeve
+  // Build donut slices — include reserved_capital_cents for zero-bot sleeves.
+  // Reserved capital is reclassified out of cash so the pie always sums correctly.
   const slices = SLEEVE_ORDER
-    .filter((k) => snap.by_sleeve[k].current_value_cents > 0)
-    .map((k) => ({ key: k, value_cents: snap.by_sleeve[k].current_value_cents }));
+    .filter((k) => {
+      const s = snap.by_sleeve[k];
+      return s.current_value_cents > 0 || s.reserved_capital_cents > 0;
+    })
+    .map((k) => ({
+      key: k,
+      value_cents: snap.by_sleeve[k].current_value_cents + snap.by_sleeve[k].reserved_capital_cents,
+    }));
 
-  const deployedCents = slices.reduce((s, sl) => s + sl.value_cents, 0);
-  const cashCents = Math.max(0, totalValue - deployedCents);
+  const deployedCents = SLEEVE_ORDER.reduce((acc, k) => acc + snap.by_sleeve[k].current_value_cents, 0);
+  const reservedCents = SLEEVE_ORDER.reduce((acc, k) => acc + snap.by_sleeve[k].reserved_capital_cents, 0);
+  const cashCents = Math.max(0, totalValue - deployedCents - reservedCents);
   const allSlices = cashCents > 0 ? [...slices, { key: "cash", value_cents: cashCents }] : slices;
 
   return (

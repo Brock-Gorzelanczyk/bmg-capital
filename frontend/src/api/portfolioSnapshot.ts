@@ -30,6 +30,7 @@ export interface SleeveSnap {
   active_bots: number;
   total_bots: number;
   bot_ids: string[];
+  reserved_capital_cents: number;
 }
 
 export interface PortfolioSnapshot {
@@ -62,6 +63,7 @@ const EMPTY_SLEEVE: SleeveSnap = {
   starting_capital_cents: 0, current_value_cents: 0, open_positions: 0,
   today_pnl_cents: 0, alltime_pnl_cents: 0, alltime_return_pct: 0,
   return_30d_pct: 0, active_bots: 0, total_bots: 0, bot_ids: [],
+  reserved_capital_cents: 0,
 };
 
 export const EMPTY_SNAPSHOT: PortfolioSnapshot = {

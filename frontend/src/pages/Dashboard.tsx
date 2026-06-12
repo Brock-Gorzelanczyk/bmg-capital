@@ -83,7 +83,7 @@ function SleeveCard({ id, sleeve }: { id: string; sleeve: DashV2Sleeve }) {
         <span className="font-mono-t tabular-nums">{fmtPct(pnlPct)}</span>
       </div>
       <div className="mt-4 pt-4 border-t border-t-dim flex justify-between text-xs text-t-muted">
-        <span>{sleeve.bots_total} bot{sleeve.bots_total !== 1 ? "s" : ""}</span>
+        <span>{sleeve.bots_total} bot{sleeve.bots_total !== 1 ? "s" : ""}{sleeve.reserved_capital_cents > 0 ? ` · ${fmtUsd(sleeve.reserved_capital_cents)} reserved` : ""}</span>
         <span>{sleeve.bots_active} active · {sleeve.open_positions} pos · {sleeve.watching} watching</span>
       </div>
     </Link>

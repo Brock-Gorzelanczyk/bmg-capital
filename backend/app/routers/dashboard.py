@@ -202,6 +202,19 @@ def get_dashboard_v2(
         s = _AC_TO_SLEEVE.get(p.asset_class, "stocks")
         sleeve_data[s]["open_positions"] += 1
 
+    # ── Sleeve reservations ───────────────────────────────────────────────────
+    try:
+        reservations = {
+            row[0]: int(row[1])
+            for row in db.execute(
+                text("SELECT sleeve_name, reserved_capital_cents FROM sleeve_config")
+            ).fetchall()
+        }
+    except Exception:
+        reservations = {}
+    for s in sleeve_data:
+        sleeve_data[s]["reserved_capital_cents"] = reservations.get(s, 0)
+
     # ── Health ───────────────────────────────────────────────────────────────
     bots_active = sum(1 for a in allocs if a.enabled)
     bots_total = len(allocs)

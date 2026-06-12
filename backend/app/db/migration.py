@@ -695,6 +695,35 @@ def _ensure_agent_memory_table(conn) -> None:
         logger.warning("_ensure_agent_memory_table failed: %s", exc)
 
 
+def _ensure_sleeve_config_table(conn) -> None:
+    """
+    Create sleeve_config table and seed options reservation.
+    sleeve_config.reserved_capital_cents holds the capital earmarked for a
+    sleeve even when no bots are deployed — used by /fund and portfolio pie.
+    """
+    MIGRATION_NAME = "sleeve_config.table_v1_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS sleeve_config (
+                sleeve_name            VARCHAR PRIMARY KEY,
+                reserved_capital_cents BIGINT  NOT NULL DEFAULT 0,
+                notes                  VARCHAR
+            )
+        """))
+        # Seed: $200k reserved for options bots (not yet deployed)
+        conn.execute(text("""
+            INSERT OR IGNORE INTO sleeve_config (sleeve_name, reserved_capital_cents, notes)
+            VALUES ('options', 20000000, 'Reserved for future options bots: options_short_strangle_45d, options_wheel_mechanical')
+        """))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration: sleeve_config table created, options reserved=$200k")
+    except Exception as exc:
+        logger.warning("_ensure_sleeve_config_table failed: %s", exc)
+
+
 def _ensure_proposal_audit_table(conn) -> None:
     """Create the proposal_audit table for Queen Tier B approval flow (idempotent)."""
     MIGRATION_NAME = "proposal_audit.table_v1_2026_06"
@@ -845,6 +874,10 @@ def run_migrations(engine: Engine) -> None:
             _ensure_agent_memory_table(conn)
         except Exception as _e:
             logger.warning("_ensure_agent_memory_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_sleeve_config_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_sleeve_config_table failed (non-fatal): %s", _e)
         try:
             _ensure_proposal_audit_table(conn)
         except Exception as _e:

@@ -8,6 +8,7 @@ export interface DashV2Sleeve {
   pnl_cents: number;
   bots_active: number;
   bots_total: number;
+  reserved_capital_cents: number;
 }
 
 export interface DashV2LeaderboardEntry {

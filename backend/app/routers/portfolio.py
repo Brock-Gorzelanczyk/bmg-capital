@@ -394,19 +394,33 @@ def get_portfolio_snapshot(
                 2,
             )
 
-        # Capital allocation percents
-        def sleeve_pct(key: str) -> float:
-            if total_value <= 0:
-                return 0.0
-            val = port_snaps[key][1].portfolio_value_cents if key in port_snaps else 0
-            return round(val / total_value * 100, 2)
+        # Sleeve reservations
+        try:
+            _sleeve_reservations: dict[str, int] = {
+                row[0]: int(row[1])
+                for row in db.execute(
+                    text("SELECT sleeve_name, reserved_capital_cents FROM sleeve_config")
+                ).fetchall()
+            }
+        except Exception:
+            _sleeve_reservations = {}
 
         sleeve_keys = ["stocks", "crypto", "options", "quant"]
         sleeve_sum = sum(
             port_snaps[k][1].portfolio_value_cents for k in sleeve_keys if k in port_snaps
         )
-        cash_cents = max(0, total_value - sleeve_sum)
+        # Reservations consume cash headroom (clamped so cash ≥ 0)
+        total_reserved = sum(_sleeve_reservations.get(k, 0) for k in sleeve_keys)
+        cash_cents = max(0, total_value - sleeve_sum - total_reserved)
         cash_pct = round(cash_cents / total_value * 100, 2) if total_value > 0 else 100.0
+
+        # Capital allocation percents — include reservations in sleeve %
+        def sleeve_pct(key: str) -> float:
+            if total_value <= 0:
+                return 0.0
+            deployed = port_snaps[key][1].portfolio_value_cents if key in port_snaps else 0
+            reserved = _sleeve_reservations.get(key, 0)
+            return round((deployed + reserved) / total_value * 100, 2)
 
         capital_allocation = {
             "stocks_pct":  sleeve_pct("stocks"),
@@ -437,6 +451,7 @@ def get_portfolio_snapshot(
                 "active_bots":            snap.bots_active,
                 "total_bots":             snap.bots_total,
                 "bot_ids":                bot_ids_in_sleeve,
+                "reserved_capital_cents": _sleeve_reservations.get(key, 0),
             }
 
         # Alloc map for status lookups
