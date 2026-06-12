@@ -53,8 +53,19 @@ def _get_bot_headers() -> dict:
     }
 
 
+def _get_cio_user_ids() -> set[str]:
+    """Returns the set of Discord user IDs authorised to approve proposals.
+    Reads CIO_DISCORD_USER_IDS (comma-separated) first, falls back to CIO_DISCORD_USER_ID."""
+    multi = os.getenv("CIO_DISCORD_USER_IDS", "").strip()
+    if multi:
+        return {uid.strip() for uid in multi.split(",") if uid.strip()}
+    single = os.getenv("CIO_DISCORD_USER_ID", "").strip()
+    return {single} if single else set()
+
+
 def _get_cio_user_id() -> str | None:
-    return os.getenv("CIO_DISCORD_USER_ID", "").strip() or None
+    ids = _get_cio_user_ids()
+    return next(iter(ids), None)
 
 
 def _get_reactions(channel_id: str, message_id: str, emoji_encoded: str) -> list[str]:
@@ -180,9 +191,9 @@ def run_proposal_handler(db: Session) -> dict:
     Fetches pending proposals that have been posted to Discord,
     checks for CIO reactions, and routes decisions to executors.
     """
-    cio_id = _get_cio_user_id()
-    if not cio_id:
-        logger.debug("[proposal_handler] no CIO_DISCORD_USER_ID configured, ignoring reactions")
+    cio_ids = _get_cio_user_ids()
+    if not cio_ids:
+        logger.debug("[proposal_handler] no CIO_DISCORD_USER_IDS configured, ignoring reactions")
         return {"checked": 0, "acted": 0}
 
     # Get pending AND deferred proposals with a message ID.
@@ -215,7 +226,7 @@ def run_proposal_handler(db: Session) -> dict:
 
         for emoji, decision in _EMOJI_DECISION.items():
             reactors = _get_reactions(channel_id, message_id, _EMOJI_ENCODED[emoji])
-            if cio_id in reactors:
+            if cio_ids & set(reactors):
                 logger.warning(
                     "[proposal_handler] CIO reacted %s on proposal %s → %s (was: %s)",
                     emoji, proposal_id, decision, current_decision,

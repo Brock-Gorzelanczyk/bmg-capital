@@ -624,27 +624,44 @@ def _write_proposal_audit(
 
 
 def _post_proposal(channel_id: str, token: str, embed: dict) -> str | None:
-    """Post proposal embed to Discord. Returns message_id or None."""
+    """Post proposal embed to Discord, then pre-add ✅ ❌ 🕐 so CIO can one-click react."""
     if not channel_id or not token:
         return None
+    headers = {
+        "Authorization": f"Bot {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "DiscordBot (https://github.com/BMG-Capital/bmg-capital, 1.0.0)",
+    }
     try:
         resp = httpx.post(
             f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            headers={
-                "Authorization": f"Bot {token}",
-                "Content-Type": "application/json",
-                "User-Agent": "DiscordBot (https://github.com/BMG-Capital/bmg-capital, 1.0.0)",
-            },
+            headers=headers,
             json={"embeds": [embed]},
             timeout=10,
         )
-        if resp.is_success:
-            return str(resp.json().get("id", ""))
-        logger.warning("[queen] proposal Discord post failed: %s", resp.status_code)
-        return None
+        if not resp.is_success:
+            logger.warning("[queen] proposal Discord post failed: %s", resp.status_code)
+            return None
+        message_id = str(resp.json().get("id", ""))
     except Exception as exc:
         logger.warning("[queen] proposal post error: %s", exc)
         return None
+
+    # Pre-add reactions so CIO just clicks — 0.6s apart to stay under rate limit
+    import time, urllib.parse
+    for emoji in ["✅", "❌", "🕐"]:
+        try:
+            encoded = urllib.parse.quote(emoji)
+            httpx.put(
+                f"https://discord.com/api/v10/channels/{channel_id}/messages/{message_id}/reactions/{encoded}/@me",
+                headers=headers,
+                timeout=5,
+            )
+            time.sleep(0.6)
+        except Exception:
+            pass
+
+    return message_id
 
 
 def _generate_synthetic_proposal(db: Session) -> list[dict]:
