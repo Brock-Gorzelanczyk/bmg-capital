@@ -52,6 +52,10 @@ def _get_discord_creds() -> tuple[str, str]:
 def _get_cio_user_id() -> str | None:
     return os.getenv("CIO_DISCORD_USER_ID", "").strip() or None
 
+def _get_mentions() -> str:
+    cio_id = _get_cio_user_id()
+    return os.getenv("DISCORD_CIO_MENTIONS", f"<@{cio_id}>" if cio_id else "").strip()
+
 
 def _bot_headers(token: str) -> dict:
     return {
@@ -68,8 +72,7 @@ def _post_halt_alert(bot_name: str, trigger: str) -> str | None:
         logger.warning("[auto_defensive_halt] Discord not configured — skipping alert")
         return None
 
-    cio_id = _get_cio_user_id()
-    mention = f"<@{cio_id}>" if cio_id else ""
+    mention = _get_mentions()
 
     embed = {
         "title": "⚠️ Auto-Defensive Halt",
@@ -108,8 +111,7 @@ def _post_critical_alert(reason: str) -> None:
     token, channel_id = _get_discord_creds()
     if not token or not channel_id:
         return
-    cio_id = _get_cio_user_id()
-    mention = f"<@{cio_id}>" if cio_id else ""
+    mention = _get_mentions()
     embed = {
         "title": "🚨 CRITICAL — Auto-Halt Cap Reached",
         "description": reason,

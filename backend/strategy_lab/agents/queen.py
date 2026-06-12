@@ -220,7 +220,7 @@ def _build_morning_embed(health: dict, research: dict, now: datetime) -> dict:
     if alerts:
         fields.append({"name": "⚠️ Alerts", "value": "\n".join(f"⚠ {a}" for a in alerts[:5]), "inline": False})
     return {
-        "author":    {"name": "BMG Capital — Queen Agent"},
+        "author":    {"name": "BMG Capital — Brick (Portfolio Manager)"},
         "title":     f"Morning Brief — {now.strftime('%A, %B %-d, %Y')}",
         "color":     _SESSION_COLOR["morning"],
         "fields":    fields,
@@ -243,7 +243,7 @@ def _build_pnl_embed(session: Session_t, health: dict, research: dict, pnl: dict
     if alerts:
         fields.append({"name": "⚠️ Alerts", "value": "\n".join(f"⚠ {a}" for a in alerts[:4]), "inline": False})
     return {
-        "author":    {"name": "BMG Capital — Queen Agent"},
+        "author":    {"name": "BMG Capital — Brick (Portfolio Manager)"},
         "title":     f"{_SESSION_LABEL[session]} — {now.strftime('%A, %B %-d, %Y')}",
         "color":     _SESSION_COLOR[session],
         "fields":    fields,
@@ -274,7 +274,7 @@ def _build_weekend_recap_embed(health: dict, weekend_pnl: dict, now: datetime) -
         {"name": "Bot Execution",                      "value": _bot_summary(health),                           "inline": False},
     ]
     return {
-        "author":    {"name": "BMG Capital — Queen Agent"},
+        "author":    {"name": "BMG Capital — Brick (Portfolio Manager)"},
         "title":     f"Weekend Crypto Recap — {now.strftime('%A, %B %-d, %Y')}",
         "color":     _SESSION_COLOR["weekend_recap"],
         "fields":    fields,
@@ -316,7 +316,7 @@ def _build_weekly_embed(health: dict, research: dict, weekly_pnl: dict, now: dat
     if alerts:
         fields.append({"name": "⚠️ Alerts", "value": "\n".join(f"⚠ {a}" for a in alerts[:4]), "inline": False})
     return {
-        "author":    {"name": "BMG Capital — Queen Agent"},
+        "author":    {"name": "BMG Capital — Brick (Portfolio Manager)"},
         "title":     f"Weekly Digest — Week of {now.strftime('%B %-d, %Y')}",
         "color":     _SESSION_COLOR["weekly"],
         "fields":    fields,
@@ -579,7 +579,7 @@ def _build_proposal_embed(
     ]
 
     return {
-        "author":    {"name": f"BMG Capital — Queen Agent · Proposal"},
+        "author":    {"name": f"BMG Capital — Brick · Proposal"},
         "title":     f"{title_prefix}{proposal_id} | {'Reduce' if direction == 'reduce' else 'Increase'} {bot_name} allocation",
         "color":     color,
         "fields":    fields,

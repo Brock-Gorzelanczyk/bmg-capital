@@ -196,8 +196,8 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
     titles = {
         "GREEN":    f"Risk Health Check — {now.strftime('%Y-%m-%d %H:%M')} UTC",
         "YELLOW":   f"Risk Health Check — {now.strftime('%Y-%m-%d %H:%M')} UTC",
-        "RED":      "🚨 Risk Sentinel — RED ALERT",
-        "CRITICAL": "🔴 CRITICAL — Immediate Attention Required",
+        "RED":      "🚨 Dick (CRO) — RED ALERT",
+        "CRITICAL": "🔴 Dick (CRO) — CRITICAL ALERT",
     }
     fields = [
         {"name": f"{icons[level]} Risk Level", "value": level, "inline": True},
@@ -235,11 +235,11 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
             "inline": False,
         })
     return {
-        "author":    {"name": "BMG Capital — Risk Sentinel"},
+        "author":    {"name": "BMG Capital — Dick (Chief Risk Officer)"},
         "title":     titles[level],
         "color":     colors[level],
         "fields":    fields,
-        "footer":    {"text": "Risk Sentinel · Tier A autonomous · Every 30 min"},
+        "footer":    {"text": "Dick (CRO) · Tier A autonomous · Every 30 min"},
         "timestamp": now.isoformat(),
     }
 
@@ -306,14 +306,12 @@ def run_risk_health_check(db: Session) -> dict:
             cio_id = os.getenv("CIO_DISCORD_USER_ID", "")
             embed = _build_embed(level, summary, now)
 
+            mentions = os.getenv("DISCORD_CIO_MENTIONS", f"<@{cio_id}>" if cio_id else "").strip()
             content = ""
-            if level == "RED" and cio_id:
-                content = f"<@{cio_id}>"
-            elif level == "CRITICAL" and cio_id:
-                content = f"<@{cio_id}> @here"
+            if level == "RED":
+                content = mentions
             elif level == "CRITICAL":
-                # No CIO_DISCORD_USER_ID set — still post @here without a personal mention
-                content = "@here"
+                content = f"{mentions} @here".strip()
 
             if _post(ch, token, embed, content=content):
                 logger.warning("[risk_sentinel] %s alert posted to Discord", level)

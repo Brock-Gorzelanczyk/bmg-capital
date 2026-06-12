@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Agent metadata: id → (display_name, emoji)
 _AGENT_META = {
     "researcher":           ("Equity Researcher",   "🔬"),
-    "risk_sentinel":        ("Chief Risk Officer",  "🛡️"),
+    "risk_sentinel":        ("Dick (CRO)",           "🛡️"),
     "data_quality_watcher": ("Data Quality",        "📊"),
     "execution_auditor":    ("Execution Auditor",   "⚡"),
     "operations":           ("Operations",          "🏦"),
