@@ -52,6 +52,7 @@ from app.routers.candidates import router as candidates_router
 from app.routers.walk_forward import router as walk_forward_router
 from app.routers.cost import router as cost_router
 from app.routers.ic import router as ic_router
+from app.routers.fund_agents import router as fund_agents_router
 from app.routers import notification_channels as notification_channels_router
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
 
@@ -361,6 +362,7 @@ app.include_router(candidates_router)
 app.include_router(walk_forward_router)
 app.include_router(cost_router)
 app.include_router(ic_router)
+app.include_router(fund_agents_router)
 
 
 @app.get("/health", tags=["health"])

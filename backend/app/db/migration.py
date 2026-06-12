@@ -626,6 +626,43 @@ def _seed_initial_bot_performance_stats(conn) -> None:
         conn.rollback()
 
 
+def _ensure_agent_bus_table(conn) -> None:
+    """Create the agent_messages inter-agent message bus table (idempotent)."""
+    MIGRATION_NAME = "agent_messages.table_v1_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS agent_messages (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel      VARCHAR  NOT NULL,
+                from_agent   VARCHAR  NOT NULL,
+                to_agent     VARCHAR,
+                msg_type     VARCHAR  NOT NULL,
+                subject      VARCHAR  NOT NULL,
+                payload      TEXT     NOT NULL DEFAULT '{}',
+                priority     INTEGER  NOT NULL DEFAULT 5,
+                reply_to_id  INTEGER,
+                read_by      TEXT     NOT NULL DEFAULT '[]',
+                created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_agent_msgs_channel ON agent_messages(channel)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_agent_msgs_created ON agent_messages(created_at)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_agent_msgs_to_agent ON agent_messages(to_agent)"
+        ))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration: agent_messages bus table created")
+    except Exception as exc:
+        logger.warning("_ensure_agent_bus_table failed: %s", exc)
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -729,6 +766,10 @@ def run_migrations(engine: Engine) -> None:
             _ensure_regime_history_table(conn)
         except Exception as _e:
             logger.warning("_ensure_regime_history_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_agent_bus_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_agent_bus_table failed (non-fatal): %s", _e)
 
 
 def _create_safety_layer_tables(conn) -> None:

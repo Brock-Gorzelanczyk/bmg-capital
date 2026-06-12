@@ -69,6 +69,10 @@ const NAV_BUILD = [
   { to: "/strategy/forge", label: "The Forge",      Icon: Hammer },
 ];
 
+const NAV_FUND = [
+  { to: "/fund", label: "Fund Team", Icon: Building2 },
+];
+
 const NAV_MARKETS = [
   { to: "/screener",  label: "Screener",  Icon: Filter },
   { to: "/news",      label: "News",      Icon: Newspaper },
@@ -486,6 +490,8 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
         <NavSection label="Labs" items={NAV_LABS} expanded={expanded} />
 
         <NavSection label="Build" items={NAV_BUILD} expanded={expanded} />
+
+        <NavSection label="Fund" items={NAV_FUND} expanded={expanded} />
 
         <NavSection label="Markets" items={NAV_MARKETS} expanded={expanded} />
 

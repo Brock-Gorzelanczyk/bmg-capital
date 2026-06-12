@@ -102,6 +102,7 @@ const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
 const StrategyScoutPage = lazy(() => import("@/pages/StrategyScoutPage"));
 const ForgeBuilderPage = lazy(() => import("@/pages/ForgeBuilderPage"));
 const SignalsFeedPage = lazy(() => import("@/pages/SignalsFeedPage"));
+const FundPage = lazy(() => import("@/pages/FundPage"));
 const PerformancePage = lazy(() => import("@/pages/PerformancePage"));
 const StrategyLeaderboardPage = lazy(() => import("@/pages/StrategyLeaderboardPage"));
 const MarketsPage = lazy(() => import("@/pages/MarketsPage"));
@@ -355,6 +356,7 @@ function AppInner() {
         <Route path="/signals" element={<SignalsFeedPage />} />
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
         <Route path="/strategy/forge" element={<ForgeBuilderPage />} />
+        <Route path="/fund" element={<FundPage />} />
         <Route path="/strategy/performance" element={<PerformancePage />} />
         <Route path="/strategy/leaderboard" element={<StrategyLeaderboardPage />} />
         <Route path="/markets" element={<MarketsPage />} />

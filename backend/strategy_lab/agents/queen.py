@@ -406,6 +406,35 @@ def run_queen_daily(db: Session, session: Session_t = "morning") -> None:
         len(health.get("alerts", [])),
     )
 
+    try:
+        from agents.bus import publish as _bus_publish
+        from agents import channels as _ch
+        _SESSION_CHANNEL = {
+            "morning":       _ch.QUEEN_MORNING,
+            "midday":        _ch.QUEEN_MIDDAY,
+            "close":         _ch.QUEEN_CLOSE,
+            "evening":       _ch.QUEEN_EVENING,
+            "weekend_recap": _ch.QUEEN_WEEKEND,
+            "weekly":        _ch.QUEEN_WEEKLY,
+        }
+        _bus_publish(
+            db,
+            channel=_SESSION_CHANNEL.get(session, f"queen.{session}"),
+            from_agent="queen",
+            msg_type="brief",
+            subject=f"Queen {session} brief — {now.strftime('%Y-%m-%d')}",
+            payload={
+                "session":          session,
+                "health_status":    health.get("status"),
+                "regime":           research.get("regime", {}),
+                "pnl_total_cents":  pnl.get("total_cents", 0) if pnl else None,
+                "stale_bots":       [b["bot"] for b in health.get("bots", []) if b.get("status") == "STALE"],
+                "alert_count":      len(health.get("alerts", [])),
+            },
+        )
+    except Exception as _exc:
+        logger.debug("[queen] bus publish skipped: %s", _exc)
+
 
 def run_regime_alert_check(db: Session) -> None:
     """
@@ -438,3 +467,18 @@ def run_regime_alert_check(db: Session) -> None:
             logger.warning("[queen] regime alert posted: %s", sig)
         else:
             logger.warning("[queen] regime alert (no Discord): %s — %s", sig, alert["description"])
+
+        try:
+            from agents.bus import publish as _bus_publish
+            from agents.channels import QUEEN_REGIME_ALERT
+            _bus_publish(
+                db,
+                channel=QUEEN_REGIME_ALERT,
+                from_agent="queen",
+                msg_type="regime_alert",
+                subject=f"Regime alert: {sig}",
+                priority=8,
+                payload=alert,
+            )
+        except Exception as _exc:
+            logger.debug("[queen] bus regime alert publish skipped: %s", _exc)

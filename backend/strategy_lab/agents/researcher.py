@@ -210,15 +210,38 @@ def run_daily_research(db: Session) -> dict:
     candidates = _score_candidates(db)
     recommendations = _build_recommendations(regime, bot_ics)
 
+    result = {
+        "regime":          regime,
+        "signal_ic":       ic_summary,
+        "candidates":      candidates,
+        "recommendations": recommendations,
+    }
+
     logger.info(
         "[researcher] regime=%s ic_bots=%d candidates=%d recs=%d",
         regime["name"], len([i for i in ic_summary if i["ic"] is not None]),
         len(candidates), len(recommendations),
     )
 
-    return {
-        "regime":          regime,
-        "signal_ic":       ic_summary,
-        "candidates":      candidates,
-        "recommendations": recommendations,
-    }
+    try:
+        from agents.bus import publish as _bus_publish
+        from agents.channels import RESEARCHER_FINDINGS
+        _bus_publish(
+            db,
+            channel=RESEARCHER_FINDINGS,
+            from_agent="researcher",
+            to_agent="queen",
+            msg_type="findings",
+            subject=f"Daily research — regime={regime['name']}",
+            payload={
+                "regime":          regime,
+                "degrading_bots":  [i["bot"] for i in ic_summary if i.get("status") == "degrading"],
+                "strong_bots":     [i["bot"] for i in ic_summary if i.get("status") == "strong"],
+                "candidates_count": len(candidates),
+                "recommendations": recommendations,
+            },
+        )
+    except Exception as _exc:
+        logger.debug("[researcher] bus publish skipped: %s", _exc)
+
+    return result
