@@ -5,22 +5,28 @@ import { cn } from "@/lib/utils";
 import { FUND_ROLES, ROLE_BY_ID } from "@/data/fundRoles";
 import type { FundRole, AgentStatus } from "@/data/fundRoles";
 
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+type LiveAgentData = {
+  id: string;
+  status: AgentStatus | "not_built";
+  last_activity: string | null;
+  expected_deploy_phase?: number;
+  today: Record<string, number>;
+  recent_activity: Array<{ ts: string; action: string; result: string }>;
+};
+
+type AgentsStatusResponse = {
+  agents: LiveAgentData[];
+  as_of: string;
+};
+
 // ── API ────────────────────────────────────────────────────────────────────────
 
-async function fetchAgentStatus() {
+async function fetchAgentStatus(): Promise<AgentsStatusResponse> {
   const res = await fetch("/api/agents/status");
   if (!res.ok) throw new Error("Failed to fetch agent status");
-  return res.json() as Promise<{
-    agents: Array<{
-      id: string;
-      status: AgentStatus | "not_built";
-      last_activity: string | null;
-      expected_deploy_phase?: number;
-      today: Record<string, number>;
-      recent_activity: Array<{ ts: string; action: string; result: string }>;
-    }>;
-    as_of: string;
-  }>;
+  return res.json();
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -179,9 +185,7 @@ function DetailPanel({
   liveData,
 }: {
   role: FundRole;
-  liveData: ReturnType<typeof fetchAgentStatus> extends Promise<infer T>
-    ? T["agents"][0] | undefined
-    : never;
+  liveData: LiveAgentData | undefined;
 }) {
   const status = liveData?.status ?? role.status;
 
@@ -542,7 +546,7 @@ export default function FundPage() {
 
       {/* Detail panel */}
       {selectedRole && (
-        <DetailPanel role={selectedRole} liveData={selectedLiveData as never} />
+        <DetailPanel role={selectedRole} liveData={selectedLiveData} />
       )}
 
       {/* Empty state when nothing selected */}
