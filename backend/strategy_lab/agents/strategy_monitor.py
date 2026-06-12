@@ -1,13 +1,7 @@
 """
-Strategy Monitor Agent — tracks BMG Capital app and bot execution health.
+Strategy Monitor Agent — system and bot execution health.
 
-Checks every morning (called by Queen at 7 AM ET):
-  1. Bot execution windows — last signal vs expected run interval
-  2. Alpaca paper account connectivity and equity snapshot
-  3. Signal generation rate vs 7-day baseline
-  4. Dead-bot detection (bots that should have run but haven't)
-
-Returns a health dict consumed by the Queen Agent.
+Called by Queen Agent for all 4 daily sessions plus regime alert checks.
 """
 from __future__ import annotations
 
@@ -20,33 +14,42 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# Max hours between signals before a bot is considered stale.
-# Thresholds are generous — alert fires at 2× the normal interval.
-_EXPECTED_INTERVAL_HOURS: dict[str, float] = {
-    "stock_swing":                 24,    # once post-close
-    "stock_day":                   1,     # every 5 min during market hours
-    "stock_lt":                    168,   # weekly
-    "crypto_swing":                8,     # every 4 hours
-    "crypto_day":                  1,     # every 5 min
-    "crypto_lt":                   168,   # weekly
-    "crypto_onchain":              8,     # every 4 hours
-    "options_income":              24,    # equity income — once daily
-    "options_directional":         24,    # equity directional — once daily
-    "crypto_quant_aggressive":     1,     # every 5 min
-    "crypto_quant_scalper":        0.5,   # every 1 min
-    "crypto_quant_mean_reversion": 0.5,  # every 3 min
-    "crypto_meanrev_2163":         1,     # every ~5-15 min
+# Per-bot expected signal interval in MINUTES.
+# STALE threshold fires at 3× this value — slow bots never false-alarm.
+_EXPECTED_INTERVAL_MINUTES: dict[str, int] = {
+    "stock_swing":                 1440,   # once post-close (24h)
+    "stock_day":                   30,     # every 5 min during hours
+    "stock_lt":                    10080,  # weekly
+    "crypto_swing":                480,    # every 4h
+    "crypto_day":                  30,     # every 5 min, 24/7
+    "crypto_lt":                   10080,  # weekly
+    "crypto_onchain":              480,    # every 4h
+    "options_income":              1440,   # equity income — once daily
+    "options_directional":         1440,   # equity directional — once daily
+    "crypto_quant_aggressive":     20,     # every 5 min
+    "crypto_quant_scalper":        10,     # every 1 min
+    "crypto_quant_mean_reversion": 15,     # every 3 min
+    "crypto_meanrev_2163":         240,    # every 4h
 }
 
-_STOCK_OPTIONS_BOTS = {
+_STOCK_EQUITY_BOTS = {
     "stock_swing", "stock_day", "stock_lt", "options_income", "options_directional"
 }
 
 _HARD_PAUSE_REASONS = {"admin_lock", "health_halt"}
 
+_BOT_SLEEVE = {
+    "stock_swing": "stocks", "stock_day": "stocks", "stock_lt": "stocks",
+    "options_income": "stocks", "options_directional": "stocks",
+    "crypto_swing": "crypto", "crypto_day": "crypto",
+    "crypto_lt": "crypto", "crypto_onchain": "crypto",
+    "crypto_quant_aggressive": "quant", "crypto_quant_scalper": "quant",
+    "crypto_quant_mean_reversion": "quant", "crypto_meanrev_2163": "quant",
+}
+
 
 def _check_bot_windows(db: Session) -> list[dict]:
-    """Per-bot execution window check. Skips stock/options bots on weekends."""
+    """Per-bot execution window check. Skips stock/equity bots on weekends."""
     from app.db.models.bots import BotProfile, BotAllocation, BotSignal
     from sqlalchemy import func
 
@@ -54,8 +57,8 @@ def _check_bot_windows(db: Session) -> list[dict]:
     is_weekend = now.weekday() >= 5
 
     results: list[dict] = []
-    for bot_name, max_hours in _EXPECTED_INTERVAL_HOURS.items():
-        if is_weekend and bot_name in _STOCK_OPTIONS_BOTS:
+    for bot_name, interval_min in _EXPECTED_INTERVAL_MINUTES.items():
+        if is_weekend and bot_name in _STOCK_EQUITY_BOTS:
             results.append({"bot": bot_name, "status": "SKIPPED", "reason": "weekend"})
             continue
 
@@ -89,15 +92,15 @@ def _check_bot_windows(db: Session) -> list[dict]:
             if last_ts.tzinfo is None:
                 last_ts = last_ts.replace(tzinfo=timezone.utc)
 
-            hours_since = (now - last_ts).total_seconds() / 3600
-            threshold = max_hours * 2  # alert at 2× normal interval
-            status = "OK" if hours_since <= threshold else "STALE"
+            minutes_since = (now - last_ts).total_seconds() / 60
+            threshold_min = interval_min * 3  # STALE at 3× expected interval
+            status = "OK" if minutes_since <= threshold_min else "STALE"
 
             results.append({
                 "bot":                    bot_name,
                 "status":                 status,
-                "hours_since_last":       round(hours_since, 1),
-                "alert_threshold_hours":  threshold,
+                "minutes_since_last":     round(minutes_since, 1),
+                "alert_threshold_min":    threshold_min,
                 "last_signal":            last_ts.isoformat(),
             })
         except Exception as exc:
@@ -118,13 +121,12 @@ def _check_alpaca() -> dict:
         client  = TradingClient(api_key, secret, paper=True)
         account = client.get_account()
 
-        equity        = float(account.equity or 0)
-        buying_power  = float(account.buying_power or 0)
-        account_status = str(account.status)
+        equity       = float(account.equity or 0)
+        buying_power = float(account.buying_power or 0)
 
         return {
-            "status":           "OK" if "ACTIVE" in account_status.upper() else "DEGRADED",
-            "account_status":   account_status,
+            "status":           "OK" if "ACTIVE" in str(account.status).upper() else "DEGRADED",
+            "account_status":   str(account.status),
             "equity_usd":       round(equity, 2),
             "buying_power_usd": round(buying_power, 2),
         }
@@ -133,7 +135,7 @@ def _check_alpaca() -> dict:
 
 
 def _check_signal_rate(db: Session) -> dict:
-    """Compare today's signal volume against the 7-day daily average."""
+    """Compare today's signal volume against 7-day daily average."""
     try:
         from app.db.models.bots import BotSignal
         from sqlalchemy import func
@@ -228,12 +230,208 @@ def get_pnl_snapshot(db: Session) -> dict:
                 "top_winners": [], "top_losers": []}
 
 
+def get_weekend_pnl(db: Session) -> dict:
+    """Sat+Sun P&L broken down by sleeve — used in Monday 6am crypto recap."""
+    try:
+        from app.db.models.bots import BotAllocation, BotDailyPnL, BotProfile
+        from sqlalchemy import func
+
+        today    = date.today()
+        weekday  = today.weekday()
+        # Compute the most recent Saturday
+        days_since_sat = (weekday - 5) % 7
+        saturday = today - timedelta(days=days_since_sat)
+        sunday   = saturday + timedelta(days=1)
+
+        allocs = db.query(BotAllocation, BotProfile).join(
+            BotProfile, BotProfile.id == BotAllocation.profile_id
+        ).all()
+
+        sleeve_totals: dict[str, int] = {"stocks": 0, "crypto": 0, "quant": 0}
+        total = 0
+
+        for alloc, profile in allocs:
+            sleeve = _BOT_SLEEVE.get(profile.name, "other")
+            if sleeve not in sleeve_totals:
+                continue
+            rows = db.query(BotDailyPnL).filter(
+                BotDailyPnL.allocation_id == alloc.id,
+                BotDailyPnL.date.in_([saturday, sunday]),
+            ).all()
+            cents = sum((r.realized_cents or 0) + (r.unrealized_cents or 0) for r in rows)
+            sleeve_totals[sleeve] = sleeve_totals.get(sleeve, 0) + cents
+            total += cents
+
+        return {
+            "total_cents":   total,
+            "by_sleeve":     sleeve_totals,
+            "saturday":      saturday.isoformat(),
+            "sunday":        sunday.isoformat(),
+        }
+    except Exception as exc:
+        logger.warning("[strategy_monitor] weekend_pnl failed: %s", exc)
+        return {"total_cents": 0, "by_sleeve": {}, "saturday": "", "sunday": ""}
+
+
+def get_weekly_pnl(db: Session) -> dict:
+    """7-day P&L by sleeve and top/bottom bots — used in Sunday weekly digest."""
+    try:
+        from app.db.models.bots import BotAllocation, BotDailyPnL, BotProfile
+        from app.db.models.allocation import BotPerformanceStats
+
+        week_ago = date.today() - timedelta(days=7)
+
+        allocs = db.query(BotAllocation, BotProfile).join(
+            BotProfile, BotProfile.id == BotAllocation.profile_id
+        ).all()
+
+        sleeve_totals: dict[str, int] = {"stocks": 0, "crypto": 0, "quant": 0}
+        bot_pnls: list[dict] = []
+
+        for alloc, profile in allocs:
+            sleeve = _BOT_SLEEVE.get(profile.name, "other")
+            rows = db.query(BotDailyPnL).filter(
+                BotDailyPnL.allocation_id == alloc.id,
+                BotDailyPnL.date >= week_ago,
+            ).all()
+            cents = sum((r.realized_cents or 0) + (r.unrealized_cents or 0) for r in rows)
+            if sleeve in sleeve_totals:
+                sleeve_totals[sleeve] += cents
+            bot_pnls.append({"bot": profile.name, "pnl_cents": cents})
+
+        bot_pnls.sort(key=lambda x: -x["pnl_cents"])
+        total = sum(sleeve_totals.values())
+
+        return {
+            "total_cents":   total,
+            "by_sleeve":     sleeve_totals,
+            "top_bots":      bot_pnls[:3],
+            "bottom_bots":   list(reversed(bot_pnls))[:3],
+        }
+    except Exception as exc:
+        logger.warning("[strategy_monitor] weekly_pnl failed: %s", exc)
+        return {"total_cents": 0, "by_sleeve": {}, "top_bots": [], "bottom_bots": []}
+
+
+def check_regime_alert_signals(db: Session) -> list[dict]:
+    """
+    Poll for regime-change alert conditions. Returns list of triggered alerts.
+    Each alert: {"signal": str, "description": str, "severity": "HIGH"|"MEDIUM"}.
+    """
+    alerts: list[dict] = []
+    try:
+        from sqlalchemy import text
+
+        # ── Try new regime_snapshots table first (from Playbook Phase 2) ──────
+        rows = db.execute(text("""
+            SELECT snapshot_date, vix_level, spx_vs_200ma, hy_spread_proxy, vix_ts_slope,
+                   regime, confidence
+            FROM regime_snapshots
+            ORDER BY snapshot_date DESC
+            LIMIT 15
+        """)).fetchall()
+
+        if rows and len(rows) >= 2:
+            latest = rows[0]
+            vix_now = latest[1]
+
+            # VIX +50% in 5 days
+            if vix_now and len(rows) >= 5:
+                vix_5d = rows[4][1]
+                if vix_5d and vix_5d > 0 and (vix_now / vix_5d - 1) >= 0.50:
+                    alerts.append({
+                        "signal": "vix_spike_5d",
+                        "description": f"VIX +{(vix_now/vix_5d-1)*100:.0f}% in 5 days ({vix_5d:.1f}→{vix_now:.1f})",
+                        "severity": "HIGH",
+                    })
+
+            # VIX term structure inverted (backwardation)
+            vix_ts = latest[4]
+            if vix_ts is not None and vix_ts < 0:
+                alerts.append({
+                    "signal": "vix_backwardation",
+                    "description": f"VIX term structure inverted (slope={vix_ts:.3f}) — stress signal",
+                    "severity": "HIGH",
+                })
+
+            # SPX below 200 MA
+            spx_vs_200 = latest[2]
+            if spx_vs_200 is not None and spx_vs_200 < 0:
+                # Only alert if it recently crossed below (was above 5 days ago)
+                if len(rows) >= 5 and rows[4][2] is not None and rows[4][2] >= 0:
+                    alerts.append({
+                        "signal": "spx_below_200ma",
+                        "description": "SPX crossed below 200 MA after extended period above",
+                        "severity": "HIGH",
+                    })
+
+            # HY spread proxy widening
+            hy_now = latest[3]
+            if hy_now and len(rows) >= 10:
+                hy_10d = rows[9][3]
+                if hy_10d and (hy_now - hy_10d) >= 0.05:  # proxy unit threshold
+                    alerts.append({
+                        "signal": "hy_spread_widening",
+                        "description": f"HY spread proxy widened {hy_now - hy_10d:.3f} in 10 days",
+                        "severity": "MEDIUM",
+                    })
+
+    except Exception:
+        pass  # Table may not exist yet — fall back to old table
+
+    try:
+        # ── Fall back to original regime_snapshot table ───────────────────────
+        from app.db.models.bots import RegimeSnapshot
+        snaps = db.query(RegimeSnapshot).order_by(RegimeSnapshot.ts.desc()).limit(15).all()
+
+        if snaps and len(snaps) >= 2:
+            vix_now = snaps[0].vix_value
+
+            # VIX +50% in 5 days
+            if vix_now and len(snaps) >= 5:
+                vix_5d = snaps[4].vix_value
+                if vix_5d and vix_5d > 0 and (vix_now / vix_5d - 1) >= 0.50:
+                    if not any(a["signal"] == "vix_spike_5d" for a in alerts):
+                        alerts.append({
+                            "signal": "vix_spike_5d",
+                            "description": f"VIX +{(vix_now/vix_5d-1)*100:.0f}% in 5 days ({vix_5d:.1f}→{vix_now:.1f})",
+                            "severity": "HIGH",
+                        })
+
+            # BTC dominance ±3pts in 7 days
+            btc_now = snaps[0].btc_dominance
+            if btc_now and len(snaps) >= 7:
+                btc_7d = snaps[6].btc_dominance
+                if btc_7d and abs(btc_now - btc_7d) >= 3.0:
+                    direction = "▲" if btc_now > btc_7d else "▼"
+                    alerts.append({
+                        "signal": "btc_dom_shift",
+                        "description": f"BTC dominance {direction}{abs(btc_now-btc_7d):.1f}pts in 7d ({btc_7d:.1f}%→{btc_now:.1f}%)",
+                        "severity": "MEDIUM",
+                    })
+
+            # Regime transition into crisis
+            current_regime = (snaps[0].trend_regime or "").lower()
+            prev_regime    = (snaps[1].trend_regime or "").lower() if len(snaps) > 1 else ""
+            if "crisis" in current_regime and "crisis" not in prev_regime:
+                if not any(a["signal"] == "regime_crisis" for a in alerts):
+                    alerts.append({
+                        "signal": "regime_crisis",
+                        "description": "Regime transitioned into CRISIS — review all positions",
+                        "severity": "HIGH",
+                    })
+
+    except Exception:
+        pass
+
+    return alerts
+
+
 def run_strategy_health_check(db: Session) -> dict:
     """
-    Main entry point called by Queen Agent at 7 AM ET.
+    Main entry point called by Queen Agent for all 4 daily sessions.
 
     Returns dict with keys: status, bots, alpaca, signal_rate, alerts, checked_at.
-    Overall status: GREEN | YELLOW | RED.
     """
     bot_windows = _check_bot_windows(db)
     alpaca      = _check_alpaca()
@@ -243,7 +441,10 @@ def run_strategy_health_check(db: Session) -> dict:
 
     stale_bots = [b for b in bot_windows if b.get("status") == "STALE"]
     for b in stale_bots:
-        alerts.append(f"STALE: {b['bot']} silent {b.get('hours_since_last', '?')}h (threshold {b.get('alert_threshold_hours', '?')}h)")
+        alerts.append(
+            f"STALE: {b['bot']} silent {b.get('minutes_since_last','?'):.0f}m "
+            f"(threshold {b.get('alert_threshold_min','?'):.0f}m)"
+        )
 
     never_ran = [b["bot"] for b in bot_windows if b.get("status") == "NEVER_RAN"]
     if never_ran:
@@ -254,13 +455,9 @@ def run_strategy_health_check(db: Session) -> dict:
 
     sr_status = signal_rate.get("status")
     if sr_status == "SILENT":
-        alerts.append(
-            f"SIGNAL SILENT: 0 signals today vs {signal_rate.get('daily_avg_7d')} avg/day"
-        )
+        alerts.append(f"SIGNAL SILENT: 0 signals today vs {signal_rate.get('daily_avg_7d')} avg/day")
     elif sr_status == "SLOW":
-        alerts.append(
-            f"SIGNAL SLOW: {signal_rate.get('today')} today vs avg {signal_rate.get('daily_avg_7d')}/day"
-        )
+        alerts.append(f"SIGNAL SLOW: {signal_rate.get('today')} today vs avg {signal_rate.get('daily_avg_7d')}/day")
 
     if stale_bots or alpaca.get("status") == "ERROR":
         overall = "RED"

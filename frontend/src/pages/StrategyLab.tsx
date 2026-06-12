@@ -154,7 +154,7 @@ const CANDIDATE_META = [
 
 const BOT_META: Record<
   string,
-  { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant" }
+  { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant" | "options" }
 > = {
   stock_swing: {
     displayName: "Stock Swing",

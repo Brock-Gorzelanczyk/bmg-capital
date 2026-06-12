@@ -27,6 +27,7 @@ ACTIVE_BOTS = [
     "crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain",
     "options_income", "options_directional",
     "crypto_quant_aggressive", "crypto_quant_scalper", "crypto_quant_mean_reversion",
+    "crypto_meanrev_2163",
 ]
 
 _REGIME_BEST_BOTS = {

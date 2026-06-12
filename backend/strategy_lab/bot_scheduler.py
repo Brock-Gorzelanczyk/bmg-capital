@@ -807,10 +807,12 @@ def setup_bot_scheduler(scheduler) -> None:
         return _job
 
     _queen_schedules = [
-        ("morning", dict(day_of_week="mon-fri", hour=7,  minute=0,  timezone=ET)),
-        ("midday",  dict(day_of_week="mon-fri", hour=12, minute=0,  timezone=ET)),
-        ("close",   dict(day_of_week="mon-fri", hour=16, minute=30, timezone=ET)),
-        ("evening", dict(hour=21, minute=0, timezone=ET)),
+        ("morning",       dict(day_of_week="mon-fri", hour=7,  minute=0,  timezone=ET)),
+        ("midday",        dict(day_of_week="mon-fri", hour=12, minute=0,  timezone=ET)),
+        ("close",         dict(day_of_week="mon-fri", hour=16, minute=30, timezone=ET)),
+        ("evening",       dict(hour=21, minute=0, timezone=ET)),              # daily — crypto runs 24/7
+        ("weekend_recap", dict(day_of_week="mon", hour=6, minute=0, timezone=ET)),  # Monday only
+        ("weekly",        dict(day_of_week="sun", hour=20, minute=0, timezone=ET)), # Sunday only
     ]
     for _session, _cron_kwargs in _queen_schedules:
         scheduler.add_job(
@@ -824,6 +826,32 @@ def setup_bot_scheduler(scheduler) -> None:
         )
         logger.warning("[startup-trace] registered job queen_%s", _session)
 
+    # ------------------------------------------------------------------
+    # Regime alert check — event-driven, polls every 30 min
+    # Posts immediately to Discord when a condition fires (24h cooldown).
+    # ------------------------------------------------------------------
+    def _run_regime_alert_check():
+        from app.db.session import SessionLocal
+        from strategy_lab.agents.queen import run_regime_alert_check
+        db = SessionLocal()
+        try:
+            run_regime_alert_check(db)
+        except Exception as exc:
+            logger.error("[queen-regime-alert] failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_regime_alert_check,
+        CronTrigger(minute="*/30"),
+        id="queen_regime_alert_check",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job queen_regime_alert_check (every 30 min)")
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
@@ -832,5 +860,6 @@ def setup_bot_scheduler(scheduler) -> None:
         "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan "
         "strategy_forge_scan signal_explain_pregen "
         "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp "
-        "queen_morning queen_midday queen_close queen_evening"
+        "queen_morning queen_midday queen_close queen_evening "
+        "queen_weekend_recap queen_weekly queen_regime_alert_check"
     )
