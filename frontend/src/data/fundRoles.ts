@@ -306,7 +306,7 @@ export const FUND_ROLES: FundRole[] = [
     agentName: "Operations",
     tier: "A",
     status: "not_built",
-    expectedDeployPhase: 6,
+    expectedDeployPhase: 3,
     description:
       "Daily reconciliation, fee attribution, and P&L reporting across all sleeves. Produces end-of-period operational summaries, verifies that account balances match strategy allocations, and maintains the audit trail for all automated actions.",
     authority: {
