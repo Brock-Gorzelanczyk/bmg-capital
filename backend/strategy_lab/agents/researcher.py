@@ -12,12 +12,48 @@ Called by Queen Agent at 7 AM ET. Returns a structured research dict.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+def _get_research_channel() -> tuple[str, str]:
+    token = os.getenv("DISCORD_BOT_TOKEN", "")
+    channel_id = (
+        os.getenv("DISCORD_CH_RESEARCH_LOG", "")
+        or os.getenv("DISCORD_CH_DEV_LOG", "")
+    )
+    try:
+        from app.config import settings
+        token = settings.discord_bot_token or token
+    except Exception:
+        pass
+    return token, channel_id
+
+
+def _post_research_digest(token: str, channel_id: str, embed: dict) -> bool:
+    if not channel_id or not token:
+        return False
+    import httpx
+    try:
+        resp = httpx.post(
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            headers={
+                "Authorization": f"Bot {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (https://github.com/BMG-Capital/bmg-capital, 1.0.0)",
+            },
+            json={"embeds": [embed]},
+            timeout=10,
+        )
+        return resp.is_success
+    except Exception as exc:
+        logger.warning("[researcher] Discord post failed: %s", exc)
+        return False
 
 IC_WARN_THRESHOLD = 0.02   # IC below this → signal degrading
 IC_GOOD_THRESHOLD = 0.05   # IC above this → strong signal
@@ -183,6 +219,34 @@ def _build_recommendations(regime: dict, bot_ics: dict[str, Optional[float]]) ->
     return recs[:6]
 
 
+def _answer_query(db: Session, question: str) -> str:
+    """Answer a query from another agent using agent_memory context."""
+    try:
+        from agents.memory import get_memories
+        memories = get_memories(db, agent_id="researcher", limit=20)
+        if not memories:
+            return "Insufficient data — will investigate in next research cycle."
+        q_lower = question.lower()
+        for m in memories:
+            key_lower = str(m.get("key", "")).lower()
+            mtype_lower = str(m.get("memory_type", "")).lower()
+            val = m.get("value")
+            if any(kw in q_lower for kw in ("regime", "market", "trend")) and "regime" in mtype_lower:
+                return f"Current regime observation [{m['key']}]: {val}"
+            if any(kw in q_lower for kw in ("degrading", "weak", "decay")) and "degrading_bots" in key_lower:
+                return f"Degrading bots: {val}"
+            if any(kw in q_lower for kw in ("strong", "best", "top")) and "strong_bots" in key_lower:
+                return f"Strong bots: {val}"
+            if any(kw in q_lower for kw in ("candidate", "symbol")) and "candidate" in mtype_lower:
+                return f"Top candidates: {val}"
+        # Return most recent memory as best-effort answer
+        m = memories[0]
+        return f"Most recent observation [{m['memory_type']}/{m['key']}]: {m['value']} — see next research cycle for targeted answer."
+    except Exception as exc:
+        logger.debug("[researcher] _answer_query failed: %s", exc)
+        return "Insufficient data — will investigate in next research cycle."
+
+
 def run_daily_research(db: Session) -> dict:
     """
     Main entry point called by Queen Agent at 7 AM ET.
@@ -194,6 +258,18 @@ def run_daily_research(db: Session) -> dict:
         _hb(db, agent_id="researcher")
     except Exception:
         pass
+
+    # Process any pending queries from other agents
+    try:
+        from agents.bus import get_pending_queries, answer_query
+        queries = get_pending_queries(db, agent_id="researcher")
+        for q in queries[:3]:  # max 3 per run
+            answer = _answer_query(db, q["question"])
+            answer_query(db, from_agent="researcher", to_agent=q["from_agent"],
+                         question=q["question"], answer=answer,
+                         correlation_id=q["payload"].get("correlation_id", ""))
+    except Exception as _qe:
+        logger.debug("[researcher] query processing skipped: %s", _qe)
 
     # Load prior observations — injected into research context for continuity
     try:
@@ -281,5 +357,31 @@ def run_daily_research(db: Session) -> dict:
         )
     except Exception as _exc:
         logger.debug("[researcher] bus publish skipped: %s", _exc)
+
+    # Post daily research digest to Discord
+    try:
+        degrading_bots = [i["bot"] for i in ic_summary if i.get("status") == "degrading"]
+        strong_bots    = [i["bot"] for i in ic_summary if i.get("status") == "strong"]
+        top_candidates = [c.get("strategy", c.get("symbol", "?")) for c in candidates[:5]]
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        embed = {
+            "author":    {"name": "BMG Capital — Equity Researcher"},
+            "title":     f"🔬 Research Digest — {today_str}",
+            "color":     0x6366F1,
+            "fields":    [
+                {"name": "Regime",              "value": regime.get("name", "unknown").replace("_", " ").title(), "inline": True},
+                {"name": "Degrading Bots (Top 3)", "value": ", ".join(degrading_bots[:3]) or "None", "inline": False},
+                {"name": "Strong Bots (Top 3)",    "value": ", ".join(strong_bots[:3]) or "None", "inline": False},
+                {"name": "Top 5 Candidates",       "value": ", ".join(top_candidates) or "None", "inline": False},
+                {"name": "Recommendations",        "value": str(len(recommendations)), "inline": True},
+            ],
+            "footer":    {"text": "Researcher · Daily 7 AM ET"},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        _tok, _ch = _get_research_channel()
+        if _post_research_digest(_tok, _ch, embed):
+            logger.info("[researcher] digest posted to Discord")
+    except Exception as _de:
+        logger.debug("[researcher] Discord digest post skipped: %s", _de)
 
     return result

@@ -310,3 +310,26 @@ def get_agents_status(db: Session = Depends(get_db)):
     ]
 
     return {"agents": agents, "as_of": now.isoformat()}
+
+
+@router.post("/standup/run")
+def trigger_standup(force: bool = False, db: Session = Depends(get_db)):
+    from agents.standup import run_daily_standup
+    result = run_daily_standup(db)
+    return result
+
+
+@router.post("/{agent_name}/post-daily-summary")
+def force_agent_summary(agent_name: str, force: bool = False, db: Session = Depends(get_db)):
+    # Dispatch to the right agent function
+    dispatch = {
+        "data_quality_watcher": lambda: __import__("strategy_lab.agents.data_quality_watcher", fromlist=["run_data_quality_check"]).run_data_quality_check(db),
+        "execution_auditor":    lambda: __import__("strategy_lab.agents.execution_auditor",    fromlist=["run_execution_audit"]).run_execution_audit(db),
+        "operations":           lambda: __import__("strategy_lab.agents.operations",           fromlist=["run_operations_reconciliation"]).run_operations_reconciliation(db),
+        "researcher":           lambda: __import__("strategy_lab.agents.researcher",           fromlist=["run_daily_research"]).run_daily_research(db),
+    }
+    if agent_name not in dispatch:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found or does not support force summary")
+    result = dispatch[agent_name]()
+    return {"ok": True, "agent": agent_name, "result": result}

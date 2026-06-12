@@ -157,6 +157,7 @@ def run_execution_audit(db: Session) -> dict:
         stats["avg_slippage_bps"] or 0.0, stats["fees_usd"],
     )
 
+    token, ch = _get_channel()
     if level in ("YELLOW", "RED"):
         colors = {"YELLOW": 0xF59E0B, "RED": 0xDC2626}
         icons  = {"YELLOW": "⚠️",     "RED": "🚨"}
@@ -179,9 +180,24 @@ def run_execution_audit(db: Session) -> dict:
             "footer":    {"text": "Execution Auditor · Tier A · Daily 5 PM ET"},
             "timestamp": now.isoformat(),
         }
-        token, ch = _get_channel()
         if ch and _post(ch, token, embed):
             logger.warning("[exec_auditor] %s alert posted to Discord", level)
+    else:
+        embed = {
+            "author":    {"name": "BMG Capital — Execution Auditor"},
+            "title":     f"✅ Execution Quality — {now.strftime('%Y-%m-%d')}",
+            "color":     0x16A34A,
+            "fields":    [
+                {"name": "Trades Audited",  "value": str(stats["trade_count"]), "inline": True},
+                {"name": "Avg Slippage",    "value": f"{stats['avg_slippage_bps']:.1f} bps" if stats["avg_slippage_bps"] is not None else "N/A", "inline": True},
+                {"name": "Total Fees",      "value": f"${stats['fees_usd']:.2f}", "inline": True},
+                {"name": "Status",          "value": "All fills within normal range", "inline": False},
+            ],
+            "footer":    {"text": "Execution Auditor · Tier A · Daily 5 PM ET"},
+            "timestamp": now.isoformat(),
+        }
+        if ch and _post(ch, token, embed):
+            logger.info("[exec_auditor] green summary posted to Discord")
 
     # Publish to bus
     try:

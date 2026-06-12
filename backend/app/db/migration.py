@@ -763,6 +763,22 @@ def _ensure_proposal_audit_table(conn) -> None:
         logger.warning("_ensure_proposal_audit_table failed: %s", exc)
 
 
+def _ensure_daily_plan_table(db) -> None:
+    """Create the daily_plan table for standup synthesized plans (idempotent)."""
+    db.execute(text("""
+        CREATE TABLE IF NOT EXISTS daily_plan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_date DATE NOT NULL UNIQUE,
+            plan_json TEXT NOT NULL,
+            contributions_json TEXT,
+            generated_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            posted_message_id VARCHAR(30)
+        )
+    """))
+    db.commit()
+    logger.info("Migration: daily_plan table ensured")
+
+
 def run_migrations(engine: Engine) -> None:
     """Add any missing columns to existing tables (safe no-op if already present)."""
     with engine.connect() as conn:
@@ -882,6 +898,24 @@ def run_migrations(engine: Engine) -> None:
             _ensure_proposal_audit_table(conn)
         except Exception as _e:
             logger.warning("_ensure_proposal_audit_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_daily_plan_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_daily_plan_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_bot_profiles_halt_columns(conn)
+        except Exception as _e:
+            logger.warning("_ensure_bot_profiles_halt_columns failed (non-fatal): %s", _e)
+
+
+def _ensure_bot_profiles_halt_columns(conn) -> None:
+    """Add status + reason_paused to bot_profiles for defensive halt executor."""
+    for col, typedef in [("status", "VARCHAR(20) DEFAULT 'ACTIVE'"), ("reason_paused", "TEXT")]:
+        try:
+            conn.execute(text(f"ALTER TABLE bot_profiles ADD COLUMN {col} {typedef}"))
+            conn.commit()
+        except Exception:
+            pass  # column already exists
 
 
 def _create_safety_layer_tables(conn) -> None:

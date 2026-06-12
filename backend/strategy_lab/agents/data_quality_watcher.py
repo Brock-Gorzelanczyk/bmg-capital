@@ -141,8 +141,8 @@ def run_data_quality_check(db: Session) -> dict:
 
     logger.info("[dq_watcher] ok=%s issues=%d", not has_issues, len(all_issues))
 
+    token, ch = _get_channel()
     if has_issues:
-        token, ch = _get_channel()
         embed = {
             "author": {"name": "BMG Capital — Data Quality Watcher"},
             "title":  f"⚠️ Data Quality Alert — {now.strftime('%Y-%m-%d %H:%M')} UTC",
@@ -157,6 +157,21 @@ def run_data_quality_check(db: Session) -> dict:
         }
         if ch and _post(ch, token, embed):
             logger.warning("[dq_watcher] alert posted: %d issues", len(all_issues))
+    else:
+        embed = {
+            "author": {"name": "BMG Capital — Data Quality Watcher"},
+            "title":  f"✅ Data Quality Check — {now.strftime('%Y-%m-%d')}",
+            "color":  0x16A34A,
+            "fields": [
+                {"name": "Regime Snapshot Age", "value": f"{regime.get('age_hours', 'N/A')}h", "inline": True},
+                {"name": "Signal Count (6h)", "value": str(signals.get("signal_count", "N/A")), "inline": True},
+                {"name": "Status", "value": "No issues detected", "inline": False},
+            ],
+            "footer": {"text": "Data Quality Watcher · Tier A · Hourly"},
+            "timestamp": now.isoformat(),
+        }
+        if ch and _post(ch, token, embed):
+            logger.info("[dq_watcher] green summary posted")
 
     # Publish to bus
     try:

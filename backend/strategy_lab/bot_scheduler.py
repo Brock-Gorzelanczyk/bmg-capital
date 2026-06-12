@@ -952,6 +952,33 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job operations (6 PM ET Mon-Fri)")
 
     # ------------------------------------------------------------------
+    # Daily standup: 7:00 AM ET — all agents contribute, Queen synthesizes plan
+    # Fires immediately on startup so we get a first plan without waiting.
+    # ------------------------------------------------------------------
+    def _run_daily_standup():
+        from app.db.session import SessionLocal
+        from agents.standup import run_daily_standup
+        db = SessionLocal()
+        try:
+            run_daily_standup(db)
+        except Exception as exc:
+            logger.error("[daily_standup] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_daily_standup,
+        CronTrigger(hour=7, minute=0, timezone=ET),
+        id="daily_standup",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),
+    )
+    logger.warning("[startup-trace] registered job daily_standup (7 AM ET, fires immediately)")
+
+    # ------------------------------------------------------------------
     # Proposal reaction handler: every 60s — polls Discord for CIO reactions
     # on #queen-proposals messages and routes to executors.
     # ------------------------------------------------------------------
@@ -976,6 +1003,32 @@ def setup_bot_scheduler(scheduler) -> None:
         next_run_time=datetime.now(UTC),
     )
     logger.warning("[startup-trace] registered job proposal_reaction_handler (every 60s)")
+
+    # ------------------------------------------------------------------
+    # Auto-defer check: every 5 minutes — proposals pending > 6h get deferred
+    # CIO can still react ✅/❌ after deferral; handler logs it as 'late_decision'.
+    # ------------------------------------------------------------------
+    def _run_auto_defer_check():
+        from app.db.session import SessionLocal
+        from agents.proposal_handler import run_auto_defer_check
+        db = SessionLocal()
+        try:
+            run_auto_defer_check(db)
+        except Exception as exc:
+            logger.debug("[proposal_auto_defer] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_auto_defer_check,
+        IntervalTrigger(minutes=5),
+        id="proposal_auto_defer",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),
+    )
+    logger.warning("[startup-trace] registered job proposal_auto_defer (every 5 min, fires immediately)")
 
     # ------------------------------------------------------------------
     # Fleet heartbeat: every 30s — keeps /fund status dashboard live.
@@ -1010,6 +1063,69 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job fleet_heartbeat (every 30s, fires immediately)")
 
+    # ------------------------------------------------------------------
+    # Deploy 4.5.E — Defensive halt check: every 15 minutes
+    # Tier A autonomous executor: pauses a bot on hard drawdown breach.
+    # Max 3 auto-pauses/day; escalates to CRITICAL if cap is hit.
+    # ------------------------------------------------------------------
+    def _run_defensive_halt_check():
+        from app.db.session import SessionLocal
+        from agents.executors.auto_defensive_halt import run_defensive_halt_check
+        db = SessionLocal()
+        try:
+            result = run_defensive_halt_check(db)
+            logger.warning(
+                "[defensive_halt_check] done — checked=%d halted=%d skipped_cap=%s",
+                result.get("checked", 0),
+                result.get("halted", 0),
+                result.get("skipped_cap", False),
+            )
+        except Exception as exc:
+            logger.error("[defensive_halt_check] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_defensive_halt_check,
+        IntervalTrigger(minutes=15),
+        id="defensive_halt_check",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),
+    )
+    logger.warning("[startup-trace] registered job defensive_halt_check (every 15 min, fires immediately)")
+
+    # ------------------------------------------------------------------
+    # Deploy 4.5.E — Resume check: every 2 minutes
+    # Polls Discord for ▶️ reactions on auto-halt messages.
+    # If CIO reacted, unpauses the bot and updates proposal_audit.
+    # ------------------------------------------------------------------
+    def _run_resume_check():
+        from app.db.session import SessionLocal
+        from agents.executors.auto_defensive_halt import run_resume_check
+        db = SessionLocal()
+        try:
+            result = run_resume_check(db)
+            if result.get("resumed", 0) > 0:
+                logger.warning(
+                    "[resume_check] resumed %d bot(s)", result["resumed"]
+                )
+        except Exception as exc:
+            logger.error("[resume_check] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_resume_check,
+        IntervalTrigger(minutes=2),
+        id="resume_check",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job resume_check (every 2 min)")
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
@@ -1019,5 +1135,6 @@ def setup_bot_scheduler(scheduler) -> None:
         "strategy_forge_scan signal_explain_pregen "
         "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp "
         "queen_morning queen_midday queen_close queen_evening "
-        "queen_weekend_recap queen_weekly queen_regime_alert_check"
+        "queen_weekend_recap queen_weekly queen_regime_alert_check "
+        "defensive_halt_check resume_check"
     )

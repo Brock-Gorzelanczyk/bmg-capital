@@ -201,6 +201,85 @@ def heartbeat(db: Session, *, agent_id: str, status: str = "active") -> None:
         logger.debug("[bus] heartbeat failed (agent=%s): %s", agent_id, exc)
 
 
+def ask_agent(
+    db: Session, *,
+    from_agent: str,
+    to_agent: str,
+    question: str,
+    correlation_id: str | None = None,
+) -> int:
+    """Post a query to another agent. Returns the message id."""
+    import uuid
+    corr = correlation_id or str(uuid.uuid4())[:8]
+    msg_id = publish(
+        db,
+        channel="agent_queries",
+        from_agent=from_agent,
+        to_agent=to_agent,
+        msg_type="query",
+        subject=question[:200],
+        payload={"question": question, "correlation_id": corr},
+        priority=5,
+    )
+    return msg_id if msg_id is not None else corr
+
+
+def get_pending_queries(db: Session, *, agent_id: str) -> list[dict]:
+    """Fetch unanswered queries addressed to this agent (last 4h)."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat()
+    try:
+        rows = db.execute(
+            text("""
+                SELECT id, from_agent, subject, payload, created_at
+                FROM agent_messages
+                WHERE channel = 'agent_queries'
+                  AND to_agent = :a
+                  AND msg_type = 'query'
+                  AND created_at >= :c
+                ORDER BY created_at ASC
+            """),
+            {"a": agent_id, "c": cutoff},
+        ).fetchall()
+        result = []
+        for r in rows:
+            payload = r[3]
+            try:
+                import json as _j
+                payload = _j.loads(payload) if isinstance(payload, str) else payload
+            except Exception:
+                pass
+            result.append({
+                "id": r[0], "from_agent": r[1],
+                "question": r[2], "payload": payload,
+                "created_at": str(r[4]),
+            })
+        return result
+    except Exception as exc:
+        logger.debug("[bus] get_pending_queries failed: %s", exc)
+        return []
+
+
+def answer_query(
+    db: Session, *,
+    from_agent: str,
+    to_agent: str,
+    question: str,
+    answer: str,
+    correlation_id: str = "",
+) -> None:
+    """Post a response back to the querying agent."""
+    publish(
+        db,
+        channel="agent_queries",
+        from_agent=from_agent,
+        to_agent=to_agent,
+        msg_type="query_response",
+        subject=f"Re: {question[:150]}",
+        payload={"answer": answer, "correlation_id": correlation_id},
+        priority=4,
+    )
+
+
 def mark_read(db: Session, *, msg_id: int, agent: str) -> None:
     """Record that `agent` has acknowledged message `msg_id`."""
     try:
