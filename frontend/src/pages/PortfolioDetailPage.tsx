@@ -449,7 +449,9 @@ export default function PortfolioDetailPage() {
           "grid gap-4",
           portfolio.bots.length === 2
             ? "grid-cols-1 sm:grid-cols-2"
-            : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            : portfolio.bots.length === 4
+              ? "grid-cols-2 lg:grid-cols-4"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
         )}>
           {portfolio.bots.map((item) => (
             <BotCard

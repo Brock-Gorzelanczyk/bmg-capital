@@ -212,8 +212,11 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         if trade_date >= thirty_days_ago:
             realized_30d_cents += fill_pnl
 
-    # ── Open positions (excluding quarantined) ───────────────────────────────
-    open_pos_rows = [p for p in all_positions if p.closed_at is None and not p.quarantined_at]
+    # ── Open positions ────────────────────────────────────────────────────────
+    # All open positions (for count/display — matches admin count)
+    open_pos_display = [p for p in all_positions if p.closed_at is None]
+    # Only non-quarantined for P&L (exclude synthetic seed data)
+    open_pos_rows = [p for p in open_pos_display if not p.quarantined_at]
 
     # ── Unrealized PnL from live prices ──────────────────────────────────────
     symbols_needed = list({p.symbol for p in open_pos_rows})
@@ -255,7 +258,7 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     # ── Open position details with live mark-to-market ───────────────────────
     price_ts = datetime.now(timezone.utc).isoformat()
     open_positions = []
-    for p in open_pos_rows:
+    for p in open_pos_display:
         price = live_prices.get(p.symbol)
         cost = p.avg_cost_cents / 100 if p.avg_cost_cents else None
         qty = p.qty or 0
@@ -311,7 +314,7 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         unrealized_pnl_cents=unrealized_pnl_cents,
         all_time_return_pct=all_time_return_pct,
         return_30d_pct=return_30d_pct,
-        open_positions_count=len(open_pos_rows),
+        open_positions_count=len(open_pos_display),
         watchlist_count=watchlist_count,
         sharpe_30d=sharpe_30d,
         capital_cents_within_portfolio=capital_within,

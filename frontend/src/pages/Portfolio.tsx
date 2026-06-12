@@ -116,7 +116,7 @@ export default function Portfolio() {
   const todayPct = dash?.portfolio?.today_pnl_pct ?? agg?.today_pnl_pct ?? 0;
   const ret30 = dash?.portfolio?.return_30d_pct ?? agg?.return_30d_pct ?? 0;
   const retAll = agg?.return_all_time_pct ?? 0;
-  const openPos = openPosData?.position_count ?? (openPosData?.positions?.length ?? 0);
+  const openPos = agg?.total_open_positions ?? openPosData?.position_count ?? (openPosData?.positions?.length ?? 0);
   const isUp = todayPnl >= 0;
   const loading = portsLoading;
 

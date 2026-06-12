@@ -360,7 +360,10 @@ def enable_bot(
     from app.db.models.bots import BotAllocation, BotProfile
     bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
     if bp:
-        db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({"enabled": True})
+        db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({
+            "enabled": True,
+            "paused_reason": None,
+        })
         db.commit()
     return {"ok": True, "bot_id": bot_id, "enabled": True}
 
@@ -377,7 +380,10 @@ def disable_bot(
     from app.db.models.bots import BotAllocation, BotProfile
     bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
     if bp:
-        db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({"enabled": False})
+        db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({
+            "enabled": False,
+            "paused_reason": "admin_lock",
+        })
         db.commit()
     return {"ok": True, "bot_id": bot_id, "enabled": False}
 
