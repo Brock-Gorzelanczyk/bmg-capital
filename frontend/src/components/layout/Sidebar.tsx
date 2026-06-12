@@ -528,6 +528,13 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
 
         {/* Avatar dropdown */}
         <AvatarDropdown expanded={expanded} onLogout={handleLogout} onClose={onClose} />
+
+        {/* Build stamp */}
+        {expanded && (
+          <p className="text-[9px] text-zinc-700 px-3 pb-1 font-mono select-none">
+            build 2026-06-12-A
+          </p>
+        )}
       </div>
     </aside>
   );
