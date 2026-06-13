@@ -410,4 +410,16 @@ def run_daily_research(db: Session) -> dict:
     except Exception:
         pass
 
+    # Daily check-in to #fund-team-chat
+    try:
+        from agents.bus import post_daily_checkin as _checkin
+        strong_count = len([b for b in result.get("signal_ic", []) if b.get("status") == "strong"])
+        degrading_count = len([b for b in result.get("signal_ic", []) if b.get("status") == "degrading"])
+        _checkin(db, "researcher",
+                 f"Researcher: Daily IC sweep complete. {strong_count} bots showing strong edge, "
+                 f"{degrading_count} showing degradation. "
+                 f"{'Edge stable across fleet.' if degrading_count == 0 else 'Flagging degrading bots to Brick.'}")
+    except Exception:
+        pass
+
     return result

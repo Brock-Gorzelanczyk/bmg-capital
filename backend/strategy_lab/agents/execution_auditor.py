@@ -223,4 +223,15 @@ def run_execution_audit(db: Session) -> dict:
     except Exception:
         pass
 
+    # Daily check-in to #fund-team-chat
+    try:
+        from agents.bus import post_daily_checkin as _checkin
+        trades = result.get("trades_audited", 0)
+        slip = result.get("avg_slippage_bps", 0)
+        _checkin(db, "execution_auditor",
+                 f"Execution Auditor: {trades} trades audited today, avg slippage {slip:.1f} bps. "
+                 f"{'Fill quality nominal.' if slip < 10 else 'Elevated slippage — see #bmg-monitoring.'}")
+    except Exception:
+        pass
+
     return result

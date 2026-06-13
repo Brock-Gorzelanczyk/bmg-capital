@@ -258,4 +258,14 @@ def run_operations_reconciliation(db: Session) -> dict:
     except Exception as _exc:
         logger.debug("[operations] app_client cross-check skipped: %s", _exc)
 
+    # Daily check-in to #fund-team-chat
+    try:
+        from agents.bus import post_daily_checkin as _checkin
+        _checkin(db, "operations",
+                 f"Operations: Reconciliation {level}. {positions['open_count']} open positions "
+                 f"(${positions['notional_usd']:,.0f} notional), today P&L {'+' if pnl['total_usd'] >= 0 else ''}${pnl['total_usd']:,.2f}. "
+                 f"{'Books balanced.' if level == 'GREEN' else 'Flags raised — see #bmg-monitoring.'}")
+    except Exception:
+        pass
+
     return result

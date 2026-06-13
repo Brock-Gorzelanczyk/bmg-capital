@@ -196,4 +196,16 @@ def run_data_quality_check(db: Session) -> dict:
     except Exception:
         pass
 
+    # Daily check-in to #fund-team-chat
+    try:
+        from agents.bus import post_daily_checkin as _checkin
+        age = result.get("regime", {}).get("age_hours", "?")
+        sig_count = result.get("signals", {}).get("signal_count", "?")
+        status_word = "⚠️ Issues found" if has_issues else "✅ All feeds clean"
+        _checkin(db, "data_quality_watcher",
+                 f"Data Quality: {status_word}. Regime snapshot {age}h old, "
+                 f"{sig_count} signals in last 6h. 8 feeds monitored, 4 endpoints polled.")
+    except Exception:
+        pass
+
     return result

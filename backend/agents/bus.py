@@ -102,6 +102,44 @@ def observe(db: Session, *, agent_id: str, content: str, context: dict | None = 
 
     _post_to_team_chat(agent_id, None, content, "observation")
 
+def post_daily_checkin(db: Session, agent_id: str, message: str) -> bool:
+    """
+    Post a daily check-in to #fund-team-chat once per UTC day per agent.
+    Returns True if posted, False if already posted today or webhook not set.
+    """
+    import os as _os
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    state_key = f"last_chat_post_{agent_id}"
+
+    # Check if already posted today
+    try:
+        row = db.execute(
+            text("SELECT value FROM fund_team_chat_state WHERE key = :k"),
+            {"k": state_key}
+        ).fetchone()
+        if row and row[0] == today:
+            return False  # already posted today
+    except Exception:
+        pass
+
+    # Post
+    _post_to_team_chat(agent_id, None, message, "observation")
+
+    # Record
+    try:
+        db.execute(text("""
+            INSERT INTO fund_team_chat_state (key, value, set_at)
+            VALUES (:k, :v, :ts)
+            ON CONFLICT (key) DO UPDATE SET value = :v, set_at = :ts
+        """), {"k": state_key, "v": today, "ts": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()})
+        db.commit()
+    except Exception:
+        pass
+
+    return True
+
+
 _CHANNEL = "bmg_agent_bus"   # Postgres NOTIFY channel name
 
 

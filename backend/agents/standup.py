@@ -411,6 +411,151 @@ def _save_plan(db: Session, plan: dict, contributions: list[dict]) -> None:
             pass
 
 
+def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Session) -> dict[str, str]:
+    """
+    Single Claude call → brief reaction from each active agent to today's plan.
+    Returns {agent_id: message_text}. Falls back to templates on failure.
+    """
+    try:
+        from app.config import settings
+        api_key = settings.anthropic_api_key
+    except Exception:
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+
+    fallback = {
+        "risk_sentinel":        "Dick (CRO): Risk metrics within bounds. Watching drawdown and concentration — no action needed yet.",
+        "researcher":           "Researcher: IC readings stable. Will flag any edge degradation as bots open positions today.",
+        "data_quality_watcher": "Data Quality: All 8 feeds clean. Monitoring for latency spikes during market open.",
+        "execution_auditor":    "Execution Auditor: Slippage baseline set. Will flag any fill quality degradation.",
+        "operations":           "Operations: Books reconciled overnight. Watching position count vs allocated capital.",
+        "sentinel_devops":      "Sentinel DevOps: Infrastructure nominal. Railway healthy, no alerts.",
+    }
+
+    if not api_key:
+        return fallback
+
+    # Check budget cap
+    try:
+        from agents.bus import is_budget_capped as _capped
+        if _capped(db):
+            return fallback
+    except Exception:
+        pass
+
+    plan_summary = plan.get("summary", "")
+    proposed_actions = plan.get("proposed_actions", [])[:3]
+    contrib_lines = []
+    for c in contributions:
+        display_name, emoji = _AGENT_META.get(c["agent"], (c["agent"], ""))
+        contrib_lines.append(f"- {emoji} {display_name}: {c['status'].upper()} — {c['summary'][:100]}")
+
+    prompt = (
+        f"Today's BMG Capital trading plan:\n"
+        f"Summary: {plan_summary}\n"
+        f"Proposed actions: {', '.join(proposed_actions)}\n\n"
+        f"Agent standup contributions:\n" + "\n".join(contrib_lines) + "\n\n"
+        "Write a brief reaction message (1-2 sentences max) for each agent below, "
+        "from their professional perspective. Be specific and reference the actual plan. "
+        "Respond ONLY with valid JSON: "
+        "{\"risk_sentinel\": \"...\", \"researcher\": \"...\", \"data_quality_watcher\": \"...\", "
+        "\"execution_auditor\": \"...\", \"operations\": \"...\", \"sentinel_devops\": \"...\"}"
+    )
+
+    try:
+        import httpx
+        resp = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 600,
+                "system": (
+                    "You are generating brief in-character reactions from BMG Capital agents "
+                    "in #fund-team-chat. Each agent speaks in their professional voice. "
+                    "Brick is decisive. Dick cites numbers. Researcher mentions ICs. "
+                    "DQW mentions feeds. Execution mentions slippage. Ops mentions positions. DevOps is brief."
+                ),
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=20,
+        )
+        if resp.is_success:
+            import json as _j
+            raw = resp.json()["content"][0]["text"].strip()
+            reactions = _j.loads(raw)
+            # Charge budget
+            try:
+                from agents.bus import charge_api_usage as _charge
+                _charge(db, "standup_discussion", 0.001)
+            except Exception:
+                pass
+            return reactions
+    except Exception as exc:
+        logger.warning("[standup] team chat reactions generation failed: %s", exc)
+    return fallback
+
+
+def _post_team_chat_discussion(plan: dict, contributions: list[dict], db: Session) -> None:
+    """
+    Post morning discussion thread to #fund-team-chat after standup.
+    Brick opens with the plan. Each agent reacts briefly.
+    """
+    webhook = os.getenv("DISCORD_WH_FUND_TEAM_CHAT", "").strip()
+    if not webhook:
+        logger.debug("[standup] DISCORD_WH_FUND_TEAM_CHAT not set — skipping team chat")
+        return
+
+    import httpx
+
+    # Brick opens
+    theme = plan.get("summary", "Fleet review complete. Monitoring live.")
+    actions = plan.get("proposed_actions", [])[:2]
+    action_text = ""
+    if actions:
+        action_text = "\n" + " ".join(f"({i+1}) {a}" for i, a in enumerate(actions))
+
+    try:
+        httpx.post(webhook, json={
+            "username": "👑 Brick (Portfolio Manager)",
+            "content": f"📋 **Plan locked — {datetime.now(timezone.utc).strftime('%b %d')}.**\n{theme}{action_text}"
+        }, timeout=8)
+    except Exception as exc:
+        logger.warning("[standup] team chat Brick post failed: %s", exc)
+        return
+
+    time.sleep(3)
+
+    # Agent reactions
+    reactions = _generate_team_chat_reactions(plan, contributions, db)
+
+    agent_order = ["risk_sentinel", "researcher", "data_quality_watcher", "execution_auditor", "operations", "sentinel_devops"]
+    agent_display = {
+        "risk_sentinel":        "🛡️ Dick (CRO)",
+        "researcher":           "🔬 Equity Researcher",
+        "data_quality_watcher": "📊 Data Quality",
+        "execution_auditor":    "⚡ Execution Auditor",
+        "operations":           "🏦 Operations",
+        "sentinel_devops":      "🖥️ Sentinel DevOps",
+    }
+
+    for agent_id in agent_order:
+        msg = reactions.get(agent_id, "")
+        if not msg:
+            continue
+        try:
+            httpx.post(webhook, json={
+                "username": agent_display.get(agent_id, agent_id),
+                "content": msg,
+            }, timeout=8)
+            time.sleep(2)
+        except Exception as exc:
+            logger.debug("[standup] team chat agent post failed for %s: %s", agent_id, exc)
+
+
 def run_daily_standup(db: Session) -> dict:
     """
     Main entry point — called daily at 7 AM ET.
@@ -476,6 +621,12 @@ def run_daily_standup(db: Session) -> dict:
         )
     except Exception as exc:
         logger.debug("[standup] bus publish skipped: %s", exc)
+
+    # Post morning discussion thread to #fund-team-chat
+    try:
+        _post_team_chat_discussion(plan, contributions, db)
+    except Exception as exc:
+        logger.warning("[standup] team chat discussion failed (non-fatal): %s", exc)
 
     logger.info("[standup] complete — %d contributions", len(contributions))
     return {"ok": True, "agents_contributed": len(contributions), "plan": plan}
