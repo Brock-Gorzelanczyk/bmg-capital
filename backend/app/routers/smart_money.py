@@ -116,3 +116,59 @@ async def trigger_congress_refresh(
 
     background_tasks.add_task(_refresh)
     return {"status": "refresh queued", "days_back": days_back}
+
+
+@router.get("/crypto")
+async def get_crypto_smart_money(
+    _user=Depends(get_current_user),
+):
+    """Crypto smart money signals: whale accumulation + funding rates."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _build_crypto_smart_money)
+
+
+def _build_crypto_smart_money() -> dict:
+    from app.services.whale import get_large_holder_signal
+    import os, requests as _req
+
+    assets = []
+
+    # BTC and ETH whale signals from CoinMetrics
+    for symbol, display, coin_id in [
+        ("BTC/USDT", "Bitcoin", "btc"),
+        ("ETH/USDT", "Ethereum", "eth"),
+    ]:
+        whale = get_large_holder_signal(symbol)
+        assets.append({
+            "symbol": display,
+            "ticker": coin_id.upper(),
+            "signal": whale.get("signal", "neutral"),
+            "large_holder_count": whale.get("large_holder_count", 0),
+            "change_pct": whale.get("change_pct", 0.0),
+            "funding_rate": None,
+        })
+
+    # Funding rates from Binance (free public API)
+    for i, (futures_sym, idx) in enumerate([("BTCUSDT", 0), ("ETHUSDT", 1)]):
+        try:
+            resp = _req.get(
+                "https://fapi.binance.com/fapi/v1/fundingRate",
+                params={"symbol": futures_sym, "limit": 1},
+                timeout=6,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data:
+                    assets[idx]["funding_rate"] = float(data[0].get("fundingRate", 0)) * 100
+        except Exception:
+            pass
+
+    # Additional coins — just basic CoinMetrics large holder if available
+    # (skip for now, only BTC/ETH supported by whale.py)
+
+    return {
+        "assets": assets,
+        "source": "CoinMetrics Community API + Binance",
+        "note": "Addresses with ≥$1M balance (AdrBal1in1MCnt). Funding rate from Binance perps.",
+    }
