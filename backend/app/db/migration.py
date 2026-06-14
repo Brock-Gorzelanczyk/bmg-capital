@@ -875,6 +875,10 @@ def run_migrations(engine: Engine) -> None:
         except Exception as _e:
             logger.warning("_backfill_admin_lock_paused_reason failed (non-fatal): %s", _e)
         try:
+            _admin_lock_crypto_day(conn)
+        except Exception as _e:
+            logger.warning("_admin_lock_crypto_day failed (non-fatal): %s", _e)
+        try:
             _ensure_candidate_pipeline_tables(conn)
         except Exception as _e:
             logger.warning("_ensure_candidate_pipeline_tables failed (non-fatal): %s", _e)
@@ -2495,6 +2499,35 @@ def _backfill_admin_lock_paused_reason(conn) -> None:
         logger.info("_backfill_admin_lock_paused_reason: updated %d rows", result.rowcount)
     except Exception as exc:
         logger.warning("_backfill_admin_lock_paused_reason failed: %s", exc)
+
+
+def _admin_lock_crypto_day(conn) -> None:
+    """Ensure crypto_day allocation remains disabled with paused_reason='admin_lock'.
+
+    crypto_day was explicitly disabled by CIO.  _ensure_portfolios_for_user re-enables
+    any allocation whose paused_reason is not in {'health_halt', 'admin_lock'}, so this
+    migration pins the paused_reason so the guard fires correctly on every page load.
+
+    Runs on every deploy (idempotent — only touches rows that are already disabled or
+    whose paused_reason is not 'admin_lock').
+    """
+    MIGRATION_NAME = "admin_lock_crypto_day_2026_06_14"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        result = conn.execute(text("""
+            UPDATE bot_allocations
+               SET enabled = 0,
+                   paused_reason = 'admin_lock'
+             WHERE profile_id IN (
+                 SELECT id FROM bot_profiles WHERE name = 'crypto_day'
+             )
+        """))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("_admin_lock_crypto_day: locked %d allocation row(s)", result.rowcount)
+    except Exception as exc:
+        logger.warning("_admin_lock_crypto_day failed: %s", exc)
 
 
 def _ensure_candidate_pipeline_tables(conn) -> None:

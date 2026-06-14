@@ -337,7 +337,7 @@ def compute_portfolio_snapshot(
     """
     bot_snapshots = [compute_bot_snapshot(alloc, profile, db) for alloc, profile in allocs_with_profiles]
 
-    starting_capital_cents = int(port.starting_capital_cents)
+    starting_capital_cents = int(port.starting_capital_cents or 0)
     realized_pnl_cents = sum(s.realized_pnl_cents for s in bot_snapshots)
     unrealized_pnl_cents = sum(s.unrealized_pnl_cents for s in bot_snapshots)
     today_pnl_cents = sum(s.today_pnl_cents for s in bot_snapshots)
