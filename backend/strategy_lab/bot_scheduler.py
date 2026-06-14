@@ -828,6 +828,37 @@ def setup_bot_scheduler(scheduler) -> None:
         logger.warning("[startup-trace] registered job queen_%s", _session)
 
     # ------------------------------------------------------------------
+    # Regime snapshot refresh — hourly, keeps regime_snapshots table fresh
+    # so DQW, researcher, and queen always have current market regime data.
+    # Fires immediately on startup to seed the table.
+    # ------------------------------------------------------------------
+    def _run_regime_refresh():
+        from app.db.session import SessionLocal
+        from strategy_lab.core.regime_detector import get_regime
+        db = SessionLocal()
+        try:
+            get_regime(db)
+            logger.info("[regime_refresh] snapshot updated")
+        except Exception as exc:
+            logger.error("[regime_refresh] failed: %s", exc)
+        finally:
+            db.close()
+
+    from apscheduler.triggers.interval import IntervalTrigger as _IT
+    from datetime import datetime as _dt, timezone as _tz
+    scheduler.add_job(
+        _run_regime_refresh,
+        _IT(hours=1),
+        id="regime_snapshot_refresh",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+        next_run_time=_dt.now(_tz.utc),  # fire immediately on startup
+    )
+    logger.warning("[startup-trace] registered job regime_snapshot_refresh (hourly, fires now)")
+
+    # ------------------------------------------------------------------
     # Regime alert check — event-driven, polls every 30 min
     # Posts immediately to Discord when a condition fires (24h cooldown).
     # ------------------------------------------------------------------
