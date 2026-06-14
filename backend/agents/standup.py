@@ -484,10 +484,12 @@ def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Ses
             timeout=20,
         )
         if resp.is_success:
-            import json as _j
+            import json as _j, re as _re
             raw = resp.json()["content"][0]["text"].strip()
-            reactions = _j.loads(raw)
-            # Charge budget
+            # Claude sometimes prefixes JSON with prose — extract the JSON object
+            match = _re.search(r'\{[^{}]*"risk_sentinel"[^{}]*\}', raw, _re.DOTALL)
+            json_str = match.group(0) if match else raw
+            reactions = _j.loads(json_str)
             try:
                 from agents.bus import charge_api_usage as _charge
                 _charge(db, "standup_discussion", 0.001)

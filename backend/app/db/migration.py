@@ -2525,24 +2525,22 @@ def _ensure_candidate_pipeline_tables(conn) -> None:
 
 
 def _ensure_regime_history_table(conn) -> None:
-    """Create regime_snapshots table for daily regime persistence."""
+    """Ensure regime_snapshots table matches bots.RegimeSnapshot ORM (ts column)."""
     conn.execute(text("""
         CREATE TABLE IF NOT EXISTS regime_snapshots (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            snapshot_date    DATE NOT NULL UNIQUE,
-            regime           TEXT NOT NULL,
-            raw_regime       TEXT,
-            confidence       REAL,
-            vix_level        REAL,
-            spx_vs_200ma     REAL,
-            hy_spread_proxy  REAL,
-            vix_ts_slope     REAL,
-            signals_json     TEXT,
-            created_at       TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            ts               TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+            vix_regime       TEXT NOT NULL DEFAULT 'mid',
+            trend_regime     TEXT NOT NULL DEFAULT 'chop',
+            vol_pctile       REAL,
+            btc_dominance    REAL,
+            btc_funding_rate REAL,
+            spy_price        REAL,
+            vix_value        REAL
         )
     """))
     conn.execute(text("""
-        CREATE INDEX IF NOT EXISTS idx_regime_snapshots_date
-        ON regime_snapshots (snapshot_date)
+        CREATE INDEX IF NOT EXISTS idx_regime_snapshots_ts
+        ON regime_snapshots (ts)
     """))
     conn.commit()
