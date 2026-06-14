@@ -834,11 +834,14 @@ def setup_bot_scheduler(scheduler) -> None:
     # ------------------------------------------------------------------
     def _run_regime_refresh():
         from app.db.session import SessionLocal
-        from strategy_lab.core.regime_detector import get_regime
+        from strategy_lab.core.regime_detector import get_regime, _persist_snapshot
         db = SessionLocal()
         try:
-            get_regime(db)
-            logger.info("[regime_refresh] snapshot updated")
+            # get_regime() returns cached value if fresh — always force a DB persist
+            regime = get_regime(db)
+            _persist_snapshot(regime, db)  # _persist_snapshot has its own 15-min DB guard
+            logger.info("[regime_refresh] snapshot updated: vix=%s trend=%s",
+                        regime.get("vix_regime"), regime.get("trend_regime"))
         except Exception as exc:
             logger.error("[regime_refresh] failed: %s", exc)
         finally:
