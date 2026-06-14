@@ -259,7 +259,6 @@ def run_auto_defer_check(db: Session) -> dict:
                 FROM proposal_audit
                 WHERE decision = 'pending'
                   AND generated_ts < :cutoff
-                  AND posted_message_id IS NOT NULL
             """),
             {"cutoff": cutoff},
         ).fetchall()

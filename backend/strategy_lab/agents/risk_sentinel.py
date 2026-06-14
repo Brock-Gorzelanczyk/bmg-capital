@@ -18,11 +18,13 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 # Risk thresholds
-DRAWDOWN_WARN_PCT   = 8.0   # YELLOW
-DRAWDOWN_HALT_PCT   = 15.0  # RED — propose fleet pause
-CONSEC_LOSS_WARN    = 4     # YELLOW
-CONSEC_LOSS_HALT    = 7     # RED
-STALE_BOT_WARN      = 2     # YELLOW if 2+ bots stale
+DRAWDOWN_WARN_PCT     = 8.0   # YELLOW
+DRAWDOWN_HALT_PCT     = 15.0  # RED — propose fleet pause
+CONSEC_LOSS_WARN      = 4     # YELLOW
+CONSEC_LOSS_HALT      = 7     # RED
+STALE_BOT_WARN        = 2     # YELLOW if 2+ bots stale
+STALE_BOT_RED         = 3     # RED if 3+ bots stale
+STALE_BOT_CRITICAL    = 5     # CRITICAL+@here if 5+ bots stale
 CRITICAL_DRAWDOWN_PCT = -4.0  # 24h drawdown worse than this → CRITICAL
 
 # 4h cooldown on repeated RED alerts to reduce noise
@@ -173,7 +175,11 @@ def _classify(drawdown_pct: float, consec_losses: int, stale_count: int,
         return "CRITICAL"
     if circuit_breaker_tripped:
         return "CRITICAL"
+    if stale_count >= STALE_BOT_CRITICAL:
+        return "CRITICAL"
     if drawdown_pct >= DRAWDOWN_HALT_PCT or consec_losses >= CONSEC_LOSS_HALT:
+        return "RED"
+    if stale_count >= STALE_BOT_RED:
         return "RED"
     if drawdown_pct >= DRAWDOWN_WARN_PCT or consec_losses >= CONSEC_LOSS_WARN or stale_count >= STALE_BOT_WARN:
         return "YELLOW"
@@ -224,6 +230,9 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
             reason_parts.append(f"24h drawdown {dd24:.2f}% exceeds threshold ({CRITICAL_DRAWDOWN_PCT}%)")
         if summary.get("circuit_breaker_tripped"):
             reason_parts.append("Circuit breaker tripped")
+        stale_ct = len(summary.get("stale_bots", []))
+        if stale_ct >= STALE_BOT_CRITICAL:
+            reason_parts.append(f"{stale_ct} bots stale ≥{STALE_BOT_CRITICAL} threshold — trading layer may be down")
         fields.append({
             "name":   "🔴 CRITICAL TRIGGER",
             "value":  " | ".join(reason_parts) if reason_parts else "Threshold exceeded",
