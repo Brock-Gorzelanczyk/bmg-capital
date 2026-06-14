@@ -99,8 +99,7 @@ export const FUND_ROLES: FundRole[] = [
     title: "CHIEF RISK OFFICER",
     agentName: "Risk Sentinel",
     tier: "Mixed",
-    status: "not_built",
-    expectedDeployPhase: 2,
+    status: "offline",
     description:
       "Autonomous Tier A risk watchdog that monitors drawdown, VaR, and position concentration across all bots. Holds veto power over Portfolio Manager — can halt the fleet or block a proposal without CIO approval. Escalates critical breaches to Discord immediately.",
     authority: {
@@ -240,8 +239,7 @@ export const FUND_ROLES: FundRole[] = [
     title: "DATA QUALITY WATCHER",
     agentName: "Data Quality Watcher",
     tier: "A",
-    status: "not_built",
-    expectedDeployPhase: 2,
+    status: "offline",
     description:
       "Autonomous Tier A sentinel that monitors data feed freshness, validates price data integrity, and detects missing or anomalous inputs before they can corrupt bot signals. Raises DQ alerts to the Risk Sentinel when data is stale or malformed.",
     authority: {
@@ -273,8 +271,7 @@ export const FUND_ROLES: FundRole[] = [
     title: "EXECUTION AUDITOR",
     agentName: "Execution Auditor",
     tier: "A",
-    status: "not_built",
-    expectedDeployPhase: 2,
+    status: "offline",
     description:
       "Tracks fill quality, slippage, and execution drift across all bot trades. Compares expected vs. actual fills, flags outlier slippage, and generates daily execution quality reports. Alerts the CRO when execution degrades beyond acceptable bounds.",
     authority: {
@@ -305,8 +302,7 @@ export const FUND_ROLES: FundRole[] = [
     title: "OPERATIONS / BACK OFFICE",
     agentName: "Operations",
     tier: "A",
-    status: "not_built",
-    expectedDeployPhase: 3,
+    status: "offline",
     description:
       "Daily reconciliation, fee attribution, and P&L reporting across all sleeves. Produces end-of-period operational summaries, verifies that account balances match strategy allocations, and maintains the audit trail for all automated actions.",
     authority: {

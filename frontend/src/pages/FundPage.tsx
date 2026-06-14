@@ -39,8 +39,11 @@ async function fetchBudgetStatus(): Promise<BudgetStatus> {
 }
 
 async function fetchAgentStatus(): Promise<AgentsStatusResponse> {
-  const res = await fetch("/api/agents/status");
-  if (!res.ok) throw new Error("Failed to fetch agent status");
+  const token = localStorage.getItem("bmg_token") ?? "";
+  const res = await fetch("/api/agents/status", {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Failed to fetch agent status (${res.status})`);
   return res.json();
 }
 
@@ -546,11 +549,12 @@ function OrgChartSVG({
 export default function FundPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["agents-status"],
     queryFn: fetchAgentStatus,
     staleTime: 30_000,
     refetchInterval: 30_000,
+    retry: false,
   });
 
   const liveMap: Record<string, { status: string; last_activity: string | null }> =
@@ -590,6 +594,10 @@ export default function FundPage() {
           {isLoading ? (
             <span className="text-[10px] text-zinc-600" style={{ fontFamily: "var(--font-mono-t)" }}>
               loading…
+            </span>
+          ) : isError ? (
+            <span className="text-[10px] text-zinc-600" style={{ fontFamily: "var(--font-mono-t)" }}>
+              status unavailable
             </span>
           ) : (
             <span
