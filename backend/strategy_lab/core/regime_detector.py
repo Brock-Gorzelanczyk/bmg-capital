@@ -84,7 +84,7 @@ def _fetch_alpaca_bars(symbol: str, limit: int = 252, timeframe: str = "1Day") -
             logger.warning("Alpaca bars %s returned %d", symbol, resp.status_code)
             return []
         data = resp.json()
-        return data.get("bars", [])
+        return data.get("bars") or []
     except Exception as exc:
         logger.warning("Alpaca bars fetch failed for %s: %s", symbol, exc)
         return []
@@ -104,7 +104,7 @@ def _compute_trend_regime(bars: list[dict]) -> tuple[str, Optional[float]]:
     Returns (trend_regime, spy_price).
     bull if 200d slope > 0 and ADX > 25, bear if slope < 0 and ADX > 25, else chop.
     """
-    if len(bars) < 201:
+    if not bars or len(bars) < 201:
         return "chop", None
 
     closes = [b["c"] for b in bars]
