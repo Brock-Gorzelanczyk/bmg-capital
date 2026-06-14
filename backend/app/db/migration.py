@@ -926,6 +926,10 @@ def run_migrations(engine: Engine) -> None:
             _ensure_agent_service_account(conn)
         except Exception as _e:
             logger.warning("_ensure_agent_service_account failed (non-fatal): %s", _e)
+        try:
+            _ensure_plain_english_tables(conn)
+        except Exception as _e:
+            logger.warning("_ensure_plain_english_tables failed (non-fatal): %s", _e)
 
 
 def _ensure_fund_team_chat_state_table(conn) -> None:
@@ -955,6 +959,27 @@ def _ensure_agent_app_access_log(conn) -> None:
     """))
     conn.commit()
     logger.info("Migration: agent_app_access_log table ensured")
+
+
+def _ensure_plain_english_tables(conn) -> None:
+    """Cache for plain-English translations + per-channel toggle."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS plain_english_cache (
+            text_hash  CHAR(64) PRIMARY KEY,
+            summary    TEXT NOT NULL,
+            action     TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS plain_english_channels_enabled (
+            channel_id TEXT PRIMARY KEY,
+            enabled    INTEGER NOT NULL DEFAULT 1,
+            set_at     TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+        )
+    """))
+    conn.commit()
+    logger.info("Migration: plain_english tables ensured")
 
 
 def _ensure_agent_service_account(conn) -> None:

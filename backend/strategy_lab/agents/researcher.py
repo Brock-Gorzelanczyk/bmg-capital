@@ -387,6 +387,14 @@ def run_daily_research(db: Session) -> dict:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         _tok, _ch = _get_research_channel()
+        try:
+            from agents.plain_english import translate_for_brock, make_plain_english_field
+            _pe_text = " | ".join(f"{f['name']}: {f['value']}" for f in embed.get("fields", []) if not f['name'].startswith("💬"))
+            _pe = translate_for_brock(_pe_text, db=db, channel_id=_ch, charge_agent="researcher")
+            if _pe:
+                embed["fields"].append(make_plain_english_field(_pe))
+        except Exception as _pe_exc:
+            logger.debug("[researcher] plain_english failed: %s", _pe_exc)
         if _post_research_digest(_tok, _ch, embed):
             logger.info("[researcher] digest posted to Discord")
     except Exception as _de:

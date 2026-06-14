@@ -697,6 +697,17 @@ def _generate_synthetic_proposal(db: Session) -> list[dict]:
         proposal_id, bot, direction, current_pct, proposed_pct,
         ic_val, regime_name, finding_ids, is_fallback,
     )
+    try:
+        from agents.plain_english import translate_for_brock, make_plain_english_field
+        _pe_text = " | ".join(
+            f"{f['name']}: {f['value']}" for f in embed.get("fields", [])
+            if not f['name'].startswith("💬")
+        )
+        _pe = translate_for_brock(_pe_text, db=db, channel_id=proposals_ch, charge_agent="queen")
+        if _pe:
+            embed["fields"].append(make_plain_english_field(_pe))
+    except Exception as _pe_exc:
+        logger.debug("[queen] plain_english (synthetic proposal) failed: %s", _pe_exc)
     message_id = _post_proposal(proposals_ch, token, embed)
 
     if message_id:
@@ -835,6 +846,17 @@ def _generate_proposals(db: Session, *, research: dict, health: dict, synthetic:
             proposal_id, bot, direction, current_pct, proposed_pct,
             ic_val, regime_name, finding_ids, is_fallback,
         )
+        try:
+            from agents.plain_english import translate_for_brock, make_plain_english_field
+            _pe_text = " | ".join(
+                f"{f['name']}: {f['value']}" for f in embed.get("fields", [])
+                if not f['name'].startswith("💬")
+            )
+            _pe = translate_for_brock(_pe_text, db=db, channel_id=proposals_ch, charge_agent="queen")
+            if _pe:
+                embed["fields"].append(make_plain_english_field(_pe))
+        except Exception as _pe_exc:
+            logger.debug("[queen] plain_english (proposal) failed: %s", _pe_exc)
         message_id = _post_proposal(proposals_ch, token, embed)
 
         # Record message_id in audit table
@@ -937,6 +959,17 @@ def run_queen_daily(db: Session, session: Session_t = "morning") -> None:
         embed = _build_pnl_embed(session, health, research, pnl, now)
 
     token, channel_id = _get_discord_channel()
+    try:
+        from agents.plain_english import translate_for_brock, make_plain_english_field
+        _pe_text = " | ".join(
+            f"{f['name']}: {f['value']}" for f in embed.get("fields", [])
+            if not f['name'].startswith("💬")
+        )
+        _pe = translate_for_brock(_pe_text, db=db, channel_id=channel_id, charge_agent="queen")
+        if _pe:
+            embed["fields"].append(make_plain_english_field(_pe))
+    except Exception as _pe_exc:
+        logger.debug("[queen] plain_english failed: %s", _pe_exc)
     if not channel_id:
         logger.warning("[queen] no channel configured — %s embed logged only", session)
     elif _post_embed(channel_id, token, embed):
@@ -1040,6 +1073,17 @@ def run_regime_alert_check(db: Session) -> None:
 
         _alert_last_fired[sig] = now
         embed = _build_regime_alert_embed(alert, now)
+        try:
+            from agents.plain_english import translate_for_brock, make_plain_english_field
+            _pe_text = " | ".join(
+                f"{f['name']}: {f['value']}" for f in embed.get("fields", [])
+                if not f['name'].startswith("💬")
+            )
+            _pe = translate_for_brock(_pe_text, db=db, channel_id=channel_id, charge_agent="queen")
+            if _pe:
+                embed["fields"].append(make_plain_english_field(_pe))
+        except Exception as _pe_exc:
+            logger.debug("[queen] plain_english (regime_alert) failed: %s", _pe_exc)
         if channel_id and _post_embed(channel_id, token, embed):
             logger.warning("[queen] regime alert posted: %s", sig)
         else:

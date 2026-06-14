@@ -315,6 +315,15 @@ def run_risk_health_check(db: Session) -> dict:
             cio_id = os.getenv("CIO_DISCORD_USER_ID", "")
             embed = _build_embed(level, summary, now)
 
+            try:
+                from agents.plain_english import translate_for_brock, make_plain_english_field
+                _pe_text = " | ".join(f"{f['name']}: {f['value']}" for f in embed.get("fields", []) if not f['name'].startswith("💬"))
+                _pe = translate_for_brock(_pe_text, db=db, channel_id=ch, charge_agent="risk_sentinel")
+                if _pe:
+                    embed["fields"].append(make_plain_english_field(_pe))
+            except Exception as _e:
+                logger.debug("[risk_sentinel] plain_english failed: %s", _e)
+
             mentions = os.getenv("DISCORD_CIO_MENTIONS", f"<@{cio_id}>" if cio_id else "").strip()
             content = ""
             if level == "RED":

@@ -156,6 +156,14 @@ def run_data_quality_check(db: Session) -> dict:
             "footer": {"text": "Data Quality Watcher · Tier A · Hourly"},
             "timestamp": now.isoformat(),
         }
+        try:
+            from agents.plain_english import translate_for_brock, make_plain_english_field
+            _pe_text = " | ".join(f"{f['name']}: {f['value']}" for f in embed.get("fields", []) if not f['name'].startswith("💬"))
+            _pe = translate_for_brock(_pe_text, db=db, channel_id=ch, charge_agent="data_quality_watcher")
+            if _pe:
+                embed["fields"].append(make_plain_english_field(_pe))
+        except Exception as _pe_exc:
+            logger.debug("[dq_watcher] plain_english failed: %s", _pe_exc)
         if ch and _post(ch, token, embed):
             logger.warning("[dq_watcher] alert posted: %d issues", len(all_issues))
     else:
@@ -171,6 +179,14 @@ def run_data_quality_check(db: Session) -> dict:
             "footer": {"text": "Data Quality Watcher · Tier A · Hourly"},
             "timestamp": now.isoformat(),
         }
+        try:
+            from agents.plain_english import translate_for_brock, make_plain_english_field
+            _pe_text = " | ".join(f"{f['name']}: {f['value']}" for f in embed.get("fields", []) if not f['name'].startswith("💬"))
+            _pe = translate_for_brock(_pe_text, db=db, channel_id=ch, charge_agent="data_quality_watcher")
+            if _pe:
+                embed["fields"].append(make_plain_english_field(_pe))
+        except Exception as _pe_exc:
+            logger.debug("[dq_watcher] plain_english failed: %s", _pe_exc)
         if ch and _post(ch, token, embed):
             logger.info("[dq_watcher] green summary posted")
 

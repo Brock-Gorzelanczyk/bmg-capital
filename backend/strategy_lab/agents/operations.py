@@ -206,6 +206,14 @@ def run_operations_reconciliation(db: Session) -> dict:
         "timestamp": now.isoformat(),
     }
     token, ch = _get_channel()
+    try:
+        from agents.plain_english import translate_for_brock, make_plain_english_field
+        _pe_text = " | ".join(f"{f['name']}: {f['value']}" for f in embed.get("fields", []) if not f['name'].startswith("💬"))
+        _pe = translate_for_brock(_pe_text, db=db, channel_id=ch, charge_agent="operations")
+        if _pe:
+            embed["fields"].append(make_plain_english_field(_pe))
+    except Exception as _pe_exc:
+        logger.debug("[operations] plain_english failed: %s", _pe_exc)
     if ch:
         _post(ch, token, embed)
 

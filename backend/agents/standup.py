@@ -349,7 +349,7 @@ def _fallback_plan(contributions: list[dict]) -> dict:
     }
 
 
-def _post_plan(channel_id: str, token: str, plan: dict, contributions: list[dict]) -> bool:
+def _post_plan(channel_id: str, token: str, plan: dict, contributions: list[dict], db=None) -> bool:
     """Post Queen's synthesized plan to Discord as a rich embed."""
     now_et = datetime.now(timezone.utc)
     today_str = now_et.strftime("%Y-%m-%d")
@@ -364,17 +364,31 @@ def _post_plan(channel_id: str, token: str, plan: dict, contributions: list[dict
     def _bullets(items: list, max_items: int = 5) -> str:
         return "\n".join(f"• {item}" for item in items[:max_items]) or "• None"
 
+    fields = [
+        {"name": "TODAY'S FOCUS",       "value": _bullets(focus_areas, 3),  "inline": False},
+        {"name": "BOTS TO WATCH",       "value": _bullets(bots_to_watch),   "inline": True},
+        {"name": "RISKS TO MONITOR",    "value": _bullets(risks),           "inline": True},
+        {"name": "PROPOSED ACTIONS",    "value": _bullets(actions),         "inline": False},
+    ]
+
+    try:
+        from agents.plain_english import translate_for_brock, make_plain_english_field
+        _pe_text = " | ".join(
+            f"{f['name']}: {f['value']}" for f in fields
+            if not f['name'].startswith("💬")
+        )
+        _pe = translate_for_brock(_pe_text, db=db, channel_id=channel_id, charge_agent="standup")
+        if _pe:
+            fields.append(make_plain_english_field(_pe))
+    except Exception as _pe_exc:
+        logger.debug("[standup] plain_english failed: %s", _pe_exc)
+
     embed = {
         "author":    {"name": "👑 Brick — BMG Capital"},
         "title":     f"📋 BMG Capital — Daily Plan · {today_str}",
         "color":     0x6366F1,
         "description": plan.get("summary", ""),
-        "fields":    [
-            {"name": "TODAY'S FOCUS",       "value": _bullets(focus_areas, 3),  "inline": False},
-            {"name": "BOTS TO WATCH",       "value": _bullets(bots_to_watch),   "inline": True},
-            {"name": "RISKS TO MONITOR",    "value": _bullets(risks),           "inline": True},
-            {"name": "PROPOSED ACTIONS",    "value": _bullets(actions),         "inline": False},
-        ],
+        "fields":    fields,
         "footer":    {"text": f"Synthesized from {n} agent contributions · Generated {time_str} ET"},
         "timestamp": now_et.isoformat(),
     }
@@ -599,7 +613,7 @@ def run_daily_standup(db: Session) -> dict:
     plan = _synthesize_plan(contributions, db)
 
     # Post plan
-    _post_plan(channel_id, token, plan, contributions)
+    _post_plan(channel_id, token, plan, contributions, db=db)
 
     # Save to DB
     _save_plan(db, plan, contributions)

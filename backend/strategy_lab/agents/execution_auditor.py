@@ -180,6 +180,14 @@ def run_execution_audit(db: Session) -> dict:
             "footer":    {"text": "Execution Auditor · Tier A · Daily 5 PM ET"},
             "timestamp": now.isoformat(),
         }
+        try:
+            from agents.plain_english import translate_for_brock, make_plain_english_field
+            _pe_text = " | ".join(f"{f['name']}: {f['value']}" for f in embed.get("fields", []) if not f['name'].startswith("💬"))
+            _pe = translate_for_brock(_pe_text, db=db, channel_id=ch, charge_agent="execution_auditor")
+            if _pe:
+                embed["fields"].append(make_plain_english_field(_pe))
+        except Exception as _pe_exc:
+            logger.debug("[exec_auditor] plain_english failed: %s", _pe_exc)
         if ch and _post(ch, token, embed):
             logger.warning("[exec_auditor] %s alert posted to Discord", level)
     else:
@@ -196,6 +204,14 @@ def run_execution_audit(db: Session) -> dict:
             "footer":    {"text": "Execution Auditor · Tier A · Daily 5 PM ET"},
             "timestamp": now.isoformat(),
         }
+        try:
+            from agents.plain_english import translate_for_brock, make_plain_english_field
+            _pe_text = " | ".join(f"{f['name']}: {f['value']}" for f in embed.get("fields", []) if not f['name'].startswith("💬"))
+            _pe = translate_for_brock(_pe_text, db=db, channel_id=ch, charge_agent="execution_auditor")
+            if _pe:
+                embed["fields"].append(make_plain_english_field(_pe))
+        except Exception as _pe_exc:
+            logger.debug("[exec_auditor] plain_english failed: %s", _pe_exc)
         if ch and _post(ch, token, embed):
             logger.info("[exec_auditor] green summary posted to Discord")
 

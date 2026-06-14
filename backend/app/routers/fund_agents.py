@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.dependencies import get_db
+from app.dependencies import get_db, get_current_user
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -378,3 +378,20 @@ def run_intro_conversation(force: bool = False, db: Session = Depends(get_db)):
     from agents.intro_conversation import run_intro_conversation as _run
     result = _run(db, force=force)
     return result
+
+
+@router.post("/plain-english/toggle")
+async def toggle_plain_english(
+    channel_id: str,
+    enabled: bool = True,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """Enable/disable Plain English summaries for a Discord channel."""
+    db.execute(text("""
+        INSERT INTO plain_english_channels_enabled (channel_id, enabled, set_at)
+        VALUES (:c, :e, :ts)
+        ON CONFLICT (channel_id) DO UPDATE SET enabled = :e, set_at = :ts
+    """), {"c": channel_id, "e": (1 if enabled else 0), "ts": datetime.now(timezone.utc).isoformat()})
+    db.commit()
+    return {"channel_id": channel_id, "enabled": enabled}
