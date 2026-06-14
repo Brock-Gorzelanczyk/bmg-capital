@@ -1,12 +1,16 @@
 """
-Markets endpoints — crypto top list (CoinGecko) + stocks screener (yfinance).
+Markets endpoints — crypto top list (CoinGecko) + stocks screener (Alpaca).
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+import requests as _requests
 
 from fastapi import APIRouter, Depends, Query
 
@@ -58,7 +62,7 @@ async def get_crypto_markets(
 
 # ── Stocks ────────────────────────────────────────────────────────────────────
 
-# Top 200 S&P 500 + Nasdaq-100 symbols by market cap (static seed list)
+# S&P 500 + Nasdaq-100 leaders by market cap order
 _SP500_SEED = [
     "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","BRK-B","AVGO","JPM",
     "LLY","V","UNH","XOM","MA","COST","HD","NFLX","PG","JNJ","ABBV","WMT",
@@ -80,81 +84,126 @@ _SP500_SEED = [
     "CRWD","SNOW","TTD","HUBS","HOOD","SHOP","SQ","PYPL","SOFI","PLTR",
 ]
 
+# Partial name map for top symbols
+_STOCK_NAMES: dict[str, str] = {
+    "AAPL":"Apple","MSFT":"Microsoft","NVDA":"NVIDIA","AMZN":"Amazon",
+    "GOOGL":"Alphabet","META":"Meta","TSLA":"Tesla","BRK-B":"Berkshire","AVGO":"Broadcom",
+    "JPM":"JPMorgan","LLY":"Eli Lilly","V":"Visa","UNH":"UnitedHealth","XOM":"ExxonMobil",
+    "MA":"Mastercard","COST":"Costco","HD":"Home Depot","NFLX":"Netflix","PG":"P&G",
+    "JNJ":"J&J","ABBV":"AbbVie","WMT":"Walmart","BAC":"BofA","CRM":"Salesforce",
+    "KO":"Coca-Cola","CVX":"Chevron","MRK":"Merck","AMD":"AMD","ORCL":"Oracle",
+    "PEP":"PepsiCo","ADBE":"Adobe","TMO":"Thermo Fisher","CSCO":"Cisco","ACN":"Accenture",
+    "LIN":"Linde","WFC":"Wells Fargo","MCD":"McDonald's","TXN":"Texas Instruments",
+    "ABT":"Abbott","PM":"Philip Morris","DIS":"Disney","INTU":"Intuit","DHR":"Danaher",
+    "NEE":"NextEra","CMCSA":"Comcast","GE":"GE Aerospace","VZ":"Verizon","IBM":"IBM",
+    "AMGN":"Amgen","CAT":"Caterpillar","NOW":"ServiceNow","RTX":"RTX Corp","SPGI":"S&P Global",
+    "QCOM":"Qualcomm","AXP":"Amex","T":"AT&T","GS":"Goldman Sachs","HON":"Honeywell",
+    "ISRG":"Intuitive Surgical","PFE":"Pfizer","BKNG":"Booking","GILD":"Gilead",
+    "BLK":"BlackRock","AMAT":"Applied Materials","MU":"Micron","SYK":"Stryker",
+    "PANW":"Palo Alto","C":"Citigroup","VRTX":"Vertex","SBUX":"Starbucks","REGN":"Regeneron",
+    "SCHW":"Schwab","GS":"Goldman","UBER":"Uber","TGT":"Target","COF":"Capital One",
+    "ABNB":"Airbnb","MRNA":"Moderna","CRWD":"CrowdStrike","SNOW":"Snowflake",
+    "PLTR":"Palantir","SQ":"Block","PYPL":"PayPal","SHOP":"Shopify","HOOD":"Robinhood",
+    "SOFI":"SoFi","DDOG":"Datadog","TTD":"Trade Desk","HUBS":"HubSpot","FSLR":"First Solar",
+}
 
-def _fetch_stock_data(symbols: list[str]) -> list[dict]:
-    """Batch fetch stock data using yfinance. Returns list of dicts."""
-    import yfinance as yf
-    import pandas as pd
 
-    try:
-        # Download 1M of daily data (for sparkline + pct calcs)
-        raw = yf.download(
-            tickers=symbols,
-            period="1mo",
-            interval="1d",
-            group_by="ticker",
-            auto_adjust=True,
-            progress=False,
-            threads=True,
-        )
-    except Exception as exc:
-        logger.warning("yfinance download failed: %s", exc)
+def _fetch_stock_data_alpaca(symbols: list[str]) -> list[dict]:
+    """Fetch stock data via Alpaca Data API (IEX feed). Replaces broken yfinance."""
+    api_key = os.getenv("ALPACA_API_KEY", "") or os.getenv("ALPACA_PAPER_KEY", "")
+    api_secret = os.getenv("ALPACA_SECRET_KEY", "") or os.getenv("ALPACA_PAPER_SECRET", "")
+    base = "https://data.alpaca.markets"
+
+    if not api_key:
+        logger.warning("[markets/stocks] ALPACA_API_KEY not set — stocks unavailable")
         return []
 
-    rows = []
-    for sym in symbols:
+    headers = {"APCA-API-KEY-ID": api_key, "APCA-API-SECRET-KEY": api_secret}
+    result_map: dict[str, dict] = {}
+
+    # ── Step 1: Snapshots (latest price, daily bar, prev close) ──────────────
+    for i in range(0, len(symbols), 100):
+        chunk = [s for s in symbols[i:i+100] if s != "BRK-B"]  # IEX uses BRK/B
+        chunk_fixed = [s.replace("BRK-B", "BRK/B") for s in symbols[i:i+100]]
         try:
-            if len(symbols) == 1:
-                closes = raw["Close"]
+            resp = _requests.get(
+                f"{base}/v2/stocks/snapshots",
+                params={"symbols": ",".join(chunk_fixed), "feed": "iex"},
+                headers=headers,
+                timeout=20,
+            )
+            if resp.status_code == 200:
+                snaps = resp.json()
+                if "snapshots" in snaps:
+                    snaps = snaps["snapshots"]
+                for raw_sym, snap in snaps.items():
+                    sym = raw_sym.replace("/", "-")
+                    daily = snap.get("dailyBar") or {}
+                    prev  = snap.get("prevDailyBar") or {}
+                    trade = snap.get("latestTrade") or {}
+
+                    price     = trade.get("p") or daily.get("c")
+                    prev_close = prev.get("c")
+                    change_1d = (
+                        round((price / prev_close - 1) * 100, 2)
+                        if price and prev_close and prev_close > 0 else None
+                    )
+                    result_map[sym] = {
+                        "symbol": sym,
+                        "name": _STOCK_NAMES.get(sym, sym),
+                        "price": round(float(price), 2) if price else None,
+                        "change_1d": change_1d,
+                        "change_5d": None,
+                        "change_1m": None,
+                        "market_cap": None,
+                        "volume": int(daily.get("v") or 0) or None,
+                        "sparkline_1m": [],
+                    }
             else:
-                closes = raw["Close"][sym] if sym in raw["Close"].columns else None
+                logger.warning("[markets/stocks] snapshots returned %d", resp.status_code)
+        except Exception as exc:
+            logger.warning("[markets/stocks] snapshot error: %s", exc)
 
-            if closes is None or len(closes) == 0:
-                continue
+    # ── Step 2: 1-month bars for sparklines + 5D / 1M returns ────────────────
+    end   = datetime.now(timezone.utc)
+    start = end - timedelta(days=37)
+    # Process in chunks of 100 (API max per request)
+    for i in range(0, len(symbols), 100):
+        chunk_fixed = [s.replace("BRK-B", "BRK/B") for s in symbols[i:i+100]]
+        try:
+            resp = _requests.get(
+                f"{base}/v2/stocks/bars",
+                params={
+                    "symbols": ",".join(chunk_fixed),
+                    "timeframe": "1Day",
+                    "start": start.strftime("%Y-%m-%dT00:00:00Z"),
+                    "end": end.strftime("%Y-%m-%dT00:00:00Z"),
+                    "feed": "iex",
+                    "limit": 10000,
+                },
+                headers=headers,
+                timeout=25,
+            )
+            if resp.status_code == 200:
+                bars_by_sym = resp.json().get("bars", {})
+                for raw_sym, bars in bars_by_sym.items():
+                    sym = raw_sym.replace("/", "-")
+                    closes = [b["c"] for b in bars if "c" in b]
+                    if not closes or sym not in result_map:
+                        continue
+                    result_map[sym]["sparkline_1m"] = [round(c, 4) for c in closes[-30:]]
+                    if len(closes) >= 5:
+                        result_map[sym]["change_5d"] = round(
+                            (closes[-1] / closes[-5] - 1) * 100, 2)
+                    if len(closes) >= 20:
+                        result_map[sym]["change_1m"] = round(
+                            (closes[-1] / closes[0] - 1) * 100, 2)
+        except Exception as exc:
+            logger.warning("[markets/stocks] bars error: %s", exc)
 
-            closes = closes.dropna()
-            if len(closes) < 2:
-                continue
-
-            sparkline = [round(float(v), 4) for v in closes.tolist()[-30:]]
-            price = sparkline[-1] if sparkline else None
-            if price is None:
-                continue
-
-            change_1d = round((sparkline[-1] / sparkline[-2] - 1) * 100, 2) if len(sparkline) >= 2 else None
-            change_5d = round((sparkline[-1] / sparkline[-6] - 1) * 100, 2) if len(sparkline) >= 6 else None
-            change_1m = round((sparkline[-1] / sparkline[0] - 1) * 100, 2) if len(sparkline) >= 20 else None
-
-            rows.append({
-                "symbol": sym,
-                "price": price,
-                "change_1d": change_1d,
-                "change_5d": change_5d,
-                "change_1m": change_1m,
-                "sparkline_1m": sparkline,
-                "market_cap": None,
-                "volume": None,
-                "name": sym,
-            })
-        except Exception:
-            continue
-
-    # Enrich with market cap + name via Tickers (batch info — best-effort)
-    try:
-        # Fetch fast_info for top 50 (rate-limit friendly)
-        top_syms = [r["symbol"] for r in rows[:50]]
-        tickers = yf.Tickers(" ".join(top_syms))
-        for row in rows[:50]:
-            try:
-                info = tickers.tickers[row["symbol"]].fast_info
-                row["market_cap"] = int(info.market_cap) if info.market_cap else None
-                row["volume"] = int(info.three_month_average_volume or 0) or None
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    rows.sort(key=lambda r: (r["market_cap"] or 0), reverse=True)
+    # Return in seed order (pre-sorted by approx market cap)
+    rows = [result_map[s] for s in symbols if s in result_map and result_map[s]["price"]]
+    logger.info("[markets/stocks] returning %d stocks", len(rows))
     return rows
 
 
@@ -164,7 +213,7 @@ async def get_stock_markets(
     sort: str = Query("market_cap"),
     _user=Depends(get_current_user),
 ):
-    """Top stocks screener via yfinance. 5-min cache."""
+    """Top stocks via Alpaca Data API (IEX feed). 5-min cache."""
     ckey = f"stocks:{limit}"
     cached = _get(ckey, 300)
     if cached is not None:
@@ -172,12 +221,12 @@ async def get_stock_markets(
 
     symbols = _SP500_SEED[:limit]
     loop = asyncio.get_running_loop()
-    stocks = await loop.run_in_executor(None, lambda: _fetch_stock_data(symbols))
+    stocks = await loop.run_in_executor(None, lambda: _fetch_stock_data_alpaca(symbols))
 
     if sort == "change_1d":
-        stocks.sort(key=lambda r: r.get("change_1d") or 0, reverse=True)
+        stocks.sort(key=lambda r: r.get("change_1d") or -999, reverse=True)
     elif sort == "change_1m":
-        stocks.sort(key=lambda r: r.get("change_1m") or 0, reverse=True)
+        stocks.sort(key=lambda r: r.get("change_1m") or -999, reverse=True)
 
     _set(ckey, stocks)
     return {"stocks": stocks}
