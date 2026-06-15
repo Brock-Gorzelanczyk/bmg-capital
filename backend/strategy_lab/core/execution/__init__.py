@@ -94,13 +94,18 @@ def _get_live_crypto_cls():
 
 
 PAPER_BROKERS = {
-    "stock": _get_paper_stocks_cls,
-    "crypto": _get_paper_crypto_cls,
+    "stock":          _get_paper_stocks_cls,
+    "crypto":         _get_paper_crypto_cls,
+    # "quant" is a sleeve label, not an instrument type; quant bots trade crypto pairs
+    "quant":          _get_paper_crypto_cls,
+    "crypto_intraday": _get_paper_crypto_cls,
 }
 
 LIVE_BROKERS = {
-    "stock": _get_live_stocks_cls,
-    "crypto": _get_live_crypto_cls,
+    "stock":          _get_live_stocks_cls,
+    "crypto":         _get_live_crypto_cls,
+    "quant":          _get_live_crypto_cls,
+    "crypto_intraday": _get_live_crypto_cls,
 }
 
 
