@@ -213,16 +213,65 @@ function CryptoTab() {
   );
 }
 
+// ── Stock logo ────────────────────────────────────────────────────────────────
+
+const LOGO_TOKEN = "pk_X-1ZO13GSgeOoUrIuJ6GMQ";
+
+const AVATAR_COLORS = [
+  "bg-violet-500", "bg-blue-500", "bg-emerald-500", "bg-amber-500",
+  "bg-rose-500", "bg-cyan-500", "bg-indigo-500", "bg-teal-500",
+];
+
+function stockColor(sym: string) {
+  let h = 0;
+  for (let i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function StockLogo({ symbol }: { symbol: string }) {
+  const [failed, setFailed] = useState(false);
+  const logoUrl = `https://img.logo.dev/ticker/${symbol}?token=${LOGO_TOKEN}&size=32`;
+  if (failed) {
+    return (
+      <span className={cn("inline-flex items-center justify-center w-6 h-6 rounded-full text-[9px] font-bold text-white shrink-0", stockColor(symbol))}>
+        {symbol[0]}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={logoUrl}
+      alt={symbol}
+      width={24}
+      height={24}
+      className="rounded w-6 h-6 object-contain shrink-0"
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 // ── Stocks table ──────────────────────────────────────────────────────────────
+
+type StockSort = "market_cap" | "change_1d" | "change_5d" | "change_1m" | "volume";
+
+const SORT_TABS: { key: StockSort; label: string }[] = [
+  { key: "market_cap", label: "Mkt Cap" },
+  { key: "change_1d",  label: "Today %" },
+  { key: "change_5d",  label: "5D %" },
+  { key: "change_1m",  label: "1M %" },
+  { key: "volume",     label: "Volume" },
+];
 
 function StocksTab() {
   const [search, setSearch] = useState("");
-  const [sortCol, setSortCol] = useState<"market_cap" | "change_1d" | "change_1m">("market_cap");
+  const [sortCol, setSortCol] = useState<StockSort>("market_cap");
 
   const { data, isLoading } = useQuery({
     queryKey: ["markets-stocks"],
     queryFn: () => getStockMarkets(100),
-    staleTime: 300_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
     retry: 0,
   });
 
@@ -234,39 +283,83 @@ function StocksTab() {
   }
   stocks = [...stocks].sort((a, b) => (b[sortCol] ?? 0) - (a[sortCol] ?? 0));
 
+  const activeCol = (col: StockSort) =>
+    col === sortCol ? "bg-t-bg2 text-t-hi" : "text-t-muted hover:text-t-mid2";
+
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
-        <input value={search} onChange={(e) => setSearch(e.target.value)}
+      {/* Controls row */}
+      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+        {/* Sort tabs */}
+        <div className="flex gap-1 bg-t-bg1 border border-t-dim rounded-xl p-1 flex-wrap">
+          <span className="px-2 py-1.5 text-[10px] text-t-muted uppercase font-semibold self-center">Rank by</span>
+          {SORT_TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setSortCol(t.key)}
+              className={cn("px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors", activeCol(t.key))}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {/* Search */}
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
           placeholder="Search symbol or company…"
-          className="flex-1 max-w-sm bg-t-bg1 border border-t-dim rounded-xl px-4 py-2 text-sm text-t-hi placeholder-t-muted focus:outline-none focus:border-t-mid" />
+          className="flex-1 max-w-xs bg-t-bg1 border border-t-dim rounded-xl px-4 py-2 text-sm text-t-hi placeholder-t-muted focus:outline-none focus:border-t-mid"
+        />
       </div>
 
       <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs min-w-[800px]">
+          <table className="w-full text-xs min-w-[820px]">
             <thead>
               <tr className="border-b border-t-dim bg-t-bg1/80">
                 <th className="text-left text-[10px] text-t-muted uppercase py-2 px-4 w-8">#</th>
                 <th className="text-left text-[10px] text-t-muted uppercase py-2 px-2">Symbol</th>
                 <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">Price</th>
-                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
-                  onClick={() => setSortCol("change_1d")}>1D {sortCol === "change_1d" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">5D</th>
-                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
-                  onClick={() => setSortCol("change_1m")}>1M {sortCol === "change_1m" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
-                  onClick={() => setSortCol("market_cap")}>Mkt Cap {sortCol === "market_cap" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">Volume</th>
+                <th
+                  className={cn("text-right text-[10px] uppercase py-2 px-3 cursor-pointer transition-colors", sortCol === "change_1d" ? "text-t-hi" : "text-t-muted hover:text-t-mid2")}
+                  onClick={() => setSortCol("change_1d")}
+                >
+                  1D {sortCol === "change_1d" && "▼"}
+                </th>
+                <th
+                  className={cn("text-right text-[10px] uppercase py-2 px-3 cursor-pointer transition-colors", sortCol === "change_5d" ? "text-t-hi" : "text-t-muted hover:text-t-mid2")}
+                  onClick={() => setSortCol("change_5d")}
+                >
+                  5D {sortCol === "change_5d" && "▼"}
+                </th>
+                <th
+                  className={cn("text-right text-[10px] uppercase py-2 px-3 cursor-pointer transition-colors", sortCol === "change_1m" ? "text-t-hi" : "text-t-muted hover:text-t-mid2")}
+                  onClick={() => setSortCol("change_1m")}
+                >
+                  1M {sortCol === "change_1m" && "▼"}
+                </th>
+                <th
+                  className={cn("text-right text-[10px] uppercase py-2 px-3 cursor-pointer transition-colors", sortCol === "market_cap" ? "text-t-hi" : "text-t-muted hover:text-t-mid2")}
+                  onClick={() => setSortCol("market_cap")}
+                >
+                  Mkt Cap {sortCol === "market_cap" && "▼"}
+                </th>
+                <th
+                  className={cn("text-right text-[10px] uppercase py-2 px-3 cursor-pointer transition-colors", sortCol === "volume" ? "text-t-hi" : "text-t-muted hover:text-t-mid2")}
+                  onClick={() => setSortCol("volume")}
+                >
+                  Volume {sortCol === "volume" && "▼"}
+                </th>
                 <th className="text-center text-[10px] text-t-muted uppercase py-2 px-3">1M Chart</th>
                 <th className="text-center text-[10px] text-t-muted uppercase py-2 px-3">Action</th>
+                <th className="text-center text-[10px] text-t-muted uppercase py-2 px-2 hidden sm:table-cell">Mkt</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 [0,1,2,3,4,5,6,7,8,9].map((i) => (
                   <tr key={i} className="border-b border-t-dim/50">
-                    <td colSpan={10} className="py-3 px-4">
+                    <td colSpan={11} className="py-3 px-4">
                       <div className="h-4 bg-t-bg2 rounded animate-pulse" />
                     </td>
                   </tr>
@@ -275,28 +368,32 @@ function StocksTab() {
                 <tr key={stock.symbol} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors">
                   <td className="py-2.5 px-4 text-t-muted">{i + 1}</td>
                   <td className="py-2.5 px-2">
-                    <div>
-                      <span className="text-t-hi font-semibold">{stock.symbol}</span>
-                      <span className="text-t-muted ml-1.5 text-[10px] hidden sm:inline truncate">{stock.name}</span>
+                    <div className="flex items-center gap-2">
+                      <StockLogo symbol={stock.symbol} />
+                      <div>
+                        <span className="text-t-hi font-semibold">{stock.symbol}</span>
+                        <span className="text-t-muted ml-1.5 text-[10px] hidden sm:inline">{stock.name}</span>
+                      </div>
                     </div>
                   </td>
                   <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-hi">{fmtPrice(stock.price)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(stock.change_1d))}>{fmtPct(stock.change_1d)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(stock.change_5d))}>{fmtPct(stock.change_5d)}</td>
-                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", pclr(stock.change_1m))}>{fmtPct(stock.change_1m)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-mid2">{fmtBig(stock.market_cap)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono-t tabular-nums text-t-mid2">{fmtBig(stock.volume)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", sortCol === "change_1d" ? "text-t-hi font-semibold" : pclr(stock.change_1d))}>{fmtPct(stock.change_1d)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", sortCol === "change_5d" ? "text-t-hi font-semibold" : pclr(stock.change_5d))}>{fmtPct(stock.change_5d)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", sortCol === "change_1m" ? "text-t-hi font-semibold" : pclr(stock.change_1m))}>{fmtPct(stock.change_1m)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", sortCol === "market_cap" ? "text-t-hi font-semibold" : "text-t-mid2")}>{fmtBig(stock.market_cap)}</td>
+                  <td className={cn("py-2.5 px-3 text-right font-mono-t tabular-nums", sortCol === "volume" ? "text-t-hi font-semibold" : "text-t-mid2")}>{fmtBig(stock.volume)}</td>
                   <td className="py-2.5 px-3 text-center">
                     <Sparkline data={stock.sparkline_1m ?? []} positive={(stock.change_1m ?? 0) >= 0} />
                   </td>
                   <td className="py-2.5 px-3 text-center">
                     <ScoutButton symbol={stock.symbol} />
                   </td>
+                  <td className="py-2.5 px-2 text-center hidden sm:table-cell text-sm">🇺🇸</td>
                 </tr>
               ))}
               {!isLoading && stocks.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-t-muted text-sm">No results</td>
+                  <td colSpan={11} className="py-10 text-center text-t-muted text-sm">No results</td>
                 </tr>
               )}
             </tbody>

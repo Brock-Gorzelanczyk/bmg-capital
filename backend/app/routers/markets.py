@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_current_user
 from app.services import coingecko as cg
-from app.routers.stocks_universe import TOP_STOCKS_UNIVERSE
+from app.routers.stocks_universe import TOP_STOCKS_UNIVERSE, STOCK_NAMES, STOCK_MCAP
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/markets", tags=["markets"])
@@ -59,22 +59,9 @@ async def get_crypto_markets(
 
 # ── Stocks ────────────────────────────────────────────────────────────────────
 
-_STOCK_NAMES: dict[str, str] = {
-    "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "NVIDIA", "GOOGL": "Alphabet",
-    "AMZN": "Amazon", "META": "Meta", "TSLA": "Tesla", "AVGO": "Broadcom",
-    "ORCL": "Oracle", "ADBE": "Adobe", "CRM": "Salesforce", "NFLX": "Netflix",
-    "AMD": "AMD", "BRK-B": "Berkshire Hathaway", "LLY": "Eli Lilly", "V": "Visa",
-    "JPM": "JPMorgan", "WMT": "Walmart", "MA": "Mastercard", "XOM": "ExxonMobil",
-    "JNJ": "J&J", "PG": "P&G", "UNH": "UnitedHealth", "HD": "Home Depot",
-    "COST": "Costco", "ABBV": "AbbVie", "BAC": "BofA", "CVX": "Chevron",
-    "MRK": "Merck", "KO": "Coca-Cola", "PEP": "PepsiCo", "TMO": "Thermo Fisher",
-    "MCD": "McDonald's", "PFE": "Pfizer", "CSCO": "Cisco", "DIS": "Disney",
-    "WFC": "Wells Fargo", "NKE": "Nike", "INTC": "Intel", "T": "AT&T",
-    "VZ": "Verizon", "IBM": "IBM", "BA": "Boeing", "GE": "GE Aerospace",
-    "F": "Ford", "GM": "GM", "COIN": "Coinbase", "RBLX": "Roblox",
-    "SHOP": "Shopify", "SQ": "Block", "PYPL": "PayPal", "UBER": "Uber",
-    "ABNB": "Airbnb",
-}
+# Names and mcap imported from stocks_universe; alias for local use
+_STOCK_NAMES = STOCK_NAMES
+_STOCK_MCAP  = STOCK_MCAP
 
 
 def _fetch_stock_data_yfinance(symbols: list[str]) -> list[dict]:
@@ -144,7 +131,7 @@ def _fetch_stock_data_yfinance(symbols: list[str]) -> list[dict]:
                 "change_1d":   change_1d,
                 "change_5d":   change_5d,
                 "change_1m":   change_1m,
-                "market_cap":  None,
+                "market_cap":  _STOCK_MCAP.get(sym),
                 "volume":      volume,
                 "sparkline_1m": sparkline,
             })
@@ -169,10 +156,16 @@ async def get_stock_markets(
     loop = asyncio.get_running_loop()
     stocks = await loop.run_in_executor(None, lambda: _fetch_stock_data_yfinance(TOP_STOCKS_UNIVERSE))
 
-    if sort == "change_1d":
-        stocks.sort(key=lambda r: r.get("change_1d") or -999, reverse=True)
-    elif sort == "change_1m":
-        stocks.sort(key=lambda r: r.get("change_1m") or -999, reverse=True)
+    _sort_map = {
+        "pct_today": "change_1d",
+        "pct_5d":    "change_5d",
+        "pct_1m":    "change_1m",
+        "volume":    "volume",
+        "mcap":      "market_cap",
+    }
+    sort_field = _sort_map.get(sort, sort)
+    if sort_field in ("change_1d", "change_5d", "change_1m", "volume", "market_cap"):
+        stocks.sort(key=lambda r: r.get(sort_field) or -999, reverse=True)
 
     _set(ckey, stocks)
     return {"stocks": stocks}
