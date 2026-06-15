@@ -1,0 +1,72 @@
+name: options_0dte_spx_condor
+enabled: false
+asset_class: options
+broker: alpaca_paper_stocks
+paper_only: true
+candidate_stage: enabled_false
+
+universe:
+  source: index_options
+  symbols:
+    - SPY    # proxy for SPX/XSP — execution layer routes to index options
+  filters:
+    - adv_gte: 100000000
+
+scan_lookback_period: "5d"
+cadence: "35 9 * * 1-5"    # Fire at 9:35 ET exactly
+
+watchlist:
+  rebuild_at: "30 9 * * 1-5"
+  size: 1
+  top_n_for_signals: 1
+  scoring:
+    vix_level: 0.50
+    gap_size: 0.50
+
+strategies:
+  - options_0dte_spx_condor
+ensemble: single_strategy
+
+position_cap: 1
+position_size_pct: 0.75
+stop_loss_pct: 400.0    # 0DTE: wings can go to full loss quickly
+take_profit_pct: 50.0
+hold_max_days: 1
+
+risk_overlay:
+  daily_loss_limit_pct: 1.5
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 10
+  hard_exit_time_et: "15:00"    # force close at 3 PM ET
+  pdt_enforce: false
+
+regime_filters:
+  - halt_if: vix_regime == 'panic'
+  - halt_if: playbook_regime == 'CRISIS'
+  - halt_if: vix_level > 30
+
+execution:
+  order_type: limit
+  limit_offset_bps: 5
+  reprice_after_seconds: 15    # 0DTE: reprice fast
+  reprice_attempts: 5
+  fallback_to_market: true    # 0DTE time pressure
+  use_brackets: false
+
+discord:
+  channel: options-signals
+
+risk:
+  deployment_target_pct: 0.0075
+  target_position_count: 1
+  max_position_pct: 0.0075
+  max_total_deployed_pct: 0.05
+
+notes: >
+  Wave 1 options candidate. enabled: false until pipeline complete.
+  CAUTION: 0DTE gamma risk is extreme. Position size is hard-limited to 0.75%.
+  Entry window: 9:35-9:50 ET only. Hard exit: 3:00 PM ET.
+  Skip FOMC/CPI weeks (heuristic: 3rd Wednesday of month).
+  Requires Alpaca SPX/XSP index options data subscription.
+  VIX > 30 → skip (too volatile for 0DTE).

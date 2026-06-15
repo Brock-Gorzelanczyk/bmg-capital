@@ -1,0 +1,78 @@
+name: options_post_earnings_ic
+enabled: false
+asset_class: options
+broker: alpaca_paper_stocks
+paper_only: true
+candidate_stage: enabled_false
+
+universe:
+  source: high_vol_earnings_names
+  symbols:
+    - NVDA
+    - TSLA
+    - META
+    - NFLX
+    - COIN
+    - AMD
+    - MU
+  filters:
+    - price_gte: 20
+    - adv_gte: 10000000
+
+scan_lookback_period: "1y"
+cadence: "0 10 * * 1-5"
+
+watchlist:
+  rebuild_at: "30 9 * * 1-5"
+  size: 7
+  top_n_for_signals: 2    # max 2 post-earnings IC positions at once
+  scoring:
+    earnings_recency: 0.40
+    ivr_post_crush: 0.35
+    vol_spike_proxy: 0.25
+
+strategies:
+  - options_post_earnings_ic
+ensemble: single_strategy
+
+position_cap: 2
+position_size_pct: 2.0
+stop_loss_pct: 200.0
+take_profit_pct: 25.0    # only 25% profit target (post-crush premium decays fast)
+hold_max_days: 30
+
+risk_overlay:
+  daily_loss_limit_pct: 2.5
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 12
+  pdt_enforce: false
+
+regime_filters:
+  - halt_if: vix_regime == 'panic'
+  - halt_if: playbook_regime == 'CRISIS'
+
+execution:
+  order_type: limit
+  limit_offset_bps: 15    # high-vol names have wider spreads
+  reprice_after_seconds: 45
+  reprice_attempts: 3
+  fallback_to_market: false
+  use_brackets: false
+
+discord:
+  channel: options-signals
+
+risk:
+  deployment_target_pct: 0.04    # 2 positions × 2%
+  target_position_count: 2
+  max_position_pct: 0.02
+  max_total_deployed_pct: 0.10
+
+notes: >
+  Wave 1 options candidate. enabled: false until pipeline complete.
+  Entry: earnings gap detected (proxy) + IVR post-crush > 35% + realized vol spike.
+  Exit: 25% credit | 21 DTE.
+  NOTE: earnings detection uses price gap proxy — real implementation needs
+  an earnings calendar API (e.g. Alpaca corporate_actions or FinancialModelingPrep).
+  Requires Alpaca options data subscription for live execution.

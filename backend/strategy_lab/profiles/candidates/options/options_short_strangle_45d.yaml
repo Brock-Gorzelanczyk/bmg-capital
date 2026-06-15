@@ -1,0 +1,76 @@
+name: options_short_strangle_45d
+enabled: false
+asset_class: options
+broker: alpaca_paper_stocks
+paper_only: true
+candidate_stage: enabled_false  # pipeline: backtest → WFA → 63-day shadow → promotion
+
+universe:
+  source: options_etf_universe
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - EEM
+    - GLD
+    - TLT
+  filters:
+    - price_gte: 20
+    - adv_gte: 10000000
+
+scan_lookback_period: "1y"
+cadence: "0 10 * * 1-5"
+
+watchlist:
+  rebuild_at: "30 9 * * 1-5"
+  size: 6
+  top_n_for_signals: 6
+  scoring:
+    ivr_proxy: 0.50
+    range_bound: 0.30
+    liquidity: 0.20
+
+strategies:
+  - options_short_strangle_45d
+ensemble: single_strategy
+
+position_cap: 3
+position_size_pct: 3.0
+stop_loss_pct: 200.0    # options: max loss = 2x credit collected
+take_profit_pct: 50.0
+hold_max_days: 45
+
+risk_overlay:
+  daily_loss_limit_pct: 3.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 15
+  pdt_enforce: false
+
+regime_filters:
+  - halt_if: vix_regime == 'panic'
+  - halt_if: playbook_regime == 'CRISIS'
+
+execution:
+  order_type: limit
+  limit_offset_bps: 10
+  reprice_after_seconds: 30
+  reprice_attempts: 3
+  fallback_to_market: false
+  use_brackets: false
+
+discord:
+  channel: options-signals
+
+risk:
+  deployment_target_pct: 0.09    # 3 positions × 3% buying power each
+  target_position_count: 3
+  max_position_pct: 0.03
+  max_total_deployed_pct: 0.15
+
+notes: >
+  Wave 1 options candidate. enabled: false until pipeline complete.
+  Entry: IVR proxy > 50 AND 20-day range < 10%.
+  Exit: 50% credit | 21 DTE | short strike breach.
+  Requires Alpaca options data subscription for live execution.
+  Backtest target: Sharpe > 1.0, max drawdown < 20%.
