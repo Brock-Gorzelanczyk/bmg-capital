@@ -1013,6 +1013,31 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job daily_standup (7 AM ET, fires immediately)")
 
     # ------------------------------------------------------------------
+    # Macro Strategist: 7:05 AM ET daily — classify regime after standup
+    # ------------------------------------------------------------------
+    def _run_macro_classification():
+        from app.db.session import SessionLocal
+        from strategy_lab.agents.macro_strategist import run_macro_classification
+        db = SessionLocal()
+        try:
+            run_macro_classification(db)
+        except Exception as exc:
+            logger.error("[macro_classification] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_macro_classification,
+        CronTrigger(hour=7, minute=5, timezone=ET),
+        id="macro_classification_daily",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job macro_classification_daily (7:05 AM ET)")
+
+    # ------------------------------------------------------------------
     # Proposal reaction handler: every 60s — polls Discord for CIO reactions
     # on #queen-proposals messages and routes to executors.
     # ------------------------------------------------------------------
