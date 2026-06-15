@@ -312,6 +312,55 @@ function MacroRunButton() {
   );
 }
 
+// ── Quant Run Button ──────────────────────────────────────────────────────────
+
+function QuantRunButton() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ transitions?: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRun() {
+    setRunning(true);
+    setResult(null);
+    setError(null);
+    try {
+      const token = localStorage.getItem("bmg_token") ?? "";
+      const res = await fetch("/api/agents/quant-researcher/run-pipeline", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setResult({ transitions: data.result?.transitions?.length ?? 0 });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3 flex-wrap" style={{ fontFamily: "var(--font-mono-t)" }}>
+      <button
+        onClick={handleRun}
+        disabled={running}
+        className="text-[10px] font-bold tracking-wider border px-3 py-1.5 transition-colors
+          border-[var(--green)] text-[var(--green)] hover:bg-[var(--green)]/10 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {running ? "SCANNING…" : "▶ RUN PIPELINE SCAN"}
+      </button>
+      {result !== null && (
+        <span className="text-[10px] text-[var(--green)]">
+          ✓ {result.transitions} transition{result.transitions !== 1 ? "s" : ""} this cycle
+        </span>
+      )}
+      {error && (
+        <span className="text-[10px] text-red-400">✗ {error}</span>
+      )}
+    </div>
+  );
+}
+
 // ── Detail Panel ──────────────────────────────────────────────────────────────
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
@@ -469,12 +518,13 @@ function DetailPanel({
         )}
 
         {/* Agent-specific action buttons */}
-        {role.id === "macro_strategist" && (
+        {(role.id === "macro_strategist" || role.id === "quant_researcher") && (
           <>
             <div className="border-t border-[var(--border-subtle)]" />
             <div>
               <SectionHeader>Actions</SectionHeader>
-              <MacroRunButton />
+              {role.id === "macro_strategist" && <MacroRunButton />}
+              {role.id === "quant_researcher" && <QuantRunButton />}
             </div>
           </>
         )}

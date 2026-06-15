@@ -18,9 +18,7 @@ from app.dependencies import get_db, get_current_user
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 # Agents not yet deployed — static metadata
-_NOT_BUILT = {
-    "quant_researcher": 6,
-}
+_NOT_BUILT: dict = {}
 
 # Map agent bus from_agent values to role IDs
 _AGENT_TO_ROLE = {
@@ -163,6 +161,26 @@ def _get_agent_today_count(db: Session, from_agent: str) -> int:
         return 0
 
 
+def _quant_today_stats(db: Session) -> dict:
+    """Return pipeline stage counts from strategy_candidates."""
+    try:
+        rows = db.execute(text("""
+            SELECT state, COUNT(*) FROM strategy_candidates GROUP BY state
+        """)).fetchall()
+        counts = {r[0]: r[1] for r in rows}
+        total = sum(counts.values())
+        return {
+            "candidates_total": total,
+            "shadow_paper":     counts.get("SHADOW_PAPER", 0),
+            "wfa_done":         counts.get("WFA_DONE", 0),
+            "backtest_done":    counts.get("BACKTEST_DONE", 0),
+            "promoted":         counts.get("PROMOTED", 0),
+            "retired":          counts.get("RETIRED", 0),
+        }
+    except Exception:
+        return {"candidates_total": 0}
+
+
 def _macro_today_stats(db: Session) -> dict:
     """Return current regime classification from regime_snapshots."""
     try:
@@ -240,6 +258,7 @@ def get_agents_status(db: Session = Depends(get_db)):
     exec_hb_status,      exec_hb_ts      = _get_heartbeat_status(db, "execution_auditor")
     ops_hb_status,       ops_hb_ts       = _get_heartbeat_status(db, "operations")
     macro_hb_status,     macro_hb_ts     = _get_heartbeat_status(db, "macro_strategist")
+    quant_hb_status,     quant_hb_ts     = _get_heartbeat_status(db, "quant_researcher")
 
     queen_activity = _get_agent_activity(db, "queen")
     queen_stats = _queen_today_stats(db)
@@ -330,6 +349,13 @@ def get_agents_status(db: Session = Depends(get_db)):
             "today": _macro_today_stats(db),
             "recent_activity": [],
         },
+        {
+            "id": "quant_researcher",
+            "status": quant_hb_status,
+            "last_activity": quant_hb_ts,
+            "today": _quant_today_stats(db),
+            "recent_activity": [],
+        },
         *[
             {
                 "id": role_id,
@@ -412,6 +438,14 @@ def run_intro_conversation(force: bool = False, db: Session = Depends(get_db)):
     from agents.intro_conversation import run_intro_conversation as _run
     result = _run(db, force=force)
     return result
+
+
+@router.post("/quant-researcher/run-pipeline")
+def run_quant_pipeline(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    """Trigger the Quant Researcher to scan and advance the candidate pipeline."""
+    from strategy_lab.agents.quant_researcher import run_pipeline_scan as _run
+    result = _run(db)
+    return {"ok": True, "result": result}
 
 
 @router.post("/macro-strategist/run-classification")
