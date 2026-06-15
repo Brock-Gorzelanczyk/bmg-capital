@@ -18,14 +18,18 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 # Risk thresholds
-DRAWDOWN_WARN_PCT     = 8.0   # YELLOW
-DRAWDOWN_HALT_PCT     = 15.0  # RED — propose fleet pause
-CONSEC_LOSS_WARN      = 4     # YELLOW
-CONSEC_LOSS_HALT      = 7     # RED
+DRAWDOWN_WARN_PCT     = 8.0   # YELLOW — 30d drawdown %
+DRAWDOWN_HALT_PCT     = 15.0  # RED — 30d drawdown %
+CONSEC_LOSS_WARN      = 4     # YELLOW — consecutive losing days
+CONSEC_LOSS_HALT      = 7     # RED — consecutive losing days
+CONSEC_LOSS_RED       = 3     # RED — 3+ consecutive losses is active P&L damage
 STALE_BOT_WARN        = 2     # YELLOW if 2+ bots stale
-STALE_BOT_RED         = 3     # RED if 3+ bots stale
+STALE_BOT_RED         = 3     # YELLOW with scanner note — stale ≠ losing; stays YELLOW unless combined with losses
 STALE_BOT_CRITICAL    = 5     # CRITICAL+@here if 5+ bots stale
 CRITICAL_DRAWDOWN_PCT = -4.0  # 24h drawdown worse than this → CRITICAL
+DRAWDOWN_24H_RED_PCT  = -2.0  # 24h drawdown worse than -2% → RED
+FLEET_PAUSE_24H_PCT   = -3.0  # 24h pct required before "fleet pause" language is used
+FLEET_AUM_PAUSE_PCT   = -1.0  # 30d P&L as % of fleet AUM — below this, no pause language
 
 # 4h cooldown on repeated RED alerts to reduce noise
 _last_alert_ts: dict[str, datetime] = {}
@@ -91,10 +95,15 @@ def _get_fleet_drawdown(db: Session) -> dict:
             bots.append({"bot": row[0], "pnl_usd": round(pnl_usd, 2), "worst_day_usd": round((row[2] or 0) / 100, 2)})
             total_pnl += pnl_usd
 
-        return {"bots": bots, "total_pnl_usd": round(total_pnl, 2)}
+        aum_row = db.execute(text(
+            "SELECT SUM(allocated_cents) FROM bot_allocations WHERE enabled = 1"
+        )).fetchone()
+        fleet_aum_usd = round((aum_row[0] or 0) / 100, 2) if aum_row and aum_row[0] else 50_000.0
+
+        return {"bots": bots, "total_pnl_usd": round(total_pnl, 2), "fleet_aum_usd": fleet_aum_usd}
     except Exception as exc:
         logger.warning("[risk_sentinel] drawdown query failed: %s", exc)
-        return {"bots": [], "total_pnl_usd": 0}
+        return {"bots": [], "total_pnl_usd": 0, "fleet_aum_usd": 50_000.0}
 
 
 def _get_consecutive_losses(db: Session) -> dict[str, int]:
@@ -169,20 +178,50 @@ def _get_fleet_drawdown_24h(db: Session) -> float:
 
 
 def _classify(drawdown_pct: float, consec_losses: int, stale_count: int,
-              drawdown_24h_pct: float = 0.0, circuit_breaker_tripped: bool = False) -> str:
-    # CRITICAL takes precedence over RED
+              drawdown_24h_pct: float = 0.0, circuit_breaker_tripped: bool = False,
+              triggers: list[str] | None = None) -> str:
+    """
+    Escalation matrix (stale bots ≠ losing bots):
+      CRITICAL: 24h dd ≤ -4%, or circuit breaker, or 5+ stale, or stale + losing combo
+      RED:      3+ consecutive losses, or 24h dd ≤ -2%, or 30d dd ≥ 15%, or 7+ consec losses
+      YELLOW:   3+ stale bots (technical issue — investigate scanners), or warn thresholds
+      GREEN:    everything else
+    """
+    t = triggers if triggers is not None else []
+
     if drawdown_24h_pct <= CRITICAL_DRAWDOWN_PCT:
+        t.append("critical_24h_drawdown")
         return "CRITICAL"
     if circuit_breaker_tripped:
+        t.append("circuit_breaker")
         return "CRITICAL"
     if stale_count >= STALE_BOT_CRITICAL:
+        t.append("critical_stale_count")
         return "CRITICAL"
+    # Stale + actively losing = CRITICAL (two failure modes simultaneously)
+    if stale_count >= STALE_BOT_RED and consec_losses >= CONSEC_LOSS_RED:
+        t.append("stale_and_losing")
+        return "CRITICAL"
+
+    # RED: actual P&L damage only
     if drawdown_pct >= DRAWDOWN_HALT_PCT or consec_losses >= CONSEC_LOSS_HALT:
+        t.append("pnl_halt_threshold")
         return "RED"
+    if consec_losses >= CONSEC_LOSS_RED:
+        t.append("consecutive_losses")
+        return "RED"
+    if drawdown_24h_pct <= DRAWDOWN_24H_RED_PCT:
+        t.append("drawdown_24h")
+        return "RED"
+
+    # YELLOW: stale bots are a technical issue, not a P&L event
     if stale_count >= STALE_BOT_RED:
-        return "RED"
-    if drawdown_pct >= DRAWDOWN_WARN_PCT or consec_losses >= CONSEC_LOSS_WARN or stale_count >= STALE_BOT_WARN:
+        t.append("stale_bots_only")
         return "YELLOW"
+    if drawdown_pct >= DRAWDOWN_WARN_PCT or consec_losses >= CONSEC_LOSS_WARN or stale_count >= STALE_BOT_WARN:
+        t.append("warn_threshold")
+        return "YELLOW"
+
     return "GREEN"
 
 
@@ -221,8 +260,34 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
         fields.append({"name": "Consecutive Losses", "value": f"{bot}: {n} days", "inline": True})
     if summary.get("red_bots"):
         fields.append({"name": "⚠️ Bots at Risk", "value": ", ".join(summary["red_bots"][:5]), "inline": False})
-    if level == "RED":
-        fields.append({"name": "ACTION REQUIRED", "value": "Review allocations immediately. Fleet pause may be warranted.", "inline": False})
+    if level in ("YELLOW", "RED") and "stale_bots_only" in summary.get("triggers", []):
+        fields.append({
+            "name":   "INVESTIGATE — NOT A P&L EVENT",
+            "value":  f"{summary.get('stale_count', 0)} bots stale — scanner health issue, not trading losses. "
+                      "Review scanner logs and restart processes. No trading action warranted.",
+            "inline": False,
+        })
+    elif level == "RED":
+        triggers   = summary.get("triggers", [])
+        dd24       = summary.get("fleet_drawdown_24h_pct", 0.0)
+        total_pnl  = summary.get("total_pnl_usd", 0.0)
+        fleet_aum  = summary.get("fleet_aum_usd", 50_000.0)
+        pnl_30d_pct = (total_pnl / fleet_aum * 100) if fleet_aum else 0.0
+
+        if dd24 <= FLEET_PAUSE_24H_PCT:
+            action = (f"Fleet pause warranted — 24h drawdown {dd24:.2f}% exceeds -{abs(FLEET_PAUSE_24H_PCT):.0f}% threshold. "
+                      "Halt all trading and review open positions immediately.")
+        elif "consecutive_losses" in triggers and pnl_30d_pct <= FLEET_AUM_PAUSE_PCT:
+            action = ("Pause underperforming bots — 30d P&L below -1% AUM threshold with "
+                      f"{summary.get('worst_consec', ('?', '?'))[1]}+ consecutive losses. "
+                      "Review individual bot allocations before re-enabling.")
+        elif "drawdown_24h" in triggers:
+            action = (f"24h drawdown elevated ({dd24:.2f}%). Review allocations and monitor closely. "
+                      "No pause warranted yet — reassess in 4h.")
+        else:
+            action = ("Review and monitor. 30d P&L above pause threshold — "
+                      "track for 24h before taking any trading action.")
+        fields.append({"name": "ACTION REQUIRED", "value": action, "inline": False})
     if level == "CRITICAL":
         reason_parts = []
         dd24 = summary.get("fleet_drawdown_24h_pct", 0.0)
@@ -282,15 +347,20 @@ def run_risk_health_check(db: Session) -> dict:
     consec_max   = worst_consec[1] if worst_consec else 0
 
     red_bots = [b for b, n in streaks.items() if n >= CONSEC_LOSS_WARN]
+    triggers: list[str] = []
     level = _classify(
         worst_dd_pct, consec_max, len(stale),
         drawdown_24h_pct=drawdown_24h,
-        circuit_breaker_tripped=False,  # populated from bus payload if available
+        circuit_breaker_tripped=False,
+        triggers=triggers,
     )
 
+    fleet_aum_usd = drawdown.get("fleet_aum_usd", 50_000.0)
     summary = {
         "level":                  level,
+        "triggers":               triggers,
         "total_pnl_usd":          total_pnl_usd,
+        "fleet_aum_usd":          fleet_aum_usd,
         "worst_dd_pct":           round(worst_dd_pct, 2),
         "fleet_drawdown_24h_pct": drawdown_24h,
         "stale_count":            len(stale),

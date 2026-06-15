@@ -142,6 +142,44 @@ def _fetch_stock_data_yfinance(symbols: list[str]) -> list[dict]:
     return rows
 
 
+@router.get("/stocks/validate")
+async def validate_stock_universe(_user=Depends(get_current_user)):
+    """
+    Validate each symbol in TOP_STOCKS_UNIVERSE via yfinance.
+    Admin health-check — not cached. Returns per-symbol status.
+    """
+    try:
+        import yfinance as yf
+    except ImportError:
+        return {"error": "yfinance not installed", "results": {}}
+
+    results: dict[str, str] = {}
+    for sym in TOP_STOCKS_UNIVERSE:
+        try:
+            df = yf.download(sym, period="5d", interval="1d", auto_adjust=True, progress=False, threads=False)
+            if df is None or (hasattr(df, "empty") and df.empty):
+                logger.warning("[markets/validate] %s returned empty DataFrame", sym)
+                results[sym] = "empty"
+            else:
+                results[sym] = "valid"
+        except Exception as exc:
+            logger.error("[markets/validate] %s fetch failed: %s", sym, exc)
+            results[sym] = f"error: {exc}"
+
+    invalid = [s for s, v in results.items() if v != "valid"]
+    if invalid:
+        logger.warning("[markets/validate] %d symbols failed: %s", len(invalid), invalid)
+    else:
+        logger.info("[markets/validate] all %d symbols valid", len(TOP_STOCKS_UNIVERSE))
+
+    return {
+        "total": len(TOP_STOCKS_UNIVERSE),
+        "valid": len([v for v in results.values() if v == "valid"]),
+        "invalid": invalid,
+        "results": results,
+    }
+
+
 @router.get("/stocks")
 async def get_stock_markets(
     sort: str = Query("market_cap"),
