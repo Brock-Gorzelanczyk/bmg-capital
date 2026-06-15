@@ -56,7 +56,6 @@ def get_strategy_leaderboard(
         .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
         .filter(
             BotAllocation.user_id == current_user.id,
-            BotProfile.enabled.is_(True),
         )
         .all()
     )

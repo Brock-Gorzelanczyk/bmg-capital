@@ -191,6 +191,21 @@ const BOT_META: Record<
     description: "5-signal high-turnover quant · 20-coin universe · $100k paper sub-account",
     assetClass: "quant",
   },
+  crypto_quant_mean_reversion: {
+    displayName: "Quant Mean Rev",
+    description: "Multi-signal mean-reversion on top-10 crypto by market cap",
+    assetClass: "quant",
+  },
+  crypto_quant_scalper: {
+    displayName: "Quant Scalper",
+    description: "High-frequency scalper on BTC/ETH/SOL with 15-min cooldown",
+    assetClass: "quant",
+  },
+  crypto_meanrev_2163: {
+    displayName: "Mean Rev 2163",
+    description: "Experimental mean-reversion variant, paper-only deployment",
+    assetClass: "quant",
+  },
   crypto_onchain: {
     displayName: "Crypto Onchain",
     description: "On-chain flow analysis — large wallet movements, DEX volume anomalies, L2 bridge activity",
@@ -217,6 +232,9 @@ const BOT_ORDER = [
   "crypto_lt",
   "crypto_onchain",
   "crypto_quant_aggressive",
+  "crypto_quant_mean_reversion",
+  "crypto_quant_scalper",
+  "crypto_meanrev_2163",
   "options_income",
   "options_directional",
 ];
@@ -765,44 +783,6 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
       {/* Open Positions — replaces equity curve until we have multi-day history */}
       <OpenPositionsPanel />
 
-      {/* Leaderboard */}
-      <div className="pt-3 border-t border-t-dim">
-        <SectionLabel as="p" className="mb-3">Bot Leaderboard</SectionLabel>
-        <div className="space-y-1.5">
-          {(p?.leaderboard ?? []).map((entry) => {
-            const ret30 = entry.return_30d_pct ?? null;
-            const ePos = (ret30 ?? 0) >= 0;
-            const tPnl = entry.today_pnl_cents / 100;
-            const tPos = tPnl >= 0;
-            const isCrypto = entry.profile.includes("crypto");
-            const _EQUITY_BOT_IDS = new Set(["options_income", "options_directional"]);
-            const isOptions = entry.profile.includes("options") && !_EQUITY_BOT_IDS.has(entry.profile);
-            return (
-              <button
-                key={entry.profile}
-                onClick={() => onNavigateBot(entry.profile)}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-t-bg1/50 hover:bg-t-bg1 border border-t-dim/80 hover:border-t-mid transition-colors text-left card-hover"
-              >
-                <span className="text-[10px] font-bold text-t-gdim w-4 flex-shrink-0 font-mono-t">
-                  #{entry.rank}
-                </span>
-                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-t-amber" : entry.profile.includes("quant") ? "bg-violet-400" : "bg-t-cyan")} />
-                <span className="flex-1 text-xs font-semibold text-t-hi truncate font-ui-t">{entry.name}</span>
-                <span className={cn("text-xs font-bold w-16 text-right tabular-nums font-mono-t", ret30 != null ? (ePos ? "text-t-green" : "text-t-red") : "text-t-gdim")}>
-                  {ret30 != null ? `${ret30 >= 0 ? "+" : ""}${ret30.toFixed(3)}%` : "—"}
-                </span>
-                <span className={cn("text-xs w-20 text-right tabular-nums font-mono-t", tPos ? "text-t-green" : "text-t-red")}>
-                  {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
-                </span>
-                <span className="text-[10px] text-t-gdim w-16 text-right flex-shrink-0 font-ui-t">
-                  {entry.watchlist_count > 0 ? `${entry.watchlist_count} names` : "—"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Watchlist */}
       <div ref={tabSectionRef} className="pt-3 border-t border-t-dim">
         <SectionLabel as="p" className="mb-3">
@@ -830,6 +810,57 @@ function PortfolioHero({ onNavigateBot }: { onNavigateBot: (name: string) => voi
     </BracketFrame>
     <SymbolChartDrawer symbol={chartSymbol} onClose={() => setChartSymbol(null)} />
     </>
+  );
+}
+
+// ─── Standalone Bot Leaderboard ──────────────────────────────────────────────
+
+function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string) => void }) {
+  const { data: p } = useQuery({
+    queryKey: ["strategy-lab-portfolio"],
+    queryFn: getStrategyLabPortfolio,
+    staleTime: 30_000,
+    retry: 0,
+  });
+  const entries = p?.leaderboard ?? [];
+  if (!entries.length) return null;
+
+  return (
+    <div>
+      <p className="panel-header mb-3">// BOT LEADERBOARD</p>
+      <div className="bg-t-bg0 border border-t-dim rounded-2xl overflow-hidden">
+        <div className="space-y-0">
+          {entries.map((entry) => {
+            const ret30 = entry.return_30d_pct ?? null;
+            const ePos = (ret30 ?? 0) >= 0;
+            const tPnl = entry.today_pnl_cents / 100;
+            const tPos = tPnl >= 0;
+            const isCrypto = entry.profile.includes("crypto");
+            const isOptions = entry.profile.includes("options") && !["options_income", "options_directional"].includes(entry.profile);
+            return (
+              <button
+                key={entry.profile}
+                onClick={() => onNavigateBot(entry.profile)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 border-b border-t-dim/50 last:border-0 hover:bg-t-bg1/60 transition-colors text-left card-hover"
+              >
+                <span className="text-[10px] font-bold text-t-gdim w-4 flex-shrink-0 font-mono-t">#{entry.rank}</span>
+                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-t-amber" : entry.profile.includes("quant") ? "bg-violet-400" : "bg-t-cyan")} />
+                <span className="flex-1 text-xs font-semibold text-t-hi truncate font-ui-t">{entry.name}</span>
+                <span className={cn("text-xs font-bold w-20 text-right tabular-nums font-mono-t", ret30 != null ? (ePos ? "text-t-green" : "text-t-red") : "text-t-gdim")}>
+                  {ret30 != null ? `${ret30 >= 0 ? "+" : ""}${ret30.toFixed(2)}%` : "—"}
+                </span>
+                <span className={cn("text-xs w-24 text-right tabular-nums font-mono-t", tPos ? "text-t-green" : "text-t-red")}>
+                  {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
+                </span>
+                <span className="text-[10px] text-t-gdim w-14 text-right flex-shrink-0 font-ui-t">
+                  {entry.watchlist_count > 0 ? `${entry.watchlist_count} names` : "—"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1986,15 +2017,58 @@ export default function StrategyLab() {
             </div>
           </div>
 
-          {/* LAB MODULES launchpad */}
+          {/* 1. Portfolio value header — sum of sleeve values (no separate API call) */}
+          {!portfoliosLoading && portfolios.length > 0 && (() => {
+            const totalUsd = portfolios.reduce((s, p) => s + (p.current_value_cents || 0), 0) / 100;
+            return (
+              <div className="bg-t-bg0 border border-t-dim rounded-xl px-5 py-4 flex items-center justify-between gap-4">
+                <div>
+                  <p className="panel-header mb-1">// PORTFOLIO VALUE</p>
+                  <p className="text-4xl font-bold text-t-hi tabular-nums font-mono-t">
+                    ${totalUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-xs text-t-muted mt-1 font-ui-t">Sum across all 4 sleeves · updates every 60s</p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 2. Capital pods (sleeve cards) */}
+          {portfoliosLoading ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-28 rounded-2xl bg-t-bg0 border border-t-dim animate-pulse" />
+              ))}
+            </div>
+          ) : portfolios.length > 0 ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {portfolios.map((port) => (
+                <PortfolioTab key={port.id} portfolio={port} />
+              ))}
+            </div>
+          ) : null}
+
+          {/* 3. Bot Leaderboard */}
+          <BotLeaderboardSection onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
+
+          {/* 4. Market Regime */}
+          <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3">
+            <p className="panel-header mb-2">// Market Regime</p>
+            <RegimeBar regime={regime} isLoading={regimeLoading} />
+          </div>
+
+          {/* 5. Candidates in incubation */}
+          <CandidatesSection />
+
+          {/* 6. LAB MODULES quick-nav */}
           <div>
             <p className="panel-header mb-2">// LAB MODULES</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {([
-                { to: "/strategy/scout",       label: "SCOUT",       badge: `${activeScoutCount} armed`,    Icon: null },
-                { to: "/strategy/forge",        label: "FORGE",       badge: `${activeForgeCount} active`,   Icon: null },
-                { to: "/strategy/performance",  label: "ANALYTICS",   badge: null,                           Icon: null },
-                { to: "/strategy/leaderboard",  label: "LEADERBOARD", badge: null,                           Icon: null },
+                { to: "/strategy/scout",       label: "SCOUT",       badge: `${activeScoutCount} armed` },
+                { to: "/strategy/forge",        label: "FORGE",       badge: `${activeForgeCount} active` },
+                { to: "/strategy/performance",  label: "ANALYTICS",   badge: null },
+                { to: "/strategy/leaderboard",  label: "LEADERBOARD", badge: null },
               ] as const).map(({ to, label, badge }) => (
                 <Link
                   key={to}
@@ -2010,110 +2084,7 @@ export default function StrategyLab() {
             </div>
           </div>
 
-          {/* Regime status bar */}
-          <div className="bg-t-bg0 border border-t-dim rounded-xl px-4 py-3">
-            <p className="panel-header mb-2">// Market Regime</p>
-            <RegimeBar regime={regime} isLoading={regimeLoading} />
-          </div>
-
-          {/* Capital pods */}
-          {portfoliosLoading ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-28 rounded-2xl bg-t-bg0 border border-t-dim animate-pulse" />
-              ))}
-            </div>
-          ) : portfolios.length > 0 ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {portfolios.map((port) => (
-                <PortfolioTab key={port.id} portfolio={port} />
-              ))}
-            </div>
-          ) : null}
-
-          {/* Strategy Scout entry card */}
-          <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="panel-header mb-0.5">
-                // STRATEGY SCOUT
-              </p>
-              <p className="text-sm text-t-mid2 font-ui-t">
-                Match strategies to tickers, fire personal signals when setups arm.
-              </p>
-            </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <span className="text-xs text-t-dim bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 whitespace-nowrap font-ui-t">
-                Active setups: <span className="text-t-hi font-semibold font-mono-t">{activeScoutCount}</span>
-              </span>
-              <Link
-                to="/strategy/scout"
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-400 hover:bg-violet-500/25 transition-colors whitespace-nowrap font-ui-t"
-              >
-                Open Scout →
-              </Link>
-            </div>
-          </div>
-
-          {/* The Forge entry card */}
-          <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="panel-header mb-0.5">
-                // THE FORGE
-              </p>
-              <p className="text-sm text-t-mid2 font-ui-t">
-                Forge your own quant bot — combine strategies, set your watchlist, allocate capital.
-              </p>
-            </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <span className="text-xs text-t-dim bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 whitespace-nowrap font-ui-t">
-                Active bots: <span className="text-t-hi font-semibold font-mono-t">{activeForgeCount}</span>
-              </span>
-              <Link
-                to="/strategy/forge"
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-t-amber/15 border border-t-amber/30 text-t-amber hover:bg-t-amber/25 transition-colors whitespace-nowrap font-ui-t"
-              >
-                Open Forge →
-              </Link>
-            </div>
-          </div>
-
-          {/* Performance Analytics entry card */}
-          <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="panel-header mb-0.5">
-                // PERFORMANCE ANALYTICS
-              </p>
-              <p className="text-sm text-t-mid2 font-ui-t">
-                Sharpe, drawdown, win rate — every bot, measured against the data.
-              </p>
-            </div>
-            <Link
-              to="/strategy/performance"
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-t-green/15 border border-t-green/30 text-t-green hover:bg-t-green/25 transition-colors whitespace-nowrap flex-shrink-0 font-ui-t"
-            >
-              Open Analytics →
-            </Link>
-          </div>
-
-          {/* Strategy Leaderboard entry card */}
-          <div className="bg-t-bg0 border border-t-dim rounded-2xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="panel-header mb-0.5">
-                // STRATEGY LEADERBOARD
-              </p>
-              <p className="text-sm text-t-mid2 font-ui-t">
-                Dollar-weighted rankings — see which strategies are actually printing across every bot.
-              </p>
-            </div>
-            <Link
-              to="/strategy/leaderboard"
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-t-cyan/15 border border-t-cyan/30 text-t-cyan hover:bg-t-cyan/25 transition-colors whitespace-nowrap flex-shrink-0 font-ui-t"
-            >
-              View Leaderboard →
-            </Link>
-          </div>
-
-          {/* Prebuilt bot tiles */}
+          {/* 7. Prebuilt bot tiles */}
           {isLoading ? (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
@@ -2139,16 +2110,11 @@ export default function StrategyLab() {
             </div>
           )}
 
-          {/* Candidates in incubation */}
-          <CandidatesSection />
-
           {/* My Signals feed — Scout + Forge combined */}
           {mySignals.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="panel-header">
-                  // MY SIGNALS
-                </p>
+                <p className="panel-header">// MY SIGNALS</p>
                 <div className="flex gap-2">
                   <Link to="/strategy/scout" className="text-xs text-t-gdim hover:text-t-muted transition-colors font-ui-t">Scout →</Link>
                   <Link to="/strategy/forge" className="text-xs text-t-gdim hover:text-t-muted transition-colors font-ui-t">Forge →</Link>
@@ -2199,7 +2165,7 @@ export default function StrategyLab() {
             </div>
           )}
 
-          {/* Aggregate portfolio hero */}
+          {/* 8. Capital Allocation + Open Positions detail (at bottom) */}
           <PortfolioHero onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
 
           {/* Comparison table */}
