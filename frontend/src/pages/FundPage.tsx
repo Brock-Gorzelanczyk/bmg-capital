@@ -258,6 +258,60 @@ const LINES: LineSpec[] = [
   ["chief_risk_officer", "portfolio_manager", "amber-dashed"],
 ];
 
+// ── Macro Run Button ──────────────────────────────────────────────────────────
+
+function MacroRunButton() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ regime?: string; confidence?: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRun() {
+    setRunning(true);
+    setResult(null);
+    setError(null);
+    try {
+      const token = localStorage.getItem("bmg_token") ?? "";
+      const res = await fetch("/api/agents/macro-strategist/run-classification", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setResult({
+        regime: data.result?.regime,
+        confidence: data.result?.confidence != null
+          ? `${(data.result.confidence * 100).toFixed(0)}%`
+          : undefined,
+      });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3 flex-wrap" style={{ fontFamily: "var(--font-mono-t)" }}>
+      <button
+        onClick={handleRun}
+        disabled={running}
+        className="text-[10px] font-bold tracking-wider border px-3 py-1.5 transition-colors
+          border-[var(--green)] text-[var(--green)] hover:bg-[var(--green)]/10 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {running ? "CLASSIFYING…" : "▶ RUN CLASSIFICATION"}
+      </button>
+      {result && (
+        <span className="text-[10px] text-[var(--green)]">
+          ✓ {result.regime}{result.confidence ? ` · ${result.confidence}` : ""}
+        </span>
+      )}
+      {error && (
+        <span className="text-[10px] text-red-400">✗ {error}</span>
+      )}
+    </div>
+  );
+}
+
 // ── Detail Panel ──────────────────────────────────────────────────────────────
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
@@ -410,6 +464,17 @@ function DetailPanel({
                   </ul>
                 )}
               </div>
+            </div>
+          </>
+        )}
+
+        {/* Agent-specific action buttons */}
+        {role.id === "macro_strategist" && (
+          <>
+            <div className="border-t border-[var(--border-subtle)]" />
+            <div>
+              <SectionHeader>Actions</SectionHeader>
+              <MacroRunButton />
             </div>
           </>
         )}

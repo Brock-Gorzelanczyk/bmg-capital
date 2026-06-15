@@ -20,7 +20,6 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 # Agents not yet deployed — static metadata
 _NOT_BUILT = {
     "quant_researcher": 6,
-    "macro_strategist": 6,
 }
 
 # Map agent bus from_agent values to role IDs
@@ -164,6 +163,33 @@ def _get_agent_today_count(db: Session, from_agent: str) -> int:
         return 0
 
 
+def _macro_today_stats(db: Session) -> dict:
+    """Return current regime classification from regime_snapshots."""
+    try:
+        row = db.execute(text("""
+            SELECT regime, confidence, signals_json, snapshot_date
+            FROM regime_snapshots
+            ORDER BY snapshot_date DESC LIMIT 1
+        """)).fetchone()
+        if not row:
+            return {"current_regime": "—", "confidence": None, "last_classified": "—"}
+        import json as _json
+        signals = {}
+        try:
+            signals = _json.loads(row[2]) if row[2] else {}
+        except Exception:
+            pass
+        vix = signals.get("vix")
+        vix_str = f" (VIX {vix:.1f})" if vix else ""
+        return {
+            "current_regime": f"{row[0]}{vix_str}",
+            "confidence":     f"{(row[1] or 0) * 100:.0f}%" if row[1] else "—",
+            "last_classified": str(row[3])[:10] if row[3] else "—",
+        }
+    except Exception:
+        return {"current_regime": "—", "confidence": None, "last_classified": "—"}
+
+
 def _get_heartbeat_status(db: Session, agent_id: str) -> tuple:
     """
     Read the most recent heartbeat from agent_heartbeats channel.
@@ -213,6 +239,7 @@ def get_agents_status(db: Session = Depends(get_db)):
     dq_hb_status,        dq_hb_ts        = _get_heartbeat_status(db, "data_quality_watcher")
     exec_hb_status,      exec_hb_ts      = _get_heartbeat_status(db, "execution_auditor")
     ops_hb_status,       ops_hb_ts       = _get_heartbeat_status(db, "operations")
+    macro_hb_status,     macro_hb_ts     = _get_heartbeat_status(db, "macro_strategist")
 
     queen_activity = _get_agent_activity(db, "queen")
     queen_stats = _queen_today_stats(db)
@@ -294,6 +321,13 @@ def get_agents_status(db: Session = Depends(get_db)):
             "status": ops_hb_status,
             "last_activity": ops_hb_ts,
             "today": {"reconciliations_run": ops_today, "api_cost_usd": 0.0, "api_budget_usd": 0.0},
+            "recent_activity": [],
+        },
+        {
+            "id": "macro_strategist",
+            "status": macro_hb_status,
+            "last_activity": macro_hb_ts,
+            "today": _macro_today_stats(db),
             "recent_activity": [],
         },
         *[
@@ -378,6 +412,14 @@ def run_intro_conversation(force: bool = False, db: Session = Depends(get_db)):
     from agents.intro_conversation import run_intro_conversation as _run
     result = _run(db, force=force)
     return result
+
+
+@router.post("/macro-strategist/run-classification")
+def run_macro_classification(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    """Trigger the Macro Strategist to classify current market regime."""
+    from strategy_lab.agents.macro_strategist import run_macro_classification as _run
+    result = _run(db)
+    return {"ok": True, "result": result}
 
 
 @router.post("/plain-english/toggle")

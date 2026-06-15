@@ -204,16 +204,14 @@ export const FUND_ROLES: FundRole[] = [
     title: "MACRO STRATEGIST",
     agentName: "Macro Strategist",
     tier: "Mixed",
-    status: "not_built",
-    expectedDeployPhase: 6,
+    status: "offline",
     description:
-      "Monitors macro regime indicators including FedWatch probabilities, yield curve shape, credit spreads, and global risk sentiment. Generates regime-based allocation proposals and flags macro tail risks to the CRO. Updates the regime snapshot used by the Researcher.",
+      "Classifies daily market regime (bull trending, bear trending, choppy, crisis, complacency) from VIX, trend, vol percentile, and BTC dominance. Stores snapshots in regime_snapshots, posts to #macro-view, and feeds regime context to Queen and Researcher.",
     authority: {
       tierA: [
-        "FedWatch and rate probability pulls",
-        "Yield curve and credit spread monitoring",
-        "Regime classification updates",
-        "Macro event calendar ingestion",
+        "Regime classification from live DB indicators",
+        "RegimeSnapshot writes",
+        "Heartbeat and Discord posts",
       ],
       tierB: [
         "Regime-based sleeve allocation proposals",
@@ -223,16 +221,15 @@ export const FUND_ROLES: FundRole[] = [
     },
     reportsTo: "Portfolio Manager (Queen)",
     inputsFrom: [
-      "External macro APIs (FRED, CME FedWatch)",
-      "RegimeSnapshot table",
-      "News and economic calendar feeds",
+      "RegimeSnapshot table (live indicators from Risk Sentinel)",
+      "regime_snapshots history",
     ],
     outputsTo: [
-      "agent_messages bus — MACRO_UPDATE channel",
-      "Queen — macro directives",
-      "Risk Sentinel — tail risk alerts",
+      "regime_snapshots — daily classification",
+      "Discord #macro-view",
+      "agent_messages — heartbeat channel",
     ],
-    discordChannels: [],
+    discordChannels: [{ name: "#macro-view", purpose: "Daily regime classification posts" }],
   },
   {
     id: "data_quality_watcher",
