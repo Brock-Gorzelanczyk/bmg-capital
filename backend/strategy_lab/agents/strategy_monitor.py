@@ -172,53 +172,93 @@ def _check_signal_rate(db: Session) -> dict:
 
 
 def get_pnl_snapshot(db: Session) -> dict:
-    """Today's P&L across all enabled bots — realized, unrealized, fees, winners/losers."""
+    """
+    Portfolio P&L from BotTrade + BotPosition — same source as the canonical endpoint.
+    BotDailyPnL is intentionally NOT used (it is an audit log, not the live source of truth).
+    Returns all-time realized + current unrealized, plus today's realized for the sub-line.
+    """
     try:
-        from app.db.models.bots import BotAllocation, BotDailyPnL, BotTrade, BotPosition
+        from app.db.models.bots import BotAllocation, BotTrade, BotPosition
         from sqlalchemy import func
 
         today       = date.today()
         today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
 
-        alloc_ids = [
-            a.id for a in db.query(BotAllocation).filter(BotAllocation.enabled.is_(True)).all()
-        ]
+        # All allocations — no enabled filter (matches canonical endpoint)
+        alloc_ids = [a.id for a in db.query(BotAllocation).all()]
         if not alloc_ids:
             return {"realized_cents": 0, "unrealized_cents": 0, "total_cents": 0,
-                    "fees_cents": 0, "trade_count": 0, "open_positions": 0,
-                    "top_winners": [], "top_losers": []}
+                    "fees_cents": 0, "today_cents": 0, "trade_count": 0,
+                    "open_positions": 0, "top_winners": [], "top_losers": []}
 
-        pnl_rows   = db.query(BotDailyPnL).filter(
-            BotDailyPnL.allocation_id.in_(alloc_ids),
-            BotDailyPnL.date == today,
+        # Avg-cost lookup from all positions
+        all_positions = db.query(BotPosition).filter(
+            BotPosition.allocation_id.in_(alloc_ids),
         ).all()
-        realized   = sum((r.realized_cents   or 0) for r in pnl_rows)
-        unrealized = sum((r.unrealized_cents or 0) for r in pnl_rows)
-        fees       = sum((r.fees_cents       or 0) for r in pnl_rows)
+        pos_cost_map: dict[int, float] = {p.id: p.avg_cost_cents for p in all_positions}
 
-        trades = db.query(BotTrade).filter(
+        # All trades (buy side provides fallback avg_cost by allocation+symbol)
+        all_trades = db.query(BotTrade).filter(
             BotTrade.allocation_id.in_(alloc_ids),
-            BotTrade.side == "sell",
-            BotTrade.created_at >= today_start,
-        ).all()
+            BotTrade.quarantined_at.is_(None),
+        ).order_by(BotTrade.ts).all()
 
-        trade_pnl = sorted(
-            [{"symbol": t.symbol or "?", "pnl_cents": int(t.pnl_cents or 0)} for t in trades],
-            key=lambda x: -x["pnl_cents"],
+        buy_price: dict[tuple, float] = {}
+        for t in all_trades:
+            if t.side.lower() in ("buy", "open", "short"):
+                buy_price[(t.allocation_id, t.symbol)] = t.fill_price_cents
+
+        realized_cents = 0
+        today_realized = 0
+        trade_pnl: list[dict] = []
+
+        for t in all_trades:
+            side = t.side.lower()
+            if side not in ("sell", "close", "cover"):
+                continue
+            avg_cost = pos_cost_map.get(t.position_id) if t.position_id else None
+            if avg_cost is None:
+                avg_cost = buy_price.get((t.allocation_id, t.symbol), t.fill_price_cents)
+            if side == "cover":
+                pnl = int((avg_cost - t.fill_price_cents) * t.qty) - int(t.fees_cents or 0)
+            else:
+                pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
+            realized_cents += pnl
+            trade_date = t.ts.date() if hasattr(t.ts, "date") else t.ts
+            if trade_date == today:
+                today_realized += pnl
+            trade_pnl.append({"symbol": t.symbol or "?", "pnl_cents": pnl})
+
+        # Open positions for count and unrealized P&L
+        open_pos = [p for p in all_positions if p.closed_at is None and not p.quarantined_at]
+        open_count = len(open_pos)
+
+        unrealized_cents = 0
+        try:
+            from app.core.canonical import _cached_live_prices
+            syms = list({p.symbol for p in open_pos})
+            prices = _cached_live_prices(syms)
+            for p in open_pos:
+                price = prices.get(p.symbol)
+                if price and p.avg_cost_cents and p.qty:
+                    unrealized_cents += int((price * 100 - p.avg_cost_cents) * p.qty)
+        except Exception:
+            pass
+
+        trade_pnl.sort(key=lambda x: -x["pnl_cents"])
+        today_trade_count = sum(
+            1 for t in all_trades
+            if t.side.lower() in ("sell", "close")
+            and (t.ts.date() if hasattr(t.ts, "date") else t.ts) == today
         )
 
-        open_count = db.query(func.count(BotPosition.id)).filter(
-            BotPosition.allocation_id.in_(alloc_ids),
-            BotPosition.closed_at.is_(None),
-            BotPosition.quarantined_at.is_(None),
-        ).scalar() or 0
-
         return {
-            "realized_cents":   realized,
-            "unrealized_cents": unrealized,
-            "fees_cents":       fees,
-            "total_cents":      realized + unrealized - fees,
-            "trade_count":      len(trades),
+            "realized_cents":   realized_cents,
+            "unrealized_cents": unrealized_cents,
+            "fees_cents":       0,
+            "total_cents":      realized_cents + unrealized_cents,
+            "today_cents":      today_realized,
+            "trade_count":      today_trade_count,
             "top_winners":      trade_pnl[:3],
             "top_losers":       list(reversed(trade_pnl))[:3],
             "open_positions":   open_count,
@@ -226,8 +266,8 @@ def get_pnl_snapshot(db: Session) -> dict:
     except Exception as exc:
         logger.warning("[strategy_monitor] pnl_snapshot failed: %s", exc)
         return {"realized_cents": 0, "unrealized_cents": 0, "total_cents": 0,
-                "fees_cents": 0, "trade_count": 0, "open_positions": 0,
-                "top_winners": [], "top_losers": []}
+                "fees_cents": 0, "today_cents": 0, "trade_count": 0,
+                "open_positions": 0, "top_winners": [], "top_losers": []}
 
 
 def get_weekend_pnl(db: Session) -> dict:

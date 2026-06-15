@@ -58,6 +58,22 @@ _REGIME_EMOJI = {
     "crisis": "🔥", "complacency": "😴", "neutral": "⚖️", "unknown": "❓",
 }
 
+_BOT_DISPLAY_NAMES: dict[str, str] = {
+    "stock_swing":                 "Stock Swing",
+    "stock_day":                   "Stock Day",
+    "stock_lt":                    "Stock Long-Term",
+    "crypto_swing":                "Crypto Swing",
+    "crypto_day":                  "Crypto Day",
+    "crypto_lt":                   "Crypto Long-Term",
+    "crypto_onchain":              "Crypto Onchain",
+    "options_income":              "Equity Income",
+    "options_directional":         "Equity Directional",
+    "crypto_quant_aggressive":     "Quant Aggressive",
+    "crypto_quant_mean_reversion": "Quant Mean Rev",
+    "crypto_quant_scalper":        "Quant Scalper",
+    "crypto_meanrev_2163":         "Mean Rev 2163",
+}
+
 # In-memory cooldown: signal_key → last fired UTC datetime (24h dedup)
 _alert_last_fired: dict[str, datetime] = {}
 _ALERT_COOLDOWN_HOURS = 24
@@ -136,13 +152,21 @@ def _regime_line(research: dict) -> str:
 
 def _bot_summary(health: dict) -> str:
     bots  = health.get("bots", [])
-    ok    = sum(1 for b in bots if b.get("status") == "OK")
-    stale = [b["bot"] for b in bots if b.get("status") == "STALE"]
-    dis   = sum(1 for b in bots if b.get("status") == "DISABLED")
-    parts = [f"{ok} healthy"]
+    # Exclude SKIPPED (weekend market-closed bots) from total
+    active = [b for b in bots if b.get("status") != "SKIPPED"]
+    total  = len(active)
+    ok     = sum(1 for b in active if b.get("status") == "OK")
+    stale  = [_BOT_DISPLAY_NAMES.get(b["bot"], b["bot"]) for b in active if b.get("status") == "STALE"]
+    dis    = sum(1 for b in active if b.get("status") in ("DISABLED", "NO_ALLOC"))
+    quiet  = sum(1 for b in active if b.get("status") == "NEVER_RAN")
+    parts  = [f"{total} total", f"{ok} healthy"]
     if stale:
         parts.append(f"{len(stale)} stale: {', '.join(stale[:3])}")
+    else:
+        parts.append("0 stale")
     parts.append(f"{dis} disabled")
+    if quiet:
+        parts.append(f"{quiet} quiet")
     return " | ".join(parts)
 
 
@@ -159,18 +183,18 @@ def _pnl_fields(pnl: dict, *, evening: bool = False) -> list[dict]:
     fees     = pnl.get("fees_cents", 0)
     trades   = pnl.get("trade_count", 0)
     open_pos = pnl.get("open_positions", 0)
+    today    = pnl.get("today_cents", 0)
     dot      = "🟢" if total >= 0 else "🔴"
 
+    today_str = f" | Today: {_fmt_pnl(today)}" if today != 0 else ""
     if evening:
-        # Realized = stable after RTH close; unrealized = live AH moves
         pnl_val = (
-            f"{dot} **{_fmt_pnl(total)}** total\n"
-            f"RTH close (realized): {_fmt_pnl(realized)} | "
-            f"AH unrealized: {_fmt_pnl(unrealiz)} | Fees: {_fmt_pnl(-fees)}"
+            f"{dot} **{_fmt_pnl(total)}** all-time{today_str}\n"
+            f"Realized: {_fmt_pnl(realized)} | AH unrealized: {_fmt_pnl(unrealiz)} | Fees: {_fmt_pnl(-fees)}"
         )
     else:
         pnl_val = (
-            f"{dot} **{_fmt_pnl(total)}** total\n"
+            f"{dot} **{_fmt_pnl(total)}** all-time{today_str}\n"
             f"Realized: {_fmt_pnl(realized)} | Unrealized: {_fmt_pnl(unrealiz)} | Fees: {_fmt_pnl(-fees)}"
         )
 
@@ -179,10 +203,10 @@ def _pnl_fields(pnl: dict, *, evening: bool = False) -> list[dict]:
     win_str = "\n".join(f"  {w['symbol']} {_fmt_pnl(w['pnl_cents'])}" for w in winners[:3]) or "—"
     los_str = "\n".join(f"  {l['symbol']} {_fmt_pnl(l['pnl_cents'])}" for l in losers[:3]) or "—"
     return [
-        {"name": "P&L Today",     "value": pnl_val,                                        "inline": False},
-        {"name": "Closed Trades", "value": f"{trades} trades | {open_pos} open positions",  "inline": True},
-        {"name": "Top Winners",   "value": win_str,                                         "inline": True},
-        {"name": "Top Losers",    "value": los_str,                                         "inline": True},
+        {"name": "Portfolio P&L",  "value": pnl_val,                                        "inline": False},
+        {"name": "Closed Trades",  "value": f"{trades} trades | {open_pos} open positions",  "inline": True},
+        {"name": "Top Winners",    "value": win_str,                                         "inline": True},
+        {"name": "Top Losers",     "value": los_str,                                         "inline": True},
     ]
 
 
