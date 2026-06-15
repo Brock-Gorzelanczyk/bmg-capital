@@ -281,7 +281,8 @@ def _migration_already_ran(conn, name: str) -> bool:
 def _record_migration(conn, name: str) -> None:
     """Record a migration as applied."""
     conn.execute(
-        text("INSERT OR IGNORE INTO schema_migrations (migration_name) VALUES (:n)"), {"n": name}
+        text("INSERT INTO schema_migrations (migration_name) VALUES (:n) ON CONFLICT (migration_name) DO NOTHING"),
+        {"n": name},
     )
     conn.commit()
 
@@ -712,18 +713,48 @@ def _ensure_sleeve_config_table(conn) -> None:
                 notes                  VARCHAR
             )
         """))
-        # Seed: $200k reserved for options bots (not yet deployed)
-        # ON CONFLICT DO NOTHING works on both SQLite 3.24+ and PostgreSQL
+        # Seed/repair: $200k reserved for options bots.
+        # DO UPDATE WHERE = 0 handles both: new rows AND rows that landed with 0
+        # due to previous INSERT OR IGNORE failures on Postgres.
         conn.execute(text("""
             INSERT INTO sleeve_config (sleeve_name, reserved_capital_cents, notes)
             VALUES ('options', 20000000, 'Reserved for future options bots: options_short_strangle_45d, options_wheel_mechanical')
-            ON CONFLICT (sleeve_name) DO NOTHING
+            ON CONFLICT (sleeve_name) DO UPDATE
+              SET reserved_capital_cents = EXCLUDED.reserved_capital_cents,
+                  notes = EXCLUDED.notes
+              WHERE sleeve_config.reserved_capital_cents = 0
         """))
         conn.commit()
         _record_migration(conn, MIGRATION_NAME)
         logger.info("Migration: sleeve_config table created, options reserved=$200k")
     except Exception as exc:
         logger.warning("_ensure_sleeve_config_table failed: %s", exc)
+
+
+def _repair_options_sleeve_reservation(conn) -> None:
+    """
+    One-shot repair: guarantee options sleeve_config row = $200k.
+    Uses a new migration name so it fires even if the original
+    sleeve_config.table_v1_2026_06 migration was already marked complete
+    (which would have skipped the INSERT entirely on subsequent startups).
+    """
+    MIGRATION_NAME = "sleeve_config.options_200k_repair_v1_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        conn.execute(text("""
+            INSERT INTO sleeve_config (sleeve_name, reserved_capital_cents, notes)
+            VALUES ('options', 20000000, 'Reserved for future options bots: options_short_strangle_45d, options_wheel_mechanical')
+            ON CONFLICT (sleeve_name) DO UPDATE
+              SET reserved_capital_cents = EXCLUDED.reserved_capital_cents,
+                  notes = EXCLUDED.notes
+              WHERE sleeve_config.reserved_capital_cents = 0
+        """))
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info("Migration: options sleeve reservation set to $200k")
+    except Exception as exc:
+        logger.warning("_repair_options_sleeve_reservation failed: %s", exc)
 
 
 def _ensure_proposal_audit_table(conn) -> None:
@@ -900,6 +931,10 @@ def run_migrations(engine: Engine) -> None:
             _ensure_sleeve_config_table(conn)
         except Exception as _e:
             logger.warning("_ensure_sleeve_config_table failed (non-fatal): %s", _e)
+        try:
+            _repair_options_sleeve_reservation(conn)
+        except Exception as _e:
+            logger.warning("_repair_options_sleeve_reservation failed (non-fatal): %s", _e)
         try:
             _ensure_proposal_audit_table(conn)
         except Exception as _e:

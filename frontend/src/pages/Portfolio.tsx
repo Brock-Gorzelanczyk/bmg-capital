@@ -215,7 +215,7 @@ export default function Portfolio() {
         {/* Per-sleeve breakdown */}
         {SLEEVE_ORDER.map((key) => {
           const sleeve = snap.by_sleeve[key];
-          if (!sleeve || sleeve.total_bots === 0) return null;
+          if (!sleeve || (sleeve.total_bots === 0 && (sleeve.reserved_capital_cents ?? 0) === 0)) return null;
           const sleeveBots = snap.bots.filter((b) => b.category === key);
           return (
             <SleeveCard key={key} sleeveKey={key} sleeve={sleeve} bots={sleeveBots} />
