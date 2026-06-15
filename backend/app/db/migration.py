@@ -713,9 +713,11 @@ def _ensure_sleeve_config_table(conn) -> None:
             )
         """))
         # Seed: $200k reserved for options bots (not yet deployed)
+        # ON CONFLICT DO NOTHING works on both SQLite 3.24+ and PostgreSQL
         conn.execute(text("""
-            INSERT OR IGNORE INTO sleeve_config (sleeve_name, reserved_capital_cents, notes)
+            INSERT INTO sleeve_config (sleeve_name, reserved_capital_cents, notes)
             VALUES ('options', 20000000, 'Reserved for future options bots: options_short_strangle_45d, options_wheel_mechanical')
+            ON CONFLICT (sleeve_name) DO NOTHING
         """))
         conn.commit()
         _record_migration(conn, MIGRATION_NAME)
