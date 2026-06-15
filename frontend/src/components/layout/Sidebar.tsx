@@ -70,7 +70,8 @@ const NAV_BUILD = [
 ];
 
 const NAV_FUND = [
-  { to: "/fund", label: "Fund Team", Icon: Building2 },
+  { to: "/fund",          label: "Fund Team",     Icon: Building2 },
+  { to: "/research-feed", label: "Research Feed", Icon: BookMarked },
 ];
 
 const NAV_MARKETS = [
