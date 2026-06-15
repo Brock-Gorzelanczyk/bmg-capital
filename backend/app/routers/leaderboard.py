@@ -1,20 +1,22 @@
-"""Per-bot strategy leaderboard — all-time P&L ranked.
+"""Per-bot strategy leaderboard — all-time and windowed P&L ranked.
 
-P&L is aggregated from BotDailyPnL rows only (no external live-price API calls),
-so the endpoint always returns quickly regardless of market data availability.
+All-time P&L aggregates from BotDailyPnL rows.
+Windowed P&L (24h/7d/30d/mtd) is computed from BotTrade realized fills
+because BotDailyPnL is an audit log, not a real-time source.
 """
 from __future__ import annotations
 
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from sqlalchemy import func
 
 from app.dependencies import get_db, get_current_user
-from app.db.models.bots import BotAllocation, BotProfile, BotDailyPnL, BotTrade
+from app.db.models.bots import BotAllocation, BotProfile, BotDailyPnL, BotTrade, BotPosition
 from app.db.models.allocation import BotPerformanceStats
 from app.db.models.users import User
 
@@ -44,13 +46,79 @@ _SORT_FIELDS = {
 }
 
 
+def _window_cutoff(window: str) -> datetime | None:
+    now = datetime.now(timezone.utc)
+    if window == "24h":
+        return now - timedelta(hours=24)
+    if window == "7d":
+        return now - timedelta(days=7)
+    if window == "30d":
+        return now - timedelta(days=30)
+    if window == "mtd":
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return None  # "all" — no cutoff
+
+
+def _compute_window_pnl(db: Session, alloc_ids: list[int], cutoff: datetime) -> dict[int, dict]:
+    """
+    Compute per-allocation realized P&L within a time window from BotTrade.
+    Returns {alloc_id: {window_pnl_cents: int, window_trades: int}}.
+    """
+    if not alloc_ids or cutoff is None:
+        return {}
+
+    all_pos = db.query(BotPosition).filter(
+        BotPosition.allocation_id.in_(alloc_ids)
+    ).all()
+    pos_cost_map: dict[int, float] = {p.id: p.avg_cost_cents for p in all_pos}
+
+    # Fallback avg_cost by (alloc_id, symbol) from pre-window buys
+    buy_price: dict[tuple, float] = {}
+    older_trades = db.query(BotTrade).filter(
+        BotTrade.allocation_id.in_(alloc_ids),
+        BotTrade.ts < cutoff,
+        BotTrade.side.in_(["buy", "open", "short"]),
+    ).all()
+    for t in older_trades:
+        buy_price[(t.allocation_id, t.symbol)] = t.fill_price_cents
+
+    window_trades = db.query(BotTrade).filter(
+        BotTrade.allocation_id.in_(alloc_ids),
+        BotTrade.ts >= cutoff,
+        BotTrade.quarantined_at.is_(None),
+    ).all()
+
+    result: dict[int, dict] = {aid: {"window_pnl_cents": 0, "window_trades": 0} for aid in alloc_ids}
+    for t in window_trades:
+        side = t.side.lower()
+        if side in ("buy", "open", "short"):
+            buy_price[(t.allocation_id, t.symbol)] = t.fill_price_cents
+            continue
+        if side not in ("sell", "close", "cover"):
+            continue
+        avg_cost = pos_cost_map.get(t.position_id) if t.position_id else None
+        if avg_cost is None:
+            avg_cost = buy_price.get((t.allocation_id, t.symbol), t.fill_price_cents)
+        if side == "cover":
+            pnl = int((avg_cost - t.fill_price_cents) * t.qty) - int(t.fees_cents or 0)
+        else:
+            pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
+        aid = t.allocation_id
+        if aid in result:
+            result[aid]["window_pnl_cents"] += pnl
+            result[aid]["window_trades"] += 1
+
+    return result
+
+
 @router.get("/strategies")
 def get_strategy_leaderboard(
     sort: str = Query("pnl", regex="^(pnl|sharpe|drawdown|win_rate)$"),
+    window: str = Query("all", regex="^(24h|7d|30d|mtd|all)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Per-bot leaderboard ranked by all-time P&L %."""
+    """Per-bot leaderboard ranked by all-time P&L %. Accepts window=24h|7d|30d|mtd|all."""
     allocs = (
         db.query(BotAllocation)
         .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
@@ -105,6 +173,10 @@ def get_strategy_leaderboard(
         if existing is None or s.stat_date > existing.stat_date:
             latest_stats[s.allocation_id] = s
 
+    # ── Windowed P&L (24h/7d/30d/mtd) from BotTrade ─────────────────────────
+    cutoff = _window_cutoff(window)
+    window_pnl_map = _compute_window_pnl(db, alloc_ids, cutoff) if cutoff else {}
+
     now = datetime.now(timezone.utc)
     rows = []
 
@@ -135,6 +207,12 @@ def get_strategy_leaderboard(
             created = created.replace(tzinfo=timezone.utc)
         days_live = max(1, (now - created).days)
 
+        wp = window_pnl_map.get(alloc.id, {})
+        window_pnl_cents = wp.get("window_pnl_cents", 0)
+        window_pnl_usd   = round(window_pnl_cents / 100, 2)
+        window_pnl_pct   = round(window_pnl_cents / starting * 100, 2) if starting else 0.0
+        window_trades    = wp.get("window_trades", 0)
+
         rows.append({
             "bot_id": bot_name,
             "strategy_name": display,
@@ -152,10 +230,16 @@ def get_strategy_leaderboard(
             "win_rate": round(win_rate, 3) if win_rate is not None else None,
             "trades_count": total_trades,
             "days_live": days_live,
+            "window_pnl_usd": window_pnl_usd,
+            "window_pnl_pct": window_pnl_pct,
+            "window_trades":  window_trades,
         })
 
     sort_key = _SORT_FIELDS.get(sort, "all_time_pnl_pct")
-    if sort_key == "max_drawdown_pct":
+    # When viewing a specific window, sort by window P&L instead
+    if window != "all" and sort == "pnl":
+        rows.sort(key=lambda r: -(r["window_pnl_usd"] or 0))
+    elif sort_key == "max_drawdown_pct":
         rows.sort(key=lambda r: (r[sort_key] is None, r[sort_key] or 0))
     else:
         rows.sort(key=lambda r: (r[sort_key] is None, -(r[sort_key] or 0)))
@@ -163,4 +247,4 @@ def get_strategy_leaderboard(
     for i, row in enumerate(rows, 1):
         row["rank"] = i
 
-    return {"strategies": rows, "total": len(rows), "sort": sort}
+    return {"strategies": rows, "total": len(rows), "sort": sort, "window": window}

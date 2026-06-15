@@ -12,6 +12,7 @@ import {
   type StrategyLeaderboardRow,
   type BotLeaderboardRow,
   type BotLbSort,
+  type LbWindow,
   type Period,
   type StratSort,
 } from "@/api/performance";
@@ -228,16 +229,32 @@ const BOT_LB_SORTS: { label: string; value: BotLbSort }[] = [
   { label: "Drawdown", value: "drawdown" },
 ];
 
+const LB_WINDOWS: { label: string; value: LbWindow }[] = [
+  { label: "24H", value: "24h" },
+  { label: "7D", value: "7d" },
+  { label: "30D", value: "30d" },
+  { label: "MTD", value: "mtd" },
+  { label: "All-Time", value: "all" },
+];
+
 const RANK_RING: Record<number, string> = {
   1: "ring-1 ring-t-amber/50",
   2: "ring-1 ring-t-muted/40",
   3: "ring-1 ring-t-amber/30",
 };
 
-function BotLeaderboardTable({ sort, snapBotMap }: { sort: BotLbSort; snapBotMap: Record<string, import("@/api/portfolioSnapshot").BotSnap> }) {
+function BotLeaderboardTable({
+  sort,
+  window,
+  snapBotMap,
+}: {
+  sort: BotLbSort;
+  window: LbWindow;
+  snapBotMap: Record<string, import("@/api/portfolioSnapshot").BotSnap>;
+}) {
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["bot-leaderboard-ranking", sort],
-    queryFn: () => getBotLeaderboardRanking(sort),
+    queryKey: ["bot-leaderboard-ranking", sort, window],
+    queryFn: () => getBotLeaderboardRanking(sort, window),
     staleTime: 120_000,
     retry: 0,
   });
@@ -272,22 +289,31 @@ function BotLeaderboardTable({ sort, snapBotMap }: { sort: BotLbSort; snapBotMap
     );
   }
 
+  const isWindowed = window !== "all";
+  const gridCols = isWindowed
+    ? "grid-cols-[36px_1fr_72px_100px_100px_100px_90px_70px]"
+    : "grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px]";
+  const headers = isWindowed
+    ? ["#", "Bot", "Tier", "Start $", "Now $", "Window P&L", "Window %", "Trades"]
+    : ["#", "Bot", "Tier", "Start $", "Now $", "All-Time %", "Sharpe", "Win %", "Trades", "Days"];
+
   return (
     <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
-      <div className="grid grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px] gap-2 px-4 py-2 border-b border-t-dim">
-        {["#", "Bot", "Tier", "Start $", "Now $", "All-Time %", "Sharpe", "Win %", "Trades", "Days"].map((h) => (
+      <div className={cn("grid gap-2 px-4 py-2 border-b border-t-dim", gridCols)}>
+        {headers.map((h) => (
           <span key={h} className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">{h}</span>
         ))}
       </div>
       <div>
         {rows.map((row) => {
-          const isUp = row.all_time_pnl_pct >= 0;
+          const isUp = isWindowed ? (row.window_pnl_usd ?? 0) >= 0 : row.all_time_pnl_pct >= 0;
           return (
             <Link
               key={row.allocation_id}
               to={`/strategy/${row.bot_id}`}
               className={cn(
-                "w-full text-left grid grid-cols-[36px_1fr_72px_100px_100px_90px_80px_70px_70px_60px] gap-2 px-4 py-3 border-b border-t-dim/50 last:border-b-0 hover:bg-t-bg2/40 transition-colors duration-100 rounded-none card-hover",
+                "w-full text-left grid gap-2 px-4 py-3 border-b border-t-dim/50 last:border-b-0 hover:bg-t-bg2/40 transition-colors duration-100 rounded-none card-hover",
+                gridCols,
                 RANK_RING[row.rank]
               )}
             >
@@ -316,17 +342,32 @@ function BotLeaderboardTable({ sort, snapBotMap }: { sort: BotLbSort; snapBotMap
               <span className="font-mono-t text-xs tabular-nums text-t-hi self-center">
                 ${row.current_equity >= 1000 ? `${(row.current_equity / 1000).toFixed(1)}k` : row.current_equity.toFixed(0)}
               </span>
-              <span className={cn("font-mono-t text-sm font-bold tabular-nums self-center", isUp ? "text-t-green" : "text-t-red")}>
-                {isUp ? "+" : ""}{row.all_time_pnl_pct.toFixed(2)}%
-              </span>
-              <span className={cn("font-mono-t text-xs tabular-nums self-center", row.sharpe_30d == null ? "text-t-gdim" : row.sharpe_30d >= 0 ? "text-t-mid2" : "text-t-red")}>
-                {row.sharpe_30d != null ? row.sharpe_30d.toFixed(2) : "—"}
-              </span>
-              <span className={cn("font-mono-t text-xs tabular-nums self-center", row.win_rate == null ? "text-t-gdim" : row.win_rate >= 0.5 ? "text-t-green" : "text-t-muted")}>
-                {row.win_rate != null ? `${(row.win_rate * 100).toFixed(0)}%` : "—"}
-              </span>
-              <span className="font-mono-t text-xs tabular-nums text-t-muted self-center">{row.trades_count.toLocaleString()}</span>
-              <span className="font-mono-t text-xs tabular-nums text-t-gdim self-center">{row.days_live}d</span>
+
+              {isWindowed ? (
+                <>
+                  <span className={cn("font-mono-t text-sm font-bold tabular-nums self-center", isUp ? "text-t-green" : "text-t-red")}>
+                    {isUp ? "+" : ""}{(row.window_pnl_usd ?? 0) >= 0 ? "" : "-"}${Math.abs(row.window_pnl_usd ?? 0).toFixed(0)}
+                  </span>
+                  <span className={cn("font-mono-t text-sm font-bold tabular-nums self-center", (row.window_pnl_pct ?? 0) >= 0 ? "text-t-green" : "text-t-red")}>
+                    {(row.window_pnl_pct ?? 0) >= 0 ? "+" : ""}{(row.window_pnl_pct ?? 0).toFixed(2)}%
+                  </span>
+                  <span className="font-mono-t text-xs tabular-nums text-t-muted self-center">{(row.window_trades ?? 0).toLocaleString()}</span>
+                </>
+              ) : (
+                <>
+                  <span className={cn("font-mono-t text-sm font-bold tabular-nums self-center", isUp ? "text-t-green" : "text-t-red")}>
+                    {isUp ? "+" : ""}{row.all_time_pnl_pct.toFixed(2)}%
+                  </span>
+                  <span className={cn("font-mono-t text-xs tabular-nums self-center", row.sharpe_30d == null ? "text-t-gdim" : row.sharpe_30d >= 0 ? "text-t-mid2" : "text-t-red")}>
+                    {row.sharpe_30d != null ? row.sharpe_30d.toFixed(2) : "—"}
+                  </span>
+                  <span className={cn("font-mono-t text-xs tabular-nums self-center", row.win_rate == null ? "text-t-gdim" : row.win_rate >= 0.5 ? "text-t-green" : "text-t-muted")}>
+                    {row.win_rate != null ? `${(row.win_rate * 100).toFixed(0)}%` : "—"}
+                  </span>
+                  <span className="font-mono-t text-xs tabular-nums text-t-muted self-center">{row.trades_count.toLocaleString()}</span>
+                  <span className="font-mono-t text-xs tabular-nums text-t-gdim self-center">{row.days_live}d</span>
+                </>
+              )}
             </Link>
           );
         })}
@@ -351,6 +392,7 @@ export default function StrategyLeaderboardPage() {
   const [category, setCategory] = useState("All");
   const [sort, setSort] = useState<StratSort>("pnl");
   const [botSort, setBotSort] = useState<BotLbSort>("pnl");
+  const [lbWindow, setLbWindow] = useState<LbWindow>("all");
   const [selected, setSelected] = useState<StrategyLeaderboardRow | null>(null);
 
   const { snap } = usePortfolioSnapshot();
@@ -476,6 +518,13 @@ export default function StrategyLeaderboardPage() {
         {tab === "bots" && (
           <>
             <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-t-gdim font-mono-t uppercase tracking-widest">Window</span>
+              {LB_WINDOWS.map((w) => (
+                <PillButton key={w.value} active={lbWindow === w.value} onClick={() => setLbWindow(w.value)}>
+                  {w.label}
+                </PillButton>
+              ))}
+              <div className="w-px h-6 bg-t-dim hidden sm:block" />
               <span className="text-xs text-t-gdim font-mono-t uppercase tracking-widest">Sort by</span>
               {BOT_LB_SORTS.map((s) => (
                 <PillButton key={s.value} active={botSort === s.value} onClick={() => setBotSort(s.value)}>
@@ -483,7 +532,7 @@ export default function StrategyLeaderboardPage() {
                 </PillButton>
               ))}
             </div>
-            <BotLeaderboardTable sort={botSort} snapBotMap={snapBotMap} />
+            <BotLeaderboardTable sort={botSort} window={lbWindow} snapBotMap={snapBotMap} />
           </>
         )}
 

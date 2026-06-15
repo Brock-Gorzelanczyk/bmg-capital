@@ -1,6 +1,7 @@
 import client from "./client";
 
 export type Period = "7d" | "30d" | "90d" | "all";
+export type LbWindow = "24h" | "7d" | "30d" | "mtd" | "all";
 export type LeaderboardMetric = "sharpe" | "total_return_pct" | "win_rate" | "profit_factor" | "today_pnl_usd";
 export type StratSort = "pnl" | "return" | "win_rate" | "trades" | "sharpe";
 export type BotLbSort = "pnl" | "sharpe" | "drawdown" | "win_rate";
@@ -23,6 +24,9 @@ export interface BotLeaderboardRow {
   win_rate: number | null;
   trades_count: number;
   days_live: number;
+  window_pnl_usd: number;
+  window_pnl_pct: number;
+  window_trades: number;
 }
 
 export interface BotMetrics {
@@ -165,8 +169,9 @@ export const getBotRegimeBreakdown = (botName: string): Promise<{ regimes: Regim
 
 export const getBotLeaderboardRanking = (
   sort: BotLbSort = "pnl",
-): Promise<{ strategies: BotLeaderboardRow[]; total: number; sort: string }> =>
-  client.get("/leaderboard/strategies", { params: { sort } }).then((r) => r.data);
+  window: LbWindow = "all",
+): Promise<{ strategies: BotLeaderboardRow[]; total: number; sort: string; window: string }> =>
+  client.get("/leaderboard/strategies", { params: { sort, window } }).then((r) => r.data);
 
 export const getStrategyLeaderboard = (
   period: Period = "30d",

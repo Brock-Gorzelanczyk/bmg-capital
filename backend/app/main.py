@@ -53,6 +53,7 @@ from app.routers.walk_forward import router as walk_forward_router
 from app.routers.cost import router as cost_router
 from app.routers.ic import router as ic_router
 from app.routers.fund_agents import router as fund_agents_router
+from app.routers.fund import router as fund_router
 from app.routers.proposals import router as proposals_router
 from app.routers.budget_router import router as budget_router
 from app.routers import notification_channels as notification_channels_router
@@ -400,6 +401,7 @@ app.include_router(walk_forward_router)
 app.include_router(cost_router)
 app.include_router(ic_router)
 app.include_router(fund_agents_router)
+app.include_router(fund_router)
 app.include_router(proposals_router)
 app.include_router(budget_router)
 

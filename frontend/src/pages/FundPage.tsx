@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FUND_ROLES, ROLE_BY_ID } from "@/data/fundRoles";
@@ -439,6 +440,98 @@ function DetailPanel({
   );
 }
 
+// ── Attention Panel ───────────────────────────────────────────────────────────
+
+type AttentionItem = {
+  id: string;
+  severity: "red" | "yellow" | "gray";
+  title: string;
+  subtitle: string;
+  action: string;
+  link: string;
+  ts: string;
+};
+
+type AttentionResponse = {
+  items: AttentionItem[];
+  count: number;
+};
+
+async function fetchAttentionItems(): Promise<AttentionResponse> {
+  const token = localStorage.getItem("bmg_token") ?? "";
+  const res = await fetch("/api/fund/attention", {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Failed to fetch attention items (${res.status})`);
+  return res.json();
+}
+
+const SEV_DOT: Record<string, [string, string]> = {
+  red:    ["●", "text-red-400"],
+  yellow: ["◆", "text-amber-400"],
+  gray:   ["·", "text-zinc-500"],
+};
+
+const SEV_BORDER: Record<string, string> = {
+  red:    "border-l-red-500/60",
+  yellow: "border-l-amber-500/40",
+  gray:   "border-l-zinc-700",
+};
+
+function AttentionPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["fund-attention"],
+    queryFn: fetchAttentionItems,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+
+  if (isLoading || !data?.items.length) return null;
+
+  return (
+    <div
+      className="border border-[var(--border-subtle)] bg-[var(--bg-1)]"
+      style={{ fontFamily: "var(--font-mono-t)" }}
+    >
+      <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+        <p className="text-[9px] font-bold tracking-widest text-[var(--text-dim)] uppercase">
+          // NEEDS YOUR ATTENTION
+        </p>
+        <span className="text-[10px] text-[var(--text-dim)]">
+          {data.count} item{data.count !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <ul className="divide-y divide-[var(--border-dim)]">
+        {data.items.map((item) => {
+          const [dotChar, dotColor] = SEV_DOT[item.severity] ?? ["·", "text-zinc-500"];
+          return (
+            <li
+              key={item.id}
+              className={cn(
+                "flex items-start gap-3 px-4 py-3 border-l-2",
+                SEV_BORDER[item.severity] ?? "border-l-zinc-700"
+              )}
+            >
+              <span className={cn("text-[11px] mt-0.5 shrink-0", dotColor)}>{dotChar}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] text-[var(--text-hi)] font-medium leading-snug truncate">{item.title}</p>
+                <p className="text-[10px] text-[var(--text-dim)] leading-snug mt-0.5">{item.subtitle}</p>
+              </div>
+              <Link
+                to={item.link}
+                className="shrink-0 text-[9px] text-[var(--text-dim)] border border-[var(--border-dim)] px-2 py-1 hover:border-[var(--text-hi)] hover:text-[var(--text-hi)] transition-colors"
+              >
+                View →
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 // ── Org Chart SVG ─────────────────────────────────────────────────────────────
 
 function OrgChartSVG({
@@ -610,6 +703,9 @@ export default function FundPage() {
           <BudgetChip />
         </div>
       </div>
+
+      {/* Attention panel */}
+      <AttentionPanel />
 
       {/* Org chart */}
       <div className="border border-[var(--border-subtle)] bg-[var(--bg-1)] p-4">
