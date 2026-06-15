@@ -623,7 +623,16 @@ export default function MissionControlPage() {
 
   // ── Guardrail usage estimates (mock current exposure vs limits) ────────────
 
-  const openPositions = snap.total_open_positions || openPosData?.position_count || paperAccount?.positions?.length || 0;
+  // Prefer snapshot (same source as /portfolio page) → fallback to live queries
+  const openPositions =
+    snap.total_open_positions ||
+    Object.values(snap.by_sleeve).reduce((s, sl) => s + ((sl as any).open_positions || 0), 0) ||
+    openPosData?.position_count ||
+    paperAccount?.positions?.length ||
+    0;
+
+  // Net P&L: snapshot total is authoritative; stats endpoint is best-effort only
+  const todayPnlCents = snap.total_pnl_today_cents;
   const dayPnlPct = paperAccount
     ? (paperAccount.day_pnl / (paperAccount.equity || 1)) * 100
     : 0;
@@ -891,22 +900,18 @@ export default function MissionControlPage() {
                 </span>
               </div>
 
-              {/* Net P&L */}
+              {/* Net P&L — stats endpoint first, snapshot as authoritative fallback */}
               <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3">
                 <span className="text-xs font-semibold text-[var(--text-secondary)]">Net P&L today</span>
-                {stats != null ? (
-                  <span
-                    className={cn(
-                      "text-lg font-bold font-mono-t tabular-nums",
-                      stats.pnl_24h >= 0 ? "text-t-green" : "text-t-red"
-                    )}
-                  >
-                    {stats.pnl_24h >= 0 ? "+" : ""}
-                    {formatCurrency(stats.pnl_24h)}
-                  </span>
-                ) : (
-                  <span className="text-[var(--text-tertiary)]">—</span>
-                )}
+                {(() => {
+                  const pnl = stats?.pnl_24h ?? todayPnlCents / 100;
+                  const isPos = pnl >= 0;
+                  return (
+                    <span className={cn("text-lg font-bold font-mono-t tabular-nums", isPos ? "text-t-green" : "text-t-red")}>
+                      {isPos ? "+" : ""}{formatCurrency(pnl)}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Best action */}

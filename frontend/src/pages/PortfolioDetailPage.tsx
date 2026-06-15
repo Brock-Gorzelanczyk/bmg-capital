@@ -248,7 +248,10 @@ function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<
         <div>
           <h1 className="text-2xl font-bold text-white">{portfolio.name} Portfolio</h1>
           <p className="text-zinc-500 text-sm mt-0.5">
-            Paper trading · {portfolio.bots.length} dedicated bots · ${startingUsd.toLocaleString()} starting capital
+            {portfolio.bots.length === 0 && (portfolio as any).reserved_capital_cents > 0
+              ? `0 dedicated bots · $${((portfolio as any).reserved_capital_cents / 100).toLocaleString()} reserved for future ${portfolio.asset_class} bots`
+              : `Paper trading · ${portfolio.bots.length} dedicated bot${portfolio.bots.length !== 1 ? "s" : ""} · $${startingUsd.toLocaleString()} starting capital`
+            }
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -461,7 +464,11 @@ export default function PortfolioDetailPage() {
         const sleeve = snap.by_sleeve[sleeveKey];
         const enriched = sleeve ? {
           ...portfolio,
-          starting_capital_cents: sleeve.starting_capital_cents || (portfolio as any).starting_capital_cents,
+          // Use reserved_capital_cents when sleeve has no bots yet (e.g. options pre-launch)
+          starting_capital_cents: sleeve.starting_capital_cents
+            || sleeve.reserved_capital_cents
+            || (portfolio as any).starting_capital_cents,
+          reserved_capital_cents: sleeve.reserved_capital_cents ?? 0,
           current_value_cents: sleeve.current_value_cents || (portfolio as any).current_value_cents,
           pnl_cents: sleeve.alltime_pnl_cents,
           pnl_pct: sleeve.alltime_return_pct,

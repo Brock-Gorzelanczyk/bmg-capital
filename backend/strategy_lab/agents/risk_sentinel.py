@@ -31,9 +31,10 @@ DRAWDOWN_24H_RED_PCT  = -2.0  # 24h drawdown worse than -2% → RED
 FLEET_PAUSE_24H_PCT   = -3.0  # 24h pct required before "fleet pause" language is used
 FLEET_AUM_PAUSE_PCT   = -1.0  # 30d P&L as % of fleet AUM — below this, no pause language
 
-# 4h cooldown on repeated RED alerts to reduce noise
-_last_alert_ts: dict[str, datetime] = {}
-_ALERT_COOLDOWN_HOURS = 4
+# 6h cooldown per level; additionally, same trigger fingerprint won't re-fire within window
+_last_alert_ts:      dict[str, datetime]   = {}
+_last_alert_trigger: dict[str, frozenset]  = {}
+_ALERT_COOLDOWN_HOURS = 6
 
 
 def _get_channel() -> tuple[str, str]:
@@ -376,11 +377,21 @@ def run_risk_health_check(db: Session) -> dict:
     )
 
     # Post to Discord: skip GREEN; YELLOW posts embed only; RED adds @CIO mention;
-    # CRITICAL adds @CIO @here mention. All respect the cooldown.
+    # CRITICAL adds @CIO @here mention. All respect the cooldown + trigger dedup.
     if level in ("YELLOW", "RED", "CRITICAL"):
-        last = _last_alert_ts.get(level)
-        if not last or (now - last).total_seconds() > _ALERT_COOLDOWN_HOURS * 3600:
-            _last_alert_ts[level] = now
+        last_ts      = _last_alert_ts.get(level)
+        last_trigger = _last_alert_trigger.get(level, frozenset())
+        current_trigger = frozenset(triggers)
+        elapsed = (now - last_ts).total_seconds() if last_ts else float("inf")
+        # Skip if: same trigger fingerprint AND within cooldown window
+        if elapsed < _ALERT_COOLDOWN_HOURS * 3600 and current_trigger == last_trigger:
+            logger.info(
+                "[risk_sentinel] %s suppressed — same trigger %s within %dh cooldown (%.1fh elapsed)",
+                level, sorted(current_trigger), _ALERT_COOLDOWN_HOURS, elapsed / 3600,
+            )
+        else:
+            _last_alert_ts[level]      = now
+            _last_alert_trigger[level] = current_trigger
             token, ch = _get_channel()
             cio_id = os.getenv("CIO_DISCORD_USER_ID", "")
             embed = _build_embed(level, summary, now)
