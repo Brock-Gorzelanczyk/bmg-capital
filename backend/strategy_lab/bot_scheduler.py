@@ -1081,6 +1081,8 @@ def setup_bot_scheduler(scheduler) -> None:
             heartbeat(db, agent_id="data_quality_watcher")
             heartbeat(db, agent_id="execution_auditor")
             heartbeat(db, agent_id="operations")
+            heartbeat(db, agent_id="macro_strategist")
+            heartbeat(db, agent_id="quant_researcher")
         except Exception as exc:
             logger.debug("[fleet_heartbeat] failed: %s", exc)
         finally:

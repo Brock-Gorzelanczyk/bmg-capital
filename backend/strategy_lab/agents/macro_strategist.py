@@ -95,30 +95,98 @@ def _post_discord(token: str, channel_id: str, embed: dict) -> bool:
         return False
 
 
+def _fetch_yfinance_indicators() -> dict:
+    """
+    Fetch VIX and SPY trend directly from Yahoo Finance.
+    Logs clearly on any failure so missing data is never silent.
+    """
+    result: dict = {}
+    try:
+        import yfinance as yf
+
+        # ── VIX ──────────────────────────────────────────────────────────────
+        try:
+            vix_info = yf.Ticker("^VIX").fast_info
+            vix_val = getattr(vix_info, "last_price", None)
+            if vix_val is not None:
+                result["vix"] = round(float(vix_val), 2)
+                logger.info("[macro_strategist] yfinance ^VIX=%.2f", result["vix"])
+            else:
+                logger.warning("[macro_strategist] yfinance ^VIX returned None — fast_info=%s", vix_info)
+        except Exception as exc:
+            logger.warning("[macro_strategist] ^VIX fetch failed: %s", exc)
+
+        # ── SPY vs 200-day MA → trend_regime ─────────────────────────────────
+        try:
+            spy_hist = yf.Ticker("SPY").history(period="250d", auto_adjust=True)
+            if spy_hist.empty:
+                logger.warning("[macro_strategist] SPY history returned empty DataFrame")
+            elif len(spy_hist) < 200:
+                logger.warning("[macro_strategist] SPY history only %d rows (need 200)", len(spy_hist))
+            else:
+                spy_close = float(spy_hist["Close"].iloc[-1])
+                ma200 = float(spy_hist["Close"].rolling(200).mean().iloc[-1])
+                ratio = spy_close / ma200
+                result["spy_price"] = round(spy_close, 2)
+                result["spx_200ma_ratio"] = round(ratio, 4)
+                if ratio >= 1.02:
+                    result["trend_regime"] = "bull_trending"
+                elif ratio <= 0.98:
+                    result["trend_regime"] = "bear_trending"
+                else:
+                    result["trend_regime"] = "choppy"
+                logger.info(
+                    "[macro_strategist] SPY=%.2f 200MA=%.2f ratio=%.4f trend=%s",
+                    spy_close, ma200, ratio, result["trend_regime"],
+                )
+        except Exception as exc:
+            logger.warning("[macro_strategist] SPY/trend fetch failed: %s", exc)
+
+    except ImportError:
+        logger.warning("[macro_strategist] yfinance not installed — skipping live fetch")
+
+    return result
+
+
 def _read_live_indicators(db: Session) -> dict:
     """
-    Read latest market indicators from existing DB tables.
-    Primary source: bots.RegimeSnapshot (updated by risk_sentinel + strategy modules).
-    Fallback: zeros.
+    Build market indicators from two sources (merged, DB wins where non-None):
+      1. yfinance — fresh VIX, SPY vs 200MA trend
+      2. bots.RegimeSnapshot — vol_pctile, BTC dominance, btc_funding (from risk_sentinel)
     """
+    # Layer 1: yfinance (always tried first)
+    merged = _fetch_yfinance_indicators()
+
+    # Layer 2: live DB snapshot (supplements or overrides where non-None)
     try:
         from app.db.models.bots import RegimeSnapshot as LiveSnap
         snap = db.query(LiveSnap).order_by(LiveSnap.ts.desc()).first()
-        if not snap:
-            return {}
-        return {
-            "vix":          snap.vix_value,
-            "vix_regime":   snap.vix_regime or "unknown",
-            "trend_regime": snap.trend_regime or "unknown",
-            "vol_pctile":   snap.vol_pctile,
-            "btc_dom":      snap.btc_dominance,
-            "btc_funding":  snap.btc_funding_rate,
-            "spy_price":    snap.spy_price,
-            "as_of":        snap.ts.isoformat() if snap.ts else None,
-        }
+        if snap:
+            db_fields = {
+                "vix":          snap.vix_value,
+                "vix_regime":   snap.vix_regime,
+                "trend_regime": snap.trend_regime,
+                "vol_pctile":   snap.vol_pctile,
+                "btc_dom":      snap.btc_dominance,
+                "btc_funding":  snap.btc_funding_rate,
+                "spy_price":    snap.spy_price,
+                "as_of":        snap.ts.isoformat() if snap.ts else None,
+            }
+            # DB overrides yfinance only for non-None values
+            for k, v in db_fields.items():
+                if v is not None:
+                    merged[k] = v
+        else:
+            logger.warning("[macro_strategist] No RegimeSnapshot row in DB — relying solely on yfinance")
     except Exception as exc:
-        logger.warning("[macro_strategist] live indicators read failed: %s", exc)
-        return {}
+        logger.warning("[macro_strategist] DB indicators read failed: %s", exc)
+
+    if not merged.get("vix"):
+        logger.warning("[macro_strategist] Final indicators still missing VIX — both yfinance and DB returned None")
+    if not merged.get("trend_regime"):
+        logger.warning("[macro_strategist] Final indicators still missing trend_regime")
+
+    return merged
 
 
 def _read_yesterday_regime(db: Session) -> Optional[str]:
