@@ -440,6 +440,18 @@ def run_intro_conversation(force: bool = False, db: Session = Depends(get_db)):
     return result
 
 
+@router.post("/intro-conversation/run-reintro")
+def run_reintro_conversation(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    """
+    Fire the name-badge re-intro sequence — 9 agents + Brick close.
+    Does not check or set the intro_completed flag; safe to run multiple times.
+    ~$0.35 one-time cost (9 Haiku calls).
+    """
+    from agents.intro_conversation import run_reintro_conversation as _run
+    result = _run(db)
+    return result
+
+
 @router.post("/quant-researcher/run-pipeline")
 def run_quant_pipeline(db: Session = Depends(get_db), _user=Depends(get_current_user)):
     """Trigger the Quant Researcher to scan and advance the candidate pipeline."""

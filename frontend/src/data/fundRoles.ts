@@ -55,7 +55,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "portfolio_manager",
     title: "PORTFOLIO MANAGER",
-    agentName: "Queen",
+    agentName: "Brick",
     tier: "Mixed",
     status: "active",
     description:
@@ -97,7 +97,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "chief_risk_officer",
     title: "CHIEF RISK OFFICER",
-    agentName: "Risk Sentinel",
+    agentName: "Dick",
     tier: "Mixed",
     status: "offline",
     description:
@@ -137,7 +137,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "equity_researcher",
     title: "EQUITY RESEARCHER",
-    agentName: "Researcher",
+    agentName: "Nick",
     tier: "A",
     status: "active",
     description:
@@ -169,7 +169,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "quant_researcher",
     title: "QUANT RESEARCHER",
-    agentName: "Quant Research",
+    agentName: "Mick",
     tier: "Mixed",
     status: "offline",
     description:
@@ -202,7 +202,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "macro_strategist",
     title: "MACRO STRATEGIST",
-    agentName: "Macro Strategist",
+    agentName: "Rick",
     tier: "Mixed",
     status: "offline",
     description:
@@ -234,7 +234,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "data_quality_watcher",
     title: "DATA QUALITY WATCHER",
-    agentName: "Data Quality Watcher",
+    agentName: "Vick",
     tier: "A",
     status: "offline",
     description:
@@ -266,7 +266,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "execution_auditor",
     title: "EXECUTION AUDITOR",
-    agentName: "Execution Auditor",
+    agentName: "Slick",
     tier: "A",
     status: "offline",
     description:
@@ -297,7 +297,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "operations",
     title: "OPERATIONS / BACK OFFICE",
-    agentName: "Operations",
+    agentName: "Wick",
     tier: "A",
     status: "offline",
     description:
@@ -332,7 +332,7 @@ export const FUND_ROLES: FundRole[] = [
   {
     id: "sentinel_devops",
     title: "SENTINEL DEVOPS",
-    agentName: "Sentinel DevOps",
+    agentName: "Patrick",
     tier: "A",
     status: "active",
     description:

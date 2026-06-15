@@ -268,7 +268,7 @@ def run_pipeline_scan(db: Session) -> dict:
         "title":       f"📊 Pipeline Scan — {len(eval_result['transitions'])} transition(s)",
         "description": f"**{total} candidates total** · {shadow} shadow paper · {wfa_done} WFA done · {bt_done} backtest done · {promoted} promoted\n\n{trans_text}",
         "color":       0x818CF8,
-        "footer":      {"text": f"Quant Researcher · {started.strftime('%Y-%m-%d %H:%M')} UTC · {elapsed_ms}ms"},
+        "footer":      {"text": f"Mick (Quant Research) · {started.strftime('%Y-%m-%d %H:%M')} UTC · {elapsed_ms}ms"},
     }
 
     token, channel_id = _get_quant_channel()

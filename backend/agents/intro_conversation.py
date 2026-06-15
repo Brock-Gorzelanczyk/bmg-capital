@@ -422,3 +422,189 @@ def run_intro_conversation(db: Session, *, force: bool = False) -> dict:
     _mark_intro_done(db)
     logger.info("[intro] sequence complete — %d posts", posted)
     return {"ok": True, "already_run": False, "agents_posted": posted}
+
+
+# ── Re-intro sequence (name-badge update) ────────────────────────────────────
+
+_REINTRO_AGENTS = [
+    {
+        "id":       "queen",
+        "name":     "👑 Brick (Portfolio Manager)",
+        "role":     "Portfolio Manager",
+        "personality": (
+            "You are Brick, Portfolio Manager at BMG Capital. Decisive, data-driven. "
+            "You're opening a brief name-badge re-intro in #fund-team-chat. "
+            "Keep it to 2 sentences max. Hand off to Dick."
+        ),
+        "script": "Team, we've got name badges now. Quick re-intro so everyone's on the same page. Dick — take it.",
+    },
+    {
+        "id":       "risk_sentinel",
+        "name":     "🛡️ Dick (CRO)",
+        "role":     "Chief Risk Officer",
+        "personality": (
+            "You are Dick, Chief Risk Officer at BMG Capital. Measured, precise, always cite a number. "
+            "2 sentences max. Acknowledge Brick, state your name, pass to Rick (Macro Strategist)."
+        ),
+        "script": "Right. Dick here, CRO. Same role, same focus on downside risk. Rick — what's the regime look like?",
+    },
+    {
+        "id":       "macro_strategist",
+        "name":     "📈 Rick (Macro Strategist)",
+        "role":     "Macro Strategist",
+        "personality": (
+            "You are Rick, Macro Strategist at BMG Capital. You classify the market regime every morning. "
+            "2-3 sentences. State your name, your daily job, include the current regime from LIVE DATA. "
+            "Pass to Nick (Equity Research)."
+        ),
+        "script": "Rick. Macro Strategist. I call the regime every morning — bull, bear, choppy, crisis — so the rest of you know whether momentum or mean-reversion is in season. Nick, what's the bot fleet telling you?",
+    },
+    {
+        "id":       "researcher",
+        "name":     "🔬 Nick (Equity Research)",
+        "role":     "Equity Research Analyst",
+        "personality": (
+            "You are Nick, Equity Research Analyst at BMG Capital. You track ICs across live bots. "
+            "2-3 sentences. State your name, your daily job, include a finding count from LIVE DATA. "
+            "Pass to Mick (Quant Research)."
+        ),
+        "script": "Nick here. I read the information coefficients on every live bot daily and write the findings into our memory store. Mick — pipeline status?",
+    },
+    {
+        "id":       "quant_researcher",
+        "name":     "🧮 Mick (Quant Research)",
+        "role":     "Quant Researcher",
+        "personality": (
+            "You are Mick, Quant Researcher at BMG Capital. You manage the candidate pipeline: backtest, WFA, shadow paper, promotion. "
+            "2-3 sentences. State your name, your daily job. Pass to Slick (Execution)."
+        ),
+        "script": "Mick. I run the candidate pipeline — backtest gates, walk-forward, shadow paper, promotion proposals when something earns it. Slick, fill quality?",
+    },
+    {
+        "id":       "execution_auditor",
+        "name":     "⚡ Slick (Execution)",
+        "role":     "TCA / Execution Desk",
+        "personality": (
+            "You are Slick, Execution desk at BMG Capital. You audit every fill for slippage, latency, rejections. "
+            "2-3 sentences. State your name, your daily job, cite today's slippage from LIVE DATA. "
+            "Pass to Vick (Data Quality)."
+        ),
+        "script": "Slick. TCA desk. Every fill audited for slippage, latency, rejections. Vick — feeds clean?",
+    },
+    {
+        "id":       "data_quality_watcher",
+        "name":     "📊 Vick (Data Quality)",
+        "role":     "Market Data Ops",
+        "personality": (
+            "You are Vick, Data Quality at BMG Capital. You monitor 8 feeds and 4 endpoints every 5 minutes. "
+            "2-3 sentences. State your name, your daily job. Pass to Wick (Operations)."
+        ),
+        "script": "Vick. Watching 8 feeds and 4 endpoints every 5 minutes — Alpaca, Kraken, Polygon, Coinglass. Wick — books?",
+    },
+    {
+        "id":       "operations",
+        "name":     "🏦 Wick (Operations)",
+        "role":     "Back Office / Reconciliation",
+        "personality": (
+            "You are Wick, Operations at BMG Capital. You run daily reconciliation across admin, portfolio, and exchange. "
+            "2-3 sentences. State your name, cite open positions from LIVE DATA. Pass to Patrick (DevOps)."
+        ),
+        "script": "Wick. Daily reconciliation between admin, portfolio, and exchange truth. Patrick — infra holding?",
+    },
+    {
+        "id":       "sentinel_devops",
+        "name":     "🖥️ Patrick (DevOps)",
+        "role":     "Infrastructure / DevOps",
+        "personality": (
+            "You are Patrick, DevOps at BMG Capital. You watch Railway deploys, service health, autofix tier-1 issues. "
+            "2 sentences max. State your name, give infra status. Quiet by design."
+        ),
+        "script": "Patrick. Infra side. Railway healthy, all services nominal. Quiet by design.",
+    },
+]
+
+_BRICK_REINTRO_CLOSE = (
+    "Good. Brock — that's the team. Same roles, real names now. "
+    "Talk to whichever of us you need."
+)
+
+
+def run_reintro_conversation(db: Session) -> dict:
+    """
+    Fire the name-badge re-intro sequence. Does NOT check or set the intro_completed flag —
+    this is intentionally a fresh post that runs every time it's called.
+    """
+    if not _webhook_url():
+        return {"ok": False, "error": "DISCORD_WH_FUND_TEAM_CHAT not configured"}
+
+    logger.info("[reintro] starting name-badge re-intro sequence")
+    live_data = _get_live_data(db)
+
+    posted = 0
+    for agent in _REINTRO_AGENTS:
+        logger.info("[reintro] generating message for %s", agent["id"])
+        text_content = _generate_reintro_message(agent, live_data, db=db)
+        ok = _post_webhook(agent["name"], text_content)
+        if ok:
+            posted += 1
+            logger.info("[reintro] posted %s", agent["id"])
+        else:
+            logger.warning("[reintro] failed to post %s", agent["id"])
+        if agent != _REINTRO_AGENTS[-1]:
+            time.sleep(30)
+
+    # Brick closes
+    time.sleep(30)
+    _post_webhook("👑 Brick (Portfolio Manager)", _BRICK_REINTRO_CLOSE)
+    posted += 1
+
+    logger.info("[reintro] sequence complete — %d posts", posted)
+    return {"ok": True, "agents_posted": posted}
+
+
+def _generate_reintro_message(agent: dict, live_data: dict, db=None) -> str:
+    """Generate one agent's re-intro line. Falls back to hardcoded script."""
+    try:
+        from app.config import settings
+        api_key = settings.anthropic_api_key
+    except Exception:
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+
+    if not api_key:
+        return agent["script"]
+
+    try:
+        from agents.bus import is_budget_capped as _capped
+        if db is not None and _capped(db):
+            return agent["script"]
+    except Exception:
+        pass
+
+    user_prompt = (
+        f"You're posting your name-badge re-intro in #fund-team-chat. "
+        f"Keep it to 2-4 sentences in character. State your new name, your role, "
+        f"one concrete stat from the LIVE DATA below if relevant, then pass to the next person naturally.\n\n"
+        f"LIVE DATA:\n{_format_live_data(live_data)}\n\n"
+        f"Reply with ONLY the message text — no quotes, no prefix."
+    )
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            system=agent["personality"],
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        result = (msg.content[0].text or "").strip()
+        try:
+            from agents.bus import charge_api_usage as _charge
+            if db is not None:
+                _charge(db, "reintro", 0.0005)
+        except Exception:
+            pass
+        return result or agent["script"]
+    except Exception as exc:
+        logger.warning("[reintro] Claude call failed for %s: %s", agent["id"], exc)
+        return agent["script"]

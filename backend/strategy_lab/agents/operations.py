@@ -198,11 +198,11 @@ def run_operations_reconciliation(db: Session) -> dict:
         fields.append({"name": "⚠️ High Quarantine Volume", "value": f"{quarantine['quarantined_today']} positions quarantined today", "inline": False})
 
     embed = {
-        "author":    {"name": "BMG Capital — Operations"},
+        "author":    {"name": "BMG Capital — Wick (Operations)"},
         "title":     f"Daily Reconciliation — {now.strftime('%Y-%m-%d')}",
         "color":     colors.get(level, 0x16A34A),
         "fields":    fields,
-        "footer":    {"text": "Operations · Tier A · Daily 6 PM ET"},
+        "footer":    {"text": "Wick (Operations) · Tier A · Daily 6 PM ET"},
         "timestamp": now.isoformat(),
     }
     token, ch = _get_channel()
@@ -270,7 +270,7 @@ def run_operations_reconciliation(db: Session) -> dict:
     try:
         from agents.bus import post_daily_checkin as _checkin
         _checkin(db, "operations",
-                 f"Operations: Reconciliation {level}. {positions['open_count']} open positions "
+                 f"Wick (Operations): Reconciliation {level}. {positions['open_count']} open positions "
                  f"(${positions['notional_usd']:,.0f} notional), today P&L {'+' if pnl['total_usd'] >= 0 else ''}${pnl['total_usd']:,.2f}. "
                  f"{'Books balanced.' if level == 'GREEN' else 'Flags raised — see #bmg-monitoring.'}")
     except Exception:

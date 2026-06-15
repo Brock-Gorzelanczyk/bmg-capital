@@ -419,7 +419,7 @@ def run_macro_classification(db: Session) -> dict:
         "description": description,
         "color":       color,
         "fields":      fields,
-        "footer":      {"text": f"Macro Strategist · {started.strftime('%Y-%m-%d %H:%M')} UTC · {elapsed_ms}ms"},
+        "footer":      {"text": f"Rick (Macro Strategist) · {started.strftime('%Y-%m-%d %H:%M')} UTC · {elapsed_ms}ms"},
     }
 
     token, channel_id = _get_macro_channel()

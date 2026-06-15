@@ -373,7 +373,7 @@ def run_daily_research(db: Session) -> dict:
         top_candidates = [c.get("strategy", c.get("symbol", "?")) for c in candidates[:5]]
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         embed = {
-            "author":    {"name": "BMG Capital — Equity Researcher"},
+            "author":    {"name": "BMG Capital — Nick (Equity Research)"},
             "title":     f"🔬 Research Digest — {today_str}",
             "color":     0x6366F1,
             "fields":    [
@@ -383,7 +383,7 @@ def run_daily_research(db: Session) -> dict:
                 {"name": "Top 5 Candidates",       "value": ", ".join(top_candidates) or "None", "inline": False},
                 {"name": "Recommendations",        "value": str(len(recommendations)), "inline": True},
             ],
-            "footer":    {"text": "Researcher · Daily 7 AM ET"},
+            "footer":    {"text": "Nick (Equity Research) · Daily 7 AM ET"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         _tok, _ch = _get_research_channel()
@@ -424,7 +424,7 @@ def run_daily_research(db: Session) -> dict:
         strong_count = len([b for b in result.get("signal_ic", []) if b.get("status") == "strong"])
         degrading_count = len([b for b in result.get("signal_ic", []) if b.get("status") == "degrading"])
         _checkin(db, "researcher",
-                 f"Researcher: Daily IC sweep complete. {strong_count} bots showing strong edge, "
+                 f"Nick (Equity Research): Daily IC sweep complete. {strong_count} bots showing strong edge, "
                  f"{degrading_count} showing degradation. "
                  f"{'Edge stable across fleet.' if degrading_count == 0 else 'Flagging degrading bots to Brick.'}")
     except Exception:

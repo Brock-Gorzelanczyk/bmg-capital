@@ -25,13 +25,15 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 _AGENT_DISPLAY = {
-    "queen":                ("👑 Brick (PM)",           ""),
-    "researcher":           ("🔬 Researcher",            ""),
-    "risk_sentinel":        ("🛡️ Dick (CRO)",            ""),
-    "data_quality_watcher": ("📊 Data Quality",          ""),
-    "execution_auditor":    ("⚡ Execution Auditor",     ""),
-    "operations":           ("🏦 Operations",            ""),
-    "sentinel_devops":      ("🖥️ Sentinel DevOps",       ""),
+    "queen":                ("👑 Brick (PM)",              ""),
+    "researcher":           ("🔬 Nick (Equity Research)",  ""),
+    "risk_sentinel":        ("🛡️ Dick (CRO)",              ""),
+    "macro_strategist":     ("📈 Rick (Macro Strategist)", ""),
+    "quant_researcher":     ("🧮 Mick (Quant Research)",   ""),
+    "data_quality_watcher": ("📊 Vick (Data Quality)",     ""),
+    "execution_auditor":    ("⚡ Slick (Execution)",       ""),
+    "operations":           ("🏦 Wick (Operations)",       ""),
+    "sentinel_devops":      ("🖥️ Patrick (DevOps)",        ""),
 }
 
 _last_observe_ts: dict[str, datetime] = {}

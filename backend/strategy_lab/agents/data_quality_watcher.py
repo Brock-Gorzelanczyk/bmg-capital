@@ -145,7 +145,7 @@ def run_data_quality_check(db: Session) -> dict:
     token, ch = _get_channel()
     if has_issues:
         embed = {
-            "author": {"name": "BMG Capital — Data Quality Watcher"},
+            "author": {"name": "BMG Capital — Vick (Data Quality)"},
             "title":  f"⚠️ Data Quality Alert — {now.strftime('%Y-%m-%d %H:%M')} UTC",
             "color":  0xF59E0B,
             "fields": [
@@ -153,7 +153,7 @@ def run_data_quality_check(db: Session) -> dict:
                 {"name": "Regime Snapshot Age", "value": f"{regime['age_hours']}h" if regime.get('age_hours') is not None else "Never", "inline": True},
                 {"name": "Signal Count (6h)", "value": str(signals.get("signal_count", "N/A")), "inline": True},
             ],
-            "footer": {"text": "Data Quality Watcher · Tier A · Hourly"},
+            "footer": {"text": "Vick (Data Quality) · Tier A · Hourly"},
             "timestamp": now.isoformat(),
         }
         try:
@@ -168,7 +168,7 @@ def run_data_quality_check(db: Session) -> dict:
             logger.warning("[dq_watcher] alert posted: %d issues", len(all_issues))
     else:
         embed = {
-            "author": {"name": "BMG Capital — Data Quality Watcher"},
+            "author": {"name": "BMG Capital — Vick (Data Quality)"},
             "title":  f"✅ Data Quality Check — {now.strftime('%Y-%m-%d')}",
             "color":  0x16A34A,
             "fields": [
@@ -176,7 +176,7 @@ def run_data_quality_check(db: Session) -> dict:
                 {"name": "Signal Count (6h)", "value": str(signals.get("signal_count", "N/A")), "inline": True},
                 {"name": "Status", "value": "No issues detected", "inline": False},
             ],
-            "footer": {"text": "Data Quality Watcher · Tier A · Hourly"},
+            "footer": {"text": "Vick (Data Quality) · Tier A · Hourly"},
             "timestamp": now.isoformat(),
         }
         try:
@@ -219,7 +219,7 @@ def run_data_quality_check(db: Session) -> dict:
         sig_count = result.get("signals", {}).get("signal_count", "?")
         status_word = "⚠️ Issues found" if has_issues else "✅ All feeds clean"
         _checkin(db, "data_quality_watcher",
-                 f"Data Quality: {status_word}. Regime snapshot {age}h old, "
+                 f"Vick (Data Quality): {status_word}. Regime snapshot {age}h old, "
                  f"{sig_count} signals in last 6h. 8 feeds monitored, 4 endpoints polled.")
     except Exception:
         pass

@@ -173,11 +173,11 @@ def run_execution_audit(db: Session) -> dict:
             fields.append({"name": "Worst Bot", "value": f"{bot}: {bps:.1f} bps", "inline": True})
 
         embed = {
-            "author":    {"name": "BMG Capital — Execution Auditor"},
+            "author":    {"name": "BMG Capital — Slick (Execution)"},
             "title":     f"Execution Quality Alert — {now.strftime('%Y-%m-%d')}",
             "color":     colors[level],
             "fields":    fields,
-            "footer":    {"text": "Execution Auditor · Tier A · Daily 5 PM ET"},
+            "footer":    {"text": "Slick (Execution) · Tier A · Daily 5 PM ET"},
             "timestamp": now.isoformat(),
         }
         try:
@@ -192,7 +192,7 @@ def run_execution_audit(db: Session) -> dict:
             logger.warning("[exec_auditor] %s alert posted to Discord", level)
     else:
         embed = {
-            "author":    {"name": "BMG Capital — Execution Auditor"},
+            "author":    {"name": "BMG Capital — Slick (Execution)"},
             "title":     f"✅ Execution Quality — {now.strftime('%Y-%m-%d')}",
             "color":     0x16A34A,
             "fields":    [
@@ -201,7 +201,7 @@ def run_execution_audit(db: Session) -> dict:
                 {"name": "Total Fees",      "value": f"${stats['fees_usd']:.2f}", "inline": True},
                 {"name": "Status",          "value": "All fills within normal range", "inline": False},
             ],
-            "footer":    {"text": "Execution Auditor · Tier A · Daily 5 PM ET"},
+            "footer":    {"text": "Slick (Execution) · Tier A · Daily 5 PM ET"},
             "timestamp": now.isoformat(),
         }
         try:
@@ -245,7 +245,7 @@ def run_execution_audit(db: Session) -> dict:
         trades = result.get("trades_audited", 0)
         slip = result.get("avg_slippage_bps", 0)
         _checkin(db, "execution_auditor",
-                 f"Execution Auditor: {trades} trades audited today, avg slippage {slip:.1f} bps. "
+                 f"Slick (Execution): {trades} trades audited today, avg slippage {slip:.1f} bps. "
                  f"{'Fill quality nominal.' if slip < 10 else 'Elevated slippage — see #bmg-monitoring.'}")
     except Exception:
         pass

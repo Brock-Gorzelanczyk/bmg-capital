@@ -17,11 +17,14 @@ logger = logging.getLogger(__name__)
 
 # Agent metadata: id → (display_name, emoji)
 _AGENT_META = {
-    "researcher":           ("Equity Researcher",   "🔬"),
-    "risk_sentinel":        ("Dick (CRO)",           "🛡️"),
-    "data_quality_watcher": ("Data Quality",        "📊"),
-    "execution_auditor":    ("Execution Auditor",   "⚡"),
-    "operations":           ("Operations",          "🏦"),
+    "researcher":           ("Nick (Equity Research)", "🔬"),
+    "risk_sentinel":        ("Dick (CRO)",              "🛡️"),
+    "macro_strategist":     ("Rick (Macro Strategist)", "📈"),
+    "quant_researcher":     ("Mick (Quant Research)",   "🧮"),
+    "data_quality_watcher": ("Vick (Data Quality)",     "📊"),
+    "execution_auditor":    ("Slick (Execution)",       "⚡"),
+    "operations":           ("Wick (Operations)",       "🏦"),
+    "sentinel_devops":      ("Patrick (DevOps)",        "🖥️"),
 }
 
 _STATUS_COLOR = {
@@ -298,8 +301,9 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
     system_prompt = (
         "You are Brick, portfolio manager at BMG Capital. "
         "You are writing a morning briefing TO Brock (the CIO — the only human in this system). "
-        "The other agents (Dick/CRO, Researcher, Operations, Data Quality, Execution Auditor) are ALL AI services "
-        "that you and Brock can query directly via the bus. They are NOT human colleagues Brock can call, email, or meet. "
+        "The other agents are ALL AI services that you and Brock can query directly via the bus. They are NOT human colleagues Brock can call, email, or meet. "
+        "Your team: Dick (CRO), Rick (Macro Strategist), Nick (Equity Research), Mick (Quant Research), "
+        "Slick (Execution), Vick (Data Quality), Wick (Operations), Patrick (DevOps). Refer to them by name in your synthesis. "
         "\n\n"
         "When generating 'proposed_actions', actions MUST be directly actionable by Brock as CIO. "
         "ALLOWED action verbs: 'Review [page or channel]', 'Approve/Reject/Defer [proposal in #queen-proposals]', "
@@ -505,11 +509,13 @@ def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Ses
 
     fallback = {
         "risk_sentinel":        "Dick (CRO): Risk metrics within bounds. Watching drawdown and concentration — no action needed yet.",
-        "researcher":           "Researcher: IC readings stable. Will flag any edge degradation as bots open positions today.",
-        "data_quality_watcher": "Data Quality: All 8 feeds clean. Monitoring for latency spikes during market open.",
-        "execution_auditor":    "Execution Auditor: Slippage baseline set. Will flag any fill quality degradation.",
-        "operations":           "Operations: Books reconciled overnight. Watching position count vs allocated capital.",
-        "sentinel_devops":      "Sentinel DevOps: Infrastructure nominal. Railway healthy, no alerts.",
+        "researcher":           "Nick (Equity Research): IC readings stable. Will flag any edge degradation as bots open positions today.",
+        "macro_strategist":     "Rick (Macro Strategist): Regime classification running. Will post update to #macro-view.",
+        "quant_researcher":     "Mick (Quant Research): Pipeline stable. Monitoring WFA candidates for gate passage.",
+        "data_quality_watcher": "Vick (Data Quality): All 8 feeds clean. Monitoring for latency spikes during market open.",
+        "execution_auditor":    "Slick (Execution): Slippage baseline set. Will flag any fill quality degradation.",
+        "operations":           "Wick (Operations): Books reconciled overnight. Watching position count vs allocated capital.",
+        "sentinel_devops":      "Patrick (DevOps): Infrastructure nominal. Railway healthy, no alerts.",
     }
 
     if not api_key:
@@ -557,8 +563,10 @@ def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Ses
                 "system": (
                     "You are generating brief in-character reactions from BMG Capital AI agents "
                     "in #fund-team-chat. These are AI services, not humans. "
-                    "Brick is decisive. Dick cites numbers. Researcher mentions ICs. "
-                    "DQW mentions feeds. Execution mentions slippage. Ops mentions positions. DevOps is brief. "
+                    "Brick is decisive. Dick (CRO) cites numbers. Nick (Equity Research) mentions ICs. "
+                    "Rick (Macro Strategist) references regime. Mick (Quant Research) mentions pipeline. "
+                    "Vick (Data Quality) mentions feeds. Slick (Execution) mentions slippage. "
+                    "Wick (Operations) mentions positions. Patrick (DevOps) is brief. "
                     "Reactions should be actionable observations — never suggest meetings, syncs, or calls."
                 ),
                 "messages": [{"role": "user", "content": prompt}],
@@ -616,14 +624,16 @@ def _post_team_chat_discussion(plan: dict, contributions: list[dict], db: Sessio
     # Agent reactions
     reactions = _generate_team_chat_reactions(plan, contributions, db)
 
-    agent_order = ["risk_sentinel", "researcher", "data_quality_watcher", "execution_auditor", "operations", "sentinel_devops"]
+    agent_order = ["risk_sentinel", "researcher", "macro_strategist", "quant_researcher", "data_quality_watcher", "execution_auditor", "operations", "sentinel_devops"]
     agent_display = {
         "risk_sentinel":        "🛡️ Dick (CRO)",
-        "researcher":           "🔬 Equity Researcher",
-        "data_quality_watcher": "📊 Data Quality",
-        "execution_auditor":    "⚡ Execution Auditor",
-        "operations":           "🏦 Operations",
-        "sentinel_devops":      "🖥️ Sentinel DevOps",
+        "researcher":           "🔬 Nick (Equity Research)",
+        "macro_strategist":     "📈 Rick (Macro Strategist)",
+        "quant_researcher":     "🧮 Mick (Quant Research)",
+        "data_quality_watcher": "📊 Vick (Data Quality)",
+        "execution_auditor":    "⚡ Slick (Execution)",
+        "operations":           "🏦 Wick (Operations)",
+        "sentinel_devops":      "🖥️ Patrick (DevOps)",
     }
 
     for agent_id in agent_order:
