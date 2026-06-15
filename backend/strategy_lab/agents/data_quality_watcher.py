@@ -150,7 +150,7 @@ def run_data_quality_check(db: Session) -> dict:
             "color":  0xF59E0B,
             "fields": [
                 {"name": "Issues Detected", "value": "\n".join(f"• {i}" for i in all_issues), "inline": False},
-                {"name": "Regime Snapshot Age", "value": f"{regime.get('age_hours', 'N/A')}h", "inline": True},
+                {"name": "Regime Snapshot Age", "value": f"{regime['age_hours']}h" if regime.get('age_hours') is not None else "Never", "inline": True},
                 {"name": "Signal Count (6h)", "value": str(signals.get("signal_count", "N/A")), "inline": True},
             ],
             "footer": {"text": "Data Quality Watcher · Tier A · Hourly"},
@@ -172,7 +172,7 @@ def run_data_quality_check(db: Session) -> dict:
             "title":  f"✅ Data Quality Check — {now.strftime('%Y-%m-%d')}",
             "color":  0x16A34A,
             "fields": [
-                {"name": "Regime Snapshot Age", "value": f"{regime.get('age_hours', 'N/A')}h", "inline": True},
+                {"name": "Regime Snapshot Age", "value": f"{regime['age_hours']}h" if regime.get('age_hours') is not None else "Never", "inline": True},
                 {"name": "Signal Count (6h)", "value": str(signals.get("signal_count", "N/A")), "inline": True},
                 {"name": "Status", "value": "No issues detected", "inline": False},
             ],

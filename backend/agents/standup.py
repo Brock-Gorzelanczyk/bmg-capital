@@ -219,6 +219,51 @@ def _post_contribution(channel_id: str, token: str, agent_id: str, contribution:
     return _discord_post(channel_id, token, {"embeds": [embed]})
 
 
+def _fetch_ground_truth_facts(db: Session) -> dict:
+    """Fetch real numeric facts to ground the synthesis prompt."""
+    facts = {
+        "open_positions": "unknown",
+        "active_bot_count": "unknown",
+        "disabled_bot_count": "unknown",
+        "fleet_value_total": "unknown",
+        "fleet_pnl_30d": "unknown",
+    }
+    try:
+        from sqlalchemy import text as _text
+        row = db.execute(_text(
+            "SELECT COUNT(*) FROM bot_positions WHERE status = 'open'"
+        )).scalar()
+        if row is not None:
+            facts["open_positions"] = int(row)
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text as _text
+        row = db.execute(_text(
+            "SELECT COUNT(*) FROM bot_allocations WHERE enabled = true"
+        )).scalar()
+        if row is not None:
+            facts["active_bot_count"] = int(row)
+        row2 = db.execute(_text(
+            "SELECT COUNT(*) FROM bot_allocations WHERE enabled = false"
+        )).scalar()
+        if row2 is not None:
+            facts["disabled_bot_count"] = int(row2)
+    except Exception:
+        pass
+    try:
+        from app.core.canonical import compute_strategy_lab_aggregate
+        agg = compute_strategy_lab_aggregate(None, db)
+        if agg:
+            total = agg.get("total_value_cents", 0) or 0
+            pnl30 = agg.get("return_30d_value_cents", 0) or 0
+            facts["fleet_value_total"] = f"${total / 100:,.2f}"
+            facts["fleet_pnl_30d"] = f"${pnl30 / 100:,.2f}"
+    except Exception:
+        pass
+    return facts
+
+
 def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
     """Call Claude API to synthesize agent contributions into a daily plan."""
     # Build structured text of contributions
@@ -247,6 +292,34 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
     except Exception:
         pass
 
+    facts = _fetch_ground_truth_facts(db)
+    facts_block = "\n".join(f"  {k} = {v}" for k, v in facts.items())
+
+    system_prompt = (
+        "You are Brick, portfolio manager at BMG Capital. "
+        "You are writing a morning briefing TO Brock (the CIO — the only human in this system). "
+        "The other agents (Dick/CRO, Researcher, Operations, Data Quality, Execution Auditor) are ALL AI services "
+        "that you and Brock can query directly via the bus. They are NOT human colleagues Brock can call, email, or meet. "
+        "\n\n"
+        "When generating 'proposed_actions', actions MUST be directly actionable by Brock as CIO. "
+        "ALLOWED action verbs: 'Review [page or channel]', 'Approve/Reject/Defer [proposal in #queen-proposals]', "
+        "'Pause/Resume [bot_id]', 'Override [hard cap]'. "
+        "FORBIDDEN patterns — NEVER include: 'Schedule a sync with [agent]', 'Escalate to [team]', "
+        "'Call [agent]', 'Email [agent]', 'Convene a meeting'. "
+        "If you want another agent's input, frame it as something YOU will go request via the bus — "
+        "NOT something Brock should coordinate. "
+        "Example: '✓ I will query Dick for regime clarification and post the result in #risk-alerts.' "
+        "        '✗ Brock should schedule a sync with Dick.' "
+        "\n\n"
+        "GROUND TRUTH FACTS — use these EXACT numbers. Do not estimate, round differently, or substitute other values. "
+        "If a number you need is not listed here, write 'unknown' instead of guessing:\n"
+        f"{facts_block}"
+        "\n\n"
+        "Respond ONLY with a valid JSON object with these keys: "
+        "focus_areas (list of 3 strings), bots_to_watch (list of strings), "
+        "risks (list of strings), proposed_actions (list of strings), summary (string)."
+    )
+
     try:
         import httpx
         response = httpx.post(
@@ -259,13 +332,7 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
             json={
                 "model": "claude-haiku-4-5-20251001",
                 "max_tokens": 1200,
-                "system": (
-                    "You are Brick, portfolio manager at BMG Capital. "
-                    "Based on your agents' morning standup contributions, write today's trading plan. "
-                    "Respond ONLY with a valid JSON object with these keys: "
-                    "focus_areas (list of 3 strings), bots_to_watch (list of strings), "
-                    "risks (list of strings), proposed_actions (list of strings), summary (string)."
-                ),
+                "system": system_prompt,
                 "messages": [
                     {
                         "role": "user",
@@ -488,10 +555,11 @@ def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Ses
                 "model": "claude-haiku-4-5-20251001",
                 "max_tokens": 600,
                 "system": (
-                    "You are generating brief in-character reactions from BMG Capital agents "
-                    "in #fund-team-chat. Each agent speaks in their professional voice. "
+                    "You are generating brief in-character reactions from BMG Capital AI agents "
+                    "in #fund-team-chat. These are AI services, not humans. "
                     "Brick is decisive. Dick cites numbers. Researcher mentions ICs. "
-                    "DQW mentions feeds. Execution mentions slippage. Ops mentions positions. DevOps is brief."
+                    "DQW mentions feeds. Execution mentions slippage. Ops mentions positions. DevOps is brief. "
+                    "Reactions should be actionable observations — never suggest meetings, syncs, or calls."
                 ),
                 "messages": [{"role": "user", "content": prompt}],
             },
