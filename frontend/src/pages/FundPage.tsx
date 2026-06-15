@@ -776,7 +776,7 @@ export default function FundPage() {
   const activeCount = Object.values(liveMap).filter(
     (a) => a.status === "active" || a.status === "degraded"
   ).length;
-  const totalAgents = FUND_ROLES.filter((r) => !r.isHuman).length;
+  const totalAgents = data?.agents?.length ?? FUND_ROLES.filter((r) => !r.isHuman).length;
 
   const selectedRole = selectedId ? ROLE_BY_ID[selectedId] : null;
   const selectedLiveData = selectedId

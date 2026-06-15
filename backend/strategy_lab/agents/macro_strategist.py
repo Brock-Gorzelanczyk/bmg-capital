@@ -110,17 +110,30 @@ def _fetch_yfinance_indicators() -> dict:
             vix_val = getattr(vix_info, "last_price", None)
             if vix_val is not None:
                 result["vix"] = round(float(vix_val), 2)
-                logger.info("[macro_strategist] yfinance ^VIX=%.2f", result["vix"])
+                logger.info("[macro_strategist] yfinance ^VIX=%.2f (fast_info)", result["vix"])
             else:
-                logger.warning("[macro_strategist] yfinance ^VIX returned None — fast_info=%s", vix_info)
+                logger.warning("[macro_strategist] yfinance ^VIX fast_info returned None — trying history fallback")
         except Exception as exc:
-            logger.warning("[macro_strategist] ^VIX fetch failed: %s", exc)
+            logger.warning("[macro_strategist] ^VIX fast_info failed: %s — trying history fallback", exc)
+
+        # Fallback: pull VIX from recent 5-day history if fast_info failed
+        if "vix" not in result:
+            try:
+                vix_hist = yf.Ticker("^VIX").history(period="5d", auto_adjust=False)
+                if not vix_hist.empty:
+                    vix_val = float(vix_hist["Close"].iloc[-1])
+                    result["vix"] = round(vix_val, 2)
+                    logger.info("[macro_strategist] yfinance ^VIX=%.2f (history fallback)", result["vix"])
+                else:
+                    logger.warning("[macro_strategist] ^VIX history also returned empty — VIX unavailable from yfinance")
+            except Exception as exc2:
+                logger.warning("[macro_strategist] ^VIX history fallback failed: %s", exc2)
 
         # ── SPY vs 200-day MA → trend_regime ─────────────────────────────────
         try:
             spy_hist = yf.Ticker("SPY").history(period="250d", auto_adjust=True)
             if spy_hist.empty:
-                logger.warning("[macro_strategist] SPY history returned empty DataFrame")
+                logger.warning("[macro_strategist] SPY history returned empty DataFrame — Yahoo Finance may be rate-limiting or blocking")
             elif len(spy_hist) < 200:
                 logger.warning("[macro_strategist] SPY history only %d rows (need 200)", len(spy_hist))
             else:
