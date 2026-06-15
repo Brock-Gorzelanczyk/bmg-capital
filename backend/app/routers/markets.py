@@ -109,7 +109,7 @@ _STOCK_NAMES: dict[str, str] = {
 
 
 def _fetch_stock_data_alpaca(symbols: list[str]) -> list[dict]:
-    """Fetch stock data via Alpaca Data API (IEX feed). Replaces broken yfinance."""
+    """Fetch stock data via Alpaca Data API (SIP feed, all account tiers). Replaces broken yfinance."""
     api_key = os.getenv("ALPACA_API_KEY", "") or os.getenv("ALPACA_PAPER_KEY", "")
     api_secret = os.getenv("ALPACA_SECRET_KEY", "") or os.getenv("ALPACA_PAPER_SECRET", "")
     base = "https://data.alpaca.markets"
@@ -123,12 +123,12 @@ def _fetch_stock_data_alpaca(symbols: list[str]) -> list[dict]:
 
     # ── Step 1: Snapshots (latest price, daily bar, prev close) ──────────────
     for i in range(0, len(symbols), 100):
-        chunk = [s for s in symbols[i:i+100] if s != "BRK-B"]  # IEX uses BRK/B
+        # Alpaca uses BRK/B (slash) for the slash-ticker convention
         chunk_fixed = [s.replace("BRK-B", "BRK/B") for s in symbols[i:i+100]]
         try:
             resp = _requests.get(
                 f"{base}/v2/stocks/snapshots",
-                params={"symbols": ",".join(chunk_fixed), "feed": "iex"},
+                params={"symbols": ",".join(chunk_fixed), "feed": "sip"},
                 headers=headers,
                 timeout=20,
             )
@@ -136,6 +136,8 @@ def _fetch_stock_data_alpaca(symbols: list[str]) -> list[dict]:
                 snaps = resp.json()
                 if "snapshots" in snaps:
                     snaps = snaps["snapshots"]
+                if not snaps:
+                    logger.warning("[markets/stocks] snapshots returned 0 entries for chunk %d — check Alpaca subscription or credentials", i // 100)
                 for raw_sym, snap in snaps.items():
                     sym = raw_sym.replace("/", "-")
                     daily = snap.get("dailyBar") or {}
@@ -178,7 +180,7 @@ def _fetch_stock_data_alpaca(symbols: list[str]) -> list[dict]:
                     "timeframe": "1Day",
                     "start": start.strftime("%Y-%m-%dT00:00:00Z"),
                     "end": end.strftime("%Y-%m-%dT00:00:00Z"),
-                    "feed": "iex",
+                    "feed": "sip",
                     "limit": 10000,
                 },
                 headers=headers,
@@ -213,7 +215,7 @@ async def get_stock_markets(
     sort: str = Query("market_cap"),
     _user=Depends(get_current_user),
 ):
-    """Top stocks via Alpaca Data API (IEX feed). 5-min cache."""
+    """Top stocks via Alpaca Data API (SIP feed). 5-min cache."""
     ckey = f"stocks:{limit}"
     cached = _get(ckey, 300)
     if cached is not None:
