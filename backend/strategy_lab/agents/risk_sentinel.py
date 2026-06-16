@@ -31,10 +31,59 @@ DRAWDOWN_24H_RED_PCT  = -2.0  # 24h drawdown worse than -2% → RED
 FLEET_PAUSE_24H_PCT   = -3.0  # 24h pct required before "fleet pause" language is used
 FLEET_AUM_PAUSE_PCT   = -1.0  # 30d P&L as % of fleet AUM — below this, no pause language
 
-# 6h cooldown per level; additionally, same trigger fingerprint won't re-fire within window
-_last_alert_ts:      dict[str, datetime]   = {}
-_last_alert_trigger: dict[str, frozenset]  = {}
 _ALERT_COOLDOWN_HOURS = 6
+
+
+def _ensure_cooldown_table(db: Session) -> None:
+    try:
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS sentinel_cooldown (
+                level VARCHAR(20) PRIMARY KEY,
+                last_fired_at TIMESTAMPTZ NOT NULL,
+                trigger_hash  TEXT        NOT NULL DEFAULT ''
+            )
+        """))
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
+def _get_sentinel_state(db: Session, level: str) -> tuple[Optional[datetime], frozenset]:
+    try:
+        _ensure_cooldown_table(db)
+        row = db.execute(text(
+            "SELECT last_fired_at, trigger_hash FROM sentinel_cooldown WHERE level = :level"
+        ), {"level": level}).fetchone()
+        if row and row[0]:
+            ts = row[0] if isinstance(row[0], datetime) else datetime.fromisoformat(str(row[0]))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            triggers = frozenset(row[1].split(",")) if row[1] else frozenset()
+            return ts, triggers
+    except Exception as exc:
+        logger.debug("[risk_sentinel] state read failed: %s", exc)
+    return None, frozenset()
+
+
+def _set_sentinel_state(db: Session, level: str, ts: datetime, triggers: frozenset) -> None:
+    try:
+        db.execute(text("""
+            INSERT INTO sentinel_cooldown (level, last_fired_at, trigger_hash)
+            VALUES (:level, :ts, :th)
+            ON CONFLICT (level) DO UPDATE
+              SET last_fired_at = EXCLUDED.last_fired_at,
+                  trigger_hash  = EXCLUDED.trigger_hash
+        """), {"level": level, "ts": ts.isoformat(), "th": ",".join(sorted(triggers))})
+        db.commit()
+    except Exception as exc:
+        logger.debug("[risk_sentinel] state write failed: %s", exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def _get_channel() -> tuple[str, str]:
@@ -304,9 +353,22 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
             "value":  " | ".join(reason_parts) if reason_parts else "Threshold exceeded",
             "inline": False,
         })
+        triggers_set = set(summary.get("triggers", []))
+        if "stale_and_losing" in triggers_set and abs(summary.get("total_pnl_usd", 0)) < 500:
+            critical_action = (
+                "Stale scanners + losing streak detected. Investigate scanner health and "
+                "review crypto_meanrev allocation. P&L impact minimal — no trading halt warranted."
+            )
+        elif "critical_stale_count" in triggers_set:
+            critical_action = (
+                "5+ bots stale — trading layer may be down. Check APScheduler logs and "
+                "verify Alpaca/exchange connectivity. Pause new entries until resolved."
+            )
+        else:
+            critical_action = "Review and halt trading if drawdown exceeds -4% of AUM. Verify positions immediately."
         fields.append({
             "name":   "IMMEDIATE ACTION REQUIRED",
-            "value":  "Halt all trading activity and review positions immediately.",
+            "value":  critical_action,
             "inline": False,
         })
     return {
@@ -379,8 +441,7 @@ def run_risk_health_check(db: Session) -> dict:
     # Post to Discord: skip GREEN; YELLOW posts embed only; RED adds @CIO mention;
     # CRITICAL adds @CIO @here mention. All respect the cooldown + trigger dedup.
     if level in ("YELLOW", "RED", "CRITICAL"):
-        last_ts      = _last_alert_ts.get(level)
-        last_trigger = _last_alert_trigger.get(level, frozenset())
+        last_ts, last_trigger = _get_sentinel_state(db, level)
         current_trigger = frozenset(triggers)
         elapsed = (now - last_ts).total_seconds() if last_ts else float("inf")
         # Skip if: same trigger fingerprint AND within cooldown window
@@ -390,8 +451,7 @@ def run_risk_health_check(db: Session) -> dict:
                 level, sorted(current_trigger), _ALERT_COOLDOWN_HOURS, elapsed / 3600,
             )
         else:
-            _last_alert_ts[level]      = now
-            _last_alert_trigger[level] = current_trigger
+            _set_sentinel_state(db, level, now, current_trigger)
             token, ch = _get_channel()
             cio_id = os.getenv("CIO_DISCORD_USER_ID", "")
             embed = _build_embed(level, summary, now)

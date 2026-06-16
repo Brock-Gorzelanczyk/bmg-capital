@@ -434,7 +434,7 @@ export default function PortfolioDetailPage() {
       <div className="flex items-center gap-4 flex-wrap">
         <button
           onClick={() => navigate("/strategy")}
-          className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors"
+          className="flex items-center gap-1.5 text-sm text-t-muted hover:text-t-hi transition-colors"
         >
           <ArrowLeft size={14} />
           Strategy Lab
@@ -447,8 +447,8 @@ export default function PortfolioDetailPage() {
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
                 sib.asset_class === assetClass
-                  ? "text-black font-bold border-transparent"
-                  : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-600"
+                  ? "text-t-bg0 font-bold border-transparent"
+                  : "bg-t-bg1 border-t-dim text-t-muted hover:text-t-hi hover:border-t-mid2"
               )}
               style={sib.asset_class === assetClass ? { background: sib.color_hex, borderColor: sib.color_hex } : undefined}
             >
