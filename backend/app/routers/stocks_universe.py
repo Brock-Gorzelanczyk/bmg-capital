@@ -7,7 +7,7 @@ Market caps are approximate (update quarterly).
 TOP_STOCKS_UNIVERSE = [
     # Mega-cap tech
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
-    "AVGO", "ORCL", "ADBE", "CRM", "NFLX", "AMD",
+    "AVGO", "ORCL", "ADBE", "CRM", "NFLX", "AMD", "SPACEX",
     # Top S&P by mcap
     "BRK-B", "LLY", "V", "JPM", "WMT", "MA", "XOM", "JNJ",
     "PG", "UNH", "HD", "COST", "ABBV", "BAC", "CVX", "MRK",
@@ -31,7 +31,7 @@ STOCK_NAMES: dict[str, str] = {
     "VZ": "Verizon", "IBM": "IBM", "BA": "Boeing", "GE": "GE Aerospace",
     "F": "Ford", "GM": "GM", "COIN": "Coinbase", "RBLX": "Roblox",
     "SHOP": "Shopify", "SQ": "Block", "PYPL": "PayPal", "UBER": "Uber",
-    "ABNB": "Airbnb",
+    "ABNB": "Airbnb", "SPACEX": "SpaceX",
 }
 
 # Approximate market cap in USD. Update quarterly.

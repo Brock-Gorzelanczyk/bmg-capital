@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import client from "@/api/client";
+import TradingViewWidget from "@/components/TradingViewWidget";
+import { mapToTvSymbol } from "@/lib/chart/tvSymbolMap";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ interface StockRow {
   market_cap: number | null;
   volume: number | null;
   sparkline_1m: number[];
+  private?: boolean;
 }
 
 const getCryptoMarkets = (limit = 100): Promise<{ coins: CoinRow[] }> =>
@@ -213,6 +216,52 @@ function CryptoTab() {
   );
 }
 
+// ── Chart modal ───────────────────────────────────────────────────────────────
+
+function ChartModal({ symbol, name, isPrivate, onClose }: { symbol: string; name: string; isPrivate?: boolean; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden w-full max-w-5xl"
+        style={{ height: "min(80vh, 640px)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-t-dim">
+          <div className="flex items-center gap-2">
+            <StockLogo symbol={symbol} />
+            <span className="text-t-hi font-semibold text-sm">{symbol}</span>
+            <span className="text-t-muted text-xs">{name}</span>
+            {isPrivate && (
+              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-semibold uppercase">Private</span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-t-muted hover:text-t-hi transition-colors text-lg leading-none px-1">✕</button>
+        </div>
+
+        {/* Content */}
+        <div className="h-[calc(100%-52px)]">
+          {isPrivate ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8">
+              <span className="text-4xl">🔒</span>
+              <p className="text-t-hi font-semibold text-lg">{name} is a Private Company</p>
+              <p className="text-t-muted text-sm max-w-sm">
+                {name} is not publicly traded on any exchange. No live chart is available.
+                Market cap shown is an estimated private valuation.
+              </p>
+            </div>
+          ) : (
+            <TradingViewWidget symbol={mapToTvSymbol(symbol)} interval="D" theme="dark" />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Stock logo ────────────────────────────────────────────────────────────────
 
 const LOGO_TOKEN = "pk_X-1ZO13GSgeOoUrIuJ6GMQ";
@@ -266,6 +315,7 @@ const SORT_TABS: { key: StockSort; label: string }[] = [
 function StocksTab() {
   const [search, setSearch] = useState("");
   const [sortCol, setSortCol] = useState<StockSort>("market_cap");
+  const [chartStock, setChartStock] = useState<StockRow | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["markets-stocks"],
@@ -288,6 +338,15 @@ function StocksTab() {
 
   return (
     <div className="space-y-3">
+      {chartStock && (
+        <ChartModal
+          symbol={chartStock.symbol}
+          name={chartStock.name}
+          isPrivate={chartStock.private}
+          onClose={() => setChartStock(null)}
+        />
+      )}
+
       {/* Controls row */}
       <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
         {/* Sort tabs */}
@@ -365,7 +424,7 @@ function StocksTab() {
                   </tr>
                 ))
               ) : stocks.map((stock, i) => (
-                <tr key={stock.symbol} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors">
+                <tr key={stock.symbol} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors cursor-pointer" onClick={() => setChartStock(stock)}>
                   <td className="py-2.5 px-4 text-t-muted">{i + 1}</td>
                   <td className="py-2.5 px-2">
                     <div className="flex items-center gap-2">
@@ -420,7 +479,7 @@ export default function MarketsPage() {
         </p>
         <h1 className="text-2xl font-bold text-t-hi">Markets</h1>
         <p className="text-t-muted text-sm mt-1">
-          Top crypto and stocks. Click ⚒ Scout to scan any asset with Strategy Scout.
+          Top crypto and stocks. Click any row to open its chart. Click ⚒ Scout to scan with Strategy Scout.
         </p>
       </div>
 
