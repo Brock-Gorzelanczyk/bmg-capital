@@ -12,6 +12,7 @@ from app.db.base import Base
 class RegimeSnapshot(Base):
     """One row per trading day — confirmed regime after persistence filter."""
     __tablename__ = "regime_snapshots"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     snapshot_date: Mapped[datetime] = mapped_column(Date, nullable=False, unique=True, index=True)

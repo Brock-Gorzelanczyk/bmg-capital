@@ -196,16 +196,15 @@ def _read_live_indicators(db: Session) -> dict:
     merged = _fetch_yfinance_indicators()
 
     # Layer 2: most recent daily regime snapshot (supplements or overrides where non-None)
+    # Use bots.RegimeSnapshot — that's the schema actually in the DB (ts, vix_value, etc.)
     try:
-        from app.db.models.regime_history import RegimeSnapshot as HistSnap
-        snap = db.query(HistSnap).order_by(HistSnap.snapshot_date.desc()).first()
+        from app.db.models.bots import RegimeSnapshot as LiveSnap
+        snap = db.query(LiveSnap).order_by(LiveSnap.ts.desc()).first()
         if snap:
             db_fields = {
-                "vix":              snap.vix_level,
-                "spx_200ma_ratio":  snap.spx_vs_200ma,
-                "as_of":            snap.snapshot_date.isoformat() if snap.snapshot_date else None,
+                "vix":              getattr(snap, "vix_value", None),
+                "as_of":            snap.ts.isoformat() if snap.ts else None,
             }
-            # DB overrides yfinance only for non-None values
             for k, v in db_fields.items():
                 if v is not None:
                     merged[k] = v
@@ -225,9 +224,9 @@ def _read_live_indicators(db: Session) -> dict:
 def _read_yesterday_regime(db: Session) -> Optional[str]:
     """Return the most recent stored regime label for transition detection."""
     try:
-        from app.db.models.regime_history import RegimeSnapshot as HistSnap
-        row = db.query(HistSnap).order_by(HistSnap.snapshot_date.desc()).first()
-        return row.regime if row else None
+        from app.db.models.bots import RegimeSnapshot as LiveSnap
+        row = db.query(LiveSnap).order_by(LiveSnap.ts.desc()).first()
+        return getattr(row, "trend_regime", None) if row else None
     except Exception:
         return None
 
