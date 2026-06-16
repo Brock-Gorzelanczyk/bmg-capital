@@ -145,10 +145,6 @@ function ForgeWizard({ catalog, onClose, onCreated }: ForgeWizardProps) {
     step === 5 ||
     step === 6;
 
-  const forgeName = state.name.trim().startsWith("forge_")
-    ? state.name.trim()
-    : `forge_${state.name.trim()}`;
-
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
       <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh]">

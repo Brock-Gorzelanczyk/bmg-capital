@@ -185,7 +185,7 @@ function BotCard({
               style={{ background: dot, boxShadow: dotGlow }}
             />
             <span className="font-semibold text-[15px]" style={{ color: live ? "#eafbe9" : "#9fb0a0" }}>
-              {resolveName(profile.name, profile.display_name)}
+              {resolveName(profile.name, undefined)}
             </span>
           </div>
           <p className="font-mono text-[11px] leading-relaxed" style={{ color: "#7e8e7e" }}>
