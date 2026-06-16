@@ -24,8 +24,12 @@ def _cache_is_fresh() -> bool:
     return _bar_cache is not None and (time.time() - _bar_cache_ts) < _BAR_CACHE_TTL
 
 
-def _fetch_bars_sync(symbols: List[str], period: str = "1y") -> Dict[str, pd.DataFrame]:
-    """Batch download daily bars via yfinance in chunks."""
+def _fetch_bars_sync(symbols: List[str], period: str = "1y", interval: str = "1d") -> Dict[str, pd.DataFrame]:
+    """Batch download OHLCV bars via yfinance.
+
+    interval: yfinance interval string ("1d", "1h", "30m", "15m", "5m", etc.)
+    period: lookback window ("1d", "5d", "60d", "1y", etc.)
+    """
     result: Dict[str, pd.DataFrame] = {}
     batch_size = 100  # larger batches = fewer round trips
 
@@ -35,7 +39,7 @@ def _fetch_bars_sync(symbols: List[str], period: str = "1y") -> Dict[str, pd.Dat
             raw = yf.download(
                 tickers=chunk,
                 period=period,
-                interval="1d",
+                interval=interval,
                 auto_adjust=True,
                 group_by="ticker",
                 threads=True,

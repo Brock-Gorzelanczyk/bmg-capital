@@ -315,7 +315,31 @@ def run_bot_profile(profile_name: str) -> dict:
                     else:
                         from app.screener.runner import _fetch_bars_sync
                         lookback_period = profile.get("scan_lookback_period", "60d")
-                        raw_bars = _fetch_bars_sync(symbols, period=lookback_period)
+
+                        # Infer bar interval from profile cadence so intraday bots
+                        # (ORB, VWAP, momentum) receive intraday bars.
+                        # cadence "*/5 ..." → 5m bars with 1-day window.
+                        # cadence "*/15 ..." → 15m bars. Otherwise daily.
+                        _cadence = profile.get("cadence", "")
+                        _cron_freq = _cadence.split()[0] if _cadence else ""
+                        if _cron_freq in ("*/5", "*/3", "*/2", "*/1"):
+                            _bar_interval = "5m"
+                            _bar_period = "1d"  # 5m limit is 60d but ORB only needs today
+                        elif _cron_freq == "*/15":
+                            _bar_interval = "15m"
+                            _bar_period = "5d"
+                        elif _cron_freq == "*/30":
+                            _bar_interval = "30m"
+                            _bar_period = "30d"
+                        else:
+                            _bar_interval = "1d"
+                            _bar_period = lookback_period
+
+                        raw_bars = _fetch_bars_sync(symbols, period=_bar_period, interval=_bar_interval)
+                        logger.warning(
+                            "[runner:%s] bar fetch: interval=%s period=%s (cadence=%s)",
+                            profile_name, _bar_interval, _bar_period, _cron_freq or "none",
+                        )
                     for sym, df in raw_bars.items():
                         if df is None or df.empty:
                             continue
