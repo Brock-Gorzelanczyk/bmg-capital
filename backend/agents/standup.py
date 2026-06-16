@@ -230,6 +230,9 @@ def _fetch_ground_truth_facts(db: Session) -> dict:
         "disabled_bot_count": "unknown",
         "fleet_value_total": "unknown",
         "fleet_pnl_30d": "unknown",
+        "real_bot_count": "unknown",
+        "real_open_positions": "unknown",
+        "real_signals_today": "unknown",
     }
     try:
         from sqlalchemy import text as _text
@@ -266,6 +269,33 @@ def _fetch_ground_truth_facts(db: Session) -> dict:
             facts["fleet_pnl_30d"] = f"${pnl30 / 100:,.2f}"
     except Exception:
         pass
+
+    # Real ground truth numbers — canonical queries used in the LLM prompt
+    try:
+        from sqlalchemy import text as _text
+        real_bot_count = db.execute(_text(
+            "SELECT COUNT(*) FROM bot_profiles WHERE status='active'"
+        )).scalar() or 0
+        facts["real_bot_count"] = int(real_bot_count)
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text as _text
+        real_open_positions = db.execute(_text(
+            "SELECT COUNT(*) FROM bot_allocations WHERE closed_at IS NULL AND quarantined_at IS NULL"
+        )).scalar() or 0
+        facts["real_open_positions"] = int(real_open_positions)
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text as _text
+        real_signals_today = db.execute(_text(
+            "SELECT COUNT(*) FROM signals WHERE created_at >= date('now')"
+        )).scalar() or 0
+        facts["real_signals_today"] = int(real_signals_today)
+    except Exception:
+        pass
+
     return facts
 
 
@@ -304,11 +334,10 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
         "You are Brick, portfolio manager at BMG Capital. "
         "You are writing a morning briefing TO Brock (the CIO — the only human in this system). "
         "\n\n"
-        "AGENT REALITY: Every other agent — Dick, Nick, Rick, Mick, Slick, Vick, Wick, Patrick — is an AI service "
-        "running on a schedule. They are NOT humans. You CANNOT query them interactively, call them, "
-        "or wait for their replies. Do NOT write phrases like 'I will query Dick', 'pending my query to Nick', "
-        "or 'I must resolve X with Vick'. If you need an agent's output, refer to their most recent "
-        "posted output in their assigned channel. "
+        "AGENT REALITY: You are an AI agent. Dick, Nick, Mick, Vick, and other agents are also AI services "
+        "running on schedules. You cannot 'query' them interactively. "
+        "Do not write phrases like 'I will query X', 'pending my query to Y', or 'I'll check with Z'. "
+        "If you need information from another agent, refer to its most recent posted output in its assigned channel. "
         "\n\n"
         "AGENT RESPONSIBILITIES (use correct names — do not mix them up):\n"
         "  Dick (CRO / #risk-alerts) — risk breaches, drawdown, concentration limits, hard caps\n"
@@ -320,22 +349,27 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
         "  Wick (Operations / internal) — position reconciliation, capital accounting\n"
         "  Patrick (DevOps / internal) — infrastructure, Railway health\n"
         "\n\n"
-        "DISCORD CHANNEL ROUTING (only reference real channels):\n"
-        "  #risk-alerts — Dick's risk output\n"
-        "  #macro-view — Rick's macro output\n"
-        "  #research-log — Nick's research output\n"
-        "  #bmg-monitoring — Vick's data quality alerts (NOT #data-quality or #data-quality-channel)\n"
-        "  #queen-briefings — Brick's morning brief\n"
-        "  #queen-proposals — allocation proposals awaiting Brock's approval\n"
-        "  #fund-team-chat — team discussion\n"
+        "CHANNEL ROUTING:\n"
+        "  Dick (Risk)         → #risk-alerts\n"
+        "  Nick (Macro)        → #macro-view\n"
+        "  Researcher          → #research-log\n"
+        "  Vick (Data Quality) → #bmg-monitoring\n"
+        "  Queen               → #queen-briefings + #queen-proposals\n"
+        "  Standup             → #daily-plan + #fund-team-chat\n"
+        "  Paste-readys        → #fund-updates\n"
+        "Do not reference any other channel names. '#data-quality-channel' does not exist.\n"
         "\n\n"
         "PROPOSED ACTIONS must be steps Brock can take as CIO. "
         "ALLOWED: 'Review [channel or page]', 'Approve/Reject/Defer [proposal in #queen-proposals]', "
         "'Pause/Resume [bot_id]', 'Override [hard cap]'. "
         "FORBIDDEN: Any phrase like 'I will query X', 'Schedule a sync', 'Escalate to', 'Call', 'Email'. "
         "\n\n"
-        "GROUND TRUTH FACTS — use these EXACT numbers. Do not estimate, invent, or round differently. "
-        "Write 'unknown' for any metric not listed here:\n"
+        "GROUND TRUTH (use these EXACT numbers, do not estimate):\n"
+        f"- Active bots: {facts.get('real_bot_count', 'unknown')}\n"
+        f"- Open positions: {facts.get('real_open_positions', 'unknown')}\n"
+        f"- Signals today: {facts.get('real_signals_today', 'unknown')}\n"
+        "\n"
+        "Additional fleet metrics (use these exact values, write 'unknown' for unlisted metrics):\n"
         f"{facts_block}"
         "\n\n"
         "Respond ONLY with a valid JSON object with these keys: "
@@ -582,6 +616,19 @@ def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Ses
                 "system": (
                     "You are generating brief in-character reactions from BMG Capital AI agents "
                     "in #fund-team-chat. These are AI services, not humans. "
+                    "You are an AI agent. Dick, Nick, Mick, Vick, and other agents are also AI services "
+                    "running on schedules. You cannot 'query' them interactively. "
+                    "Do not write phrases like 'I will query X', 'pending my query to Y', or 'I'll check with Z'. "
+                    "If you need information from another agent, refer to its most recent posted output in its assigned channel. "
+                    "CHANNEL ROUTING: "
+                    "Dick (Risk) → #risk-alerts | "
+                    "Nick (Macro) → #macro-view | "
+                    "Researcher → #research-log | "
+                    "Vick (Data Quality) → #bmg-monitoring | "
+                    "Queen → #queen-briefings + #queen-proposals | "
+                    "Standup → #daily-plan + #fund-team-chat | "
+                    "Paste-readys → #fund-updates. "
+                    "Do not reference any other channel names. '#data-quality-channel' does not exist. "
                     "Brick is decisive. Dick (CRO) cites numbers. Nick (Equity Research) mentions ICs. "
                     "Rick (Macro Strategist) references regime. Mick (Quant Research) mentions pipeline. "
                     "Vick (Data Quality) mentions feeds. Slick (Execution) mentions slippage. "

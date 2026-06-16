@@ -90,6 +90,7 @@ def _check_signal_freshness(db: Session) -> dict:
         count = db.execute(text(
             "SELECT COUNT(*) FROM bot_signals WHERE ts >= :c AND (is_test IS NULL OR is_test = 0)"
         ), {"c": cutoff}).scalar() or 0
+        logger.warning("[data_quality] signal_count_6h query returned %d", count)
 
         if count == 0 and not is_weekend:
             return {"ok": False, "issue": f"No bot signals in last {SIGNAL_STALE_HOURS}h", "signal_count": 0}
@@ -192,7 +193,8 @@ def run_data_quality_check(db: Session) -> dict:
             _last_alert_hash = issue_hash
             _last_alert_ts = now
     elif has_issues:
-        logger.info("[dq_watcher] alert suppressed by dedup (same hash within %dh cooldown)", _ALERT_COOLDOWN_HOURS)
+        logger.info("[dq_watcher] alert suppressed by dedup — hash=%s, same issues within %dh cooldown (%.1fh elapsed)",
+                    issue_hash, _ALERT_COOLDOWN_HOURS, elapsed_hours)
     else:
         embed = {
             "author": {"name": "BMG Capital — Vick (Data Quality)"},

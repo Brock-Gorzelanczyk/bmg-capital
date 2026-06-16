@@ -133,21 +133,19 @@ export default function Portfolio() {
   const openPos = snap.total_open_positions;
   const isUp = todayPnl >= 0;
 
-  // Build donut slices — include reserved_capital_cents for zero-bot sleeves.
-  // Reserved capital is reclassified out of cash so the pie always sums correctly.
+  // Donut slices use current_value_cents only — reserved_capital_cents is already
+  // part of the sleeve's portfolio value (the $200k options reservation lives
+  // inside the options StrategyPortfolio as starting capital). Adding it again
+  // would double-count and push the total above 100%.
   const slices = SLEEVE_ORDER
-    .filter((k) => {
-      const s = snap.by_sleeve[k];
-      return s.current_value_cents > 0 || s.reserved_capital_cents > 0;
-    })
+    .filter((k) => snap.by_sleeve[k].current_value_cents > 0)
     .map((k) => ({
       key: k,
-      value_cents: snap.by_sleeve[k].current_value_cents + snap.by_sleeve[k].reserved_capital_cents,
+      value_cents: snap.by_sleeve[k].current_value_cents,
     }));
 
   const deployedCents = SLEEVE_ORDER.reduce((acc, k) => acc + snap.by_sleeve[k].current_value_cents, 0);
-  const reservedCents = SLEEVE_ORDER.reduce((acc, k) => acc + snap.by_sleeve[k].reserved_capital_cents, 0);
-  const cashCents = Math.max(0, totalValue - deployedCents - reservedCents);
+  const cashCents = Math.max(0, totalValue - deployedCents);
   const allSlices = cashCents > 0 ? [...slices, { key: "cash", value_cents: cashCents }] : slices;
 
   return (

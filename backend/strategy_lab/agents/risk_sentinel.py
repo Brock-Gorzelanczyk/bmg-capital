@@ -37,6 +37,10 @@ _ALERT_COOLDOWN_HOURS = 6
 # Replaces DB-backed sentinel_cooldown table which silently failed on SQLite.
 _alert_state: dict[str, tuple[datetime, frozenset]] = {}
 
+# Hash-key dedup: (severity, top-3-triggers-tuple) → last_fired_at
+# Suppresses re-posts for identical (severity, trigger) combos within cooldown window.
+_alert_hash_state: dict[tuple, datetime] = {}
+
 
 def _get_sentinel_state(db: Session, level: str) -> tuple[Optional[datetime], frozenset]:
     entry = _alert_state.get(level)
@@ -100,6 +104,9 @@ def _get_fleet_drawdown(db: Session) -> dict:
             WHERE bdp.date >= :cutoff AND ba.enabled = 1
             GROUP BY bp.name
         """), {"cutoff": cutoff}).fetchall()
+
+        _raw_total = sum((r[1] or 0) for r in rows) / 100 if rows else 0
+        logger.warning("[risk_sentinel] 30d pnl fetch result: %d rows, value=%s", len(rows), f"${_raw_total:+,.2f}" if rows else "None")
 
         bots = []
         total_pnl = 0
@@ -260,7 +267,7 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
     pnl_value = (
         f"${summary['total_pnl_usd']:+,.2f}"
         if summary.get("pnl_data_available", True)
-        else "DATA_MISSING (bot_daily_pnl empty)"
+        else "DATA_MISSING — could not compute fleet P&L"
     )
     fields = [
         {"name": f"{icons[level]} Risk Level", "value": level, "inline": True},
@@ -416,13 +423,27 @@ def run_risk_health_check(db: Session) -> dict:
         last_ts, last_trigger = _get_sentinel_state(db, level)
         current_trigger = frozenset(triggers)
         elapsed = (now - last_ts).total_seconds() if last_ts else float("inf")
-        # Skip if: same trigger fingerprint AND within cooldown window
-        if elapsed < _ALERT_COOLDOWN_HOURS * 3600 and current_trigger == last_trigger:
+
+        # Build content-based hash key: (severity, top-3 triggers sorted)
+        # This suppresses identical alerts even if minor trigger details shift.
+        top_3_triggers = sorted(triggers)[:3]
+        hash_key = (level, tuple(top_3_triggers))
+        hash_last_ts = _alert_hash_state.get(hash_key)
+        hash_elapsed = (now - hash_last_ts).total_seconds() if hash_last_ts else float("inf")
+
+        # Suppress if same hash_key posted within cooldown window,
+        # OR same full trigger fingerprint within cooldown (legacy path).
+        _same_hash = hash_elapsed < _ALERT_COOLDOWN_HOURS * 3600
+        _same_trigger = elapsed < _ALERT_COOLDOWN_HOURS * 3600 and current_trigger == last_trigger
+
+        if _same_hash or _same_trigger:
+            logger.info("[risk-dedup] suppressed: %s", hash_key)
             logger.info(
                 "[risk_sentinel] %s suppressed — same trigger %s within %dh cooldown (%.1fh elapsed)",
                 level, sorted(current_trigger), _ALERT_COOLDOWN_HOURS, elapsed / 3600,
             )
         else:
+            _alert_hash_state[hash_key] = now
             _set_sentinel_state(db, level, now, current_trigger)
             token, ch = _get_channel()
             cio_id = os.getenv("CIO_DISCORD_USER_ID", "")
@@ -494,6 +515,8 @@ def run_risk_health_check(db: Session) -> dict:
         from agents.bus import post_update_request as _upd
         severe_losers = [(b, n) for b, n in streaks.items() if n >= _DEMOTION_THRESHOLD]
         for bot_name, loss_count in severe_losers:
+            date_str = now.strftime("%Y-%m-%d")
+            date_compact = now.strftime("%Y%m%d")
             _upd(
                 from_agent="risk_sentinel",
                 title=f"{bot_name} — {loss_count} consecutive losses, tier demotion needed",
@@ -504,9 +527,9 @@ def run_risk_health_check(db: Session) -> dict:
                 ),
                 paste_ready=(
                     f"Demote {bot_name} one tier (e.g. T2 → T1 or T1 → T0) to take it off live capital. "
-                    f"It has {loss_count} consecutive losing days as of {now.strftime('%Y-%m-%d')}. "
+                    f"It has {loss_count} consecutive losing days as of {date_str}. "
                     f"Check bot_allocations in the DB and set tier = 'T1' (or T0 if already T1). "
-                    f"Also set paused_reason = 'consecutive_loss_demotion_{now.strftime(\"%Y%m%d\")}' so it shows as paused in the UI."
+                    f"Also set paused_reason = 'consecutive_loss_demotion_{date_compact}' so it shows as paused in the UI."
                 ),
                 priority="high" if loss_count >= CONSEC_LOSS_HALT else "normal",
             )

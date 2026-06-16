@@ -783,6 +783,19 @@ def _generate_proposals(db: Session, *, research: dict, health: dict, synthetic:
     proposals_posted: list[dict] = []
 
     actionable = [e for e in ic_summary if e.get("status") in ("degrading", "strong")]
+    threshold_met = len(actionable) > 0
+    reason = (
+        f"{len(actionable)} bot(s) with actionable IC status (degrading/strong)"
+        if threshold_met
+        else (
+            "no IC entries" if not ic_summary
+            else f"all {len(ic_summary)} IC entries have normal status (not degrading/strong)"
+        )
+    )
+    logger.warning(
+        "[queen-proposal] check triggered. threshold_met=%s. reason=%s",
+        threshold_met, reason,
+    )
     logger.warning(
         "[queen] proposal check: %d IC entries total, %d actionable (degrading/strong)",
         len(ic_summary), len(actionable),
@@ -806,8 +819,18 @@ def _generate_proposals(db: Session, *, research: dict, health: dict, synthetic:
             from strategy_lab.agents.researcher import _REGIME_BEST_BOTS
             if bot in _REGIME_BEST_BOTS.get(regime_name, []):
                 direction = "increase"
+            else:
+                logger.warning(
+                    "[queen-proposal] bot=%s IC strong (ic=%s) but NOT in regime best-bots for regime=%s — skipping increase",
+                    bot, ic_val, regime_name,
+                )
 
         if direction is None:
+            if status not in ("degrading", "strong"):
+                logger.warning(
+                    "[queen-proposal] bot=%s skipped — IC status=%s (ic=%s) does not trigger a proposal",
+                    bot, status, ic_val,
+                )
             continue
 
         proposed_pct = round(
@@ -1078,6 +1101,8 @@ def run_regime_alert_check(db: Session) -> None:
     Posts immediately to Discord when a regime alert fires.
     24-hour cooldown per signal prevents spam.
     """
+    logger.warning("[queen-regime-alert] run_regime_alert_check fired at %s", datetime.now(timezone.utc).isoformat())
+
     try:
         from agents.bus import heartbeat as _hb
         _hb(db, agent_id="queen")
@@ -1092,6 +1117,7 @@ def run_regime_alert_check(db: Session) -> None:
         return
 
     if not alerts:
+        logger.warning("[queen-regime-alert] no alerts returned by check_regime_alert_signals — nothing to post")
         return
 
     now   = datetime.now(timezone.utc)

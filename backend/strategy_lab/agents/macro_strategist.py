@@ -195,20 +195,15 @@ def _read_live_indicators(db: Session) -> dict:
     # Layer 1: yfinance (always tried first)
     merged = _fetch_yfinance_indicators()
 
-    # Layer 2: live DB snapshot (supplements or overrides where non-None)
+    # Layer 2: most recent daily regime snapshot (supplements or overrides where non-None)
     try:
-        from app.db.models.bots import RegimeSnapshot as LiveSnap
-        snap = db.query(LiveSnap).order_by(LiveSnap.ts.desc()).first()
+        from app.db.models.regime_history import RegimeSnapshot as HistSnap
+        snap = db.query(HistSnap).order_by(HistSnap.snapshot_date.desc()).first()
         if snap:
             db_fields = {
-                "vix":          snap.vix_value,
-                "vix_regime":   snap.vix_regime,
-                "trend_regime": snap.trend_regime,
-                "vol_pctile":   snap.vol_pctile,
-                "btc_dom":      snap.btc_dominance,
-                "btc_funding":  snap.btc_funding_rate,
-                "spy_price":    snap.spy_price,
-                "as_of":        snap.ts.isoformat() if snap.ts else None,
+                "vix":              snap.vix_level,
+                "spx_200ma_ratio":  snap.spx_vs_200ma,
+                "as_of":            snap.snapshot_date.isoformat() if snap.snapshot_date else None,
             }
             # DB overrides yfinance only for non-None values
             for k, v in db_fields.items():
@@ -357,14 +352,14 @@ def _save_snapshot(
 def _publish_heartbeat(db: Session, result: dict) -> None:
     try:
         db.execute(text("""
-            INSERT INTO agent_messages (from_agent, channel, msg_type, subject, body, created_at)
-            VALUES (:agent, :channel, :mtype, :subject, :body, :ts)
+            INSERT INTO agent_messages (from_agent, channel, msg_type, subject, payload, created_at)
+            VALUES (:agent, :channel, :mtype, :subject, :payload, :ts)
         """), {
             "agent":   "macro_strategist",
             "channel": "agent_heartbeats",
             "mtype":   "heartbeat",
             "subject": f"regime:{result.get('regime', 'unknown')}",
-            "body":    json.dumps(result),
+            "payload": json.dumps(result),
             "ts":      datetime.now(timezone.utc).isoformat(),
         })
         db.commit()
