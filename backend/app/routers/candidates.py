@@ -26,7 +26,7 @@ from app.db.models.users import User
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/candidates", tags=["candidates"])
 
-_CANDIDATES_DIR = Path(__file__).parent.parent.parent.parent / "strategy_lab" / "candidates"
+_CANDIDATES_DIR = Path(__file__).parent.parent.parent / "strategy_lab" / "candidates"
 
 # ── Valid state transitions ────────────────────────────────────────────────────
 
@@ -124,6 +124,7 @@ def sync_candidates(db: Session = Depends(get_db), current_user: User = Depends(
         return {"synced": 0, "message": "candidates/ directory not found"}
 
     synced = 0
+    created = 0
     for path in sorted(_CANDIDATES_DIR.glob("*.py")):
         if path.name.startswith("_"):
             continue
@@ -147,10 +148,11 @@ def sync_candidates(db: Session = Depends(get_db), current_user: User = Depends(
                 metadata_json=json.dumps(cfg) if cfg else None,
             )
             db.add(candidate)
-            synced += 1
+            created += 1
+        synced += 1
     db.commit()
     total = db.query(StrategyCandidate).count()
-    return {"synced": synced, "total": total}
+    return {"synced": synced, "new": created, "total": total}
 
 
 # ── GET / ─────────────────────────────────────────────────────────────────────

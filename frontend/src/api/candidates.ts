@@ -67,7 +67,7 @@ export interface GateResult {
 }
 
 export const syncCandidates = () =>
-  client.post<{ synced: number; total: number }>("/candidates/sync").then((r) => r.data);
+  client.post<{ synced: number; new: number; total: number }>("/candidates/sync").then((r) => r.data);
 
 export const listCandidates = () =>
   client.get<{ candidates: Candidate[] }>("/candidates/").then((r) => r.data);

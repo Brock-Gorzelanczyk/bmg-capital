@@ -180,7 +180,7 @@ export default function CandidatesPage() {
   const syncMut = useMutation({
     mutationFn: syncCandidates,
     onSuccess: (d) => {
-      toast.success(`Synced ${d.synced} new candidates (${d.total} total)`);
+      toast.success(`Synced ${d.synced} candidates (${d.new ?? 0} new · ${d.total} total)`);
       qc.invalidateQueries({ queryKey: ["candidates"] });
     },
     onError: () => toast.error("Sync failed"),
