@@ -766,6 +766,160 @@ def get_bot_risk_status(
     return status
 
 
+@router.get("/bot-health")
+def get_bot_health(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    17-row pipeline health table. Returns per-bot:
+      last_signal_at, signals_24h, trades_24h, discord_posts_24h,
+      open_positions, expected_interval_min, pipeline_health (GREEN/YELLOW/RED/DISABLED)
+
+    Refresh every 30s from the UI — cheap read-only query.
+    """
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    try:
+        from strategy_lab.agents.strategy_monitor import _check_bot_windows
+        rows = _check_bot_windows(db)
+    except Exception as exc:
+        logger.error("[bot-health] strategy_monitor failed: %s", exc)
+        rows = []
+
+    summary = {
+        "green":    sum(1 for r in rows if r.get("pipeline_health") == "GREEN"),
+        "yellow":   sum(1 for r in rows if r.get("pipeline_health") == "YELLOW"),
+        "red":      sum(1 for r in rows if r.get("pipeline_health") == "RED"),
+        "disabled": sum(1 for r in rows if r.get("pipeline_health") == "DISABLED"),
+    }
+    return {
+        "bots":       rows,
+        "summary":    summary,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/synthetic-check")
+def synthetic_check(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Post-deploy pipeline verification. For each active production bot:
+      1. Inserts a synthetic is_test=True signal
+      2. Verifies the row was written to bot_signals
+      3. Checks Discord channel is configured
+
+    Signals are marked is_test=True — invisible to all stats/reporting.
+    Returns pass/fail per bot plus an overall ok flag.
+    """
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    from app.db.models.bots import BotProfile, BotAllocation, BotSignal
+
+    _PRODUCTION_BOTS = {
+        "stock_swing", "stock_day", "stock_lt",
+        "options_income", "options_directional",
+        "crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain",
+        "crypto_quant_aggressive", "crypto_quant_scalper", "crypto_quant_mean_reversion",
+    }
+
+    _DISCORD_CHANNELS = {
+        "stock_swing": "DISCORD_CH_STOCKS_SIGNALS",
+        "stock_day":   "DISCORD_CH_STOCKS_SIGNALS",
+        "stock_lt":    "DISCORD_CH_STOCKS_SIGNALS",
+        "options_income":      "DISCORD_CH_OPTIONS_SIGNALS",
+        "options_directional": "DISCORD_CH_OPTIONS_SIGNALS",
+        "crypto_swing":   "DISCORD_CH_CRYPTO_SIGNALS",
+        "crypto_day":     "DISCORD_CH_CRYPTO_SIGNALS",
+        "crypto_lt":      "DISCORD_CH_CRYPTO_SIGNALS",
+        "crypto_onchain": "DISCORD_CH_CRYPTO_SIGNALS",
+        "crypto_quant_aggressive":     "DISCORD_CH_QUANT_SIGNALS",
+        "crypto_quant_scalper":        "DISCORD_CH_QUANT_SIGNALS",
+        "crypto_quant_mean_reversion": "DISCORD_CH_QUANT_SIGNALS",
+    }
+
+    now = datetime.now(timezone.utc)
+    results = []
+    all_pass = True
+
+    for bot_name in sorted(_PRODUCTION_BOTS):
+        result: Dict[str, Any] = {"bot": bot_name, "pass": False, "steps": {}}
+        try:
+            prof = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
+            if not prof:
+                result["steps"]["profile"] = "MISSING"
+                result["fail_reason"] = "no BotProfile row"
+                results.append(result)
+                all_pass = False
+                continue
+            result["steps"]["profile"] = "OK"
+
+            alloc = db.query(BotAllocation).filter(
+                BotAllocation.profile_id == prof.id,
+                BotAllocation.user_id == current_user.id,
+            ).first()
+            if not alloc:
+                result["steps"]["allocation"] = "MISSING"
+                result["fail_reason"] = "no BotAllocation for this user"
+                results.append(result)
+                all_pass = False
+                continue
+            result["steps"]["allocation"] = "OK"
+            result["steps"]["enabled"] = "OK" if alloc.enabled else "DISABLED"
+
+            # Insert synthetic signal
+            sig = BotSignal(
+                allocation_id=alloc.id,
+                ts=now,
+                symbol="SYNTHETIC",
+                side="hold",
+                confidence=0.0,
+                reason="synthetic_pipeline_check",
+                strategy="synthetic",
+                is_test=True,
+            )
+            db.add(sig)
+            db.flush()
+            db.refresh(sig)
+            result["steps"]["signal_write"] = "OK" if sig.id else "FAILED"
+            result["synthetic_signal_id"] = sig.id
+
+            # Verify Discord channel env var is set
+            ch_env = _DISCORD_CHANNELS.get(bot_name, "")
+            ch_configured = bool(os.getenv(ch_env) or os.getenv("DISCORD_CH_ALL_SIGNALS"))
+            result["steps"]["discord_channel"] = "OK" if ch_configured else "MISSING_ENV_VAR"
+            result["discord_channel_env"] = ch_env
+
+            result["pass"] = sig.id is not None and ch_configured
+            if not result["pass"]:
+                all_pass = False
+
+        except Exception as exc:
+            result["fail_reason"] = str(exc)[:200]
+            result["pass"] = False
+            all_pass = False
+        results.append(result)
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("[synthetic-check] commit failed: %s", exc)
+
+    passed = sum(1 for r in results if r["pass"])
+    return {
+        "ok":         all_pass,
+        "passed":     passed,
+        "total":      len(results),
+        "checked_at": now.isoformat(),
+        "results":    results,
+    }
+
+
 @router.post("/agent-token/generate")
 def generate_agent_token(
     db: Session = Depends(get_db),

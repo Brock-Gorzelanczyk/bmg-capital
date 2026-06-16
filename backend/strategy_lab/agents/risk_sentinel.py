@@ -161,11 +161,27 @@ def _get_consecutive_losses(db: Session) -> dict[str, int]:
 
 
 def _get_stale_bots(db: Session) -> list[str]:
-    """Return names of bots that haven't fired a signal recently."""
+    """Return names of RED-health bots using per-bot cadence-aware thresholds.
+
+    Uses pipeline_health RED (> 4× expected interval, or signals > 0 but discord == 0)
+    instead of a global static stale count. DISABLED / T0 bots are excluded.
+    YELLOW bots are included if they also have a Discord posting gap.
+    """
     try:
-        from strategy_lab.agents.strategy_monitor import run_strategy_health_check
-        health = run_strategy_health_check(db)
-        return [b["bot"] for b in health.get("bots", []) if b.get("status") == "STALE"]
+        from strategy_lab.agents.strategy_monitor import _check_bot_windows
+        rows = _check_bot_windows(db)
+        stale = []
+        for b in rows:
+            ph = b.get("pipeline_health")
+            if ph == "RED":
+                stale.append(b["bot"])
+            elif ph == "YELLOW":
+                # Only alert on YELLOW if it's a posting gap (signals fired, Discord silent)
+                s24 = b.get("signals_24h", 0)
+                d24 = b.get("discord_posts_24h", 0)
+                if s24 > 0 and d24 == 0:
+                    stale.append(b["bot"])
+        return stale
     except Exception:
         return []
 

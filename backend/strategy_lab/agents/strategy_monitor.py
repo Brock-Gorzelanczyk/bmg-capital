@@ -15,21 +15,38 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 # Per-bot expected signal interval in MINUTES.
-# STALE threshold fires at 3× this value — slow bots never false-alarm.
+# Derived from each bot's YAML cadence cron string.
+# GREEN  : minutes_since_last ≤ 2× expected
+# YELLOW : minutes_since_last ≤ 4× expected
+# RED    : minutes_since_last > 4× expected, OR signals > 0 but discord_posts == 0
 _EXPECTED_INTERVAL_MINUTES: dict[str, int] = {
-    "stock_swing":                 1440,   # once post-close (24h)
-    "stock_day":                   30,     # every 5 min during hours
-    "stock_lt":                    10080,  # weekly
-    "crypto_swing":                480,    # every 4h
-    "crypto_day":                  30,     # every 5 min, 24/7
-    "crypto_lt":                   10080,  # weekly
-    "crypto_onchain":              480,    # every 4h
-    "options_income":              1440,   # equity income — once daily
-    "options_directional":         1440,   # equity directional — once daily
-    "crypto_quant_aggressive":     20,     # every 5 min
-    "crypto_quant_scalper":        10,     # every 1 min
-    "crypto_quant_mean_reversion": 15,     # every 3 min
-    "crypto_meanrev_2163":         240,    # every 4h
+    # Stock / equity bots (market-hours only, weekdays)
+    "stock_swing":                 1440,   # "50 15 * * 1-5" — once post-close
+    "stock_day":                   30,     # "*/5 4-19 * * 1-5" — 5min during hours
+    "stock_lt":                    10080,  # "0 10 * * 2" — weekly
+    "options_income":              60,     # "0,30 10-15 * * 1-5" — 30min during hours
+    "options_directional":         60,     # "0,30 10-15 * * 1-5" — 30min during hours
+    # Crypto bots (24/7)
+    "crypto_swing":                480,    # "0 */4 * * *" — every 4h
+    "crypto_day":                  30,     # "*/5 * * * *" — every 5min
+    "crypto_lt":                   10080,  # "0 10 * * 1" — weekly
+    "crypto_onchain":              480,    # "30 */4 * * *" — every 4h
+    # Quant bots (24/7, high frequency)
+    "crypto_quant_aggressive":     20,     # "*/5 * * * *" — every 5min
+    "crypto_quant_scalper":        5,      # "*/1 * * * *" — every 1min
+    "crypto_quant_mean_reversion": 10,     # "*/3 * * * *" — every 3min
+    # T0 incubation / slow bots (disabled in prod)
+    "crypto_meanrev_2163":         240,    # "0 */4 * * *" — every 4h (T0)
+    "tsmom_multi_asset":           10080,  # "0 17 * * 5" — weekly Friday
+    "quality_factor":              43200,  # quarterly rebalance (T0)
+    "value_quality":               43200,  # quarterly rebalance (T0)
+    "earnings_nlp":                1440,   # "0 9 * * 1-5" — daily (T0, blocked)
+}
+
+# T0 incubation bots — disabled, exempt from RED alerts
+_T0_BOTS = {
+    "crypto_meanrev_2163", "tsmom_multi_asset", "quality_factor",
+    "value_quality", "earnings_nlp",
 }
 
 _STOCK_EQUITY_BOTS = {
@@ -48,63 +65,142 @@ _BOT_SLEEVE = {
 }
 
 
+def _compute_pipeline_health(
+    bot_name: str,
+    last_signal_ts,
+    signals_24h: int,
+    discord_posts_24h: int,
+    expected_interval_min: int,
+    is_enabled: bool,
+    paused_reason: Optional[str],
+    is_weekend: bool,
+    now: datetime,
+) -> str:
+    """Return GREEN / YELLOW / RED / DISABLED based on cadence-aware thresholds."""
+    if not is_enabled or paused_reason in _HARD_PAUSE_REASONS or bot_name in _T0_BOTS:
+        return "DISABLED"
+
+    # Posting gap: signals fired but Discord didn't post at least one
+    has_posting_gap = signals_24h > 0 and discord_posts_24h < signals_24h
+
+    if last_signal_ts is None:
+        # Weekly / slow bots never ran yet — YELLOW; faster bots — RED
+        return "YELLOW" if expected_interval_min >= 10080 else "RED"
+
+    if last_signal_ts.tzinfo is None:
+        last_signal_ts = last_signal_ts.replace(tzinfo=timezone.utc)
+    minutes_since = (now - last_signal_ts).total_seconds() / 60
+
+    # Equity bots are expected silent on weekends
+    if is_weekend and bot_name in _STOCK_EQUITY_BOTS:
+        return "YELLOW" if has_posting_gap else "GREEN"
+
+    if signals_24h > 0 and discord_posts_24h == 0:
+        return "RED"
+
+    if minutes_since <= expected_interval_min * 2:
+        return "YELLOW" if has_posting_gap else "GREEN"
+    if minutes_since <= expected_interval_min * 4:
+        return "YELLOW"
+    return "RED"
+
+
 def _check_bot_windows(db: Session) -> list[dict]:
-    """Per-bot execution window check. Skips stock/equity bots on weekends."""
-    from app.db.models.bots import BotProfile, BotAllocation, BotSignal
-    from sqlalchemy import func
+    """Per-bot execution health. Returns pipeline_health GREEN/YELLOW/RED per bot."""
+    from app.db.models.bots import BotProfile, BotAllocation, BotSignal, BotTrade, BotPosition
+    from sqlalchemy import func, and_
 
     now = datetime.now(timezone.utc)
     is_weekend = now.weekday() >= 5
+    cutoff_24h = (now - timedelta(hours=24)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
 
     results: list[dict] = []
     for bot_name, interval_min in _EXPECTED_INTERVAL_MINUTES.items():
-        if is_weekend and bot_name in _STOCK_EQUITY_BOTS:
-            results.append({"bot": bot_name, "status": "SKIPPED", "reason": "weekend"})
-            continue
-
         try:
             prof = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
             if not prof:
-                results.append({"bot": bot_name, "status": "UNKNOWN", "reason": "no_profile"})
+                results.append({"bot": bot_name, "pipeline_health": "RED",
+                                 "status": "UNKNOWN", "reason": "no_profile"})
                 continue
 
             alloc = db.query(BotAllocation).filter(
                 BotAllocation.profile_id == prof.id,
             ).first()
             if not alloc:
-                results.append({"bot": bot_name, "status": "NO_ALLOC", "reason": "no_allocation_row"})
-                continue
-            if not alloc.enabled:
-                results.append({"bot": bot_name, "status": "DISABLED"})
-                continue
-            if alloc.paused_reason in _HARD_PAUSE_REASONS:
-                results.append({"bot": bot_name, "status": "DISABLED", "reason": alloc.paused_reason})
+                results.append({"bot": bot_name, "pipeline_health": "RED",
+                                 "status": "NO_ALLOC", "reason": "no_allocation_row"})
                 continue
 
+            # Signal stats
             last_ts = db.query(func.max(BotSignal.ts)).filter(
                 BotSignal.allocation_id == alloc.id,
+                BotSignal.is_test.is_(None) | (BotSignal.is_test == False),  # noqa: E712
             ).scalar()
 
-            if last_ts is None:
-                results.append({"bot": bot_name, "status": "NEVER_RAN", "last_signal": None})
-                continue
+            signals_24h = db.query(func.count(BotSignal.id)).filter(
+                BotSignal.allocation_id == alloc.id,
+                BotSignal.ts >= cutoff_24h,
+                BotSignal.is_test.is_(None) | (BotSignal.is_test == False),  # noqa: E712
+            ).scalar() or 0
 
-            if last_ts.tzinfo is None:
-                last_ts = last_ts.replace(tzinfo=timezone.utc)
+            discord_posts_24h = db.query(func.count(BotSignal.id)).filter(
+                BotSignal.allocation_id == alloc.id,
+                BotSignal.ts >= cutoff_24h,
+                BotSignal.discord_posted_at.isnot(None),
+                BotSignal.is_test.is_(None) | (BotSignal.is_test == False),  # noqa: E712
+            ).scalar() or 0
 
-            minutes_since = (now - last_ts).total_seconds() / 60
-            threshold_min = interval_min * 3  # STALE at 3× expected interval
-            status = "OK" if minutes_since <= threshold_min else "STALE"
+            trades_24h = db.query(func.count(BotTrade.id)).filter(
+                BotTrade.allocation_id == alloc.id,
+                BotTrade.ts >= cutoff_24h,
+                BotTrade.quarantined_at.is_(None),
+            ).scalar() or 0
+
+            open_positions = db.query(func.count(BotPosition.id)).filter(
+                BotPosition.allocation_id == alloc.id,
+                BotPosition.closed_at.is_(None),
+                BotPosition.quarantined_at.is_(None),
+            ).scalar() or 0
+
+            health = _compute_pipeline_health(
+                bot_name=bot_name,
+                last_signal_ts=last_ts,
+                signals_24h=signals_24h,
+                discord_posts_24h=discord_posts_24h,
+                expected_interval_min=interval_min,
+                is_enabled=bool(alloc.enabled),
+                paused_reason=alloc.paused_reason,
+                is_weekend=is_weekend,
+                now=now,
+            )
+
+            minutes_since = None
+            if last_ts is not None:
+                lts = last_ts if last_ts.tzinfo else last_ts.replace(tzinfo=timezone.utc)
+                minutes_since = round((now - lts).total_seconds() / 60, 1)
 
             results.append({
                 "bot":                    bot_name,
-                "status":                 status,
-                "minutes_since_last":     round(minutes_since, 1),
-                "alert_threshold_min":    threshold_min,
-                "last_signal":            last_ts.isoformat(),
+                "pipeline_health":        health,
+                "status":                 "DISABLED" if health == "DISABLED" else ("STALE" if health == "RED" else "OK"),
+                "enabled":                bool(alloc.enabled),
+                "paused_reason":          alloc.paused_reason,
+                "last_signal_at":         last_ts.isoformat() if last_ts else None,
+                "minutes_since_last":     minutes_since,
+                "signals_24h":            signals_24h,
+                "discord_posts_24h":      discord_posts_24h,
+                "trades_24h":             trades_24h,
+                "open_positions":         open_positions,
+                "expected_interval_min":  interval_min,
+                "alert_threshold_min":    interval_min * 4,
             })
         except Exception as exc:
-            results.append({"bot": bot_name, "status": "ERROR", "reason": str(exc)[:80]})
+            results.append({
+                "bot":             bot_name,
+                "pipeline_health": "RED",
+                "status":          "ERROR",
+                "reason":          str(exc)[:120],
+            })
 
     return results
 
@@ -479,14 +575,25 @@ def run_strategy_health_check(db: Session) -> dict:
 
     alerts: list[str] = []
 
-    stale_bots = [b for b in bot_windows if b.get("status") == "STALE"]
-    for b in stale_bots:
+    # Use pipeline_health GREEN/YELLOW/RED — RED bots trigger alerts
+    red_bots = [b for b in bot_windows if b.get("pipeline_health") == "RED"]
+    yellow_bots = [b for b in bot_windows if b.get("pipeline_health") == "YELLOW"]
+    for b in red_bots:
         alerts.append(
-            f"STALE: {b['bot']} silent {b.get('minutes_since_last','?'):.0f}m "
-            f"(threshold {b.get('alert_threshold_min','?'):.0f}m)"
+            f"RED: {b['bot']} silent {b.get('minutes_since_last') or '∞'}m "
+            f"(threshold {b.get('alert_threshold_min','?')}m, signals_24h={b.get('signals_24h',0)})"
+        )
+    for b in yellow_bots:
+        alerts.append(
+            f"YELLOW: {b['bot']} slow — {b.get('signals_24h',0)} signals in 24h, "
+            f"{b.get('discord_posts_24h',0)} posted to Discord"
         )
 
-    never_ran = [b["bot"] for b in bot_windows if b.get("status") == "NEVER_RAN"]
+    # Legacy compat: still populate stale_bots for callers that check it
+    stale_bots = red_bots + yellow_bots
+
+    never_ran = [b["bot"] for b in bot_windows if b.get("last_signal_at") is None
+                 and b.get("pipeline_health") not in ("DISABLED",)]
     if never_ran:
         alerts.append(f"NEVER RAN: {', '.join(never_ran)}")
 
