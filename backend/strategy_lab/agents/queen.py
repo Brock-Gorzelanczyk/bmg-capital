@@ -802,6 +802,27 @@ def _generate_proposals(db: Session, *, research: dict, health: dict, synthetic:
     )
     if not actionable:
         logger.warning("[queen] no proposals generated — all bots healthy or insufficient IC data")
+        # Post a daily status ping so the proposals channel isn't dead
+        insufficient = [e for e in ic_summary if e.get("status") == "insufficient_data"]
+        healthy      = [e for e in ic_summary if e.get("status") == "healthy"]
+        ic_lines = "\n".join(
+            f"• **{e['bot']}**: {e['status']}" + (f" (IC={e['ic']:.3f})" if e.get("ic") is not None else "")
+            for e in ic_summary
+        ) or "No IC data"
+        status_embed = {
+            "title": "📊 Daily IC Status — No Proposals Today",
+            "description": (
+                f"All bots are within normal parameters. No allocation changes proposed.\n\n"
+                f"**Regime:** {regime_name}\n"
+                f"**Bots tracked:** {len(ic_summary)} "
+                f"({len(healthy)} healthy · {len(insufficient)} still building data)"
+            ),
+            "color": 0x6366F1,
+            "fields": [{"name": "IC Summary", "value": ic_lines[:1020], "inline": False}],
+            "footer": {"text": f"Queen · {now.strftime('%Y-%m-%d %H:%M UTC')} · 10-trade min for IC"},
+        }
+        _post_embed(proposals_ch, token, status_embed)
+        return proposals_posted
 
     for ic_entry in ic_summary:
         bot      = ic_entry.get("bot", "")

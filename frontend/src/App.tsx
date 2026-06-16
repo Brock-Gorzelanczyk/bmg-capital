@@ -431,6 +431,7 @@ function AppInner() {
         <Route path="/risk-console" element={<Page component={RiskConsolePage} />} />
         <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
+        <Route path="/activity" element={<Navigate to="/autopilot/activity" replace />} />
         <Route path="/autopilot/promise" element={<AutopilotPromisePage />} />
         <Route path="/settings/pitch/playbook" element={<PlaybookPage />} />
         <Route path="/settings/pitch/playbook/decisions" element={<PlaybookDecisionsPage />} />
