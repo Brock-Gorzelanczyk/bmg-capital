@@ -98,12 +98,12 @@ _PORTFOLIO_DEFS = [
      "starting_capital_cents": 0,
      "bots": {}},
     {"asset_class": "quant",   "name": "Quant",   "emoji": "∑",  "color_hex": "#a78bfa",
-     "starting_capital_cents": 13_000_000,
+     "starting_capital_cents": 10_000_000,
      "bots": {
          "crypto_quant_aggressive":     4_000_000,   # $40k
          "crypto_quant_scalper":        3_000_000,   # $30k
          "crypto_quant_mean_reversion": 3_000_000,   # $30k
-         "crypto_meanrev_2163":         3_000_000,   # $30k
+         # crypto_meanrev_2163 removed — T0 incubation bot; no live capital until promoted
      }},
 ]
 

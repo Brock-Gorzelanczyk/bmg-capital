@@ -532,6 +532,17 @@ def run_bot_profile(profile_name: str) -> dict:
             for alloc in allocations:
                 alloc_user_id = alloc.user_id
 
+                # T0 incubation bots must never execute trades — signal-only staging
+                _alloc_tier = getattr(alloc, "tier", None)
+                if _alloc_tier == "T0":
+                    logger.warning(
+                        "[runner:%s] BLOCKED alloc=%d tier=T0 — incubation bots cannot execute; "
+                        "run m004 migration to pause or promote via tier system",
+                        profile_name, alloc.id,
+                    )
+                    _alloc_skip_counts["t0_blocked"] = _alloc_skip_counts.get("t0_blocked", 0) + 1
+                    continue
+
                 # ── FIX B: Daily-loss guardrail check ────────────────────────────
                 try:
                     from app.services.guardrail_checker import check_guardrails

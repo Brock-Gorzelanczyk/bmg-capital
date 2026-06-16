@@ -172,6 +172,14 @@ async def lifespan(app: FastAPI):
     except Exception as _m003_exc:
         logger.warning("[startup] m003_quant_research failed (non-fatal): %s", _m003_exc)
 
+    # Pause T0 incubation bots that incorrectly received capital (crypto_meanrev_2163 et al.)
+    try:
+        from app.db.migrations.m004_pause_t0_violations import run as _run_m004
+        with engine.connect() as _m004_conn:
+            _run_m004(_m004_conn)
+    except Exception as _m004_exc:
+        logger.warning("[startup] m004_pause_t0_violations failed (non-fatal): %s", _m004_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()
