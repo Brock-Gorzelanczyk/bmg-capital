@@ -198,6 +198,7 @@ def _load_strategy_module(strategy_name: str):
     """
     for module_path in (
         f"strategy_lab.strategies.{strategy_name}",
+        f"strategy_lab.strategies.candidates.options.{strategy_name}",
         strategy_name,
     ):
         try:

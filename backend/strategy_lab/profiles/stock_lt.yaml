@@ -32,7 +32,7 @@ universe:
     - TSLA
 scan_lookback_period: "2y"
 confidence_threshold: 0.45
-cadence: "0 10 1-7 * 2"
+cadence: "0 10 * * 2"
 long_only: true
 watchlist:
   rebuild_at: "0 10 1-7 * 2"

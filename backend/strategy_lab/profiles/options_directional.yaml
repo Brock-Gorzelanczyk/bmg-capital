@@ -23,7 +23,7 @@ universe:
     - price_gte: 20
     - adv_gte: 5000000
 scan_lookback_period: "1y"
-cadence: "45 9 * * 1-5"
+cadence: "0,30 10-15 * * 1-5"
 watchlist:
   rebuild_at: "30 9 * * 1-5"
   size: 20

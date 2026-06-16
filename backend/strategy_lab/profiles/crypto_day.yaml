@@ -5,7 +5,7 @@ universe:
   symbols: [BTC/USD, ETH/USD, SOL/USD, DOGE/USD, ADA/USD, AVAX/USD, LINK/USD, AAVE/USD, UNI/USD, OP/USD]
 scan_timeframe: "1h"
 scan_lookback_bars: 500
-cadence: "* * * * *"
+cadence: "*/5 * * * *"
 watchlist:
   rebuild_at: "0 */4 * * *"
   size: 10

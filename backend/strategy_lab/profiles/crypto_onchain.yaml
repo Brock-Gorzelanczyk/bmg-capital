@@ -3,7 +3,7 @@ asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
   symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, LINK/USD]
-cadence: "0 */4 * * *"
+cadence: "30 */4 * * *"
 strategies:
   - mvrv_zscore_accumulation
   - sopr_capitulation_buy

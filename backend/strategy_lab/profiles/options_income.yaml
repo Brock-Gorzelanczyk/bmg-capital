@@ -24,7 +24,7 @@ universe:
     - adv_gte: 1000000
     - iv_rank_gte: 30
 scan_lookback_period: "1y"
-cadence: "0 10 * * 1-5"
+cadence: "0,30 10-15 * * 1-5"
 watchlist:
   rebuild_at: "0 9 * * 1-5"
   size: 20
