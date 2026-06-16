@@ -1219,6 +1219,33 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job resume_check (every 2 min)")
 
+    # ------------------------------------------------------------------
+    # Candidate Pipeline Daemon: 2:30 AM ET daily
+    # Advances CANDIDATE→BACKTEST_DONE→WFA_DONE→SHADOW_PAPER→PROMOTED
+    # ------------------------------------------------------------------
+    def _run_pipeline_daemon():
+        from app.db.session import SessionLocal
+        from strategy_lab.core.pipeline.executor import advance_pipeline
+        db = SessionLocal()
+        try:
+            result = advance_pipeline(db)
+            logger.warning("[pipeline-daemon] run complete: %s", result)
+        except Exception as exc:
+            logger.error("[pipeline-daemon] failed: %s", exc, exc_info=True)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_pipeline_daemon,
+        CronTrigger(hour=2, minute=30, timezone=ET),
+        id="candidate_pipeline_daemon",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job candidate_pipeline_daemon (2:30 AM ET daily)")
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
@@ -1229,5 +1256,6 @@ def setup_bot_scheduler(scheduler) -> None:
         "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp "
         "queen_morning queen_midday queen_close queen_evening "
         "queen_weekend_recap queen_weekly queen_regime_alert_check "
-        "defensive_halt_check resume_check compute_bot_stats macro_classification_daily"
+        "defensive_halt_check resume_check compute_bot_stats macro_classification_daily "
+        "candidate_pipeline_daemon"
     )

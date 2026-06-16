@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -70,6 +70,35 @@ def _candidate_detail(c: StrategyCandidate, db: Session) -> dict:
         .order_by(WfaRun.completed_at.desc())
         .first()
     )
+    # Shadow days: how long this candidate has been in SHADOW_PAPER
+    shadow_days: int | None = None
+    if c.state == "SHADOW_PAPER":
+        shadow_entry = (
+            db.query(CandidateStateHistory)
+            .filter(CandidateStateHistory.candidate_id == c.id, CandidateStateHistory.to_state == "SHADOW_PAPER")
+            .order_by(CandidateStateHistory.created_at.asc())
+            .first()
+        )
+        if shadow_entry:
+            shadow_days = (datetime.now(timezone.utc) - shadow_entry.created_at.replace(tzinfo=timezone.utc)).days
+
+    # Last failure reason: most recent transition that ended in BACKTEST_DONE (WFA fail) or RETIRED
+    last_failure: str | None = None
+    last_gate_fail = (
+        db.query(CandidateStateHistory)
+        .filter(
+            CandidateStateHistory.candidate_id == c.id,
+            CandidateStateHistory.reason.isnot(None),
+            CandidateStateHistory.to_state.in_(["RETIRED", "BACKTEST_DONE", "CANDIDATE"]),
+        )
+        .order_by(CandidateStateHistory.created_at.desc())
+        .first()
+    )
+    if last_gate_fail and last_gate_fail.reason and any(
+        kw in last_gate_fail.reason for kw in ("fail", "Failed", "below", "Too few")
+    ):
+        last_failure = last_gate_fail.reason
+
     return {
         "id": c.id,
         "name": c.name,
@@ -82,6 +111,8 @@ def _candidate_detail(c: StrategyCandidate, db: Session) -> dict:
         "created_at": c.created_at.isoformat(),
         "updated_at": c.updated_at.isoformat(),
         "metadata_json": c.metadata_json,
+        "shadow_days": shadow_days,
+        "last_failure": last_failure,
         "latest_backtest": {
             "job_id": latest_bt.job_id,
             "completed_at": latest_bt.completed_at.isoformat() if latest_bt.completed_at else None,
@@ -199,7 +230,10 @@ class BacktestRequest(BaseModel):
 
 
 @router.post("/{name}/run-backtest")
-def enqueue_backtest(name: str, req: BacktestRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+def enqueue_backtest(
+    name: str, req: BacktestRequest, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+) -> dict:
     c = db.query(StrategyCandidate).filter(StrategyCandidate.name == name).first()
     if not c:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -217,7 +251,19 @@ def enqueue_backtest(name: str, req: BacktestRequest, db: Session = Depends(get_
     )
     db.add(run)
     _transition(db, c, "BACKTEST_QUEUED", reason="enqueued via API", triggered_by=str(current_user.id))
-    return {"job_id": job_id}
+
+    from app.db.session import SessionLocal
+    from strategy_lab.core.pipeline.executor import execute_backtest
+
+    def _run_in_bg(jid: str) -> None:
+        bg_db = SessionLocal()
+        try:
+            execute_backtest(jid, bg_db)
+        finally:
+            bg_db.close()
+
+    background_tasks.add_task(_run_in_bg, job_id)
+    return {"job_id": job_id, "status": "running"}
 
 
 # ── POST /{name}/run-wfa ──────────────────────────────────────────────────────
@@ -229,7 +275,10 @@ class WfaRequest(BaseModel):
 
 
 @router.post("/{name}/run-wfa")
-def enqueue_wfa(name: str, req: WfaRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
+def enqueue_wfa(
+    name: str, req: WfaRequest, background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+) -> dict:
     c = db.query(StrategyCandidate).filter(StrategyCandidate.name == name).first()
     if not c:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -247,7 +296,19 @@ def enqueue_wfa(name: str, req: WfaRequest, db: Session = Depends(get_db), curre
     )
     db.add(run)
     _transition(db, c, "WFA_QUEUED", reason="enqueued via API", triggered_by=str(current_user.id))
-    return {"job_id": job_id}
+
+    from app.db.session import SessionLocal
+    from strategy_lab.core.pipeline.executor import execute_wfa
+
+    def _run_in_bg(jid: str) -> None:
+        bg_db = SessionLocal()
+        try:
+            execute_wfa(jid, bg_db)
+        finally:
+            bg_db.close()
+
+    background_tasks.add_task(_run_in_bg, job_id)
+    return {"job_id": job_id, "status": "running"}
 
 
 # ── GET /{name}/promotion-eval ────────────────────────────────────────────────

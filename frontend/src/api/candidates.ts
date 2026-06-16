@@ -43,6 +43,8 @@ export interface Candidate {
   updated_at: string;
   latest_backtest: LatestBacktest | null;
   latest_wfa: LatestWfa | null;
+  shadow_days: number | null;
+  last_failure: string | null;
 }
 
 export interface StateHistoryEntry {

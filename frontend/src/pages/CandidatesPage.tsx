@@ -271,7 +271,7 @@ export default function CandidatesPage() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-elevated-2)]/40">
-                  {["Name", "State", "Traffic", "Backtest", "WFE", "DSR", "OOS Sharpe", "Gate", "Actions"].map((h) => (
+                  {["Name", "State", "Traffic", "Backtest", "WFE", "DSR", "OOS Sharpe", "Shadow", "Gate", "Actions"].map((h) => (
                     <th key={h} className={cn(
                       "px-4 py-3 font-semibold text-[var(--text-tertiary)] tracking-wider uppercase text-[10px]",
                       h === "Name" || h === "Actions" ? "text-left" : "text-center"
@@ -352,6 +352,24 @@ export default function CandidatesPage() {
                             {fmt(wfa.aggregate_oos_sharpe)}
                           </span>
                         ) : <span className="text-zinc-600">—</span>}
+                      </td>
+
+                      {/* Shadow days */}
+                      <td className="px-4 py-3 text-center">
+                        {c.state === "SHADOW_PAPER" && c.shadow_days != null ? (
+                          <div>
+                            <span className={cn("font-mono font-bold text-[11px]", c.shadow_days >= 63 ? "text-emerald-400" : "text-amber-400")}>
+                              {c.shadow_days}d
+                            </span>
+                            <div className="text-[9px] text-zinc-600">/ 63d</div>
+                          </div>
+                        ) : c.last_failure ? (
+                          <span className="text-[9px] text-rose-400 font-mono leading-tight truncate max-w-[80px] block" title={c.last_failure}>
+                            {c.last_failure.slice(0, 30)}{c.last_failure.length > 30 ? "…" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-600">—</span>
+                        )}
                       </td>
 
                       {/* Gate status (lazy) */}
