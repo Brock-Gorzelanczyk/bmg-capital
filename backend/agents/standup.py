@@ -233,8 +233,9 @@ def _fetch_ground_truth_facts(db: Session) -> dict:
     }
     try:
         from sqlalchemy import text as _text
+        # Positions that are actually open (not closed, not quarantined)
         row = db.execute(_text(
-            "SELECT COUNT(*) FROM bot_positions WHERE status = 'open'"
+            "SELECT COUNT(*) FROM bot_positions WHERE closed_at IS NULL AND quarantined_at IS NULL"
         )).scalar()
         if row is not None:
             facts["open_positions"] = int(row)
@@ -242,13 +243,14 @@ def _fetch_ground_truth_facts(db: Session) -> dict:
         pass
     try:
         from sqlalchemy import text as _text
+        # Distinct bot profiles with at least one enabled allocation
         row = db.execute(_text(
-            "SELECT COUNT(*) FROM bot_allocations WHERE enabled = true"
+            "SELECT COUNT(DISTINCT profile_id) FROM bot_allocations WHERE enabled = 1"
         )).scalar()
         if row is not None:
             facts["active_bot_count"] = int(row)
         row2 = db.execute(_text(
-            "SELECT COUNT(*) FROM bot_allocations WHERE enabled = false"
+            "SELECT COUNT(DISTINCT profile_id) FROM bot_allocations WHERE enabled = 0"
         )).scalar()
         if row2 is not None:
             facts["disabled_bot_count"] = int(row2)
@@ -301,22 +303,39 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
     system_prompt = (
         "You are Brick, portfolio manager at BMG Capital. "
         "You are writing a morning briefing TO Brock (the CIO — the only human in this system). "
-        "The other agents are ALL AI services that you and Brock can query directly via the bus. They are NOT human colleagues Brock can call, email, or meet. "
-        "Your team: Dick (CRO), Rick (Macro Strategist), Nick (Equity Research), Mick (Quant Research), "
-        "Slick (Execution), Vick (Data Quality), Wick (Operations), Patrick (DevOps). Refer to them by name in your synthesis. "
         "\n\n"
-        "When generating 'proposed_actions', actions MUST be directly actionable by Brock as CIO. "
-        "ALLOWED action verbs: 'Review [page or channel]', 'Approve/Reject/Defer [proposal in #queen-proposals]', "
+        "AGENT REALITY: Every other agent — Dick, Nick, Rick, Mick, Slick, Vick, Wick, Patrick — is an AI service "
+        "running on a schedule. They are NOT humans. You CANNOT query them interactively, call them, "
+        "or wait for their replies. Do NOT write phrases like 'I will query Dick', 'pending my query to Nick', "
+        "or 'I must resolve X with Vick'. If you need an agent's output, refer to their most recent "
+        "posted output in their assigned channel. "
+        "\n\n"
+        "AGENT RESPONSIBILITIES (use correct names — do not mix them up):\n"
+        "  Dick (CRO / #risk-alerts) — risk breaches, drawdown, concentration limits, hard caps\n"
+        "  Nick (Equity Research / #research-log) — regime classification, IC health, equity research\n"
+        "  Rick (Macro Strategist / #macro-view) — macro regime, VIX, yield curve, cross-asset signals\n"
+        "  Mick (Quant Research / internal) — WFA pipeline, quant strategy candidates\n"
+        "  Slick (Execution / internal) — fill quality, slippage, trade execution audit\n"
+        "  Vick (Data Quality / #bmg-monitoring) — feed health, data anomalies, signal counts\n"
+        "  Wick (Operations / internal) — position reconciliation, capital accounting\n"
+        "  Patrick (DevOps / internal) — infrastructure, Railway health\n"
+        "\n\n"
+        "DISCORD CHANNEL ROUTING (only reference real channels):\n"
+        "  #risk-alerts — Dick's risk output\n"
+        "  #macro-view — Rick's macro output\n"
+        "  #research-log — Nick's research output\n"
+        "  #bmg-monitoring — Vick's data quality alerts (NOT #data-quality or #data-quality-channel)\n"
+        "  #queen-briefings — Brick's morning brief\n"
+        "  #queen-proposals — allocation proposals awaiting Brock's approval\n"
+        "  #fund-team-chat — team discussion\n"
+        "\n\n"
+        "PROPOSED ACTIONS must be steps Brock can take as CIO. "
+        "ALLOWED: 'Review [channel or page]', 'Approve/Reject/Defer [proposal in #queen-proposals]', "
         "'Pause/Resume [bot_id]', 'Override [hard cap]'. "
-        "FORBIDDEN patterns — NEVER include: 'Schedule a sync with [agent]', 'Escalate to [team]', "
-        "'Call [agent]', 'Email [agent]', 'Convene a meeting'. "
-        "If you want another agent's input, frame it as something YOU will go request via the bus — "
-        "NOT something Brock should coordinate. "
-        "Example: '✓ I will query Dick for regime clarification and post the result in #risk-alerts.' "
-        "        '✗ Brock should schedule a sync with Dick.' "
+        "FORBIDDEN: Any phrase like 'I will query X', 'Schedule a sync', 'Escalate to', 'Call', 'Email'. "
         "\n\n"
-        "GROUND TRUTH FACTS — use these EXACT numbers. Do not estimate, round differently, or substitute other values. "
-        "If a number you need is not listed here, write 'unknown' instead of guessing:\n"
+        "GROUND TRUTH FACTS — use these EXACT numbers. Do not estimate, invent, or round differently. "
+        "Write 'unknown' for any metric not listed here:\n"
         f"{facts_block}"
         "\n\n"
         "Respond ONLY with a valid JSON object with these keys: "
@@ -422,9 +441,9 @@ def _fallback_plan(contributions: list[dict]) -> dict:
 
 def _post_plan(channel_id: str, token: str, plan: dict, contributions: list[dict], db=None) -> bool:
     """Post Queen's synthesized plan to Discord as a rich embed."""
-    now_et = datetime.now(timezone.utc)
-    today_str = now_et.strftime("%Y-%m-%d")
-    time_str = now_et.strftime("%H:%M UTC")
+    now_utc = datetime.now(timezone.utc)
+    today_str = now_utc.strftime("%Y-%m-%d")
+    time_str = now_utc.strftime("%H:%M UTC")
     n = len(contributions)
 
     focus_areas   = plan.get("focus_areas", [])
@@ -460,8 +479,8 @@ def _post_plan(channel_id: str, token: str, plan: dict, contributions: list[dict
         "color":     0x6366F1,
         "description": plan.get("summary", ""),
         "fields":    fields,
-        "footer":    {"text": f"Synthesized from {n} agent contributions · Generated {time_str} ET"},
-        "timestamp": now_et.isoformat(),
+        "footer":    {"text": f"Synthesized from {n} agent contributions · Generated {time_str}"},
+        "timestamp": now_utc.isoformat(),
     }
 
     return _discord_post(channel_id, token, {"embeds": [embed]})
