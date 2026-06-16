@@ -407,30 +407,30 @@ def get_portfolio_snapshot(
             _sleeve_reservations = {}
 
         sleeve_keys = ["stocks", "crypto", "options", "quant"]
-        sleeve_sum = sum(
-            port_snaps[k][1].portfolio_value_cents for k in sleeve_keys if k in port_snaps
-        )
-        # Total reserved capital earmarked across all sleeves
-        total_reserved = sum(_sleeve_reservations.get(k, 0) for k in sleeve_keys)
-        # Effective total = deployed + reserved. This is the true AUM denominator.
-        total_effective = total_value + total_reserved
-        cash_cents = max(0, total_effective - sleeve_sum - total_reserved)
-        cash_pct = round(cash_cents / total_effective * 100, 2) if total_effective > 0 else 100.0
 
-        # Capital allocation percents — use total_effective so %s sum to ≤100%
+        # Compute each sleeve's numerator (deployed + reserved) independently.
+        # Use the SUM of numerators as the denominator — this guarantees
+        # sum(sleeve_pct) == 100% by identity, even if StrategyPortfolio rows
+        # double-count quant bots across the crypto and quant sleeves.
+        sleeve_numerators: dict[str, int] = {}
+        for k in sleeve_keys:
+            deployed = port_snaps[k][1].portfolio_value_cents if k in port_snaps else 0
+            reserved = _sleeve_reservations.get(k, 0)
+            sleeve_numerators[k] = deployed + reserved
+
+        total_aum = sum(sleeve_numerators.values())
+
         def sleeve_pct(key: str) -> float:
-            if total_effective <= 0:
+            if total_aum <= 0:
                 return 0.0
-            deployed = port_snaps[key][1].portfolio_value_cents if key in port_snaps else 0
-            reserved = _sleeve_reservations.get(key, 0)
-            return round((deployed + reserved) / total_effective * 100, 2)
+            return round(sleeve_numerators[key] / total_aum * 100, 2)
 
         capital_allocation = {
             "stocks_pct":  sleeve_pct("stocks"),
             "crypto_pct":  sleeve_pct("crypto"),
             "options_pct": sleeve_pct("options"),
             "quant_pct":   sleeve_pct("quant"),
-            "cash_pct":    cash_pct,
+            "cash_pct":    0.0,
         }
 
         # Per-sleeve breakdown
