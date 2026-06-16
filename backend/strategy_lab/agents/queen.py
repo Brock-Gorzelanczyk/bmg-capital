@@ -415,8 +415,8 @@ def _check_proposal_cooldown(db: Session, proposal_class: str) -> tuple[bool, st
     - approved and executed in the last 6h.
     """
     try:
-        rejection_cutoff = (datetime.now(timezone.utc) - timedelta(hours=_REJECTION_COOLDOWN_HOURS)).isoformat()
-        approval_cutoff  = (datetime.now(timezone.utc) - timedelta(hours=_APPROVAL_COOLDOWN_HOURS)).isoformat()
+        rejection_cutoff = (datetime.now(timezone.utc) - timedelta(hours=_REJECTION_COOLDOWN_HOURS)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+        approval_cutoff  = (datetime.now(timezone.utc) - timedelta(hours=_APPROVAL_COOLDOWN_HOURS)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
 
         rejected = db.execute(
             text("""
@@ -455,8 +455,8 @@ def _check_conflict_veto(db: Session, bot_name: str) -> tuple[bool, str]:
     or Data Quality Watcher has a CRITICAL alert in last 2 hours.
     """
     try:
-        sentinel_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
-        dq_cutoff       = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        sentinel_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+        dq_cutoff       = (datetime.now(timezone.utc) - timedelta(hours=2)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
 
         cro_alert = db.execute(
             text("""
@@ -506,7 +506,7 @@ def _get_bot_allocations(db: Session) -> dict[str, float]:
 def _get_recent_finding_id(db: Session) -> list[int]:
     """Get IDs of researcher findings from last 24h."""
     try:
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
         rows = db.execute(
             text("""
                 SELECT id FROM agent_messages

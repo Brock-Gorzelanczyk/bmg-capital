@@ -84,8 +84,10 @@ def _check_signal_freshness(db: Session) -> dict:
     now = datetime.now(timezone.utc)
     # Skip check on weekends for stock bots
     is_weekend = now.weekday() >= 5
-    # Strip tzinfo so the cutoff string matches naive UTC strings stored in SQLite
-    cutoff = (now - timedelta(hours=SIGNAL_STALE_HOURS)).replace(tzinfo=None).isoformat()
+    # SQLite stores datetimes as "YYYY-MM-DD HH:MM:SS" (space, not T).
+    # isoformat() produces T-separator which sorts AFTER space in ASCII,
+    # making all stored rows appear older than the cutoff → always 0.
+    cutoff = (now - timedelta(hours=SIGNAL_STALE_HOURS)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
     try:
         count = db.execute(text(
             "SELECT COUNT(*) FROM bot_signals WHERE ts >= :c AND (is_test IS NULL OR is_test = 0)"

@@ -177,7 +177,7 @@ def _get_fleet_drawdown_24h(db: Session) -> float:
     Starting capital is estimated as the sum of all active allocation amounts.
     """
     try:
-        since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        since = (datetime.now(timezone.utc) - timedelta(hours=24)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
         row = db.execute(text("""
             SELECT SUM(bt.pnl_cents) as pnl_24h,
                    SUM(COALESCE(ba.capital_cents_within_portfolio, ba.starting_capital_cents, 0)) as starting_capital
