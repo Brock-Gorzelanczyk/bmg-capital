@@ -410,18 +410,20 @@ def get_portfolio_snapshot(
         sleeve_sum = sum(
             port_snaps[k][1].portfolio_value_cents for k in sleeve_keys if k in port_snaps
         )
-        # Reservations consume cash headroom (clamped so cash ≥ 0)
+        # Total reserved capital earmarked across all sleeves
         total_reserved = sum(_sleeve_reservations.get(k, 0) for k in sleeve_keys)
-        cash_cents = max(0, total_value - sleeve_sum - total_reserved)
-        cash_pct = round(cash_cents / total_value * 100, 2) if total_value > 0 else 100.0
+        # Effective total = deployed + reserved. This is the true AUM denominator.
+        total_effective = total_value + total_reserved
+        cash_cents = max(0, total_effective - sleeve_sum - total_reserved)
+        cash_pct = round(cash_cents / total_effective * 100, 2) if total_effective > 0 else 100.0
 
-        # Capital allocation percents — include reservations in sleeve %
+        # Capital allocation percents — use total_effective so %s sum to ≤100%
         def sleeve_pct(key: str) -> float:
-            if total_value <= 0:
+            if total_effective <= 0:
                 return 0.0
             deployed = port_snaps[key][1].portfolio_value_cents if key in port_snaps else 0
             reserved = _sleeve_reservations.get(key, 0)
-            return round((deployed + reserved) / total_value * 100, 2)
+            return round((deployed + reserved) / total_effective * 100, 2)
 
         capital_allocation = {
             "stocks_pct":  sleeve_pct("stocks"),
@@ -435,7 +437,12 @@ def get_portfolio_snapshot(
         by_sleeve: dict = {}
         for key in sleeve_keys:
             if key not in port_snaps:
-                by_sleeve[key] = _empty_sleeve()
+                empty = _empty_sleeve()
+                res = _sleeve_reservations.get(key, 0)
+                empty["starting_capital_cents"] = res
+                empty["current_value_cents"] = res
+                empty["reserved_capital_cents"] = res
+                by_sleeve[key] = empty
                 continue
             _, snap = port_snaps[key]
             bot_ids_in_sleeve = [
@@ -505,8 +512,8 @@ def get_portfolio_snapshot(
         return {
             "as_of":                      datetime.now(timezone.utc).isoformat(),
             "user_id":                    current_user.id,
-            "total_value_cents":          total_value,
-            "total_starting_capital_cents": total_starting,
+            "total_value_cents":          total_effective,
+            "total_starting_capital_cents": total_starting + total_reserved,
             "total_open_positions":       total_open_pos,
             "total_pnl_today_cents":      total_today_pnl,
             "total_pnl_alltime_cents":    total_alltime_pnl,

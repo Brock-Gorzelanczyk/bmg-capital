@@ -94,7 +94,7 @@ function SleeveCard({ sleeveKey, sleeve, bots }: { sleeveKey: string; sleeve: Sl
         </div>
         <div className="text-right">
           <p className="text-sm font-bold font-mono-t tabular-nums text-t-hi">
-            {fmtUsd(sleeve.current_value_cents)}
+            {fmtUsd(sleeve.current_value_cents + (sleeve.reserved_capital_cents ?? 0))}
           </p>
           <p className={cn("text-xs font-mono-t tabular-nums", ret30 >= 0 ? "text-t-green" : "text-t-red")}>
             {ret30 >= 0 ? "+" : ""}{ret30.toFixed(2)}% 30d
