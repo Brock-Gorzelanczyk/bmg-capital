@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, TrendingUp, TrendingDown, Activity, ArrowDownRight, ArrowUpRight, Clock } from "lucide-react";
+import { Clock, ArrowDownRight, ArrowUpRight } from "lucide-react";
 import {
   getPortfolios,
   allocateBot,
@@ -18,19 +18,71 @@ import client from "@/api/client";
 import { cn } from "@/lib/utils";
 import { formatTradeSize } from "@/lib/formatTradeSize";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Per-sleeve accent config ──────────────────────────────────────────────────
 
-function getTradeUnit(symbol: string, assetClass?: string): string {
-  if (symbol.includes("/")) return symbol.split("/")[0];
-  if (assetClass === "options") return "contracts";
-  return "shares";
+const SLEEVE_ACCENT: Record<string, { color: string; glyph: string; label: string }> = {
+  stocks:  { color: "#9fb0cf", glyph: "S", label: "STOCKS" },
+  crypto:  { color: "#f0b35a", glyph: "C", label: "CRYPTO" },
+  options: { color: "#c79bf0", glyph: "O", label: "OPTIONS" },
+  quant:   { color: "#38bdf8", glyph: "Q", label: "QUANT" },
+};
+
+const ASSET_CLASS_ORDER = ["stocks", "crypto", "options", "quant"] as const;
+
+function hexRgba(hex: string, alpha: number): string {
+  const m = hex.replace("#", "");
+  const r = parseInt(m.slice(0, 2), 16);
+  const g = parseInt(m.slice(2, 4), 16);
+  const b = parseInt(m.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
-function formatNotional(qty: number, price: number): string {
-  return `($${(qty * price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+// ── Value colour helpers ──────────────────────────────────────────────────────
+
+function pnlColor(val: number): string {
+  if (val > 0) return "#4ade80";
+  if (val < 0) return "#f87171";
+  return "#7e8e7e";
 }
 
-// ── Portfolio activity API ────────────────────────────────────────────────────
+function fmtUsd(cents: number): string {
+  const usd = Math.abs(cents / 100);
+  const sign = cents >= 0 ? "+" : "-";
+  return `${sign}$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtPct(pct: number): string {
+  const sign = pct >= 0 ? "+" : "";
+  return `${sign}${pct.toFixed(2)}%`;
+}
+
+// ── Bot display names & descriptions ─────────────────────────────────────────
+
+const BOT_META: Record<string, { displayName: string; description: string }> = {
+  stock_swing:                  { displayName: "Stock Swing",           description: "Russell 1000 momentum, 1–30 day holds" },
+  stock_day:                    { displayName: "Stock Day",             description: "Intraday gappers & earnings momentum, EOD flat" },
+  stock_lt:                     { displayName: "Stock Long-Term",       description: "S&P 500 factor model, monthly rebalance" },
+  crypto_swing:                 { displayName: "Crypto Swing",          description: "3–7 day trend follow, majors only" },
+  crypto_day:                   { displayName: "Crypto Day",            description: "Intraday momentum across 28 pairs, 5m candles" },
+  crypto_lt:                    { displayName: "Crypto L-T DCA",        description: "Trend-weighted accumulation, weekly" },
+  crypto_onchain:               { displayName: "Crypto On-Chain",       description: "Whale-flow & DEX signal following" },
+  options_income:               { displayName: "Options Income",        description: "Theta harvest — credit spreads on SPY/QQQ" },
+  options_directional:          { displayName: "Options Directional",   description: "Delta-1 swing — momentum calls & puts" },
+  crypto_quant_aggressive:      { displayName: "Quant Aggressive",      description: "Multi-factor, high turnover · cross-asset" },
+  crypto_quant_scalper:         { displayName: "Quant Scalper",         description: "0DTE micro-cycle · ultra short hold" },
+  crypto_quant_mean_reversion:  { displayName: "Quant Mean Reversion",  description: "Bollinger fade on 1h bands" },
+  crypto_meanrev_2163:          { displayName: "Mean Rev 2163",         description: "Experimental mean-reversion variant, paper-only" },
+};
+
+function resolveName(name: string, fromApi?: string): string {
+  return BOT_META[name]?.displayName ?? fromApi ?? name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function resolveDesc(name: string, fromApi?: string): string {
+  return BOT_META[name]?.description ?? fromApi ?? "";
+}
+
+// ── Portfolio activity ────────────────────────────────────────────────────────
 
 interface TradeRecord {
   id: number;
@@ -50,10 +102,9 @@ function usePortfolioActivity(portfolioId: number | undefined) {
     queryKey: ["portfolio-activity", portfolioId],
     queryFn: () =>
       portfolioId
-        ? client.get<{ trades: TradeRecord[]; total: number }>(
-            `/bots/portfolios/${portfolioId}/activity`,
-            { params: { limit: 40 } }
-          ).then((r) => r.data)
+        ? client
+            .get<{ trades: TradeRecord[]; total: number }>(`/bots/portfolios/${portfolioId}/activity`, { params: { limit: 40 } })
+            .then((r) => r.data)
         : Promise.resolve({ trades: [], total: 0 }),
     enabled: !!portfolioId,
     staleTime: 60_000,
@@ -61,53 +112,29 @@ function usePortfolioActivity(portfolioId: number | undefined) {
   });
 }
 
-// ── Bot metadata ──────────────────────────────────────────────────────────────
-
-const BOT_META: Record<string, { displayName: string; description: string }> = {
-  stock_swing:        { displayName: "Stock Swing",         description: "Russell 1000 momentum, 1–30 day holds" },
-  stock_day:          { displayName: "Stock Day",           description: "Intraday gappers & earnings momentum, EOD flat" },
-  stock_lt:           { displayName: "Stock Long-Term",     description: "S&P 500 factor model, monthly rebalance" },
-  crypto_swing:       { displayName: "Crypto Swing",        description: "Top 20 crypto by mcap, 1–30 day holds" },
-  crypto_day:         { displayName: "Crypto Day",          description: "BTC/ETH/SOL intraday momentum, 8h force-close" },
-  crypto_lt:          { displayName: "Crypto Long-Term",     description: "BTC/ETH + majors, weekly DCA & monthly rebalance" },
-  crypto_onchain:     { displayName: "Crypto On-Chain",     description: "On-chain flow — large wallet moves, DEX volume anomalies, L2 bridge activity" },
-  options_income:     { displayName: "Equity Income",      description: "Equity income — quality stocks, dividend + growth focus" },
-  options_directional:{ displayName: "Equity Directional", description: "Equity directional — tactical momentum & mean-reversion" },
-  crypto_quant_aggressive:   { displayName: "Quant Aggressive",    description: "8-strategy quant stack, 5m bars, 20-coin universe" },
-  crypto_quant_scalper:      { displayName: "Quant Scalper",       description: "1m scalping, 5-strategy ensemble, liquid majors only" },
-  crypto_quant_mean_reversion: { displayName: "Quant Mean Reversion", description: "5m mean-reversion, 6-strategy fade stack, mid-cap alts" },
-  crypto_meanrev_2163:         { displayName: "Mean Rev 2163",        description: "Experimental mean-reversion variant, paper-only deployment" },
-};
-
-function resolveDisplayName(name: string, fromApi?: string): string {
-  return BOT_META[name]?.displayName ?? fromApi ?? name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 // ── Bot card ──────────────────────────────────────────────────────────────────
 
 function BotCard({
   item,
-  portfolioStarting,
+  accent,
   onNavigate,
   snapBot,
 }: {
   item: BotListItem;
-  portfolioStarting: number;
+  accent: string;
   onNavigate: (n: string) => void;
   snapBot?: BotSnap;
 }) {
   const { profile, allocation, stats } = item;
   const qc = useQueryClient();
-  const meta = BOT_META[profile.name];
-  const isEnabled = snapBot ? snapBot.enabled : (allocation?.enabled ?? false);
-  const badge = snapBot ? botStatusBadge(snapBot) : null;
-  const isAdminLocked = snapBot ? snapBot.is_admin_locked : (allocation?.paused_reason === "admin_lock" || allocation?.paused_reason === "health_halt");
-  const ret30 = snapBot ? snapBot.return_30d_pct : (stats?.return_30d_pct ?? 0);
-  const todayPnl = snapBot ? (snapBot.today_pnl_cents / 100) : (stats?.today_pnl ?? 0);
-  const openPositions = stats?.open_positions ?? 0;
 
-  // Capital within portfolio
-  const capitalCents = (item as any).capital_cents_within_portfolio ?? 0;
+  const isEnabled = snapBot ? snapBot.enabled : (allocation?.enabled ?? false);
+  const isAdminLocked = snapBot
+    ? snapBot.is_admin_locked
+    : allocation?.paused_reason === "admin_lock" || allocation?.paused_reason === "health_halt";
+  const ret30 = snapBot ? snapBot.return_30d_pct : (stats?.return_30d_pct ?? 0);
+  const todayPnlUsd = snapBot ? snapBot.today_pnl_cents / 100 : (stats?.today_pnl ?? 0);
+  const openPositions = stats?.open_positions ?? 0;
   const capitalPct = (item as any).capital_pct_within_portfolio ?? allocation?.capital_pct ?? 0;
 
   const allocateMut = useMutation({
@@ -115,83 +142,122 @@ function BotCard({
       allocateBot(profile.name, { capital_pct: allocation?.capital_pct ?? 10, risk_profile: "standard", enabled }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["strategy-portfolios"] });
-      toast.success(isEnabled ? `${resolveDisplayName(profile.name)} disabled` : `${resolveDisplayName(profile.name)} enabled`);
+      toast.success(isEnabled ? `${resolveName(profile.name)} disabled` : `${resolveName(profile.name)} enabled`);
     },
     onError: () => toast.error("Failed to update bot"),
   });
 
   const waitlistMut = useMutation({
-    mutationFn: (join: boolean) => join ? joinWaitlist(profile.name) : leaveWaitlist(profile.name),
+    mutationFn: (join: boolean) => (join ? joinWaitlist(profile.name) : leaveWaitlist(profile.name)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["strategy-portfolios"] }),
   });
 
+  const badge = snapBot ? botStatusBadge(snapBot) : null;
+  const live = isEnabled && !isAdminLocked;
+  const dot = live ? "#4ade80" : "#fbbf24";
+  const dotGlow = live ? "0 0 7px rgba(74,222,128,0.9)" : "none";
+  const cardOpacity = live ? "1" : "0.62";
+
+  // Note line
+  let note = "";
+  if (openPositions === 0 && live) note = "// scanning — positions appear after entry signals";
+  else if (openPositions > 0) note = `${openPositions} position${openPositions !== 1 ? "s" : ""} open`;
+
   return (
     <div
-      className={cn(
-        "bg-zinc-900 border rounded-2xl p-5 flex flex-col gap-4 cursor-pointer transition-all",
-        isEnabled ? "border-zinc-700 hover:border-zinc-600" : "border-zinc-800 opacity-60"
-      )}
       onClick={() => onNavigate(profile.name)}
+      className="flex flex-col gap-0 cursor-pointer transition-all"
+      style={{
+        border: `1px solid ${live ? "rgba(74,222,128,0.14)" : "rgba(74,222,128,0.07)"}`,
+        borderLeft: `3px solid ${accent}`,
+        borderRadius: "6px",
+        background: live ? "#0a100a" : "#080c08",
+        padding: "18px",
+        opacity: cardOpacity,
+      }}
     >
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="font-bold text-white text-sm">{meta?.displayName ?? resolveDisplayName(profile.name)}</p>
-          <p className="text-xs text-zinc-500 mt-0.5">{meta?.description ?? profile.description}</p>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span
+              className="w-[7px] h-[7px] rounded-full flex-shrink-0"
+              style={{ background: dot, boxShadow: dotGlow }}
+            />
+            <span className="font-semibold text-[15px]" style={{ color: live ? "#eafbe9" : "#9fb0a0" }}>
+              {resolveName(profile.name, profile.display_name)}
+            </span>
+          </div>
+          <p className="font-mono text-[11px] leading-relaxed" style={{ color: "#7e8e7e" }}>
+            {resolveDesc(profile.name, profile.description)}
+          </p>
         </div>
         {badge ? (
-          <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ml-2", BADGE_CLASSES[badge.variant])}>
-            {badge.subtitle ?? badge.text}
+          <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded border flex-shrink-0 font-mono tracking-wider", BADGE_CLASSES[badge.variant])}>
+            {badge.text}
           </span>
         ) : (
-          <span className={cn(
-            "text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ml-2",
-            isAdminLocked
-              ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-              : isEnabled
-                ? "bg-lime-500/15 text-lime-400 border-lime-500/30"
-                : "bg-zinc-800 text-zinc-500 border-zinc-700"
-          )}>
-            {isAdminLocked ? "frozen · historical" : isEnabled ? "ACTIVE" : "DISABLED"}
+          <span
+            className="text-[9px] font-mono tracking-[0.08em] rounded border flex-shrink-0 px-2 py-0.5"
+            style={{
+              color: isAdminLocked ? "#fbbf24" : live ? "#4ade80" : "#fbbf24",
+              background: isAdminLocked ? "rgba(251,191,36,0.07)" : live ? "rgba(74,222,128,0.08)" : "rgba(251,191,36,0.07)",
+              borderColor: isAdminLocked ? "rgba(251,191,36,0.3)" : live ? "rgba(74,222,128,0.3)" : "rgba(251,191,36,0.3)",
+            }}
+          >
+            {isAdminLocked ? "FROZEN" : live ? "ACTIVE" : "PAUSED"}
           </span>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 mt-4">
         <div>
-          <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Today P&L</p>
-          <p className={cn("text-sm font-semibold", todayPnl >= 0 ? "text-lime-400" : "text-red-400")}>
-            {todayPnl >= 0 ? "+" : ""}${Math.abs(todayPnl).toFixed(2)}
-          </p>
+          <div className="font-mono text-[9px] tracking-[0.1em]" style={{ color: "#50604f" }}>TODAY P&amp;L</div>
+          <div className="font-mono text-[15px] mt-1" style={{ color: pnlColor(todayPnlUsd) }}>
+            {todayPnlUsd >= 0 ? "+" : ""}${Math.abs(todayPnlUsd).toFixed(2)}
+          </div>
         </div>
         <div>
-          <p className="text-[10px] text-zinc-600 uppercase tracking-wide">30d Return</p>
-          <p className={cn("text-sm font-semibold", ret30 >= 0 ? "text-lime-400" : "text-red-400")}>
-            {ret30 >= 0 ? "+" : ""}{ret30.toFixed(2)}%
-          </p>
+          <div className="font-mono text-[9px] tracking-[0.1em]" style={{ color: "#50604f" }}>30D RETURN</div>
+          <div className="font-mono text-[15px] mt-1" style={{ color: pnlColor(ret30) }}>
+            {fmtPct(ret30)}
+          </div>
         </div>
         <div>
-          <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Open Positions</p>
-          <p className="text-sm font-semibold text-white">{openPositions}</p>
-          {openPositions === 0 && (
-            <p className="text-[9px] text-zinc-600 mt-0.5 leading-tight">Bot is scanning — positions appear after entry signals</p>
-          )}
+          <div className="font-mono text-[9px] tracking-[0.1em]" style={{ color: "#50604f" }}>OPEN POSITIONS</div>
+          <div className="font-mono text-[15px] mt-1" style={{ color: "#dce8dc" }}>{openPositions}</div>
         </div>
         <div>
-          <p className="text-[10px] text-zinc-600 uppercase tracking-wide">Allocated</p>
-          <p className="text-sm font-semibold text-white">
-            {capitalCents
-              ? `$${(capitalCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })} (${capitalPct}%)`
-              : allocation ? `${allocation.capital_pct ?? 10}%` : "—"}
-          </p>
+          <div className="font-mono text-[9px] tracking-[0.1em]" style={{ color: "#50604f" }}>ALLOCATED</div>
+          <div className="font-mono text-[15px] mt-1" style={{ color: "#dce8dc" }}>
+            {capitalPct ? `${capitalPct}%` : allocation ? `${allocation.capital_pct ?? 10}%` : "—"}
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-2 mt-auto" onClick={(e) => e.stopPropagation()}>
-        {isEnabled ? (
+      {/* Note */}
+      <div className="min-h-[18px] mt-3">
+        {note && (
+          <span className="font-mono text-[10px]" style={{ color: "#50604f" }}>
+            {note}
+          </span>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
+        {live ? (
           <button
             onClick={() => allocateMut.mutate(false)}
             disabled={allocateMut.isPending}
-            className="flex-1 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-40"
+            className="flex-1 py-2 text-xs font-medium rounded transition-all disabled:opacity-40"
+            style={{
+              color: "#7e8e7e",
+              background: "#121a12",
+              border: "1px solid rgba(74,222,128,0.14)",
+              fontFamily: "'Space Grotesk', sans-serif",
+            }}
           >
             Disable
           </button>
@@ -199,7 +265,13 @@ function BotCard({
           <button
             onClick={() => allocateMut.mutate(true)}
             disabled={allocateMut.isPending}
-            className="flex-1 py-1.5 rounded-lg bg-lime-500 text-black text-xs font-bold hover:bg-lime-400 transition-colors disabled:opacity-40"
+            className="flex-1 py-2 text-xs font-medium rounded transition-all disabled:opacity-40"
+            style={{
+              color: "#4ade80",
+              background: "transparent",
+              border: "1px solid #4ade80",
+              fontFamily: "'Space Grotesk', sans-serif",
+            }}
           >
             Enable
           </button>
@@ -207,7 +279,13 @@ function BotCard({
         <button
           onClick={() => waitlistMut.mutate(true)}
           disabled={waitlistMut.isPending}
-          className="flex-1 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-40"
+          className="flex-1 py-2 text-xs font-medium rounded transition-all disabled:opacity-40 hover:opacity-80"
+          style={{
+            color: accent,
+            background: "transparent",
+            border: `1px solid ${hexRgba(accent, 0.4)}`,
+            fontFamily: "'Space Grotesk', sans-serif",
+          }}
         >
           Notify when live
         </button>
@@ -216,93 +294,17 @@ function BotCard({
   );
 }
 
-// ── Portfolio detail header ───────────────────────────────────────────────────
-
-function PortfolioHeader({ portfolio }: { portfolio: StrategyPortfolio & Record<string, any> }) {
-  const startingUsd = portfolio.starting_capital_cents / 100;
-  const currentUsd = portfolio.current_value_cents / 100;
-  const pnlUsd = portfolio.pnl_cents / 100;
-  const isPositive = portfolio.pnl_pct >= 0;
-  const todayPnlUsd = ((portfolio as any).today_pnl_cents ?? 0) / 100;
-  const todayPositive = todayPnlUsd >= 0;
-
-  const allComingSoon = portfolio.bots.length > 0 &&
-    portfolio.bots.every((b: any) => b.allocation?.paused_reason === "coming_soon");
-
-  const stats = [
-    { label: "Starting Capital", value: `$${startingUsd.toLocaleString()}` },
-    { label: "Current Value",    value: `$${currentUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { label: "All-Time P&L",     value: `${isPositive ? "+" : "-"}$${Math.abs(pnlUsd).toFixed(2)}`, positive: isPositive, hasSign: true },
-    { label: "All-Time Return",  value: `${isPositive ? "+" : "-"}${Math.abs(portfolio.pnl_pct).toFixed(2)}%`, positive: isPositive, hasSign: true },
-    { label: "Today P&L",        value: `${todayPositive ? "+" : "-"}$${Math.abs(todayPnlUsd).toFixed(2)}`, positive: todayPositive, hasSign: true },
-    { label: "Active Bots",      value: `${portfolio.bots.filter((b: any) => b.allocation?.enabled).length} / ${portfolio.bots.length}` },
-  ];
-
-  return (
-    <div
-      className="rounded-2xl border p-6"
-      style={{ borderColor: portfolio.color_hex + "40", background: portfolio.color_hex + "08" }}
-    >
-      <div className="flex items-center gap-3 mb-5">
-        <span className="text-4xl">{portfolio.emoji}</span>
-        <div>
-          <h1 className="text-2xl font-bold text-white">{portfolio.name} Portfolio</h1>
-          <p className="text-zinc-500 text-sm mt-0.5">
-            {portfolio.bots.length === 0 && (portfolio as any).reserved_capital_cents > 0
-              ? `0 dedicated bots · $${((portfolio as any).reserved_capital_cents / 100).toLocaleString()} reserved for future ${portfolio.asset_class} bots`
-              : `Paper trading · ${portfolio.bots.length} dedicated bot${portfolio.bots.length !== 1 ? "s" : ""} · $${startingUsd.toLocaleString()} starting capital`
-            }
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {["crypto", "quant"].includes(portfolio.asset_class) && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
-              OPEN 24/7
-            </span>
-          )}
-          {isPositive
-            ? <TrendingUp size={20} style={{ color: portfolio.color_hex }} />
-            : <TrendingDown size={20} className="text-red-400" />}
-        </div>
-      </div>
-
-      {allComingSoon ? (
-        <div className="flex items-center gap-3 py-4 px-5 rounded-xl bg-purple-500/10 border border-purple-500/20">
-          <span className="text-2xl">🔧</span>
-          <div>
-            <p className="text-purple-300 font-semibold text-sm">Strategy under construction</p>
-            <p className="text-zinc-500 text-xs mt-0.5">
-              Options strategies are being developed. Live signals will appear here once the scanner ships.
-            </p>
-          </div>
-          <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/30">
-            COMING SOON
-          </span>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {stats.map((s) => (
-            <div key={s.label}>
-              <p className="text-[10px] text-zinc-600 uppercase tracking-wide mb-0.5">{s.label}</p>
-              <p className={cn(
-                "text-lg font-bold",
-                s.hasSign
-                  ? s.positive ? "text-lime-400" : "text-red-400"
-                  : "text-white"
-              )}>
-                {s.value}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Recent Activity ───────────────────────────────────────────────────────────
 
-function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: number; colorHex: string; assetClass: string }) {
+function RecentActivity({
+  portfolioId,
+  accent,
+  assetClass,
+}: {
+  portfolioId: number;
+  accent: string;
+  assetClass: string;
+}) {
   const navigate = useNavigate();
   const { data, isLoading } = usePortfolioActivity(portfolioId);
   const trades = data?.trades ?? [];
@@ -311,7 +313,7 @@ function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: nu
     return (
       <div className="space-y-2">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-10 bg-zinc-900 rounded-xl animate-pulse" />
+          <div key={i} className="h-10 rounded animate-pulse" style={{ background: "#0a100a" }} />
         ))}
       </div>
     );
@@ -319,61 +321,189 @@ function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: nu
 
   if (trades.length === 0) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center">
-        <p className="text-zinc-500 text-sm">
-          {["crypto", "quant"].includes(assetClass)
-            ? `Bots scan continuously. Next scan: within 1 minute.`
-            : "No trades yet. The execution engine runs at market open (Mon–Fri 9:30 AM ET)."}
-        </p>
+      <div
+        className="rounded p-6 text-center font-mono text-[11px]"
+        style={{ border: "1px solid rgba(74,222,128,0.1)", background: "#070d07", color: "#50604f" }}
+      >
+        {["crypto", "quant"].includes(assetClass)
+          ? "Bots scan continuously. Next scan: within 1 minute."
+          : "No trades yet. Execution engine runs at market open (Mon–Fri 9:30 AM ET)."}
       </div>
     );
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-      <div className="divide-y divide-zinc-800">
-        {trades.map((t) => {
-          const isBuy = t.side === "buy";
-          const hasPnl = t.realized_pnl !== null;
-          const pnlPositive = (t.realized_pnl ?? 0) >= 0;
-          const ts = new Date(t.ts);
-          return (
-            <div key={t.id} onClick={() => navigate(`/strategy/trade/${t.id}`)} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-800/50 transition-colors cursor-pointer">
-              <div className={cn(
-                "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
-                isBuy ? "bg-lime-500/15" : "bg-orange-500/15"
-              )}>
-                {isBuy
-                  ? <ArrowUpRight size={13} className="text-lime-400" />
-                  : <ArrowDownRight size={13} className="text-orange-400" />}
+    <div className="rounded overflow-hidden" style={{ border: "1px solid rgba(74,222,128,0.1)", background: "#070d07" }}>
+      {trades.map((t, idx) => {
+        const isBuy = t.side === "buy";
+        const hasPnl = t.realized_pnl !== null;
+        const pnlPositive = (t.realized_pnl ?? 0) >= 0;
+        const ts = new Date(t.ts);
+        return (
+          <div
+            key={t.id}
+            onClick={() => navigate(`/strategy/trade/${t.id}`)}
+            className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-white/[0.02]"
+            style={{ borderBottom: idx < trades.length - 1 ? "1px solid rgba(74,222,128,0.08)" : undefined }}
+          >
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: isBuy ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.10)" }}
+            >
+              {isBuy
+                ? <ArrowUpRight size={13} className="text-lime-400" />
+                : <ArrowDownRight size={13} className="text-red-400" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold" style={{ color: "#eafbe9" }}>{t.symbol}</span>
+                <span
+                  className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase"
+                  style={{
+                    background: isBuy ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
+                    color: isBuy ? "#4ade80" : "#f87171",
+                  }}
+                >
+                  {t.side}
+                </span>
+                <span className="text-[11px] font-mono" style={{ color: "#50604f" }}>{t.bot_display_name}</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-white text-sm font-semibold">{t.symbol}</span>
-                  <span className={cn(
-                    "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase",
-                    isBuy ? "bg-lime-500/10 text-lime-400" : "bg-orange-500/10 text-orange-400"
-                  )}>
-                    {t.side}
+              <p className="text-xs font-mono mt-0.5" style={{ color: "#7e8e7e" }}>
+                {formatTradeSize(t.qty, t.symbol, Math.abs(t.qty) * t.fill_price)}
+                {hasPnl && (
+                  <span className="ml-2 font-semibold" style={{ color: pnlPositive ? "#4ade80" : "#f87171" }}>
+                    · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized
                   </span>
-                  <span className="text-zinc-600 text-xs">{t.bot_display_name}</span>
-                </div>
-                <p className="text-zinc-500 text-xs mt-0.5">
-                  {formatTradeSize(t.qty, t.symbol, Math.abs(t.qty) * t.fill_price)}
-                  {hasPnl && (
-                    <span className={cn("ml-2 font-semibold", pnlPositive ? "text-lime-400" : "text-red-400")}>
-                      · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized
-                    </span>
-                  )}
-                </p>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 text-xs flex-shrink-0 font-mono" style={{ color: "#50604f" }}>
+              <Clock size={10} />
+              <span>{ts.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Hero card ─────────────────────────────────────────────────────────────────
+
+function HeroCard({
+  portfolio,
+  accent,
+  glyph,
+}: {
+  portfolio: StrategyPortfolio & Record<string, any>;
+  accent: string;
+  glyph: string;
+}) {
+  const startingUsd = portfolio.starting_capital_cents / 100;
+  const currentUsd = portfolio.current_value_cents / 100;
+  const pnlUsd = portfolio.pnl_cents / 100;
+  const todayPnlUsd = (portfolio.today_pnl_cents ?? 0) / 100;
+  const activeBots = portfolio.bots.filter((b: any) => b.allocation?.enabled).length;
+  const totalBots = portfolio.bots.length;
+
+  const stats = [
+    { label: "STARTING CAPITAL", value: `$${startingUsd.toLocaleString()}`, color: "#eafbe9" },
+    {
+      label: "CURRENT VALUE",
+      value: `$${currentUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      color: "#eafbe9",
+    },
+    { label: "ALL-TIME P&L", value: fmtUsd(portfolio.pnl_cents ?? 0), color: pnlColor(pnlUsd) },
+    { label: "ALL-TIME RETURN", value: fmtPct(portfolio.pnl_pct ?? 0), color: pnlColor(portfolio.pnl_pct ?? 0) },
+    { label: "TODAY P&L", value: fmtUsd(portfolio.today_pnl_cents ?? 0), color: pnlColor(todayPnlUsd) },
+    { label: "ACTIVE BOTS", value: `${activeBots} / ${totalBots}`, color: accent },
+  ];
+
+  // Simple decorative polyline
+  const pts = Array.from({ length: 17 }, (_, i) => {
+    const x = (i / 16) * 1340;
+    const y = 110 - i * 3.5 + Math.sin(i * 1.2) * 8;
+    return `${x.toFixed(0)},${y.toFixed(0)}`;
+  }).join(" ");
+
+  return (
+    <div
+      className="relative rounded overflow-hidden"
+      style={{
+        border: `1px solid ${hexRgba(accent, 0.28)}`,
+        background: "linear-gradient(180deg,#0a120a,#070d07)",
+        padding: "26px 30px",
+        animation: "bmgGlow 4s ease-in-out infinite",
+      }}
+    >
+      {/* Corner brackets */}
+      {[
+        { top: 10, left: 10, bt: "border-t-[1.5px]", bl: "border-l-[1.5px]", br: undefined, bb: undefined },
+        { top: 10, right: 10, bt: "border-t-[1.5px]", br: "border-r-[1.5px]", bl: undefined, bb: undefined },
+        { bottom: 10, left: 10, bb: "border-b-[1.5px]", bl: "border-l-[1.5px]", bt: undefined, br: undefined },
+        { bottom: 10, right: 10, bb: "border-b-[1.5px]", br: "border-r-[1.5px]", bt: undefined, bl: undefined },
+      ].map((c, i) => (
+        <span
+          key={i}
+          className="absolute w-[18px] h-[18px]"
+          style={{
+            top: c.top, left: (c as any).left, right: (c as any).right, bottom: c.bottom,
+            borderTop: c.bt ? `1.5px solid ${accent}` : undefined,
+            borderLeft: c.bl ? `1.5px solid ${accent}` : undefined,
+            borderRight: (c as any).br ? `1.5px solid ${accent}` : undefined,
+            borderBottom: (c as any).bb ? `1.5px solid ${accent}` : undefined,
+            filter: `drop-shadow(0 0 4px ${hexRgba(accent, 0.6)})`,
+          }}
+        />
+      ))}
+
+      {/* Decorative polyline */}
+      <svg
+        viewBox="0 0 1340 160"
+        preserveAspectRatio="none"
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{ opacity: 0.25 }}
+      >
+        <polyline points={pts} fill="none" stroke={accent} strokeWidth="1.5" opacity="0.6" />
+      </svg>
+
+      <div className="relative">
+        {/* Title */}
+        <div className="flex items-center gap-3 mb-6">
+          <span
+            className="w-11 h-11 rounded flex items-center justify-center font-mono font-bold text-[18px] flex-shrink-0"
+            style={{
+              background: hexRgba(accent, 0.1),
+              border: `1px solid ${hexRgba(accent, 0.35)}`,
+              color: accent,
+            }}
+          >
+            {glyph}
+          </span>
+          <div>
+            <h1 className="text-[26px] font-bold tracking-tight leading-none" style={{ color: "#eafbe9" }}>
+              {portfolio.name} Portfolio
+            </h1>
+            <p className="font-mono text-[11px] mt-1.5" style={{ color: "#7e8e7e" }}>
+              paper trading · {portfolio.bots.length} dedicated bot{portfolio.bots.length !== 1 ? "s" : ""} ·{" "}
+              ${startingUsd.toLocaleString()} starting capital
+            </p>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
+          {stats.map((s) => (
+            <div key={s.label}>
+              <div className="font-mono text-[9px] tracking-[0.12em] mb-1.5" style={{ color: "#7e8e7e" }}>
+                {s.label}
               </div>
-              <div className="flex items-center gap-1 text-zinc-600 text-xs flex-shrink-0">
-                <Clock size={10} />
-                <span>{ts.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              <div className="font-mono text-[20px] font-medium leading-none" style={{ color: s.color }}>
+                {s.value}
               </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -381,13 +511,10 @@ function RecentActivity({ portfolioId, colorHex, assetClass }: { portfolioId: nu
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-const ASSET_CLASS_ORDER = ["stocks", "crypto", "options", "quant"];
-
 export default function PortfolioDetailPage() {
   const { assetClass } = useParams<{ assetClass: string }>();
   const navigate = useNavigate();
 
-  // activity-only: keep getPortfolios for sibling metadata (emoji/color_hex) + RecentActivity portfolioId
   const { data, isLoading } = useQuery({
     queryKey: ["strategy-portfolios"],
     queryFn: getPortfolios,
@@ -401,17 +528,22 @@ export default function PortfolioDetailPage() {
   const portfolios = data?.portfolios ?? [];
   const portfolio = portfolios.find((p) => p.asset_class === assetClass) ?? null;
 
-  const siblings = ASSET_CLASS_ORDER
-    .map((ac) => portfolios.find((p) => p.asset_class === ac))
-    .filter((p): p is StrategyPortfolio => !!p);
+  const siblings = ASSET_CLASS_ORDER.map((ac) => portfolios.find((p) => p.asset_class === ac)).filter(
+    (p): p is StrategyPortfolio => !!p
+  );
+
+  const accentMeta = SLEEVE_ACCENT[assetClass ?? "stocks"] ?? SLEEVE_ACCENT.stocks;
+  const accent = portfolio?.color_hex ?? accentMeta.color;
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-4">
-        <div className="h-8 w-48 bg-zinc-800 rounded animate-pulse" />
-        <div className="h-40 bg-zinc-900 rounded-2xl animate-pulse" />
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-4">
+        <div className="h-8 w-48 rounded animate-pulse" style={{ background: "#0a100a" }} />
+        <div className="h-44 rounded animate-pulse" style={{ background: "#0a100a" }} />
         <div className="grid grid-cols-3 gap-4">
-          {[0, 1, 2].map((i) => <div key={i} className="h-48 bg-zinc-900 rounded-2xl animate-pulse" />)}
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-52 rounded animate-pulse" style={{ background: "#0a100a" }} />
+          ))}
         </div>
       </div>
     );
@@ -419,114 +551,174 @@ export default function PortfolioDetailPage() {
 
   if (!portfolio) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-16 text-center">
-        <p className="text-zinc-500 mb-4">Portfolio not found.</p>
-        <Link to="/strategy" className="text-lime-400 underline">← Back to Strategy Lab</Link>
+      <div className="max-w-5xl mx-auto px-6 py-16 text-center">
+        <p className="font-mono text-sm mb-4" style={{ color: "#7e8e7e" }}>
+          Portfolio not found.
+        </p>
+        <Link to="/strategy" className="text-sm" style={{ color: accent }}>
+          ← Strategy Lab
+        </Link>
       </div>
     );
   }
 
   const portfolioAny = portfolio as any;
 
+  // Enrich with real-time snapshot values
+  const sleeveKey = assetClass as keyof typeof snap.by_sleeve;
+  const sleeve = snap.by_sleeve[sleeveKey];
+  const enriched: any = sleeve
+    ? {
+        ...portfolio,
+        starting_capital_cents:
+          sleeve.starting_capital_cents || sleeve.reserved_capital_cents || portfolioAny.starting_capital_cents,
+        reserved_capital_cents: sleeve.reserved_capital_cents ?? 0,
+        current_value_cents: sleeve.current_value_cents || portfolioAny.current_value_cents,
+        pnl_cents: sleeve.alltime_pnl_cents,
+        pnl_pct: sleeve.alltime_return_pct,
+        today_pnl_cents: sleeve.today_pnl_cents,
+      }
+    : portfolio;
+
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 pb-20 md:pb-6 space-y-6">
-      {/* Back + sibling tabs */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <button
-          onClick={() => navigate("/strategy")}
-          className="flex items-center gap-1.5 text-sm text-t-muted hover:text-t-hi transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Strategy Lab
-        </button>
-        <div className="flex items-center gap-2 ml-auto">
-          {siblings.map((sib) => (
-            <button
-              key={sib.asset_class}
-              onClick={() => navigate(`/strategy/portfolio/${sib.asset_class}`)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
-                sib.asset_class === assetClass
-                  ? "text-t-bg0 font-bold border-transparent"
-                  : "bg-t-bg1 border-t-dim text-t-muted hover:text-t-hi hover:border-t-mid2"
-              )}
-              style={sib.asset_class === assetClass ? { background: sib.color_hex, borderColor: sib.color_hex } : undefined}
+    <>
+      {/* Inline keyframe for hero glow — inserted once */}
+      <style>{`
+        @keyframes bmgGlow {
+          0%,100% { box-shadow: 0 0 24px ${hexRgba(accent, 0.12)}, inset 0 0 26px ${hexRgba(accent, 0.03)}; }
+          50%      { box-shadow: 0 0 38px ${hexRgba(accent, 0.24)}, inset 0 0 30px ${hexRgba(accent, 0.06)}; }
+        }
+      `}</style>
+
+      <div
+        className="min-h-screen pb-24"
+        style={{ background: "#040804", color: "#dce8dc" }}
+      >
+        <div className="max-w-5xl mx-auto px-6 py-5">
+
+          {/* Breadcrumb + sleeve tabs */}
+          <div className="flex items-center gap-4 mb-5">
+            <div className="flex items-center gap-2 font-mono text-[11px]" style={{ color: "#50604f" }}>
+              <button
+                onClick={() => navigate("/strategy")}
+                className="transition-colors hover:opacity-80"
+                style={{ color: "#7e8e7e" }}
+              >
+                Strategy Lab
+              </button>
+              <span>/</span>
+              <span style={{ color: accent }}>{portfolio.name}</span>
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              {siblings.map((sib) => {
+                const sibAccent = SLEEVE_ACCENT[sib.asset_class]?.color ?? sib.color_hex ?? "#4ade80";
+                const isActive = sib.asset_class === assetClass;
+                return (
+                  <button
+                    key={sib.asset_class}
+                    onClick={() => navigate(`/strategy/portfolio/${sib.asset_class}`)}
+                    className="flex items-center gap-1.5 font-mono text-[11px] tracking-[0.06em] rounded transition-all"
+                    style={{
+                      padding: "7px 13px",
+                      color: isActive ? "#040804" : sibAccent,
+                      background: isActive ? sibAccent : "transparent",
+                      border: `1px solid ${isActive ? sibAccent : "rgba(74,222,128,0.16)"}`,
+                    }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-[1px] flex-shrink-0"
+                      style={{ background: isActive ? "#040804" : sibAccent }}
+                    />
+                    {SLEEVE_ACCENT[sib.asset_class]?.label ?? sib.name.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Hero card */}
+          <HeroCard
+            portfolio={enriched}
+            accent={accent}
+            glyph={accentMeta.glyph}
+          />
+
+          {/* Active bots header */}
+          <div className="flex items-center gap-3 mt-7 mb-4">
+            <span className="font-mono text-[11px] tracking-[0.16em]" style={{ color: "#4ade80", opacity: 0.85 }}>
+              // ACTIVE BOTS · {portfolio.bots.length} DEDICATED
+            </span>
+            <span
+              className="flex-1 h-px"
+              style={{ background: "linear-gradient(90deg,rgba(74,222,128,0.22),transparent)" }}
+            />
+          </div>
+
+          {/* Bot grid */}
+          {portfolio.bots.length === 0 ? (
+            <div
+              className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded"
+              style={{ border: "1px dashed rgba(74,222,128,0.1)", background: "rgba(74,222,128,0.02)" }}
             >
-              {sib.emoji} {sib.name}
-            </button>
-          ))}
-        </div>
-      </div>
+              <p className="font-semibold text-sm" style={{ color: "#7e8e7e" }}>No bots configured for this sleeve</p>
+              <p className="font-mono text-xs" style={{ color: "#50604f" }}>
+                Visit{" "}
+                <a href="/candidates" style={{ color: accent }}>
+                  /candidates
+                </a>{" "}
+                to track strategies moving through the pipeline.
+              </p>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "grid gap-4",
+                portfolio.bots.length === 2
+                  ? "grid-cols-1 sm:grid-cols-2"
+                  : portfolio.bots.length >= 4
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                  : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+              )}
+            >
+              {portfolio.bots.map((item) => (
+                <BotCard
+                  key={item.profile.name}
+                  item={item}
+                  accent={accent}
+                  onNavigate={(name) => navigate(`/strategy/${name}`)}
+                  snapBot={snapBotMap[item.profile.name]}
+                />
+              ))}
+            </div>
+          )}
 
-      {/* Portfolio hero — enrich with canonical snapshot values when available */}
-      {(() => {
-        const sleeveKey = assetClass as keyof typeof snap.by_sleeve;
-        const sleeve = snap.by_sleeve[sleeveKey];
-        const enriched = sleeve ? {
-          ...portfolio,
-          // Use reserved_capital_cents when sleeve has no bots yet (e.g. options pre-launch)
-          starting_capital_cents: sleeve.starting_capital_cents
-            || sleeve.reserved_capital_cents
-            || (portfolio as any).starting_capital_cents,
-          reserved_capital_cents: sleeve.reserved_capital_cents ?? 0,
-          current_value_cents: sleeve.current_value_cents || (portfolio as any).current_value_cents,
-          pnl_cents: sleeve.alltime_pnl_cents,
-          pnl_pct: sleeve.alltime_return_pct,
-          today_pnl_cents: sleeve.today_pnl_cents,
-        } : portfolio;
-        return <PortfolioHeader portfolio={enriched as any} />;
-      })()}
-
-      {/* Bot grid */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Activity size={14} style={{ color: portfolio.color_hex }} />
-          <h2 className="text-sm font-semibold text-zinc-300">Active Bots</h2>
-        </div>
-        {portfolio.bots.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center border border-dashed border-zinc-800 rounded-xl bg-zinc-900/30">
-            <p className="text-zinc-400 font-semibold text-sm">No active bots in this sleeve</p>
-            <p className="text-zinc-600 text-xs max-w-xs">
-              Real options bots are being built as candidates.
-              Visit <a href="/candidates" className="text-blue-400 hover:underline">/candidates</a> to track their progress through the pipeline.
-            </p>
-          </div>
-        ) : (
-          <div className={cn(
-            "grid gap-4",
-            portfolio.bots.length === 2
-              ? "grid-cols-1 sm:grid-cols-2"
-              : portfolio.bots.length === 4
-                ? "grid-cols-2 lg:grid-cols-4"
-                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-          )}>
-            {portfolio.bots.map((item) => (
-              <BotCard
-                key={item.profile.name}
-                item={item}
-                portfolioStarting={portfolio.starting_capital_cents}
-                onNavigate={(name) => navigate(`/strategy/${name}`)}
-                snapBot={snapBotMap[item.profile.name]}
+          {/* Recent trades */}
+          {portfolioAny.id && (
+            <>
+              <div className="flex items-center gap-3 mt-8 mb-4">
+                <span className="font-mono text-[11px] tracking-[0.16em]" style={{ color: accent, opacity: 0.85 }}>
+                  // RECENT TRADES
+                </span>
+                <span
+                  className="flex-1 h-px"
+                  style={{ background: `linear-gradient(90deg,${hexRgba(accent, 0.22)},transparent)` }}
+                />
+              </div>
+              <RecentActivity
+                portfolioId={portfolioAny.id}
+                accent={accent}
+                assetClass={portfolio.asset_class}
               />
-            ))}
-          </div>
-        )}
-      </div>
+            </>
+          )}
 
-      {/* Recent Activity */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Clock size={14} style={{ color: portfolio.color_hex }} />
-          <h2 className="text-sm font-semibold text-zinc-300">Recent Trades</h2>
-          <span className="text-xs text-zinc-600 ml-1">— every P&L dollar backed by a trade</span>
+          {/* Footer */}
+          <p className="font-mono text-[10px] mt-8" style={{ color: "#50604f" }}>
+            Paper trading only. Not investment advice. Not a registered investment adviser.
+          </p>
         </div>
-        <RecentActivity portfolioId={portfolioAny.id} colorHex={portfolio.color_hex} assetClass={portfolio.asset_class} />
       </div>
-
-      {/* Footer */}
-      <p className="text-xs text-zinc-600 pt-4">
-        Paper trading only. Not investment advice. Not a registered investment adviser.
-      </p>
-    </div>
+    </>
   );
 }
