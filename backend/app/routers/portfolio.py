@@ -438,10 +438,7 @@ def get_portfolio_snapshot(
         for key in sleeve_keys:
             if key not in port_snaps:
                 empty = _empty_sleeve()
-                res = _sleeve_reservations.get(key, 0)
-                empty["starting_capital_cents"] = res
-                empty["current_value_cents"] = res
-                empty["reserved_capital_cents"] = res
+                empty["reserved_capital_cents"] = _sleeve_reservations.get(key, 0)
                 by_sleeve[key] = empty
                 continue
             _, snap = port_snaps[key]
@@ -512,8 +509,8 @@ def get_portfolio_snapshot(
         return {
             "as_of":                      datetime.now(timezone.utc).isoformat(),
             "user_id":                    current_user.id,
-            "total_value_cents":          total_effective,
-            "total_starting_capital_cents": total_starting + total_reserved,
+            "total_value_cents":          total_value,
+            "total_starting_capital_cents": total_starting,
             "total_open_positions":       total_open_pos,
             "total_pnl_today_cents":      total_today_pnl,
             "total_pnl_alltime_cents":    total_alltime_pnl,
