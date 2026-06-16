@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone, date
 from typing import Optional
 
@@ -95,65 +96,89 @@ def _post_discord(token: str, channel_id: str, embed: dict) -> bool:
         return False
 
 
+def _yf_fetch_with_retry(fn, label: str, retries: int = 3, backoff: float = 2.0):
+    """Call fn(), retry up to `retries` times with `backoff` seconds between attempts."""
+    last_exc = None
+    for attempt in range(1, retries + 1):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            logger.warning("[macro_strategist] %s attempt %d/%d failed: %s", label, attempt, retries, exc)
+            if attempt < retries:
+                time.sleep(backoff)
+    logger.error("[macro_strategist] %s gave up after %d attempts: %s", label, retries, last_exc)
+    return None
+
+
 def _fetch_yfinance_indicators() -> dict:
     """
     Fetch VIX and SPY trend directly from Yahoo Finance.
-    Logs clearly on any failure so missing data is never silent.
+    Each fetch gets 3 attempts with 2s backoff. Missing data is never silent.
+    Returns empty dict if all fetches fail — caller must guard against null records.
     """
     result: dict = {}
     try:
         import yfinance as yf
 
-        # ── VIX ──────────────────────────────────────────────────────────────
-        try:
+        # ── VIX via fast_info (3 retries) ────────────────────────────────────
+        logger.info("[regime] Fetching ^VIX from yfinance (fast_info, 3 retries)")
+        def _vix_fast():
             vix_info = yf.Ticker("^VIX").fast_info
-            vix_val = getattr(vix_info, "last_price", None)
-            if vix_val is not None:
-                result["vix"] = round(float(vix_val), 2)
-                logger.info("[macro_strategist] yfinance ^VIX=%.2f (fast_info)", result["vix"])
-            else:
-                logger.warning("[macro_strategist] yfinance ^VIX fast_info returned None — trying history fallback")
-        except Exception as exc:
-            logger.warning("[macro_strategist] ^VIX fast_info failed: %s — trying history fallback", exc)
+            val = getattr(vix_info, "last_price", None)
+            if val is None:
+                raise ValueError("fast_info.last_price is None")
+            return round(float(val), 2)
 
-        # Fallback: pull VIX from recent 5-day history if fast_info failed
-        if "vix" not in result:
-            try:
-                vix_hist = yf.Ticker("^VIX").history(period="5d", auto_adjust=False)
-                if not vix_hist.empty:
-                    vix_val = float(vix_hist["Close"].iloc[-1])
-                    result["vix"] = round(vix_val, 2)
-                    logger.info("[macro_strategist] yfinance ^VIX=%.2f (history fallback)", result["vix"])
-                else:
-                    logger.warning("[macro_strategist] ^VIX history also returned empty — VIX unavailable from yfinance")
-            except Exception as exc2:
-                logger.warning("[macro_strategist] ^VIX history fallback failed: %s", exc2)
+        vix_val = _yf_fetch_with_retry(_vix_fast, "^VIX fast_info")
+        if vix_val is not None:
+            result["vix"] = vix_val
+            logger.info("[regime] ^VIX=%.2f (fast_info)", vix_val)
+        else:
+            # Fallback: 5-day history (3 retries)
+            logger.warning("[regime] ^VIX fast_info failed — trying history fallback")
+            def _vix_hist():
+                hist = yf.Ticker("^VIX").history(period="5d", auto_adjust=False)
+                if hist.empty:
+                    raise ValueError("^VIX history returned empty DataFrame")
+                return round(float(hist["Close"].iloc[-1]), 2)
 
-        # ── SPY vs 200-day MA → trend_regime ─────────────────────────────────
-        try:
-            spy_hist = yf.Ticker("SPY").history(period="250d", auto_adjust=True)
-            if spy_hist.empty:
-                logger.warning("[macro_strategist] SPY history returned empty DataFrame — Yahoo Finance may be rate-limiting or blocking")
-            elif len(spy_hist) < 200:
-                logger.warning("[macro_strategist] SPY history only %d rows (need 200)", len(spy_hist))
+            vix_hist_val = _yf_fetch_with_retry(_vix_hist, "^VIX history")
+            if vix_hist_val is not None:
+                result["vix"] = vix_hist_val
+                logger.info("[regime] ^VIX=%.2f (history fallback)", vix_hist_val)
             else:
-                spy_close = float(spy_hist["Close"].iloc[-1])
-                ma200 = float(spy_hist["Close"].rolling(200).mean().iloc[-1])
-                ratio = spy_close / ma200
-                result["spy_price"] = round(spy_close, 2)
-                result["spx_200ma_ratio"] = round(ratio, 4)
-                if ratio >= 1.02:
-                    result["trend_regime"] = "bull_trending"
-                elif ratio <= 0.98:
-                    result["trend_regime"] = "bear_trending"
-                else:
-                    result["trend_regime"] = "choppy"
-                logger.info(
-                    "[macro_strategist] SPY=%.2f 200MA=%.2f ratio=%.4f trend=%s",
-                    spy_close, ma200, ratio, result["trend_regime"],
-                )
-        except Exception as exc:
-            logger.warning("[macro_strategist] SPY/trend fetch failed: %s", exc)
+                logger.error("[regime] ^VIX unavailable from yfinance — both fast_info and history failed")
+
+        # ── SPY vs 200-day MA → trend_regime (3 retries) ─────────────────────
+        logger.info("[regime] Fetching SPY 250d history for 200MA trend")
+        def _spy_hist():
+            hist = yf.Ticker("SPY").history(period="250d", auto_adjust=True)
+            if hist.empty:
+                raise ValueError("SPY history returned empty DataFrame")
+            if len(hist) < 200:
+                raise ValueError(f"SPY history only {len(hist)} rows (need 200)")
+            return hist
+
+        spy_df = _yf_fetch_with_retry(_spy_hist, "SPY history")
+        if spy_df is not None:
+            spy_close = float(spy_df["Close"].iloc[-1])
+            ma200 = float(spy_df["Close"].rolling(200).mean().iloc[-1])
+            ratio = spy_close / ma200
+            result["spy_price"] = round(spy_close, 2)
+            result["spx_200ma_ratio"] = round(ratio, 4)
+            if ratio >= 1.02:
+                result["trend_regime"] = "bull_trending"
+            elif ratio <= 0.98:
+                result["trend_regime"] = "bear_trending"
+            else:
+                result["trend_regime"] = "choppy"
+            logger.info(
+                "[regime] SPY=%.2f 200MA=%.2f ratio=%.4f trend=%s",
+                spy_close, ma200, ratio, result["trend_regime"],
+            )
+        else:
+            logger.error("[regime] SPY trend unavailable — yfinance failed after all retries")
 
     except ImportError:
         logger.warning("[macro_strategist] yfinance not installed — skipping live fetch")
@@ -355,8 +380,20 @@ def run_macro_classification(db: Session) -> dict:
     logger.info("[macro_strategist] Running regime classification")
 
     indicators = _read_live_indicators(db)
-    if not indicators:
-        logger.warning("[macro_strategist] No live indicators available")
+
+    # Guard: if both VIX and trend are missing, all sources failed — do not write a null record
+    if indicators.get("vix") is None and indicators.get("trend_regime") is None:
+        logger.error(
+            "[regime] All data sources failed (VIX=None, trend=None) — "
+            "skipping snapshot write. Gaps are better than null records."
+        )
+        return {
+            "regime":         "unknown",
+            "snapshot_saved": False,
+            "skipped":        True,
+            "reason":         "all fetch sources returned None",
+            "classified_at":  started.isoformat(),
+        }
 
     prev_regime = _read_yesterday_regime(db)
     regime, confidence, signals = _classify_regime(indicators)
