@@ -66,7 +66,7 @@ def generate_signals(bars: dict, profile_config: dict, regime: dict) -> List[Sig
         logger.info("[0dte_spx] skipping — likely FOMC/CPI week")
         return []
 
-    if not _within_entry_window():
+    if not profile_config.get("backtesting") and not _within_entry_window():
         logger.debug("[0dte_spx] outside 9:35–9:50 ET entry window")
         return []
 

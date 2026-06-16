@@ -130,7 +130,8 @@ def generate_signals(bars: dict, profile_config: dict, regime: dict) -> List[Sig
     if ivr is None or ivr < _POST_IVR_MIN:
         return []
 
-    universe = profile_config.get("universe", {}).get("symbols", _EARNINGS_UNIVERSE)
+    _u = profile_config.get("universe", _EARNINGS_UNIVERSE)
+    universe = _u.get("symbols", _EARNINGS_UNIVERSE) if isinstance(_u, dict) else list(_u)
     out: List[Signal] = []
     for symbol in universe:
         sym_bars = bars.get(symbol, [])

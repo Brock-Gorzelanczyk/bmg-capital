@@ -109,20 +109,34 @@ def _download(symbols: list[str], start: str, end: str) -> dict[str, pd.DataFram
     return out
 
 
+OPTIONS_HOLD_DAYS: int = 21     # max hold for short-vol / credit positions
+OPTIONS_STOP_PCT: float = 0.05   # 5% underlying move = condor breach
+OPTIONS_TARGET_PCT: float = 0.15  # 15% underlying fall = take-profit for short
+
+
 @dataclass
 class _Pos:
     symbol: str; entry_date: date; entry_price: float; shares: float
     stop_price: float; target_price: float
     exit_date: Optional[date] = None; exit_price: Optional[float] = None
     exit_reason: Optional[str] = None
+    short: bool = False
 
     @property
     def pnl(self) -> float:
-        return 0.0 if self.exit_price is None else (self.exit_price - self.entry_price) * self.shares
+        if self.exit_price is None:
+            return 0.0
+        if self.short:
+            return (self.entry_price - self.exit_price) * self.shares
+        return (self.exit_price - self.entry_price) * self.shares
 
     @property
     def pnl_pct(self) -> float:
-        return 0.0 if self.exit_price is None else (self.exit_price - self.entry_price) / self.entry_price * 100.0
+        if self.exit_price is None:
+            return 0.0
+        if self.short:
+            return (self.entry_price - self.exit_price) / self.entry_price * 100.0
+        return (self.exit_price - self.entry_price) / self.entry_price * 100.0
 
 
 def _precompute_bars(price_data: dict[str, pd.DataFrame]) -> dict[str, list[dict]]:
@@ -170,12 +184,21 @@ def _simulate(
             current = close_arr[ri]
             days_held = (dt_date - pos.entry_date).days
             reason: Optional[str] = None
-            if current <= pos.stop_price:
-                reason = "stop"
-            elif current >= pos.target_price:
-                reason = "target"
-            elif days_held >= MAX_HOLD_DAYS:
-                reason = "time"
+            max_hold = OPTIONS_HOLD_DAYS if pos.short else MAX_HOLD_DAYS
+            if pos.short:
+                if current >= pos.stop_price:   # underlying moved up past stop
+                    reason = "stop"
+                elif current <= pos.target_price:  # underlying fell to target
+                    reason = "target"
+                elif days_held >= max_hold:
+                    reason = "time"
+            else:
+                if current <= pos.stop_price:
+                    reason = "stop"
+                elif current >= pos.target_price:
+                    reason = "target"
+                elif days_held >= max_hold:
+                    reason = "time"
             if reason:
                 try:
                     cost = cost_per_trade(pos.symbol, "sell", pos.shares, current, exchange)
@@ -188,7 +211,11 @@ def _simulate(
                 pos.exit_date = dt_date
                 pos.exit_price = exit_net
                 pos.exit_reason = reason
-                cash += exit_net * pos.shares
+                if pos.short:
+                    # return margin + P&L: cash posted was entry*shares, now recoup (2*entry - exit)*shares
+                    cash += (2.0 * pos.entry_price - exit_net) * pos.shares
+                else:
+                    cash += exit_net * pos.shares
                 held.discard(pos.symbol)
                 closed_trades.append(pos)
             else:
@@ -204,8 +231,9 @@ def _simulate(
                 signals = []
 
             for sig in signals:
-                if sig.side != "buy":
+                if sig.side not in ("buy", "sell", "short"):
                     continue
+                is_short = sig.side in ("sell", "short")
                 if sig.symbol in held:
                     continue
                 if len(open_positions) >= MAX_POSITIONS:
@@ -248,14 +276,26 @@ def _simulate(
                 if actual_cost > cash:
                     continue
 
-                pos = _Pos(
-                    symbol=sig.symbol,
-                    entry_date=next_entry_date,
-                    entry_price=entry_net,
-                    shares=shares,
-                    stop_price=entry_net * (1.0 + STOP_PCT),
-                    target_price=entry_net * (1.0 + TARGET_PCT),
-                )
+                if is_short:
+                    pos = _Pos(
+                        symbol=sig.symbol,
+                        entry_date=next_entry_date,
+                        entry_price=entry_net,
+                        shares=shares,
+                        stop_price=entry_net * (1.0 + OPTIONS_STOP_PCT),
+                        target_price=entry_net * (1.0 - OPTIONS_TARGET_PCT),
+                        short=True,
+                    )
+                else:
+                    pos = _Pos(
+                        symbol=sig.symbol,
+                        entry_date=next_entry_date,
+                        entry_price=entry_net,
+                        shares=shares,
+                        stop_price=entry_net * (1.0 + STOP_PCT),
+                        target_price=entry_net * (1.0 + TARGET_PCT),
+                        short=False,
+                    )
                 cash -= actual_cost
                 open_positions.append(pos)
                 held.add(sig.symbol)
@@ -265,7 +305,11 @@ def _simulate(
             close_arr = sym_close.get(pos.symbol)
             ri = sym_index.get(pos.symbol, {}).get(dt)
             if close_arr is not None and ri is not None:
-                open_value += close_arr[ri] * pos.shares
+                current_price = close_arr[ri]
+                if pos.short:
+                    open_value += (2.0 * pos.entry_price - current_price) * pos.shares
+                else:
+                    open_value += current_price * pos.shares
             else:
                 open_value += pos.entry_price * pos.shares
         equity_curve.append(cash + open_value)
@@ -397,7 +441,9 @@ def run_backtest(
         raise RuntimeError(f"Simulation produced no equity data for '{strategy_name}'")
 
     # Trim equity curve to the requested start_date
-    ref_df = price_data.get(_SPY) or next(iter(price_data.values()))
+    ref_df = price_data.get(_SPY)
+    if ref_df is None:
+        ref_df = next(iter(price_data.values()))
     signal_mask = ref_df.index >= pd.Timestamp(start_date)
     n_signal = int(signal_mask.sum())
     if len(equity_curve) > n_signal:
