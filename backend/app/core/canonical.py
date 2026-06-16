@@ -298,8 +298,31 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         .count()
     )
 
-    # Equity curve: no longer sourced from BotDailyPnL simulation rows
+    # Equity curve: built from sell-side trades, bucketed by date
     equity_curve: list = []
+    if all_trades:
+        daily_pnl: dict[str, int] = {}
+        _buy_price_by_sym: dict[str, float] = {}
+        for t in all_trades:
+            if t.side.lower() in ("buy", "open", "short"):
+                _buy_price_by_sym[t.symbol] = t.fill_price_cents
+        for t in all_trades:
+            s = t.side.lower()
+            if s not in ("sell", "close", "cover"):
+                continue
+            avg = pos_cost_map.get(t.position_id) if t.position_id else None
+            if avg is None:
+                avg = _buy_price_by_sym.get(t.symbol, t.fill_price_cents)
+            if s == "cover":
+                pnl = int((avg - t.fill_price_cents) * t.qty) - int(t.fees_cents or 0)
+            else:
+                pnl = int((t.fill_price_cents - avg) * t.qty) - int(t.fees_cents or 0)
+            d_key = (t.ts.date() if hasattr(t.ts, "date") else t.ts).isoformat()
+            daily_pnl[d_key] = daily_pnl.get(d_key, 0) + pnl
+        running = starting_capital_cents
+        for d_key in sorted(daily_pnl):
+            running += daily_pnl[d_key]
+            equity_curve.append({"date": d_key, "portfolio": round(running / 100, 2), "benchmark": 0})
 
     capital_within = int(alloc.capital_cents_within_portfolio or 0)
 
