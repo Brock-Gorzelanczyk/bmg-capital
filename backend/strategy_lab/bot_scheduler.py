@@ -64,7 +64,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: run_bot_profile("stock_swing"),
-        CronTrigger(day_of_week="mon-fri", hour=16, minute=5, timezone=ET),
+        CronTrigger(day_of_week="mon-fri", hour=15, minute=50, timezone=ET),
         id="bot_stock_swing",
         replace_existing=True,
     )

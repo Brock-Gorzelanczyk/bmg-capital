@@ -39,7 +39,8 @@ universe:
     - adv_gte: 10000000
 scan_lookback_period: "1y"
 confidence_threshold: 0.45
-cadence: "5 16 * * 1-5"
+cadence: "50 15 * * 1-5"
+long_only: true
 watchlist:
   rebuild_at: "5 16 * * 1-5"
   size: 100

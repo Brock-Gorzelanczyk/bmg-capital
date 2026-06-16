@@ -595,6 +595,14 @@ def run_bot_profile(profile_name: str) -> dict:
                     if sig.side == "hold":
                         continue
 
+                    # Long-only bots: skip sell/short signals unless we already hold the position
+                    if profile.get("long_only") and sig.side in ("sell", "short") and sig.symbol not in open_symbols:
+                        logger.info(
+                            "[runner:%s] SKIP short %s — long_only=true and not holding",
+                            profile_name, sig.symbol,
+                        )
+                        continue
+
                     # sell signals now route to the short execution path in _execute_signal.
 
                     # 10-pre. Extended-hours session filter (equities only).
