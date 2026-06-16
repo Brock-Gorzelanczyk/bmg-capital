@@ -486,7 +486,7 @@ def setup_bot_scheduler(scheduler) -> None:
         try:
             from app.services.discord_public import post_monthly_recap
             from app.db.session import SessionLocal
-            from app.db.models.bots import BotSignal, BotDailyPnL
+            from app.db.models.bots import BotSignal, BotDailyPnL, BotTrade
             from datetime import date
             import calendar
 
@@ -514,10 +514,15 @@ def setup_bot_scheduler(scheduler) -> None:
                     (r.realized_cents or 0) + (r.unrealized_cents or 0)
                     for r in pnl_rows
                 )
+                trades = db.query(BotTrade).filter(
+                    BotTrade.side == "sell",
+                    func.date(BotTrade.ts) >= first_prev,
+                    func.date(BotTrade.ts) <= last_prev,
+                ).count()
                 post_monthly_recap({
                     "month_name": first_prev.strftime("%B %Y"),
                     "signals":    signals,
-                    "trades":     0,  # TODO: wire bot_trades table
+                    "trades":     trades,
                     "pnl_cents":  pnl_cents,
                 })
             finally:
@@ -717,7 +722,6 @@ def setup_bot_scheduler(scheduler) -> None:
 
     # ------------------------------------------------------------------
     # tsmom_multi_asset: Friday 5PM ET weekly rebalance
-    # Moskowitz, Ooi & Pedersen (2012) TSMOM — 12 ETFs + crypto, inv-vol.
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: _run_and_log("tsmom_multi_asset"),
@@ -730,8 +734,7 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
-    # quality_factor: first Tuesday of month 10:30 AM ET (quarterly logic in strategy)
-    # Novy-Marx (2013) Gross Profitability proxy — top quintile SP500.
+    # quality_factor: first Tuesday of month 10:30 AM ET
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: _run_and_log("quality_factor"),
@@ -744,8 +747,7 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
-    # value_quality: first Tuesday of month 11 AM ET (same as quality_factor, staggered)
-    # AQR QMJ-style value + quality combo — top decile SP500.
+    # value_quality: first Tuesday of month 11 AM ET
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: _run_and_log("value_quality"),
@@ -759,7 +761,6 @@ def setup_bot_scheduler(scheduler) -> None:
 
     # ------------------------------------------------------------------
     # crypto_meanrev_2163: every 4 hours, 24/7
-    # 21-63 day mean reversion on top-20 crypto via 30d z-score.
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: _run_and_log("crypto_meanrev_2163"),
@@ -772,11 +773,15 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
-    # earnings_nlp: 9AM ET daily Mon-Fri
-    # BLOCKED stub — will be no-op until transcript feed is wired.
+    # earnings_nlp: 9AM ET daily Mon-Fri (BLOCKED stub)
     # ------------------------------------------------------------------
+    def _earnings_nlp_guarded():
+        if not os.getenv("ENABLE_EARNINGS_NLP"):
+            return
+        _run_and_log("earnings_nlp")
+
     scheduler.add_job(
-        lambda: _run_and_log("earnings_nlp"),
+        _earnings_nlp_guarded,
         CronTrigger(day_of_week="mon-fri", hour=9, minute=0, timezone=ET),
         id="bot_earnings_nlp",
         replace_existing=True,
@@ -785,6 +790,104 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
 
+    # ------------------------------------------------------------------
+    # Regime refresher: every 30 minutes, 24/7
+    # Fetches live VIX (VIXY proxy), SPY 200d trend, BTC dominance,
+    # BTC perp funding rate → persists RegimeSnapshot to DB.
+    # This is what keeps researcher.py's regime data current.
+    # ------------------------------------------------------------------
+    def _run_regime_refresh():
+        try:
+            from app.db.session import SessionLocal
+            from strategy_lab.core.regime_detector import get_regime
+            db = SessionLocal()
+            try:
+                get_regime(db)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("[regime-refresh] failed: %s", exc)
+
+    scheduler.add_job(
+        _run_regime_refresh,
+        CronTrigger(minute="*/30"),
+        id="regime_refresh",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job regime_refresh (every 30 min)")
+
+    # ------------------------------------------------------------------
+    # Bot performance stats rollup: 2:00 AM ET daily
+    # Computes Sharpe, win rate, max drawdown, profit factor per bot
+    # → writes BotPerformanceStats + triggers tier promotions/demotions.
+    # This is what keeps researcher.py's performance data current.
+    # ------------------------------------------------------------------
+    def _run_compute_bot_stats():
+        try:
+            from app.jobs.compute_bot_stats import run as run_stats
+            result = run_stats()
+            logger.warning(
+                "[compute-bot-stats] done — processed=%d promoted=%d demoted=%d errors=%d",
+                result.get("processed", 0), result.get("promoted", 0),
+                result.get("demoted", 0), result.get("errors", 0),
+            )
+        except Exception as exc:
+            logger.error("[compute-bot-stats] failed: %s", exc)
+
+    scheduler.add_job(
+        _run_compute_bot_stats,
+        CronTrigger(hour=2, minute=0, timezone=ET),
+        id="compute_bot_stats",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job compute_bot_stats (2:00 AM ET daily)")
+
+    # ------------------------------------------------------------------
+    # Queen Agent — 4 posts per day to #dev-log
+    #   morning  07:00 AM ET  Intelligence brief (regime, IC, directives)
+    #   midday   12:00 PM ET  Intraday pulse (P&L so far, signals)
+    #   close    04:30 PM ET  EOD report (full day P&L, winners/losers)
+    #   evening  09:00 PM ET  Crypto/overnight watch (24/7 — covers crypto)
+    # ------------------------------------------------------------------
+    def _make_queen_job(session_name: str):
+        def _job():
+            from app.db.session import SessionLocal
+            from strategy_lab.agents.queen import run_queen_daily
+            db = SessionLocal()
+            try:
+                run_queen_daily(db, session=session_name)
+            except Exception as exc:
+                logger.error("[queen-%s] job failed: %s", session_name, exc)
+            finally:
+                db.close()
+        _job.__name__ = f"_queen_{session_name}"
+        return _job
+
+    _queen_schedules = [
+        ("morning", dict(day_of_week="mon-fri", hour=7,  minute=0,  timezone=ET)),
+        ("midday",  dict(day_of_week="mon-fri", hour=12, minute=0,  timezone=ET)),
+        ("close",   dict(day_of_week="mon-fri", hour=16, minute=30, timezone=ET)),
+        ("evening", dict(hour=21, minute=0, timezone=ET)),
+    ]
+    for _session, _cron_kwargs in _queen_schedules:
+        scheduler.add_job(
+            _make_queen_job(_session),
+            CronTrigger(**_cron_kwargs),
+            id=f"queen_{_session}",
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=1800,
+            coalesce=True,
+        )
+        logger.warning("[startup-trace] registered job queen_%s", _session)
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
@@ -792,5 +895,7 @@ def setup_bot_scheduler(scheduler) -> None:
         "options_income options_directional position_monitor dead_mans_switch "
         "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan "
         "strategy_forge_scan signal_explain_pregen "
-        "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp"
+        "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp "
+        "queen_morning queen_midday queen_close queen_evening "
+        "regime_refresh compute_bot_stats"
     )

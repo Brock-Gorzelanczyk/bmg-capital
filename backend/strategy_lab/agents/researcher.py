@@ -81,20 +81,47 @@ def _regime_from_db(db: Session) -> dict:
 
 def _compute_bot_ic(db: Session, bot_name: str, lookback_days: int = 63) -> Optional[float]:
     """
-    Rolling Information Coefficient for a bot (63-day window).
+    Rolling IC for a bot. Prefers BotPerformanceStats (populated nightly by
+    compute_bot_stats job) for accuracy; falls back to raw trade hit-rate.
 
-    IC = 2 * win_rate - 1, derived from closed trades with realized P&L.
-    Returns None when fewer than 10 trades exist (insufficient data).
+    IC = 2 * win_rate - 1  (ranges -1 to +1; >0 means edge exists).
+    Returns None when insufficient data.
     """
     try:
+        from app.db.models.bots import BotProfile, BotAllocation
+        from app.db.models.allocation import BotPerformanceStats
+
+        prof = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
+        if not prof:
+            return None
+
+        alloc = db.query(BotAllocation).filter(
+            BotAllocation.profile_id == prof.id,
+            BotAllocation.enabled.is_(True),
+        ).first()
+        if not alloc:
+            return None
+
+        # Prefer latest BotPerformanceStats row (has win_rate + sharpe + drawdown)
+        stats = (
+            db.query(BotPerformanceStats)
+            .filter(BotPerformanceStats.allocation_id == alloc.id)
+            .order_by(BotPerformanceStats.stat_date.desc())
+            .first()
+        )
+        if stats and stats.win_rate is not None and (stats.total_trades or 0) >= 10:
+            return round(2 * float(stats.win_rate) - 1, 4)
+    except Exception:
+        pass  # fall through to raw trade computation
+
+    # Fallback: compute from raw BotTrade records
+    try:
         from app.db.models.bots import BotProfile, BotAllocation, BotTrade
-        from sqlalchemy import func
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
         prof = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
         if not prof:
             return None
-
         alloc_ids = [
             a.id for a in db.query(BotAllocation).filter(
                 BotAllocation.profile_id == prof.id,
@@ -103,23 +130,56 @@ def _compute_bot_ic(db: Session, bot_name: str, lookback_days: int = 63) -> Opti
         ]
         if not alloc_ids:
             return None
-
         trades = db.query(BotTrade).filter(
             BotTrade.allocation_id.in_(alloc_ids),
             BotTrade.side == "sell",
             BotTrade.created_at >= cutoff,
             BotTrade.pnl_cents.isnot(None),
         ).all()
-
         if len(trades) < 10:
             return None
-
         wins = sum(1 for t in trades if (t.pnl_cents or 0) > 0)
-        ic = 2 * (wins / len(trades)) - 1
-        return round(ic, 4)
+        return round(2 * (wins / len(trades)) - 1, 4)
     except Exception as exc:
         logger.warning("[researcher] IC compute failed for %s: %s", bot_name, exc)
         return None
+
+
+def _get_bot_live_stats(db: Session) -> dict[str, dict]:
+    """
+    Pull latest BotPerformanceStats for all bots.
+    Returns {bot_name: {sharpe, win_rate, return_30d_pct, max_drawdown_pct, ...}}.
+    """
+    result: dict[str, dict] = {}
+    try:
+        from app.db.models.bots import BotProfile, BotAllocation
+        from app.db.models.allocation import BotPerformanceStats
+
+        allocs = db.query(BotAllocation).filter(BotAllocation.enabled.is_(True)).all()
+        for alloc in allocs:
+            prof = db.query(BotProfile).filter(BotProfile.id == alloc.profile_id).first()
+            if not prof:
+                continue
+            stats = (
+                db.query(BotPerformanceStats)
+                .filter(BotPerformanceStats.allocation_id == alloc.id)
+                .order_by(BotPerformanceStats.stat_date.desc())
+                .first()
+            )
+            if stats:
+                result[prof.name] = {
+                    "sharpe":        round(float(stats.sharpe_ratio or 0), 3),
+                    "win_rate":      round(float(stats.win_rate or 0), 4),
+                    "return_30d":    round(float(stats.return_30d_pct or 0), 3),
+                    "max_drawdown":  round(float(stats.max_drawdown_pct or 0), 4),
+                    "profit_factor": round(float(stats.profit_factor or 1), 3),
+                    "total_trades":  stats.total_trades or 0,
+                    "tier":          alloc.tier or "T0",
+                    "stat_date":     str(stats.stat_date),
+                }
+    except Exception as exc:
+        logger.warning("[researcher] live_stats query failed: %s", exc)
+    return result
 
 
 def _score_candidates(db: Session) -> list[dict]:
@@ -184,13 +244,18 @@ def _build_recommendations(regime: dict, bot_ics: dict[str, Optional[float]]) ->
 
 def run_daily_research(db: Session) -> dict:
     """
-    Main entry point called by Queen Agent at 7 AM ET.
+    Main entry point called by Queen Agent 4× per day.
 
-    Returns dict with keys: regime, signal_ic, candidates, recommendations.
+    Returns dict with keys: regime, signal_ic, live_stats, candidates, recommendations.
+    Data sources:
+      regime      ← RegimeSnapshot (refreshed every 30 min by regime_refresh job)
+      signal_ic   ← BotPerformanceStats win_rate (refreshed at 2 AM by compute_bot_stats)
+      live_stats  ← BotPerformanceStats (Sharpe, drawdown, tier, return_30d)
+      candidates  ← strategy_wfa_results (populated by WFA pipeline)
     """
-    regime = _regime_from_db(db)
-
-    bot_ics: dict[str, Optional[float]] = {b: _compute_bot_ic(db, b) for b in ACTIVE_BOTS}
+    regime     = _regime_from_db(db)
+    live_stats = _get_bot_live_stats(db)
+    bot_ics    = {b: _compute_bot_ic(db, b) for b in ACTIVE_BOTS}
 
     ic_summary = [
         {
@@ -202,22 +267,37 @@ def run_daily_research(db: Session) -> dict:
                 "healthy"          if ic is not None else
                 "insufficient_data"
             ),
+            "sharpe":       live_stats.get(b, {}).get("sharpe"),
+            "return_30d":   live_stats.get(b, {}).get("return_30d"),
+            "max_drawdown": live_stats.get(b, {}).get("max_drawdown"),
+            "tier":         live_stats.get(b, {}).get("tier"),
         }
         for b, ic in bot_ics.items()
     ]
 
-    candidates = _score_candidates(db)
+    candidates      = _score_candidates(db)
     recommendations = _build_recommendations(regime, bot_ics)
 
+    # Enrich recommendations with live performance alerts
+    for b, stats in live_stats.items():
+        if stats.get("sharpe", 0) < 0 and stats.get("total_trades", 0) >= 10:
+            recommendations.append(f"NEGATIVE SHARPE: {b} ({stats['sharpe']:.2f}) — review or pause")
+        if stats.get("max_drawdown", 0) > 0.15 and b not in [r for r in recommendations]:
+            recommendations.append(f"HIGH DRAWDOWN: {b} {stats['max_drawdown']*100:.1f}% — check risk controls")
+
+    recommendations = recommendations[:6]
+
     logger.info(
-        "[researcher] regime=%s ic_bots=%d candidates=%d recs=%d",
-        regime["name"], len([i for i in ic_summary if i["ic"] is not None]),
-        len(candidates), len(recommendations),
+        "[researcher] regime=%s ic_bots=%d perf_bots=%d candidates=%d recs=%d",
+        regime["name"],
+        len([i for i in ic_summary if i["ic"] is not None]),
+        len(live_stats), len(candidates), len(recommendations),
     )
 
     return {
         "regime":          regime,
         "signal_ic":       ic_summary,
+        "live_stats":      live_stats,
         "candidates":      candidates,
         "recommendations": recommendations,
     }

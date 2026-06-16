@@ -143,6 +143,19 @@ def test_event(body: TestEventBody):
     }
 
 
+# ── Queen Agent test ──────────────────────────────────────────────────────────
+
+@router.post("/queen/test")
+def queen_test(db: Session = Depends(get_db), _current_user=Depends(get_current_user)):
+    """Trigger the Queen Agent immediately and post today's brief to #dev-log."""
+    from strategy_lab.agents.queen import run_queen_daily
+    try:
+        run_queen_daily(db)
+        return {"ok": True, "message": "Queen brief posted — check #dev-log"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Autofix endpoints ─────────────────────────────────────────────────────────
 
 @router.post("/disable-autofix")

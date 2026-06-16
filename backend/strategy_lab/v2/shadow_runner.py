@@ -57,6 +57,10 @@ def run_v2_shadow(bot_id: str) -> dict:
 
     Returns a summary dict.  Designed to be called by APScheduler.
     """
+    import os
+    if not os.getenv("ENABLE_V2_SHADOW"):
+        logger.debug("v2: ENABLE_V2_SHADOW not set — skipping shadow run for %s", bot_id)
+        return {"skipped": True, "reason": "ENABLE_V2_SHADOW not set"}
     _load_registry()
     definition = _REGISTRY.get(bot_id)
     if definition is None:

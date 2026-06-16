@@ -622,14 +622,15 @@ def run_bot_profile(profile_name: str) -> dict:
                     # Discord post (which fires immediately from log_signal) shows the
                     # deployment-sizer amount rather than position_size_pct × capital.
                     _log_capital = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+                    _pre_size_pct = (sig.size_hint or 0.05) * 100
                     if os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true":
                         try:
                             from strategy_lab.core.deployment_sizer import compute_per_trade_notional as _cpt_pre
-                            _notional_usd = _cpt_pre(alloc, profile, db, _log_capital, profile_name) or (_log_capital * final_size_pct / 100.0)
+                            _notional_usd = _cpt_pre(alloc, profile, db, _log_capital, profile_name) or (_log_capital * _pre_size_pct / 100.0)
                         except Exception:
-                            _notional_usd = _log_capital * final_size_pct / 100.0
+                            _notional_usd = _log_capital * _pre_size_pct / 100.0
                     else:
-                        _notional_usd = _log_capital * final_size_pct / 100.0
+                        _notional_usd = _log_capital * _pre_size_pct / 100.0
 
                     # ── Persist signal to bot_signals now (before any execution guard
                     # that could continue/skip).  Wrapped so a DB error never aborts

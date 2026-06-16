@@ -241,6 +241,22 @@ def generate_briefing_html(user_id: int, db: Session) -> tuple[str, str]:
     total_pnl_color = _pnl_color(total_pnl_cents)
     total_pnl_fmt = _format_pnl(total_pnl_cents)
 
+    # Build bot table outside the outer f-string — nested f"""...""" is only
+    # valid in Python 3.12+; extracting avoids the SyntaxError on 3.11.
+    if bot_sections:
+        bot_table_html = (
+            '<table style="width:100%;border-collapse:collapse;font-size:14px">'
+            "<thead><tr style=\"background:#f8fafc\">"
+            "<th style=\"padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151\">Bot</th>"
+            "<th style=\"padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151\">P&amp;L</th>"
+            "<th style=\"padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151\">Positions</th>"
+            "<th style=\"padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151\">Top Watchlist</th>"
+            "<th style=\"padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151\">Health</th>"
+            f"</tr></thead><tbody>{bot_rows_html}</tbody></table>"
+        )
+    else:
+        bot_table_html = "<p style='color:#64748b;font-style:italic'>No active bot allocations found.</p>"
+
     html = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -269,19 +285,7 @@ def generate_briefing_html(user_id: int, db: Session) -> tuple[str, str]:
 
       <!-- Bot table -->
       <h2 style="margin:24px 0 12px;font-size:16px;font-weight:700;color:#0f172a">Active Bots — Yesterday Performance</h2>
-      {"<p style='color:#64748b;font-style:italic'>No active bot allocations found.</p>" if not bot_sections else f"""
-      <table style="width:100%;border-collapse:collapse;font-size:14px">
-        <thead>
-          <tr style="background:#f8fafc">
-            <th style="padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151">Bot</th>
-            <th style="padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151">P&amp;L</th>
-            <th style="padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151">Positions</th>
-            <th style="padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151">Top Watchlist</th>
-            <th style="padding:10px;text-align:left;border-bottom:2px solid #e2e8f0;color:#374151">Health</th>
-          </tr>
-        </thead>
-        <tbody>{bot_rows_html}</tbody>
-      </table>"""}
+      {bot_table_html}
 
       <!-- Catalyst calendar -->
       <h2 style="margin:24px 0 8px;font-size:16px;font-weight:700;color:#0f172a">Today's Catalyst Calendar</h2>
