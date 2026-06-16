@@ -18,7 +18,6 @@ from __future__ import annotations
 import importlib
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -619,9 +618,19 @@ def run_bot_profile(profile_name: str) -> dict:
                             "target_price": round(_entry_price * (1 + _tp_pct), 6),
                         }
 
-                    # _notional_usd is computed after final_size_pct is resolved below.
-                    # Placeholder here so log_signal receives it after sizing is done.
-                    _notional_usd: float | None = None
+                    # ── Compute notional before log_signal so the audit.py background
+                    # Discord post (which fires immediately from log_signal) shows the
+                    # deployment-sizer amount rather than position_size_pct × capital.
+                    _log_capital = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+                    _pre_size_pct = (sig.size_hint or 0.05) * 100
+                    if os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true":
+                        try:
+                            from strategy_lab.core.deployment_sizer import compute_per_trade_notional as _cpt_pre
+                            _notional_usd = _cpt_pre(alloc, profile, db, _log_capital, profile_name) or (_log_capital * _pre_size_pct / 100.0)
+                        except Exception:
+                            _notional_usd = _log_capital * _pre_size_pct / 100.0
+                    else:
+                        _notional_usd = _log_capital * _pre_size_pct / 100.0
 
                     # ── Persist signal to bot_signals now (before any execution guard
                     # that could continue/skip).  Wrapped so a DB error never aborts
@@ -754,17 +763,6 @@ def run_bot_profile(profile_name: str) -> dict:
                                 "[runner:%s] Extended-hours size ×%.2f → %.4f%% (session=%s)",
                                 profile_name, _size_mult, final_size_pct, _ext_session,
                             )
-
-                    # ── Compute notional now that final_size_pct is resolved ────────
-                    _log_capital = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
-                    if os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true":
-                        try:
-                            from strategy_lab.core.deployment_sizer import compute_per_trade_notional as _cpt_pre
-                            _notional_usd = _cpt_pre(alloc, profile, db, _log_capital, profile_name) or (_log_capital * final_size_pct / 100.0)
-                        except Exception:
-                            _notional_usd = _log_capital * final_size_pct / 100.0
-                    else:
-                        _notional_usd = _log_capital * final_size_pct / 100.0
 
                     # 10h. Trade journal — write entry rationale
                     why_opened_json = "{}"

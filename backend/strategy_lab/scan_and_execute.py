@@ -31,7 +31,7 @@ def _can_fire_signal(
     1-minute concurrent-scan dedup regardless of cooldown_minutes setting.
     """
     effective_min = max(cooldown_min, 1.0)  # always block within 1 min
-    cutoff = datetime.utcnow() - timedelta(minutes=effective_min)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=effective_min)
     from sqlalchemy import text as _text
     row = db.execute(
         _text("""
@@ -338,7 +338,7 @@ def scan_and_execute(
                         size_hint=min(1.0, max(0.0, default_size / 100.0)),
                         reason=str(r.get("reasons", "")),
                         strategy=r["strategy"],
-                        ts=datetime.utcnow(),  # naive UTC — matches datetime.utcnow() cutoff in cooldown query
+                        ts=datetime.now(timezone.utc),
                     )
                     signal_id = log_signal(
                         db, alloc.id, sig,
