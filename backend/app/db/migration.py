@@ -2648,4 +2648,23 @@ def _ensure_regime_history_table(conn) -> None:
         CREATE INDEX IF NOT EXISTS idx_regime_snapshots_ts
         ON regime_snapshots (ts)
     """))
+    # Add columns used by regime_history.py model (macro_strategist daily snapshots).
+    # ALTER TABLE ADD COLUMN fails if the column already exists — catch and ignore per column.
+    _extra_cols = [
+        "snapshot_date DATE",
+        "regime TEXT",
+        "raw_regime TEXT",
+        "confidence REAL",
+        "vix_level REAL",
+        "spx_vs_200ma REAL",
+        "hy_spread_proxy REAL",
+        "vix_ts_slope REAL",
+        "signals_json TEXT",
+        "created_at TIMESTAMP",
+    ]
+    existing = {r[1] for r in conn.execute(text("PRAGMA table_info(regime_snapshots)")).fetchall()}
+    for col_def in _extra_cols:
+        col_name = col_def.split()[0]
+        if col_name not in existing:
+            conn.execute(text(f"ALTER TABLE regime_snapshots ADD COLUMN {col_def}"))
     conn.commit()

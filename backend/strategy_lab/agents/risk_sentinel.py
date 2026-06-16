@@ -116,7 +116,7 @@ def _get_fleet_drawdown(db: Session) -> dict:
             total_pnl += pnl_usd
 
         aum_row = db.execute(text(
-            "SELECT SUM(allocated_cents) FROM bot_allocations WHERE enabled = 1"
+            "SELECT SUM(COALESCE(capital_cents_within_portfolio, starting_capital_cents, 0)) FROM bot_allocations WHERE enabled = 1"
         )).fetchone()
         fleet_aum_usd = round((aum_row[0] or 0) / 100, 2) if aum_row and aum_row[0] else 50_000.0
 
@@ -180,7 +180,7 @@ def _get_fleet_drawdown_24h(db: Session) -> float:
         since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
         row = db.execute(text("""
             SELECT SUM(bt.pnl_cents) as pnl_24h,
-                   SUM(ba.allocated_cents) as starting_capital
+                   SUM(COALESCE(ba.capital_cents_within_portfolio, ba.starting_capital_cents, 0)) as starting_capital
             FROM bot_trades bt
             JOIN bot_allocations ba ON ba.id = bt.allocation_id
             WHERE bt.closed_at >= :since AND ba.enabled = 1
