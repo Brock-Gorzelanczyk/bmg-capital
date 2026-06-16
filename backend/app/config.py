@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     discord_ch_monthly_recap: str = ""
     discord_ch_announcements: str = ""
     discord_ch_dev_log: str = ""
+    # Webhook for the #fund-updates paste-ready requests channel
+    discord_wh_fund_updates: str = ""
     # Legacy aliases (kept for backward compat — prefer DISCORD_CH_* above).
     discord_channel_all_signals: str = ""
     discord_channel_stocks: str = ""

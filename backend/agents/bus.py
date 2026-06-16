@@ -80,6 +80,64 @@ def _post_to_team_chat(from_agent: str, to_agent, content: str, msg_type: str, r
         logger.debug("[bus] team chat post failed: %s", exc)
 
 
+def _updates_webhook_url() -> str:
+    return os.getenv("DISCORD_WH_FUND_UPDATES", "").strip()
+
+
+def post_update_request(
+    from_agent: str,
+    title: str,
+    body: str,
+    paste_ready: str,
+    priority: str = "normal",
+) -> bool:
+    """
+    Post a paste-ready update request to #fund-updates so Brock can copy it
+    directly into Claude Code.
+
+    Args:
+        from_agent:   agent ID (e.g. "risk_sentinel")
+        title:        short headline, e.g. "crypto_meanrev_2163 tier demotion needed"
+        body:         1-3 sentence context for why this is needed
+        paste_ready:  the exact text Brock should paste into Claude Code
+        priority:     "low" | "normal" | "high" | "critical"
+    """
+    url = _updates_webhook_url()
+    if not url:
+        logger.debug("[bus] DISCORD_WH_FUND_UPDATES not set — update request not posted")
+        return False
+
+    display_name, _ = _agent_display(from_agent)
+    priority_prefix = {"low": "🔵", "normal": "🟡", "high": "🟠", "critical": "🔴"}.get(priority, "🟡")
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    # Cap paste_ready to fit in a Discord embed field (1024 chars)
+    if len(paste_ready) > 900:
+        paste_ready = paste_ready[:900] + "\n…(truncated)"
+
+    embed = {
+        "title":       f"{priority_prefix} {title}",
+        "description": body,
+        "color":       {"low": 0x3B82F6, "normal": 0xFBBF24, "high": 0xF97316, "critical": 0xEF4444}.get(priority, 0xFBBF24),
+        "fields": [
+            {
+                "name":   "📋 Paste into Claude Code",
+                "value":  f"```\n{paste_ready}\n```",
+                "inline": False,
+            }
+        ],
+        "footer": {"text": f"{display_name} · {now_str}"},
+    }
+
+    try:
+        import httpx as _hx
+        resp = _hx.post(url, json={"embeds": [embed], "username": display_name}, timeout=8)
+        return resp.is_success
+    except Exception as exc:
+        logger.warning("[bus] post_update_request failed: %s", exc)
+        return False
+
+
 def observe(db: Session, *, agent_id: str, content: str, context: dict | None = None) -> None:
     """Post an unsolicited observation. Throttled to 1 per agent per 15 min."""
     now = datetime.now(timezone.utc)

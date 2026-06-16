@@ -516,4 +516,29 @@ def run_risk_health_check(db: Session) -> dict:
     except Exception:
         pass
 
+    # Post paste-ready demotion requests to #fund-updates for bots with 7+ consecutive losses
+    _DEMOTION_THRESHOLD = 7
+    try:
+        from agents.bus import post_update_request as _upd
+        severe_losers = [(b, n) for b, n in streaks.items() if n >= _DEMOTION_THRESHOLD]
+        for bot_name, loss_count in severe_losers:
+            _upd(
+                from_agent="risk_sentinel",
+                title=f"{bot_name} — {loss_count} consecutive losses, tier demotion needed",
+                body=(
+                    f"{bot_name} has logged {loss_count} consecutive losing days with no recovery. "
+                    f"Routing and config checks already passed. This is a strategy failure, not a plumbing issue. "
+                    f"Recommend demoting one tier to pull it off live capital."
+                ),
+                paste_ready=(
+                    f"Demote {bot_name} one tier (e.g. T2 → T1 or T1 → T0) to take it off live capital. "
+                    f"It has {loss_count} consecutive losing days as of {now.strftime('%Y-%m-%d')}. "
+                    f"Check bot_allocations in the DB and set tier = 'T1' (or T0 if already T1). "
+                    f"Also set paused_reason = 'consecutive_loss_demotion_{now.strftime(\"%Y%m%d\")}' so it shows as paused in the UI."
+                ),
+                priority="high" if loss_count >= CONSEC_LOSS_HALT else "normal",
+            )
+    except Exception as exc:
+        logger.debug("[risk_sentinel] update_request post failed: %s", exc)
+
     return summary
