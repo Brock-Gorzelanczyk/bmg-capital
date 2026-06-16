@@ -39,24 +39,24 @@ export interface CreateForgeBotPayload {
 }
 
 export const getForgeBots = () =>
-  client.get<{ bots: ForgeBot[] }>("/api/forge/bots").then((r) => r.data);
+  client.get<{ bots: ForgeBot[] }>("/forge/bots").then((r) => r.data);
 
 export const createForgeBot = (payload: CreateForgeBotPayload) =>
-  client.post<ForgeBot>("/api/forge/bots", payload).then((r) => r.data);
+  client.post<ForgeBot>("/forge/bots", payload).then((r) => r.data);
 
 export const updateForgeBot = (id: number, payload: Partial<CreateForgeBotPayload>) =>
-  client.put<ForgeBot>(`/api/forge/bots/${id}`, payload).then((r) => r.data);
+  client.put<ForgeBot>(`/forge/bots/${id}`, payload).then((r) => r.data);
 
 export const updateForgeBotStatus = (id: number, status: "active" | "paused") =>
   client
-    .patch<{ ok: boolean; status: string }>(`/api/forge/bots/${id}/status`, { status })
+    .patch<{ ok: boolean; status: string }>(`/forge/bots/${id}/status`, { status })
     .then((r) => r.data);
 
 export const deleteForgeBot = (id: number) =>
-  client.delete(`/api/forge/bots/${id}`).then((r) => r.data);
+  client.delete(`/forge/bots/${id}`).then((r) => r.data);
 
 export const getForgeSignals = () =>
-  client.get<{ signals: ForgeSignal[] }>("/api/forge/signals").then((r) => r.data);
+  client.get<{ signals: ForgeSignal[] }>("/forge/signals").then((r) => r.data);
 
 export const getForgeBotSignals = (id: number) =>
-  client.get<{ signals: ForgeSignal[] }>(`/api/forge/bots/${id}/signals`).then((r) => r.data);
+  client.get<{ signals: ForgeSignal[] }>(`/forge/bots/${id}/signals`).then((r) => r.data);

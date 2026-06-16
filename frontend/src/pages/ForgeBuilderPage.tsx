@@ -35,7 +35,7 @@ function sideColor(side: string) {
   return "text-zinc-400";
 }
 
-const STEP_LABELS = ["Name", "Strategies", "Watchlist", "Capital", "Review"];
+const STEP_LABELS = ["Name", "Strategies", "Watchlist", "Capital", "Risk & Mode", "Review"];
 
 // ── Wizard ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +46,11 @@ interface WizardState {
   tickerInput: string;
   watchlist: string[];
   capitalPct: number;
+  stopLossPct: number;
+  takeProfitPct: number;
+  maxPosSizePct: number;
+  schedule: "intraday" | "daily" | "weekly";
+  mode: "shadow" | "sandbox";
 }
 
 const INIT_WIZARD: WizardState = {
@@ -55,6 +60,11 @@ const INIT_WIZARD: WizardState = {
   tickerInput: "",
   watchlist: [],
   capitalPct: 5,
+  stopLossPct: 5,
+  takeProfitPct: 15,
+  maxPosSizePct: 10,
+  schedule: "daily",
+  mode: "shadow",
 };
 
 interface ForgeWizardProps {
@@ -73,18 +83,26 @@ function ForgeWizard({ catalog, onClose, onCreated }: ForgeWizardProps) {
     setState((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const forgeName = state.name.trim().startsWith("forge_")
+    ? state.name.trim()
+    : `forge_${state.name.trim()}`;
+
   const createMut = useMutation({
     mutationFn: () =>
       createForgeBot({
-        name: state.name.trim(),
-        description: state.description.trim() || undefined,
+        name: forgeName,
+        description: [
+          state.description.trim(),
+          `stop:${state.stopLossPct}% tp:${state.takeProfitPct}% maxpos:${state.maxPosSizePct}%`,
+          `schedule:${state.schedule} mode:${state.mode}`,
+        ].filter(Boolean).join(" | "),
         strategies: state.selectedStrategies,
         watchlist: state.watchlist,
         capital_pct: state.capitalPct,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["forge-bots"] });
-      toast.success(`${state.name} launched!`);
+      toast.success(`${forgeName} submitted for review!`);
       onCreated();
     },
     onError: () => toast.error("Failed to create bot"),
@@ -124,7 +142,12 @@ function ForgeWizard({ catalog, onClose, onCreated }: ForgeWizardProps) {
     (step === 2 && state.selectedStrategies.length >= 1) ||
     (step === 3 && state.watchlist.length >= 1) ||
     step === 4 ||
-    step === 5;
+    step === 5 ||
+    step === 6;
+
+  const forgeName = state.name.trim().startsWith("forge_")
+    ? state.name.trim()
+    : `forge_${state.name.trim()}`;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
@@ -368,29 +391,111 @@ function ForgeWizard({ catalog, onClose, onCreated }: ForgeWizardProps) {
             </>
           )}
 
-          {/* Step 5: Review */}
+          {/* Step 5: Risk & Mode */}
           {step === 5 && (
+            <div className="space-y-5">
+              <p className="text-xs text-zinc-500">Set risk parameters and operating mode for this bot.</p>
+
+              {/* Max position size */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wide">Max Position Size</label>
+                <div className="flex gap-2">
+                  {[5, 10, 20].map((v) => (
+                    <button key={v} onClick={() => update({ maxPosSizePct: v })}
+                      className={cn("flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors",
+                        state.maxPosSizePct === v ? "bg-orange-500/15 border-orange-500/40 text-orange-400" : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                      )}>
+                      {v}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stop loss */}
+              <div>
+                <div className="flex justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Stop Loss</label>
+                  <span className="text-sm font-bold text-red-400">{state.stopLossPct}%</span>
+                </div>
+                <input type="range" min={1} max={20} step={1} value={state.stopLossPct}
+                  onChange={(e) => update({ stopLossPct: Number(e.target.value) })}
+                  className="w-full accent-red-500" />
+                <div className="flex justify-between text-xs text-zinc-600 mt-0.5"><span>1%</span><span>20%</span></div>
+              </div>
+
+              {/* Take profit */}
+              <div>
+                <div className="flex justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Take Profit</label>
+                  <span className="text-sm font-bold text-emerald-400">{state.takeProfitPct}%</span>
+                </div>
+                <input type="range" min={5} max={50} step={5} value={state.takeProfitPct}
+                  onChange={(e) => update({ takeProfitPct: Number(e.target.value) })}
+                  className="w-full accent-emerald-500" />
+                <div className="flex justify-between text-xs text-zinc-600 mt-0.5"><span>5%</span><span>50%</span></div>
+              </div>
+
+              {/* Schedule */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wide">Scan Schedule</label>
+                <div className="flex gap-2">
+                  {(["intraday", "daily", "weekly"] as const).map((v) => (
+                    <button key={v} onClick={() => update({ schedule: v })}
+                      className={cn("flex-1 py-2 rounded-lg text-xs font-semibold border capitalize transition-colors",
+                        state.schedule === v ? "bg-orange-500/15 border-orange-500/40 text-orange-400" : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                      )}>
+                      {v === "intraday" ? "Intraday (5m)" : v === "daily" ? "Daily (EOD)" : "Weekly"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mode */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 mb-2 uppercase tracking-wide">Mode</label>
+                <div className="flex gap-2">
+                  <button onClick={() => update({ mode: "shadow" })}
+                    className={cn("flex-1 py-3 rounded-lg text-sm font-semibold border transition-colors",
+                      state.mode === "shadow" ? "bg-violet-500/15 border-violet-500/40 text-violet-400" : "bg-zinc-900 border-zinc-700 text-zinc-400"
+                    )}>
+                    Shadow Paper
+                    <p className="text-[10px] font-normal text-zinc-600 mt-0.5">signals only · no fills</p>
+                  </button>
+                  <button onClick={() => update({ mode: "sandbox" })}
+                    className={cn("flex-1 py-3 rounded-lg text-sm font-semibold border transition-colors",
+                      state.mode === "sandbox" ? "bg-orange-500/15 border-orange-500/40 text-orange-400" : "bg-zinc-900 border-zinc-700 text-zinc-400"
+                    )}>
+                    Sandbox Trade
+                    <p className="text-[10px] font-normal text-zinc-600 mt-0.5">simulated fills · paper capital</p>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 6: Review */}
+          {step === 6 && (
             <div className="space-y-4">
+              {/* forge_ name badge */}
+              <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3">
+                <p className="text-[10px] text-zinc-500 mb-0.5 uppercase tracking-widest">Bot ID (auto-prefixed)</p>
+                <p className="text-orange-400 font-mono font-semibold text-sm">{forgeName}</p>
+                <p className="text-[10px] text-zinc-600 mt-0.5">forge_ prefix ensures this bot never conflicts with curated bots</p>
+              </div>
+
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl divide-y divide-zinc-800">
                 <div className="px-4 py-3">
                   <p className="text-xs text-zinc-500 mb-0.5">Bot Name</p>
                   <p className="text-white font-semibold">{state.name}</p>
-                  {state.description && (
-                    <p className="text-zinc-400 text-xs mt-0.5">{state.description}</p>
-                  )}
+                  {state.description && <p className="text-zinc-400 text-xs mt-0.5">{state.description}</p>}
                 </div>
                 <div className="px-4 py-3">
-                  <p className="text-xs text-zinc-500 mb-1.5">
-                    Strategies ({state.selectedStrategies.length})
-                  </p>
+                  <p className="text-xs text-zinc-500 mb-1.5">Strategies ({state.selectedStrategies.length})</p>
                   <div className="flex flex-wrap gap-1.5">
                     {state.selectedStrategies.map((sid) => {
                       const entry = catalog.find((c) => c.strategy_id === sid);
                       return (
-                        <span
-                          key={sid}
-                          className="text-xs bg-orange-500/10 border border-orange-500/20 text-orange-300 px-2 py-0.5 rounded-md"
-                        >
+                        <span key={sid} className="text-xs bg-orange-500/10 border border-orange-500/20 text-orange-300 px-2 py-0.5 rounded-md">
                           {entry?.display_name || sid}
                         </span>
                       );
@@ -398,28 +503,37 @@ function ForgeWizard({ catalog, onClose, onCreated }: ForgeWizardProps) {
                   </div>
                 </div>
                 <div className="px-4 py-3">
-                  <p className="text-xs text-zinc-500 mb-1.5">
-                    Watchlist ({state.watchlist.length} tickers)
-                  </p>
+                  <p className="text-xs text-zinc-500 mb-1.5">Watchlist ({state.watchlist.length} tickers)</p>
                   <div className="flex flex-wrap gap-1.5">
                     {state.watchlist.map((t) => (
-                      <span
-                        key={t}
-                        className="text-xs font-mono bg-zinc-800 border border-zinc-700 text-white px-2 py-0.5 rounded-md"
-                      >
-                        {t}
-                      </span>
+                      <span key={t} className="text-xs font-mono bg-zinc-800 border border-zinc-700 text-white px-2 py-0.5 rounded-md">{t}</span>
                     ))}
                   </div>
                 </div>
-                <div className="px-4 py-3">
-                  <p className="text-xs text-zinc-500 mb-0.5">Capital Allocation</p>
-                  <p className="text-white font-semibold">{state.capitalPct}%</p>
+                <div className="grid grid-cols-2 divide-x divide-zinc-800">
+                  <div className="px-4 py-3">
+                    <p className="text-xs text-zinc-500 mb-0.5">Capital · Stop · TP</p>
+                    <p className="text-white font-semibold text-sm">{state.capitalPct}% · {state.stopLossPct}%SL · {state.takeProfitPct}%TP</p>
+                  </div>
+                  <div className="px-4 py-3">
+                    <p className="text-xs text-zinc-500 mb-0.5">Schedule · Mode</p>
+                    <p className="text-white font-semibold text-sm capitalize">{state.schedule} · {state.mode}</p>
+                  </div>
                 </div>
               </div>
+
+              {/* Guardrail: Brock approval required */}
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
+                <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest mb-1">⚠ Pending Review</p>
+                <p className="text-xs text-zinc-400">
+                  This bot starts in <strong className="text-amber-400">PENDING_REVIEW</strong> state.
+                  It will scan and fire signals but Brock must approve before any capital is allocated.
+                  Bots must demonstrate Sharpe &gt; 0.3 before shadow paper allocation is enabled.
+                </p>
+              </div>
+
               <p className="text-xs text-zinc-600">
-                The scanner runs every 5 minutes and fires signals to your #my-signals Discord channel
-                when a setup crosses its confidence threshold.
+                The scanner runs every 5 minutes and fires signals to your #my-signals Discord channel.
               </p>
             </div>
           )}
@@ -428,15 +542,15 @@ function ForgeWizard({ catalog, onClose, onCreated }: ForgeWizardProps) {
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 flex-shrink-0">
           <button
-            onClick={() => (step === 1 ? onClose() : setStep((s) => (s - 1) as typeof step))}
+            onClick={() => (step === 1 ? onClose() : setStep((s) => Math.max(1, s - 1) as typeof step))}
             className="text-sm text-zinc-400 hover:text-white transition-colors"
           >
             {step === 1 ? "Cancel" : "← Back"}
           </button>
-          {step < 5 ? (
+          {step < 6 ? (
             <button
               disabled={!canNext}
-              onClick={() => setStep((s) => (s + 1) as typeof step)}
+              onClick={() => setStep((s) => Math.min(6, s + 1) as typeof step)}
               className="px-6 py-2.5 rounded-xl bg-orange-500 text-black text-sm font-bold hover:bg-orange-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Next →

@@ -199,8 +199,15 @@ function CandidateCard({ c, onClick }: { c: CatalogCandidate; onClick: () => voi
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+const AC_LABELS: Record<string, string> = {
+  stock: "Stocks", crypto: "Crypto", options: "Options", quant: "Quant",
+};
+
 export default function StrategyLibraryPage() {
   const [filter, setFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState<"all" | "deployed" | "incubation">("all");
+  const [acFilter, setAcFilter] = useState<"all" | "stock" | "crypto" | "options" | "quant">("all");
+  const [sortBy, setSortBy] = useState<"name" | "sharpe" | "winrate">("name");
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
 
@@ -245,13 +252,25 @@ export default function StrategyLibraryPage() {
       | { kind: "bot"; b: BotLeaderboardRow }
       | { kind: "candidate"; c: CatalogCandidate };
 
-    const all: Item[] = [
+    let all: Item[] = [
       ...bots.map((b) => ({ kind: "bot" as const, b })),
       ...candidates.map((c) => ({ kind: "candidate" as const, c })),
     ];
 
+    // Status filter
+    if (statusFilter === "deployed") all = all.filter((i) => i.kind === "bot");
+    if (statusFilter === "incubation") all = all.filter((i) => i.kind === "candidate");
+
+    // Asset class filter
+    if (acFilter !== "all") {
+      all = all.filter((item) => {
+        if (item.kind === "bot") return item.b.bot_id.includes(acFilter === "stock" ? "stock" : acFilter === "quant" ? "quant" : acFilter);
+        return (item.c.asset_class ?? "").toLowerCase().startsWith(acFilter);
+      });
+    }
+
     const q = search.toLowerCase();
-    return all.filter((item) => {
+    const result = all.filter((item) => {
       if (filter !== "All") {
         const s = item.kind === "bot" ? BOT_STYLE[item.b.bot_id] : normalizeStyle(item.c.style);
         if (s !== filter) return false;
@@ -262,7 +281,23 @@ export default function StrategyLibraryPage() {
       }
       return true;
     });
-  }, [bots, candidates, filter, search]);
+
+    if (sortBy === "sharpe") {
+      result.sort((a, b) => {
+        const sa = a.kind === "bot" ? (a.b.sharpe_30d ?? -99) : (a.c.expected_sharpe ? parseFloat(a.c.expected_sharpe) : -99);
+        const sb = b.kind === "bot" ? (b.b.sharpe_30d ?? -99) : (b.c.expected_sharpe ? parseFloat(b.c.expected_sharpe) : -99);
+        return sb - sa;
+      });
+    } else if (sortBy === "winrate") {
+      result.sort((a, b) => {
+        const wa = a.kind === "bot" ? (a.b.win_rate ?? 0) : 0;
+        const wb = b.kind === "bot" ? (b.b.win_rate ?? 0) : 0;
+        return wb - wa;
+      });
+    }
+
+    return result;
+  }, [bots, candidates, filter, statusFilter, acFilter, sortBy, search]);
 
   const isLoading = botsLoading || cLoading;
   const isError = botsError && cError;
@@ -289,7 +324,38 @@ export default function StrategyLibraryPage() {
           )}
         </div>
 
-        {/* Filter chips + search */}
+        {/* Filters row 1 — status + asset class + sort */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status */}
+          {(["all", "deployed", "incubation"] as const).map((v) => (
+            <button key={v} onClick={() => setStatusFilter(v)}
+              className={cn("px-3 py-1.5 rounded-lg font-mono-t text-[11px] uppercase tracking-widest transition-all",
+                statusFilter === v ? "bg-t-green/20 text-t-green border border-t-green/40" : "bg-t-bg1 border border-t-dim text-t-muted hover:text-t-mid2"
+              )}>
+              {v === "all" ? "All" : v === "deployed" ? "Deployed" : "Incubation"}
+            </button>
+          ))}
+          <span className="text-t-dim text-[10px] font-mono-t mx-1">|</span>
+          {/* Asset class */}
+          {(["all", "stock", "crypto", "options", "quant"] as const).map((v) => (
+            <button key={v} onClick={() => setAcFilter(v)}
+              className={cn("px-3 py-1.5 rounded-lg font-mono-t text-[11px] uppercase tracking-widest transition-all",
+                acFilter === v ? "bg-t-accent/20 text-t-accent border border-t-accent/40" : "bg-t-bg1 border border-t-dim text-t-muted hover:text-t-mid2"
+              )}>
+              {v === "all" ? "All Classes" : AC_LABELS[v] ?? v}
+            </button>
+          ))}
+          <span className="text-t-dim text-[10px] font-mono-t mx-1">|</span>
+          {/* Sort */}
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 text-[11px] font-mono-t text-t-muted outline-none cursor-pointer">
+            <option value="name">Sort: Name</option>
+            <option value="sharpe">Sort: Sharpe</option>
+            <option value="winrate">Sort: Win Rate</option>
+          </select>
+        </div>
+
+        {/* Filters row 2 — style chips + search */}
         <div className="flex flex-wrap items-center gap-2">
           {styleChips.map((s) => (
             <button

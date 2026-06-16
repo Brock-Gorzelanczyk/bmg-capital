@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import SignalExplainButton from "@/components/explain/SignalExplainButton";
+import { useNavigate } from "react-router-dom";
 import {
   getCatalog,
   evaluate,
@@ -10,9 +11,11 @@ import {
   deleteSetup,
   getSignals,
   screenStrategy,
+  scanTicker,
   type EvaluateResult,
   type ScoutSetup,
   type ScreenResult,
+  type ScanResult,
 } from "@/api/scout";
 
 // ── Design tokens (terminal · phosphor · violet scout) ───────────────────────
@@ -1012,9 +1015,240 @@ function MySetupsView() {
   );
 }
 
+// ── ScanTickerTab ─────────────────────────────────────────────────────────────
+
+const QUICK_SCAN_TICKERS = ["NVDA", "TSLA", "AAPL", "AMZN", "SPY", "QQQ", "BTC/USD", "ETH/USD", "SOL/USD"];
+
+function ScanTickerTab() {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [ticker, setTicker] = useState("");
+  const [result, setResult] = useState<ScanResult | null>(null);
+
+  const scanMut = useMutation({
+    mutationFn: () => scanTicker(ticker.trim().toUpperCase()),
+    onSuccess: (data) => setResult(data),
+    onError: () => toast.error("Scan failed — check ticker symbol"),
+  });
+
+  const armMut = useMutation({
+    mutationFn: ({ t, sid }: { t: string; sid: string }) => createSetup(t, sid),
+    onSuccess: (d) => {
+      toast.success(d.already_exists ? "Already in setups" : "⊹ Setup armed");
+      qc.invalidateQueries({ queryKey: ["scout-setups"] });
+    },
+    onError: () => toast.error("Failed to add setup"),
+  });
+
+  const submit = () => {
+    const t = ticker.trim().toUpperCase();
+    if (!t) return;
+    setResult(null);
+    scanMut.mutate();
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Ticker input */}
+      <div style={{ border: `1px solid ${C.borderDim}`, borderRadius: 6, background: C.surface, padding: 18 }}>
+        <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.18em", marginBottom: 10 }}>
+          TICKER — runs all catalog strategies against current market data
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+          {QUICK_SCAN_TICKERS.map((t) => {
+            const on = t === ticker.toUpperCase();
+            return (
+              <button
+                key={t}
+                onClick={() => setTicker(t)}
+                style={{
+                  fontFamily: MONO, fontSize: 10,
+                  color: on ? C.bg0 : C.amber,
+                  background: on ? C.amber : "transparent",
+                  border: `1px solid ${C.amberBorder}`,
+                  borderRadius: 4, padding: "5px 10px", cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >{t}</button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            placeholder="or type: MSFT, AVAX/USD…"
+            value={ticker}
+            onChange={(e) => { setTicker(e.target.value.toUpperCase()); setResult(null); }}
+            onKeyDown={(e) => e.key === "Enter" && ticker.trim() && submit()}
+            style={{
+              flex: 1, background: C.bg1, border: `1px solid ${C.borderDim}`,
+              borderRadius: 4, padding: "9px 12px",
+              fontFamily: MONO, fontSize: 13, color: C.hi, outline: "none",
+            }}
+          />
+          <button
+            onClick={submit}
+            disabled={!ticker.trim() || scanMut.isPending}
+            style={{
+              fontFamily: SANS, fontSize: 13, fontWeight: 600,
+              color: C.bg0, background: C.amber,
+              border: "none", borderRadius: 5, padding: "10px 24px",
+              cursor: (!ticker.trim() || scanMut.isPending) ? "not-allowed" : "pointer",
+              boxShadow: "0 0 18px rgba(251,191,36,0.35)",
+              opacity: (!ticker.trim() || scanMut.isPending) ? 0.5 : 1,
+              transition: "all 0.15s ease",
+            }}
+          >
+            {scanMut.isPending ? "Scanning…" : "⊹ Scan"}
+          </button>
+        </div>
+      </div>
+
+      {/* Loading state */}
+      {scanMut.isPending && (
+        <div style={{ border: `1px solid ${C.amberBorder}`, borderRadius: 6, background: C.surface, padding: "32px 18px", textAlign: "center" }}>
+          <div style={{ fontFamily: MONO, fontSize: 12, color: C.amber }}>
+            {"// scanning " + ticker.toUpperCase() + " across all strategies ▮"}
+          </div>
+          <div style={{ width: 200, height: 3, background: "#121a12", borderRadius: 2, margin: "14px auto 0", overflow: "hidden" }}>
+            <div style={{ height: "100%", background: C.amber, borderRadius: 2, animation: "bmg-pulse 1s ease infinite", opacity: 0.7 }} />
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && !scanMut.isPending && (
+        <div style={{ border: `1px solid ${C.amberBorder}`, borderRadius: 6, background: C.surface, overflow: "hidden" }}>
+          {/* Header */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 16px", borderBottom: `1px solid ${C.borderDim}`,
+          }}>
+            <div>
+              <span style={{ fontFamily: MONO, fontSize: 13, color: C.amber, fontWeight: 500 }}>
+                {result.ticker}
+              </span>
+              <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint, marginLeft: 10 }}>
+                {result.results.length > 0 ? `${result.results.length} strategies firing` : "no setups firing"} · {result.bar_count} bars
+              </span>
+            </div>
+            <button
+              onClick={() => navigate("/strategy/forge")}
+              style={{
+                fontFamily: SANS, fontSize: 11, fontWeight: 600,
+                color: C.violet, background: C.violetDim,
+                border: `1px solid ${C.violetBorder}`, borderRadius: 4,
+                padding: "5px 12px", cursor: "pointer", transition: "all 0.15s",
+              }}
+            >
+              ⊹ Build Bot in Forge
+            </button>
+          </div>
+
+          {/* Conflict warning */}
+          {result.conflict_warning && (
+            <div style={{
+              padding: "10px 16px", borderBottom: `1px solid ${C.borderDim}`,
+              background: "rgba(251,191,36,0.06)",
+              fontFamily: SANS, fontSize: 12, color: C.amber,
+            }}>
+              ⚠ {result.conflict_warning}
+            </div>
+          )}
+
+          {/* Empty */}
+          {result.results.length === 0 && (
+            <div style={{ padding: "40px 18px", textAlign: "center" }}>
+              <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint }}>
+                {"// NO_SETUPS_FIRING — no strategies have active signals for " + result.ticker + " right now"}
+              </div>
+              <div style={{ fontFamily: SANS, fontSize: 12, color: C.dim, marginTop: 8 }}>
+                {result.message}
+              </div>
+            </div>
+          )}
+
+          {/* Strategy rank table */}
+          {result.results.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.borderDim}` }}>
+                    {["#", "STRATEGY", "DIRECTION", "CONFIDENCE", "QUALITY", "ACTIONS"].map((col) => (
+                      <th key={col} style={{
+                        padding: "8px 12px", fontFamily: MONO, fontSize: 9,
+                        color: C.faint, letterSpacing: "0.16em", textAlign: "left", fontWeight: 400,
+                      }}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.results.map((r, idx) => {
+                    const dirColor = r.side === "buy" || r.side === "cover" ? C.green : C.red;
+                    const dirLabel = r.side === "buy" || r.side === "cover" ? "LONG" : "SHORT";
+                    const qColor = r.setup_quality >= 70 ? C.green : r.setup_quality >= 45 ? C.amber : C.red;
+                    return (
+                      <tr
+                        key={r.strategy_id}
+                        style={{ borderBottom: `1px solid rgba(74,222,128,0.04)` }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "rgba(251,191,36,0.03)")}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+                      >
+                        <td style={{ padding: "11px 12px", fontFamily: MONO, fontSize: 10, color: C.faint }}>{idx + 1}</td>
+                        <td style={{ padding: "11px 12px" }}>
+                          <div style={{ fontFamily: SANS, fontSize: 13, color: C.hi, fontWeight: 500 }}>{r.display_name}</div>
+                          <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, marginTop: 2 }}>{r.category}</div>
+                        </td>
+                        <td style={{ padding: "11px 12px" }}>
+                          <span style={{
+                            fontFamily: MONO, fontSize: 9, padding: "2px 7px", borderRadius: 3,
+                            border: `1px solid ${dirColor}40`, color: dirColor, background: `${dirColor}10`,
+                          }}>{dirLabel}</span>
+                        </td>
+                        <td style={{ padding: "11px 12px", fontFamily: MONO, fontSize: 12, color: confColor(r.confidence) }}>
+                          {(r.confidence * 100).toFixed(1)}%
+                        </td>
+                        <td style={{ padding: "11px 12px", fontFamily: MONO, fontSize: 12, color: qColor }}>
+                          {r.setup_quality}
+                        </td>
+                        <td style={{ padding: "11px 12px" }}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              onClick={() => armMut.mutate({ t: result.ticker, sid: r.strategy_id })}
+                              disabled={armMut.isPending}
+                              style={{
+                                fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em",
+                                color: C.violet, background: C.violetDim,
+                                border: `1px solid ${C.violetBorder}`, borderRadius: 4,
+                                padding: "5px 10px", cursor: "pointer", transition: "all 0.15s",
+                              }}
+                            >ARM</button>
+                            <button
+                              onClick={() => navigate(`/strategy/forge`)}
+                              style={{
+                                fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em",
+                                color: C.amber, background: "rgba(251,191,36,0.08)",
+                                border: `1px solid ${C.amberBorder}`, borderRadius: 4,
+                                padding: "5px 10px", cursor: "pointer", transition: "all 0.15s",
+                              }}
+                            >FORGE</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-type Tab = "setups" | "evaluate" | "screen";
+type Tab = "setups" | "evaluate" | "screen" | "scan";
 
 export default function StrategyScoutPage() {
   const [tab, setTab] = useState<Tab>("setups");
@@ -1039,6 +1273,7 @@ export default function StrategyScoutPage() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "setups",   label: `// MY SETUPS${setups.length > 0 ? ` (${setups.length})` : ""}` },
+    { key: "scan",     label: "// RANK BY TICKER" },
     { key: "evaluate", label: "// EVALUATE" },
     { key: "screen",   label: "// FIND SETUPS" },
   ];
@@ -1167,6 +1402,7 @@ export default function StrategyScoutPage() {
       {/* Tab content */}
       <div style={{ animation: "bmg-slideIn 0.18s ease both" }}>
         {tab === "setups"   && <MySetupsView />}
+        {tab === "scan"     && <ScanTickerTab />}
         {tab === "evaluate" && <EvaluateTab />}
         {tab === "screen"   && <FindSetupsTab />}
       </div>
