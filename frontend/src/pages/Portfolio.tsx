@@ -145,7 +145,9 @@ export default function Portfolio() {
     }));
 
   const deployedCents = SLEEVE_ORDER.reduce((acc, k) => acc + snap.by_sleeve[k].current_value_cents, 0);
-  const cashCents = Math.max(0, totalValue - deployedCents);
+  // Use max of total and deployed so percentages always sum to 100% even if backend values diverge
+  const donutTotal = Math.max(totalValue, deployedCents);
+  const cashCents = Math.max(0, donutTotal - deployedCents);
   const allSlices = cashCents > 0 ? [...slices, { key: "cash", value_cents: cashCents }] : slices;
 
   return (
@@ -182,7 +184,7 @@ export default function Portfolio() {
         {totalValue > 0 && allSlices.length > 0 && (
           <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
             <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">Capital Allocation</p>
-            <AllocationDonut totalCents={totalValue} slices={allSlices} size={160} />
+            <AllocationDonut totalCents={donutTotal} slices={allSlices} size={160} />
           </div>
         )}
 

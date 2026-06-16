@@ -873,6 +873,7 @@ def run_migrations(engine: Engine) -> None:
         _seed_quant_watchlists(conn)
         _add_trade_provenance_trigger(conn)
         _reenable_options_bots(conn)
+        _ensure_options_bots_allocated(conn)
         _backfill_onchain_starting_capital(conn)
         _fix_quant_bot_capitals(conn)
         _delete_zombie_signals(conn)
@@ -2312,6 +2313,85 @@ def _reenable_options_bots(conn) -> None:
         logger.info("_reenable_options_bots: updated %d rows", result.rowcount)
     except Exception as exc:
         logger.warning("_reenable_options_bots failed: %s", exc)
+
+
+def _ensure_options_bots_allocated(conn) -> None:
+    """Guarantee options_income and options_directional have enabled BotAllocation rows.
+
+    Root cause: _migrate_strategy_portfolios does UPDATE-only (no INSERT), so if the
+    BotProfile rows didn't exist at migration time (seed runs after migration), no
+    allocations were created. Also zeroes out the options portfolio starting_capital
+    (old migration seeded it at $50k; options is a placeholder sleeve).
+    """
+    MIGRATION_NAME = "ensure_options_bots_allocated_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        inserted = 0
+        updated = 0
+
+        users = conn.execute(text("SELECT id FROM users")).fetchall()
+        for (user_id,) in users:
+            stocks_port = conn.execute(text(
+                "SELECT id FROM strategy_portfolios WHERE user_id=:u AND asset_class='stocks'"
+            ), {"u": user_id}).fetchone()
+            if not stocks_port:
+                continue
+            stocks_port_id = stocks_port[0]
+
+            for bot_name in ("options_income", "options_directional"):
+                profile = conn.execute(text(
+                    "SELECT id FROM bot_profiles WHERE name=:n"
+                ), {"n": bot_name}).fetchone()
+                if not profile:
+                    continue
+                profile_id = profile[0]
+
+                existing = conn.execute(text(
+                    "SELECT id FROM bot_allocations WHERE user_id=:u AND profile_id=:p"
+                ), {"u": user_id, "p": profile_id}).fetchone()
+
+                if existing:
+                    conn.execute(text("""
+                        UPDATE bot_allocations
+                           SET portfolio_id                   = :pid,
+                               starting_capital_cents         = 10000000,
+                               capital_cents_within_portfolio = 10000000,
+                               enabled                        = 1,
+                               paused_reason                  = NULL,
+                               tier                           = 'T1',
+                               updated_at                     = :now
+                         WHERE id = :id
+                    """), {"pid": stocks_port_id, "id": existing[0], "now": now})
+                    updated += 1
+                else:
+                    conn.execute(text("""
+                        INSERT INTO bot_allocations
+                            (user_id, profile_id, capital_pct, risk_profile, paper_mode,
+                             go_live_requested, enabled, starting_capital_cents,
+                             capital_cents_within_portfolio, portfolio_id, tier,
+                             created_at, updated_at)
+                        VALUES (:u, :p, 10.0, 'standard', 1, 0, 1, 10000000, 10000000, :pid, 'T1', :now, :now)
+                    """), {"u": user_id, "p": profile_id, "pid": stocks_port_id, "now": now})
+                    inserted += 1
+
+        # Also zero out options portfolio starting_capital — it's a placeholder sleeve
+        conn.execute(text("""
+            UPDATE strategy_portfolios
+               SET starting_capital_cents = 0
+             WHERE asset_class = 'options'
+               AND starting_capital_cents != 0
+        """))
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info(
+            "_ensure_options_bots_allocated: inserted=%d updated=%d allocations; options portfolio capital zeroed",
+            inserted, updated,
+        )
+    except Exception as exc:
+        logger.warning("_ensure_options_bots_allocated failed: %s", exc)
 
 
 def _backfill_onchain_starting_capital(conn) -> None:
