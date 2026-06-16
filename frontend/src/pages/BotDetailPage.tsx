@@ -29,6 +29,7 @@ import {
   getBotWatchlistReadiness,
   getBotStrategyTrace,
   runBacktest,
+  runBotNow,
   getCatalysts,
   getActivity,
   getStrategyWeights,
@@ -2702,6 +2703,12 @@ export default function BotDetailPage() {
     onError: () => toast.error("Failed to update waitlist"),
   });
 
+  const runNowMut = useMutation({
+    mutationFn: () => runBotNow(botName),
+    onSuccess: (data) => toast.success(data.message || "Bot triggered"),
+    onError: () => toast.error("Failed to trigger bot run"),
+  });
+
   const equityCurve: EquityPoint[] = Array.isArray(stats.equity_curve) ? stats.equity_curve : [];
   const totalPnl = stats.today_pnl ?? 0;
 
@@ -2805,6 +2812,13 @@ export default function BotDetailPage() {
                   )}
                 >
                   {isEnabled ? "Disable Bot" : "Enable Bot"}
+                </button>
+                <button
+                  onClick={() => runNowMut.mutate()}
+                  disabled={runNowMut.isPending}
+                  className="px-3 py-1.5 rounded-lg border border-t-accent/40 text-xs font-semibold text-t-accent hover:bg-t-accent/10 transition-colors font-ui-t disabled:opacity-50"
+                >
+                  {runNowMut.isPending ? "Running…" : "Run Now"}
                 </button>
                 {!isOnWaitlist ? (
                   <button
