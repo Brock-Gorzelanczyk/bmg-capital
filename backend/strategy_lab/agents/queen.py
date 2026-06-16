@@ -782,6 +782,14 @@ def _generate_proposals(db: Session, *, research: dict, health: dict, synthetic:
 
     proposals_posted: list[dict] = []
 
+    actionable = [e for e in ic_summary if e.get("status") in ("degrading", "strong")]
+    logger.warning(
+        "[queen] proposal check: %d IC entries total, %d actionable (degrading/strong)",
+        len(ic_summary), len(actionable),
+    )
+    if not actionable:
+        logger.warning("[queen] no proposals generated — all bots healthy or insufficient IC data")
+
     for ic_entry in ic_summary:
         bot      = ic_entry.get("bot", "")
         ic_val   = ic_entry.get("ic")

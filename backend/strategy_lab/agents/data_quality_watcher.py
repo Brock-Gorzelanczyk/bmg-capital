@@ -6,6 +6,7 @@ Runs hourly — posts to #bmg-monitoring when issues detected.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from datetime import datetime, timezone, timedelta
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 # Staleness thresholds
 REGIME_STALE_HOURS   = 26   # RegimeSnapshot older than this → alert
 SIGNAL_STALE_HOURS   = 6    # No signals from any bot in 6h → alert (non-weekend)
+
+# Dedup state — prevents repeat alerts for the same issues within the cooldown window
+_last_alert_hash: str = ""
+_last_alert_ts: datetime | None = None
+_ALERT_COOLDOWN_HOURS = 4
 
 
 def _get_channel() -> tuple[str, str]:
@@ -78,10 +84,11 @@ def _check_signal_freshness(db: Session) -> dict:
     now = datetime.now(timezone.utc)
     # Skip check on weekends for stock bots
     is_weekend = now.weekday() >= 5
-    cutoff = (now - timedelta(hours=SIGNAL_STALE_HOURS)).isoformat()
+    # Strip tzinfo so the cutoff string matches naive UTC strings stored in SQLite
+    cutoff = (now - timedelta(hours=SIGNAL_STALE_HOURS)).replace(tzinfo=None).isoformat()
     try:
         count = db.execute(text(
-            "SELECT COUNT(*) FROM bot_signals WHERE ts >= :c"
+            "SELECT COUNT(*) FROM bot_signals WHERE ts >= :c AND (is_test IS NULL OR is_test = 0)"
         ), {"c": cutoff}).scalar() or 0
 
         if count == 0 and not is_weekend:
@@ -143,7 +150,19 @@ def run_data_quality_check(db: Session) -> dict:
     logger.info("[dq_watcher] ok=%s issues=%d", not has_issues, len(all_issues))
 
     token, ch = _get_channel()
+
+    # Dedup: skip Discord post if same issues posted within cooldown window
+    global _last_alert_hash, _last_alert_ts
+    _should_post_alert = False
     if has_issues:
+        issue_hash = hashlib.md5(",".join(sorted(all_issues)).encode()).hexdigest()[:8]
+        elapsed_hours = (
+            (now - _last_alert_ts).total_seconds() / 3600
+            if _last_alert_ts is not None else float("inf")
+        )
+        _should_post_alert = (issue_hash != _last_alert_hash) or (elapsed_hours > _ALERT_COOLDOWN_HOURS)
+
+    if has_issues and _should_post_alert:
         embed = {
             "author": {"name": "BMG Capital — Vick (Data Quality)"},
             "title":  f"⚠️ Data Quality Alert — {now.strftime('%Y-%m-%d %H:%M')} UTC",
@@ -166,6 +185,14 @@ def run_data_quality_check(db: Session) -> dict:
             logger.debug("[dq_watcher] plain_english failed: %s", _pe_exc)
         if ch and _post(ch, token, embed):
             logger.warning("[dq_watcher] alert posted: %d issues", len(all_issues))
+            _last_alert_hash = issue_hash
+            _last_alert_ts = now
+        elif not ch:
+            # No channel configured — still update dedup state so we don't spam logs
+            _last_alert_hash = issue_hash
+            _last_alert_ts = now
+    elif has_issues:
+        logger.info("[dq_watcher] alert suppressed by dedup (same hash within %dh cooldown)", _ALERT_COOLDOWN_HOURS)
     else:
         embed = {
             "author": {"name": "BMG Capital — Vick (Data Quality)"},

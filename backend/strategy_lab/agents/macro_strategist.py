@@ -460,6 +460,7 @@ def run_macro_classification(db: Session) -> dict:
     }
 
     token, channel_id = _get_macro_channel()
+    logger.warning("[macro_strategist] starting, posting to channel %s", channel_id)
     posted = _post_discord(token, channel_id, embed)
     result["discord_posted"] = posted
 

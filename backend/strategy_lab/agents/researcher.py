@@ -383,7 +383,7 @@ def run_daily_research(db: Session) -> dict:
                 {"name": "Top 5 Candidates",       "value": ", ".join(top_candidates) or "None", "inline": False},
                 {"name": "Recommendations",        "value": str(len(recommendations)), "inline": True},
             ],
-            "footer":    {"text": "Nick (Equity Research) · Daily 7 AM ET"},
+            "footer":    {"text": "Nick (Equity Research) · 4x daily · 7a / 12p / 4:30p / 9p ET"},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         _tok, _ch = _get_research_channel()

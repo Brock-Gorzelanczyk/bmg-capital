@@ -1065,8 +1065,9 @@ def setup_bot_scheduler(scheduler) -> None:
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
+        next_run_time=datetime.now(UTC),  # fire immediately on startup to confirm Discord wiring
     )
-    logger.warning("[startup-trace] registered job macro_classification_daily (7:05 AM ET)")
+    logger.warning("[startup-trace] registered job macro_classification_daily (7:05 AM ET, fires immediately)")
 
     # ------------------------------------------------------------------
     # Proposal reaction handler: every 60s — polls Discord for CIO reactions
@@ -1228,5 +1229,5 @@ def setup_bot_scheduler(scheduler) -> None:
         "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp "
         "queen_morning queen_midday queen_close queen_evening "
         "queen_weekend_recap queen_weekly queen_regime_alert_check "
-        "defensive_halt_check resume_check compute_bot_stats"
+        "defensive_halt_check resume_check compute_bot_stats macro_classification_daily"
     )

@@ -33,57 +33,20 @@ FLEET_AUM_PAUSE_PCT   = -1.0  # 30d P&L as % of fleet AUM — below this, no pau
 
 _ALERT_COOLDOWN_HOURS = 6
 
-
-def _ensure_cooldown_table(db: Session) -> None:
-    try:
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS sentinel_cooldown (
-                level VARCHAR(20) PRIMARY KEY,
-                last_fired_at TIMESTAMPTZ NOT NULL,
-                trigger_hash  TEXT        NOT NULL DEFAULT ''
-            )
-        """))
-        db.commit()
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
+# In-memory dedup: level → (last_fired_at, trigger_frozenset)
+# Replaces DB-backed sentinel_cooldown table which silently failed on SQLite.
+_alert_state: dict[str, tuple[datetime, frozenset]] = {}
 
 
 def _get_sentinel_state(db: Session, level: str) -> tuple[Optional[datetime], frozenset]:
-    try:
-        _ensure_cooldown_table(db)
-        row = db.execute(text(
-            "SELECT last_fired_at, trigger_hash FROM sentinel_cooldown WHERE level = :level"
-        ), {"level": level}).fetchone()
-        if row and row[0]:
-            ts = row[0] if isinstance(row[0], datetime) else datetime.fromisoformat(str(row[0]))
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            triggers = frozenset(row[1].split(",")) if row[1] else frozenset()
-            return ts, triggers
-    except Exception as exc:
-        logger.debug("[risk_sentinel] state read failed: %s", exc)
+    entry = _alert_state.get(level)
+    if entry:
+        return entry
     return None, frozenset()
 
 
 def _set_sentinel_state(db: Session, level: str, ts: datetime, triggers: frozenset) -> None:
-    try:
-        db.execute(text("""
-            INSERT INTO sentinel_cooldown (level, last_fired_at, trigger_hash)
-            VALUES (:level, :ts, :th)
-            ON CONFLICT (level) DO UPDATE
-              SET last_fired_at = EXCLUDED.last_fired_at,
-                  trigger_hash  = EXCLUDED.trigger_hash
-        """), {"level": level, "ts": ts.isoformat(), "th": ",".join(sorted(triggers))})
-        db.commit()
-    except Exception as exc:
-        logger.debug("[risk_sentinel] state write failed: %s", exc)
-        try:
-            db.rollback()
-        except Exception:
-            pass
+    _alert_state[level] = (ts, triggers)
 
 
 def _get_channel() -> tuple[str, str]:
@@ -294,9 +257,14 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
         "RED":      "🚨 Dick (CRO) — RED ALERT",
         "CRITICAL": "🔴 Dick (CRO) — CRITICAL ALERT",
     }
+    pnl_value = (
+        f"${summary['total_pnl_usd']:+,.2f}"
+        if summary.get("pnl_data_available", True)
+        else "DATA_MISSING (bot_daily_pnl empty)"
+    )
     fields = [
         {"name": f"{icons[level]} Risk Level", "value": level, "inline": True},
-        {"name": "Fleet P&L (30d)",            "value": f"${summary['total_pnl_usd']:,.2f}", "inline": True},
+        {"name": "Fleet P&L (30d)",            "value": pnl_value, "inline": True},
         {"name": "Stale Bots",                 "value": str(summary["stale_count"]), "inline": True},
     ]
     if summary.get("fleet_drawdown_24h_pct") is not None and summary["fleet_drawdown_24h_pct"] != 0.0:
@@ -419,10 +387,14 @@ def run_risk_health_check(db: Session) -> dict:
     )
 
     fleet_aum_usd = drawdown.get("fleet_aum_usd", 50_000.0)
+    pnl_data_available = bool(drawdown.get("bots"))
+    if not pnl_data_available:
+        logger.warning("[risk_sentinel] bot_daily_pnl has no rows in last 30d — P&L shown as DATA_MISSING")
     summary = {
         "level":                  level,
         "triggers":               triggers,
         "total_pnl_usd":          total_pnl_usd,
+        "pnl_data_available":     pnl_data_available,
         "fleet_aum_usd":          fleet_aum_usd,
         "worst_dd_pct":           round(worst_dd_pct, 2),
         "fleet_drawdown_24h_pct": drawdown_24h,
