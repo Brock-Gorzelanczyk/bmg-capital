@@ -356,6 +356,12 @@ def run_bot_profile(profile_name: str) -> dict:
                             }
                             for _, row in df.iterrows()
                         ]
+                    if bars and _bar_interval != "1d":
+                        _sample_sym = next(iter(bars))
+                        logger.warning(
+                            "[runner:%s] sample bar count for %s: %d bars (interval=%s)",
+                            profile_name, _sample_sym, len(bars[_sample_sym]), _bar_interval,
+                        )
                     logger.warning(
                         "[runner:%s] fetched bars for %d/%d symbols",
                         profile_name, len(bars), len(symbols),

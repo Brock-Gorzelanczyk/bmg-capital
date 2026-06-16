@@ -44,6 +44,7 @@ def _fetch_bars_sync(symbols: List[str], period: str = "1y", interval: str = "1d
                 group_by="ticker",
                 threads=True,
                 progress=False,
+                prepost=False,  # exclude pre/post market bars (critical for intraday strategies)
             )
             if raw.empty:
                 continue
