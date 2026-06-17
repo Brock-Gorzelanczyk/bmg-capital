@@ -264,6 +264,56 @@ async def lifespan(app: FastAPI):
             logger.warning("[startup] intro conversation failed (non-fatal): %s", _exc)
     asyncio.create_task(_maybe_run_intro())
 
+    # Post-deploy synthetic pipeline check — fires 60s after startup so scheduler is warm
+    async def _post_deploy_synthetic_check():
+        import asyncio as _aio
+        await _aio.sleep(60)
+        try:
+            from strategy_lab.agents.strategy_monitor import _check_bot_windows
+            from app.dependencies import get_db as _get_db
+            _db = next(_get_db())
+            try:
+                rows = _check_bot_windows(_db)
+                red   = [r["bot"] for r in rows if r.get("pipeline_health") == "RED"    and r.get("pipeline_health") != "DISABLED"]
+                yellow = [r["bot"] for r in rows if r.get("pipeline_health") == "YELLOW" and r.get("pipeline_health") != "DISABLED"]
+                green  = [r["bot"] for r in rows if r.get("pipeline_health") == "GREEN"]
+                logger.warning(
+                    "[post-deploy-check] pipeline health: %d GREEN, %d YELLOW, %d RED — RED=%s YELLOW=%s",
+                    len(green), len(yellow), len(red), red, yellow,
+                )
+                if red:
+                    try:
+                        from app.services.discord import post_embed_to_channel
+                        import os as _os
+                        ch = _os.getenv("DISCORD_CH_BMG_MONITORING") or _os.getenv("DISCORD_CH_DEV_LOG")
+                        token = _os.getenv("DISCORD_BOT_TOKEN", "")
+                        if ch and token:
+                            embed = {
+                                "title": f"🚨 Post-Deploy Health Check — {len(red)} RED bot(s)",
+                                "color": 0xEF4444,
+                                "fields": [
+                                    {"name": "RED", "value": ", ".join(red), "inline": False},
+                                    {"name": "YELLOW", "value": ", ".join(yellow) or "none", "inline": False},
+                                    {"name": "GREEN", "value": str(len(green)), "inline": True},
+                                ],
+                                "footer": {"text": "post-deploy synthetic check · auto-fired 60s after startup"},
+                            }
+                            import httpx as _httpx
+                            _httpx.post(
+                                f"https://discord.com/api/v10/channels/{ch}/messages",
+                                headers={"Authorization": f"Bot {token}", "Content-Type": "application/json",
+                                         "User-Agent": "DiscordBot (https://github.com/BMG-Capital/bmg-capital, 1.0.0)"},
+                                json={"embeds": [embed]}, timeout=8,
+                            )
+                    except Exception as _disc_exc:
+                        logger.debug("[post-deploy-check] discord notify failed: %s", _disc_exc)
+            finally:
+                _db.close()
+        except Exception as _exc:
+            logger.warning("[post-deploy-check] failed (non-fatal): %s", _exc)
+
+    asyncio.create_task(_post_deploy_synthetic_check())
+
     yield
 
     # Graceful shutdown
