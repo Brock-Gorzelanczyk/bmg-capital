@@ -5,10 +5,11 @@ import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 import { BracketFrame, SectionLabel, GlowInput, BMGButton, BMGCard } from "@/components/design";
 import {
-  getBotConfig, getBotWatchlist, getBotAudit,
+  getBotConfig, getBotWatchlist, getBotAudit, getBotHealthDetail,
   patchBotConfig, deleteBotConfig,
   enableBot, disableBot, pauseBot, resumeBot,
   addWatchlistSymbol, removeWatchlistSymbol,
+  type BotSignalRow, type BotTradeRow, type BotDiscordPost,
 } from "@/api/adminBots";
 
 const ADMIN_EMAIL = "32bgorzelanczyk@gmail.com";
@@ -520,6 +521,191 @@ function AuditLog({ botId }: { botId: string }) {
   );
 }
 
+// ── Activity section (A13) ────────────────────────────────────────────────────
+
+type ActivityTab = "signals" | "trades" | "posts";
+
+function fmtPnl(cents: number | null) {
+  if (cents == null) return "—";
+  const usd = cents / 100;
+  const sign = usd >= 0 ? "+" : "-";
+  return `${sign}$${Math.abs(usd).toFixed(2)}`;
+}
+
+function ActivitySection({ botId }: { botId: string }) {
+  const [tab, setTab] = useState<ActivityTab>("signals");
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["admin-bot-health-detail", botId],
+    queryFn: () => getBotHealthDetail(botId),
+    staleTime: 15_000,
+  });
+
+  const tabs: { key: ActivityTab; label: string }[] = [
+    { key: "signals", label: "Signals" },
+    { key: "trades",  label: "Trades"  },
+    { key: "posts",   label: "Discord Posts" },
+  ];
+
+  return (
+    <BMGCard padding="md">
+      <div className="flex items-center justify-between mb-4">
+        <SectionLabel as="h2">Activity</SectionLabel>
+        <button
+          onClick={() => refetch()}
+          className="text-xs font-mono text-[var(--bmg-text-label)] hover:text-[var(--bmg-text-muted)] transition-colors"
+        >
+          refresh
+        </button>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 mb-4 border-b border-[var(--bmg-green-border)]">
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={cn(
+              "px-3 py-1.5 text-xs font-mono rounded-t transition-colors",
+              tab === t.key
+                ? "bg-[var(--bmg-green-dim)] text-[var(--bmg-green)] border-b-2 border-[var(--bmg-green)]"
+                : "text-[var(--bmg-text-label)] hover:text-[var(--bmg-text-muted)]",
+            )}
+          >
+            {t.label}
+            {data && (
+              <span className="ml-1 opacity-60">
+                ({t.key === "signals" ? data.signals.length
+                  : t.key === "trades" ? data.trades.length
+                  : data.discord_posts.length})
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-8 rounded bg-[var(--bmg-bg)] animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <p className="text-xs text-red-400">Failed to load activity data.</p>
+      )}
+
+      {data && tab === "signals" && (
+        <div className="overflow-x-auto">
+          {data.signals.length === 0 ? (
+            <p className="text-xs text-[var(--bmg-text-muted)] italic">No signals recorded yet.</p>
+          ) : (
+            <table className="w-full text-xs font-mono">
+              <thead>
+                <tr className="text-[var(--bmg-text-label)] border-b border-[var(--bmg-green-border)]">
+                  <th className="text-left py-1 pr-3">Time</th>
+                  <th className="text-left py-1 pr-3">Symbol</th>
+                  <th className="text-left py-1 pr-3">Side</th>
+                  <th className="text-right py-1 pr-3">Conf.</th>
+                  <th className="text-right py-1">Discord</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.signals.map((s: BotSignalRow) => (
+                  <tr key={s.id} className="border-b border-[var(--bmg-green-border)]/30 hover:bg-[var(--bmg-bg)]/50">
+                    <td className="py-1 pr-3 text-[var(--bmg-text-muted)]">{s.ts ? timeAgo(s.ts) : "—"}</td>
+                    <td className="py-1 pr-3 text-[var(--bmg-text)]">{s.symbol}</td>
+                    <td className={cn("py-1 pr-3", s.side?.toLowerCase().includes("buy") ? "text-[var(--bmg-green)]" : "text-red-400")}>
+                      {s.side}
+                    </td>
+                    <td className="py-1 pr-3 text-right text-[var(--bmg-text-muted)]">
+                      {s.confidence != null ? `${(s.confidence * 100).toFixed(0)}%` : "—"}
+                    </td>
+                    <td className="py-1 text-right">
+                      {s.discord_posted_at
+                        ? <span className="text-[var(--bmg-green)]">✓</span>
+                        : <span className="text-[var(--bmg-text-label)]">—</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {data && tab === "trades" && (
+        <div className="overflow-x-auto">
+          {data.trades.length === 0 ? (
+            <p className="text-xs text-[var(--bmg-text-muted)] italic">No trades recorded yet.</p>
+          ) : (
+            <table className="w-full text-xs font-mono">
+              <thead>
+                <tr className="text-[var(--bmg-text-label)] border-b border-[var(--bmg-green-border)]">
+                  <th className="text-left py-1 pr-3">Time</th>
+                  <th className="text-left py-1 pr-3">Symbol</th>
+                  <th className="text-left py-1 pr-3">Side</th>
+                  <th className="text-right py-1 pr-3">Qty</th>
+                  <th className="text-right py-1">P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.trades.map((t: BotTradeRow) => (
+                  <tr key={t.id} className="border-b border-[var(--bmg-green-border)]/30 hover:bg-[var(--bmg-bg)]/50">
+                    <td className="py-1 pr-3 text-[var(--bmg-text-muted)]">{t.ts ? timeAgo(t.ts) : "—"}</td>
+                    <td className="py-1 pr-3 text-[var(--bmg-text)]">{t.symbol}</td>
+                    <td className={cn("py-1 pr-3", t.side?.toLowerCase().includes("buy") ? "text-[var(--bmg-green)]" : "text-red-400")}>
+                      {t.side}
+                    </td>
+                    <td className="py-1 pr-3 text-right text-[var(--bmg-text-muted)]">{t.qty}</td>
+                    <td className={cn("py-1 text-right", (t.pnl_cents ?? 0) >= 0 ? "text-[var(--bmg-green)]" : "text-red-400")}>
+                      {fmtPnl(t.pnl_cents)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {data && tab === "posts" && (
+        <div className="overflow-x-auto">
+          {data.discord_posts.length === 0 ? (
+            <p className="text-xs text-[var(--bmg-text-muted)] italic">No Discord posts recorded yet.</p>
+          ) : (
+            <table className="w-full text-xs font-mono">
+              <thead>
+                <tr className="text-[var(--bmg-text-label)] border-b border-[var(--bmg-green-border)]">
+                  <th className="text-left py-1 pr-3">Posted</th>
+                  <th className="text-left py-1 pr-3">Symbol</th>
+                  <th className="text-left py-1 pr-3">Side</th>
+                  <th className="text-right py-1">Conf.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.discord_posts.map((p: BotDiscordPost) => (
+                  <tr key={p.id} className="border-b border-[var(--bmg-green-border)]/30 hover:bg-[var(--bmg-bg)]/50">
+                    <td className="py-1 pr-3 text-[var(--bmg-text-muted)]">{p.ts ? timeAgo(p.ts) : "—"}</td>
+                    <td className="py-1 pr-3 text-[var(--bmg-text)]">{p.symbol}</td>
+                    <td className={cn("py-1 pr-3", p.side?.toLowerCase().includes("buy") ? "text-[var(--bmg-green)]" : "text-red-400")}>
+                      {p.side}
+                    </td>
+                    <td className="py-1 text-right text-[var(--bmg-text-muted)]">
+                      {p.confidence != null ? `${(p.confidence * 100).toFixed(0)}%` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </BMGCard>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdminBotDetailPage() {
@@ -657,6 +843,7 @@ export default function AdminBotDetailPage() {
             onSaved={() => qc.invalidateQueries({ queryKey: ["admin-bot-config", botId] })}
           />
           <AuditLog botId={botId} />
+          <ActivitySection botId={botId} />
         </>
       )}
     </div>

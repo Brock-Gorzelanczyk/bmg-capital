@@ -801,6 +801,118 @@ def get_bot_health(
     }
 
 
+@router.get("/bot-health/{bot_name}")
+def get_bot_health_detail(
+    bot_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Drill-down for a single bot. Returns last 25 signals, last 25 trades,
+    last 10 Discord posts, and live health row.
+    """
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    try:
+        from app.db.models.bots import BotProfile, BotAllocation, BotSignal, BotTrade
+        from strategy_lab.agents.strategy_monitor import _check_bot_windows
+
+        prof = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
+        if not prof:
+            raise HTTPException(status_code=404, detail=f"Bot '{bot_name}' not found")
+
+        alloc_rows = db.query(BotAllocation).filter(BotAllocation.profile_id == prof.id).all()
+        alloc_ids  = [a.id for a in alloc_rows]
+
+        # Last 25 signals
+        sig_rows = (
+            db.query(BotSignal)
+            .filter(BotSignal.allocation_id.in_(alloc_ids))
+            .order_by(BotSignal.ts.desc())
+            .limit(25)
+            .all()
+        ) if alloc_ids else []
+
+        signals = [
+            {
+                "id":               s.id,
+                "ts":               s.ts.isoformat() if s.ts else None,
+                "symbol":           s.symbol,
+                "side":             s.side,
+                "confidence":       s.confidence,
+                "price":            s.price,
+                "discord_posted_at": s.discord_posted_at.isoformat() if s.discord_posted_at else None,
+                "is_test":          bool(s.is_test),
+            }
+            for s in sig_rows
+        ]
+
+        # Last 25 trades
+        trade_rows = (
+            db.query(BotTrade)
+            .filter(BotTrade.allocation_id.in_(alloc_ids))
+            .order_by(BotTrade.ts.desc())
+            .limit(25)
+            .all()
+        ) if alloc_ids else []
+
+        trades = [
+            {
+                "id":            t.id,
+                "ts":            t.ts.isoformat() if t.ts else None,
+                "symbol":        t.symbol,
+                "side":          t.side,
+                "qty":           t.qty,
+                "price":         t.price,
+                "pnl_cents":     t.pnl_cents,
+                "quarantined_at": t.quarantined_at.isoformat() if t.quarantined_at else None,
+            }
+            for t in trade_rows
+        ]
+
+        # Last 10 Discord posts (signals with discord_posted_at set)
+        discord_rows = (
+            db.query(BotSignal)
+            .filter(
+                BotSignal.allocation_id.in_(alloc_ids),
+                BotSignal.discord_posted_at.isnot(None),
+            )
+            .order_by(BotSignal.discord_posted_at.desc())
+            .limit(10)
+            .all()
+        ) if alloc_ids else []
+
+        discord_posts = [
+            {
+                "id":        s.id,
+                "ts":        s.discord_posted_at.isoformat() if s.discord_posted_at else None,
+                "symbol":    s.symbol,
+                "side":      s.side,
+                "confidence": s.confidence,
+            }
+            for s in discord_rows
+        ]
+
+        # Live health row for this bot
+        all_bot_windows = _check_bot_windows(db)
+        health_row = next((r for r in all_bot_windows if r.get("bot") == bot_name), {})
+
+        return {
+            "bot":          bot_name,
+            "health":       health_row,
+            "signals":      signals,
+            "trades":       trades,
+            "discord_posts": discord_posts,
+            "checked_at":   datetime.now(timezone.utc).isoformat(),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[bot-health-detail] failed for %s: %s", bot_name, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.post("/synthetic-check")
 def synthetic_check(
     db: Session = Depends(get_db),

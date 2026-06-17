@@ -75,3 +75,47 @@ export const removeWatchlistSymbol = (botId: string, symbol: string) =>
 
 export const getBotAudit = (botId: string): Promise<{ entries: AuditEntry[] }> =>
   client.get(`/admin/bots/${botId}/audit`).then(r => r.data);
+
+// ── Bot health detail (A13) ───────────────────────────────────────────────────
+
+export interface BotSignalRow {
+  id: number;
+  ts: string | null;
+  symbol: string;
+  side: string;
+  confidence: number | null;
+  price: number | null;
+  discord_posted_at: string | null;
+  is_test: boolean;
+}
+
+export interface BotTradeRow {
+  id: number;
+  ts: string | null;
+  symbol: string;
+  side: string;
+  qty: number;
+  price: number | null;
+  pnl_cents: number | null;
+  quarantined_at: string | null;
+}
+
+export interface BotDiscordPost {
+  id: number;
+  ts: string | null;
+  symbol: string;
+  side: string;
+  confidence: number | null;
+}
+
+export interface BotHealthDetail {
+  bot: string;
+  health: Record<string, unknown>;
+  signals: BotSignalRow[];
+  trades: BotTradeRow[];
+  discord_posts: BotDiscordPost[];
+  checked_at: string;
+}
+
+export const getBotHealthDetail = (botName: string): Promise<BotHealthDetail> =>
+  client.get(`/admin/bot-health/${botName}`).then(r => r.data);

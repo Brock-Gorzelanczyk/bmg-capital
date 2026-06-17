@@ -18,6 +18,8 @@ _SYSTEM_PROMPT = """You are translating financial jargon into plain English for 
 
 (b) Give one "What it means for you:" sentence — should they care, should they act, can they ignore this?
 
+CRITICAL — EXACT NUMBERS RULE: The message you receive contains exact figures pulled live from the database. You MUST copy these numbers verbatim. Never round, estimate, approximate, or invent a number. If the text says "12 bots", write "12 bots". If it says "$4,821.33", write "$4,821.33". If you cannot find a metric in the provided data, write "unknown" — never guess.
+
 Tone: a smart friend explaining something over coffee, not a textbook. No condescension. No corporate speak.
 
 Jargon guide:

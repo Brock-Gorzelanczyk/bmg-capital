@@ -183,12 +183,25 @@ def _check_bot_windows(db: Session) -> list[dict]:
                 lts = last_ts if last_ts.tzinfo else last_ts.replace(tzinfo=timezone.utc)
                 minutes_since = round((now - lts).total_seconds() / 60, 1)
 
+            # A14: categorize why a bot is DISABLED for dashboard display
+            disable_category: str | None = None
+            if health == "DISABLED":
+                if bot_name in _T0_BOTS:
+                    disable_category = "T0_INCUBATION"
+                elif alloc.paused_reason == "admin_lock":
+                    disable_category = "ADMIN_LOCK"
+                elif alloc.paused_reason == "health_halt":
+                    disable_category = "HEALTH_HALT"
+                else:
+                    disable_category = "NOT_ENABLED"
+
             results.append({
                 "bot":                    bot_name,
                 "pipeline_health":        health,
                 "status":                 "DISABLED" if health == "DISABLED" else ("STALE" if health == "RED" else "OK"),
                 "enabled":                bool(alloc.enabled),
                 "paused_reason":          alloc.paused_reason,
+                "disable_category":       disable_category,
                 "last_signal_at":         last_ts.isoformat() if last_ts else None,
                 "minutes_since_last":     minutes_since,
                 "signals_24h":            signals_24h,
@@ -623,6 +636,14 @@ def run_strategy_health_check(db: Session) -> dict:
         alpaca.get("status"), sr_status, len(alerts),
     )
 
+    # A15: fire Discord alerts on RED transitions (non-fatal)
+    try:
+        n_posted = post_health_transition_alerts(db, bot_windows)
+        if n_posted:
+            logger.warning("[strategy_monitor] %d RED-transition alert(s) posted to Discord", n_posted)
+    except Exception as _exc:
+        logger.debug("[strategy_monitor] health transition alerts failed: %s", _exc)
+
     return {
         "status":      overall,
         "bots":        bot_windows,
@@ -631,3 +652,167 @@ def run_strategy_health_check(db: Session) -> dict:
         "alerts":      alerts,
         "checked_at":  datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ── A15: health transition alerts to Discord ──────────────────────────────────
+
+def _ensure_bot_health_state_table(db: Session) -> None:
+    try:
+        from sqlalchemy import text as sql_text
+        db.execute(sql_text("""
+            CREATE TABLE IF NOT EXISTS bot_health_state (
+                bot_name      TEXT PRIMARY KEY,
+                last_health   TEXT NOT NULL,
+                alerted_at    TEXT,
+                updated_at    TEXT NOT NULL
+            )
+        """))
+        db.commit()
+    except Exception as exc:
+        logger.debug("[strategy_monitor] bot_health_state table ensure failed: %s", exc)
+
+
+def _read_health_state(db: Session) -> dict[str, dict]:
+    """Return {bot_name: {last_health, alerted_at}} from bot_health_state table."""
+    try:
+        from sqlalchemy import text as sql_text
+        rows = db.execute(sql_text(
+            "SELECT bot_name, last_health, alerted_at FROM bot_health_state"
+        )).fetchall()
+        return {r[0]: {"last_health": r[1], "alerted_at": r[2]} for r in rows}
+    except Exception:
+        return {}
+
+
+def _write_health_state(db: Session, bot_name: str, health: str, alerted_at: str | None = None) -> None:
+    try:
+        from sqlalchemy import text as sql_text
+        db.execute(sql_text("""
+            INSERT INTO bot_health_state (bot_name, last_health, alerted_at, updated_at)
+            VALUES (:bot, :health, :alerted, :now)
+            ON CONFLICT(bot_name) DO UPDATE SET
+                last_health = excluded.last_health,
+                alerted_at  = COALESCE(excluded.alerted_at, bot_health_state.alerted_at),
+                updated_at  = excluded.updated_at
+        """), {
+            "bot":     bot_name,
+            "health":  health,
+            "alerted": alerted_at,
+            "now":     datetime.now(timezone.utc).isoformat(),
+        })
+        db.commit()
+    except Exception as exc:
+        logger.debug("[strategy_monitor] _write_health_state failed for %s: %s", bot_name, exc)
+
+
+def _post_risk_alert(bot_row: dict, now: datetime) -> bool:
+    """Post a RED transition alert to #risk-alerts Discord channel."""
+    import os
+    import httpx
+
+    token      = os.getenv("DISCORD_BOT_TOKEN", "")
+    channel_id = os.getenv("DISCORD_CH_RISK_ALERTS", "") or os.getenv("DISCORD_CH_DEV_LOG", "")
+    if not token or not channel_id:
+        logger.debug("[strategy_monitor] risk-alert skipped — no Discord config")
+        return False
+
+    bot_name       = bot_row.get("bot", "unknown")
+    minutes_stale  = bot_row.get("minutes_since_last")
+    signals_24h    = bot_row.get("signals_24h", 0)
+    trades_24h     = bot_row.get("trades_24h", 0)
+    open_positions = bot_row.get("open_positions", 0)
+    expected_min   = bot_row.get("expected_interval_min", "?")
+    detail_url     = f"/admin/bot-health/{bot_name}"
+
+    if minutes_stale:
+        last_signal_str = f"{minutes_stale:.0f} minutes ago"
+        expected_str    = f"every {expected_min} min"
+    else:
+        last_signal_str = "never"
+        expected_str    = f"every {expected_min} min"
+
+    description = (
+        f"🔴 **{bot_name}** flipped to RED at {now.strftime('%I:%M %p ET')}.\n\n"
+        f"Last signal: {last_signal_str} (expected: {expected_str}).\n"
+        f"Open positions: **{open_positions}**. Trades 24h: **{trades_24h}**.\n\n"
+        f"Drill-down: `{detail_url}`"
+    )
+
+    embed = {
+        "title":       f"🔴 Bot Health Alert — {bot_name}",
+        "description": description,
+        "color":       0xDC2626,
+        "fields": [
+            {"name": "Signals 24h",    "value": str(signals_24h),    "inline": True},
+            {"name": "Trades 24h",     "value": str(trades_24h),     "inline": True},
+            {"name": "Open Positions", "value": str(open_positions),  "inline": True},
+        ],
+        "footer":    {"text": f"strategy_monitor · {now.strftime('%Y-%m-%d %H:%M UTC')}"},
+        "timestamp": now.isoformat(),
+    }
+
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bot {token}",
+                    "Content-Type":  "application/json",
+                    "User-Agent":    "DiscordBot (https://github.com/BMG-Capital/bmg-capital, 1.0.0)",
+                },
+                json={"embeds": [embed]},
+            )
+        return resp.is_success
+    except Exception as exc:
+        logger.error("[strategy_monitor] risk-alert Discord post failed: %s", exc)
+        return False
+
+
+def post_health_transition_alerts(db: Session, bot_windows: list[dict]) -> int:
+    """
+    Called from run_strategy_health_check. Compares current health against stored
+    state. Posts to #risk-alerts when a bot transitions to RED, with 6h dedup per bot.
+    Returns number of alerts posted.
+    """
+    _ensure_bot_health_state_table(db)
+    previous = _read_health_state(db)
+    now      = datetime.now(timezone.utc)
+    posted   = 0
+
+    for bot_row in bot_windows:
+        bot_name   = bot_row.get("bot", "")
+        cur_health = bot_row.get("pipeline_health", "")
+
+        prev_entry = previous.get(bot_name, {})
+        prev_health = prev_entry.get("last_health", "UNKNOWN")
+        alerted_at  = prev_entry.get("alerted_at")
+
+        # Only alert on transition TO RED (not staying RED)
+        if cur_health == "RED" and prev_health != "RED":
+            # 6h dedup — skip if we already alerted for this bot in the last 6h
+            within_cooldown = False
+            if alerted_at:
+                try:
+                    alerted_dt = datetime.fromisoformat(alerted_at)
+                    if alerted_dt.tzinfo is None:
+                        alerted_dt = alerted_dt.replace(tzinfo=timezone.utc)
+                    within_cooldown = (now - alerted_dt).total_seconds() < 6 * 3600
+                except Exception:
+                    pass
+
+            if not within_cooldown:
+                success = _post_risk_alert(bot_row, now)
+                alerted_iso = now.isoformat() if success else None
+                _write_health_state(db, bot_name, cur_health, alerted_at=alerted_iso)
+                if success:
+                    posted += 1
+                    logger.warning("[strategy_monitor] risk-alert posted: %s GREEN/YELLOW→RED", bot_name)
+                else:
+                    _write_health_state(db, bot_name, cur_health)
+            else:
+                _write_health_state(db, bot_name, cur_health)
+        else:
+            _write_health_state(db, bot_name, cur_health)
+
+    return posted

@@ -14,6 +14,7 @@ interface BotHealthRow {
   pipeline_health:       PipelineHealth;
   enabled:               boolean;
   paused_reason?:        string | null;
+  disable_category?:     string | null;
   last_signal_at?:       string | null;
   minutes_since_last?:   number | null;
   signals_24h:           number;
@@ -233,8 +234,13 @@ export default function BotHealthPage() {
                     {/* Health badge */}
                     <td className="px-3 py-2.5">
                       <HealthBadge health={row.pipeline_health} />
-                      {row.paused_reason && row.pipeline_health === "DISABLED" && (
-                        <span className="ml-1.5 text-[9px] text-zinc-600">{row.paused_reason}</span>
+                      {row.pipeline_health === "DISABLED" && row.disable_category && (
+                        <span className="ml-1.5 text-[9px] text-zinc-500 font-mono">
+                          {row.disable_category === "T0_INCUBATION" ? "incubation"
+                            : row.disable_category === "ADMIN_LOCK"  ? "admin-lock"
+                            : row.disable_category === "HEALTH_HALT" ? "health-halt"
+                            : "not-enabled"}
+                        </span>
                       )}
                     </td>
 

@@ -783,24 +783,43 @@ def _generate_proposals(db: Session, *, research: dict, health: dict, synthetic:
     proposals_posted: list[dict] = []
 
     actionable = [e for e in ic_summary if e.get("status") in ("degrading", "strong")]
-    threshold_met = len(actionable) > 0
-    reason = (
-        f"{len(actionable)} bot(s) with actionable IC status (degrading/strong)"
-        if threshold_met
-        else (
-            "no IC entries" if not ic_summary
-            else f"all {len(ic_summary)} IC entries have normal status (not degrading/strong)"
-        )
+
+    # A9: also fire when RED health bots exist or 7d P&L is deeply negative
+    health_bots    = health.get("bots", [])
+    red_bots       = [b["bot"] for b in health_bots if b.get("pipeline_health") == "RED"]
+    bad_pnl_bots   = [
+        b["bot"] for b in health_bots
+        if b.get("pnl_7d_pct") is not None and b["pnl_7d_pct"] < -5.0
+    ]
+    stale_bots     = [
+        b["bot"] for b in health_bots
+        if b.get("signals_24h", 0) == 0
+        and b.get("expected_interval_min", 9999) <= 60
+        and b.get("pipeline_health") == "RED"
+    ]
+
+    threshold_reasons: list[str] = []
+    if actionable:
+        threshold_reasons.append(f"{len(actionable)} bot(s) degrading/strong IC")
+    if red_bots:
+        threshold_reasons.append(f"{len(red_bots)} RED bot(s): {', '.join(red_bots[:3])}")
+    if bad_pnl_bots:
+        threshold_reasons.append(f"{len(bad_pnl_bots)} bot(s) with 7d P&L < -5%: {', '.join(bad_pnl_bots[:3])}")
+
+    threshold_met = bool(threshold_reasons)
+    reason = " | ".join(threshold_reasons) if threshold_met else (
+        "no IC entries" if not ic_summary
+        else f"all {len(ic_summary)} IC entries normal, no RED bots, no deep P&L loss"
     )
     logger.warning(
         "[queen-proposal] check triggered. threshold_met=%s. reason=%s",
         threshold_met, reason,
     )
     logger.warning(
-        "[queen] proposal check: %d IC entries total, %d actionable (degrading/strong)",
-        len(ic_summary), len(actionable),
+        "[queen] proposal check: %d IC entries total, %d actionable, %d RED bots, %d bad-pnl bots",
+        len(ic_summary), len(actionable), len(red_bots), len(bad_pnl_bots),
     )
-    if not actionable:
+    if not threshold_met:
         logger.warning("[queen] no proposals generated — all bots healthy or insufficient IC data")
         # Post a daily status ping so the proposals channel isn't dead
         insufficient = [e for e in ic_summary if e.get("status") == "insufficient_data"]
@@ -978,7 +997,99 @@ def _generate_proposals(db: Session, *, research: dict, health: dict, synthetic:
             proposal_id, bot, current_pct, proposed_pct, message_id,
         )
 
+    # A9 — health alert proposals for RED bots that have no IC entry yet
+    # (new bots with 0 trades never appear in ic_summary, so IC loop skips them)
+    ic_bots_covered = {e.get("bot") for e in ic_summary}
+    for red_bot in red_bots:
+        if red_bot in ic_bots_covered:
+            continue  # already handled by IC loop
+        bot_row = next((b for b in health_bots if b.get("bot") == red_bot), {})
+        signals_24h_val = bot_row.get("signals_24h", 0)
+        minutes_stale   = bot_row.get("minutes_since_last")
+        proposal_id     = _next_proposal_id(db)
+        rationale = (
+            f"Bot {red_bot} is RED: "
+            + (f"no signals in {minutes_stale:.0f}min (expected every {bot_row.get('expected_interval_min', '?')}min), "
+               if minutes_stale else "no signal history, ")
+            + f"trades_24h={bot_row.get('trades_24h', 0)}, signals_24h={signals_24h_val}. "
+            + "Insufficient IC data — investigate scanner/strategy configuration."
+        )
+        _write_proposal_audit(
+            db, proposal_id, "health_alert",
+            {"type": "health_alert", "bot": red_bot, "pipeline_health": "RED",
+             "signals_24h": signals_24h_val},
+            rationale, finding_ids,
+        )
+        health_embed = {
+            "title": f"🔴 Health Alert — {red_bot}",
+            "description": rationale,
+            "color": 0xDC2626,
+            "fields": [
+                {"name": "Regime",             "value": regime_name,                                    "inline": True},
+                {"name": "Signals 24h",        "value": str(signals_24h_val),                           "inline": True},
+                {"name": "Minutes Since Last", "value": f"{minutes_stale:.0f}" if minutes_stale else "never", "inline": True},
+                {"name": "Suggested Action",   "value": "Check Railway logs for scanner errors. Verify YAML config and watchlist are non-empty.", "inline": False},
+            ],
+            "footer": {"text": f"Queen · {now.strftime('%Y-%m-%d %H:%M UTC')} · health_alert"},
+        }
+        _post_embed(proposals_ch, token, health_embed)
+        proposals_posted.append({"proposal_id": proposal_id, "bot": red_bot, "direction": "health_alert", "posted": True})
+        logger.warning("[queen] health-alert proposal posted for RED bot: %s", red_bot)
+
     return proposals_posted
+
+
+# ── Numeric grounding for LLM calls ──────────────────────────────────────────
+
+def _query_exact_counts(db: Session) -> dict:
+    """
+    Pull exact live counts from DB to prevent LLM hallucination.
+    Returned dict is prepended to translate_for_brock input so Haiku
+    copies the numbers verbatim rather than estimating.
+    """
+    try:
+        from app.db.models.bots import BotProfile, BotAllocation, BotSignal, BotTrade, BotPosition
+        from sqlalchemy import func
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+        cutoff_24h = (now - timedelta(hours=24)).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+
+        total_bots      = db.query(func.count(BotProfile.id)).scalar() or 0
+        enabled_bots    = db.query(func.count(BotAllocation.id)).filter(BotAllocation.enabled == True).scalar() or 0  # noqa: E712
+        signals_24h     = db.query(func.count(BotSignal.id)).filter(BotSignal.ts >= cutoff_24h).scalar() or 0
+        trades_24h      = db.query(func.count(BotTrade.id)).filter(BotTrade.ts >= cutoff_24h).scalar() or 0
+        open_positions  = db.query(func.count(BotPosition.id)).filter(BotPosition.closed_at.is_(None), BotPosition.quarantined_at.is_(None)).scalar() or 0
+
+        return {
+            "total_bots":     total_bots,
+            "enabled_bots":   enabled_bots,
+            "signals_24h":    signals_24h,
+            "trades_24h":     trades_24h,
+            "open_positions": open_positions,
+        }
+    except Exception as exc:
+        logger.debug("[queen] _query_exact_counts failed: %s", exc)
+        return {}
+
+
+def _grounding_prefix(counts: dict) -> str:
+    """Build a plain-text grounding header to prepend to LLM input."""
+    if not counts:
+        return ""
+    lines = ["[EXACT LIVE COUNTS — copy these numbers verbatim, do not change them]"]
+    if counts.get("total_bots") is not None:
+        lines.append(f"- Total bots in DB: {counts['total_bots']}")
+    if counts.get("enabled_bots") is not None:
+        lines.append(f"- Enabled (active) bots: {counts['enabled_bots']}")
+    if counts.get("signals_24h") is not None:
+        lines.append(f"- Signals last 24h: {counts['signals_24h']}")
+    if counts.get("trades_24h") is not None:
+        lines.append(f"- Trades last 24h: {counts['trades_24h']}")
+    if counts.get("open_positions") is not None:
+        lines.append(f"- Open positions right now: {counts['open_positions']}")
+    lines.append("[END EXACT COUNTS]\n")
+    return "\n".join(lines) + "\n"
 
 
 # ── Entry points ──────────────────────────────────────────────────────────────
@@ -1041,6 +1152,8 @@ def run_queen_daily(db: Session, session: Session_t = "morning") -> None:
             f"{f['name']}: {f['value']}" for f in embed.get("fields", [])
             if not f['name'].startswith("💬")
         )
+        _exact_counts = _query_exact_counts(db)
+        _pe_text = _grounding_prefix(_exact_counts) + _pe_text
         _pe = translate_for_brock(_pe_text, db=db, channel_id=channel_id, charge_agent="queen")
         if _pe:
             embed["fields"].append(make_plain_english_field(_pe))
