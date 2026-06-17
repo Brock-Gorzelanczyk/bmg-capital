@@ -669,7 +669,7 @@ def get_portfolios(
 
 @router.get("/activity")
 def get_cross_bot_activity(
-    limit: int = 100,
+    limit: int = 200,
     bot: str | None = None,
     symbol: str | None = None,
     side: str | None = None,
@@ -680,8 +680,14 @@ def get_cross_bot_activity(
     Recent trades across all bots for the authenticated user.
     Optional filters: bot (profile name), symbol, side (buy/sell).
     Returns trades enriched with bot name, P&L, sparkline-ready daily_pnl.
+
+    Fallback: if the current user has no personal allocations, show all
+    enabled system allocations (seeded by m004_seed_system_allocations) so
+    the activity feed is never empty just because a user hasn't manually
+    configured allocations.
     """
     from sqlalchemy import func
+    from datetime import timedelta
 
     alloc_q = db.query(BotAllocation, BotProfile).join(
         BotProfile, BotProfile.id == BotAllocation.profile_id
@@ -691,6 +697,17 @@ def get_cross_bot_activity(
         alloc_q = alloc_q.filter(BotProfile.name == bot)
 
     alloc_pairs = alloc_q.all()
+
+    # Fallback: no personal allocations → use all enabled system allocations
+    # so the feed shows real trades instead of an empty state.
+    if not alloc_pairs:
+        system_q = db.query(BotAllocation, BotProfile).join(
+            BotProfile, BotProfile.id == BotAllocation.profile_id
+        ).filter(BotAllocation.enabled.is_(True))
+        if bot:
+            system_q = system_q.filter(BotProfile.name == bot)
+        alloc_pairs = system_q.all()
+
     if not alloc_pairs:
         return {"trades": [], "summary": {}}
 
