@@ -296,8 +296,6 @@ def detect_regime(profile_name: str = "", profile: dict | None = None, db=None) 
         logger.warning("[detect_regime:%s] get_regime() raised: %s — using neutral shim", profile_name, exc)
         regime = {}
 
-    # Shim: if regime is empty (e.g. all API calls failed before cache was
-    # populated), default to neutral so strategies still run.
     if not regime:
         logger.warning(
             "[detect_regime:%s] regime is empty — applying neutral shim",

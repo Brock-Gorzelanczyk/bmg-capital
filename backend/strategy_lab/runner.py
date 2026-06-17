@@ -1359,6 +1359,200 @@ def _maybe_announce_first_live_signal(db, bot_name: str, strategy: str, symbol: 
     post_first_live_signal_announcement(bot_name, strategy, symbol)
 
 
+# ── Options signal execution ──────────────────────────────────────────────────
+
+def _resolve_option_details(sig, position_dollars: float) -> dict:
+    """Extract/estimate option contract details from signal reason JSON.
+
+    Returns a dict with: option_type, strike_price, expiration_date,
+    underlying_symbol, contract_count, contract_premium_cents, display_premium.
+    Falls back to estimation when yfinance is unavailable.
+    """
+    import json
+    import math
+    from datetime import date, timedelta
+
+    underlying = sig.symbol
+    option_type = "call"
+    strike_price = None
+    expiration_date = None
+    contract_premium = None
+
+    # Parse reason JSON from strategy signal
+    reason_data: dict = {}
+    if sig.reason:
+        try:
+            reason_data = json.loads(sig.reason)
+        except Exception:
+            pass
+
+    setup = reason_data.get("setup", "")
+    spot = float(reason_data.get("spot", 0) or 0)
+
+    # Infer option_type from setup name
+    if any(k in setup for k in ("put", "csp", "cash_secured_put", "wheel", "bull_put", "jade_lizard")):
+        option_type = "put"
+    elif any(k in setup for k in ("bear_call", "iron_condor", "zero_dte")):
+        option_type = "call/put spread"
+    elif "condor" in setup:
+        option_type = "iron condor"
+    elif "pmcc" in setup or "diagonal" in setup or "leaps" in setup:
+        option_type = "call"
+    else:
+        option_type = "call"
+
+    # Infer target DTE from setup
+    dte = 45
+    if "zero_dte" in setup or "0dte" in setup:
+        dte = 0
+    elif "leaps" in setup:
+        dte = 365
+    elif "30d" in setup or "debit" in setup or "credit" in setup:
+        dte = 30
+    elif "45dte" in setup or "45" in setup:
+        dte = 45
+
+    expiration_date = (date.today() + timedelta(days=dte)).isoformat()
+
+    # Try yfinance for real option chain
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(underlying)
+        exps = ticker.options
+        if exps:
+            from datetime import datetime
+            target_dt = date.today() + timedelta(days=dte)
+            # Find nearest expiry to target DTE
+            best_exp = min(
+                exps,
+                key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - target_dt).days)
+            )
+            expiration_date = best_exp
+            chain = ticker.option_chain(best_exp)
+            df = chain.calls if "put" not in option_type else chain.puts
+            if not df.empty and spot > 0:
+                # Find ATM or slightly OTM strike
+                if "put" in option_type:
+                    # CSP/bear put: slightly OTM = 95-97% of spot
+                    target_strike = spot * 0.96
+                    row = df.iloc[(df["strike"] - target_strike).abs().argsort()[:1]]
+                else:
+                    # Call/LEAPS: ATM strike
+                    row = df.iloc[(df["strike"] - spot).abs().argsort()[:1]]
+                if not row.empty:
+                    strike_price = float(row["strike"].iloc[0])
+                    mid = (float(row["bid"].iloc[0]) + float(row["ask"].iloc[0])) / 2
+                    contract_premium = mid if mid > 0 else float(row["lastPrice"].iloc[0])
+    except Exception as yf_exc:
+        logger.debug("[options] yfinance chain lookup failed for %s: %s", underlying, yf_exc)
+
+    # Fallback estimation when yfinance unavailable or returned nothing
+    if spot <= 0:
+        spot = 100.0  # generic fallback
+    if strike_price is None:
+        strike_price = round(spot * (0.95 if "put" in option_type else 1.0), 2)
+    if contract_premium is None:
+        # Rough estimate: 3-5% of spot for ATM 30-45 DTE
+        contract_premium = round(spot * 0.035, 2)
+
+    contract_count = max(1, math.floor(position_dollars / (contract_premium * 100)))
+    contract_premium_cents = round(contract_premium * 100, 2)
+
+    return {
+        "option_type": option_type,
+        "strike_price": strike_price,
+        "expiration_date": expiration_date,
+        "underlying_symbol": underlying,
+        "contract_count": contract_count,
+        "contract_premium_cents": contract_premium_cents,
+        "display_premium": contract_premium,
+    }
+
+
+def _execute_options_signal(
+    db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str
+) -> None:
+    """Execute an options signal — creates BotPosition + BotTrade with options fields."""
+    import os
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotPosition, BotTrade
+
+    now = datetime.now(timezone.utc)
+    capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+    position_dollars = capital_usd * (final_size_pct / 100.0)
+
+    opt = _resolve_option_details(sig, position_dollars)
+    premium = opt["display_premium"]
+    contract_count = opt["contract_count"]
+
+    # fill_price_cents = total premium paid per contract (in cents)
+    fill_cents = premium * 100
+
+    logger.warning(
+        "[options:%s] %s %s %s strike=%.2f exp=%s contracts=%d premium=%.2f total=$%.0f",
+        profile_name, sig.side, sig.symbol, opt["option_type"],
+        opt["strike_price"] or 0, opt["expiration_date"] or "?",
+        contract_count, premium, premium * 100 * contract_count,
+    )
+
+    try:
+        pos = BotPosition(
+            allocation_id=alloc.id,
+            symbol=sig.symbol,
+            qty=float(contract_count),
+            avg_cost_cents=fill_cents,
+            side="long" if sig.side == "buy" else "short",
+            opened_at=now,
+            closed_at=None,
+            is_paper=True,
+            stop_price_usd=None,
+            target_price_usd=None,
+            trailing_stop_activated=False,
+            # Options fields
+            option_type=opt["option_type"],
+            strike_price=opt["strike_price"],
+            expiration_date=opt["expiration_date"],
+            underlying_symbol=opt["underlying_symbol"],
+            contract_count=contract_count,
+            contract_premium_cents=opt["contract_premium_cents"],
+        )
+        db.add(pos)
+        db.flush()
+
+        trade = BotTrade(
+            allocation_id=alloc.id,
+            symbol=sig.symbol,
+            side=sig.side,
+            qty=float(contract_count),
+            fill_price_cents=fill_cents,
+            fees_cents=0,
+            ts=now,
+            position_id=pos.id,
+            is_paper=True,
+            expected_fill_cents=fill_cents,
+            slippage_bps=0.0,
+            # Options fields
+            option_type=opt["option_type"],
+            strike_price=opt["strike_price"],
+            expiration_date=opt["expiration_date"],
+            underlying_symbol=opt["underlying_symbol"],
+            contract_count=contract_count,
+            contract_premium_cents=opt["contract_premium_cents"],
+        )
+        db.add(trade)
+        db.commit()
+        logger.info(
+            "[options:%s] Opened %s × %d contracts %s @ $%.2f/contract (pos=%d trade=%d)",
+            profile_name, sig.symbol, contract_count, opt["option_type"], premium, pos.id, trade.id,
+        )
+    except Exception as exc:
+        logger.error("[options:%s] DB write failed for %s: %s", profile_name, sig.symbol, exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 # ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────
 
 def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str, bars: dict | None = None, signal_id: int | None = None) -> None:
@@ -1386,6 +1580,11 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     from strategy_lab.core.execution import compute_bracket_prices
 
     asset_class = profile.get("asset_class", "stock")
+
+    # Route options profiles to the dedicated options executor
+    if asset_class == "options":
+        _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name)
+        return
     now = datetime.now(timezone.utc)
 
     # 1. Resolve equity — skip Alpaca call when paper creds are absent to avoid

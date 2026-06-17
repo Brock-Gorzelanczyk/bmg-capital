@@ -93,6 +93,13 @@ class BotPosition(Base):
     trailing_stop_price_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     quarantined_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     quarantine_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Options-specific fields (null for stock/crypto positions)
+    option_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)        # call|put|spread|condor|calendar
+    strike_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    expiration_date: Mapped[Optional[str]] = mapped_column(String, nullable=True)    # ISO date "YYYY-MM-DD"
+    underlying_symbol: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    contract_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    contract_premium_cents: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # per-contract premium × 100
 
 
 class BotTrade(Base):
@@ -114,6 +121,13 @@ class BotTrade(Base):
     slippage_bps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     quarantined_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     quarantine_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Options-specific fields (null for stock/crypto trades)
+    option_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)        # call|put|spread|condor|calendar
+    strike_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    expiration_date: Mapped[Optional[str]] = mapped_column(String, nullable=True)    # ISO date "YYYY-MM-DD"
+    underlying_symbol: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    contract_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    contract_premium_cents: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # per-contract × 100
 
 
 class BotDailyPnL(Base):

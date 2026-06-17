@@ -180,6 +180,14 @@ async def lifespan(app: FastAPI):
     except Exception as _m004_exc:
         logger.warning("[startup] m004_pause_t0_violations failed (non-fatal): %s", _m004_exc)
 
+    # Add options-specific columns to bot_positions and bot_trades (idempotent)
+    try:
+        from app.db.migrations.m005_options_fields import run as _run_m005
+        with engine.connect() as _m005_conn:
+            _run_m005(_m005_conn)
+    except Exception as _m005_exc:
+        logger.warning("[startup] m005_options_fields failed (non-fatal): %s", _m005_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()

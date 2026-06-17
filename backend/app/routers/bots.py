@@ -855,6 +855,13 @@ def get_portfolio_activity(
             "fill_price_cents": t.fill_price_cents,
             "realized_pnl": realized_pnl,
             "is_paper": t.is_paper,
+            # Options-specific (None for stock/crypto trades)
+            "option_type": getattr(t, "option_type", None),
+            "strike_price": getattr(t, "strike_price", None),
+            "expiration_date": getattr(t, "expiration_date", None),
+            "underlying_symbol": getattr(t, "underlying_symbol", None),
+            "contract_count": getattr(t, "contract_count", None),
+            "contract_premium_cents": getattr(t, "contract_premium_cents", None),
         })
 
     return {"trades": result, "total": len(result)}
