@@ -105,11 +105,12 @@ try:
     if asset_class == "options":
         from strategy_lab.runner import _execute_options_signal
         _execute_options_signal(
-            sig=sig,
-            alloc=alloc,
             db=db,
-            profile_name=bot_name,
+            alloc=alloc,
+            sig=sig,
             final_size_pct=final_size_pct,
+            profile=profile_cfg,
+            profile_name=bot_name,
         )
     else:
         # Stock/crypto paper trade
