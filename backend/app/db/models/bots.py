@@ -108,6 +108,7 @@ class BotTrade(Base):
     ts: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     alpaca_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     position_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("bot_positions.id"), nullable=True)
+    signal_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("bot_signals.id"), nullable=True, index=True)
     is_paper: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expected_fill_cents: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     slippage_bps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

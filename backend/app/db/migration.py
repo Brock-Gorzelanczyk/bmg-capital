@@ -230,6 +230,7 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("slippage_bps",        "FLOAT"),
         ("quarantined_at",      "DATETIME"),
         ("quarantine_reason",   "VARCHAR"),
+        ("signal_id",           "INTEGER"),
     ],
     "bot_daily_pnl": [
         ("peak_drawdown_pct",           "FLOAT"),

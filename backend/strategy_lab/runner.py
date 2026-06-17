@@ -915,6 +915,7 @@ def run_bot_profile(profile_name: str) -> dict:
                             profile=profile,
                             profile_name=profile_name,
                             bars=bars,
+                            signal_id=_signal_id,
                         )
                         logger.info(
                             "[scheduled] %s _execute_signal OK %s %s",
@@ -1360,7 +1361,7 @@ def _maybe_announce_first_live_signal(db, bot_name: str, strategy: str, symbol: 
 
 # ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────
 
-def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str, bars: dict | None = None) -> None:
+def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str, bars: dict | None = None, signal_id: int | None = None) -> None:
     """Place a simulated paper trade and persist BotPosition + BotTrade.
 
     Steps:
@@ -1557,6 +1558,33 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     # 5–6. Create BotPosition + BotTrade — wrapped so a DB error can't corrupt the
     # session and block all subsequent signals in this scan cycle.
     try:
+        # Ensure every entry trade has a signal_id — synthetic backfill if upstream log_signal failed
+        if signal_id is None:
+            try:
+                from app.db.models.bots import BotSignal as _BotSig
+                _syn = _BotSig(
+                    allocation_id=alloc.id,
+                    ts=now,
+                    symbol=sig.symbol,
+                    side=sig.side,
+                    confidence=sig.confidence,
+                    reason=getattr(sig, "reason", "synthetic_backfill") or "synthetic_backfill",
+                    strategy=getattr(sig, "strategy", None),
+                    entry_price=entry_price if entry_price > 0 else None,
+                )
+                db.add(_syn)
+                db.flush()
+                signal_id = _syn.id
+                logger.warning(
+                    "[execute:%s] synthetic signal created for %s %s (log_signal failed upstream)",
+                    profile_name, sig.side, sig.symbol,
+                )
+            except Exception as _syn_exc:
+                logger.error(
+                    "[execute:%s] INTEGRITY: trade proceeding WITHOUT signal_id for %s %s: %s",
+                    profile_name, sig.side, sig.symbol, _syn_exc,
+                )
+
         pos = BotPosition(
             allocation_id=alloc.id,
             symbol=sig.symbol,
@@ -1582,6 +1610,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             fees_cents=0,
             ts=now,
             position_id=pos.id,
+            signal_id=signal_id,
             is_paper=True,
             alpaca_order_id=order_id,
             expected_fill_cents=fill_cents,

@@ -58,9 +58,10 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     is_short = getattr(pos, "side", "long") == "short"
     fill_cents = price_usd * 100  # float — preserves sub-penny precision
 
-    # Log exit signal so health checker sees recent bot activity (close trades have no entry signal)
+    # Log exit signal so health checker sees recent bot activity; capture id for trade FK
+    _exit_signal_id: int | None = None
     try:
-        db.add(BotSignal(
+        _exit_sig = BotSignal(
             allocation_id=alloc.id,
             ts=now,
             symbol=pos.symbol,
@@ -68,8 +69,10 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
             confidence=1.0,
             reason=reason,
             entry_price=price_usd,
-        ))
+        )
+        db.add(_exit_sig)
         db.flush()
+        _exit_signal_id = _exit_sig.id
     except Exception as _sig_exc:
         logger.warning("[monitor] exit signal log failed for %s: %s", pos.symbol, _sig_exc)
 
@@ -82,6 +85,7 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
         fees_cents=0,
         ts=now,
         position_id=pos.id,
+        signal_id=_exit_signal_id,
         is_paper=True,
         expected_fill_cents=fill_cents,
         slippage_bps=0.0,

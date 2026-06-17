@@ -385,6 +385,7 @@ def scan_and_execute(
                         profile=profile,
                         profile_name=profile_name,
                         bars=bars,
+                        signal_id=signal_id,
                     )
                     alloc_executed += 1
                     trades_executed += 1
