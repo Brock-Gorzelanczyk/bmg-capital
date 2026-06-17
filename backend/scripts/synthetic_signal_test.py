@@ -155,7 +155,8 @@ try:
     db.refresh(bs)
     print(f"  BotSignal in DB: id={bs.id} is_test={bs.is_test} allocation_id={bs.allocation_id}")
 
-    # 7. Post to Discord
+    # 7. Post to Discord — pass db+signal_id so discord_posted_at gets set on success
+    discord_ok = False
     try:
         from app.services.discord_public import post_signal
         signal_payload = {
@@ -170,12 +171,10 @@ try:
             "stop": None,
             "target": None,
         }
-        msg_id = post_signal(signal_payload)
-        print(f"  Discord post result: message_id={msg_id}")
-        if msg_id:
-            print("  Discord: POSTED OK")
-        else:
-            print("  Discord: post returned None (check DISCORD_CH_* env vars)")
+        post_signal(signal_payload, db=db, signal_id=bs.id)
+        db.refresh(bs)
+        discord_ok = bs.discord_posted_at is not None
+        print(f"  Discord: discord_posted_at={bs.discord_posted_at}  msg_id={bs.discord_message_id}")
     except Exception as de:
         print(f"  Discord: FAILED — {type(de).__name__}: {de}")
 
@@ -183,8 +182,9 @@ try:
     print("=== SYNTHETIC TEST RESULT ===")
     print(f"  BotSignal id={bs.id}: CREATED")
     print(f"  asset_class={asset_class}")
-    print(f"  Discord: {'OK' if msg_id else 'NO MESSAGE ID'}")
-    print("  Check the relevant Discord channel for the test embed.")
+    print(f"  Discord posting confirmed: {discord_ok}")
+    if not discord_ok:
+        print("  NOTE: discord_posted_at not set — check #options-signals / #stocks-signals manually")
 
 except Exception as exc:
     import traceback
