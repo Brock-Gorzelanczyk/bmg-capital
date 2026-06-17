@@ -180,6 +180,14 @@ async def lifespan(app: FastAPI):
     except Exception as _m004_exc:
         logger.warning("[startup] m004_pause_t0_violations failed (non-fatal): %s", _m004_exc)
 
+    # Seed system paper allocations for all production bots (options_income, options_directional, etc.)
+    try:
+        from app.db.migrations.m004_seed_system_allocations import run as _run_m004_alloc
+        with engine.connect() as _m004_alloc_conn:
+            _run_m004_alloc(_m004_alloc_conn)
+    except Exception as _m004_alloc_exc:
+        logger.warning("[startup] m004_seed_system_allocations failed (non-fatal): %s", _m004_alloc_exc)
+
     # Add options-specific columns to bot_positions and bot_trades (idempotent)
     try:
         from app.db.migrations.m005_options_fields import run as _run_m005
