@@ -385,7 +385,7 @@ function EvaluateTab() {
   const [result, setResult] = useState<EvaluateResult | null>(null);
   const qc = useQueryClient();
 
-  const { data: catalogData } = useQuery({
+  const { data: catalogData, isLoading: catalogLoading, isError: catalogError } = useQuery({
     queryKey: ["scout-catalog"],
     queryFn: getCatalog,
     staleTime: 10 * 60_000,
@@ -434,6 +434,25 @@ function EvaluateTab() {
     color: C.hi,
     outline: "none",
   };
+
+  if (catalogLoading) {
+    return (
+      <div style={{ border: `1px solid ${C.borderDim}`, borderRadius: 6, background: C.surface, padding: "32px 18px", textAlign: "center" }}>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: C.faint, animation: "bmg-pulse 1.4s ease infinite" }}>
+          {"// loading catalog ▮"}
+        </div>
+      </div>
+    );
+  }
+
+  if (catalogError) {
+    return (
+      <div style={{ border: `1px solid rgba(248,113,113,0.22)`, borderRadius: 6, background: "rgba(248,113,113,0.04)", padding: "24px 18px", textAlign: "center" }}>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: C.red, letterSpacing: "0.1em" }}>// CATALOG_LOAD_ERROR</div>
+        <div style={{ fontFamily: SANS, fontSize: 13, color: C.mid, marginTop: 8 }}>Unable to load strategy catalog. Check backend connection.</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1355,7 +1374,7 @@ export default function StrategyScoutPage() {
         <div style={{ display: "flex", gap: 22, textAlign: "right", flexShrink: 0 }}>
           <div>
             <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.12em" }}>SCANNING</div>
-            <div style={{ fontFamily: MONO, fontSize: 20, color: C.violet, marginTop: 4 }}>65</div>
+            <div style={{ fontFamily: MONO, fontSize: 20, color: C.violet, marginTop: 4 }}>{setups.length}</div>
           </div>
           <div>
             <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.12em" }}>ARMED</div>

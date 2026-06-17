@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Bot, FlaskConical, Play, TrendingUp, TrendingDown, BarChart3, ChevronDown, ChevronUp, Shuffle, RefreshCw, Clock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Bot, FlaskConical, Play, TrendingUp, TrendingDown, BarChart3, ChevronDown, ChevronUp, Shuffle, RefreshCw, Clock, SendToBack, ExternalLink } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import {
   getBacktestStatus,
   runBacktest as apiRunBacktest,
@@ -10,6 +12,7 @@ import {
   STRATEGY_KEYS,
   type BacktestDetailResponse,
 } from "@/api/backtest";
+import { syncCandidates } from "@/api/candidates";
 
 const INITIAL_CAPITAL = 100_000;
 
@@ -297,6 +300,7 @@ const SLIPPAGE_OPTIONS     = [
 const BORROW_COST_OPTIONS  = [{ label: "0%", value: 0 }, { label: "1%", value: 1 }, { label: "5%", value: 5 }];
 
 export default function BacktestLabPage() {
+  const navigate = useNavigate();
   const [strategyKey, setStrategyKey] = useState(STRATEGY_KEYS[0]);
   const [capital,     setCapital]     = useState(100000);
   const [commission,  setCommission]  = useState(0);
@@ -312,6 +316,7 @@ export default function BacktestLabPage() {
   const [tab,          setTab]          = useState<"chart" | "trades" | "montecarlo">("chart");
   const [advOpen,      setAdvOpen]      = useState(false);
   const [stressOpen,   setStressOpen]   = useState(false);
+  const [promoting,    setPromoting]    = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -381,6 +386,20 @@ export default function BacktestLabPage() {
     } finally {
       setRunning(false);
       setRunStatus("");
+    }
+  }
+
+  async function handlePromoteToPipeline() {
+    if (!result) return;
+    setPromoting(true);
+    try {
+      const resp = await syncCandidates();
+      toast.success(`Pipeline synced — ${resp.total} candidate${resp.total !== 1 ? "s" : ""} registered`);
+      navigate("/candidates");
+    } catch {
+      toast.error("Failed to submit to pipeline — check connection");
+    } finally {
+      setPromoting(false);
     }
   }
 
@@ -583,6 +602,25 @@ export default function BacktestLabPage() {
                 {(alpha ?? 0) > 0 ? "+" : ""}{alpha}%
               </div>
             </div>
+          </div>
+
+          {/* Submit to pipeline */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={handlePromoteToPipeline}
+              disabled={promoting}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600/15 border border-blue-500/30 hover:bg-blue-600/25 disabled:opacity-60 text-blue-400 text-xs font-semibold rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
+            >
+              <SendToBack size={13} className={promoting ? "animate-pulse" : ""} />
+              {promoting ? "Submitting…" : "Submit to Candidate Pipeline"}
+            </button>
+            <a
+              href="/candidates"
+              onClick={(e) => { e.preventDefault(); navigate("/candidates"); }}
+              className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
+            >
+              <ExternalLink size={11} /> View all candidates & WFA results
+            </a>
           </div>
 
           {/* Regime Performance */}

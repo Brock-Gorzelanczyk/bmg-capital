@@ -1447,20 +1447,13 @@ function BacktestTab({ botName }: { botName: string }) {
               className="bg-t-bg1 border border-t-dim rounded-lg px-3 py-1.5 text-sm text-t-hi w-32 focus:outline-none focus:border-lime-500/50 font-mono-t tabular-nums"
             />
           </div>
-          <div
-            title="Full backtesting engine coming Q3 — currently disabled to prevent misleading results."
-            className="relative group"
+          <button
+            onClick={handleRun}
+            disabled={isRunning}
+            className="px-4 py-2.5 rounded-lg bg-lime-500/15 border border-lime-500/30 text-xs font-semibold text-t-green hover:bg-lime-500/25 transition-colors font-ui-t disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <button
-              disabled
-              className="px-4 py-2.5 rounded-lg bg-t-bg1/50 border border-t-dim/50 text-xs text-t-muted font-ui-t cursor-not-allowed opacity-60 select-none"
-            >
-              Run Backtest
-            </button>
-            <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 whitespace-nowrap rounded-lg bg-zinc-900 border border-t-dim px-3 py-1.5 text-xs text-t-mid2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 font-ui-t">
-              Full backtesting engine coming Q3 — currently disabled
-            </span>
-          </div>
+            {isRunning ? "Running…" : "Run Backtest"}
+          </button>
         </div>
       </div>
 

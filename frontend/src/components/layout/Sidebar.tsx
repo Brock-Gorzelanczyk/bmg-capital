@@ -57,6 +57,7 @@ const NAV_TRADE = [
   { to: "/mission-control", label: "Mission Control", Icon: Cpu },
   { to: "/risk-console",    label: "Risk Console",    Icon: ShieldAlert },
   { to: "/portfolio",       label: "Portfolio",       Icon: Briefcase },
+  { to: "/activity",        label: "Activity",        Icon: Activity },
   { to: "/markets",         label: "Markets",         Icon: Globe },
 ];
 

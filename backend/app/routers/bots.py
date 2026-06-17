@@ -630,6 +630,87 @@ def get_portfolios(
     return {"portfolios": result}
 
 
+# ── GET /api/bots/activity — cross-bot trade feed (B1) ───────────────────────
+
+@router.get("/activity")
+def get_cross_bot_activity(
+    limit: int = 100,
+    bot: str | None = None,
+    symbol: str | None = None,
+    side: str | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Recent trades across all bots for the authenticated user.
+    Optional filters: bot (profile name), symbol, side (buy/sell).
+    Returns trades enriched with bot name, P&L, sparkline-ready daily_pnl.
+    """
+    from sqlalchemy import func
+
+    alloc_q = db.query(BotAllocation, BotProfile).join(
+        BotProfile, BotProfile.id == BotAllocation.profile_id
+    ).filter(BotAllocation.user_id == current_user.id)
+
+    if bot:
+        alloc_q = alloc_q.filter(BotProfile.name == bot)
+
+    alloc_pairs = alloc_q.all()
+    if not alloc_pairs:
+        return {"trades": [], "summary": {}}
+
+    alloc_id_to_name = {a.id: p.name for a, p in alloc_pairs}
+    alloc_ids = list(alloc_id_to_name.keys())
+
+    q = db.query(BotTrade).filter(
+        BotTrade.allocation_id.in_(alloc_ids),
+        BotTrade.quarantined_at.is_(None),
+    )
+    if symbol:
+        q = q.filter(BotTrade.symbol.ilike(f"%{symbol}%"))
+    if side:
+        q = q.filter(BotTrade.side == side)
+
+    trades_raw = q.order_by(BotTrade.ts.desc()).limit(min(limit, 500)).all()
+
+    trades = []
+    for t in trades_raw:
+        d = _trade_to_dict(t)
+        d["bot"] = alloc_id_to_name.get(t.allocation_id, "unknown")
+        d["pnl_cents"] = t.pnl_cents
+        d["pnl_usd"] = round(t.pnl_cents / 100, 2) if t.pnl_cents is not None else None
+        trades.append(d)
+
+    # Daily P&L sparkline — last 30 days
+    from datetime import date, timedelta
+    today = date.today()
+    cutoff = (today - timedelta(days=30)).isoformat()
+    daily_rows = db.execute(
+        __import__("sqlalchemy").text("""
+            SELECT date(ts) as d, SUM(pnl_cents) as pnl
+            FROM bot_trades
+            WHERE allocation_id IN :ids
+              AND quarantined_at IS NULL
+              AND pnl_cents IS NOT NULL
+              AND ts >= :cutoff
+            GROUP BY date(ts)
+            ORDER BY d ASC
+        """),
+        {"ids": tuple(alloc_ids) if len(alloc_ids) > 1 else (alloc_ids[0], alloc_ids[0]),
+         "cutoff": cutoff},
+    ).fetchall()
+    sparkline = [{"date": r[0], "pnl_cents": r[1]} for r in daily_rows]
+
+    summary = {
+        "total_trades": len(trades_raw),
+        "total_pnl_cents": sum(t.pnl_cents or 0 for t in trades_raw),
+        "winning_trades": sum(1 for t in trades_raw if (t.pnl_cents or 0) > 0),
+        "losing_trades": sum(1 for t in trades_raw if (t.pnl_cents or 0) < 0),
+    }
+
+    return {"trades": trades, "sparkline": sparkline, "summary": summary}
+
+
 # ── GET /api/bots/portfolio/nav-history (C8) ──────────────────────────────────
 
 @router.get("/portfolio/nav-history")

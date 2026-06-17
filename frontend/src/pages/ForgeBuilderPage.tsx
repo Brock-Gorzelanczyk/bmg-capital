@@ -179,7 +179,7 @@ function ForgeWizard({ catalog, onClose, onCreated }: ForgeWizardProps) {
             ))}
           </div>
           <p className="text-xs text-zinc-500">
-            Step {step} of 5 — <span className="text-zinc-300">{STEP_LABELS[step - 1]}</span>
+            Step {step} of 6 — <span className="text-zinc-300">{STEP_LABELS[step - 1]}</span>
           </p>
         </div>
 
@@ -676,14 +676,14 @@ export default function ForgeBuilderPage() {
   const qc = useQueryClient();
   const [showWizard, setShowWizard] = useState(false);
 
-  const { data: botsData, isLoading: botsLoading } = useQuery({
+  const { data: botsData, isLoading: botsLoading, isError: botsError } = useQuery({
     queryKey: ["forge-bots"],
     queryFn: getForgeBots,
     retry: 0,
     staleTime: 30_000,
   });
 
-  const { data: signalsData } = useQuery({
+  const { data: signalsData, isLoading: signalsLoading } = useQuery({
     queryKey: ["forge-signals"],
     queryFn: getForgeSignals,
     retry: 0,
@@ -717,7 +717,7 @@ export default function ForgeBuilderPage() {
   const bots = botsData?.bots ?? [];
   const signals = signalsData?.signals ?? [];
   const catalog = catalogData?.strategies ?? [];
-  const isEnabled = !botsLoading && botsData !== undefined;
+  const isEnabled = !botsLoading && !botsError && botsData !== undefined;
 
   return (
     <>
@@ -750,25 +750,40 @@ export default function ForgeBuilderPage() {
           <button
             onClick={() => {
               if (!isEnabled) return;
-              if (catalog.length === 0 && !catalogLoading) {
+              if (catalogLoading) {
+                toast.info("Loading strategy catalog…");
+                return;
+              }
+              if (catalog.length === 0) {
                 toast.error("Strategy catalog unavailable — is ENABLE_STRATEGY_FORGE set?");
                 return;
               }
               setShowWizard(true);
             }}
-            className="px-5 py-2.5 rounded-xl bg-orange-500 text-black text-sm font-bold hover:bg-orange-400 transition-colors shadow-lg shadow-orange-500/20 disabled:opacity-50"
+            disabled={!isEnabled}
+            className="px-5 py-2.5 rounded-xl bg-orange-500 text-black text-sm font-bold hover:bg-orange-400 transition-colors shadow-lg shadow-orange-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            + New Bot
+            {catalogLoading ? "Loading…" : "+ New Bot"}
           </button>
         </div>
 
         {/* Feature-not-enabled notice */}
-        {!botsLoading && botsData === undefined && (
+        {!botsLoading && !botsError && botsData === undefined && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl px-5 py-6 text-center">
             <p className="text-orange-300 font-semibold mb-1">The Forge is not enabled</p>
             <p className="text-zinc-400 text-sm">
               Set <code className="bg-zinc-800 px-1 py-0.5 rounded text-xs">ENABLE_STRATEGY_FORGE=true</code> in
               Railway environment variables to activate.
+            </p>
+          </div>
+        )}
+
+        {/* Error state */}
+        {!botsLoading && botsError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-5 py-6 text-center">
+            <p className="text-red-300 font-semibold mb-1">Failed to load Forge bots</p>
+            <p className="text-zinc-400 text-sm">
+              Check your backend connection and confirm the Forge API is reachable.
             </p>
           </div>
         )}
@@ -817,23 +832,35 @@ export default function ForgeBuilderPage() {
           </>
         )}
 
-        {/* Signals feed */}
-        {signals.length > 0 && (
+        {/* Signals feed — only shown when the forge is enabled */}
+        {isEnabled && (
           <div>
             <SectionLabel className="mb-3">Recent Forge Signals</SectionLabel>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-3 px-4 py-2 border-b border-zinc-800">
-                <span className="text-[10px] font-semibold text-zinc-600 uppercase w-10">Side</span>
-                <span className="text-[10px] font-semibold text-zinc-600 uppercase w-20">Ticker</span>
-                <span className="text-[10px] font-semibold text-zinc-600 uppercase flex-1">Strategy</span>
-                <span className="text-[10px] font-semibold text-zinc-600 uppercase">Bot</span>
-                <span className="text-[10px] font-semibold text-zinc-600 uppercase w-10 text-right">Conf</span>
-                <span className="text-[10px] font-semibold text-zinc-600 uppercase w-14 text-right">When</span>
+            {signalsLoading && (
+              <div className="h-24 rounded-2xl bg-zinc-900 border border-zinc-800 animate-pulse" />
+            )}
+            {!signalsLoading && signals.length === 0 && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-6 text-center">
+                <p className="text-zinc-600 text-sm">
+                  No signals fired yet — the scanner runs every 5 minutes once a bot is active.
+                </p>
               </div>
-              {signals.slice(0, 20).map((sig) => (
-                <SignalRow key={sig.id} sig={sig} />
-              ))}
-            </div>
+            )}
+            {!signalsLoading && signals.length > 0 && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-2 border-b border-zinc-800">
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-10">Side</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-20">Ticker</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase flex-1">Strategy</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase">Bot</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-10 text-right">Conf</span>
+                  <span className="text-[10px] font-semibold text-zinc-600 uppercase w-14 text-right">When</span>
+                </div>
+                {signals.slice(0, 20).map((sig) => (
+                  <SignalRow key={sig.id} sig={sig} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -102,6 +102,7 @@ const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
 const StrategyScoutPage = lazy(() => import("@/pages/StrategyScoutPage"));
 const ForgeBuilderPage = lazy(() => import("@/pages/ForgeBuilderPage"));
 const SignalsFeedPage = lazy(() => import("@/pages/SignalsFeedPage"));
+const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
 const FundPage = lazy(() => import("@/pages/FundPage"));
 const ResearchFeedPage = lazy(() => import("@/pages/ResearchFeedPage"));
 const PerformancePage = lazy(() => import("@/pages/PerformancePage"));
@@ -433,7 +434,7 @@ function AppInner() {
         <Route path="/risk-console" element={<Page component={RiskConsolePage} />} />
         <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
-        <Route path="/activity" element={<Navigate to="/autopilot/activity" replace />} />
+        <Route path="/activity" element={<Page component={ActivityPage} />} />
         <Route path="/autopilot/promise" element={<AutopilotPromisePage />} />
         <Route path="/settings/pitch/playbook" element={<PlaybookPage />} />
         <Route path="/settings/pitch/playbook/decisions" element={<PlaybookDecisionsPage />} />
