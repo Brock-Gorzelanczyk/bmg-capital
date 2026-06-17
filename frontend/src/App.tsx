@@ -117,6 +117,7 @@ const CertificatesPage = lazy(() => import("@/pages/CertificatesPage"));
 const VerifyPage = lazy(() => import("@/pages/VerifyPage"));
 const AdminBotsPage = lazy(() => import("@/pages/AdminBotsPage"));
 const AdminBotDetailPage = lazy(() => import("@/pages/AdminBotDetailPage"));
+const BotHealthPage = lazy(() => import("@/pages/BotHealthPage"));
 const SentinelDashboardPage = lazy(() => import("@/pages/SentinelDashboardPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
@@ -408,6 +409,7 @@ function AppInner() {
         <Route path="/admin/scanners"    element={<AdminRoute><ScannersPage /></AdminRoute>} />
         <Route path="/admin/smart-money" element={<AdminRoute><SmartMoneyPage /></AdminRoute>} />
         <Route path="/admin/sentinel"    element={<AdminRoute><SentinelDashboardPage /></AdminRoute>} />
+        <Route path="/admin/bot-health"  element={<AdminRoute><BotHealthPage /></AdminRoute>} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
