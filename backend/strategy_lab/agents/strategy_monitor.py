@@ -57,7 +57,7 @@ _HARD_PAUSE_REASONS = {"admin_lock", "health_halt"}
 
 _BOT_SLEEVE = {
     "stock_swing": "stocks", "stock_day": "stocks", "stock_lt": "stocks",
-    "options_income": "stocks", "options_directional": "stocks",
+    "options_income": "options", "options_directional": "options",
     "crypto_swing": "crypto", "crypto_day": "crypto",
     "crypto_lt": "crypto", "crypto_onchain": "crypto",
     "crypto_quant_aggressive": "quant", "crypto_quant_scalper": "quant",
@@ -123,41 +123,45 @@ def _check_bot_windows(db: Session) -> list[dict]:
                                  "status": "UNKNOWN", "reason": "no_profile"})
                 continue
 
-            alloc = db.query(BotAllocation).filter(
+            # Get ALL allocations for this profile (any user) so signal + trade
+            # counts are accurate even when activity spans multiple allocations.
+            alloc_rows = db.query(BotAllocation).filter(
                 BotAllocation.profile_id == prof.id,
-            ).first()
-            if not alloc:
+            ).all()
+            if not alloc_rows:
                 results.append({"bot": bot_name, "pipeline_health": "RED",
                                  "status": "NO_ALLOC", "reason": "no_allocation_row"})
                 continue
+            alloc = alloc_rows[0]
+            alloc_ids = [a.id for a in alloc_rows]
 
-            # Signal stats
+            # Signal stats — aggregated across all allocations for this profile
             last_ts = db.query(func.max(BotSignal.ts)).filter(
-                BotSignal.allocation_id == alloc.id,
+                BotSignal.allocation_id.in_(alloc_ids),
                 BotSignal.is_test.is_(None) | (BotSignal.is_test == False),  # noqa: E712
             ).scalar()
 
             signals_24h = db.query(func.count(BotSignal.id)).filter(
-                BotSignal.allocation_id == alloc.id,
+                BotSignal.allocation_id.in_(alloc_ids),
                 BotSignal.ts >= cutoff_24h,
                 BotSignal.is_test.is_(None) | (BotSignal.is_test == False),  # noqa: E712
             ).scalar() or 0
 
             discord_posts_24h = db.query(func.count(BotSignal.id)).filter(
-                BotSignal.allocation_id == alloc.id,
+                BotSignal.allocation_id.in_(alloc_ids),
                 BotSignal.ts >= cutoff_24h,
                 BotSignal.discord_posted_at.isnot(None),
                 BotSignal.is_test.is_(None) | (BotSignal.is_test == False),  # noqa: E712
             ).scalar() or 0
 
             trades_24h = db.query(func.count(BotTrade.id)).filter(
-                BotTrade.allocation_id == alloc.id,
+                BotTrade.allocation_id.in_(alloc_ids),
                 BotTrade.ts >= cutoff_24h,
                 BotTrade.quarantined_at.is_(None),
             ).scalar() or 0
 
             open_positions = db.query(func.count(BotPosition.id)).filter(
-                BotPosition.allocation_id == alloc.id,
+                BotPosition.allocation_id.in_(alloc_ids),
                 BotPosition.closed_at.is_(None),
                 BotPosition.quarantined_at.is_(None),
             ).scalar() or 0

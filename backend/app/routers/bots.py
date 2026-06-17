@@ -88,22 +88,20 @@ _BOT_CAPITAL = 10_000_000  # $100,000 per bot in cents
 
 _PORTFOLIO_DEFS = [
     {"asset_class": "stocks",  "name": "Stocks",  "emoji": "📈", "color_hex": "#A3E635",
-     "starting_capital_cents": 50_000_000,
-     "bots": {"stock_swing": _BOT_CAPITAL, "stock_day": _BOT_CAPITAL, "stock_lt": _BOT_CAPITAL,
-              "options_income": _BOT_CAPITAL, "options_directional": _BOT_CAPITAL}},
+     "starting_capital_cents": 30_000_000,  # 3 bots × $100k
+     "bots": {"stock_swing": _BOT_CAPITAL, "stock_day": _BOT_CAPITAL, "stock_lt": _BOT_CAPITAL}},
     {"asset_class": "crypto",  "name": "Crypto",  "emoji": "🪙", "color_hex": "#F59E0B",
      "starting_capital_cents": 40_000_000,
      "bots": {"crypto_swing": _BOT_CAPITAL, "crypto_day": _BOT_CAPITAL, "crypto_lt": _BOT_CAPITAL, "crypto_onchain": _BOT_CAPITAL}},
     {"asset_class": "options", "name": "Options", "emoji": "⚡", "color_hex": "#8B5CF6",
-     "starting_capital_cents": 0,
-     "bots": {}},
+     "starting_capital_cents": 20_000_000,  # 2 bots × $100k — independent risk capping
+     "bots": {"options_income": _BOT_CAPITAL, "options_directional": _BOT_CAPITAL}},
     {"asset_class": "quant",   "name": "Quant",   "emoji": "∑",  "color_hex": "#a78bfa",
      "starting_capital_cents": 10_000_000,
      "bots": {
-         "crypto_quant_aggressive":     4_000_000,   # $40k
-         "crypto_quant_scalper":        3_000_000,   # $30k
-         "crypto_quant_mean_reversion": 3_000_000,   # $30k
-         # crypto_meanrev_2163 removed — T0 incubation bot; no live capital until promoted
+         "crypto_quant_aggressive":     4_000_000,
+         "crypto_quant_scalper":        3_000_000,
+         "crypto_quant_mean_reversion": 3_000_000,
      }},
 ]
 

@@ -978,6 +978,109 @@ def run_migrations(engine: Engine) -> None:
             _ensure_plain_english_tables(conn)
         except Exception as _e:
             logger.warning("_ensure_plain_english_tables failed (non-fatal): %s", _e)
+        try:
+            _revert_options_to_options_sleeve(conn)
+        except Exception as _e:
+            logger.warning("_revert_options_to_options_sleeve failed (non-fatal): %s", _e)
+        try:
+            _ensure_macro_last_post_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_macro_last_post_table failed (non-fatal): %s", _e)
+
+
+def _revert_options_to_options_sleeve(conn) -> None:
+    """Move options_income/options_directional from stocks sleeve back to options sleeve.
+
+    The previous _ensure_options_bots_allocated migration placed them in the stocks
+    portfolio and zeroed the options portfolio capital. This migration undoes that:
+    links allocations to the options portfolio and restores $200k starting capital.
+    """
+    MIGRATION_NAME = "revert_options_to_options_sleeve_2026_06"
+    if _migration_already_ran(conn, MIGRATION_NAME):
+        return
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        updated = 0
+
+        # Restore options portfolio starting_capital_cents to $200k
+        conn.execute(text("""
+            UPDATE strategy_portfolios
+               SET starting_capital_cents = 20000000
+             WHERE asset_class = 'options'
+        """))
+
+        users = conn.execute(text("SELECT id FROM users")).fetchall()
+        for (user_id,) in users:
+            options_port = conn.execute(text(
+                "SELECT id FROM strategy_portfolios WHERE user_id=:u AND asset_class='options'"
+            ), {"u": user_id}).fetchone()
+            if not options_port:
+                continue
+            options_port_id = options_port[0]
+
+            for bot_name in ("options_income", "options_directional"):
+                profile = conn.execute(text(
+                    "SELECT id FROM bot_profiles WHERE name=:n"
+                ), {"n": bot_name}).fetchone()
+                if not profile:
+                    continue
+                profile_id = profile[0]
+
+                existing = conn.execute(text(
+                    "SELECT id FROM bot_allocations WHERE user_id=:u AND profile_id=:p"
+                ), {"u": user_id, "p": profile_id}).fetchone()
+
+                if existing:
+                    conn.execute(text("""
+                        UPDATE bot_allocations
+                           SET portfolio_id                   = :pid,
+                               starting_capital_cents         = 10000000,
+                               capital_cents_within_portfolio = 10000000,
+                               enabled                        = 1,
+                               paused_reason                  = NULL,
+                               tier                           = 'T1',
+                               updated_at                     = :now
+                         WHERE id = :id
+                    """), {"pid": options_port_id, "id": existing[0], "now": now})
+                    updated += 1
+                else:
+                    conn.execute(text("""
+                        INSERT INTO bot_allocations
+                            (user_id, profile_id, capital_pct, risk_profile, paper_mode,
+                             go_live_requested, enabled, starting_capital_cents,
+                             capital_cents_within_portfolio, portfolio_id, tier,
+                             created_at, updated_at)
+                        VALUES (:u, :p, 10.0, 'standard', 1, 0, 1, 10000000, 10000000,
+                                :pid, 'T1', :now, :now)
+                    """), {"u": user_id, "p": profile_id, "pid": options_port_id, "now": now})
+                    updated += 1
+
+        conn.commit()
+        _record_migration(conn, MIGRATION_NAME)
+        logger.info(
+            "_revert_options_to_options_sleeve: updated=%d allocations → options portfolio, $200k capital restored",
+            updated,
+        )
+    except Exception as exc:
+        logger.warning("_revert_options_to_options_sleeve failed: %s", exc)
+
+
+def _ensure_macro_last_post_table(conn) -> None:
+    """Singleton table tracking the market state at the time of the last Rick Discord post.
+    Used by macro_strategist to detect triggers (regime/VIX/SPY/BTC changes) vs last post.
+    """
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS macro_last_post (
+            id            INTEGER PRIMARY KEY,
+            regime_name   TEXT,
+            vix_value     REAL,
+            spy_trend     TEXT,
+            btc_dominance REAL,
+            posted_at     TEXT
+        )
+    """))
+    conn.commit()
+    logger.info("Migration: macro_last_post table ensured")
 
 
 def _ensure_fund_team_chat_state_table(conn) -> None:
