@@ -255,24 +255,50 @@ def _build_signal_embed(signal: dict) -> dict:
 
 
 def _post_to_channel(channel_id: str, embed: dict, token: str) -> Optional[str]:
+    """POST embed to a Discord channel with exponential backoff retry on 429.
+
+    Returns the message ID string on success, or None if all attempts fail.
+    Up to 3 total attempts: waits retry_after (or 1s) then 2s then 4s.
+    """
+    import time
+
     url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
-    with httpx.Client(timeout=8) as client:
-        resp = client.post(
-            url,
-            headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
-            json={"embeds": [embed]},
-        )
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        with httpx.Client(timeout=8) as client:
+            resp = client.post(
+                url,
+                headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+                json={"embeds": [embed]},
+            )
         if resp.status_code == 429:
-            logger.warning("Discord rate limited on channel %s", channel_id)
-            return None
+            try:
+                retry_after = float(resp.json().get("retry_after", 1.0))
+            except Exception:
+                retry_after = 1.0
+            wait = retry_after if attempt == 0 else retry_after * (2 ** attempt)
+            logger.warning(
+                "Discord rate limited on channel %s (attempt %d/%d) — sleeping %.2fs",
+                channel_id, attempt + 1, max_attempts, wait,
+            )
+            if attempt < max_attempts - 1:
+                time.sleep(wait)
+            else:
+                logger.error(
+                    "Discord rate limit: gave up after %d attempts on channel %s",
+                    max_attempts, channel_id,
+                )
+                return None
         elif not resp.is_success:
             logger.warning("Discord post failed channel=%s status=%s: %s",
                            channel_id, resp.status_code, resp.text[:200])
             return None
-        try:
-            return str(resp.json().get("id", ""))
-        except Exception:
-            return None
+        else:
+            try:
+                return str(resp.json().get("id", ""))
+            except Exception:
+                return None
+    return None
 
 
 def post_signal(
@@ -323,9 +349,10 @@ def post_signal(
     for cid in channel_ids:
         try:
             mid = _post_to_channel(cid, embed, cfg.discord_bot_token)
-            if mid and not message_id:
-                message_id = mid
-            posted = True
+            if mid:
+                if not message_id:
+                    message_id = mid
+                posted = True
         except Exception as exc:
             logger.debug("discord signal post skipped channel=%s: %s", cid, exc)
 
