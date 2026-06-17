@@ -259,3 +259,50 @@ def _fetch_regime() -> dict:
     )
 
     return regime
+
+
+# ── Shim: detect_regime ───────────────────────────────────────────────────────
+# All three call sites (runner.py ×2, scan_and_execute.py) import this name
+# but it was never defined here — only get_regime() existed.  The ImportError
+# was silently swallowed and every scan ran with regime={}, meaning strategies
+# never received real VIX/trend data.
+#
+# This thin wrapper accepts the (profile_name, profile) signature used by
+# callers and delegates to get_regime(), then applies a neutral fallback shim
+# so that API failures never leave regime empty.
+
+_NEUTRAL_REGIME: dict = {
+    "vix_regime": "mid",
+    "trend_regime": "chop",
+    "vol_pctile": 50.0,
+    "btc_dominance": 50.0,
+    "btc_funding_rate": 0.0,
+    "spy_price": None,
+    "vix_value": None,
+}
+
+
+def detect_regime(profile_name: str = "", profile: dict | None = None, db=None) -> dict:
+    """
+    Public entry point used by runner.py and scan_and_execute.py.
+
+    Calls get_regime() and, if the result is empty for any reason, returns a
+    neutral/permissive regime dict so that strategy scanners are never gated
+    out by a missing regime.
+    """
+    try:
+        regime = get_regime(db=db) or {}
+    except Exception as exc:
+        logger.warning("[detect_regime:%s] get_regime() raised: %s — using neutral shim", profile_name, exc)
+        regime = {}
+
+    # Shim: if regime is empty (e.g. all API calls failed before cache was
+    # populated), default to neutral so strategies still run.
+    if not regime:
+        logger.warning(
+            "[detect_regime:%s] regime is empty — applying neutral shim",
+            profile_name,
+        )
+        regime = dict(_NEUTRAL_REGIME)
+
+    return regime
