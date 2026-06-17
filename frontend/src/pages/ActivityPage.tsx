@@ -16,6 +16,12 @@ interface TradeRow {
   pnl_cents: number | null;
   pnl_usd: number | null;
   ts: string | null;
+  // Options-specific fields (present when asset_class === 'options')
+  asset_class?: string;
+  contract_symbol?: string;
+  option_type?: "call" | "put";
+  strike_price?: number;
+  expiration_date?: string;  // ISO date string e.g. "2024-07-19"
 }
 
 interface SparkPoint {
@@ -92,6 +98,26 @@ function sideClass(side: string) {
   if (["buy", "long", "cover"].includes(side)) return "text-emerald-400";
   if (["sell", "short"].includes(side)) return "text-red-400";
   return "text-zinc-400";
+}
+
+// ── Options helpers ───────────────────────────────────────────────────────────
+
+function isOptionsRow(t: TradeRow): boolean {
+  return t.asset_class === "options" || !!t.contract_symbol;
+}
+
+/** Format "2024-07-19" → "Jul 19" */
+function fmtExpiry(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00Z");
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** Format strike price as "$580" or "$580.50" */
+function fmtStrike(strike: number | undefined): string {
+  if (strike == null) return "—";
+  return strike % 1 === 0 ? `$${strike.toFixed(0)}` : `$${strike.toFixed(2)}`;
 }
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
@@ -333,8 +359,8 @@ export default function ActivityPage() {
                   <th className="text-left px-4 py-2.5 font-semibold">Bot</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Symbol</th>
                   <th className="text-left px-3 py-2.5 font-semibold">Side</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Qty</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Fill</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Qty / Contracts</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Fill / Premium</th>
                   <th className="text-right px-3 py-2.5 font-semibold">P&amp;L</th>
                   <th className="text-right px-4 py-2.5 font-semibold">When</th>
                 </tr>
@@ -343,28 +369,82 @@ export default function ActivityPage() {
                 {filtered.map((t) => {
                   const pnl = fmtPnl(t.pnl_cents);
                   const sleeve = BOT_SLEEVE[t.bot] ?? "unknown";
+                  const isOptions = isOptionsRow(t);
+
                   return (
                     <tr
                       key={t.id}
                       className="border-b border-zinc-800/60 hover:bg-zinc-800/30 transition-colors last:border-0"
                     >
+                      {/* Bot */}
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", SLEEVE_DOT[sleeve])} />
                           <span className="text-zinc-300">{BOT_LABELS[t.bot] ?? t.bot}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-white font-semibold">{t.symbol}</td>
+
+                      {/* Symbol — options shows underlying + strike/expiry badges */}
+                      <td className="px-3 py-2.5">
+                        {isOptions ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-white font-semibold">
+                              {t.contract_symbol ?? t.symbol}
+                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* CALL / PUT badge */}
+                              {t.option_type ? (
+                                <span className={cn(
+                                  "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide",
+                                  t.option_type === "call"
+                                    ? "bg-emerald-900/60 text-emerald-300"
+                                    : "bg-red-900/60 text-red-300",
+                                )}>
+                                  {t.option_type}
+                                </span>
+                              ) : null}
+                              {/* Strike */}
+                              {t.strike_price != null && (
+                                <span className="text-zinc-400">{fmtStrike(t.strike_price)}</span>
+                              )}
+                              {/* Expiry */}
+                              {t.expiration_date && (
+                                <span className="text-zinc-500">{fmtExpiry(t.expiration_date)}</span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-white font-semibold">{t.symbol}</span>
+                        )}
+                      </td>
+
+                      {/* Side */}
                       <td className={cn("px-3 py-2.5 font-semibold uppercase", sideClass(t.side))}>
                         {t.side}
                       </td>
-                      <td className="px-3 py-2.5 text-right text-zinc-400">{t.qty}</td>
+
+                      {/* Qty / Contracts */}
                       <td className="px-3 py-2.5 text-right text-zinc-400">
-                        {t.fill_price != null ? `$${t.fill_price.toFixed(2)}` : "—"}
+                        {isOptions
+                          ? <span>×{t.qty} contracts</span>
+                          : t.qty}
                       </td>
+
+                      {/* Fill / Premium per contract */}
+                      <td className="px-3 py-2.5 text-right text-zinc-400">
+                        {t.fill_price != null
+                          ? isOptions
+                            ? <span>${t.fill_price.toFixed(2)}<span className="text-zinc-600">/ct</span></span>
+                            : `$${t.fill_price.toFixed(2)}`
+                          : "—"}
+                      </td>
+
+                      {/* P&L */}
                       <td className={cn("px-3 py-2.5 text-right font-semibold", pnl.cls)}>
                         {pnl.text}
                       </td>
+
+                      {/* When */}
                       <td className="px-4 py-2.5 text-right text-zinc-600">
                         {t.ts ? ago(t.ts) : "—"}
                       </td>

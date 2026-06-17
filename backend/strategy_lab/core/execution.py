@@ -174,12 +174,14 @@ PAPER_BROKERS = {
     "stock":   _get_paper_stocks_cls,
     "crypto":  _get_paper_crypto_cls,
     "quant":   _get_paper_crypto_cls,  # quant bots trade crypto via Alpaca paper
+    "options": _get_paper_stocks_cls,  # options on US equities route via Alpaca stock API
 }
 
 LIVE_BROKERS = {
     "stock":   _get_live_stocks_cls,
     "crypto":  _get_live_crypto_cls,
     "quant":   _get_live_crypto_cls,
+    "options": _get_live_stocks_cls,
 }
 
 

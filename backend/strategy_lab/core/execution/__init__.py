@@ -99,6 +99,7 @@ PAPER_BROKERS = {
     # "quant" is a sleeve label, not an instrument type; quant bots trade crypto pairs
     "quant":          _get_paper_crypto_cls,
     "crypto_intraday": _get_paper_crypto_cls,
+    "options":        _get_paper_stocks_cls,  # options on US equities route via Alpaca stock API
 }
 
 LIVE_BROKERS = {
@@ -106,6 +107,7 @@ LIVE_BROKERS = {
     "crypto":         _get_live_crypto_cls,
     "quant":          _get_live_crypto_cls,
     "crypto_intraday": _get_live_crypto_cls,
+    "options":        _get_live_stocks_cls,
 }
 
 

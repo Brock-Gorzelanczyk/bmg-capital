@@ -316,6 +316,41 @@ def _position_to_dict(p: BotPosition) -> dict:
     }
 
 
+import re as _re
+
+_OCC_RE = _re.compile(
+    r"^([A-Z]{1,6})(\d{2})(\d{2})(\d{2})([CP])(\d{8})$"
+)
+
+
+def _parse_occ_symbol(symbol: str) -> dict:
+    """
+    Parse an OCC option contract symbol into its components.
+    Returns a dict with options-specific fields; gracefully returns
+    a minimal dict with just contract_symbol if parsing fails.
+    OCC format: <ROOT><YY><MM><DD><C|P><8-digit-strike>
+    Strike encoding: 5 digits integer + 3 digits fractional (divide by 1000).
+    Example: SPY240719C00580000 → strike $580.00, exp 2024-07-19, type CALL
+    """
+    m = _OCC_RE.match(symbol.upper().strip())
+    if not m:
+        # Symbol doesn't look like OCC — still surface contract_symbol
+        return {"contract_symbol": symbol}
+    root, yy, mm, dd, cp, strike_raw = m.groups()
+    option_type = "call" if cp == "C" else "put"
+    strike_price = int(strike_raw) / 1000.0
+    expiration_date = f"20{yy}-{mm}-{dd}"
+    return {
+        "contract_symbol": symbol,
+        "option_type": option_type,
+        "strike_price": strike_price,
+        "expiration_date": expiration_date,
+        # contract_count mirrors qty; premium_per_contract = fill_price / 100 shares per contract
+        # fill_price is already in dollars (fill_price_cents / 100) so premium = fill_price
+        # (Options fill prices are per-share; multiply by 100 for total, but per-contract = fill_price)
+    }
+
+
 def _trade_to_dict(t: BotTrade) -> dict:
     return {
         "id": t.id,
@@ -660,6 +695,7 @@ def get_cross_bot_activity(
         return {"trades": [], "summary": {}}
 
     alloc_id_to_name = {a.id: p.name for a, p in alloc_pairs}
+    alloc_id_to_asset_class = {a.id: p.asset_class for a, p in alloc_pairs}
     alloc_ids = list(alloc_id_to_name.keys())
 
     q = db.query(BotTrade).filter(
@@ -679,6 +715,14 @@ def get_cross_bot_activity(
         d["bot"] = alloc_id_to_name.get(t.allocation_id, "unknown")
         d["pnl_cents"] = t.pnl_cents
         d["pnl_usd"] = round(t.pnl_cents / 100, 2) if t.pnl_cents is not None else None
+        asset_class = alloc_id_to_asset_class.get(t.allocation_id, "stock")
+        d["asset_class"] = asset_class
+        # Enrich options trades by parsing the OCC contract symbol stored in t.symbol
+        # OCC format: <underlying><YY><MM><DD><C|P><8-digit-strike>
+        # e.g. SPY240719C00580000 → underlying=SPY, exp=2024-07-19, type=C, strike=580.00
+        if asset_class == "options":
+            parsed = _parse_occ_symbol(t.symbol)
+            d.update(parsed)
         trades.append(d)
 
     # Daily P&L sparkline — last 30 days
