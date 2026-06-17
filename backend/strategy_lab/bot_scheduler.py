@@ -253,6 +253,10 @@ def setup_bot_scheduler(scheduler) -> None:
         CronTrigger(hour="*/4", minute=30),
         id="bot_crypto_onchain",
         replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
