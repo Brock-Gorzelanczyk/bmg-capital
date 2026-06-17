@@ -540,6 +540,68 @@ def setup_bot_scheduler(scheduler) -> None:
     )
 
     # ------------------------------------------------------------------
+    # C8 — Daily NAV calculation: 4:30 PM ET, Mon-Fri
+    # Computes portfolio NAV (starting capital + realized + unrealized),
+    # stores to nav_history table, renders as chart on /portfolio page.
+    # ------------------------------------------------------------------
+    def _compute_daily_nav():
+        from app.db.session import SessionLocal
+        from app.jobs.compute_nav import compute_and_store_nav
+        db = SessionLocal()
+        try:
+            result = compute_and_store_nav(db)
+            logger.warning(
+                "[nav-cron] computed: date=%s nav_cents=%d pct_change=%s",
+                result.get("date"), result.get("nav_cents", 0), result.get("pct_change"),
+            )
+        except Exception as exc:
+            logger.error("[nav-cron] failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _compute_daily_nav,
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=ET),
+        id="daily_nav_calculation",
+        replace_existing=True,
+    )
+    # Also compute on startup so the chart has a row from day 1
+    scheduler.add_job(
+        _compute_daily_nav,
+        "date",
+        run_date=datetime.now(UTC),
+        id="daily_nav_startup",
+        replace_existing=True,
+    )
+
+    # ------------------------------------------------------------------
+    # C1 — Bot health watchdog: every 15 min, 24/7
+    # Independent of queen sessions — catches RED transitions even when
+    # no session is firing (e.g., weekends, overnight).
+    # ------------------------------------------------------------------
+    def _health_watchdog():
+        from app.db.session import SessionLocal
+        from strategy_lab.agents.strategy_monitor import run_strategy_health_check
+        db = SessionLocal()
+        try:
+            run_strategy_health_check(db)
+        except Exception as exc:
+            logger.error("[health-watchdog] failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _health_watchdog,
+        CronTrigger(minute="*/15"),
+        id="bot_health_watchdog",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered bot_health_watchdog (*/15 min)")
+
+    # ------------------------------------------------------------------
     # Recurring dupe quarantine: every 10 min, 24/7
     # Band-aid until cooldown root cause is confirmed fixed. Same logic
     # as the startup migration but runs repeatedly so dupes can't

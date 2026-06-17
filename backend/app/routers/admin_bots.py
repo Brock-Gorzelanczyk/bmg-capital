@@ -331,7 +331,24 @@ def patch_bot_config(
         raise HTTPException(status_code=422, detail="'value' is required")
 
     validated = _validate_value(key, value)
+    # Read current value for before_val
+    cur_val = None
+    try:
+        from app.db.models.bots import BotConfigOverride
+        row = db.query(BotConfigOverride).filter(
+            BotConfigOverride.bot_id == bot_id,
+            BotConfigOverride.key == key,
+        ).first()
+        cur_val = row.value if row else None
+    except Exception:
+        pass
     _write_override(db, bot_id, key, validated, admin.email)
+    try:
+        from app.services.audit_trail import post_audit_event
+        post_audit_event(db, actor=admin.email, action="config_change", entity_type="bot",
+                         entity_id=bot_id, before_val={key: cur_val}, after_val={key: validated})
+    except Exception:
+        pass
     return {"ok": True, "bot_id": bot_id, "key": key, "value": validated}
 
 
@@ -356,15 +373,19 @@ def enable_bot(
 ):
     _require_bot(bot_id)
     _write_override(db, bot_id, "enabled", True, admin.email)
-    # Also sync alloc.enabled so all downstream endpoints see correct state
     from app.db.models.bots import BotAllocation, BotProfile
     bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
     if bp:
         db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({
-            "enabled": True,
-            "paused_reason": None,
+            "enabled": True, "paused_reason": None,
         })
         db.commit()
+    try:
+        from app.services.audit_trail import post_audit_event
+        post_audit_event(db, actor=admin.email, action="enable", entity_type="bot",
+                         entity_id=bot_id, before_val=False, after_val=True)
+    except Exception:
+        pass
     return {"ok": True, "bot_id": bot_id, "enabled": True}
 
 
@@ -376,15 +397,19 @@ def disable_bot(
 ):
     _require_bot(bot_id)
     _write_override(db, bot_id, "enabled", False, admin.email)
-    # Also sync alloc.enabled so all downstream endpoints see correct state
     from app.db.models.bots import BotAllocation, BotProfile
     bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
     if bp:
         db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({
-            "enabled": False,
-            "paused_reason": "admin_lock",
+            "enabled": False, "paused_reason": "admin_lock",
         })
         db.commit()
+    try:
+        from app.services.audit_trail import post_audit_event
+        post_audit_event(db, actor=admin.email, action="disable", entity_type="bot",
+                         entity_id=bot_id, before_val=True, after_val=False)
+    except Exception:
+        pass
     return {"ok": True, "bot_id": bot_id, "enabled": False}
 
 
@@ -396,6 +421,12 @@ def pause_bot(
 ):
     _require_bot(bot_id)
     _write_override(db, bot_id, "paused", True, admin.email)
+    try:
+        from app.services.audit_trail import post_audit_event
+        post_audit_event(db, actor=admin.email, action="pause", entity_type="bot",
+                         entity_id=bot_id, before_val="running", after_val="paused")
+    except Exception:
+        pass
     return {"ok": True, "bot_id": bot_id, "paused": True}
 
 
@@ -407,6 +438,12 @@ def resume_bot(
 ):
     _require_bot(bot_id)
     _write_override(db, bot_id, "paused", False, admin.email)
+    try:
+        from app.services.audit_trail import post_audit_event
+        post_audit_event(db, actor=admin.email, action="resume", entity_type="bot",
+                         entity_id=bot_id, before_val="paused", after_val="running")
+    except Exception:
+        pass
     return {"ok": True, "bot_id": bot_id, "paused": False}
 
 

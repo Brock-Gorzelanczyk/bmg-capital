@@ -986,6 +986,43 @@ def run_migrations(engine: Engine) -> None:
             _ensure_macro_last_post_table(conn)
         except Exception as _e:
             logger.warning("_ensure_macro_last_post_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_nav_history_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_nav_history_table failed (non-fatal): %s", _e)
+        try:
+            _ensure_audit_trail_table(conn)
+        except Exception as _e:
+            logger.warning("_ensure_audit_trail_table failed (non-fatal): %s", _e)
+
+
+def _ensure_nav_history_table(conn) -> None:
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS nav_history (
+            date        TEXT PRIMARY KEY,
+            nav_cents   INTEGER NOT NULL,
+            pct_change  REAL,
+            computed_at TEXT NOT NULL
+        )
+    """))
+    conn.commit()
+
+
+def _ensure_audit_trail_table(conn) -> None:
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS audit_trail (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts          TEXT    NOT NULL,
+            actor       TEXT    NOT NULL,
+            action      TEXT    NOT NULL,
+            entity_type TEXT    NOT NULL,
+            entity_id   TEXT,
+            before_val  TEXT,
+            after_val   TEXT,
+            notes       TEXT
+        )
+    """))
+    conn.commit()
 
 
 def _revert_options_to_options_sleeve(conn) -> None:

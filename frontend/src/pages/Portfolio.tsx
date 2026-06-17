@@ -1,9 +1,11 @@
 import { TrendingUp, TrendingDown, Layers, Activity } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { usePortfolioSnapshot } from "@/hooks/usePortfolioSnapshot";
 import { botStatusBadge, BADGE_CLASSES } from "@/lib/botStatus";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import AllocationDonut from "@/components/ui/AllocationDonut";
 import type { BotSnap, SleeveSnap } from "@/api/portfolioSnapshot";
+import client from "@/api/client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,6 +121,147 @@ function SleeveCard({ sleeveKey, sleeve, bots }: { sleeveKey: string; sleeve: Sl
   );
 }
 
+// ─── NAV History Chart ───────────────────────────────────────────────────────
+
+interface NavEntry {
+  date: string;
+  nav_cents: number;
+  pct_change: number;
+}
+
+async function fetchNavHistory(): Promise<NavEntry[]> {
+  const { data } = await client.get<{ entries: NavEntry[] }>("/portfolio/nav-history");
+  return Array.isArray(data?.entries) ? data.entries : [];
+}
+
+function NavChart() {
+  const { data: entries = [], isLoading } = useQuery({
+    queryKey: ["nav-history"],
+    queryFn: fetchNavHistory,
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  const chartHeight = 200;
+  const paddingX = 8;
+  const paddingY = 16;
+  const labelHeight = 20;
+  const svgHeight = chartHeight + labelHeight;
+
+  if (isLoading) {
+    return (
+      <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
+        <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">NAV History · 30d</p>
+        <div className="h-[200px] flex items-center justify-center">
+          <p className="text-xs text-t-muted animate-pulse">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
+        <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">NAV History · 30d</p>
+        <div className="h-[200px] flex items-center justify-center">
+          <p className="text-xs text-t-muted text-center">
+            No NAV history yet — check back after 4:30 PM ET today
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const slice = entries.slice(-30);
+  const values = slice.map((e) => e.nav_cents);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+  const range = maxVal - minVal || 1;
+
+  // Determine overall direction: last vs first
+  const isUp = slice[slice.length - 1].nav_cents >= slice[0].nav_cents;
+  const lineColor = isUp ? "var(--color-t-green, #22c55e)" : "var(--color-t-red, #ef4444)";
+  const fillColor = isUp ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)";
+
+  // Build SVG points using a viewBox of 1000 x (chartHeight)
+  const vbWidth = 1000;
+  const innerW = vbWidth - paddingX * 2;
+  const innerH = chartHeight - paddingY * 2;
+
+  const toX = (i: number) => paddingX + (i / (slice.length - 1)) * innerW;
+  const toY = (v: number) => paddingY + innerH - ((v - minVal) / range) * innerH;
+
+  const points = slice.map((e, i) => `${toX(i)},${toY(e.nav_cents)}`);
+  const linePath = `M ${points.join(" L ")}`;
+
+  // Close path for fill: go to bottom-right, bottom-left, back to start
+  const lastX = toX(slice.length - 1);
+  const firstX = toX(0);
+  const bottomY = paddingY + innerH;
+  const fillPath = `${linePath} L ${lastX},${bottomY} L ${firstX},${bottomY} Z`;
+
+  const firstLabel = slice[0].date;
+  const lastLabel = slice[slice.length - 1].date;
+  const firstLabelX = toX(0);
+  const lastLabelX = toX(slice.length - 1);
+
+  return (
+    <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
+      <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">NAV History · 30d</p>
+      <svg
+        viewBox={`0 0 ${vbWidth} ${svgHeight}`}
+        preserveAspectRatio="none"
+        className="w-full"
+        style={{ height: `${svgHeight}px` }}
+        aria-label="Portfolio NAV history chart"
+      >
+        {/* Fill area under the line */}
+        <path d={fillPath} fill={fillColor} stroke="none" />
+        {/* Line */}
+        <path
+          d={linePath}
+          fill="none"
+          stroke={lineColor}
+          strokeWidth="2.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* Endpoint dot */}
+        <circle
+          cx={toX(slice.length - 1)}
+          cy={toY(slice[slice.length - 1].nav_cents)}
+          r="4"
+          fill={lineColor}
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* X-axis labels: first and last date */}
+        <text
+          x={firstLabelX}
+          y={chartHeight + labelHeight - 4}
+          textAnchor="start"
+          fontSize="28"
+          fill="currentColor"
+          className="text-t-muted"
+          style={{ fill: "var(--color-t-muted, #6b7280)" }}
+        >
+          {firstLabel}
+        </text>
+        <text
+          x={lastLabelX}
+          y={chartHeight + labelHeight - 4}
+          textAnchor="end"
+          fontSize="28"
+          fill="currentColor"
+          style={{ fill: "var(--color-t-muted, #6b7280)" }}
+        >
+          {lastLabel}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 const SLEEVE_ORDER = ["stocks", "crypto", "options", "quant"] as const;
@@ -211,6 +354,9 @@ export default function Portfolio() {
             positive={isLoading ? undefined : retAll >= 0}
           />
         </div>
+
+        {/* NAV History Chart */}
+        <NavChart />
 
         {/* Per-sleeve breakdown */}
         {SLEEVE_ORDER.map((key) => {

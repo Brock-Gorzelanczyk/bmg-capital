@@ -1032,6 +1032,44 @@ def synthetic_check(
     }
 
 
+@router.get("/audit-trail")
+def get_audit_trail(
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Append-only compliance log. Returns last N audit events, newest first."""
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    try:
+        from sqlalchemy import text as sql_text
+        rows = db.execute(sql_text("""
+            SELECT id, ts, actor, action, entity_type, entity_id,
+                   before_val, after_val, notes
+            FROM audit_trail
+            ORDER BY id DESC
+            LIMIT :n
+        """), {"n": min(limit, 500)}).fetchall()
+        entries = [
+            {
+                "id":          r[0],
+                "ts":          r[1],
+                "actor":       r[2],
+                "action":      r[3],
+                "entity_type": r[4],
+                "entity_id":   r[5],
+                "before_val":  r[6],
+                "after_val":   r[7],
+                "notes":       r[8],
+            }
+            for r in rows
+        ]
+        return {"entries": entries, "total": len(entries)}
+    except Exception as exc:
+        logger.error("[audit-trail] read failed: %s", exc)
+        return {"entries": [], "total": 0}
+
+
 @router.post("/agent-token/generate")
 def generate_agent_token(
     db: Session = Depends(get_db),

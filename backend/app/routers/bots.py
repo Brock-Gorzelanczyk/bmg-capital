@@ -630,6 +630,24 @@ def get_portfolios(
     return {"portfolios": result}
 
 
+# ── GET /api/bots/portfolio/nav-history (C8) ──────────────────────────────────
+
+@router.get("/portfolio/nav-history")
+def get_nav_history(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return up to `days` rows of daily NAV for the portfolio chart."""
+    try:
+        from app.jobs.compute_nav import get_nav_history as _get
+        entries = _get(db, days=min(days, 365))
+    except Exception as exc:
+        logger.warning("[nav-history] failed: %s", exc)
+        entries = []
+    return {"entries": entries}
+
+
 # ── GET /api/bots/portfolios/{portfolio_id}/activity ─────────────────────────
 
 @router.get("/portfolios/{portfolio_id}/activity")
