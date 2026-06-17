@@ -215,7 +215,7 @@ export default function BotHealthPage() {
                 return (
                   <tr
                     key={row.bot}
-                    onClick={() => navigate(`/admin/bots/${row.bot}`)}
+                    onClick={() => navigate(`/admin/bot-health/${row.bot}`)}
                     className={cn(
                       "cursor-pointer transition-colors",
                       cfg.row,
@@ -234,7 +234,7 @@ export default function BotHealthPage() {
                     {/* Health badge */}
                     <td className="px-3 py-2.5">
                       <HealthBadge health={row.pipeline_health} />
-                      {row.pipeline_health === "DISABLED" && row.disable_category && (
+                      {row.pipeline_health === "DISABLED" && (
                         <span className="ml-1.5 text-[9px] text-zinc-500 font-mono">
                           {row.disable_category === "T0_INCUBATION" ? "incubation"
                             : row.disable_category === "ADMIN_LOCK"  ? "admin-lock"

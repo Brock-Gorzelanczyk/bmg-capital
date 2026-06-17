@@ -53,10 +53,26 @@ def _fetch_latest_prices_fallback(symbols: list[str]) -> dict[str, float]:
 
 def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime) -> None:
     """Record exit trade and mark position closed."""
-    from app.db.models.bots import BotTrade
+    from app.db.models.bots import BotTrade, BotSignal
 
     is_short = getattr(pos, "side", "long") == "short"
     fill_cents = price_usd * 100  # float — preserves sub-penny precision
+
+    # Log exit signal so health checker sees recent bot activity (close trades have no entry signal)
+    try:
+        db.add(BotSignal(
+            allocation_id=alloc.id,
+            ts=now,
+            symbol=pos.symbol,
+            side="cover" if is_short else "sell",
+            confidence=1.0,
+            reason=reason,
+            entry_price=price_usd,
+        ))
+        db.flush()
+    except Exception as _sig_exc:
+        logger.warning("[monitor] exit signal log failed for %s: %s", pos.symbol, _sig_exc)
+
     exit_trade = BotTrade(
         allocation_id=alloc.id,
         symbol=pos.symbol,

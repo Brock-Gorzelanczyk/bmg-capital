@@ -21,6 +21,14 @@ from sqlalchemy import text as sql_text
 
 logger = logging.getLogger(__name__)
 
+# Warn at import time so Railway startup logs make the missing config obvious
+if not os.getenv("DISCORD_CH_AUDIT_TRAIL"):
+    logger.warning(
+        "[audit_trail] DISCORD_CH_AUDIT_TRAIL env var not set — "
+        "audit events will write to DB only (no Discord). "
+        "Create #audit-trail channel, copy its ID, and set the env var in Railway."
+    )
+
 
 def _ensure_audit_trail_table(db: Session) -> None:
     try:

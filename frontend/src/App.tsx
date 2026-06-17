@@ -410,7 +410,8 @@ function AppInner() {
         <Route path="/admin/scanners"    element={<AdminRoute><ScannersPage /></AdminRoute>} />
         <Route path="/admin/smart-money" element={<AdminRoute><SmartMoneyPage /></AdminRoute>} />
         <Route path="/admin/sentinel"    element={<AdminRoute><SentinelDashboardPage /></AdminRoute>} />
-        <Route path="/admin/bot-health"  element={<AdminRoute><BotHealthPage /></AdminRoute>} />
+        <Route path="/admin/bot-health"           element={<AdminRoute><BotHealthPage /></AdminRoute>} />
+        <Route path="/admin/bot-health/:botId"    element={<AdminRoute><AdminBotDetailPage /></AdminRoute>} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
