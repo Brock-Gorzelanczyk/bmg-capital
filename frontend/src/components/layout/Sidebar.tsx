@@ -9,7 +9,7 @@ import {
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
   Grid3X3, Zap, Globe, Eye, TestTube2, Cpu, SlidersHorizontal, Beaker,
-  Radar, Hammer, ShieldAlert,
+  Radar, Hammer, ShieldAlert, HeartPulse,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -106,6 +106,7 @@ const NAV_COMMUNITY = [
 
 const NAV_ADMIN = [
   { to: "/admin",              label: "Bot Config",      Icon: SlidersHorizontal },
+  { to: "/admin/bot-health",   label: "Bot Health",      Icon: HeartPulse },
   { to: "/admin/monitoring",   label: "Monitoring",      Icon: Activity   },
   { to: "/admin/heatmap",      label: "Heat Map",        Icon: Grid3X3    },
   { to: "/admin/flow",         label: "Options Flow",    Icon: Zap        },
