@@ -421,6 +421,106 @@ function RecentActivity({
         );
       })}
     </div>
+  );
+}
+
+// ── Hero card ─────────────────────────────────────────────────────────────────
+
+function HeroCard({
+  portfolio,
+  accent,
+  glyph,
+}: {
+  portfolio: StrategyPortfolio & Record<string, any>;
+  accent: string;
+  glyph: string;
+}) {
+  const startingUsd = portfolio.starting_capital_cents / 100;
+  const currentUsd = portfolio.current_value_cents / 100;
+  const pnlUsd = portfolio.pnl_cents / 100;
+  const todayPnlUsd = (portfolio.today_pnl_cents ?? 0) / 100;
+  const activeBots = portfolio.bots.filter((b: any) => b.allocation?.enabled).length;
+  const totalBots = portfolio.bots.length;
+
+  const stats = [
+    { label: "STARTING CAPITAL", value: `$${startingUsd.toLocaleString()}`, color: "#eafbe9" },
+    {
+      label: "CURRENT VALUE",
+      value: `$${currentUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      color: "#eafbe9",
+    },
+    { label: "ALL-TIME P&L", value: fmtUsd(portfolio.pnl_cents ?? 0), color: pnlColor(pnlUsd) },
+    { label: "ALL-TIME RETURN", value: fmtPct(portfolio.pnl_pct ?? 0), color: pnlColor(portfolio.pnl_pct ?? 0) },
+    { label: "TODAY P&L", value: fmtUsd(portfolio.today_pnl_cents ?? 0), color: pnlColor(todayPnlUsd) },
+    { label: "ACTIVE BOTS", value: `${activeBots} / ${totalBots}`, color: accent },
+  ];
+
+  const pts = Array.from({ length: 17 }, (_, i) => {
+    const x = (i / 16) * 1340;
+    const y = 110 - i * 3.5 + Math.sin(i * 1.2) * 8;
+    return `${x.toFixed(0)},${y.toFixed(0)}`;
+  }).join(" ");
+
+  return (
+    <div
+      className="relative rounded overflow-hidden"
+      style={{
+        border: `1px solid ${hexRgba(accent, 0.28)}`,
+        background: "linear-gradient(180deg,#0a120a,#070d07)",
+        padding: "26px 30px",
+        animation: "bmgGlow 4s ease-in-out infinite",
+      }}
+    >
+      {[
+        { top: 10, left: 10, bt: "border-t-[1.5px]", bl: "border-l-[1.5px]", br: undefined, bb: undefined },
+        { top: 10, right: 10, bt: "border-t-[1.5px]", br: "border-r-[1.5px]", bl: undefined, bb: undefined },
+        { bottom: 10, left: 10, bb: "border-b-[1.5px]", bl: "border-l-[1.5px]", bt: undefined, br: undefined },
+        { bottom: 10, right: 10, bb: "border-b-[1.5px]", br: "border-r-[1.5px]", bt: undefined, bl: undefined },
+      ].map((c, i) => (
+        <span
+          key={i}
+          className="absolute w-[18px] h-[18px]"
+          style={{
+            top: c.top, left: (c as any).left, right: (c as any).right, bottom: c.bottom,
+            borderTop: c.bt ? `1.5px solid ${accent}` : undefined,
+            borderLeft: c.bl ? `1.5px solid ${accent}` : undefined,
+            borderRight: (c as any).br ? `1.5px solid ${accent}` : undefined,
+            borderBottom: (c as any).bb ? `1.5px solid ${accent}` : undefined,
+            filter: `drop-shadow(0 0 4px ${hexRgba(accent, 0.6)})`,
+          }}
+        />
+      ))}
+      <svg
+        viewBox="0 0 1340 160"
+        preserveAspectRatio="none"
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{ opacity: 0.25 }}
+      >
+        <polyline points={pts} fill="none" stroke={accent} strokeWidth="1.5" opacity="0.6" />
+      </svg>
+      <div className="relative">
+        <div className="flex items-center gap-3 mb-6">
+          <span
+            className="w-11 h-11 rounded flex items-center justify-center font-mono font-bold text-[18px] flex-shrink-0"
+            style={{ background: hexRgba(accent, 0.1), border: `1px solid ${hexRgba(accent, 0.35)}`, color: accent }}
+          >
+            {glyph}
+          </span>
+          <div>
+            <h1 className="text-[26px] font-bold tracking-tight leading-none" style={{ color: "#eafbe9" }}>
+              {portfolio.name} Portfolio
+            </h1>
+            <p className="font-mono text-[11px] mt-1.5" style={{ color: "#7e8e7e" }}>
+              paper trading · {portfolio.bots.length} dedicated bot{portfolio.bots.length !== 1 ? "s" : ""} ·{" "}
+              ${startingUsd.toLocaleString()} starting capital
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
+          {stats.map((s) => (
+            <div key={s.label}>
+              <div className="font-mono text-[9px] tracking-[0.12em] mb-1.5" style={{ color: "#7e8e7e" }}>
+                {s.label}
               </div>
               <div className="font-mono text-[20px] font-medium leading-none" style={{ color: s.color }}>
                 {s.value}
