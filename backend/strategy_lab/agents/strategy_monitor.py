@@ -119,7 +119,9 @@ def _check_bot_windows(db: Session) -> list[dict]:
         try:
             prof = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
             if not prof:
-                results.append({"bot": bot_name, "pipeline_health": "RED",
+                _ph = "DISABLED" if bot_name in _T0_BOTS else "RED"
+                results.append({"bot": bot_name, "pipeline_health": _ph,
+                                 "disable_category": "T0_INCUBATION" if bot_name in _T0_BOTS else None,
                                  "status": "UNKNOWN", "reason": "no_profile"})
                 continue
 
@@ -129,7 +131,9 @@ def _check_bot_windows(db: Session) -> list[dict]:
                 BotAllocation.profile_id == prof.id,
             ).all()
             if not alloc_rows:
-                results.append({"bot": bot_name, "pipeline_health": "RED",
+                _ph = "DISABLED" if bot_name in _T0_BOTS else "RED"
+                results.append({"bot": bot_name, "pipeline_health": _ph,
+                                 "disable_category": "T0_INCUBATION" if bot_name in _T0_BOTS else None,
                                  "status": "NO_ALLOC", "reason": "no_allocation_row"})
                 continue
             alloc = alloc_rows[0]
