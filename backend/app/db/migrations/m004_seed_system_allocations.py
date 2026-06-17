@@ -32,10 +32,10 @@ _PRODUCTION_PROFILES = [
     "crypto_quant_aggressive",
     "crypto_quant_scalper",
     "crypto_quant_mean_reversion",
-    "tsmom_multi_asset",
-    "quality_factor",
-    "value_quality",
-    "crypto_meanrev_2163",
+    # T0 incubation bots intentionally excluded — m004_pause_t0_violations handles them.
+    # Including them here would create enabled=True allocations on fresh DBs since
+    # pause migration runs first but has nothing to pause.
+    # "tsmom_multi_asset", "quality_factor", "value_quality", "crypto_meanrev_2163"
 ]
 
 # Starting capital per bot: $100,000 = 10_000_000 cents
