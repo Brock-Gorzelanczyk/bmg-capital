@@ -58,21 +58,36 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     is_short = getattr(pos, "side", "long") == "short"
     fill_cents = price_usd * 100  # float — preserves sub-penny precision
 
-    # Log exit signal so health checker sees recent bot activity; capture id for trade FK
+    # Log exit signal so health checker sees recent bot activity; capture id for trade FK.
+    # Uses begin_nested() (savepoint) so a flush failure never corrupts the outer transaction.
     _exit_signal_id: int | None = None
+    _exit_signal_dict: dict | None = None
     try:
-        _exit_sig = BotSignal(
-            allocation_id=alloc.id,
-            ts=now,
-            symbol=pos.symbol,
-            side="cover" if is_short else "sell",
-            confidence=1.0,
-            reason=reason,
-            entry_price=price_usd,
-        )
-        db.add(_exit_sig)
-        db.flush()
-        _exit_signal_id = _exit_sig.id
+        with db.begin_nested():
+            _exit_sig = BotSignal(
+                allocation_id=alloc.id,
+                ts=now,
+                symbol=pos.symbol,
+                side="cover" if is_short else "sell",
+                confidence=1.0,
+                reason=reason,
+                entry_price=price_usd,
+            )
+            db.add(_exit_sig)
+            db.flush()
+            _exit_signal_id = _exit_sig.id
+        # Build signal dict for Discord AFTER savepoint commits (id is stable now)
+        from app.db.models.bots import BotProfile
+        _prof = db.get(BotProfile, alloc.profile_id)
+        _exit_signal_dict = {
+            "bot":        _prof.name if _prof else "unknown",
+            "symbol":     pos.symbol,
+            "side":       "cover" if is_short else "sell",
+            "confidence": 1.0,
+            "reason":     reason,
+            "fill_price": price_usd,
+            "ts":         now.isoformat(),
+        }
     except Exception as _sig_exc:
         logger.warning("[monitor] exit signal log failed for %s: %s", pos.symbol, _sig_exc)
 
@@ -95,6 +110,19 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     pos.closed_at = now
     pos.exit_reason = reason
     db.commit()
+
+    # Fire Discord embed for exit signal — must be AFTER commit so signal row is visible
+    if _exit_signal_id is not None and _exit_signal_dict is not None:
+        try:
+            import threading
+            from strategy_lab.core.audit import _post_signal_to_discord
+            threading.Thread(
+                target=_post_signal_to_discord,
+                args=(_exit_signal_id, _exit_signal_dict),
+                daemon=True,
+            ).start()
+        except Exception as _disc_exc:
+            logger.debug("[monitor] exit discord post skipped for %s: %s", pos.symbol, _disc_exc)
 
     entry_usd = pos.avg_cost_cents / 100.0
     pnl = (entry_usd - price_usd) * pos.qty if is_short else (price_usd - entry_usd) * pos.qty
