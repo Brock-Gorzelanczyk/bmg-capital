@@ -187,7 +187,8 @@ def _get_stale_bots(db: Session) -> list[str]:
             if expected > 0 and minutes_since > expected * 2:
                 stale.append(b["bot"])
         return stale
-    except Exception:
+    except Exception as exc:
+        logger.warning("[risk_sentinel] _get_stale_bots failed — returning empty list: %s", exc)
         return []
 
 
@@ -223,9 +224,9 @@ def _classify(drawdown_pct: float, consec_losses: int, stale_count: int,
               triggers: list[str] | None = None) -> str:
     """
     Escalation matrix (stale bots ≠ losing bots):
-      CRITICAL: 24h dd ≤ -4%, or circuit breaker, or 5+ stale, or stale + losing combo
+      CRITICAL: 24h dd ≤ -4%, or circuit breaker, or 3+ stale, or stale + losing combo
       RED:      3+ consecutive losses, or 24h dd ≤ -2%, or 30d dd ≥ 15%, or 7+ consec losses
-      YELLOW:   3+ stale bots (technical issue — investigate scanners), or warn thresholds
+      YELLOW:   2+ stale bots (technical issue — investigate scanners), or warn thresholds
       GREEN:    everything else
     """
     t = triggers if triggers is not None else []
@@ -373,17 +374,21 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
         "title":     titles[level],
         "color":     colors[level],
         "fields":    fields,
-        "footer":    {"text": "Dick (CRO) · Tier A autonomous · Every 30 min"},
+        "footer":    {"text": "Dick (CRO) · Tier A autonomous · 9:00 AM + 4:30 PM ET daily"},
         "timestamp": now.isoformat(),
     }
 
 
 def run_risk_health_check(db: Session) -> dict:
     """
-    Main entry point — called every 30 min by APScheduler.
-    Posts to #risk-alerts on YELLOW or RED. Returns risk dict.
+    Main entry point — called 2× daily (9 AM + 4:30 PM ET) by APScheduler.
+    Posts to #risk-alerts on YELLOW or above. Returns risk dict.
     """
     now = datetime.now(timezone.utc)
+    logger.info(
+        "[risk_sentinel] v2 cadence-aware — CRITICAL≥%d RED≥%d",
+        STALE_BOT_CRITICAL, STALE_BOT_RED,
+    )
 
     try:
         from agents.bus import heartbeat as _hb
