@@ -691,6 +691,33 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
 
+    # ------------------------------------------------------------------
+    # Fleet Sentinel: every 10 min, 24/7
+    # Runs 7 health checks and posts paste-ready alerts to #fund-updates
+    # when issues are detected. 4-hour in-memory dedup prevents spam.
+    # ------------------------------------------------------------------
+    def _run_fleet_sentinel():
+        from app.db.session import SessionLocal
+        from strategy_lab.core.fleet_sentinel import run_fleet_sentinel
+        db = SessionLocal()
+        try:
+            run_fleet_sentinel(db)
+        except Exception as exc:
+            logger.error("[fleet-sentinel] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_fleet_sentinel,
+        CronTrigger(minute="*/10"),
+        id="fleet_sentinel",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered fleet_sentinel (*/10 min)")
+
     def _post_discord_daily_digest(db) -> None:
         from strategy_lab.daily_briefing import build_discord_digest
         from app.services.discord_public import post_daily_digest
