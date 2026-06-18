@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Zap, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Zap, Trash2, Plus, X } from "lucide-react";
 import { createChart, CandlestickSeries, LineSeries, ColorType, LineStyle } from "lightweight-charts";
 import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 import { fetchBars } from "@/api/bars";
@@ -111,6 +111,17 @@ function getConfig(strategyId: string): StrategyChartConfig {
   return STRATEGY_CHART_CONFIG[strategyId] ?? DEFAULT_CONFIG;
 }
 
+// ── Drawing types ─────────────────────────────────────────────────────────────
+
+interface HorizontalDrawing {
+  id: string;
+  type: "horizontal";
+  price: number;
+  color: string;
+  label: string;
+}
+type Drawing = HorizontalDrawing;
+
 // ── Chart component ───────────────────────────────────────────────────────────
 
 interface OHLCBar {
@@ -123,11 +134,13 @@ function ScoutPriceChart({
   indicators,
   indicatorConfigs,
   crossoverMarkers,
+  drawings,
 }: {
   bars: OHLCBar[];
   indicators: Record<string, (number | null)[]>;
   indicatorConfigs: IndicatorConfig[];
   crossoverMarkers: { time: UTCTimestamp; direction: "up" | "down" }[];
+  drawings: Drawing[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -160,6 +173,20 @@ function ScoutPriceChart({
       wickDownColor: "#f87171",
     });
     priceSeries.setData(bars);
+
+    // Horizontal price-level drawings
+    drawings.forEach((d) => {
+      if (d.type === "horizontal") {
+        priceSeries.createPriceLine({
+          price: d.price,
+          color: d.color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          title: d.label,
+          axisLabelVisible: true,
+        });
+      }
+    });
 
     // Indicator lines
     indicatorConfigs.forEach((cfg) => {
@@ -208,7 +235,7 @@ function ScoutPriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [bars, indicators, indicatorConfigs, crossoverMarkers]);
+  }, [bars, indicators, indicatorConfigs, crossoverMarkers, drawings]);
 
   return <div ref={containerRef} className="w-full" />;
 }
@@ -248,6 +275,104 @@ function fmtDate(ts: UTCTimestamp): string {
 
 function fmtPct(v: number): string {
   return `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+}
+
+// ── Drawing toolbar ───────────────────────────────────────────────────────────
+
+const DRAWING_COLORS = ["#f59e0b", "#a78bfa", "#4ade80", "#f87171", "#38bdf8", "#fb923c"];
+
+function DrawingToolbar({
+  drawings,
+  onAdd,
+  onRemove,
+}: {
+  drawings: Drawing[];
+  onAdd: (d: Drawing) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [price, setPrice] = useState("");
+  const [label, setLabel] = useState("");
+  const [color, setColor] = useState(DRAWING_COLORS[0]);
+
+  function handleAdd() {
+    const p = parseFloat(price);
+    if (isNaN(p) || p <= 0) return;
+    onAdd({
+      id: Math.random().toString(36).slice(2),
+      type: "horizontal",
+      price: p,
+      color,
+      label: label.trim() || `$${p.toFixed(2)}`,
+    });
+    setPrice("");
+    setLabel("");
+  }
+
+  return (
+    <div className="bg-t-bg1 border border-t-dim rounded-2xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-mono-t text-t-faint uppercase tracking-widest">// PRICE LEVELS</span>
+        {drawings.length > 0 && (
+          <span className="text-[10px] font-mono-t text-t-gdim">{drawings.length} level{drawings.length !== 1 ? "s" : ""} saved</span>
+        )}
+      </div>
+
+      {/* Add row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <input
+          type="number"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          placeholder="Price level"
+          className="w-28 bg-t-bg0 border border-t-dim rounded-lg px-3 py-1.5 text-xs text-t-hi font-mono-t outline-none focus:border-t-mid"
+        />
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          placeholder="Label (e.g. Support)"
+          className="flex-1 min-w-24 bg-t-bg0 border border-t-dim rounded-lg px-3 py-1.5 text-xs text-t-hi font-mono-t outline-none focus:border-t-mid"
+        />
+        <div className="flex gap-1 shrink-0">
+          {DRAWING_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              className={cn("w-4 h-4 rounded-full border-2 transition-all", color === c ? "border-white scale-110" : "border-transparent")}
+              style={{ background: c }}
+            />
+          ))}
+        </div>
+        <button
+          onClick={handleAdd}
+          disabled={!price || isNaN(parseFloat(price))}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono-t text-t-bg0 bg-t-amber rounded-lg font-bold disabled:opacity-40 shrink-0"
+        >
+          <Plus size={12} /> Add
+        </button>
+      </div>
+
+      {/* Existing levels */}
+      {drawings.length > 0 && (
+        <div className="space-y-1 pt-1 border-t border-t-dim/40">
+          {drawings.map((d) => (
+            <div key={d.id} className="flex items-center gap-2 text-xs font-mono-t group">
+              <div className="w-3 h-0.5 shrink-0 rounded" style={{ background: d.color }} />
+              <span className="text-t-body flex-1 truncate">{d.label}</span>
+              <span className="text-t-gdim tabular-nums">${d.price.toFixed(2)}</span>
+              <button
+                onClick={() => onRemove(d.id)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-t-muted hover:text-t-red"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Save to Workshop modal ────────────────────────────────────────────────────
@@ -315,6 +440,7 @@ export default function ScoutChartPage() {
   const qc = useQueryClient();
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [searchParams] = useSearchParams();
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
 
   const ticker = (rawTicker ?? "").toUpperCase();
   const sid = strategyId ?? "";
@@ -350,6 +476,42 @@ export default function ScoutChartPage() {
   const indicators = barsData?.indicators ?? {};
 
   const crossovers = useMemo(() => computeCrossovers(bars, indicators, cfg), [bars, indicators, cfg]);
+
+  // Load saved price-level drawings
+  const { data: savedDrawings } = useQuery<Drawing[]>({
+    queryKey: ["chart-drawings", ticker, "1D"],
+    queryFn: () =>
+      client
+        .get<{ drawings: Drawing[] }>("/chart-drawings", { params: { symbol: ticker, timeframe: "1D" } })
+        .then((r) => r.data.drawings ?? []),
+    enabled: !!ticker,
+    staleTime: 60_000,
+  });
+  // Sync server drawings into local state (only on initial load)
+  const drawingsInitialized = useRef(false);
+  useEffect(() => {
+    if (!drawingsInitialized.current && savedDrawings && savedDrawings.length > 0) {
+      drawingsInitialized.current = true;
+      setDrawings(savedDrawings);
+    }
+  }, [savedDrawings]);
+
+  const saveDrawingsMutation = useMutation({
+    mutationFn: (ds: Drawing[]) =>
+      client.put("/chart-drawings", { symbol: ticker, timeframe: "1D", drawings: ds }),
+  });
+
+  function handleAddDrawing(d: Drawing) {
+    const next = [...drawings, d];
+    setDrawings(next);
+    saveDrawingsMutation.mutate(next);
+  }
+
+  function handleRemoveDrawing(id: string) {
+    const next = drawings.filter((d) => d.id !== id);
+    setDrawings(next);
+    saveDrawingsMutation.mutate(next);
+  }
 
   // Find current setup status
   const currentStatus = useMemo(() => {
@@ -536,9 +698,17 @@ export default function ScoutChartPage() {
               indicators={indicators}
               indicatorConfigs={cfg.indicators}
               crossoverMarkers={crossovers.map(c => ({ time: c.time, direction: c.direction }))}
+              drawings={drawings}
             />
           )}
         </div>
+
+        {/* Price level annotations */}
+        <DrawingToolbar
+          drawings={drawings}
+          onAdd={handleAddDrawing}
+          onRemove={handleRemoveDrawing}
+        />
 
         {/* Setup status */}
         {currentStatus && (
