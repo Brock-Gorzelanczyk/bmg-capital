@@ -308,6 +308,7 @@ def run_bot_profile(profile_name: str) -> dict:
             limit = int(profile.get("scan_lookback_bars", 200))
 
             bars: dict[str, list[dict]] = {}
+            _bar_interval = "1d"  # default; overwritten for intraday non-crypto bots
             if symbols:
                 try:
                     if asset_class in ("crypto", "crypto_intraday", "quant"):

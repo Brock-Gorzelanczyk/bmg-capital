@@ -141,18 +141,19 @@ def _compute_bot_ic(db: Session, bot_name: str, lookback_days: int = 63) -> Opti
         if not alloc_ids:
             return None
 
-        trades = db.query(BotTrade).filter(
-            BotTrade.allocation_id.in_(alloc_ids),
-            BotTrade.side == "sell",
-            BotTrade.created_at >= cutoff,
-            BotTrade.pnl_cents.isnot(None),
+        # BotTrade has no pnl_cents — use BotDailyPnL (the P&L source of truth)
+        from app.db.models.bots import BotDailyPnL
+        cutoff_date = cutoff.date() if hasattr(cutoff, "date") else cutoff
+        daily_rows = db.query(BotDailyPnL).filter(
+            BotDailyPnL.allocation_id.in_(alloc_ids),
+            BotDailyPnL.date >= cutoff_date,
         ).all()
 
-        if len(trades) < 10:
+        if len(daily_rows) < 10:
             return None
 
-        wins = sum(1 for t in trades if (t.pnl_cents or 0) > 0)
-        ic = 2 * (wins / len(trades)) - 1
+        wins = sum(1 for r in daily_rows if (r.realized_cents or 0) > 0)
+        ic = 2 * (wins / len(daily_rows)) - 1
         return round(ic, 4)
     except Exception as exc:
         logger.warning("[researcher] IC compute failed for %s: %s", bot_name, exc)

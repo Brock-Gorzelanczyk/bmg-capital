@@ -388,7 +388,7 @@ def build_discord_digest(db: Session) -> dict:
         .filter(
             BotTrade.allocation_id.in_(alloc_ids),
             BotTrade.side == "sell",
-            BotTrade.created_at >= today_start,
+            BotTrade.ts >= today_start,
         )
         .all()
     ) if alloc_ids else []
@@ -396,7 +396,7 @@ def build_discord_digest(db: Session) -> dict:
     realized_cents = 0
     trade_pnl: list[tuple[int, str]] = []  # (pnl_cents, symbol)
     for trade in trades_today:
-        pnl_c = int((trade.pnl_cents or 0))
+        pnl_c = int(getattr(trade, "pnl_cents", None) or 0)
         realized_cents += pnl_c
         trade_pnl.append((pnl_c, trade.symbol or "?"))
 
