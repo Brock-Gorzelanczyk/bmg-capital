@@ -310,6 +310,17 @@ def get_candidates() -> dict:
     return {"candidates": _CANDIDATE_CATALOG}
 
 
+@router.get("/description/{name}")
+def get_strategy_description(name: str) -> dict:
+    """Return full description for a deployed bot or incubation candidate by name."""
+    from strategy_lab.strategy_descriptions import DESCRIPTIONS
+    desc = DESCRIPTIONS.get(name)
+    if not desc:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"No description found for '{name}'")
+    return desc
+
+
 @router.get("/portfolio")
 def get_portfolio(
     db: Session = Depends(get_db),

@@ -168,6 +168,23 @@ export interface CatalogCandidate {
 export const listCandidateCatalog = () =>
   client.get<{ candidates: CatalogCandidate[] }>("/strategy-lab/candidates").then((r) => r.data);
 
+export interface StrategyDescription {
+  display_name: string;
+  asset_class: string;
+  family: string;
+  thesis: string;
+  entry_rule?: string;
+  exit_rule?: string;
+  risk?: string;
+  cadence?: string;
+  academic_source?: string;
+  works_best_in?: string;
+  avoid_in?: string;
+}
+
+export const getStrategyDescription = (name: string) =>
+  client.get<StrategyDescription>(`/strategy-lab/description/${name}`).then((r) => r.data);
+
 export type TrafficLightStatus = "GREEN" | "YELLOW" | "RED" | "PENDING";
 
 export interface TrafficLight {
