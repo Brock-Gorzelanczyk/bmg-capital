@@ -702,35 +702,17 @@ def get_cross_bot_activity(
     from sqlalchemy import func
     from datetime import timedelta
 
-    # Fund-wide view: show all enabled paper allocations so every production
-    # bot's trades appear regardless of which user_id owns the allocation.
-    # User-specific allocations are merged in so any personal overrides also show.
+    # Fund-wide historical view: show trades from ALL paper allocations,
+    # regardless of current enabled status or user_id.  The activity feed is a
+    # trade ledger — past executions shouldn't vanish because an allocation was
+    # later paused or belongs to a different system user.
     paper_q = db.query(BotAllocation, BotProfile).join(
         BotProfile, BotProfile.id == BotAllocation.profile_id
-    ).filter(
-        BotAllocation.paper_mode.is_(True),
-        BotAllocation.enabled.is_(True),
-    )
+    ).filter(BotAllocation.paper_mode.is_(True))
     if bot:
         paper_q = paper_q.filter(BotProfile.name == bot)
 
     alloc_pairs = paper_q.all()
-
-    # Also include any disabled-but-personal allocations for the current user
-    # so they can see their own historical trades even if a bot is paused.
-    personal_q = db.query(BotAllocation, BotProfile).join(
-        BotProfile, BotProfile.id == BotAllocation.profile_id
-    ).filter(BotAllocation.user_id == current_user.id)
-    if bot:
-        personal_q = personal_q.filter(BotProfile.name == bot)
-    personal_pairs = personal_q.all()
-
-    # Merge, deduplicate by allocation_id
-    seen_ids: set[int] = {a.id for a, _ in alloc_pairs}
-    for a, p in personal_pairs:
-        if a.id not in seen_ids:
-            alloc_pairs.append((a, p))
-            seen_ids.add(a.id)
 
     if not alloc_pairs:
         return {"trades": [], "summary": {}}
@@ -754,8 +736,9 @@ def get_cross_bot_activity(
     for t in trades_raw:
         d = _trade_to_dict(t)
         d["bot"] = alloc_id_to_name.get(t.allocation_id, "unknown")
-        d["pnl_cents"] = t.pnl_cents
-        d["pnl_usd"] = round(t.pnl_cents / 100, 2) if t.pnl_cents is not None else None
+        pnl_cents = getattr(t, "pnl_cents", None)
+        d["pnl_cents"] = pnl_cents
+        d["pnl_usd"] = round(pnl_cents / 100, 2) if pnl_cents is not None else None
         asset_class = alloc_id_to_asset_class.get(t.allocation_id, "stock")
         d["asset_class"] = asset_class
         # For options trades: direct DB columns take precedence; fall back to OCC parsing
@@ -792,9 +775,9 @@ def get_cross_bot_activity(
 
     summary = {
         "total_trades": len(trades_raw),
-        "total_pnl_cents": sum(t.pnl_cents or 0 for t in trades_raw),
-        "winning_trades": sum(1 for t in trades_raw if (t.pnl_cents or 0) > 0),
-        "losing_trades": sum(1 for t in trades_raw if (t.pnl_cents or 0) < 0),
+        "total_pnl_cents": sum(getattr(t, "pnl_cents", None) or 0 for t in trades_raw),
+        "winning_trades": sum(1 for t in trades_raw if (getattr(t, "pnl_cents", None) or 0) > 0),
+        "losing_trades": sum(1 for t in trades_raw if (getattr(t, "pnl_cents", None) or 0) < 0),
     }
 
     return {"trades": trades, "sparkline": sparkline, "summary": summary}
