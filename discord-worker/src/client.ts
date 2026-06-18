@@ -10,14 +10,18 @@ export async function getDiscordClient(): Promise<Client> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw new Error("DISCORD_BOT_TOKEN is not set");
 
-  const client = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-    ],
-    partials: [Partials.Channel],
-  });
+  // MessageContent is a Privileged Gateway Intent — must be enabled in the
+  // Discord Developer Portal before the bot may request it.  Gate it behind
+  // an env var so the worker boots cleanly even if the portal flag isn't set.
+  const intents: GatewayIntentBits[] = [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+  ];
+  if (process.env.ENABLE_MESSAGE_CONTENT_INTENT === "true") {
+    intents.push(GatewayIntentBits.MessageContent);
+  }
+
+  const client = new Client({ intents, partials: [Partials.Channel] });
 
   readyPromise = new Promise((resolve, reject) => {
     client.once("ready", () => {

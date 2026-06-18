@@ -291,8 +291,13 @@ async function main(): Promise<void> {
   // Ensure tables exist (idempotent — safe to run on every boot).
   await runMigrations();
 
-  // Attach two-way agent message listener (requires Message Content Intent in Discord portal).
-  attachAgentListener(discordClient);
+  // Two-way agent chat — only active when Privileged MessageContent intent is
+  // enabled in the Discord Developer Portal AND ENABLE_MESSAGE_CONTENT_INTENT=true.
+  if (process.env.ENABLE_MESSAGE_CONTENT_INTENT === "true") {
+    attachAgentListener(discordClient);
+  } else {
+    console.warn("[discord] agent listener DISABLED — set ENABLE_MESSAGE_CONTENT_INTENT=true after enabling Message Content Intent in Discord Developer Portal");
+  }
 
   // Start scheduled cron jobs (digest, leaderboard, recap).
   startDiscordSchedulers();
