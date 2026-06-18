@@ -305,7 +305,7 @@ export default function Research() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const sym = searchInput.trim().toUpperCase();
+    const sym = searchInput.trim().toUpperCase().replace(/^\$/, "");
     if (sym) {
       setActiveSymbol(sym);
       navigate(`/research?symbol=${sym}`, { replace: true });

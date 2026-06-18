@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
@@ -23,6 +24,50 @@ class WorkshopChartCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class WorkshopChartRating(BaseModel):
+    overall: int
+    chart_pattern: Optional[int] = None
+    indicator_confluence: Optional[int] = None
+    volume: Optional[int] = None
+    risk_reward: Optional[int] = None
+    conviction: Optional[str] = None  # low | medium | high
+    notes: Optional[str] = None
+
+    @validator("overall", "chart_pattern", "indicator_confluence", "volume", "risk_reward", pre=True, each_item=False)
+    def _check_range(cls, v):
+        if v is not None and not (1 <= v <= 5):
+            raise ValueError("Rating must be between 1 and 5")
+        return v
+
+    @validator("conviction")
+    def _check_conviction(cls, v):
+        if v is not None and v not in ("low", "medium", "high"):
+            raise ValueError("conviction must be low, medium, or high")
+        return v
+
+
+# ── Serializer ─────────────────────────────────────────────────────────────────
+
+def _serialize(r: WorkshopChart) -> dict:
+    return {
+        "id": r.id,
+        "ticker": r.ticker,
+        "strategy_id": r.strategy_id,
+        "name": r.name,
+        "notes": r.notes,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        "rating_overall": r.rating_overall,
+        "rating_chart_pattern": r.rating_chart_pattern,
+        "rating_indicator_confluence": r.rating_indicator_confluence,
+        "rating_volume": r.rating_volume,
+        "rating_risk_reward": r.rating_risk_reward,
+        "rating_conviction": r.rating_conviction,
+        "rating_notes": r.rating_notes,
+        "rating_updated_at": r.rating_updated_at.isoformat() if r.rating_updated_at else None,
+    }
+
+
 # ── CRUD endpoints ─────────────────────────────────────────────────────────────
 
 @router.get("/charts")
@@ -36,20 +81,7 @@ def list_charts(
         .order_by(WorkshopChart.created_at.desc())
         .all()
     )
-    return {
-        "charts": [
-            {
-                "id": r.id,
-                "ticker": r.ticker,
-                "strategy_id": r.strategy_id,
-                "name": r.name,
-                "notes": r.notes,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-            }
-            for r in rows
-        ]
-    }
+    return {"charts": [_serialize(r) for r in rows]}
 
 
 @router.post("/charts", status_code=201)
@@ -68,14 +100,7 @@ def create_chart(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return {
-        "id": row.id,
-        "ticker": row.ticker,
-        "strategy_id": row.strategy_id,
-        "name": row.name,
-        "notes": row.notes,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-    }
+    return _serialize(row)
 
 
 @router.get("/charts/{chart_id}")
@@ -87,15 +112,32 @@ def get_chart(
     row = db.query(WorkshopChart).filter_by(id=chart_id, user_id=user.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Chart not found")
-    return {
-        "id": row.id,
-        "ticker": row.ticker,
-        "strategy_id": row.strategy_id,
-        "name": row.name,
-        "notes": row.notes,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-    }
+    return _serialize(row)
+
+
+@router.put("/charts/{chart_id}/rating")
+def save_rating(
+    chart_id: int,
+    body: WorkshopChartRating,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    row = db.query(WorkshopChart).filter_by(id=chart_id, user_id=user.id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Chart not found")
+
+    row.rating_overall = body.overall
+    row.rating_chart_pattern = body.chart_pattern
+    row.rating_indicator_confluence = body.indicator_confluence
+    row.rating_volume = body.volume
+    row.rating_risk_reward = body.risk_reward
+    row.rating_conviction = body.conviction
+    row.rating_notes = body.notes
+    row.rating_updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(row)
+    return _serialize(row)
 
 
 @router.delete("/charts/{chart_id}")

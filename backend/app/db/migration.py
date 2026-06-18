@@ -263,6 +263,16 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
     ],
     "portfolio_daily_pnl": [],
     "v2_shadow_runs": [],   # created via CREATE TABLE IF NOT EXISTS in _ensure_v2_tables
+    "workshop_charts": [
+        ("rating_overall",               "INTEGER"),
+        ("rating_chart_pattern",         "INTEGER"),
+        ("rating_indicator_confluence",  "INTEGER"),
+        ("rating_volume",                "INTEGER"),
+        ("rating_risk_reward",           "INTEGER"),
+        ("rating_conviction",            "VARCHAR(10)"),
+        ("rating_notes",                 "TEXT"),
+        ("rating_updated_at",            "DATETIME"),
+    ],
 }
 
 

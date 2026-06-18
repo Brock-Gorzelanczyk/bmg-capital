@@ -17,3 +17,13 @@ class WorkshopChart(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Setup quality rating (Phase 4)
+    rating_overall = Column(Integer, nullable=True)
+    rating_chart_pattern = Column(Integer, nullable=True)
+    rating_indicator_confluence = Column(Integer, nullable=True)
+    rating_volume = Column(Integer, nullable=True)
+    rating_risk_reward = Column(Integer, nullable=True)
+    rating_conviction = Column(String(10), nullable=True)  # low | medium | high
+    rating_notes = Column(Text, nullable=True)
+    rating_updated_at = Column(DateTime(timezone=True), nullable=True)
