@@ -797,19 +797,13 @@ def get_cross_bot_activity(
 
     # P&L summary from bot_daily_pnl (bot_trades has no pnl_cents column)
     try:
-        pnl_row = db.execute(
-            __import__("sqlalchemy").text("""
-                SELECT COALESCE(SUM(bdp.realized_cents), 0)  AS total_realized,
-                       SUM(CASE WHEN bdp.realized_cents > 0 THEN 1 ELSE 0 END) AS winning_days,
-                       SUM(CASE WHEN bdp.realized_cents < 0 THEN 1 ELSE 0 END) AS losing_days
-                  FROM bot_daily_pnl bdp
-                 WHERE bdp.allocation_id IN :ids
-            """),
-            {"ids": tuple(alloc_ids) if len(alloc_ids) > 1 else (alloc_ids[0], alloc_ids[0])},
-        ).fetchone()
-        total_pnl_cents = int(pnl_row[0] or 0)
-        winning_days = int(pnl_row[1] or 0)
-        losing_days = int(pnl_row[2] or 0)
+        from sqlalchemy import func as _func
+        pnl_rows = db.query(BotDailyPnL).filter(
+            BotDailyPnL.allocation_id.in_(alloc_ids)
+        ).all()
+        total_pnl_cents = sum(r.realized_cents or 0 for r in pnl_rows)
+        winning_days = sum(1 for r in pnl_rows if (r.realized_cents or 0) > 0)
+        losing_days = sum(1 for r in pnl_rows if (r.realized_cents or 0) < 0)
     except Exception as _pnl_exc:
         logger.warning("[activity] P&L summary query failed: %s", _pnl_exc)
         total_pnl_cents, winning_days, losing_days = 0, 0, 0
