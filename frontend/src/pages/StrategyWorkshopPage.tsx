@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Search, Plus, Trash2, Clock, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionLabel } from "@/components/design";
+import client from "@/api/client";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,24 +21,13 @@ interface WorkshopChart {
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem("bmg_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function listCharts(): Promise<WorkshopChart[]> {
-  const res = await fetch("/api/strategy-workshop/charts", { headers: authHeaders() });
-  if (!res.ok) throw new Error("Failed to fetch workshop charts");
-  const data = await res.json();
-  return data.charts ?? [];
+  const res = await client.get<{ charts: WorkshopChart[] }>("/strategy-workshop/charts");
+  return res.data.charts ?? [];
 }
 
 async function deleteChart(id: number): Promise<void> {
-  const res = await fetch(`/api/strategy-workshop/charts/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error("Delete failed");
+  await client.delete(`/strategy-workshop/charts/${id}`);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

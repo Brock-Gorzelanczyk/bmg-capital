@@ -36,18 +36,20 @@ def list_charts(
         .order_by(WorkshopChart.created_at.desc())
         .all()
     )
-    return [
-        {
-            "id": r.id,
-            "ticker": r.ticker,
-            "strategy_id": r.strategy_id,
-            "name": r.name,
-            "notes": r.notes,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-        }
-        for r in rows
-    ]
+    return {
+        "charts": [
+            {
+                "id": r.id,
+                "ticker": r.ticker,
+                "strategy_id": r.strategy_id,
+                "name": r.name,
+                "notes": r.notes,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ]
+    }
 
 
 @router.post("/charts", status_code=201)

@@ -8,6 +8,7 @@ import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 import { fetchBars } from "@/api/bars";
 import { createSetup, deleteSetup, getSetups } from "@/api/scout";
 import { getStrategyDescription } from "@/api/candidates";
+import client from "@/api/client";
 import { cn } from "@/lib/utils";
 
 // ── Strategy → indicator config ───────────────────────────────────────────────
@@ -427,15 +428,8 @@ export default function ScoutChartPage() {
 
   // Save to Workshop mutation (calls new strategy-workshop endpoint)
   const saveMutation = useMutation({
-    mutationFn: async ({ name, notes }: { name: string; notes: string }) => {
-      const res = await fetch("/api/strategy-workshop/charts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("bmg_token")}` },
-        body: JSON.stringify({ ticker, strategy_id: sid, name, notes }),
-      });
-      if (!res.ok) throw new Error("Save failed");
-      return res.json();
-    },
+    mutationFn: ({ name, notes }: { name: string; notes: string }) =>
+      client.post("/strategy-workshop/charts", { ticker, strategy_id: sid, name, notes }).then(r => r.data),
     onSuccess: () => {
       setShowSaveModal(false);
       toast.success("Saved to Workshop");
