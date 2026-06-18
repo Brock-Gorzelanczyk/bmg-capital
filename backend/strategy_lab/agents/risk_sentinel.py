@@ -24,8 +24,8 @@ CONSEC_LOSS_WARN      = 4     # YELLOW — consecutive losing days
 CONSEC_LOSS_HALT      = 7     # RED — consecutive losing days
 CONSEC_LOSS_RED       = 3     # RED — 3+ consecutive losses is active P&L damage
 STALE_BOT_WARN        = 2     # YELLOW if 2+ bots stale
-STALE_BOT_RED         = 3     # YELLOW with scanner note — stale ≠ losing; stays YELLOW unless combined with losses
-STALE_BOT_CRITICAL    = 5     # CRITICAL+@here if 5+ bots stale
+STALE_BOT_RED         = 2     # YELLOW with scanner note — stale ≠ losing; stays YELLOW unless combined with losses
+STALE_BOT_CRITICAL    = 3     # CRITICAL+@here if 3+ bots stale by their OWN cadence (2× expected interval)
 CRITICAL_DRAWDOWN_PCT = -4.0  # 24h drawdown worse than this → CRITICAL
 DRAWDOWN_24H_RED_PCT  = -2.0  # 24h drawdown worse than -2% → RED
 FLEET_PAUSE_24H_PCT   = -3.0  # 24h pct required before "fleet pause" language is used
@@ -161,26 +161,31 @@ def _get_consecutive_losses(db: Session) -> dict[str, int]:
 
 
 def _get_stale_bots(db: Session) -> list[str]:
-    """Return names of RED-health bots using per-bot cadence-aware thresholds.
+    """Return bots genuinely stale: last signal > 2× their own expected cadence.
 
-    Uses pipeline_health RED (> 4× expected interval, or signals > 0 but discord == 0)
-    instead of a global static stale count. DISABLED / T0 bots are excluded.
-    YELLOW bots are included if they also have a Discord posting gap.
+    Skipped entirely:
+      - DISABLED (admin_lock / health_halt / T0 incubation / not enabled)
+      - Never ran (last_signal_ts is None) — newly set-up or never activated
+      - ERROR / NO_ALLOC / UNKNOWN status — infrastructure issues, not trading gaps
+
+    This prevents long-cadence bots (stock_lt / crypto_lt = weekly) and
+    newly registered bots from inflating the stale count and false-firing CRITICAL.
     """
     try:
         from strategy_lab.agents.strategy_monitor import _check_bot_windows
         rows = _check_bot_windows(db)
         stale = []
         for b in rows:
-            ph = b.get("pipeline_health")
-            if ph == "RED":
+            if b.get("pipeline_health") == "DISABLED":
+                continue
+            if b.get("status") in ("ERROR", "NO_ALLOC", "UNKNOWN"):
+                continue
+            minutes_since = b.get("minutes_since_last")
+            if minutes_since is None:
+                continue  # never ran — cannot be stale
+            expected = b.get("expected_interval_min") or 0
+            if expected > 0 and minutes_since > expected * 2:
                 stale.append(b["bot"])
-            elif ph == "YELLOW":
-                # Only alert on YELLOW if it's a posting gap (signals fired, Discord silent)
-                s24 = b.get("signals_24h", 0)
-                d24 = b.get("discord_posts_24h", 0)
-                if s24 > 0 and d24 == 0:
-                    stale.append(b["bot"])
         return stale
     except Exception:
         return []
@@ -352,7 +357,8 @@ def _build_embed(level: str, summary: dict, now: datetime) -> dict:
             )
         elif "critical_stale_count" in triggers_set:
             critical_action = (
-                "5+ bots stale — trading layer may be down. Check APScheduler logs and "
+                f"{STALE_BOT_CRITICAL}+ bots stale beyond 2× their own cadence — "
+                "trading layer may be down. Check APScheduler logs and "
                 "verify Alpaca/exchange connectivity. Pause new entries until resolved."
             )
         else:
