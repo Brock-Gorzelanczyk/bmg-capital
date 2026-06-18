@@ -237,7 +237,7 @@ function ScoutPriceChart({
     };
   }, [bars, indicators, indicatorConfigs, crossoverMarkers, drawings]);
 
-  return <div ref={containerRef} className="w-full" />;
+  return <div ref={containerRef} className="w-full" style={{ height: 340 }} />;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -701,14 +701,14 @@ export default function ScoutChartPage() {
               drawings={drawings}
             />
           )}
-        </div>
 
-        {/* Price level annotations */}
-        <DrawingToolbar
-          drawings={drawings}
-          onAdd={handleAddDrawing}
-          onRemove={handleRemoveDrawing}
-        />
+          {/* Price level annotations — lives inside chart card so it's always in-frame */}
+          <DrawingToolbar
+            drawings={drawings}
+            onAdd={handleAddDrawing}
+            onRemove={handleRemoveDrawing}
+          />
+        </div>
 
         {/* Setup status */}
         {currentStatus && (
