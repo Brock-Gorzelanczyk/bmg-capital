@@ -964,9 +964,8 @@ def setup_bot_scheduler(scheduler) -> None:
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
-        next_run_time=datetime.now(UTC),  # fire on startup so we get a brief on deploy
     )
-    logger.warning("[startup-trace] registered job queen_morning (6:30 AM ET daily, fires immediately)")
+    logger.warning("[startup-trace] registered job queen_morning (6:30 AM ET daily)")
 
     # ------------------------------------------------------------------
     # Regime snapshot refresh — hourly, keeps regime_snapshots table fresh
@@ -1159,9 +1158,8 @@ def setup_bot_scheduler(scheduler) -> None:
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
-        next_run_time=datetime.now(UTC),
     )
-    logger.warning("[startup-trace] registered job daily_standup (7 AM ET, fires immediately)")
+    logger.warning("[startup-trace] registered job daily_standup (7 AM ET)")
 
     # ------------------------------------------------------------------
     # Macro Strategist: 7:05 AM ET daily — classify regime after standup

@@ -368,6 +368,7 @@ function AppInner() {
         <Route path="/strategy/leaderboard" element={<StrategyLeaderboardPage />} />
         <Route path="/markets" element={<MarketsPage />} />
         <Route path="/strategy/library" element={<StrategyLibraryPage />} />
+        <Route path="/strategy-library" element={<Navigate to="/strategy/library" replace />} />
         <Route path="/strategy/library/custom-bot" element={<Navigate to="/strategy/forge" replace />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />

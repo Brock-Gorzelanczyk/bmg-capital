@@ -70,7 +70,7 @@ export default function SymbolSearch({
   };
 
   const commit = useCallback((sym: string) => {
-    const s = sym.trim().toUpperCase();
+    const s = sym.trim().toUpperCase().replace(/^\$/, "");
     if (!s) return;
     setQuery(s);
     setOpen(false);
