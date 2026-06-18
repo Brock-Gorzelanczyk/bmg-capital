@@ -428,6 +428,167 @@ def scan_ticker(
     return response
 
 
+# ── Quick-lookup: 2y walk-forward ranking per ticker ──────────────────────────
+
+_LOOKUP_CACHE: dict[str, tuple[float, Any]] = {}
+_LOOKUP_CACHE_TTL = 3600  # 1 hour
+
+
+def _lookup_cache_get(key: str) -> Any | None:
+    entry = _LOOKUP_CACHE.get(key)
+    if entry and time.time() - entry[0] < _LOOKUP_CACHE_TTL:
+        return entry[1]
+    return None
+
+
+def _lookup_cache_set(key: str, value: Any) -> None:
+    _LOOKUP_CACHE[key] = (time.time(), value)
+
+
+def _is_crypto_symbol(symbol: str) -> bool:
+    s = symbol.upper()
+    return "/" in s or s.endswith(("USD", "USDT", "BTC", "ETH")) or "-USD" in s
+
+
+def _strategies_for_symbol(symbol: str) -> list[str]:
+    """Return catalog strategy IDs relevant to this symbol's asset class."""
+    is_crypto = _is_crypto_symbol(symbol)
+    _CRYPTO_CAT_KEYWORDS = {"crypto", "bitcoin", "ethereum", "defi", "onchain"}
+    relevant, generic = [], []
+    for sid, meta in SCOUT_CATALOG.items():
+        cat = meta.get("category", "").lower()
+        is_crypto_cat = any(k in cat for k in _CRYPTO_CAT_KEYWORDS)
+        if is_crypto == is_crypto_cat:
+            relevant.append(sid)
+        elif not is_crypto_cat and not is_crypto:
+            generic.append(sid)
+    return relevant if relevant else list(SCOUT_CATALOG.keys())
+
+
+def _simulate_strategy_on_bars(strategy_id: str, ticker: str, bars: list[dict]) -> dict | None:
+    """
+    Walk-forward simulation: every STEP bars from warmup onward, check if strategy fires.
+    If it fires, hold for HOLD_DAYS bars and record the return.
+    Returns performance dict or None if insufficient trades.
+    """
+    import math
+
+    meta = SCOUT_CATALOG.get(strategy_id)
+    if not meta:
+        return None
+
+    warmup = max(meta.get("min_bars", 50), 30)
+    HOLD_DAYS = 15
+    STEP = 15  # check every 15 bars to keep wall-clock reasonable
+
+    if len(bars) < warmup + HOLD_DAYS + STEP:
+        return None
+
+    trade_returns: list[float] = []
+    for i in range(warmup, len(bars) - HOLD_DAYS - 1, STEP):
+        try:
+            result = _run_strategy(strategy_id, ticker, bars[: i + 1])
+        except Exception:
+            continue
+        if not result:
+            continue
+
+        entry = bars[i]["c"]
+        exit_p = bars[i + HOLD_DAYS]["c"]
+        if entry <= 0:
+            continue
+
+        side = result.get("side", "buy")
+        ret = (exit_p - entry) / entry if side in ("buy", "cover", "long") else (entry - exit_p) / entry
+        trade_returns.append(ret)
+
+    if len(trade_returns) < 3:
+        return None
+
+    n = len(trade_returns)
+    wins = sum(1 for r in trade_returns if r > 0)
+    win_rate = (wins / n) * 100
+    avg = sum(trade_returns) / n
+    variance = sum((r - avg) ** 2 for r in trade_returns) / n
+    std = variance ** 0.5
+    sharpe = avg / std * math.sqrt(252 / HOLD_DAYS) if std > 0 else 0.0
+
+    trading_days = len(bars) - warmup - HOLD_DAYS
+    years = max(0.1, trading_days / 252)
+    trades_per_year = max(1, round(n / years))
+
+    composite = sharpe * (win_rate / 100) * math.log(max(2, n))
+    return {
+        "sharpe":         round(sharpe, 2),
+        "win_rate_pct":   round(win_rate, 1),
+        "trades_per_year": trades_per_year,
+        "composite_score": round(max(0.0, composite), 3),
+    }
+
+
+@router.post("/quick-lookup")
+def quick_lookup(
+    body: dict = Body(...),
+    _: None = Depends(_scout_enabled),
+    current_user=Depends(get_current_user),
+):
+    """
+    Rank all asset-class-relevant strategies against a ticker by 2y walk-forward
+    composite score: sharpe × win_rate × log(trade_count).
+    Results cached 1h per symbol. First call: 5-10s. Subsequent calls: instant.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    symbol = (body.get("symbol") or "").strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=422, detail="symbol is required")
+
+    cache_key = f"ql:{symbol}"
+    cached = _lookup_cache_get(cache_key)
+    if cached is not None:
+        cached_copy = dict(cached)
+        cached_copy["cached"] = True
+        return cached_copy
+
+    bars = _fetch_bars_for_ticker(symbol, period="2y")
+    if not bars:
+        raise HTTPException(status_code=422, detail=f"No price data found for {symbol}")
+
+    strategy_ids = _strategies_for_symbol(symbol)
+
+    results: list[dict] = []
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {
+            pool.submit(_simulate_strategy_on_bars, sid, symbol, bars): sid
+            for sid in strategy_ids
+        }
+        for future in as_completed(futures, timeout=60):
+            sid = futures[future]
+            try:
+                stats = future.result(timeout=30)
+            except Exception as exc:
+                logger.debug("[quick-lookup] %s failed: %s", sid, exc)
+                stats = None
+            if stats and stats["composite_score"] > 0:
+                meta = SCOUT_CATALOG[sid]
+                results.append({
+                    "strategy_id":   sid,
+                    "display_name":  meta["display_name"],
+                    "category":      meta["category"],
+                    **stats,
+                })
+
+    results.sort(key=lambda x: -x["composite_score"])
+    response = {
+        "symbol":    symbol,
+        "bar_count": len(bars),
+        "results":   results[:10],
+        "cached":    False,
+    }
+    _lookup_cache_set(cache_key, response)
+    return response
+
+
 @router.get("/screen")
 def screen_strategy(
     strategy: str = Query(..., description="Strategy ID from catalog"),

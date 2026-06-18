@@ -12,10 +12,12 @@ import {
   getSignals,
   screenStrategy,
   scanTicker,
+  quickLookup,
   type EvaluateResult,
   type ScoutSetup,
   type ScreenResult,
   type ScanResult,
+  type QuickLookupResult,
 } from "@/api/scout";
 
 // ── Design tokens (terminal · phosphor · violet scout) ───────────────────────
@@ -1267,6 +1269,180 @@ function ScanTickerTab() {
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
+// ── Quick Lookup panel ────────────────────────────────────────────────────────
+
+function QuickLookupPanel() {
+  const [ticker, setTicker] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<QuickLookupResult[] | null>(null);
+  const [symbol, setSymbol] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const qc = useQueryClient();
+
+  const QUICK_TICKERS = ["NVDA", "AAPL", "TSLA", "SPY", "BTC/USD", "ETH/USD"];
+
+  async function handleLookup(sym?: string) {
+    const s = (sym ?? ticker).trim().toUpperCase();
+    if (!s) return;
+    setTicker(s);
+    setLoading(true);
+    setError(null);
+    setResults(null);
+    try {
+      const data = await quickLookup(s);
+      setResults(data.results);
+      setSymbol(data.symbol);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Lookup failed — check ticker symbol");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleArm(strategyId: string) {
+    if (!symbol) return;
+    try {
+      await createSetup(symbol, strategyId);
+      qc.invalidateQueries({ queryKey: ["scout-setups"] });
+      toast.success(`Armed ${symbol} × ${strategyId}`);
+    } catch {
+      toast.error("Failed to arm pairing");
+    }
+  }
+
+  return (
+    <div style={{
+      background: C.bg1,
+      border: `1px solid ${C.violetBorder}`,
+      borderRadius: 8,
+      padding: "16px 20px",
+      marginBottom: 20,
+    }}>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: C.violet, letterSpacing: "0.14em", marginBottom: 12 }}>
+        // QUICK LOOKUP
+      </div>
+
+      {/* Input row */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <input
+          value={ticker}
+          onChange={(e) => setTicker(e.target.value.toUpperCase())}
+          onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+          placeholder="NVDA, BTC/USD, SPY…"
+          style={{
+            background: C.bg0, border: `1px solid ${C.borderMid}`,
+            borderRadius: 4, padding: "6px 10px",
+            fontFamily: MONO, fontSize: 13, color: C.hi,
+            outline: "none", width: 180,
+          }}
+        />
+        <button
+          onClick={() => handleLookup()}
+          disabled={loading || !ticker.trim()}
+          style={{
+            background: loading ? C.bg2 : C.violet, color: C.bg0,
+            border: "none", borderRadius: 4,
+            padding: "6px 14px", fontFamily: MONO, fontSize: 11,
+            fontWeight: 700, letterSpacing: "0.08em", cursor: loading ? "not-allowed" : "pointer",
+            opacity: !ticker.trim() ? 0.4 : 1,
+          }}
+        >
+          {loading ? "SCANNING…" : "FIND SETUPS"}
+        </button>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {QUICK_TICKERS.map((t) => (
+            <button key={t} onClick={() => handleLookup(t)} disabled={loading}
+              style={{
+                background: "none", border: `1px solid ${C.borderDim}`,
+                borderRadius: 4, padding: "4px 10px",
+                fontFamily: MONO, fontSize: 10, color: C.mid,
+                cursor: "pointer", opacity: loading ? 0.4 : 1,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = C.violet)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = C.mid)}
+            >{t}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Loading */}
+      {loading && (
+        <div style={{ marginTop: 14, fontFamily: MONO, fontSize: 11, color: C.dim }}>
+          Running 2y walk-forward backtest across strategies… (5-10s first run, cached 1h)
+        </div>
+      )}
+
+      {/* Error */}
+      {error && !loading && (
+        <div style={{ marginTop: 14, fontFamily: MONO, fontSize: 11, color: "#f87171" }}>{error}</div>
+      )}
+
+      {/* Results */}
+      {results !== null && !loading && (
+        <div style={{ marginTop: 14 }}>
+          {results.length === 0 ? (
+            <div style={{ fontFamily: MONO, fontSize: 11, color: C.dim }}>
+              No strategies cleared the quality threshold for {symbol} over 2y. Try a different ticker.
+            </div>
+          ) : (
+            <>
+              <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.12em", marginBottom: 8 }}>
+                RESULTS — {symbol} — ranked by 2y composite score (Sharpe × Win% × log trades)
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {results.map((r, i) => (
+                  <div key={r.strategy_id} style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "8px 10px", borderRadius: 4,
+                    background: i === 0 ? "rgba(167,139,250,0.06)" : "transparent",
+                    border: `1px solid ${i === 0 ? C.violetBorder : C.borderDim}`,
+                    flexWrap: "wrap",
+                  }}>
+                    {/* Rank */}
+                    <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint, width: 18, flexShrink: 0 }}>
+                      {i + 1}.
+                    </span>
+                    {/* Strategy name */}
+                    <span style={{ fontFamily: MONO, fontSize: 12, color: i === 0 ? C.violet : C.hi, flex: "1 1 160px" }}>
+                      {r.display_name}
+                    </span>
+                    {/* Metrics */}
+                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                      <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>
+                        Sharpe <span style={{ color: r.sharpe >= 1 ? C.green : r.sharpe >= 0.5 ? C.body : C.dim }}>{r.sharpe.toFixed(2)}</span>
+                      </span>
+                      <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>
+                        Win <span style={{ color: r.win_rate_pct >= 55 ? C.green : C.body }}>{r.win_rate_pct.toFixed(0)}%</span>
+                      </span>
+                      <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>
+                        Trades <span style={{ color: C.body }}>{r.trades_per_year}/yr</span>
+                      </span>
+                    </div>
+                    {/* Arm button */}
+                    <button
+                      onClick={() => handleArm(r.strategy_id)}
+                      style={{
+                        background: "none", border: `1px solid ${C.violetBorder}`,
+                        borderRadius: 4, padding: "3px 10px",
+                        fontFamily: MONO, fontSize: 9, color: C.violet,
+                        cursor: "pointer", letterSpacing: "0.08em", whiteSpace: "nowrap",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = C.violetDim; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+                    >
+                      ARM
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type Tab = "setups" | "evaluate" | "screen" | "scan";
 
 export default function StrategyScoutPage() {
@@ -1386,6 +1562,9 @@ export default function StrategyScoutPage() {
           </div>
         </div>
       </div>
+
+      {/* Quick Lookup panel */}
+      <QuickLookupPanel />
 
       {/* Tab bar */}
       <div style={{

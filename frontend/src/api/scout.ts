@@ -104,6 +104,26 @@ export interface ScreenResponse {
   results: ScreenResult[];
 }
 
+export interface QuickLookupResult {
+  strategy_id: string;
+  display_name: string;
+  category: string;
+  sharpe: number;
+  win_rate_pct: number;
+  trades_per_year: number;
+  composite_score: number;
+}
+
+export interface QuickLookupResponse {
+  symbol: string;
+  bar_count: number;
+  results: QuickLookupResult[];
+  cached: boolean;
+}
+
+export const quickLookup = (symbol: string) =>
+  client.post<QuickLookupResponse>("/scout/quick-lookup", { symbol }).then((r) => r.data);
+
 export async function screenStrategy(
   strategy: string,
   universe: string,
