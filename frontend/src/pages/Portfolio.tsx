@@ -1,4 +1,5 @@
 import { TrendingUp, TrendingDown, Layers, Activity } from "lucide-react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePortfolioSnapshot } from "@/hooks/usePortfolioSnapshot";
 import { botStatusBadge, BADGE_CLASSES } from "@/lib/botStatus";
@@ -130,17 +131,26 @@ interface NavEntry {
 }
 
 async function fetchNavHistory(): Promise<NavEntry[]> {
-  const { data } = await client.get<{ entries: NavEntry[] }>("/portfolio/nav-history");
+  const { data } = await client.get<{ entries: NavEntry[] }>("/bots/portfolio/nav-history?days=3650");
   return Array.isArray(data?.entries) ? data.entries : [];
 }
 
+const NAV_ZOOM_DAYS: Record<string, number> = { "1M": 30, "3M": 90, "1Y": 365, "ALL": 99999 };
+
 function NavChart() {
-  const { data: entries = [], isLoading } = useQuery({
+  const [zoom, setZoom] = useState<"1M" | "3M" | "1Y" | "ALL">("ALL");
+  const { data: allEntries = [], isLoading } = useQuery({
     queryKey: ["nav-history"],
     queryFn: fetchNavHistory,
     staleTime: 60_000,
     retry: 1,
   });
+
+  const entries = useMemo(() => {
+    const days = NAV_ZOOM_DAYS[zoom] ?? 99999;
+    if (days >= 99999) return allEntries;
+    return allEntries.slice(-days);
+  }, [allEntries, zoom]);
 
   const chartHeight = 200;
   const paddingX = 8;
@@ -151,7 +161,7 @@ function NavChart() {
   if (isLoading) {
     return (
       <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
-        <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">NAV History · 30d</p>
+        <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">NAV History</p>
         <div className="h-[200px] flex items-center justify-center">
           <p className="text-xs text-t-muted animate-pulse">Loading…</p>
         </div>
@@ -162,7 +172,7 @@ function NavChart() {
   if (entries.length === 0) {
     return (
       <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
-        <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">NAV History · 30d</p>
+        <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">NAV History</p>
         <div className="h-[200px] flex items-center justify-center">
           <p className="text-xs text-t-muted text-center">
             No NAV history yet — check back after 4:30 PM ET today
@@ -172,7 +182,7 @@ function NavChart() {
     );
   }
 
-  const slice = entries.slice(-30);
+  const slice = entries;
   const values = slice.map((e) => e.nav_cents);
   const minVal = Math.min(...values);
   const maxVal = Math.max(...values);
@@ -207,7 +217,25 @@ function NavChart() {
 
   return (
     <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
-      <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">NAV History · 30d</p>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-semibold text-t-muted uppercase tracking-wider">
+          NAV History · {allEntries.length} days total
+        </p>
+        <div className="flex rounded border border-t-dim overflow-hidden">
+          {(["1M", "3M", "1Y", "ALL"] as const).map((z) => (
+            <button
+              key={z}
+              onClick={() => setZoom(z)}
+              className={cn(
+                "text-[10px] px-2 py-0.5 font-mono-t transition-colors",
+                zoom === z ? "bg-t-bg0 text-t-hi" : "bg-transparent text-t-dim hover:text-t-muted",
+              )}
+            >
+              {z}
+            </button>
+          ))}
+        </div>
+      </div>
       <svg
         viewBox={`0 0 ${vbWidth} ${svgHeight}`}
         preserveAspectRatio="none"

@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, Activity, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, RefreshCw, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import client from "@/api/client";
 
@@ -40,6 +40,8 @@ interface ActivityResponse {
     winning_trades: number;
     losing_trades: number;
   };
+  total_count: number;
+  has_more: boolean;
 }
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -196,23 +198,72 @@ function Stat({ label, value, positive }: { label: string; value: string; positi
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 100;
+
 export default function ActivityPage() {
-  const [botFilter, setBotFilter] = useState("all");
-  const [sideFilter, setSideFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const [botFilter, setBotFilter]         = useState("all");
+  const [sideFilter, setSideFilter]       = useState("all");
+  const [assetFilter, setAssetFilter]     = useState("all");
+  const [dateFrom, setDateFrom]           = useState("");
+  const [dateTo, setDateTo]               = useState("");
+  const [search, setSearch]               = useState("");
+
+  // Accumulated trades from all loaded pages
+  const [allTrades, setAllTrades]         = useState<TradeRow[]>([]);
+  const [offset, setOffset]               = useState(0);
+  const [totalCount, setTotalCount]       = useState<number | null>(null);
+  const [hasMore, setHasMore]             = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  function buildUrl(off: number) {
+    const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(off) });
+    if (botFilter !== "all")  p.set("bot", botFilter);
+    if (sideFilter !== "all") p.set("side", sideFilter);
+    if (assetFilter !== "all") p.set("asset_class", assetFilter);
+    if (dateFrom) p.set("date_from", dateFrom);
+    if (dateTo)   p.set("date_to", dateTo);
+    return `/bots/activity?${p}`;
+  }
+
+  // Build a stable filter key so we know when filters change (and need to reset)
+  const filterKey = `${botFilter}|${sideFilter}|${assetFilter}|${dateFrom}|${dateTo}`;
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<ActivityResponse>({
-    queryKey: ["cross-bot-activity"],
-    queryFn: () => client.get("/bots/activity?limit=200").then((r) => r.data),
+    queryKey: ["cross-bot-activity", filterKey],
+    queryFn: async () => {
+      const res = await client.get(buildUrl(0)).then((r) => r.data);
+      // Reset accumulator when filters change
+      setAllTrades(res.trades ?? []);
+      setOffset(0);
+      setTotalCount(res.total_count ?? null);
+      setHasMore(res.has_more ?? false);
+      return res;
+    },
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
 
-  const trades = data?.trades ?? [];
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const nextOffset = allTrades.length;
+      const res: ActivityResponse = await client.get(buildUrl(nextOffset)).then((r) => r.data);
+      setAllTrades((prev) => [...prev, ...(res.trades ?? [])]);
+      setOffset(nextOffset);
+      setTotalCount(res.total_count ?? null);
+      setHasMore(res.has_more ?? false);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingMore, hasMore, allTrades.length, botFilter, sideFilter, assetFilter, dateFrom, dateTo]);
+
+  const trades = allTrades;
   const sparkline = data?.sparkline ?? [];
   const summary = data?.summary ?? { total_trades: 0, total_pnl_cents: 0, winning_trades: 0, losing_trades: 0 };
 
-  // Unique bots present in data
+  // Unique bots present in loaded data
   const allBots = useMemo(() => [...new Set(trades.map((t) => t.bot))].sort(), [trades]);
 
   const filtered = useMemo(() => {
@@ -241,7 +292,11 @@ export default function ActivityPage() {
             // ACTIVITY FEED
           </p>
           <h1 className="text-2xl font-bold text-white">Trade Activity</h1>
-          <p className="text-zinc-500 text-sm mt-1">All closed trades across every bot — last 200.</p>
+          <p className="text-zinc-500 text-sm mt-1">
+            {totalCount != null
+              ? `All trades across every bot — showing ${trades.length.toLocaleString()} of ${totalCount.toLocaleString()}`
+              : "All closed trades across every bot."}
+          </p>
         </div>
         <button
           onClick={() => refetch()}
@@ -299,6 +354,19 @@ export default function ActivityPage() {
           ))}
         </select>
 
+        {/* Asset class filter */}
+        <select
+          value={assetFilter}
+          onChange={(e) => setAssetFilter(e.target.value)}
+          className="text-xs bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-zinc-500"
+        >
+          <option value="all">All assets</option>
+          <option value="stock">Stocks</option>
+          <option value="crypto">Crypto</option>
+          <option value="options">Options</option>
+          <option value="quant">Quant</option>
+        </select>
+
         {/* Side filter */}
         <div className="flex rounded-lg border border-zinc-700 overflow-hidden">
           {(["all", "buy", "sell"] as const).map((s) => (
@@ -317,6 +385,23 @@ export default function ActivityPage() {
           ))}
         </div>
 
+        {/* Date range */}
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="text-xs bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-zinc-500"
+          title="From date"
+        />
+        <span className="text-xs text-zinc-600">→</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="text-xs bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-zinc-500"
+          title="To date"
+        />
+
         {/* Symbol search */}
         <input
           type="text"
@@ -327,7 +412,10 @@ export default function ActivityPage() {
         />
 
         <span className="text-xs text-zinc-600 ml-auto">
-          {filtered.length} of {trades.length} trades
+          {filtered.length} of {trades.length} loaded
+          {totalCount != null && trades.length < totalCount && (
+            <span className="text-zinc-700"> ({totalCount.toLocaleString()} total)</span>
+          )}
         </span>
       </div>
 
@@ -462,6 +550,32 @@ export default function ActivityPage() {
           </div>
         )}
       </div>
+
+      {/* Load more */}
+      {hasMore && !isError && (
+        <div className="flex justify-center pb-2">
+          <button
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            className={cn(
+              "flex items-center gap-2 text-xs px-4 py-2 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors",
+              isLoadingMore && "opacity-40 cursor-not-allowed",
+            )}
+          >
+            {isLoadingMore
+              ? <RefreshCw size={12} className="animate-spin" />
+              : <ChevronDown size={12} />}
+            {isLoadingMore
+              ? "Loading…"
+              : `Load ${Math.min(PAGE_SIZE, (totalCount ?? 0) - trades.length).toLocaleString()} more`}
+            {totalCount != null && (
+              <span className="text-zinc-600">
+                ({((totalCount ?? 0) - trades.length).toLocaleString()} remaining)
+              </span>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

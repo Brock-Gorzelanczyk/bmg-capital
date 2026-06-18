@@ -2702,7 +2702,14 @@ export default function BotDetailPage() {
     onError: () => toast.error("Failed to trigger bot run"),
   });
 
-  const equityCurve: EquityPoint[] = Array.isArray(stats.equity_curve) ? stats.equity_curve : [];
+  const [equityZoom, setEquityZoom] = useState<"1M" | "3M" | "1Y" | "ALL">("ALL");
+  const rawEquityCurve: EquityPoint[] = Array.isArray(stats.equity_curve) ? stats.equity_curve : [];
+  const equityCurve = useMemo(() => {
+    if (equityZoom === "ALL" || rawEquityCurve.length === 0) return rawEquityCurve;
+    const daysBack = equityZoom === "1M" ? 30 : equityZoom === "3M" ? 90 : 365;
+    const cutoff = new Date(Date.now() - daysBack * 86_400_000).toISOString().slice(0, 10);
+    return rawEquityCurve.filter((p) => p.date >= cutoff);
+  }, [rawEquityCurve, equityZoom]);
   const totalPnl = stats.today_pnl ?? 0;
 
   // Keyboard shortcuts (defined after allocateMut and isEnabled are available)
@@ -3010,7 +3017,27 @@ export default function BotDetailPage() {
 
             {/* RIGHT — Equity Curve */}
             <div className="bg-t-bg0 border border-t-dim rounded-2xl p-5 flex flex-col gap-3">
-              <SectionLabel as="h2">Equity Curve</SectionLabel>
+              <div className="flex items-center justify-between">
+                <SectionLabel as="h2">Equity Curve</SectionLabel>
+                {rawEquityCurve.length > 0 && (
+                  <div className="flex rounded border border-t-dim overflow-hidden">
+                    {(["1M", "3M", "1Y", "ALL"] as const).map((z) => (
+                      <button
+                        key={z}
+                        onClick={() => setEquityZoom(z)}
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 transition-colors font-mono-t",
+                          equityZoom === z
+                            ? "bg-t-bg1 text-t-hi"
+                            : "bg-transparent text-t-dim hover:text-t-muted",
+                        )}
+                      >
+                        {z}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {equityCurve.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center min-h-[180px]">
                   <p className="text-t-dim text-sm text-center px-4 leading-relaxed font-ui-t">

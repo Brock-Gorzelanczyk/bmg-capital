@@ -682,10 +682,14 @@ def get_portfolios(
 
 @router.get("/activity")
 def get_cross_bot_activity(
-    limit: int = 200,
+    limit: int = 100,
+    offset: int = 0,
     bot: str | None = None,
     symbol: str | None = None,
     side: str | None = None,
+    asset_class: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -729,8 +733,25 @@ def get_cross_bot_activity(
         q = q.filter(BotTrade.symbol.ilike(f"%{symbol}%"))
     if side:
         q = q.filter(BotTrade.side == side)
+    if asset_class:
+        # filter by asset_class via the allocation→profile join
+        ac_alloc_ids = [aid for aid, ac in alloc_id_to_asset_class.items() if ac == asset_class]
+        q = q.filter(BotTrade.allocation_id.in_(ac_alloc_ids))
+    if date_from:
+        try:
+            from datetime import datetime as _dt
+            q = q.filter(BotTrade.ts >= _dt.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import datetime as _dt
+            q = q.filter(BotTrade.ts <= _dt.fromisoformat(date_to + "T23:59:59"))
+        except ValueError:
+            pass
 
-    trades_raw = q.order_by(BotTrade.ts.desc()).limit(min(limit, 500)).all()
+    total_count = q.count()
+    trades_raw = q.order_by(BotTrade.ts.desc()).offset(max(0, offset)).limit(min(limit, 500)).all()
 
     trades = []
     for t in trades_raw:
@@ -781,7 +802,13 @@ def get_cross_bot_activity(
         "losing_trades": sum(1 for t in trades_raw if (getattr(t, "pnl_cents", None) or 0) < 0),
     }
 
-    return {"trades": trades, "sparkline": sparkline, "summary": summary}
+    return {
+        "trades": trades,
+        "sparkline": sparkline,
+        "summary": summary,
+        "total_count": total_count,
+        "has_more": offset + len(trades_raw) < total_count,
+    }
 
 
 # ── GET /api/bots/portfolio/nav-history (C8) ──────────────────────────────────
@@ -795,7 +822,7 @@ def get_nav_history(
     """Return up to `days` rows of daily NAV for the portfolio chart."""
     try:
         from app.jobs.compute_nav import get_nav_history as _get
-        entries = _get(db, days=min(days, 365))
+        entries = _get(db, days=min(days, 3650))
     except Exception as exc:
         logger.warning("[nav-history] failed: %s", exc)
         entries = []
@@ -1427,20 +1454,22 @@ def get_bot_cards(
         else:
             status = "active"
 
-        # Get last 30 days of BotDailyPnL
+        # Load ALL BotDailyPnL rows for all-time accuracy; slice windows for 7d/30d metrics
         today = date.today()
         thirty_days_ago = today - timedelta(days=30)
         seven_days_ago = today - timedelta(days=7)
 
-        daily_pnl_rows = []
+        all_daily_pnl_rows = []
         if allocation:
-            daily_pnl_rows = db.query(BotDailyPnL).filter(
+            all_daily_pnl_rows = db.query(BotDailyPnL).filter(
                 BotDailyPnL.allocation_id == allocation.id,
-                BotDailyPnL.date >= thirty_days_ago
             ).order_by(BotDailyPnL.date).all()
 
+        # Windowed slices for period metrics (Sharpe, return_30d, etc.)
+        daily_pnl_rows = [r for r in all_daily_pnl_rows if r.date >= thirty_days_ago]
+
         # today_pnl
-        today_row = next((r for r in daily_pnl_rows if r.date == today), None)
+        today_row = next((r for r in all_daily_pnl_rows if r.date == today), None)
         today_pnl_cents = (
             (today_row.realized_cents or 0) + (today_row.unrealized_cents or 0)
         ) if today_row else 0
@@ -1452,9 +1481,9 @@ def get_bot_cards(
         capital_cents = int(PAPER_BALANCE * (capital_pct / 100)) if allocation else 0
         starting_capital = getattr(allocation, 'starting_capital_cents', None) or capital_cents
 
-        # portfolio_value = capital + cumulative realized + today unrealized
+        # portfolio_value = capital + ALL-TIME cumulative realized + today unrealized
         cumulative_realized = sum(
-            (r.realized_cents or 0) for r in daily_pnl_rows
+            (r.realized_cents or 0) for r in all_daily_pnl_rows
         )
         today_unrealized = (today_row.unrealized_cents or 0) if today_row else 0
         portfolio_value_cents = capital_cents + cumulative_realized + today_unrealized
@@ -1556,15 +1585,18 @@ def get_bot_cards(
                 BotPosition.closed_at.is_(None)
             ).count()
 
-        # equity curve: 30 data points (one per session in last 30 days)
+        # equity curve: full all-time history (portfolio value in dollars) for zoom controls
         equity_curve = []
-        for r in daily_pnl_rows:
+        running_realized = 0
+        for r in all_daily_pnl_rows:
+            running_realized += (r.realized_cents or 0)
             eod_val = getattr(r, 'portfolio_value_eod_cents', None)
-            if eod_val:
-                equity_curve.append({"date": r.date.isoformat(), "value_cents": eod_val})
-            else:
-                # approximate from cumulative realized at that point
-                equity_curve.append({"date": r.date.isoformat(), "value_cents": capital_cents})
+            val_cents = eod_val if eod_val else (capital_cents + running_realized)
+            equity_curve.append({
+                "date": r.date.isoformat(),
+                "portfolio": round(val_cents / 100, 2),  # dollars
+                "value_cents": val_cents,
+            })
 
         # top 3 watchlist
         watchlist_top3 = []
@@ -1659,7 +1691,7 @@ def get_bot_cards(
                     "display": f"{capital_pct}%"
                 }
             },
-            "equity_curve_30d": equity_curve,
+            "equity_curve": equity_curve,
             "watchlist_top_3": watchlist_top3,
             "user_card_config": allocation.card_config if allocation and allocation.card_config else {
                 "visible_metrics": [
@@ -2249,10 +2281,11 @@ def get_positions(
 def get_trades(
     profile_name: str,
     limit: int = 50,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Return recent trades for the user's bot allocation."""
+    """Return paginated trades for a bot — user's own allocation, or fund-wide paper fallback."""
     profile = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
     if not profile:
         raise HTTPException(404, f"Bot profile '{profile_name}' not found")
@@ -2265,20 +2298,36 @@ def get_trades(
         )
         .first()
     )
+    # Fund-wide fallback: use any paper allocation for this profile
     if not allocation:
-        return {"trades": [], "demo": True}
-
-    trades = (
-        db.query(BotTrade)
-        .filter(
-            BotTrade.allocation_id == allocation.id,
-            BotTrade.quarantined_at.is_(None),
+        allocation = (
+            db.query(BotAllocation)
+            .filter(
+                BotAllocation.profile_id == profile.id,
+                BotAllocation.paper_mode.is_(True),
+            )
+            .first()
         )
-        .order_by(BotTrade.ts.desc())
-        .limit(limit)
+    if not allocation:
+        return {"trades": [], "total_count": 0, "has_more": False, "demo": True}
+
+    q = db.query(BotTrade).filter(
+        BotTrade.allocation_id == allocation.id,
+        BotTrade.quarantined_at.is_(None),
+    )
+    total_count = q.count()
+    trades = (
+        q.order_by(BotTrade.ts.desc())
+        .offset(max(0, offset))
+        .limit(min(limit, 200))
         .all()
     )
-    return {"trades": [_trade_to_dict(t) for t in trades], "demo": False}
+    return {
+        "trades": [_trade_to_dict(t) for t in trades],
+        "total_count": total_count,
+        "has_more": offset + len(trades) < total_count,
+        "demo": False,
+    }
 
 
 # ── GET /api/bots/{profile_name}/signals ──────────────────────────────────────
