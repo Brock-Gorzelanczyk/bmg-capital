@@ -171,6 +171,23 @@ try:
             "stop": None,
             "target": None,
         }
+        if asset_class == "options":
+            import math
+            from datetime import timedelta
+            expiry = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d")
+            opt_type = "put" if "put" in side.lower() else "call"
+            strike = round(price * (0.95 if opt_type == "put" else 1.05), 2) if price else 0.0
+            premium = round(price * 0.02, 2) if price else 1.0
+            capital = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+            invested = capital * (sig.size_pct / 100.0)
+            contracts = max(1, math.floor(invested / (premium * 100)))
+            signal_payload.update({
+                "option_type":      opt_type,
+                "strike_price":     strike,
+                "expiration_date":  expiry,
+                "contract_count":   contracts,
+                "premium":          premium,
+            })
         post_signal(signal_payload, db=db, signal_id=bs.id)
         db.refresh(bs)
         discord_ok = bs.discord_posted_at is not None

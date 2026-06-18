@@ -84,13 +84,13 @@ BOT_DISPLAY = {
     "crypto_quant_aggressive":      "Crypto Quant Aggressive",
     "crypto_quant_scalper":         "Crypto Quant Scalper",
     "crypto_quant_mean_reversion":  "Crypto Quant Mean Reversion",
-    "options_income":               "Equity Income",
-    "options_directional":          "Equity Directional",
+    "options_income":               "Options Income",
+    "options_directional":          "Options Directional",
 }
 
-_STOCKS_BOTS  = {"stock_swing", "stock_day", "stock_lt", "options_income", "options_directional"}
+_STOCKS_BOTS  = {"stock_swing", "stock_day", "stock_lt"}
 _CRYPTO_BOTS  = {"crypto_swing", "crypto_day", "crypto_lt", "crypto_onchain"}
-_OPTIONS_BOTS: set = set()  # no live options bots yet
+_OPTIONS_BOTS = {"options_income", "options_directional"}
 _QUANT_BOTS   = {"crypto_quant_aggressive", "crypto_quant_scalper", "crypto_quant_mean_reversion"}
 
 
@@ -242,6 +242,20 @@ def _build_signal_embed(signal: dict) -> dict:
         fields.append({"name": "Stop",        "value": _fmt_price(signal["stop"]),     "inline": True})
     if signal.get("target") is not None:
         fields.append({"name": "Take Profit", "value": _fmt_price(signal["target"]),   "inline": True})
+
+    # Options-specific fields
+    option_type = signal.get("option_type")
+    if option_type:
+        type_badge = "📞 CALL" if option_type.lower() == "call" else "🔻 PUT"
+        fields.append({"name": "Type",      "value": type_badge,                                        "inline": True})
+        if signal.get("strike_price") is not None:
+            fields.append({"name": "Strike",    "value": _fmt_price(float(signal["strike_price"])),     "inline": True})
+        if signal.get("expiration_date") is not None:
+            fields.append({"name": "Expiry",    "value": str(signal["expiration_date"]),                "inline": True})
+        if signal.get("contract_count") is not None:
+            fields.append({"name": "Contracts", "value": str(signal["contract_count"]),                 "inline": True})
+        if signal.get("premium") is not None:
+            fields.append({"name": "Premium/Contract", "value": _fmt_price(float(signal["premium"])),   "inline": True})
 
     return {
         "author": {"name": f"{BOT_DISPLAY.get(bot, bot)} bot"},
