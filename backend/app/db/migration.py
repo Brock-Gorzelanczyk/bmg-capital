@@ -224,6 +224,13 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("quarantined_at",         "DATETIME"),
         ("quarantine_reason",      "VARCHAR"),
         ("side",                   "VARCHAR NOT NULL DEFAULT 'long'"),
+        # Options sleeve columns
+        ("option_type",            "VARCHAR"),
+        ("strike_price",           "FLOAT"),
+        ("expiration_date",        "VARCHAR"),
+        ("underlying_symbol",      "VARCHAR"),
+        ("contract_count",         "INTEGER"),
+        ("contract_premium_cents", "FLOAT"),
     ],
     "bot_trades": [
         ("expected_fill_cents", "INTEGER"),
@@ -231,6 +238,13 @@ _TABLE_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
         ("quarantined_at",      "DATETIME"),
         ("quarantine_reason",   "VARCHAR"),
         ("signal_id",           "INTEGER"),
+        # Options sleeve columns
+        ("option_type",            "VARCHAR"),
+        ("strike_price",           "FLOAT"),
+        ("expiration_date",        "VARCHAR"),
+        ("underlying_symbol",      "VARCHAR"),
+        ("contract_count",         "INTEGER"),
+        ("contract_premium_cents", "FLOAT"),
     ],
     "bot_daily_pnl": [
         ("peak_drawdown_pct",           "FLOAT"),

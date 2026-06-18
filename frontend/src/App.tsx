@@ -373,6 +373,7 @@ function AppInner() {
         <Route path="/strategy/analyst" element={<AnalystPage />} />
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
+        <Route path="/strategy/bot/:botName" element={<BotDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
         <Route path="/candidates" element={<CandidatesPage />} />
         <Route path="/candidates/:candidateName" element={<CandidateDetailPage />} />

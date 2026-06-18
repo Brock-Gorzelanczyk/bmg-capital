@@ -56,7 +56,7 @@ import { useIsViewer } from "@/store/authStore";
 
 const BOT_META: Record<
   string,
-  { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant"; strategies: string[]; ensemble?: string }
+  { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant" | "options"; strategies: string[]; ensemble?: string }
 > = {
   stock_swing: {
     displayName: "Stock Swing",
@@ -131,6 +131,26 @@ const BOT_META: Record<
       "crypto_quant_momentum_trigger",
       "crypto_quant_volume_zscore_spike",
       "crypto_quant_range_break_retest",
+    ],
+  },
+  options_income: {
+    displayName: "Equity Income",
+    description: "High-IV wheel strategies on S&P 500 names — CSPs, CCs, iron condors, 30-45 DTE",
+    assetClass: "options",
+    ensemble: "weighted_vote",
+    strategies: [
+      "wheel_strategy", "covered_call_30d", "cash_secured_put",
+      "pmcc_diagonal", "iron_condor_45dte", "jade_lizard", "neutral_calendar_spread",
+    ],
+  },
+  options_directional: {
+    displayName: "Equity Directional",
+    description: "Momentum credit/debit spreads on Russell 1000 — bull puts, bear calls, LEAPS replacements",
+    assetClass: "options",
+    ensemble: "weighted_vote",
+    strategies: [
+      "bull_put_credit_spread", "bear_call_credit_spread",
+      "bull_call_debit_spread", "leaps_stock_replacement", "long_call_directional",
     ],
   },
 };
@@ -2507,7 +2527,7 @@ function BotWhySection({
   profile,
 }: {
   botName: string;
-  meta: { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant"; strategies: string[]; ensemble?: string } | undefined;
+  meta: { displayName: string; description: string; assetClass: "stock" | "crypto" | "quant" | "options"; strategies: string[]; ensemble?: string } | undefined;
   profile: import("@/api/bots").BotProfile | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
