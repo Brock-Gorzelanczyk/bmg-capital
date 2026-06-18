@@ -11,7 +11,11 @@ export async function getDiscordClient(): Promise<Client> {
   if (!token) throw new Error("DISCORD_BOT_TOKEN is not set");
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
     partials: [Partials.Channel],
   });
 

@@ -46,6 +46,7 @@ _TO_KRAKEN_PAIR: dict[str, str] = {
     "BNB/USD":   "BNBUSD",
     "DOT/USD":   "DOTUSD",
     "LTC/USD":   "LTCUSD",
+    "XLM/USD":   "XXLMZUSD",   # Stellar — Kraken legacy key
     "XRP/USD":   "XXRPZUSD",
     "UNI/USD":   "UNIUSD",
     "ATOM/USD":  "ATOMUSD",
@@ -71,6 +72,7 @@ _KRAKEN_RESPONSE_KEY: dict[str, str] = {
     "ETHUSD":  "XETHZUSD",
     "XDGUSD":  "XDGZUSD",
     "XXRPZUSD": "XXRPZUSD",
+    "XXLMZUSD": "XXLMZUSD",
 }
 
 

@@ -1906,6 +1906,9 @@ def _cadence_for_profile(profile_name: str) -> str:
     """
     if "lt" in profile_name:
         return "lt"
+    # Options bots have their own multi-factor gates — MTF always passes.
+    if "options" in profile_name or "income" in profile_name or "directional" in profile_name:
+        return "lt"
     # Intraday bots: day-trading + quant strategies (5 min cadence, 15m bars)
     if "day" in profile_name or "quant" in profile_name:
         return "day"

@@ -131,7 +131,21 @@ def scan_and_execute(
         else:
             from app.screener.runner import _fetch_bars_sync
             lookback_period = profile.get("scan_lookback_period", "1y")
-            raw = _fetch_bars_sync(symbols, period=lookback_period)
+            # Infer bar interval from cadence so intraday bots get 5m/15m/30m bars.
+            _cadence = profile.get("cadence", "")
+            _cron_freq = _cadence.split()[0] if _cadence else ""
+            if _cron_freq in ("*/5", "*/3", "*/2", "*/1"):
+                _bar_interval = "5m"
+                lookback_period = "1d"
+            elif _cron_freq == "*/15":
+                _bar_interval = "15m"
+                lookback_period = "5d"
+            elif _cron_freq == "*/30":
+                _bar_interval = "30m"
+                lookback_period = "30d"
+            else:
+                _bar_interval = "1d"
+            raw = _fetch_bars_sync(symbols, period=lookback_period, interval=_bar_interval)
         for sym, df in raw.items():
             if df is None or df.empty:
                 continue

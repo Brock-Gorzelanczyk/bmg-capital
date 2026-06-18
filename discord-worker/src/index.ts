@@ -18,6 +18,7 @@ import { startDiscordSchedulers } from "./scheduler.js";
 import { postSignalToDiscord }    from "./post-signal.js";
 import { db } from "./db.js";
 import { getDiscordClient } from "./client.js";
+import { attachAgentListener } from "./agent-listener.js";
 
 const POLL_INTERVAL_MS = 10_000; // 10 seconds
 
@@ -286,9 +287,12 @@ async function main(): Promise<void> {
   );
 
   // Eagerly initialize Discord client so the bot shows Online immediately.
-  await getDiscordClient();
+  const discordClient = await getDiscordClient();
   // Ensure tables exist (idempotent — safe to run on every boot).
   await runMigrations();
+
+  // Attach two-way agent message listener (requires Message Content Intent in Discord portal).
+  attachAgentListener(discordClient);
 
   // Start scheduled cron jobs (digest, leaderboard, recap).
   startDiscordSchedulers();

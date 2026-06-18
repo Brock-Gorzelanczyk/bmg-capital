@@ -7,13 +7,20 @@ their expected deploy phase.
 """
 from __future__ import annotations
 
+import logging
+import os
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.dependencies import get_db, get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -483,3 +490,162 @@ async def toggle_plain_english(
     """), {"c": channel_id, "e": (1 if enabled else 0), "ts": datetime.now(timezone.utc).isoformat()})
     db.commit()
     return {"channel_id": channel_id, "enabled": enabled}
+
+
+# ── Two-way Discord chat: agent respond endpoint ──────────────────────────────
+
+_VALID_AGENTS = {"brick", "dick", "vick", "wick", "rick", "nick"}
+
+_PROMPTS_DIR = Path(__file__).parent.parent / "agents" / "prompts"
+
+_AGENT_PERSONA = {
+    "brick": "👑 Brick (Portfolio Manager)",
+    "dick":  "⚠️ Dick (CRO)",
+    "vick":  "📊 Vick (Data Quality)",
+    "wick":  "🔧 Wick (Ops)",
+    "rick":  "🔭 Rick (Macro Strategist)",
+    "nick":  "🔬 Nick (Researcher)",
+}
+
+
+class AgentRespondRequest(BaseModel):
+    message: str
+    author_name: str
+    author_id: str
+    channel_id: str
+
+
+def _load_system_prompt(agent: str) -> str:
+    prompt_file = _PROMPTS_DIR / f"{agent}.md"
+    if prompt_file.exists():
+        return prompt_file.read_text()
+    return f"You are {_AGENT_PERSONA.get(agent, agent)}, a BMG Capital fund team member. Respond concisely and stay within your domain."
+
+
+def _build_context(agent: str, db: Session) -> str:
+    """Build a short data context block for the agent."""
+    lines: list[str] = []
+    now_iso = datetime.now(timezone.utc).isoformat()
+    lines.append(f"Current time: {now_iso}")
+
+    try:
+        # Fleet P&L snapshot (last 24h signals)
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        sig_rows = db.execute(
+            text("""
+                SELECT bp.name, COUNT(bs.id) AS cnt
+                FROM bot_signals bs
+                JOIN bot_allocations ba ON ba.id = bs.allocation_id
+                JOIN bot_profiles bp ON bp.id = ba.profile_id
+                WHERE bs.ts >= :cutoff
+                GROUP BY bp.name ORDER BY cnt DESC LIMIT 10
+            """),
+            {"cutoff": cutoff},
+        ).fetchall()
+        if sig_rows:
+            lines.append("Signals last 24h: " + ", ".join(f"{r[0]}={r[1]}" for r in sig_rows))
+    except Exception:
+        pass
+
+    if agent in ("dick", "vick"):
+        try:
+            stale_rows = db.execute(
+                text("""
+                    SELECT bp.name
+                    FROM bot_profiles bp
+                    JOIN bot_allocations ba ON ba.profile_id = bp.id
+                    WHERE bp.enabled = 1 AND ba.enabled = 1
+                      AND ba.id NOT IN (
+                        SELECT allocation_id FROM bot_signals
+                        WHERE ts >= datetime('now', '-6 hours')
+                      )
+                """)
+            ).fetchall()
+            if stale_rows:
+                lines.append("Stale bots (no signal 6h): " + ", ".join(r[0] for r in stale_rows))
+        except Exception:
+            pass
+
+    if agent in ("brick", "rick"):
+        try:
+            regime_row = db.execute(
+                text("SELECT regime, confidence, created_at FROM regime_snapshots ORDER BY created_at DESC LIMIT 1")
+            ).fetchone()
+            if regime_row:
+                lines.append(f"Regime: {regime_row[0]} (conf={regime_row[1]}, as_of={regime_row[2]})")
+        except Exception:
+            pass
+
+    return "\n".join(lines) if lines else "No live context available."
+
+
+@router.post("/{agent}/respond")
+def agent_respond(
+    agent: str,
+    body: AgentRespondRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Generate an agent reply to an incoming Discord message.
+
+    Called by the discord-worker when a message arrives in a FUND TEAM channel.
+    No auth required — rate-limiting is enforced at the discord-worker layer.
+    Returns {reply: str, agent: str, persona: str} or {reply: null} on failure.
+    """
+    agent = agent.lower()
+    if agent not in _VALID_AGENTS:
+        raise HTTPException(status_code=404, detail=f"Unknown agent: {agent}")
+
+    from app.config import settings
+    if not settings.anthropic_api_key:
+        logger.warning("[agent-respond] ANTHROPIC_API_KEY not set — cannot generate response")
+        return {"reply": None, "agent": agent, "persona": _AGENT_PERSONA.get(agent, agent)}
+
+    system_prompt = _load_system_prompt(agent)
+    context = _build_context(agent, db)
+
+    user_content = (
+        f"[Context]\n{context}\n\n"
+        f"[Incoming message from {body.author_name}]\n{body.message}"
+    )
+
+    reply_text: Optional[str] = None
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_content}],
+        )
+        reply_text = msg.content[0].text if msg.content else None
+    except Exception as exc:
+        logger.warning("[agent-respond] Claude API call failed for %s: %s", agent, exc)
+
+    # Log conversation
+    if reply_text:
+        try:
+            db.execute(
+                text("""
+                    INSERT INTO agent_conversation_log
+                      (agent, channel_id, author_name, author_id, user_message, agent_reply)
+                    VALUES (:a, :ch, :an, :ai, :um, :ar)
+                """),
+                {
+                    "a":  agent,
+                    "ch": body.channel_id,
+                    "an": body.author_name,
+                    "ai": body.author_id,
+                    "um": body.message[:2000],
+                    "ar": reply_text[:2000],
+                },
+            )
+            db.commit()
+        except Exception as exc:
+            logger.warning("[agent-respond] log write failed: %s", exc)
+
+    return {
+        "reply":   reply_text,
+        "agent":   agent,
+        "persona": _AGENT_PERSONA.get(agent, agent),
+    }

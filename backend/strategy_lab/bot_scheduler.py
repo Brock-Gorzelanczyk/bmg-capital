@@ -58,16 +58,18 @@ def setup_bot_scheduler(scheduler) -> None:
       crypto_lt    — Monday 10:00 AM UTC (weekly DCA)
     """
     logger.warning("[startup-trace] setup_bot_scheduler called — registering bot jobs")
-    from strategy_lab.runner import run_bot_profile
 
     # ------------------------------------------------------------------
     # stock_swing: 4:05 PM ET, Mon-Fri
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("stock_swing"),
+        lambda: _run_and_log("stock_swing"),
         CronTrigger(day_of_week="mon-fri", hour=15, minute=50, timezone=ET),
         id="bot_stock_swing",
         replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
@@ -75,29 +77,35 @@ def setup_bot_scheduler(scheduler) -> None:
     # (opening-range established after first 30 min)
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("stock_day"),
+        lambda: _run_and_log("stock_day"),
         CronTrigger(day_of_week="mon-fri", hour="4-19", minute="*/5", timezone=ET),
         id="bot_stock_day",
         replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
-    # stock_lt: every Tuesday 10:00 AM ET (was: first Tue of month)
-    # Weekly cadence keeps the UI alive for demo; the strategy itself
-    # still only rebalances when factor signals change significantly.
+    # stock_lt: every Tuesday 10:00 AM ET
+    # next_run_time fires once on deploy for pipeline verification.
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("stock_lt"),
+        lambda: _run_and_log("stock_lt"),
         CronTrigger(day_of_week="tue", hour=10, minute=0, timezone=ET),
         id="bot_stock_lt",
         replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
     )
 
     # ------------------------------------------------------------------
     # crypto_swing: every 4 hours, 24/7 — fire immediately on startup
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("crypto_swing"),
+        lambda: _run_and_log("crypto_swing"),
         CronTrigger(hour="*/4", minute=0),
         id="bot_crypto_swing",
         replace_existing=True,
@@ -113,13 +121,13 @@ def setup_bot_scheduler(scheduler) -> None:
     # meant every 10s Alpaca timeout dropped the next trigger permanently.
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("crypto_day"),
+        lambda: _run_and_log("crypto_day"),
         CronTrigger(minute="*/5"),
         id="bot_crypto_day",
         replace_existing=True,
         next_run_time=datetime.now(UTC),  # fire immediately on startup
         max_instances=1,
-        misfire_grace_time=300,  # tolerate up to 5 min startup lag before skipping
+        misfire_grace_time=300,
         coalesce=True,
     )
 
@@ -129,7 +137,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # health record immediately without waiting until next Monday.
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("crypto_lt"),
+        lambda: _run_and_log("crypto_lt"),
         CronTrigger(day_of_week="mon", hour=10, minute=0, timezone=UTC),
         id="bot_crypto_lt_dca",
         replace_existing=True,
@@ -249,7 +257,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # crypto_onchain: every 4 hours, 24/7 (same cadence as crypto_swing)
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("crypto_onchain"),
+        lambda: _run_and_log("crypto_onchain"),
         CronTrigger(hour="*/4", minute=30),
         id="bot_crypto_onchain",
         replace_existing=True,
@@ -265,7 +273,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # Starts at 10:00 AM (after opening range) through 3:30 PM.
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("options_income"),
+        lambda: _run_and_log("options_income"),
         CronTrigger(day_of_week="mon-fri", hour="10-15", minute="0,30", timezone=ET),
         id="bot_options_income",
         replace_existing=True,
@@ -279,7 +287,7 @@ def setup_bot_scheduler(scheduler) -> None:
     # Scans for credit/debit spreads and momentum options entries.
     # ------------------------------------------------------------------
     scheduler.add_job(
-        lambda: run_bot_profile("options_directional"),
+        lambda: _run_and_log("options_directional"),
         CronTrigger(day_of_week="mon-fri", hour="10-15", minute="0,30", timezone=ET),
         id="bot_options_directional",
         replace_existing=True,

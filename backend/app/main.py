@@ -230,6 +230,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m008_exc:
         logger.warning("[startup] m008_backfill_nav_history failed (non-fatal): %s", _m008_exc)
 
+    try:
+        from app.db.migrations.m009_agent_conversation_log import run as _run_m009
+        with engine.connect() as _m009_conn:
+            _run_m009(_m009_conn)
+    except Exception as _m009_exc:
+        logger.warning("[startup] m009_agent_conversation_log failed (non-fatal): %s", _m009_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()
