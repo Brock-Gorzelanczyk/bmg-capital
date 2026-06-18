@@ -47,6 +47,7 @@ from app.db.models.smart_money import SmartMoneyCongressTrade  # noqa: F401
 from app.db.models.sentinel import AgentEvent, AgentFix, AgentCircuitBreaker, AgentEscalation  # noqa: F401
 from app.db.models.allocation import BotPerformanceStats, BotTierHistory  # noqa: F401
 from app.db.models.strategy_library import StrategyMeta  # noqa: F401
+from app.db.models.workshop import WorkshopChart  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -92,4 +93,5 @@ __all__ = [
     "AgentEvent", "AgentFix", "AgentCircuitBreaker", "AgentEscalation",
     "BotPerformanceStats", "BotTierHistory",
     "StrategyMeta",
+    "WorkshopChart",
 ]

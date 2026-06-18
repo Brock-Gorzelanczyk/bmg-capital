@@ -34,6 +34,7 @@ from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
 from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money, exams, admin
+from app.routers import strategy_workshop
 from app.routers.admin_bots import router as admin_bots_router
 from app.routers.sentinel import router as sentinel_router
 from app.routers.dashboard import router as dashboard_router
@@ -147,6 +148,17 @@ async def lifespan(app: FastAPI):
         logger.warning("[startup] exam_seed failed (non-fatal): %s", _exam_seed_exc)
     finally:
         _seed_exam_db.close()
+
+    # Seed example workshop charts for user_id=1 (non-fatal — idempotent)
+    try:
+        from app.routers.strategy_workshop import startup_seed_workshop_examples
+        _seed_workshop_db = SessionLocal()
+        try:
+            startup_seed_workshop_examples(_seed_workshop_db)
+        finally:
+            _seed_workshop_db.close()
+    except Exception as _workshop_seed_exc:
+        logger.warning("[startup] workshop_charts seed failed (non-fatal): %s", _workshop_seed_exc)
 
     # Ensure bot_paper_accounts table + crypto_quant_aggressive $100k sub-account row
     # (non-fatal — same idempotent pattern as learning_seed)
@@ -444,6 +456,7 @@ app.include_router(db_restore.router)
 app.include_router(copilot.router)
 app.include_router(workspace.router)
 app.include_router(workshop.router)
+app.include_router(strategy_workshop.router)
 app.include_router(monitoring.router)
 app.include_router(autonomous.router)
 app.include_router(gdpr.router)
