@@ -277,8 +277,9 @@ export default function ActivityPage() {
     });
   }, [trades, botFilter, sideFilter, search]);
 
-  const winRate = summary.total_trades > 0
-    ? Math.round(summary.winning_trades / summary.total_trades * 100)
+  const totalDays = summary.winning_trades + summary.losing_trades;
+  const winRate = totalDays > 0
+    ? Math.round(summary.winning_trades / totalDays * 100)
     : null;
 
   const pnlPos = summary.total_pnl_cents >= 0;
@@ -320,8 +321,8 @@ export default function ActivityPage() {
             positive={pnlPos}
           />
           <Stat label="Total Trades" value={String(summary.total_trades)} />
-          <Stat label="Win Rate" value={winRate != null ? `${winRate}%` : "—"} positive={winRate != null ? winRate >= 50 : undefined} />
-          <Stat label="Losing Trades" value={String(summary.losing_trades)} positive={summary.losing_trades === 0 ? true : undefined} />
+          <Stat label="Win Rate (days)" value={winRate != null ? `${winRate}%` : "—"} positive={winRate != null ? winRate >= 50 : undefined} />
+          <Stat label="Losing Days" value={String(summary.losing_trades)} positive={summary.losing_trades === 0 ? true : undefined} />
         </div>
       )}
 
