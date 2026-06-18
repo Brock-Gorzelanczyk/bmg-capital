@@ -1590,12 +1590,13 @@ def get_bot_cards(
         total_closed = wins + losses
         win_rate_pct = (wins / total_closed) if total_closed > 0 else None
 
-        # open positions count
+        # open positions count (exclude quarantined — they don't appear in the positions table)
         open_positions_count = 0
         if allocation:
             open_positions_count = db.query(BotPosition).filter(
                 BotPosition.allocation_id == allocation.id,
-                BotPosition.closed_at.is_(None)
+                BotPosition.closed_at.is_(None),
+                BotPosition.quarantined_at.is_(None),
             ).count()
 
         # equity curve: full all-time history (portfolio value in dollars) for zoom controls
