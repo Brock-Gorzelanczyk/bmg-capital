@@ -22,6 +22,8 @@ interface TradeRow {
   option_type?: "call" | "put";
   strike_price?: number;
   expiration_date?: string;  // ISO date string e.g. "2024-07-19"
+  contract_count?: number;
+  premium_per_contract?: number;
 }
 
 interface SparkPoint {
@@ -50,8 +52,8 @@ const BOT_LABELS: Record<string, string> = {
   crypto_day:                   "Crypto Day",
   crypto_lt:                    "Crypto Long-Term",
   crypto_onchain:               "Crypto Onchain",
-  options_income:               "Equity Income",
-  options_directional:          "Equity Directional",
+  options_income:               "Options Income",
+  options_directional:          "Options Directional",
   crypto_quant_aggressive:      "Quant Aggressive",
   crypto_quant_scalper:         "Quant Scalper",
   crypto_quant_mean_reversion:  "Quant Mean Rev",
@@ -426,17 +428,21 @@ export default function ActivityPage() {
                       {/* Qty / Contracts */}
                       <td className="px-3 py-2.5 text-right text-zinc-400">
                         {isOptions
-                          ? <span>×{t.qty} contracts</span>
+                          ? <span>×{t.contract_count ?? t.qty} contracts</span>
                           : t.qty}
                       </td>
 
                       {/* Fill / Premium per contract */}
                       <td className="px-3 py-2.5 text-right text-zinc-400">
-                        {t.fill_price != null
-                          ? isOptions
-                            ? <span>${t.fill_price.toFixed(2)}<span className="text-zinc-600">/ct</span></span>
-                            : `$${t.fill_price.toFixed(2)}`
-                          : "—"}
+                        {isOptions
+                          ? t.premium_per_contract != null
+                            ? <span>${t.premium_per_contract.toFixed(2)}<span className="text-zinc-600">/ct</span></span>
+                            : t.fill_price != null
+                              ? <span>${t.fill_price.toFixed(2)}<span className="text-zinc-600">/ct</span></span>
+                              : "—"
+                          : t.fill_price != null
+                            ? `$${t.fill_price.toFixed(2)}`
+                            : "—"}
                       </td>
 
                       {/* P&L */}

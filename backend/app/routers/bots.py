@@ -313,6 +313,11 @@ def _position_to_dict(p: BotPosition) -> dict:
         "closed_at": p.closed_at.isoformat() if p.closed_at else None,
         "exit_reason": p.exit_reason,
         "is_paper": p.is_paper,
+        # Options-specific columns (null for stock/crypto positions)
+        "option_type": p.option_type,
+        "strike_price": p.strike_price,
+        "expiration_date": p.expiration_date,
+        "contract_count": p.contract_count,
     }
 
 
@@ -363,6 +368,14 @@ def _trade_to_dict(t: BotTrade) -> dict:
         "ts": t.ts.isoformat() if t.ts else None,
         "alpaca_order_id": t.alpaca_order_id,
         "is_paper": t.is_paper,
+        # Options-specific columns (null for stock/crypto trades)
+        "option_type": t.option_type,
+        "strike_price": t.strike_price,
+        "expiration_date": t.expiration_date,
+        "underlying_symbol": t.underlying_symbol,
+        "contract_count": t.contract_count,
+        "contract_premium_cents": t.contract_premium_cents,
+        "premium_per_contract": round(t.contract_premium_cents / 100, 2) if t.contract_premium_cents is not None else None,
     }
 
 
@@ -734,12 +747,16 @@ def get_cross_bot_activity(
         d["pnl_usd"] = round(t.pnl_cents / 100, 2) if t.pnl_cents is not None else None
         asset_class = alloc_id_to_asset_class.get(t.allocation_id, "stock")
         d["asset_class"] = asset_class
-        # Enrich options trades by parsing the OCC contract symbol stored in t.symbol
-        # OCC format: <underlying><YY><MM><DD><C|P><8-digit-strike>
-        # e.g. SPY240719C00580000 → underlying=SPY, exp=2024-07-19, type=C, strike=580.00
+        # For options trades: direct DB columns take precedence; fall back to OCC parsing
+        # for Alpaca live trades that store the OCC symbol in t.symbol.
         if asset_class == "options":
-            parsed = _parse_occ_symbol(t.symbol)
-            d.update(parsed)
+            if t.option_type:
+                # Direct columns populated (paper trades, _execute_options_signal path)
+                d["contract_symbol"] = t.underlying_symbol or t.symbol
+            else:
+                # Alpaca live trade — try OCC symbol parse
+                parsed = _parse_occ_symbol(t.symbol)
+                d.update(parsed)
         trades.append(d)
 
     # Daily P&L sparkline — last 30 days

@@ -64,6 +64,11 @@ export interface BotPosition {
   market_value?: number | null;
   unrealized_pnl?: number | null;
   unrealized_pnl_pct?: number | null;
+  // Options-specific (null for stock/crypto positions)
+  option_type?: string | null;
+  strike_price?: number | null;
+  expiration_date?: string | null;
+  contract_count?: number | null;
 }
 
 export const getBots = () =>

@@ -2865,6 +2865,7 @@ export default function BotDetailPage() {
                   </thead>
                   <tbody>
                     {positions.map((pos) => {
+                      const isPosOptions = !!pos.option_type;
                       // Prefer server-enriched fields; fall back to live price fetch
                       const currentValue = pos.market_value ?? (livePrices[pos.symbol] != null && pos.qty ? livePrices[pos.symbol]! * pos.qty : null);
                       const unrealizedPnl = pos.unrealized_pnl ?? null;
@@ -2890,22 +2891,50 @@ export default function BotDetailPage() {
                           title={`View ${pos.symbol} chart`}
                         >
                           <td className="py-2.5">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-semibold text-t-hi font-mono-t">{pos.symbol}</span>
                               {isSymbolMismatch(pos.symbol) && (
                                 <span className="text-[10px] text-t-amber border border-t-amber/30 bg-t-amber/10 px-1 py-0.5 rounded font-medium whitespace-nowrap font-ui-t">⚠️ mismatch</span>
                               )}
+                              {isPosOptions && pos.option_type && (
+                                <span className={cn(
+                                  "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide font-ui-t",
+                                  pos.option_type === "call" ? "bg-emerald-900/60 text-emerald-300" : "bg-red-900/60 text-red-300"
+                                )}>
+                                  {pos.option_type}
+                                </span>
+                              )}
+                              {isPosOptions && pos.strike_price != null && (
+                                <span className="text-xs text-t-mid2 font-mono-t">
+                                  ${pos.strike_price % 1 === 0 ? pos.strike_price.toFixed(0) : pos.strike_price.toFixed(2)}
+                                </span>
+                              )}
+                              {isPosOptions && pos.expiration_date && (
+                                <span className="text-xs text-t-muted font-mono-t">
+                                  {new Date(pos.expiration_date + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="py-2.5">
-                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-t-cyan/15 text-t-cyan border border-t-cyan/20 font-ui-t">
-                              LONG
-                            </span>
+                            {isPosOptions ? (
+                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-700/30 font-ui-t">
+                                OPTIONS
+                              </span>
+                            ) : (
+                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-t-cyan/15 text-t-cyan border border-t-cyan/20 font-ui-t">
+                                LONG
+                              </span>
+                            )}
                           </td>
                           <td className="py-2.5 text-right text-t-mid2 tabular-nums font-mono-t">
-                            {pos.qty != null && pos.avg_cost_cents != null
-                              ? formatTradeSize(pos.qty, pos.symbol, (pos.avg_cost_cents / 100) * Math.abs(pos.qty))
-                              : pos.qty != null ? formatQty(pos.qty, pos.symbol) : "—"}
+                            {isPosOptions
+                              ? pos.contract_count != null
+                                ? `×${pos.contract_count} contracts`
+                                : pos.qty != null ? `×${pos.qty} contracts` : "—"
+                              : pos.qty != null && pos.avg_cost_cents != null
+                                ? formatTradeSize(pos.qty, pos.symbol, (pos.avg_cost_cents / 100) * Math.abs(pos.qty))
+                                : pos.qty != null ? formatQty(pos.qty, pos.symbol) : "—"}
                           </td>
                           <td className="py-2.5 text-right text-t-mid2 tabular-nums font-mono-t">
                             {currentValue != null ? `$${currentValue.toFixed(2)}` : "—"}
