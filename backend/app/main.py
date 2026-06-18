@@ -203,6 +203,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m006_exc:
         logger.warning("[startup] m006_reenable_stalled_production_bots failed (non-fatal): %s", _m006_exc)
 
+    try:
+        from app.db.migrations.m007_unlock_crypto_day import run as _run_m007
+        with engine.connect() as _m007_conn:
+            _run_m007(_m007_conn)
+    except Exception as _m007_exc:
+        logger.warning("[startup] m007_unlock_crypto_day failed (non-fatal): %s", _m007_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()
