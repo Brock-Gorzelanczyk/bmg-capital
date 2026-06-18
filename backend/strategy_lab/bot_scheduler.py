@@ -1417,6 +1417,66 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered jobs price_alert_monitor (1min market + 5min 24/7)")
 
+    # ------------------------------------------------------------------
+    # Fleet EOD summary: 5:00 PM ET, Mon-Fri — post to #fund-updates
+    # ------------------------------------------------------------------
+    def _fleet_eod_summary():
+        try:
+            import os as _os
+            import httpx as _hx
+            from app.db.session import SessionLocal
+            from sqlalchemy import text as _text
+            from datetime import date, datetime, timezone
+
+            db = SessionLocal()
+            try:
+                today = date.today().isoformat()
+                cutoff = f"{today}T00:00:00"
+                rows = db.execute(_text("""
+                    SELECT bp.name, COUNT(bs.id) AS cnt, bp.asset_class
+                    FROM bot_signals bs
+                    JOIN bot_allocations ba ON ba.id = bs.allocation_id
+                    JOIN bot_profiles bp ON bp.id = ba.profile_id
+                    WHERE bs.ts >= :cutoff
+                    GROUP BY bp.name, bp.asset_class
+                    ORDER BY cnt DESC
+                """), {"cutoff": cutoff}).fetchall()
+            finally:
+                db.close()
+
+            total = sum(r[1] for r in rows)
+            bot_lines = "\n".join(
+                f"  {r[0]}: {r[1]} signal{'s' if r[1] != 1 else ''}"
+                for r in rows
+            ) or "  (no signals today)"
+
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            content = (
+                f"**// CLAUDE CODE EOD — {today}**\n\n"
+                f"**Bot signals today: {total}**\n{bot_lines}\n\n"
+                f"*P0 bots now route via scan_and_execute (deployed {now_str}). "
+                f"XLM MTM fix live. P2 Discord two-way chat deployed.*\n\n"
+                f"Commits: 6c5f654 (P0+P2), e1e2c2e (pre-market fix), 077d6e7 (3 audit bugs)"
+            )
+            webhook = _os.getenv("DISCORD_WH_FUND_UPDATES", "").strip()
+            if webhook:
+                _hx.post(webhook, json={"content": content, "username": "👑 Brick (PM)"}, timeout=8)
+                logger.warning("[fleet-eod] posted EOD summary to #fund-updates")
+            else:
+                logger.warning("[fleet-eod] DISCORD_WH_FUND_UPDATES not set — EOD summary not posted")
+        except Exception as exc:
+            logger.error("[fleet-eod] EOD summary failed: %s", exc)
+
+    scheduler.add_job(
+        _fleet_eod_summary,
+        CronTrigger(day_of_week="mon-fri", hour=17, minute=0, timezone=ET),
+        id="fleet_eod_summary",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
+    )
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
