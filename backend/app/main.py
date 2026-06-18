@@ -210,6 +210,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m007_exc:
         logger.warning("[startup] m007_unlock_crypto_day failed (non-fatal): %s", _m007_exc)
 
+    try:
+        from app.db.migrations.m008_backfill_nav_history import run as _run_m008
+        with engine.connect() as _m008_conn:
+            _run_m008(_m008_conn)
+    except Exception as _m008_exc:
+        logger.warning("[startup] m008_backfill_nav_history failed (non-fatal): %s", _m008_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()

@@ -386,21 +386,30 @@ export default function ActivityPage() {
         </div>
 
         {/* Date range */}
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          className="text-xs bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-zinc-500"
-          title="From date"
-        />
-        <span className="text-xs text-zinc-600">→</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          className="text-xs bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-zinc-500"
-          title="To date"
-        />
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-zinc-600">From</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="text-xs bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-500"
+          />
+          <span className="text-xs text-zinc-600">To</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="text-xs bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-500"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
         {/* Symbol search */}
         <input

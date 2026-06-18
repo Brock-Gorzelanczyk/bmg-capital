@@ -795,11 +795,30 @@ def get_cross_bot_activity(
         logger.warning("[activity] sparkline query failed: %s", _sp_exc)
         sparkline = []
 
+    # P&L summary from bot_daily_pnl (bot_trades has no pnl_cents column)
+    try:
+        pnl_row = db.execute(
+            __import__("sqlalchemy").text("""
+                SELECT COALESCE(SUM(bdp.realized_cents), 0)  AS total_realized,
+                       SUM(CASE WHEN bdp.realized_cents > 0 THEN 1 ELSE 0 END) AS winning_days,
+                       SUM(CASE WHEN bdp.realized_cents < 0 THEN 1 ELSE 0 END) AS losing_days
+                  FROM bot_daily_pnl bdp
+                 WHERE bdp.allocation_id IN :ids
+            """),
+            {"ids": tuple(alloc_ids) if len(alloc_ids) > 1 else (alloc_ids[0], alloc_ids[0])},
+        ).fetchone()
+        total_pnl_cents = int(pnl_row[0] or 0)
+        winning_days = int(pnl_row[1] or 0)
+        losing_days = int(pnl_row[2] or 0)
+    except Exception as _pnl_exc:
+        logger.warning("[activity] P&L summary query failed: %s", _pnl_exc)
+        total_pnl_cents, winning_days, losing_days = 0, 0, 0
+
     summary = {
-        "total_trades": len(trades_raw),
-        "total_pnl_cents": sum(getattr(t, "pnl_cents", None) or 0 for t in trades_raw),
-        "winning_trades": sum(1 for t in trades_raw if (getattr(t, "pnl_cents", None) or 0) > 0),
-        "losing_trades": sum(1 for t in trades_raw if (getattr(t, "pnl_cents", None) or 0) < 0),
+        "total_trades": total_count,
+        "total_pnl_cents": total_pnl_cents,
+        "winning_trades": winning_days,
+        "losing_trades": losing_days,
     }
 
     return {
