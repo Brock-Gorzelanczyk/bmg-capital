@@ -4,9 +4,27 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
+import requests
 import yfinance as yf
+from requests.adapters import HTTPAdapter, Retry
 
 logger = logging.getLogger(__name__)
+
+# Cloud environments (Railway, Render, Fly, etc.) get rate-limited or blocked by
+# Yahoo Finance when using the default urllib session. A browser-like User-Agent
+# with a retry-enabled session resolves the vast majority of cloud fetch failures.
+def _yf_session() -> requests.Session:
+    session = requests.Session()
+    retry = Retry(total=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.headers.update({
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        )
+    })
+    return session
 
 
 def compute_bmg_score(info: dict) -> dict:
@@ -151,8 +169,11 @@ def _extract_quarterly_financials(ticker: yf.Ticker) -> Optional[List[Dict[str, 
 async def get_fundamentals(symbol: str) -> Dict[str, Any]:
     """Fetch company fundamentals from yfinance."""
     def _fetch() -> dict:
-        ticker = yf.Ticker(symbol)
+        ticker = yf.Ticker(symbol, session=_yf_session())
         info = ticker.info
+        # yfinance returns a single-key sparse dict when Yahoo blocks the request
+        if len(info) < 5:
+            raise ValueError(f"Yahoo Finance returned no data for {symbol} — possibly rate-limited or invalid ticker")
         quarterly = _extract_quarterly_financials(ticker)
         return {
             "symbol": symbol.upper(),
