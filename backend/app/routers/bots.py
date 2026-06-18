@@ -753,25 +753,26 @@ def get_cross_bot_activity(
                 d.update(parsed)
         trades.append(d)
 
-    # Daily P&L sparkline — last 30 days
-    from datetime import date, timedelta
-    today = date.today()
-    cutoff = (today - timedelta(days=30)).isoformat()
-    daily_rows = db.execute(
-        __import__("sqlalchemy").text("""
-            SELECT date(ts) as d, SUM(pnl_cents) as pnl
-            FROM bot_trades
-            WHERE allocation_id IN :ids
-              AND quarantined_at IS NULL
-              AND pnl_cents IS NOT NULL
-              AND ts >= :cutoff
-            GROUP BY date(ts)
-            ORDER BY d ASC
-        """),
-        {"ids": tuple(alloc_ids) if len(alloc_ids) > 1 else (alloc_ids[0], alloc_ids[0]),
-         "cutoff": cutoff},
-    ).fetchall()
-    sparkline = [{"date": r[0], "pnl_cents": r[1]} for r in daily_rows]
+    # Daily P&L sparkline — last 30 days from bot_daily_pnl (bot_trades has no pnl column)
+    from datetime import date as _date
+    cutoff_date = _date.today() - timedelta(days=30)
+    try:
+        daily_rows = (
+            db.query(BotDailyPnL)
+            .filter(
+                BotDailyPnL.allocation_id.in_(alloc_ids),
+                BotDailyPnL.date >= cutoff_date,
+            )
+            .order_by(BotDailyPnL.date.asc())
+            .all()
+        )
+        sparkline = [
+            {"date": str(r.date), "pnl_cents": (r.realized_cents or 0)}
+            for r in daily_rows
+        ]
+    except Exception as _sp_exc:
+        logger.warning("[activity] sparkline query failed: %s", _sp_exc)
+        sparkline = []
 
     summary = {
         "total_trades": len(trades_raw),
