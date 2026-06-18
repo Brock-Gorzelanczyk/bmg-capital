@@ -248,8 +248,8 @@ type ResearchTab = "overview" | "financials" | "news";
 export default function Research() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [searchInput, setSearchInput] = useState(params.get("symbol") ?? "");
-  const [activeSymbol, setActiveSymbol] = useState(params.get("symbol") ?? "");
+  const [searchInput, setSearchInput] = useState((params.get("symbol") ?? "").replace(/^\$/, ""));
+  const [activeSymbol, setActiveSymbol] = useState((params.get("symbol") ?? "").replace(/^\$/, ""));
   const [aiOpen, setAiOpen] = useState(false);
   const [level, setLevel] = useState<ReadingLevel>("investor");
   const [descCache, setDescCache] = useState<Map<string, string>>(new Map());
