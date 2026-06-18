@@ -100,6 +100,8 @@ const NetWorthPage = lazy(() => import("@/pages/NetWorthPage"));
 const StrategyLibraryPage = lazy(() => import("@/pages/StrategyLibraryPage"));
 const CustomBotBuilderPage = lazy(() => import("@/pages/CustomBotBuilderPage"));
 const StrategyScoutPage = lazy(() => import("@/pages/StrategyScoutPage"));
+const ScoutChartPage = lazy(() => import("@/pages/ScoutChartPage"));
+const StrategyWorkshopPage = lazy(() => import("@/pages/StrategyWorkshopPage"));
 const ForgeBuilderPage = lazy(() => import("@/pages/ForgeBuilderPage"));
 const SignalsFeedPage = lazy(() => import("@/pages/SignalsFeedPage"));
 const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
@@ -358,6 +360,8 @@ function AppInner() {
         <Route path="/strategy" element={<Page component={StrategyLab} />} />
         <Route path="/signals" element={<SignalsFeedPage />} />
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
+        <Route path="/strategy/scout/chart/:ticker/:strategyId" element={<ScoutChartPage />} />
+        <Route path="/strategy/workshop" element={<Page component={StrategyWorkshopPage} />} />
         <Route path="/strategy/forge" element={<ForgeBuilderPage />} />
         <Route path="/fund" element={<FundPage />} />
         <Route path="/strategy/performance" element={<PerformancePage />} />

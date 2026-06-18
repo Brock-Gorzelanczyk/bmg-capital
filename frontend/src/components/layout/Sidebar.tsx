@@ -9,7 +9,7 @@ import {
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
   Grid3X3, Zap, Globe, Eye, TestTube2, Cpu, SlidersHorizontal, Beaker,
-  Radar, Hammer, ShieldAlert, HeartPulse,
+  Radar, Hammer, ShieldAlert, HeartPulse, ClipboardPen,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -66,8 +66,9 @@ const NAV_LABS = [
 ];
 
 const NAV_BUILD = [
-  { to: "/strategy/scout", label: "Strategy Scout", Icon: Radar  },
-  { to: "/strategy/forge", label: "The Forge",      Icon: Hammer },
+  { to: "/strategy/scout",    label: "Strategy Scout", Icon: Radar        },
+  { to: "/strategy/workshop", label: "Workshop",       Icon: ClipboardPen },
+  { to: "/strategy/forge",    label: "The Forge",      Icon: Hammer       },
 ];
 
 const NAV_FUND = [

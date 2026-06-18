@@ -1278,6 +1278,7 @@ function QuickLookupPanel() {
   const [symbol, setSymbol] = useState("");
   const [error, setError] = useState<string | null>(null);
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const QUICK_TICKERS = ["NVDA", "AAPL", "TSLA", "SPY", "BTC/USD", "ETH/USD"];
 
@@ -1305,6 +1306,7 @@ function QuickLookupPanel() {
       await createSetup(symbol, strategyId);
       qc.invalidateQueries({ queryKey: ["scout-setups"] });
       toast.success(`Armed ${symbol} × ${strategyId}`);
+      setTimeout(() => navigate(`/strategy/scout/chart/${symbol}/${strategyId}`), 600);
     } catch {
       toast.error("Failed to arm pairing");
     }
