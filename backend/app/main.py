@@ -27,6 +27,7 @@ from app.db.models.forge import UserForgeBot, UserForgeSignal  # noqa: F401
 from app.db.models.pipeline import StrategyCandidate, BacktestRun, WfaRun, CandidateStateHistory  # noqa: F401
 from app.db.models.quant_analytics import LivePerformanceAlert, DecaySignal, FactorAttribution, HrpRecommendedWeight  # noqa: F401
 from app.db.models.ic_metrics import SignalIcMetric, SignalIcAlert  # noqa: F401
+from app.db.models.price_alert import PriceAlert  # noqa: F401
 from app.routers.chart_layouts import ChartLayout  # noqa: F401
 from app.db.migration import run_migrations
 from app.alpaca.stream import stream_manager
@@ -34,7 +35,7 @@ from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
 from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money, exams, admin
-from app.routers import strategy_workshop
+from app.routers import strategy_workshop, price_alerts
 from app.routers.admin_bots import router as admin_bots_router
 from app.routers.sentinel import router as sentinel_router
 from app.routers.dashboard import router as dashboard_router
@@ -457,6 +458,7 @@ app.include_router(copilot.router)
 app.include_router(workspace.router)
 app.include_router(workshop.router)
 app.include_router(strategy_workshop.router)
+app.include_router(price_alerts.router)
 app.include_router(monitoring.router)
 app.include_router(autonomous.router)
 app.include_router(gdpr.router)

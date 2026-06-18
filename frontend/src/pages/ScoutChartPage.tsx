@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Zap, Trash2, Plus, X } from "lucide-react";
+import { ArrowLeft, Save, Zap, Trash2, Plus, X, Bell } from "lucide-react";
 import { createChart, CandlestickSeries, LineSeries, ColorType, LineStyle } from "lightweight-charts";
 import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 import { fetchBars } from "@/api/bars";
@@ -109,6 +109,22 @@ const DEFAULT_CONFIG: StrategyChartConfig = {
 
 function getConfig(strategyId: string): StrategyChartConfig {
   return STRATEGY_CHART_CONFIG[strategyId] ?? DEFAULT_CONFIG;
+}
+
+// ── Price alert types ─────────────────────────────────────────────────────────
+
+interface PriceAlert {
+  id: number;
+  workshop_chart_id: number | null;
+  ticker: string;
+  price: number;
+  direction: "above" | "below";
+  message: string | null;
+  status: "armed" | "triggered" | "cancelled" | "snoozed";
+  notif_discord: boolean;
+  notif_inapp: boolean;
+  created_at: string;
+  triggered_at: string | null;
 }
 
 // ── Drawing types ─────────────────────────────────────────────────────────────
@@ -277,6 +293,122 @@ function fmtPct(v: number): string {
   return `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
 }
 
+// ── Price alert modal ─────────────────────────────────────────────────────────
+
+function AlertModal({
+  drawing,
+  currentPrice,
+  ticker,
+  existingAlert,
+  onClose,
+  onSave,
+  onCancel,
+}: {
+  drawing: Drawing;
+  currentPrice: number | null;
+  ticker: string;
+  existingAlert: PriceAlert | null;
+  onClose: () => void;
+  onSave: (direction: "above" | "below", message: string, notifDiscord: boolean) => void;
+  onCancel: (alertId: number) => void;
+}) {
+  const defaultDir: "above" | "below" =
+    currentPrice != null && drawing.price > currentPrice ? "above" : "below";
+  const [direction, setDirection] = useState<"above" | "below">(existingAlert?.direction ?? defaultDir);
+  const [message, setMessage] = useState(existingAlert?.message ?? "");
+  const [notifDiscord, setNotifDiscord] = useState(existingAlert?.notif_discord ?? true);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-t-bg1 border border-t-mid rounded-2xl p-6 w-full max-w-sm space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h3 className="text-t-hi font-semibold font-ui-t text-sm">Set Price Alert</h3>
+          <p className="text-[11px] text-t-muted font-mono-t mt-0.5">
+            {ticker} · ${drawing.price.toFixed(2)} · {drawing.label}
+          </p>
+        </div>
+
+        {/* Direction */}
+        <div className="space-y-1">
+          <p className="text-[11px] text-t-gdim font-mono-t uppercase tracking-widest">Alert when price goes</p>
+          <div className="flex gap-2">
+            {(["above", "below"] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setDirection(d)}
+                className={cn(
+                  "flex-1 py-1.5 text-xs font-mono-t rounded-lg border transition-all",
+                  direction === d
+                    ? "border-t-amber bg-t-amber/10 text-t-amber font-bold"
+                    : "border-t-dim text-t-muted hover:border-t-mid"
+                )}
+              >
+                {d.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Message */}
+        <div className="space-y-1">
+          <p className="text-[11px] text-t-gdim font-mono-t uppercase tracking-widest">Note (optional)</p>
+          <input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder={`e.g. ${ticker} entry zone hit`}
+            className="w-full bg-t-bg0 border border-t-dim rounded-lg px-3 py-2 text-xs text-t-hi font-mono-t outline-none focus:border-t-mid"
+          />
+        </div>
+
+        {/* Discord toggle */}
+        <label className="flex items-center gap-2.5 cursor-pointer">
+          <div
+            onClick={() => setNotifDiscord((v) => !v)}
+            className={cn(
+              "w-8 h-4 rounded-full transition-colors relative cursor-pointer",
+              notifDiscord ? "bg-t-amber" : "bg-t-dim"
+            )}
+          >
+            <div className={cn(
+              "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform",
+              notifDiscord ? "translate-x-4" : "translate-x-0.5"
+            )} />
+          </div>
+          <span className="text-xs font-mono-t text-t-body">Post to #price-alerts on Discord</span>
+        </label>
+
+        {/* Actions */}
+        <div className="flex gap-2 justify-between pt-1">
+          {existingAlert ? (
+            <button
+              onClick={() => onCancel(existingAlert.id)}
+              className="text-xs font-mono-t text-t-red border border-t-red/30 rounded-lg px-3 py-1.5 hover:bg-t-red/10"
+            >
+              Disarm alert
+            </button>
+          ) : (
+            <div />
+          )}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="text-xs font-mono-t text-t-muted border border-t-dim rounded-lg px-3 py-1.5 hover:border-t-mid">
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave(direction, message, notifDiscord)}
+              className="text-xs font-mono-t text-t-bg0 bg-t-amber rounded-lg px-4 py-1.5 font-bold hover:bg-t-amber/80"
+            >
+              {existingAlert ? "Update" : "Arm alert"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Drawing toolbar ───────────────────────────────────────────────────────────
 
 const DRAWING_COLORS = ["#f59e0b", "#a78bfa", "#4ade80", "#f87171", "#38bdf8", "#fb923c"];
@@ -285,10 +417,14 @@ function DrawingToolbar({
   drawings,
   onAdd,
   onRemove,
+  armedAlerts,
+  onAlertClick,
 }: {
   drawings: Drawing[];
   onAdd: (d: Drawing) => void;
   onRemove: (id: string) => void;
+  armedAlerts: PriceAlert[];
+  onAlertClick: (d: Drawing) => void;
 }) {
   const [price, setPrice] = useState("");
   const [label, setLabel] = useState("");
@@ -361,6 +497,21 @@ function DrawingToolbar({
               <div className="w-3 h-0.5 shrink-0 rounded" style={{ background: d.color }} />
               <span className="text-t-body flex-1 truncate">{d.label}</span>
               <span className="text-t-gdim tabular-nums">${d.price.toFixed(2)}</span>
+              {/* Alert bell */}
+              {(() => {
+                const armed = armedAlerts.find(
+                  (a) => Math.abs(a.price - d.price) < 0.01
+                );
+                return (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onAlertClick(d); }}
+                    title={armed ? "Alert armed — click to manage" : "Set price alert"}
+                    className="transition-opacity text-t-muted hover:text-t-amber"
+                  >
+                    <Bell size={11} className={armed ? "text-t-amber" : ""} />
+                  </button>
+                );
+              })()}
               <button
                 onClick={() => onRemove(d.id)}
                 className="opacity-0 group-hover:opacity-100 transition-opacity text-t-muted hover:text-t-red"
@@ -441,6 +592,7 @@ export default function ScoutChartPage() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [searchParams] = useSearchParams();
   const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [alertTarget, setAlertTarget] = useState<Drawing | null>(null);
 
   const ticker = (rawTicker ?? "").toUpperCase();
   const sid = strategyId ?? "";
@@ -512,6 +664,43 @@ export default function ScoutChartPage() {
     setDrawings(next);
     saveDrawingsMutation.mutate(next);
   }
+
+  // Load alerts for this ticker
+  const { data: alertsData, refetch: refetchAlerts } = useQuery<PriceAlert[]>({
+    queryKey: ["price-alerts", ticker],
+    queryFn: () =>
+      client
+        .get<{ alerts: PriceAlert[] }>("/price-alerts", { params: { ticker } })
+        .then((r) => r.data.alerts ?? []),
+    enabled: !!ticker,
+    staleTime: 30_000,
+  });
+  const armedAlerts: PriceAlert[] = (alertsData ?? []).filter((a) => a.status === "armed");
+
+  const createAlertMutation = useMutation({
+    mutationFn: (body: {
+      ticker: string;
+      price: number;
+      direction: "above" | "below";
+      message: string;
+      notif_discord: boolean;
+      workshop_chart_id?: number;
+    }) => client.post<PriceAlert>("/price-alerts", body).then((r) => r.data),
+    onSuccess: () => {
+      refetchAlerts();
+      setAlertTarget(null);
+      toast.success("Alert armed");
+    },
+    onError: () => toast.error("Failed to arm alert"),
+  });
+
+  const cancelAlertMutation = useMutation({
+    mutationFn: (alertId: number) => client.delete(`/price-alerts/${alertId}`),
+    onSuccess: () => {
+      refetchAlerts();
+      toast.success("Alert cancelled");
+    },
+  });
 
   // Find current setup status
   const currentStatus = useMemo(() => {
@@ -707,6 +896,8 @@ export default function ScoutChartPage() {
             drawings={drawings}
             onAdd={handleAddDrawing}
             onRemove={handleRemoveDrawing}
+            armedAlerts={armedAlerts}
+            onAlertClick={(d) => setAlertTarget(d)}
           />
         </div>
 
@@ -776,6 +967,19 @@ export default function ScoutChartPage() {
           strategyId={sid}
           onClose={() => setShowSaveModal(false)}
           onSave={(name, notes) => saveMutation.mutate({ name, notes })}
+        />
+      )}
+      {alertTarget && (
+        <AlertModal
+          drawing={alertTarget}
+          currentPrice={currentStatus?.currentPrice ?? null}
+          ticker={ticker}
+          existingAlert={armedAlerts.find((a) => Math.abs(a.price - alertTarget.price) < 0.01) ?? null}
+          onClose={() => setAlertTarget(null)}
+          onSave={(direction, message, notifDiscord) =>
+            createAlertMutation.mutate({ ticker, price: alertTarget.price, direction, message, notif_discord: notifDiscord })
+          }
+          onCancel={(alertId) => { cancelAlertMutation.mutate(alertId); setAlertTarget(null); }}
         />
       )}
     </div>

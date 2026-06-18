@@ -48,6 +48,7 @@ from app.db.models.sentinel import AgentEvent, AgentFix, AgentCircuitBreaker, Ag
 from app.db.models.allocation import BotPerformanceStats, BotTierHistory  # noqa: F401
 from app.db.models.strategy_library import StrategyMeta  # noqa: F401
 from app.db.models.workshop import WorkshopChart  # noqa: F401
+from app.db.models.price_alert import PriceAlert  # noqa: F401
 
 __all__ = [
     "Watchlist", "WatchlistItem", "Portfolio", "Position",
@@ -94,4 +95,5 @@ __all__ = [
     "BotPerformanceStats", "BotTierHistory",
     "StrategyMeta",
     "WorkshopChart",
+    "PriceAlert",
 ]

@@ -97,6 +97,7 @@ class Settings(BaseSettings):
     discord_ch_monthly_recap: str = ""
     discord_ch_announcements: str = ""
     discord_ch_dev_log: str = ""
+    discord_ch_price_alerts: str = ""
     discord_ch_macro_view: str = ""
     # Webhook for the #fund-updates paste-ready requests channel
     discord_wh_fund_updates: str = ""

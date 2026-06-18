@@ -1340,6 +1340,51 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job candidate_pipeline_daemon (2:30 AM ET daily)")
 
+    # ------------------------------------------------------------------
+    # Price Alert Monitor — checks armed user price alerts vs live prices
+    # Stocks: every 1 min during US market hours (9:30–16:00 ET weekdays)
+    # Crypto: every 5 min 24/7
+    # ------------------------------------------------------------------
+    def _run_price_alert_monitor():
+        from app.db.session import SessionLocal
+        from app.services.price_monitor import run_price_alert_monitor
+        db = SessionLocal()
+        try:
+            run_price_alert_monitor(db)
+        except Exception as exc:
+            logger.error("[price-alert-monitor] job failed: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_price_alert_monitor,
+        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/1", timezone=ET),
+        id="price_alert_monitor_market",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _run_price_alert_monitor,
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=0, timezone=ET),
+        id="price_alert_monitor_close",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _run_price_alert_monitor,
+        IntervalTrigger(minutes=5),
+        id="price_alert_monitor_5min",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=120,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered jobs price_alert_monitor (1min market + 5min 24/7)")
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
@@ -1351,5 +1396,5 @@ def setup_bot_scheduler(scheduler) -> None:
         "queen_morning queen_midday queen_close queen_evening "
         "queen_weekend_recap queen_weekly queen_regime_alert_check "
         "defensive_halt_check resume_check compute_bot_stats macro_classification_daily "
-        "candidate_pipeline_daemon"
+        "candidate_pipeline_daemon price_alert_monitor"
     )
