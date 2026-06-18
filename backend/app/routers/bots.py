@@ -702,24 +702,35 @@ def get_cross_bot_activity(
     from sqlalchemy import func
     from datetime import timedelta
 
-    alloc_q = db.query(BotAllocation, BotProfile).join(
+    # Fund-wide view: show all enabled paper allocations so every production
+    # bot's trades appear regardless of which user_id owns the allocation.
+    # User-specific allocations are merged in so any personal overrides also show.
+    paper_q = db.query(BotAllocation, BotProfile).join(
+        BotProfile, BotProfile.id == BotAllocation.profile_id
+    ).filter(
+        BotAllocation.paper_mode.is_(True),
+        BotAllocation.enabled.is_(True),
+    )
+    if bot:
+        paper_q = paper_q.filter(BotProfile.name == bot)
+
+    alloc_pairs = paper_q.all()
+
+    # Also include any disabled-but-personal allocations for the current user
+    # so they can see their own historical trades even if a bot is paused.
+    personal_q = db.query(BotAllocation, BotProfile).join(
         BotProfile, BotProfile.id == BotAllocation.profile_id
     ).filter(BotAllocation.user_id == current_user.id)
-
     if bot:
-        alloc_q = alloc_q.filter(BotProfile.name == bot)
+        personal_q = personal_q.filter(BotProfile.name == bot)
+    personal_pairs = personal_q.all()
 
-    alloc_pairs = alloc_q.all()
-
-    # Fallback: no personal allocations → use all enabled system allocations
-    # so the feed shows real trades instead of an empty state.
-    if not alloc_pairs:
-        system_q = db.query(BotAllocation, BotProfile).join(
-            BotProfile, BotProfile.id == BotAllocation.profile_id
-        ).filter(BotAllocation.enabled.is_(True))
-        if bot:
-            system_q = system_q.filter(BotProfile.name == bot)
-        alloc_pairs = system_q.all()
+    # Merge, deduplicate by allocation_id
+    seen_ids: set[int] = {a.id for a, _ in alloc_pairs}
+    for a, p in personal_pairs:
+        if a.id not in seen_ids:
+            alloc_pairs.append((a, p))
+            seen_ids.add(a.id)
 
     if not alloc_pairs:
         return {"trades": [], "summary": {}}
@@ -1918,6 +1929,18 @@ def get_bot(
         )
         .first()
     )
+    # Fallback: if the current user has no allocation, use the first enabled
+    # paper allocation for this profile so the bot detail page shows real data.
+    if not allocation:
+        allocation = (
+            db.query(BotAllocation)
+            .filter(
+                BotAllocation.profile_id == profile.id,
+                BotAllocation.paper_mode.is_(True),
+                BotAllocation.enabled.is_(True),
+            )
+            .first()
+        )
 
     recent_signals: list[dict] = []
     positions: list[dict] = []
@@ -1950,11 +1973,8 @@ def get_bot(
     row["recent_signals"] = recent_signals
     row["display_name"] = _DISPLAY_NAMES.get(profile.name, profile.name.replace("_", " ").title())
 
-    # BUG E fix: derive display_asset_class from name when profile.asset_class is missing/wrong
-    _EQUITY_BOT_IDS = {"options_income", "options_directional"}
-    if profile.name in _EQUITY_BOT_IDS:
-        display_asset_class = "stocks"
-    elif "options" in profile.name.lower():
+    # Derive display_asset_class from profile name when DB value is missing/stale
+    if "options" in profile.name.lower():
         display_asset_class = "options"
     else:
         display_asset_class = profile.asset_class or "stock"
