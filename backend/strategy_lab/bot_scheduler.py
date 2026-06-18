@@ -912,11 +912,34 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job compute_bot_stats (2:00 AM ET daily)")
 
     # ------------------------------------------------------------------
-    # Queen Agent — 4 posts per day to #dev-log
-    #   morning  07:00 AM ET  Intelligence brief (regime, IC, directives)
-    #   midday   12:00 PM ET  Intraday pulse (P&L so far, signals)
-    #   close    04:30 PM ET  EOD report (full day P&L, winners/losers)
-    #   evening  09:00 PM ET  Crypto/overnight watch (24/7 — covers crypto)
+    # Queen Agent — 1 consolidated morning brief per day to #dev-log
+    #   morning  06:30 AM ET  Mon-Sun (quiet mode: was 6x/day)
+    #
+    # Expected brief format when run_queen_daily(db, session="morning") fires:
+    #
+    # // QUEEN MORNING BRIEF — <date>
+    #
+    # Fleet P&L (24h): $X (Z bps)
+    # Open positions: N
+    # Top winner: <bot> +$X
+    # Top loser: <bot> -$X
+    #
+    # // RISK (Dick) — <status emoji>
+    # <one-line summary>
+    #
+    # // DATA (Vick) — <status emoji>
+    # <one-line summary>
+    #
+    # // OPS (Wick) — <status emoji>
+    # <one-line summary>
+    #
+    # // MACRO (Rick) — <regime>
+    # <one-line summary>
+    #
+    # // RESEARCHER (Nick) — <signal count>
+    # <one-line summary>
+    #
+    # Items needing your attention: <bullet list or "none">
     # ------------------------------------------------------------------
     def _make_queen_job(session_name: str):
         def _job():
@@ -932,25 +955,18 @@ def setup_bot_scheduler(scheduler) -> None:
         _job.__name__ = f"_queen_{session_name}"
         return _job
 
-    _queen_schedules = [
-        ("morning",       dict(day_of_week="mon-fri", hour=7,  minute=0,  timezone=ET)),
-        ("midday",        dict(day_of_week="mon-fri", hour=12, minute=0,  timezone=ET)),
-        ("close",         dict(day_of_week="mon-fri", hour=16, minute=30, timezone=ET)),
-        ("evening",       dict(hour=21, minute=0, timezone=ET)),
-        ("weekend_recap", dict(day_of_week="mon", hour=6, minute=0, timezone=ET)),
-        ("weekly",        dict(day_of_week="sun", hour=20, minute=0, timezone=ET)),
-    ]
-    for _session, _cron_kwargs in _queen_schedules:
-        scheduler.add_job(
-            _make_queen_job(_session),
-            CronTrigger(**_cron_kwargs),
-            id=f"queen_{_session}",
-            replace_existing=True,
-            max_instances=1,
-            misfire_grace_time=1800,
-            coalesce=True,
-        )
-        logger.warning("[startup-trace] registered job queen_%s", _session)
+    # Quiet mode: single daily brief at 6:30 AM ET, every day
+    scheduler.add_job(
+        _make_queen_job("morning"),
+        CronTrigger(hour=6, minute=30, timezone=ET),
+        id="queen_morning",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+        next_run_time=datetime.now(UTC),  # fire on startup so we get a brief on deploy
+    )
+    logger.warning("[startup-trace] registered job queen_morning (6:30 AM ET daily, fires immediately)")
 
     # ------------------------------------------------------------------
     # Regime snapshot refresh — hourly, keeps regime_snapshots table fresh
@@ -1028,17 +1044,26 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Quiet mode: 2x daily instead of every 30 min — no startup immediate fire
     scheduler.add_job(
         _run_risk_sentinel,
-        CronTrigger(minute="*/30"),
-        id="risk_sentinel",
+        CronTrigger(hour=9, minute=0, timezone=ET),
+        id="risk_sentinel_premarket",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=600,
         coalesce=True,
-        next_run_time=datetime.now(UTC),
     )
-    logger.warning("[startup-trace] registered job risk_sentinel (every 30 min, fires immediately)")
+    scheduler.add_job(
+        _run_risk_sentinel,
+        CronTrigger(hour=16, minute=30, timezone=ET),
+        id="risk_sentinel_postclose",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered jobs risk_sentinel_premarket (9 AM ET) + risk_sentinel_postclose (4:30 PM ET)")
 
     # Data Quality Watcher: every hour — regime snapshot + signal freshness
     def _run_data_quality_watcher():
@@ -1052,17 +1077,17 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Quiet mode: 1x daily at 8 AM instead of every hour — no startup immediate fire
     scheduler.add_job(
         _run_data_quality_watcher,
-        CronTrigger(minute=0),
+        CronTrigger(hour=8, minute=0, timezone=ET),
         id="data_quality_watcher",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
-        next_run_time=datetime.now(UTC),
     )
-    logger.warning("[startup-trace] registered job data_quality_watcher (hourly, fires immediately)")
+    logger.warning("[startup-trace] registered job data_quality_watcher (8 AM ET daily)")
 
     # Execution Auditor: 5 PM ET Mon-Fri — fill quality + slippage after market close
     def _run_execution_auditor():
@@ -1099,16 +1124,17 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Quiet mode: 6 AM daily (Mon-Sun) instead of 6 PM Mon-Fri — no startup immediate fire
     scheduler.add_job(
         _run_operations,
-        CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=ET),
+        CronTrigger(hour=6, minute=0, timezone=ET),
         id="operations",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job operations (6 PM ET Mon-Fri)")
+    logger.warning("[startup-trace] registered job operations (6 AM ET daily)")
 
     # ------------------------------------------------------------------
     # Daily standup: 7:00 AM ET — all agents contribute, Queen synthesizes plan
@@ -1151,17 +1177,17 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Quiet mode: 6:15 AM instead of 7:05 AM — no startup immediate fire
     scheduler.add_job(
         _run_macro_classification,
-        CronTrigger(hour=7, minute=5, timezone=ET),
+        CronTrigger(hour=6, minute=15, timezone=ET),
         id="macro_classification_daily",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
-        next_run_time=datetime.now(UTC),  # fire immediately on startup to confirm Discord wiring
     )
-    logger.warning("[startup-trace] registered job macro_classification_daily (7:05 AM ET, fires immediately)")
+    logger.warning("[startup-trace] registered job macro_classification_daily (6:15 AM ET daily)")
 
     # ------------------------------------------------------------------
     # Proposal reaction handler: every 60s — polls Discord for CIO reactions
@@ -1393,8 +1419,9 @@ def setup_bot_scheduler(scheduler) -> None:
         "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan "
         "strategy_forge_scan signal_explain_pregen "
         "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp "
-        "queen_morning queen_midday queen_close queen_evening "
-        "queen_weekend_recap queen_weekly queen_regime_alert_check "
+        "queen_morning queen_regime_alert_check "
+        "risk_sentinel_premarket risk_sentinel_postclose "
+        "data_quality_watcher operations "
         "defensive_halt_check resume_check compute_bot_stats macro_classification_daily "
         "candidate_pipeline_daemon price_alert_monitor"
     )
