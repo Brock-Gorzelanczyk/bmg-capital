@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink, useNavigate, useNavigation } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, BookMarked, Briefcase,
   FlaskConical,
@@ -389,8 +389,6 @@ interface Props {
 export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Props) {
   const { logout, user } = useAuthStore();
   const navigate = useNavigate();
-  const navigation = useNavigation();
-  const isNavigating = navigation.state !== "idle";
   const streak = useLearnStore((s) => s.progress?.streak ?? 0);
   const tier = useTierStore((s) => s.tier);
   const isAdmin = user?.is_admin === true;
@@ -421,17 +419,9 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
 
   return (
     <aside className={cn(
-      "h-screen border-r border-[var(--border-subtle)] flex flex-col py-4 shrink-0 transition-[width] duration-300 relative",
+      "h-screen border-r border-[var(--border-subtle)] flex flex-col py-4 shrink-0 transition-[width] duration-300",
       expanded ? "w-56" : "w-14 lg:w-56"
     )} style={{ background: '#060a06' }}>
-      {/* Navigation loading bar */}
-      {isNavigating && (
-        <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden z-10">
-          <div className="h-full bg-[var(--green)] animate-[navprogress_1s_ease-in-out_infinite]"
-            style={{ width: '40%', animation: 'navprogress 1s ease-in-out infinite' }} />
-          <style>{`@keyframes navprogress{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}`}</style>
-        </div>
-      )}
       {/* Logo — text wordmark */}
       <div className={cn("px-3 mb-4 flex items-center gap-1.5 h-9", show(expanded))}>
         <span style={{ fontFamily: 'var(--font-mono-t)', fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--green)' }}>
