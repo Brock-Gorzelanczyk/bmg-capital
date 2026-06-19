@@ -8,8 +8,8 @@ import {
   GraduationCap, Users, ScanSearch, Scale, Award,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
-  Grid3X3, Zap, Globe, Eye, TestTube2, Cpu, SlidersHorizontal, Beaker,
-  Radar, Hammer, ShieldAlert, HeartPulse, ClipboardPen,
+  Zap, Globe, Eye, Cpu, Beaker,
+  Radar, Hammer, ShieldAlert, ClipboardPen,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -101,16 +101,11 @@ const NAV_COMMUNITY = [
   { to: "/social", label: "Community Feed", Icon: Users },
 ];
 
-const NAV_ADMIN = [
-  { to: "/admin",              label: "Bot Config",      Icon: SlidersHorizontal },
-  { to: "/admin/bot-health",   label: "Bot Health",      Icon: HeartPulse },
-  { to: "/admin/monitoring",   label: "Monitoring",      Icon: Activity   },
-  { to: "/admin/heatmap",      label: "Heat Map",        Icon: Grid3X3    },
+const NAV_INTEL = [
+  { to: "/admin/smart-money",  label: "Smart Money",     Icon: Eye        },
   { to: "/admin/flow",         label: "Options Flow",    Icon: Zap        },
   { to: "/admin/macro",        label: "Macro Dashboard", Icon: Globe      },
-  { to: "/admin/backtest",     label: "Backtest Lab",    Icon: TestTube2  },
   { to: "/admin/candidates",   label: "Candidates",      Icon: Beaker     },
-  { to: "/admin/smart-money",  label: "Smart Money",     Icon: Eye        },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -505,7 +500,7 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
 
         {mode === "pro" && <NavSection label="Community" items={NAV_COMMUNITY} expanded={expanded} />}
 
-        {isAdmin && <NavSection label="Admin" items={NAV_ADMIN} expanded={expanded} />}
+        {isAdmin && <NavSection label="Intel" items={NAV_INTEL} expanded={expanded} />}
       </nav>
 
       {/* Bottom: Upgrade + Avatar */}

@@ -6,6 +6,7 @@ import {
   Bell, Shield, Eye, Palette, CreditCard, Database, Monitor, ChevronRight,
   Check, Copy, Trash2, Download, Lock, Key, Smartphone, Globe, BarChart2,
   Moon, Sun, Sliders, RefreshCw, AlertTriangle, Info,
+  SlidersHorizontal, HeartPulse, Activity, Grid3X3, TestTube2, Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -29,6 +30,7 @@ const SECTIONS = [
   { id: "privacy",       label: "Privacy & Data",Icon: Eye       },
   { id: "security",      label: "Security",      Icon: Shield    },
   { id: "subscription",  label: "Subscription",  Icon: CreditCard},
+  { id: "admin",         label: "Admin",         Icon: Cpu       },
   { id: "danger",        label: "Sign out",      Icon: LogOut    },
 ] as const;
 
@@ -867,6 +869,43 @@ function SubscriptionSection({ navigate }: { navigate: ReturnType<typeof useNavi
   );
 }
 
+// ── Admin ─────────────────────────────────────────────────────────────────────
+
+const ADMIN_TOOLS = [
+  { to: "/admin",              label: "Bot Config",    Icon: SlidersHorizontal, desc: "Configure bot profiles, allocation sizes, and strategy parameters" },
+  { to: "/admin/bot-health",   label: "Bot Health",    Icon: HeartPulse,        desc: "Pipeline health monitoring — RED/YELLOW/GREEN per bot" },
+  { to: "/admin/monitoring",   label: "Monitoring",    Icon: Activity,          desc: "Live scheduler status, signal throughput, and execution logs" },
+  { to: "/admin/heatmap",      label: "Heat Map",      Icon: Grid3X3,           desc: "Signal density heatmap across tickers and time windows" },
+  { to: "/admin/backtest",     label: "Backtest Lab",  Icon: TestTube2,         desc: "Run historical strategy simulations and compare performance" },
+];
+
+function AdminSection() {
+  const navigate = useNavigate();
+  return (
+    <div className="space-y-3">
+      <SectionHeader title="Admin" subtitle="Internal tooling and system controls" />
+      <div className="space-y-2">
+        {ADMIN_TOOLS.map(({ to, label, Icon, desc }) => (
+          <button
+            key={to}
+            onClick={() => navigate(to)}
+            className="flex items-center gap-3 w-full p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-elevated-2)] transition-colors text-left group"
+          >
+            <div className="w-9 h-9 rounded-lg bg-[var(--bg-elevated-2)] flex items-center justify-center shrink-0">
+              <Icon size={16} className="text-[var(--text-secondary)]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">{label}</p>
+              <p className="text-xs text-[var(--text-tertiary)] leading-snug">{desc}</p>
+            </div>
+            <ChevronRight size={14} className="text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] shrink-0 transition-colors" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Sign Out ──────────────────────────────────────────────────────────────────
 
 function DangerSection({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
@@ -935,6 +974,7 @@ export default function Settings() {
       case "privacy":       return <PrivacySection />;
       case "security":      return <SecuritySection />;
       case "subscription":  return <SubscriptionSection navigate={navigate} />;
+      case "admin":         return <AdminSection />;
       case "danger":        return <DangerSection navigate={navigate} />;
     }
   };
