@@ -244,6 +244,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m010_exc:
         logger.warning("[startup] m010_quarantine_legacy_options failed (non-fatal): %s", _m010_exc)
 
+    try:
+        from app.db.migrations.m011_quarantine_legacy_options_trades import run as _run_m011
+        with engine.connect() as _m011_conn:
+            _run_m011(_m011_conn)
+    except Exception as _m011_exc:
+        logger.warning("[startup] m011_quarantine_legacy_options_trades failed (non-fatal): %s", _m011_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()

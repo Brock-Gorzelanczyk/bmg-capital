@@ -1682,3 +1682,274 @@ def announce_quarantine_complete(
         "fresh_options": fresh_count,
         "message_preview": msg[:200],
     }
+
+
+# ── GET /api/admin/options/quarantine-summary ─────────────────────────────────
+
+@router.get("/options/quarantine-summary")
+def options_quarantine_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return counts of quarantined options bot_positions + bot_trades by reason and bot."""
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    from sqlalchemy import text as _sql
+    from app.db.models.bots import BotProfile, BotAllocation, BotPosition, BotTrade
+
+    for bot_name in ("options_income", "options_directional"):
+        pass  # just warm the import
+
+    # Summary by bot + reason
+    try:
+        pos_rows = db.execute(_sql("""
+            SELECT bp.name AS bot, bpos.quarantine_reason, COUNT(*) AS cnt
+            FROM bot_positions bpos
+            JOIN bot_allocations ba ON ba.id = bpos.allocation_id
+            JOIN bot_profiles bp ON bp.id = ba.profile_id
+            WHERE bp.name IN ('options_income', 'options_directional')
+              AND bpos.quarantined_at IS NOT NULL
+            GROUP BY bp.name, bpos.quarantine_reason
+        """)).fetchall()
+    except Exception as exc:
+        pos_rows = []
+        logger.warning("quarantine-summary positions query failed: %s", exc)
+
+    try:
+        trade_rows = db.execute(_sql("""
+            SELECT bp.name AS bot, bt.quarantine_reason, COUNT(*) AS cnt
+            FROM bot_trades bt
+            JOIN bot_allocations ba ON ba.id = bt.allocation_id
+            JOIN bot_profiles bp ON bp.id = ba.profile_id
+            WHERE bp.name IN ('options_income', 'options_directional')
+              AND bt.quarantined_at IS NOT NULL
+            GROUP BY bp.name, bt.quarantine_reason
+        """)).fetchall()
+    except Exception as exc:
+        trade_rows = []
+        logger.warning("quarantine-summary trades query failed: %s", exc)
+
+    try:
+        active_pos = db.execute(_sql("""
+            SELECT bp.name AS bot, COUNT(*) AS cnt
+            FROM bot_positions bpos
+            JOIN bot_allocations ba ON ba.id = bpos.allocation_id
+            JOIN bot_profiles bp ON bp.id = ba.profile_id
+            WHERE bp.name IN ('options_income', 'options_directional')
+              AND bpos.quarantined_at IS NULL
+              AND bpos.closed_at IS NULL
+            GROUP BY bp.name
+        """)).fetchall()
+    except Exception as exc:
+        active_pos = []
+        logger.warning("quarantine-summary active positions query failed: %s", exc)
+
+    by_bot: Dict[str, Any] = {}
+    for r in pos_rows:
+        by_bot.setdefault(r[0], {"quarantined_positions": {}, "quarantined_trades": {}})
+        by_bot[r[0]]["quarantined_positions"][r[1] or "no_reason"] = r[2]
+    for r in trade_rows:
+        by_bot.setdefault(r[0], {"quarantined_positions": {}, "quarantined_trades": {}})
+        by_bot[r[0]]["quarantined_trades"][r[1] or "no_reason"] = r[2]
+    for r in active_pos:
+        by_bot.setdefault(r[0], {"quarantined_positions": {}, "quarantined_trades": {}})
+        by_bot[r[0]]["active_open_positions"] = r[1]
+
+    total_q_pos    = sum(r[2] for r in pos_rows)
+    total_q_trades = sum(r[2] for r in trade_rows)
+
+    return {
+        "quarantined_positions": total_q_pos,
+        "quarantined_trades":    total_q_trades,
+        "by_bot": by_bot,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ── POST /api/admin/discord/purge-legacy-options-embeds ──────────────────────
+
+_MARKET_OPEN_CUTOFF = datetime(2026, 6, 19, 13, 30, 0, tzinfo=timezone.utc)
+_DISCORD_EPOCH_MS   = 1_420_070_400_000  # 2015-01-01T00:00:00Z in milliseconds
+_OPTIONS_BOT_AUTHORS = {
+    "Options Income bot", "Options Directional bot",
+    "Equity Income bot",  "Equity Directional bot",
+}
+
+
+def _dt_to_snowflake(dt: datetime) -> int:
+    ms = int(dt.timestamp() * 1000)
+    return (ms - _DISCORD_EPOCH_MS) << 22
+
+
+def _snowflake_to_dt(snowflake: int) -> datetime:
+    ms = (snowflake >> 22) + _DISCORD_EPOCH_MS
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+
+
+@router.post("/discord/purge-legacy-options-embeds")
+def purge_legacy_options_embeds(
+    confirm: bool = False,
+    purge_all_signals: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Delete legacy options embeds from Discord channels before today's market open.
+
+    #options-signals: deletes ALL messages before 2026-06-19 13:30 UTC.
+    #all-signals: deletes only messages from options bots (by embed author).
+
+    DESTRUCTIVE — Discord deletes are permanent.
+    Requires ?confirm=true to execute. Without it, returns a dry-run count.
+    """
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    import time as _time
+    import json as _json
+    import urllib.request as _ur
+    import urllib.error as _ue
+
+    from app.config import settings as _cfg
+
+    bot_token = (os.environ.get("DISCORD_BOT_TOKEN") or _cfg.discord_bot_token or "").strip()
+    if not bot_token:
+        return {"ok": False, "error": "DISCORD_BOT_TOKEN not set on backend service"}
+
+    ch_options = (
+        os.environ.get("DISCORD_CH_OPTIONS_SIGNALS") or
+        _cfg.discord_ch_options_signals or
+        _cfg.discord_channel_options or
+        "1512905889974325280"
+    ).strip()
+    ch_all = (
+        os.environ.get("DISCORD_CH_ALL_SIGNALS") or
+        _cfg.discord_ch_all_signals or
+        _cfg.discord_channel_all_signals or
+        ""
+    ).strip()
+
+    cutoff_snowflake = _dt_to_snowflake(_MARKET_OPEN_CUTOFF)
+    fourteen_days_ago = datetime.now(timezone.utc) - timedelta(days=13, hours=23)
+
+    headers = {
+        "Authorization": f"Bot {bot_token}",
+        "Content-Type": "application/json",
+    }
+
+    def _discord_get(url: str) -> Any:
+        req = _ur.Request(url, headers=headers)
+        with _ur.urlopen(req, timeout=10) as resp:
+            return _json.loads(resp.read())
+
+    def _discord_delete(url: str) -> bool:
+        req = _ur.Request(url, headers=headers, method="DELETE")
+        try:
+            with _ur.urlopen(req, timeout=10):
+                pass
+            return True
+        except Exception:
+            return False
+
+    def _discord_bulk_delete(channel_id: str, message_ids: list[str]) -> bool:
+        url = f"https://discord.com/api/v10/channels/{channel_id}/messages/bulk-delete"
+        data = _json.dumps({"messages": message_ids}).encode()
+        req = _ur.Request(url, data=data, headers=headers, method="POST")
+        try:
+            with _ur.urlopen(req, timeout=10):
+                pass
+            return True
+        except Exception as exc:
+            logger.warning("bulk-delete failed: %s", exc)
+            return False
+
+    def _fetch_messages_before(channel_id: str, before_snowflake: int) -> list[dict]:
+        """Fetch all messages in channel_id before before_snowflake (paginates 100 at a time)."""
+        all_msgs: list[dict] = []
+        before = str(before_snowflake)
+        while True:
+            url = f"https://discord.com/api/v10/channels/{channel_id}/messages?limit=100&before={before}"
+            try:
+                msgs = _discord_get(url)
+            except Exception as exc:
+                logger.warning("fetch messages failed: %s", exc)
+                break
+            if not msgs:
+                break
+            all_msgs.extend(msgs)
+            before = msgs[-1]["id"]
+            _time.sleep(0.5)  # respect rate limits
+        return all_msgs
+
+    def _purge_channel(channel_id: str, filter_fn=None) -> Dict[str, Any]:
+        """Delete messages before cutoff in channel_id. filter_fn(msg) → bool to keep."""
+        msgs = _fetch_messages_before(channel_id, cutoff_snowflake)
+        if filter_fn:
+            msgs = [m for m in msgs if not filter_fn(m)]  # filter_fn returns True = delete
+
+        bulk_ids   = [m["id"] for m in msgs if _snowflake_to_dt(int(m["id"])) >= fourteen_days_ago]
+        single_ids = [m["id"] for m in msgs if _snowflake_to_dt(int(m["id"])) < fourteen_days_ago]
+
+        deleted = 0
+        errors  = 0
+        if not confirm:
+            return {"dry_run": True, "would_delete": len(msgs), "bulk": len(bulk_ids), "single": len(single_ids)}
+
+        # Bulk delete in batches of up to 100 (min 2)
+        for i in range(0, len(bulk_ids), 100):
+            batch = bulk_ids[i:i + 100]
+            if len(batch) == 1:
+                single_ids.append(batch[0])
+                continue
+            if _discord_bulk_delete(channel_id, batch):
+                deleted += len(batch)
+            else:
+                errors += len(batch)
+            _time.sleep(1)
+
+        # One-by-one for old messages
+        for mid in single_ids:
+            url = f"https://discord.com/api/v10/channels/{channel_id}/messages/{mid}"
+            if _discord_delete(url):
+                deleted += 1
+            else:
+                errors += 1
+            _time.sleep(0.5)
+
+        return {"deleted": deleted, "errors": errors}
+
+    results: Dict[str, Any] = {"confirm": confirm, "cutoff": _MARKET_OPEN_CUTOFF.isoformat()}
+
+    # #options-signals — delete ALL messages before cutoff
+    if ch_options:
+        results["options_signals"] = _purge_channel(ch_options)
+    else:
+        results["options_signals"] = {"skipped": True, "reason": "DISCORD_CH_OPTIONS_SIGNALS not set"}
+
+    # #all-signals — delete only messages from options bots
+    if purge_all_signals and ch_all:
+        def _is_options_embed(msg: dict) -> bool:
+            embeds = msg.get("embeds") or []
+            if not embeds:
+                return False
+            author = (embeds[0].get("author") or {}).get("name", "")
+            return author in _OPTIONS_BOT_AUTHORS
+        results["all_signals"] = _purge_channel(ch_all, filter_fn=lambda m: not _is_options_embed(m))
+    elif purge_all_signals:
+        results["all_signals"] = {"skipped": True, "reason": "DISCORD_CH_ALL_SIGNALS not set"}
+    else:
+        results["all_signals"] = {"skipped": True, "reason": "Pass ?purge_all_signals=true to include"}
+
+    # Post summary to #fund-updates after a confirmed purge
+    if confirm and not any(r.get("dry_run") for r in results.values() if isinstance(r, dict)):
+        opts_count = (results.get("options_signals") or {}).get("deleted", 0)
+        all_count  = (results.get("all_signals") or {}).get("deleted", 0)
+        _discord_fund_updates(
+            f"🧹 **Legacy options cleanup complete**\n"
+            f"Quarantined trades (DB): run `/api/admin/options/quarantine-summary` for counts\n"
+            f"Discord embeds purged: **{opts_count}** from #options-signals"
+            + (f", **{all_count}** from #all-signals" if all_count else "")
+            + "\nFresh slate for today's options fills."
+        )
+
+    return results

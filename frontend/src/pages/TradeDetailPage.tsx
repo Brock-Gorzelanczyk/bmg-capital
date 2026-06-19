@@ -206,7 +206,8 @@ function TradeChartSection({ symbol, entryPrice, entryTime, side, qty, stopLoss,
 
 // ─── P&L Hero ─────────────────────────────────────────────────────────────────
 
-function PnlHero({ symbol, qty, entryPrice, status, realizedPnl, livePrice, groupDec }: {
+function PnlHero({ symbol, qty, entryPrice, status, realizedPnl, livePrice, groupDec,
+  isOptions, contractCount, entryPremiumUsd, currentPremiumUsd }: {
   symbol: string;
   qty: number;
   entryPrice: number;
@@ -214,19 +215,34 @@ function PnlHero({ symbol, qty, entryPrice, status, realizedPnl, livePrice, grou
   realizedPnl: number | null;
   livePrice: number | null;
   groupDec?: number;
+  isOptions?: boolean;
+  contractCount?: number | null;
+  entryPremiumUsd?: number | null;
+  currentPremiumUsd?: number | null;
 }) {
-  const unrealizedPnl = (status === "open" && livePrice != null)
-    ? (livePrice - entryPrice) * qty
-    : null;
+  // Options P&L: (current_premium - entry_premium) × contracts × 100
+  // Stock P&L:   (live_price - entry_price) × qty
+  const unrealizedPnl = status !== "open" ? null
+    : isOptions
+      ? (currentPremiumUsd != null && entryPremiumUsd != null
+          ? (currentPremiumUsd - entryPremiumUsd) * (contractCount ?? 1) * 100
+          : null)
+      : livePrice != null
+        ? (livePrice - entryPrice) * qty
+        : null;
 
   const displayPnl = status === "closed" ? realizedPnl : unrealizedPnl;
   const pnlLabel = status === "closed" ? "Realized P&L" : "Unrealized P&L";
   const positive = displayPnl != null && displayPnl >= 0;
 
-  const pnlPct = (status === "open" && livePrice != null && entryPrice > 0)
-    ? ((livePrice - entryPrice) / entryPrice) * 100
-    : (status === "closed" && realizedPnl != null && entryPrice > 0 && qty > 0)
-    ? (realizedPnl / (entryPrice * qty)) * 100
+  // P&L % — for options use premium as cost basis
+  const costBasis = isOptions
+    ? (entryPremiumUsd != null ? entryPremiumUsd * (contractCount ?? 1) * 100 : null)
+    : entryPrice * qty;
+  const pnlPct = (status === "open" && unrealizedPnl != null && costBasis && costBasis > 0)
+    ? (unrealizedPnl / costBasis) * 100
+    : (status === "closed" && realizedPnl != null && costBasis && costBasis > 0)
+    ? (realizedPnl / costBasis) * 100
     : null;
 
   return (
@@ -293,7 +309,7 @@ export default function TradeDetailPage() {
   const navigate = useNavigate();
   const id = parseInt(tradeId ?? "0", 10);
 
-  const { data: trade, isLoading, isError } = useQuery({
+  const { data: trade, isLoading, isError, error } = useQuery({
     queryKey: ["bot-trade-detail", id],
     queryFn: () => getTradeDetail(id),
     enabled: id > 0,
@@ -301,8 +317,12 @@ export default function TradeDetailPage() {
     retry: 1,
   });
 
-  // Live price — BTC/USD → BTC-USD for both fetch and lookup (backend normalizes slash→hyphen)
-  const priceSymbol = trade?.symbol?.replace("/", "-") ?? "";
+  // Live price: for options use the underlying ticker; for others use the trade symbol
+  const priceSymbol = trade
+    ? (trade.option_type
+        ? (trade.underlying_symbol ?? trade.symbol).replace("/", "-")
+        : trade.symbol.replace("/", "-"))
+    : "";
   const { data: prices } = useQuery({
     queryKey: ["latest-prices", priceSymbol],
     queryFn: () => getLatestPrices([priceSymbol]),
@@ -327,6 +347,26 @@ export default function TradeDetailPage() {
   }
 
   if (isError || !trade) {
+    // Check if this is a 410 Gone (quarantined trade)
+    const status = (error as any)?.response?.status ?? (error as any)?.status;
+    if (status === 410) {
+      return (
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 mb-6">
+            <ArrowLeft size={12} /> Back
+          </button>
+          <div className="bg-zinc-900 border border-amber-500/30 rounded-2xl p-6 text-center space-y-2">
+            <p className="text-amber-400 font-semibold text-sm">Trade Quarantined</p>
+            <p className="text-zinc-500 text-xs leading-relaxed">
+              This trade was created before the options fix (pre-17aa7f3) and has been
+              quarantined. It was a share position mislabeled as an options contract
+              and has been excluded from P&amp;L and all activity feeds.
+            </p>
+            <p className="text-zinc-600 text-xs">The audit trail is preserved in the database.</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="max-w-3xl mx-auto px-4 py-8 text-center">
         <p className="text-zinc-500 text-sm mb-4">Trade not found.</p>
@@ -336,8 +376,18 @@ export default function TradeDetailPage() {
   }
 
   const isCrypto = trade.symbol.includes("/");
-  const isOptions = (trade.bot_profile ?? "").startsWith("options");
-  const unitLabel = isCrypto ? trade.symbol.split("/")[0] : isOptions ? "contracts" : "shares";
+  // Use the option_type field from DB — not bot profile name — to detect real options positions
+  const isOptions = !!trade.option_type;
+  const isLegacyShare = !!trade.is_legacy_share;
+  // Chart symbol: for options, use underlying ticker; for others, use the trade symbol
+  const chartSymbol = isOptions
+    ? (trade.underlying_symbol ?? trade.symbol).replace("/", "-")
+    : trade.symbol.replace("/", "-");
+  const unitLabel = isCrypto
+    ? trade.symbol.split("/")[0]
+    : (isOptions && !isLegacyShare)
+      ? "contracts"
+      : "shares";
   const backTo = trade.bot_profile ? `/strategy/${trade.bot_profile}` : "/strategy";
   // Shared decimal floor for all price levels in this trade
   const tradeDec = groupDecimals(
@@ -347,6 +397,19 @@ export default function TradeDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5 pb-20">
+      {/* Legacy share banner */}
+      {isLegacyShare && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-start gap-2">
+          <span className="text-amber-400 mt-0.5 flex-shrink-0">⚠</span>
+          <div>
+            <p className="text-amber-400 text-xs font-semibold">Legacy Position — Pre-Options Fix</p>
+            <p className="text-zinc-500 text-xs mt-0.5 leading-relaxed">
+              This trade was created before the options fix (commit 17aa7f3). It is a <strong className="text-zinc-400">share position</strong>, not an options contract. P&L and quantity are shown in share terms.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-zinc-500">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1 hover:text-zinc-300 transition-colors">
@@ -403,11 +466,15 @@ export default function TradeDetailPage() {
         realizedPnl={trade.realized_pnl_usd}
         livePrice={livePrice}
         groupDec={tradeDec}
+        isOptions={isOptions && !isLegacyShare}
+        contractCount={trade.contract_count}
+        entryPremiumUsd={trade.entry_premium_usd}
+        currentPremiumUsd={trade.current_premium_usd}
       />
 
       {/* Chart with price lines, markers, and legend */}
       <TradeChartSection
-        symbol={trade.symbol}
+        symbol={chartSymbol}
         entryPrice={trade.entry_price_usd}
         entryTime={trade.entry_time}
         side={trade.side}
@@ -467,6 +534,54 @@ export default function TradeDetailPage() {
           />
         )}
       </div>
+
+      {/* Options contract metadata */}
+      {isOptions && !isLegacyShare && (
+        <div className="bg-zinc-900 border border-purple-500/20 rounded-2xl px-5 py-1">
+          <p className="text-xs font-semibold text-purple-400 uppercase tracking-wide py-3 border-b border-zinc-800">Options Contract</p>
+          <MetaRow label="Underlying" value={trade.underlying_symbol ?? trade.symbol} />
+          {trade.option_type && (
+            <MetaRow label="Right" value={
+              <span className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide",
+                trade.option_type === "call"
+                  ? "bg-emerald-900/60 text-emerald-300"
+                  : "bg-red-900/60 text-red-300",
+              )}>
+                {trade.option_type}
+              </span>
+            } />
+          )}
+          {trade.strike_price != null && (
+            <MetaRow label="Strike" value={`$${trade.strike_price.toFixed(trade.strike_price % 1 === 0 ? 0 : 2)}`} />
+          )}
+          {trade.expiration_date && (
+            <MetaRow label="Expiry" value={
+              (() => {
+                const d = new Date(trade.expiration_date + "T00:00:00Z");
+                const dte = Math.round((d.getTime() - Date.now()) / 86_400_000);
+                return `${trade.expiration_date} (${dte > 0 ? `${dte} DTE` : "expired"})`;
+              })()
+            } />
+          )}
+          {trade.contract_count != null && (
+            <MetaRow label="Contracts" value={`${trade.contract_count} contract${trade.contract_count !== 1 ? "s" : ""}`} />
+          )}
+          {trade.entry_premium_usd != null && (
+            <MetaRow label="Entry Premium" value={`$${trade.entry_premium_usd.toFixed(2)}/ct (cost basis $${((trade.entry_premium_usd) * (trade.contract_count ?? 1) * 100).toFixed(2)})`} />
+          )}
+          {trade.current_premium_usd != null ? (
+            <MetaRow label="Current Premium" value={`$${trade.current_premium_usd.toFixed(2)}/ct`} />
+          ) : (
+            <MetaRow label="Current Premium" value={<span className="text-zinc-600 text-xs">Live quote unavailable</span>} />
+          )}
+          <div className="py-2.5 border-t border-zinc-800 mt-1">
+            <p className="text-[10px] text-zinc-600">
+              P&L formula: (current_premium − entry_premium) × contracts × 100
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Strategy context */}
       {(trade.strategy || trade.reason || trade.confidence != null) && (

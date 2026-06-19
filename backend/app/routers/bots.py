@@ -1034,7 +1034,7 @@ _BOT_DISPLAY_NAMES = {
     "crypto_quant_aggressive": "Crypto Quant Aggressive",
     "crypto_quant_scalper": "Crypto Quant Scalper",
     "crypto_quant_mean_reversion": "Crypto Quant Mean Reversion",
-    "options_income": "Equity Income", "options_directional": "Equity Directional",
+    "options_income": "Options Income", "options_directional": "Options Directional",
 }
 
 
@@ -3635,8 +3635,8 @@ _BOT_DISPLAY_NAMES = {
     "crypto_swing": "Crypto Swing",
     "crypto_day": "Crypto Day",
     "crypto_lt": "Crypto L-T DCA",
-    "options_income": "Equity Income",
-    "options_directional": "Equity Directional",
+    "options_income": "Options Income",
+    "options_directional": "Options Directional",
 }
 
 
@@ -3832,8 +3832,14 @@ def get_trade_detail(
     from sqlalchemy import func as sql_func
 
     trade = db.get(BotTrade, trade_id)
-    if not trade or trade.quarantined_at:
+    if not trade:
         raise HTTPException(404, "Trade not found")
+    if trade.quarantined_at:
+        raise HTTPException(410, detail={
+            "quarantined": True,
+            "reason": trade.quarantine_reason or "legacy_pre_options_fix",
+            "message": "This trade has been quarantined and is no longer visible.",
+        })
 
     alloc = db.get(BotAllocation, trade.allocation_id)
     if not alloc or alloc.user_id != current_user.id:
@@ -3931,6 +3937,36 @@ def get_trade_detail(
 
     bot_profile_name = profile.name if profile else None
 
+    # Options detection — use the trade's own column, NOT the profile name
+    is_real_options = bool(trade.option_type)
+    is_options_bot = (profile and profile.asset_class == "options")
+    # Legacy share: options bot allocation but no option_type → mislabeled share position
+    is_legacy_share = is_options_bot and not is_real_options
+    asset_class = "options" if is_real_options else (profile.asset_class if profile else "stock")
+
+    # For real options positions: fix P&L formula (× 100 multiplier) and fetch live premium
+    if is_real_options and is_close_trade:
+        contract_count = trade.contract_count or trade.qty or 1
+        realized_pnl = round((exit_price - entry_price) * contract_count * 100, 2)
+
+    current_premium_usd = None
+    if is_real_options and trade.strike_price and trade.expiration_date and status == "open":
+        try:
+            import yfinance as yf
+            _root = trade.underlying_symbol or trade.symbol
+            _ticker = yf.Ticker(_root)
+            _chain = _ticker.option_chain(trade.expiration_date)
+            _df = _chain.puts if "put" in (trade.option_type or "").lower() else _chain.calls
+            if _df is not None and not _df.empty:
+                _row = _df.iloc[(_df["strike"] - trade.strike_price).abs().argsort()[:1]]
+                if not _row.empty:
+                    _bid = float(_row["bid"].iloc[0])
+                    _ask = float(_row["ask"].iloc[0])
+                    _mid = (_bid + _ask) / 2
+                    current_premium_usd = round(_mid if _mid > 0 else float(_row["lastPrice"].iloc[0]), 4)
+        except Exception:
+            pass
+
     return {
         "trade_id": trade.id,
         "position_id": trade.position_id,
@@ -3952,6 +3988,17 @@ def get_trade_detail(
         "close_time": close_time,
         "exit_price_usd": exit_price,
         "realized_pnl_usd": realized_pnl,
+        # Asset classification
+        "asset_class": asset_class,
+        "is_legacy_share": is_legacy_share,
+        # Options-specific fields (null for stock/crypto positions)
+        "option_type": trade.option_type,
+        "strike_price": trade.strike_price,
+        "expiration_date": trade.expiration_date,
+        "underlying_symbol": trade.underlying_symbol,
+        "contract_count": trade.contract_count,
+        "entry_premium_usd": round(trade.contract_premium_cents / 100, 4) if trade.contract_premium_cents else None,
+        "current_premium_usd": current_premium_usd,
     }
 
 

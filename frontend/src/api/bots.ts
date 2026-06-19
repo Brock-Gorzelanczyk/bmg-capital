@@ -655,6 +655,17 @@ export interface TradeDetail {
   close_time: string | null;
   exit_price_usd: number | null;
   realized_pnl_usd: number | null;
+  // Asset classification
+  asset_class?: string;
+  is_legacy_share?: boolean;
+  // Options-specific (present when option_type is non-null)
+  option_type?: "call" | "put" | null;
+  strike_price?: number | null;
+  expiration_date?: string | null;
+  underlying_symbol?: string | null;
+  contract_count?: number | null;
+  entry_premium_usd?: number | null;
+  current_premium_usd?: number | null;
 }
 
 export const getTradeDetail = (tradeId: number): Promise<TradeDetail> =>
