@@ -6,8 +6,8 @@ Market caps are approximate (update quarterly).
 
 TOP_STOCKS_UNIVERSE = [
     # Mega-cap tech
-    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
-    "AVGO", "ORCL", "ADBE", "CRM", "NFLX", "AMD", "SPACEX",
+    "AAPL", "MSFT", "NVDA", "SPCX", "GOOGL", "AMZN", "META", "TSLA",
+    "AVGO", "ORCL", "ADBE", "CRM", "NFLX", "AMD",
     # Top S&P by mcap
     "BRK-B", "LLY", "V", "JPM", "WMT", "MA", "XOM", "JNJ",
     "PG", "UNH", "HD", "COST", "ABBV", "BAC", "CVX", "MRK",
@@ -21,7 +21,7 @@ STOCK_NAMES: dict[str, str] = {
     "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "NVIDIA", "GOOGL": "Alphabet",
     "AMZN": "Amazon", "META": "Meta", "TSLA": "Tesla", "AVGO": "Broadcom",
     "ORCL": "Oracle", "ADBE": "Adobe", "CRM": "Salesforce", "NFLX": "Netflix",
-    "AMD": "AMD", "BRK-B": "Berkshire Hathaway", "LLY": "Eli Lilly", "V": "Visa",
+    "SPCX": "SpaceX", "AMD": "AMD", "BRK-B": "Berkshire Hathaway", "LLY": "Eli Lilly", "V": "Visa",
     "JPM": "JPMorgan", "WMT": "Walmart", "MA": "Mastercard", "XOM": "ExxonMobil",
     "JNJ": "J&J", "PG": "P&G", "UNH": "UnitedHealth", "HD": "Home Depot",
     "COST": "Costco", "ABBV": "AbbVie", "BAC": "BofA", "CVX": "Chevron",
@@ -31,7 +31,7 @@ STOCK_NAMES: dict[str, str] = {
     "VZ": "Verizon", "IBM": "IBM", "BA": "Boeing", "GE": "GE Aerospace",
     "F": "Ford", "GM": "GM", "COIN": "Coinbase", "RBLX": "Roblox",
     "SHOP": "Shopify", "SQ": "Block", "PYPL": "PayPal", "UBER": "Uber",
-    "ABNB": "Airbnb", "SPACEX": "SpaceX",
+    "ABNB": "Airbnb",
 }
 
 # Approximate market cap in USD. Update quarterly.
@@ -78,6 +78,7 @@ STOCK_MCAP: dict[str, int] = {
     "T":       160_000_000_000,
     "VZ":      155_000_000_000,
     "IBM":     165_000_000_000,
+    "SPCX":  2_100_000_000_000,
     "ABNB":     85_000_000_000,
     "SHOP":    100_000_000_000,
     "BA":      130_000_000_000,

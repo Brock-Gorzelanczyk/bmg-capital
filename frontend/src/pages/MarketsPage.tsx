@@ -115,15 +115,6 @@ interface PrivateCo {
 
 const PRIVATE_COMPANIES: PrivateCo[] = [
   {
-    ticker: "SPACEX",
-    name: "SpaceX",
-    valuation: 350_000_000_000,
-    last_round: "Dec 2024 secondary",
-    category: "Aerospace",
-    ipo_status: "Private — no announced IPO date",
-    notes: "Internal secondaries every ~6 months. Most recent tender at $185/share.",
-  },
-  {
     ticker: "OPENAI",
     name: "OpenAI",
     valuation: 157_000_000_000,

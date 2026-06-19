@@ -191,24 +191,8 @@ async def get_stock_markets(
     if cached is not None:
         return {"stocks": cached}
 
-    # Fetch public stocks; exclude private tickers that yfinance can't resolve
-    public_universe = [s for s in TOP_STOCKS_UNIVERSE if s != "SPACEX"]
     loop = asyncio.get_running_loop()
-    stocks = await loop.run_in_executor(None, lambda: _fetch_stock_data_yfinance(public_universe))
-
-    # Inject SpaceX as a static private-market row (no public exchange listing)
-    stocks.append({
-        "symbol":       "SPACEX",
-        "name":         "SpaceX",
-        "price":        None,
-        "change_1d":    None,
-        "change_5d":    None,
-        "change_1m":    None,
-        "market_cap":   350_000_000_000,
-        "volume":       None,
-        "sparkline_1m": [],
-        "private":      True,
-    })
+    stocks = await loop.run_in_executor(None, lambda: _fetch_stock_data_yfinance(TOP_STOCKS_UNIVERSE))
 
     _sort_map = {
         "pct_today": "change_1d",
