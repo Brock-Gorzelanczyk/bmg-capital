@@ -3,8 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import client from "@/api/client";
-import TradingViewWidget from "@/components/TradingViewWidget";
-import { mapToTvSymbol } from "@/lib/chart/tvSymbolMap";
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
@@ -103,11 +101,138 @@ function ScoutButton({ symbol }: { symbol: string }) {
   );
 }
 
+// ── Private companies ─────────────────────────────────────────────────────────
+
+interface PrivateCo {
+  ticker: string;
+  name: string;
+  valuation: number;
+  last_round: string;
+  category: string;
+  ipo_status: string;
+  notes: string;
+}
+
+const PRIVATE_COMPANIES: PrivateCo[] = [
+  {
+    ticker: "SPACEX",
+    name: "SpaceX",
+    valuation: 350_000_000_000,
+    last_round: "Dec 2024 secondary",
+    category: "Aerospace",
+    ipo_status: "Private — no announced IPO date",
+    notes: "Internal secondaries every ~6 months. Most recent tender at $185/share.",
+  },
+  {
+    ticker: "OPENAI",
+    name: "OpenAI",
+    valuation: 157_000_000_000,
+    last_round: "Oct 2024 Series F",
+    category: "AI",
+    ipo_status: "Private — CEO stated IPO not imminent",
+    notes: "$6.6B raise at $157B post-money. Transitioning to capped-profit structure.",
+  },
+  {
+    ticker: "ANTHROPIC",
+    name: "Anthropic",
+    valuation: 61_500_000_000,
+    last_round: "Mar 2025",
+    category: "AI",
+    ipo_status: "Private — no IPO timeline announced",
+    notes: "Amazon & Google are strategic investors. $61.5B valuation post Mar 2025 round.",
+  },
+  {
+    ticker: "STRIPE",
+    name: "Stripe",
+    valuation: 70_000_000_000,
+    last_round: "Mar 2023 tender",
+    category: "Fintech",
+    ipo_status: "Private — exploring IPO options",
+    notes: "2021 peak valuation was $95B. Secondary market trades around $70B.",
+  },
+  {
+    ticker: "DATABRICKS",
+    name: "Databricks",
+    valuation: 62_000_000_000,
+    last_round: "Dec 2024 Series J",
+    category: "Data/AI",
+    ipo_status: "Private — IPO widely expected in 2025",
+    notes: "$10B raise at $62B valuation. ~$3B ARR. Actively preparing for IPO.",
+  },
+];
+
+function PrivateCompaniesSection() {
+  return (
+    <div className="space-y-3 mt-6">
+      <div className="flex items-center gap-2">
+        <p className="text-[10px] font-semibold text-t-muted uppercase tracking-widest">
+          // PRIVATE COMPANIES — TRACKED
+        </p>
+        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 uppercase">
+          No public market data
+        </span>
+      </div>
+      <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs min-w-[700px]">
+            <thead>
+              <tr className="border-b border-t-dim bg-t-bg1/80">
+                <th className="text-left text-[10px] text-t-muted uppercase py-2 px-4">Company</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">Est. Valuation</th>
+                <th className="text-left text-[10px] text-t-muted uppercase py-2 px-3">Last Round</th>
+                <th className="text-left text-[10px] text-t-muted uppercase py-2 px-3">Category</th>
+                <th className="text-left text-[10px] text-t-muted uppercase py-2 px-3">IPO Status</th>
+                <th className="text-center text-[10px] text-t-muted uppercase py-2 px-3">Watch</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PRIVATE_COMPANIES.map((co) => (
+                <tr key={co.ticker} className="border-b border-t-dim/40 last:border-0 hover:bg-t-bg2/30 transition-colors">
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[9px] font-bold shrink-0">
+                        {co.ticker[0]}
+                      </span>
+                      <div>
+                        <div className="text-t-hi font-semibold">{co.name}</div>
+                        <div className="text-t-muted text-[10px]">{co.notes}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-3 text-right font-mono-t tabular-nums text-t-hi font-semibold">
+                    {fmtBig(co.valuation)}
+                  </td>
+                  <td className="py-3 px-3 text-t-mid2">{co.last_round}</td>
+                  <td className="py-3 px-3">
+                    <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold">
+                      {co.category}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 text-t-muted text-[10px]">{co.ipo_status}</td>
+                  <td className="py-3 px-3 text-center">
+                    <button
+                      onClick={() => { import("sonner").then(({ toast }) => toast.success(`Watching ${co.name} for IPO news`)); }}
+                      className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 transition-colors whitespace-nowrap"
+                    >
+                      Notify on IPO
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Crypto table ──────────────────────────────────────────────────────────────
 
 type CryptoFilter = "top100" | "trending" | "movers";
 
 function CryptoTab() {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<CryptoFilter>("top100");
   const [search, setSearch] = useState("");
   const [sortCol, setSortCol] = useState<"market_cap" | "pct_24h" | "pct_7d" | "total_volume">("market_cap");
@@ -178,7 +303,8 @@ function CryptoTab() {
                   </tr>
                 ))
               ) : coins.map((coin, i) => (
-                <tr key={coin.id} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors">
+                <tr key={coin.id} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/chart?symbol=${coin.symbol}/USD`)}>
                   <td className="py-2.5 px-4 text-t-muted">{i + 1}</td>
                   <td className="py-2.5 px-2">
                     <div className="flex items-center gap-2">
@@ -210,52 +336,6 @@ function CryptoTab() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Chart modal ───────────────────────────────────────────────────────────────
-
-function ChartModal({ symbol, name, isPrivate, onClose }: { symbol: string; name: string; isPrivate?: boolean; onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
-      <div
-        className="relative bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden w-full max-w-5xl"
-        style={{ height: "min(80vh, 640px)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-t-dim">
-          <div className="flex items-center gap-2">
-            <StockLogo symbol={symbol} />
-            <span className="text-t-hi font-semibold text-sm">{symbol}</span>
-            <span className="text-t-muted text-xs">{name}</span>
-            {isPrivate && (
-              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-semibold uppercase">Private</span>
-            )}
-          </div>
-          <button onClick={onClose} className="text-t-muted hover:text-t-hi transition-colors text-lg leading-none px-1">✕</button>
-        </div>
-
-        {/* Content */}
-        <div className="h-[calc(100%-52px)]">
-          {isPrivate ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8">
-              <span className="text-4xl">🔒</span>
-              <p className="text-t-hi font-semibold text-lg">{name} is a Private Company</p>
-              <p className="text-t-muted text-sm max-w-sm">
-                {name} is not publicly traded on any exchange. No live chart is available.
-                Market cap shown is an estimated private valuation.
-              </p>
-            </div>
-          ) : (
-            <TradingViewWidget symbol={mapToTvSymbol(symbol)} interval="D" theme="dark" />
-          )}
         </div>
       </div>
     </div>
@@ -313,9 +393,9 @@ const SORT_TABS: { key: StockSort; label: string }[] = [
 ];
 
 function StocksTab() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [sortCol, setSortCol] = useState<StockSort>("market_cap");
-  const [chartStock, setChartStock] = useState<StockRow | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["markets-stocks"],
@@ -338,15 +418,6 @@ function StocksTab() {
 
   return (
     <div className="space-y-3">
-      {chartStock && (
-        <ChartModal
-          symbol={chartStock.symbol}
-          name={chartStock.name}
-          isPrivate={chartStock.private}
-          onClose={() => setChartStock(null)}
-        />
-      )}
-
       {/* Controls row */}
       <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
         {/* Sort tabs */}
@@ -424,7 +495,8 @@ function StocksTab() {
                   </tr>
                 ))
               ) : stocks.map((stock, i) => (
-                <tr key={stock.symbol} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors cursor-pointer" onClick={() => setChartStock(stock)}>
+                <tr key={stock.symbol} className="border-b border-t-dim/40 hover:bg-t-bg2/30 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/chart?symbol=${stock.symbol}`)}>
                   <td className="py-2.5 px-4 text-t-muted">{i + 1}</td>
                   <td className="py-2.5 px-2">
                     <div className="flex items-center gap-2">
@@ -459,16 +531,18 @@ function StocksTab() {
           </table>
         </div>
       </div>
+
+      <PrivateCompaniesSection />
     </div>
   );
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-type MarketTab = "crypto" | "stocks";
+type MarketTab = "stocks" | "crypto";
 
 export default function MarketsPage() {
-  const [tab, setTab] = useState<MarketTab>("crypto");
+  const [tab, setTab] = useState<MarketTab>("stocks");
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6 space-y-5 animate-page-in">
@@ -479,15 +553,15 @@ export default function MarketsPage() {
         </p>
         <h1 className="text-2xl font-bold text-t-hi">Markets</h1>
         <p className="text-t-muted text-sm mt-1">
-          Top crypto and stocks. Click any row to open its chart. Click ⚒ Scout to scan with Strategy Scout.
+          Top stocks and crypto. Click any row to open its chart. Click ⚒ Scout to scan with Strategy Scout.
         </p>
       </div>
 
       {/* Tab selector */}
       <div className="flex gap-1 bg-t-bg1 border border-t-dim rounded-xl p-1 w-fit">
         {([
-          { key: "crypto", label: "// CRYPTO" },
           { key: "stocks", label: "// STOCKS" },
+          { key: "crypto", label: "// CRYPTO" },
         ] as { key: MarketTab; label: string }[]).map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={cn("px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors",
@@ -497,8 +571,8 @@ export default function MarketsPage() {
         ))}
       </div>
 
-      {tab === "crypto" && <CryptoTab />}
       {tab === "stocks" && <StocksTab />}
+      {tab === "crypto" && <CryptoTab />}
     </div>
   );
 }
