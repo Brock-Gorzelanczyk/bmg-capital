@@ -765,13 +765,21 @@ def get_cross_bot_activity(
         # For options trades: direct DB columns take precedence; fall back to OCC parsing
         # for Alpaca live trades that store the OCC symbol in t.symbol.
         if asset_class == "options":
-            if t.option_type:
-                # Direct columns populated (paper trades, _execute_options_signal path)
-                d["contract_symbol"] = t.underlying_symbol or t.symbol
-            else:
-                # Alpaca live trade — try OCC symbol parse
+            if _OCC_RE.match(t.symbol or ""):
+                # Symbol field IS the OCC contract symbol (live Alpaca fill or synthetic test)
                 parsed = _parse_occ_symbol(t.symbol)
                 d.update(parsed)
+                # Direct DB columns override parsed values when available
+                if t.option_type:           d["option_type"]       = t.option_type
+                if t.strike_price is not None: d["strike_price"]   = t.strike_price
+                if t.expiration_date:       d["expiration_date"]   = t.expiration_date
+                if t.contract_count:        d["contract_count"]    = t.contract_count
+            elif t.option_type:
+                # Paper trade: symbol is the underlying ticker; option fields in DB columns
+                d["contract_symbol"] = t.underlying_symbol or t.symbol
+            else:
+                # Fallback OCC parse attempt on underlying symbol
+                d["contract_symbol"] = t.symbol
         trades.append(d)
 
     # Daily P&L sparkline — last 30 days from bot_daily_pnl (bot_trades has no pnl column)
@@ -2275,7 +2283,9 @@ def get_positions(
             current_premium: float | None = None
             try:
                 import yfinance as yf
-                ticker = yf.Ticker(p.symbol)
+                # underlying_symbol holds the root ticker (e.g. "SPY"); p.symbol may be OCC-format
+                _yfroot = p.underlying_symbol or p.symbol
+                ticker = yf.Ticker(_yfroot)
                 chain = ticker.option_chain(p.expiration_date)
                 df = chain.puts if "put" in (p.option_type or "").lower() else chain.calls
                 if df is not None and not df.empty:

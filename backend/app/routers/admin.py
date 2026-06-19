@@ -1289,6 +1289,205 @@ def post_to_fund_updates(
     return {"posted": ok, "error": err or None}
 
 
+_SYNTHETIC_TAG = "SYNTHETIC_TEST_DELETE_ME"
+
+_OPTIONS_DIRECTIONAL_BOT = "options_directional"
+
+# OCC components for the synthetic test position
+_SYN_SYMBOL    = "SPY260717C00800000"
+_SYN_UNDERLYING = "SPY"
+_SYN_TYPE      = "call"
+_SYN_STRIKE    = 800.0          # dollars — NOT cents
+_SYN_EXPIRY    = "2026-07-17"
+_SYN_CONTRACTS = 1
+_SYN_ENTRY_CENTS = 250.0        # $2.50 per-contract premium × 100
+
+
+@router.post("/options/synthetic-fill-test")
+def synthetic_fill_test(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Create one synthetic filled options position + trade for mirror verification.
+
+    The position is tagged quarantine_reason='SYNTHETIC_TEST_DELETE_ME' with
+    quarantined_at=NULL so it appears on all 6 surfaces exactly as a real fill
+    would. Also posts the options embed to #options-signals and #all-signals.
+
+    Run DELETE /api/admin/options/synthetic-fill-test before market open to
+    remove it so it does not pollute real P&L.
+    """
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    from app.db.models.bots import BotProfile, BotAllocation, BotPosition, BotTrade
+
+    prof = db.query(BotProfile).filter(BotProfile.name == _OPTIONS_DIRECTIONAL_BOT).first()
+    if not prof:
+        return {"ok": False, "error": f"Bot profile '{_OPTIONS_DIRECTIONAL_BOT}' not found"}
+
+    alloc = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.profile_id == prof.id, BotAllocation.paper_mode.is_(True))
+        .first()
+    )
+    if not alloc:
+        return {"ok": False, "error": f"No paper allocation for '{_OPTIONS_DIRECTIONAL_BOT}'"}
+
+    now = datetime.now(timezone.utc)
+    try:
+        pos = BotPosition(
+            allocation_id=alloc.id,
+            symbol=_SYN_SYMBOL,
+            qty=float(_SYN_CONTRACTS),
+            avg_cost_cents=_SYN_ENTRY_CENTS,
+            side="long",
+            opened_at=now,
+            closed_at=None,
+            is_paper=True,
+            trailing_stop_activated=False,
+            option_type=_SYN_TYPE,
+            strike_price=_SYN_STRIKE,
+            expiration_date=_SYN_EXPIRY,
+            underlying_symbol=_SYN_UNDERLYING,
+            contract_count=_SYN_CONTRACTS,
+            contract_premium_cents=_SYN_ENTRY_CENTS,
+            quarantine_reason=_SYNTHETIC_TAG,
+        )
+        db.add(pos)
+        db.flush()
+
+        trade = BotTrade(
+            allocation_id=alloc.id,
+            symbol=_SYN_SYMBOL,
+            side="buy",
+            qty=float(_SYN_CONTRACTS),
+            fill_price_cents=_SYN_ENTRY_CENTS,
+            fees_cents=0,
+            ts=now,
+            position_id=pos.id,
+            is_paper=True,
+            option_type=_SYN_TYPE,
+            strike_price=_SYN_STRIKE,
+            expiration_date=_SYN_EXPIRY,
+            underlying_symbol=_SYN_UNDERLYING,
+            contract_count=_SYN_CONTRACTS,
+            contract_premium_cents=_SYN_ENTRY_CENTS,
+            quarantine_reason=_SYNTHETIC_TAG,
+        )
+        db.add(trade)
+        db.commit()
+        db.refresh(pos)
+        db.refresh(trade)
+    except Exception as exc:
+        db.rollback()
+        return {"ok": False, "error": f"DB write failed: {exc}"}
+
+    # Post options embed via the same code path real signals use
+    discord_posted = False
+    try:
+        from app.services.discord_public import post_signal as _post_signal
+        _post_signal(
+            {
+                "bot":             _OPTIONS_DIRECTIONAL_BOT,
+                "symbol":          _SYN_UNDERLYING,
+                "side":            "buy",
+                "confidence":      0.85,
+                "strategy":        "long_call",
+                "price":           _SYN_ENTRY_CENTS / 100,
+                "option_type":     _SYN_TYPE,
+                "strike_price":    _SYN_STRIKE,
+                "expiration_date": _SYN_EXPIRY,
+                "contract_count":  _SYN_CONTRACTS,
+                "premium":         _SYN_ENTRY_CENTS / 100,
+                "reason":          (
+                    "[SYNTHETIC TEST] SPY 800C Jul-17 — verifying options embed format. "
+                    "Delete before market open."
+                ),
+            },
+            db=None,
+            signal_id=None,
+            source="bot",
+        )
+        discord_posted = True
+    except Exception as exc:
+        logger.warning("synthetic-fill-test discord post failed: %s", exc)
+
+    logger.info(
+        "synthetic-fill-test: position_id=%d trade_id=%d discord=%s",
+        pos.id, trade.id, discord_posted,
+    )
+    return {
+        "ok": True,
+        "position_id": pos.id,
+        "trade_id": trade.id,
+        "contract_symbol": _SYN_SYMBOL,
+        "strike": _SYN_STRIKE,
+        "expiry": _SYN_EXPIRY,
+        "entry_premium_usd": _SYN_ENTRY_CENTS / 100,
+        "discord_posted": discord_posted,
+        "cleanup_tag": _SYNTHETIC_TAG,
+        "note": "Run DELETE /api/admin/options/synthetic-fill-test before 9:30 AM ET.",
+        "verify_surfaces": [
+            {"surface": "Activity Feed",             "path": "/activity",                      "filter": "Options asset class filter"},
+            {"surface": "Options Portfolio",          "path": "/strategy/portfolio/options",    "filter": "Recent Trades section"},
+            {"surface": "Bot Detail (directional)",   "path": "/strategy/bot/options_directional"},
+            {"surface": "Dashboard",                  "path": "/dashboard",                     "filter": "Fleet P&L should include unrealized"},
+            {"surface": "Discord #options-signals",   "note": "embed: CALL/strike/expiry/contracts — NO equity fields"},
+            {"surface": "Discord #all-signals",       "note": "same embed within 5s"},
+        ],
+        "expected_display": {
+            "contract_symbol":     _SYN_SYMBOL,
+            "underlying":          _SYN_UNDERLYING,
+            "contract_desc":       "800C 7/17",
+            "entry_premium":       "$2.50/ct",
+            "contracts":           "1 contract (NOT 100 shares)",
+            "unrealized_pnl_formula": "(current_premium − 2.50) × 1 × 100",
+            "asset_class":         "options (NOT stock)",
+        },
+    }
+
+
+@router.delete("/options/synthetic-fill-test")
+def delete_synthetic_fill_test(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Delete all synthetic test positions + trades created by POST /options/synthetic-fill-test."""
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    from sqlalchemy import text as _sql
+
+    trades_deleted = positions_deleted = 0
+    try:
+        r = db.execute(
+            _sql("DELETE FROM bot_trades WHERE quarantine_reason = :tag AND quarantined_at IS NULL"),
+            {"tag": _SYNTHETIC_TAG},
+        )
+        trades_deleted = r.rowcount or 0
+    except Exception as exc:
+        logger.warning("synthetic cleanup trades failed: %s", exc)
+
+    try:
+        r = db.execute(
+            _sql("DELETE FROM bot_positions WHERE quarantine_reason = :tag AND quarantined_at IS NULL"),
+            {"tag": _SYNTHETIC_TAG},
+        )
+        positions_deleted = r.rowcount or 0
+    except Exception as exc:
+        logger.warning("synthetic cleanup positions failed: %s", exc)
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        return {"ok": False, "error": f"commit failed: {exc}"}
+
+    logger.info("synthetic-fill-test deleted: trades=%d positions=%d", trades_deleted, positions_deleted)
+    return {"ok": True, "trades_deleted": trades_deleted, "positions_deleted": positions_deleted}
+
+
 def _next_options_monthly_expiry() -> str:
     """Return the nearest third-Friday monthly expiry ≥21 DTE from today (YYYY-MM-DD)."""
     from datetime import date, timedelta
