@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useNavigation } from "react-router-dom";
 import {
-  LayoutDashboard, LineChart, BookMarked, Briefcase, BookOpen, BarChart2,
-  FlaskConical, Layers, Bitcoin, PenTool, Radio,
+  LayoutDashboard, BookMarked, Briefcase,
+  FlaskConical,
   Filter, Newspaper, Microscope, Compass,
   Activity,
-  GraduationCap, Users, ScanSearch, Scale, Award,
-  Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
-  Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
+  GraduationCap, Award,
+  Search, LogOut, HelpCircle, ChevronUp, Inbox, Settings, Crown,
+  Building2,
   Zap, Globe, Eye, Cpu, Beaker,
   Radar, Hammer, ShieldAlert, ClipboardPen,
 } from "lucide-react";
@@ -25,7 +25,6 @@ import { useAuthStore } from "@/store/authStore";
 import { useLearnStore } from "@/store/learnStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useTierStore } from "@/store/tierStore";
-import { useUiStore } from "@/store/uiStore";
 import StreakBadge from "@/components/learn/StreakBadge";
 
 // ─── Hover prefetch map ───────────────────────────────────────────────────────
@@ -52,60 +51,46 @@ const PREFETCH_MAP: Record<string, (qc: QueryClient) => void> = {
 
 // ─── Nav item definitions ─────────────────────────────────────────────────────
 
+// ─── 6-section nav layout ─────────────────────────────────────────────────────
+
 const NAV_TRADE = [
   { to: "/",                label: "Dashboard",       Icon: LayoutDashboard },
-  { to: "/mission-control", label: "Mission Control", Icon: Cpu },
-  { to: "/risk-console",    label: "Risk Console",    Icon: ShieldAlert },
-  { to: "/portfolio",       label: "Portfolio",       Icon: Briefcase },
-  { to: "/activity",        label: "Activity",        Icon: Activity },
-  { to: "/markets",         label: "Markets",         Icon: Globe },
+  { to: "/mission-control", label: "Mission Control", Icon: Cpu             },
+  { to: "/portfolio",       label: "Portfolio",       Icon: Briefcase       },
+  { to: "/risk-console",    label: "Risk Console",    Icon: ShieldAlert     },
+  { to: "/activity",        label: "Activity",        Icon: Activity        },
 ];
 
-const NAV_LABS = [
-  { to: "/strategy", label: "Strategy Lab", Icon: FlaskConical },
-];
-
-const NAV_BUILD = [
+const NAV_STRATEGY = [
+  { to: "/strategy",          label: "Strategy Lab",   Icon: FlaskConical },
   { to: "/strategy/scout",    label: "Strategy Scout", Icon: Radar        },
   { to: "/strategy/workshop", label: "Workshop",       Icon: ClipboardPen },
   { to: "/strategy/forge",    label: "The Forge",      Icon: Hammer       },
 ];
 
-const NAV_FUND = [
-  { to: "/fund",          label: "Fund Team",     Icon: Building2 },
-  { to: "/research-feed", label: "Research Feed", Icon: BookMarked },
-];
-
 const NAV_MARKETS = [
-  { to: "/screener",  label: "Screener",  Icon: Filter },
-  { to: "/news",      label: "News",      Icon: Newspaper },
+  { to: "/markets",   label: "Markets",   Icon: Globe      },
+  { to: "/screener",  label: "Screener",  Icon: Filter     },
+  { to: "/news",      label: "News",      Icon: Newspaper  },
   { to: "/research",  label: "Research",  Icon: Microscope },
-  { to: "/discovery", label: "Discovery", Icon: Compass },
-];
-
-const NAV_LEARN = [
-  { to: "/learn/tracks", label: "Learning Center", Icon: GraduationCap },
-  { to: "/learn/certificates", label: "Certificates", Icon: Award },
-];
-
-const NAV_TOOLS = [
-  { to: "/tax-xray",       label: "Tax X-Ray",      Icon: ScanSearch },
-  { to: "/risk-parity",    label: "Risk Parity",     Icon: Scale },
-  { to: "/smart-transfers",label: "Smart Transfers", Icon: ArrowLeftRight },
-  { to: "/rsu-console",    label: "RSU Console",     Icon: ClipboardList },
-  { to: "/estate",         label: "Estate Plan",     Icon: Building2 },
-  { to: "/rules",          label: "Trading Rules",   Icon: ScrollText },
-];
-
-const NAV_COMMUNITY = [
-  { to: "/social", label: "Community Feed", Icon: Users },
+  { to: "/discovery", label: "Discovery", Icon: Compass    },
 ];
 
 const NAV_INTEL = [
-  { to: "/admin/smart-money",  label: "Smart Money",     Icon: Eye        },
-  { to: "/admin/flow",         label: "Options Flow",    Icon: Zap        },
-  { to: "/admin/macro",        label: "Macro Dashboard", Icon: Globe      },
-  { to: "/admin/candidates",   label: "Candidates",      Icon: Beaker     },
+  { to: "/admin/smart-money", label: "Smart Money",     Icon: Eye    },
+  { to: "/admin/flow",        label: "Options Flow",    Icon: Zap    },
+  { to: "/admin/macro",       label: "Macro Dashboard", Icon: Globe  },
+  { to: "/admin/candidates",  label: "Candidates",      Icon: Beaker },
+];
+
+const NAV_FUND = [
+  { to: "/fund",          label: "Fund Team",     Icon: Building2  },
+  { to: "/research-feed", label: "Research Feed", Icon: BookMarked },
+];
+
+const NAV_LEARN = [
+  { to: "/learn/tracks",      label: "Learning Center", Icon: GraduationCap },
+  { to: "/learn/certificates",label: "Certificates",    Icon: Award         },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -404,10 +389,11 @@ interface Props {
 export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Props) {
   const { logout, user } = useAuthStore();
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const isNavigating = navigation.state !== "idle";
   const streak = useLearnStore((s) => s.progress?.streak ?? 0);
   const tier = useTierStore((s) => s.tier);
   const isAdmin = user?.is_admin === true;
-  const mode = useUiStore((s) => s.mode);
 
   const { data: autoStatus } = useQuery({
     queryKey: ["autonomous-status"],
@@ -435,9 +421,17 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
 
   return (
     <aside className={cn(
-      "h-screen border-r border-[var(--border-subtle)] flex flex-col py-4 shrink-0 transition-[width] duration-300",
+      "h-screen border-r border-[var(--border-subtle)] flex flex-col py-4 shrink-0 transition-[width] duration-300 relative",
       expanded ? "w-56" : "w-14 lg:w-56"
     )} style={{ background: '#060a06' }}>
+      {/* Navigation loading bar */}
+      {isNavigating && (
+        <div className="absolute top-0 left-0 right-0 h-[2px] overflow-hidden z-10">
+          <div className="h-full bg-[var(--green)] animate-[navprogress_1s_ease-in-out_infinite]"
+            style={{ width: '40%', animation: 'navprogress 1s ease-in-out infinite' }} />
+          <style>{`@keyframes navprogress{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}`}</style>
+        </div>
+      )}
       {/* Logo — text wordmark */}
       <div className={cn("px-3 mb-4 flex items-center gap-1.5 h-9", show(expanded))}>
         <span style={{ fontFamily: 'var(--font-mono-t)', fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--green)' }}>
@@ -481,13 +475,13 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
           }}
         />
 
-        <NavSection label="Labs" items={NAV_LABS} expanded={expanded} />
-
-        <NavSection label="Build" items={NAV_BUILD} expanded={expanded} />
-
-        <NavSection label="Fund" items={NAV_FUND} expanded={expanded} />
+        <NavSection label="Strategy" items={NAV_STRATEGY} expanded={expanded} />
 
         <NavSection label="Markets" items={NAV_MARKETS} expanded={expanded} />
+
+        {isAdmin && <NavSection label="Intel" items={NAV_INTEL} expanded={expanded} />}
+
+        <NavSection label="Fund" items={NAV_FUND} expanded={expanded} />
 
         <NavSection
           label="Learn"
@@ -495,12 +489,6 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
           expanded={expanded}
           headerRight={streak > 0 ? <StreakBadge streak={streak} size="sm" /> : undefined}
         />
-
-        {mode === "pro" && <NavSection label="Tools" items={NAV_TOOLS} expanded={expanded} />}
-
-        {mode === "pro" && <NavSection label="Community" items={NAV_COMMUNITY} expanded={expanded} />}
-
-        {isAdmin && <NavSection label="Intel" items={NAV_INTEL} expanded={expanded} />}
       </nav>
 
       {/* Bottom: Upgrade + Avatar */}

@@ -6,13 +6,13 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
 import ProtectedRoute from "@/components/ProtectedRoute";
-// Critical-path pages — kept as static imports
-import Dashboard from "@/pages/Dashboard";
-import ChartPage from "@/pages/ChartPage";
-import Screener from "@/pages/Screener";
-import LoginPage from "@/pages/LoginPage";
 const LOGIN_V2 = import.meta.env.VITE_LOGIN_V2 === "true";
 import NotFoundPage from "@/pages/NotFoundPage";
+// All pages lazy-loaded for route-level code splitting
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const ChartPage = lazy(() => import("@/pages/ChartPage"));
+const Screener = lazy(() => import("@/pages/Screener"));
+const LoginPage = lazy(() => import("@/pages/LoginPage"));
 // Heavy/non-critical pages — lazy-loaded for code splitting
 const WatchlistPage = lazy(() => import("@/pages/WatchlistPage"));
 const Portfolio = lazy(() => import("@/pages/Portfolio"));
@@ -349,6 +349,7 @@ function AppInner() {
 
   return (
     <ErrorBoundary>
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       {/* URL alias redirects — outside layout so they fire before AppShell renders */}
       <Route path="/strategy-lab" element={<Navigate to="/strategy" replace />} />
@@ -468,6 +469,7 @@ function AppInner() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
+    </Suspense>
     {!isViewer && <VoiceAIButton onClick={() => setVoiceOpen(true)} />}
     <VoiceAIModal open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     <CoPilot

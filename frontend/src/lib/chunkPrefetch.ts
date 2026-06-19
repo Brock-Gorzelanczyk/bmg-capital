@@ -4,26 +4,45 @@
  * before the user clicks, eliminating the chunk-load delay on first visit.
  */
 export const chunkPrefetch: Record<string, () => void> = {
+  // Core routes (now lazy-loaded)
+  "/":              () => { import("@/pages/Dashboard"); },
+  "/dashboard":     () => { import("@/pages/Dashboard"); },
+  "/chart":         () => { import("@/pages/ChartPage"); },
+  "/screener":      () => { import("@/pages/Screener"); },
+  // Strategy
   "/strategy":      () => { import("@/pages/StrategyLab"); },
-  "/portfolio":     () => { import("@/pages/Portfolio"); },
-  // /screener and /chart are statically imported in App.tsx — no chunk to prefetch
-  "/watchlist":     () => { import("@/pages/WatchlistPage"); },
+  "/strategy/scout":     () => { import("@/pages/StrategyScoutPage"); },
+  "/strategy/workshop":  () => { import("@/pages/StrategyWorkshopPage"); },
+  "/strategy/forge":     () => { import("@/pages/ForgeBuilderPage"); },
+  // Markets
+  "/markets":       () => { import("@/pages/MarketsPage"); },
   "/news":          () => { import("@/pages/News"); },
+  "/research":      () => { import("@/pages/Research"); },
+  "/discovery":     () => { import("@/pages/Discovery"); },
+  // Intel (admin)
+  "/admin/smart-money": () => { import("@/pages/SmartMoneyPage"); },
+  "/admin/flow":        () => { import("@/pages/OptionsFlowPage"); },
+  "/admin/macro":       () => { import("@/pages/MacroDashboardPage"); },
+  "/admin/candidates":  () => { import("@/pages/CandidatesPage"); },
+  // Fund
+  "/fund":          () => { import("@/pages/FundPage"); },
+  "/research-feed": () => { import("@/pages/ResearchFeedPage"); },
+  // Learn
+  "/learn/tracks":  () => { import("@/pages/learn/LearnPage"); },
+  "/learn/certificates": () => { import("@/pages/CertificatesPage"); },
+  // Other
+  "/portfolio":     () => { import("@/pages/Portfolio"); },
+  "/watchlist":     () => { import("@/pages/WatchlistPage"); },
   "/options":       () => { import("@/pages/OptionsLab"); },
   "/crypto":        () => { import("@/pages/CryptoLab"); },
-  "/paper":         () => { import("@/pages/PaperTrading"); },
   "/journal":       () => { import("@/pages/JournalPage"); },
   "/analytics":     () => { import("@/pages/AnalyticsPage"); },
   "/morning-brief": () => { import("@/pages/MorningBriefPage"); },
-  "/learn":         () => { import("@/pages/LearnHome"); },
   "/settings":      () => { import("@/pages/Settings"); },
   "/pods":          () => { import("@/pages/PodsPage"); },
-  "/workshop":      () => { import("@/pages/WorkshopPage"); },
   "/alerts":        () => { import("@/pages/Alerts"); },
   "/earnings":      () => { import("@/pages/Earnings"); },
-  "/research":      () => { import("@/pages/Research"); },
   "/social":        () => { import("@/pages/Social"); },
-  "/discovery":     () => { import("@/pages/Discovery"); },
   "/defi":          () => { import("@/pages/DeFi"); },
   "/tax-xray":      () => { import("@/pages/TaxXRayPage"); },
   "/risk-parity":   () => { import("@/pages/RiskParityPage"); },
@@ -34,4 +53,6 @@ export const chunkPrefetch: Record<string, () => void> = {
   "/net-worth":     () => { import("@/pages/NetWorthPage"); },
   "/autopilot":     () => { import("@/pages/AutopilotPage"); },
   "/mission-control":() => { import("@/pages/MissionControlPage"); },
+  "/risk-console":   () => { import("@/pages/RiskConsolePage"); },
+  "/activity":       () => { import("@/pages/ActivityPage"); },
 };
