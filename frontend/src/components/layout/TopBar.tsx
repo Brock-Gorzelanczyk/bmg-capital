@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWsStore, useAlertStore, useUiStore, useNotificationStore, useMarketStore } from "@/store";
 import { useIsAdmin } from "@/store/authStore";
 import { getNotifications } from "@/api/notifications";
-import { getRegime } from "@/api/strategy";
+import client from "@/api/client";
 import { getMyTier } from "@/api/tiers";
 import { pauseAllBots } from "@/api/bots";
 import SymbolSearch from "@/components/ui/SymbolSearch";
@@ -77,9 +77,10 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   useEffect(() => { if (data) setNotifications(data); }, [data, setNotifications]);
 
   const { data: regimeData } = useQuery({
-    queryKey: ["strategy-regime"],
-    queryFn: getRegime,
-    staleTime: 300_000,
+    queryKey: ["portfolio-regime"],
+    queryFn: () => client.get<{ regime: string }>("/portfolio/regime/current").then(r => r.data),
+    staleTime: 120_000,
+    retry: 0,
   });
   const regime: string = regimeData?.regime ?? "unknown";
 
@@ -95,13 +96,24 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
   const showTrialBadge = tierData?.status === "trialing" && trialDaysLeft > 0;
 
   const REGIME_MAP: Record<string, { label: string; abbr: string; cls: string; icon: React.ReactNode }> = {
-    "Trend-Up":   { label: "Trend-Up",   abbr: "TU", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
-    "Trend-Down": { label: "Trend-Down", abbr: "TD", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
-    "Range":      { label: "Range",      abbr: "R",  cls: "text-blue-400 border-blue-400/30 bg-blue-400/8",           icon: <BarChart2 size={11} /> },
-    "Crisis":     { label: "Crisis",     abbr: "Cr", cls: "text-orange-400 border-orange-400/30 bg-orange-400/8",     icon: <AlertTriangle size={11} /> },
-    bull:         { label: "Trend-Up",   abbr: "TU", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
-    risk_off:     { label: "Trend-Down", abbr: "TD", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
-    unknown:      { label: "Regime…",    abbr: "—",  cls: "text-zinc-400 border-zinc-400/20 bg-zinc-400/5",           icon: <BarChart2 size={11} /> },
+    // regime_router_v2 values
+    BULL_TRENDING: { label: "Bull",      abbr: "BU", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
+    BEAR_TRENDING: { label: "Bear",      abbr: "BR", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
+    CHOPPY:        { label: "Choppy",    abbr: "CH", cls: "text-blue-400 border-blue-400/30 bg-blue-400/8",           icon: <BarChart2 size={11} /> },
+    NEUTRAL:       { label: "Neutral",   abbr: "N",  cls: "text-blue-400 border-blue-400/30 bg-blue-400/8",           icon: <BarChart2 size={11} /> },
+    CRISIS:        { label: "Crisis",    abbr: "Cr", cls: "text-orange-400 border-orange-400/30 bg-orange-400/8",     icon: <AlertTriangle size={11} /> },
+    LOW_VOL:       { label: "Low Vol",   abbr: "LV", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
+    RECOVERY:      { label: "Recovery",  abbr: "RC", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
+    RISK_ON:       { label: "Risk-On",   abbr: "RO", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
+    RISK_OFF:      { label: "Risk-Off",  abbr: "RF", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
+    // legacy keys
+    "Trend-Up":    { label: "Bull",      abbr: "BU", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
+    "Trend-Down":  { label: "Bear",      abbr: "BR", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
+    "Range":       { label: "Choppy",    abbr: "CH", cls: "text-blue-400 border-blue-400/30 bg-blue-400/8",           icon: <BarChart2 size={11} /> },
+    "Crisis":      { label: "Crisis",    abbr: "Cr", cls: "text-orange-400 border-orange-400/30 bg-orange-400/8",     icon: <AlertTriangle size={11} /> },
+    bull:          { label: "Bull",      abbr: "BU", cls: "text-emerald-400 border-emerald-400/30 bg-emerald-400/8",  icon: <TrendingUp size={11} /> },
+    risk_off:      { label: "Risk-Off",  abbr: "RF", cls: "text-red-400 border-red-400/30 bg-red-400/8",              icon: <TrendingDown size={11} /> },
+    unknown:       { label: "Regime…",   abbr: "—",  cls: "text-zinc-400 border-zinc-400/20 bg-zinc-400/5",           icon: <BarChart2 size={11} /> },
   };
   const regimeChip = REGIME_MAP[regime] ?? REGIME_MAP.unknown;
 

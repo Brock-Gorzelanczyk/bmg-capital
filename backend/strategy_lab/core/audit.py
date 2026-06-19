@@ -109,39 +109,50 @@ def _post_signal_to_discord(signal_id: int, signal_dict: dict) -> None:
                         .order_by(BotTrade.id.desc())
                         .first()
                     )
-                    if trade and trade.position_id:
-                        pos = db.get(BotPosition, trade.position_id)
-                        if pos and pos.contract_count:
-                            premium_usd = (pos.contract_premium_cents / 100) if pos.contract_premium_cents else None
-                            total_usd = (premium_usd * 100 * pos.contract_count) if premium_usd else None
-                            # DTE
+                    if trade:
+                        # Prefer BotPosition (most accurate after fill); fall back to BotTrade fields
+                        pos = db.get(BotPosition, trade.position_id) if trade.position_id else None
+
+                        # Resolve contract data from pos → trade (whichever has it)
+                        contract_count   = (pos and pos.contract_count)   or trade.contract_count
+                        premium_cents    = (pos and pos.contract_premium_cents) or trade.contract_premium_cents
+                        strike_price     = (pos and pos.strike_price)     or trade.strike_price
+                        expiration_date  = (pos and pos.expiration_date)  or trade.expiration_date
+                        option_type_val  = (pos and getattr(pos, "option_type", None)) or signal_dict.get("option_type")
+
+                        if contract_count:
+                            premium_usd = (premium_cents / 100) if premium_cents else None
+                            total_usd   = (premium_usd * 100 * contract_count) if premium_usd else None
                             dte: int | None = None
-                            if pos.expiration_date:
+                            if expiration_date:
                                 try:
-                                    exp = _date.fromisoformat(pos.expiration_date)
+                                    exp = _date.fromisoformat(str(expiration_date))
                                     dte = (exp - _date.today()).days
                                 except Exception:
                                     pass
                             signal_dict = {
                                 **signal_dict,
-                                "option_type":      pos.option_type or signal_dict.get("option_type"),
-                                "strike_price":     pos.strike_price,
-                                "expiration_date":  pos.expiration_date,
-                                "contract_count":   pos.contract_count,
+                                "option_type":      option_type_val,
+                                "strike_price":     strike_price,
+                                "expiration_date":  expiration_date,
+                                "contract_count":   contract_count,
                                 "premium":          premium_usd,
                                 "options_total_usd": total_usd,
                                 "options_dte":      dte,
-                                # Clear equity-style invested amount — contract fields take over
+                                # Clear equity-style fields — contract fields take over
                                 "notional_usd":     None,
                                 "starting_capital_cents": None,
                                 "size_pct":         None,
                             }
                             logger.debug(
                                 "[discord-options] enriched signal %d: %d contracts × $%.2f premium, "
-                                "strike=%.2f exp=%s dte=%s",
-                                signal_id, pos.contract_count, premium_usd or 0,
-                                pos.strike_price or 0, pos.expiration_date or "?", dte,
+                                "strike=%.2f exp=%s dte=%s (source=%s)",
+                                signal_id, contract_count, premium_usd or 0,
+                                strike_price or 0, expiration_date or "?", dte,
+                                "position" if pos else "trade",
                             )
+                        else:
+                            logger.warning("[discord-options] signal %d: trade found but no contract_count on trade or position", signal_id)
                 except Exception as _enrich_exc:
                     logger.warning("[discord-options] position enrich failed for signal %d: %s", signal_id, _enrich_exc)
 

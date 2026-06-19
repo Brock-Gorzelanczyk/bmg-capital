@@ -107,7 +107,7 @@ async def trigger_congress_refresh(
     try:
         result = await asyncio.wait_for(
             fetch_and_upsert_congress(db, days_back=days_back),
-            timeout=60,
+            timeout=120,
         )
         logger.info("[smart-money] congress refresh done: %s", result)
         ok = len(result.get("errors", [])) == 0
@@ -119,11 +119,65 @@ async def trigger_congress_refresh(
             "errors": result.get("errors", []),
         }
     except asyncio.TimeoutError:
-        logger.error("[smart-money] congress refresh timed out after 60s")
-        return {"status": "error", "days_back": days_back, "error": "Timed out after 60s — congress sources may be slow. Try again later."}
+        logger.error("[smart-money] congress refresh timed out after 120s")
+        return {"status": "error", "days_back": days_back, "error": "Timed out after 120s — congress sources may be slow. Try again later."}
     except Exception as exc:
         logger.error("[smart-money] congress refresh failed: %s", exc, exc_info=True)
         return {"status": "error", "days_back": days_back, "error": str(exc)}
+
+
+@router.get("/diagnose/congress", dependencies=[Depends(require_admin)])
+async def diagnose_congress():
+    """Diagnose SSW and HSW connectivity. Shows raw HTTP status + row count."""
+    import asyncio
+    import httpx
+
+    SOURCES = {
+        "senate_stock_watcher": "https://senatestockwatcher.com/api/v1/all_transactions.json",
+        "house_stock_watcher": "https://housestockwatcher.com/api/all_transactions",
+    }
+    results = {}
+    headers = {
+        "User-Agent": "BMG Capital app/1.0 (admin@bmgcapital.app)",
+        "Accept": "application/json",
+    }
+
+    async def _probe(key: str, url: str) -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+                resp = await client.get(url, headers=headers)
+            data = None
+            rows = 0
+            parse_error = None
+            try:
+                data = resp.json()
+                if isinstance(data, list):
+                    rows = len(data)
+                elif isinstance(data, dict):
+                    for v in data.values():
+                        if isinstance(v, list):
+                            rows = len(v)
+                            break
+            except Exception as e:
+                parse_error = str(e)
+            return {
+                "url": url,
+                "http_status": resp.status_code,
+                "content_type": resp.headers.get("content-type", ""),
+                "body_bytes": len(resp.content),
+                "row_count": rows,
+                "parse_error": parse_error,
+                "sample": str(resp.text[:200]) if resp.status_code != 200 else None,
+            }
+        except Exception as exc:
+            return {"url": url, "error": str(exc)}
+
+    tasks = [_probe(k, u) for k, u in SOURCES.items()]
+    probe_results = await asyncio.gather(*tasks)
+    for key, result in zip(SOURCES.keys(), probe_results):
+        results[key] = result
+
+    return {"sources": results}
 
 
 @router.get("/crypto")

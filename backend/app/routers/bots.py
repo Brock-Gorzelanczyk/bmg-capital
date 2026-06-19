@@ -70,8 +70,8 @@ _DISPLAY_NAMES: dict[str, str] = {
     "crypto_swing":         "Crypto Swing",
     "crypto_day":           "Crypto Day",
     "crypto_lt":            "Crypto Long-Term",
-    "options_income":       "Equity Income",
-    "options_directional":  "Equity Directional",
+    "options_income":       "Options Income",
+    "options_directional":  "Options Directional",
 }
 
 _DEMO_SYMBOLS = {

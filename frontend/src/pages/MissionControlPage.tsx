@@ -567,11 +567,20 @@ export default function MissionControlPage() {
       symbol.toUpperCase() === "ETH"
     );
   }
+  // Strategies that only apply to on-chain / crypto instruments
+  const CRYPTO_ONLY_STRATEGIES = new Set([
+    "whale_accumulation", "halving_phase", "nupl_signal", "sopr_reversal",
+    "exchange_netflow", "funding_rate_contrarian", "basis_carry", "oi_divergence",
+    "stablecoin_dominance", "btc_dominance_shift", "mvrv_signal",
+  ]);
   function isCryptoStrategy(strategyId: string, lab: string): boolean {
     if (lab === "crypto") return true;
+    if (CRYPTO_ONLY_STRATEGIES.has(strategyId?.toLowerCase())) return true;
     const s = (strategyId + " " + lab).toLowerCase();
     return s.includes("crypto") || s.includes("btc") || s.includes("eth") ||
-      s.includes("stablecoin") || s.includes("defi") || s.includes("onchain");
+      s.includes("stablecoin") || s.includes("defi") || s.includes("onchain") ||
+      s.includes("whale") || s.includes("halving") || s.includes("sopr") ||
+      s.includes("netflow") || s.includes("funding_rate") || s.includes("basis_carry");
   }
   function isStockStrategy(strategyId: string, lab: string): boolean {
     const s = (strategyId + " " + lab).toLowerCase();

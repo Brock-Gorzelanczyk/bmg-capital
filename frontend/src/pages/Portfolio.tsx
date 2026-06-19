@@ -48,6 +48,29 @@ function BotRow({ bot }: { bot: BotSnap }) {
   const badge = botStatusBadge(bot);
   const retPos = bot.return_30d_pct >= 0;
   const pnlPos = bot.today_pnl_cents >= 0;
+  const isDisabled = bot.status === "disabled" || (!bot.enabled && bot.open_positions === 0);
+
+  if (isDisabled) {
+    return (
+      <div className="flex items-center justify-between py-3 border-b border-t-dim/50 last:border-0 opacity-50">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-t-muted truncate line-through">{bot.display_name}</p>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-zinc-700 text-zinc-500">
+              DISABLED
+            </span>
+          </div>
+          <p className="text-xs text-t-dim">{bot.open_positions} open positions</p>
+        </div>
+        <div className="text-right ml-4">
+          <p className="text-xs font-mono-t tabular-nums text-zinc-600">
+            Quarantined: {fmtUsd(bot.current_value_cents)}
+          </p>
+          <p className="text-xs text-zinc-700">{bot.return_30d_pct.toFixed(2)}% 30d</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-between py-3 border-b border-t-dim/50 last:border-0">
@@ -111,7 +134,7 @@ function SleeveCard({ sleeveKey, sleeve, bots }: { sleeveKey: string; sleeve: Sl
         {bots.length === 0 ? (
           <p className="py-4 text-sm text-t-muted text-center">
             {sleeve.reserved_capital_cents > 0
-              ? `0 dedicated bots · ${fmtUsd(sleeve.reserved_capital_cents)} reserved for future ${sleeveKey} bots`
+              ? `${sleeve.total_bots} dedicated bot${sleeve.total_bots !== 1 ? "s" : ""} · ${fmtUsd(sleeve.reserved_capital_cents)} deployed in ${sleeveKey} strategies`
               : "No bots configured"}
           </p>
         ) : (
@@ -422,7 +445,10 @@ export default function Portfolio() {
         {SLEEVE_ORDER.map((key) => {
           const sleeve = snap.by_sleeve[key];
           if (!sleeve || (sleeve.total_bots === 0 && (sleeve.reserved_capital_cents ?? 0) === 0)) return null;
-          const sleeveBots = snap.bots.filter((b) => b.category === key);
+          // options_income / options_directional bots belong to the "options" sleeve
+          const sleeveBots = snap.bots.filter((b) =>
+            b.category === key || (key === "options" && b.category?.startsWith("options_"))
+          );
           return (
             <SleeveCard key={key} sleeveKey={key} sleeve={sleeve} bots={sleeveBots} />
           );
