@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
@@ -49,6 +50,10 @@ _DISPLAY_NAMES: dict[str, str] = {
     "crypto_lt": "Crypto Long-Term",
     "crypto_onchain": "Crypto On-Chain",
     "crypto_quant_aggressive": "Quant Aggressive",
+    "crypto_quant_scalper": "Quant Scalper",
+    "crypto_quant_mean_reversion": "Quant Mean Rev",
+    "options_directional": "Options Directional",
+    "options_income": "Options Income",
     "options_flow": "Options Flow",
     "stock_momentum": "Stock Momentum",
     "stock_breakout": "Stock Breakout",
@@ -74,16 +79,12 @@ def get_dashboard_v2(
     cutoff_30d = (now - timedelta(days=30)).date()
 
     # ── Load allocations + profiles ──────────────────────────────────────────
-    # Filter by BotAllocation.enabled (per-user flag) NOT BotProfile.enabled
-    # (global YAML flag). Profile-level enabled is unreliable — many profiles
-    # have enabled=False in DB while the allocation itself is active.
+    # Load ALL allocations for the user (no enabled filter) — same as portfolio.
+    # bots_active count below uses alloc.enabled to distinguish active vs total.
     allocs = (
         db.query(BotAllocation)
         .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
-        .filter(
-            BotAllocation.user_id == current_user.id,
-            BotAllocation.enabled.is_(True),
-        )
+        .filter(BotAllocation.user_id == current_user.id)
         .all()
     )
     alloc_ids = [a.id for a in allocs]
