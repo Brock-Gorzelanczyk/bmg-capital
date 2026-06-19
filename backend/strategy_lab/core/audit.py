@@ -197,24 +197,32 @@ def log_signal(
     _opt_setup_desc: str | None = None
     _opt_strikes_desc: str | None = None
     _opt_spot: float | None = None
-    if _is_options and signal.reason:
-        try:
-            import json as _json
-            _r = _json.loads(signal.reason)
-            _setup = _r.get("setup", _sig_strategy)
-            _opt_setup_desc = _r.get("setup", _sig_strategy)
-            _opt_strikes_desc = _r.get("strikes")
-            _opt_spot = float(_r.get("spot", 0) or 0) or None
-            if any(k in _setup for k in ("put", "csp", "cash_secured_put", "wheel", "bull_put", "jade_lizard")):
-                _opt_type = "put"
-            elif any(k in _setup for k in ("bear_call", "iron_condor", "condor", "strangle", "straddle")):
-                _opt_type = "call/put spread"
-            elif any(k in _setup for k in ("long_call", "leaps", "pmcc", "diagonal", "bull_call", "covered_call")):
-                _opt_type = "call"
-            else:
-                _opt_type = "call"
-        except Exception:
+    if _is_options:
+        # Default option_type from strategy name even if reason is absent
+        _s = _sig_strategy
+        if any(k in _s for k in ("put", "csp", "cash_secured_put", "wheel", "bull_put", "jade_lizard")):
+            _opt_type = "put"
+        elif any(k in _s for k in ("bear_call", "iron_condor", "condor", "strangle", "straddle", "neutral_calendar")):
+            _opt_type = "call/put spread"
+        else:
             _opt_type = "call"
+        _opt_setup_desc = _sig_strategy
+        if signal.reason:
+            try:
+                import json as _json
+                _r = _json.loads(signal.reason)
+                _setup = _r.get("setup", _sig_strategy)
+                _opt_setup_desc = _r.get("setup", _sig_strategy)
+                _opt_strikes_desc = _r.get("strikes")
+                _opt_spot = float(_r.get("spot", 0) or 0) or None
+                if any(k in _setup for k in ("put", "csp", "cash_secured_put", "wheel", "bull_put", "jade_lizard")):
+                    _opt_type = "put"
+                elif any(k in _setup for k in ("bear_call", "iron_condor", "condor", "strangle", "straddle")):
+                    _opt_type = "call/put spread"
+                elif any(k in _setup for k in ("long_call", "leaps", "pmcc", "diagonal", "bull_call", "covered_call")):
+                    _opt_type = "call"
+            except Exception:
+                pass  # keep default derived from strategy name
 
     signal_dict = {
         "bot":                    profile_name,

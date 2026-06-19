@@ -1523,6 +1523,13 @@ def _execute_options_signal(
         contract_count, premium, premium * 100 * contract_count,
     )
 
+    logger.warning(
+        "[OPTIONS-EXEC:%s] CONFIRMED OPTIONS PATH — %s %s opt_type=%s contracts=%d "
+        "strike=%.2f exp=%s premium=%.2f total=$%.0f",
+        profile_name, sig.side, sig.symbol, opt["option_type"],
+        contract_count, opt["strike_price"] or 0, opt["expiration_date"] or "?",
+        premium, premium * 100 * contract_count,
+    )
     try:
         pos = BotPosition(
             allocation_id=alloc.id,
@@ -1609,11 +1616,17 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     asset_class = profile.get("asset_class", "stock")
     _sig_strategy = (getattr(sig, "strategy", "") or "").strip()
+    _in_opt_set = _sig_strategy in _OPTIONS_STRATEGIES
 
-    # Route to options executor if profile declares asset_class=options OR
-    # the signal's strategy is a known options strategy. The strategy-name
-    # check is a safety net for cases where profile YAML load returns {}.
-    if asset_class == "options" or _sig_strategy in _OPTIONS_STRATEGIES:
+    # Hard routing gate — log decision so Railway logs are proof
+    logger.warning(
+        "[ROUTE:%s] %s %s — asset_class=%r strategy=%r in_opt_set=%s → path=%s",
+        profile_name, sig.side, sig.symbol,
+        asset_class, _sig_strategy, _in_opt_set,
+        "OPTIONS" if (asset_class == "options" or _in_opt_set) else "EQUITY",
+    )
+
+    if asset_class == "options" or _in_opt_set:
         _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name)
         return
     now = datetime.now(timezone.utc)

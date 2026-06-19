@@ -211,27 +211,36 @@ def _build_signal_embed(signal: dict) -> dict:
     size_pct     = signal.get("size_pct")
     cap_cents    = signal.get("starting_capital_cents")
     dollar_label = "Invested" if is_buy else "Notional"
+
+    # Options-specific fields (resolved early so size_value can use it)
+    option_type = signal.get("option_type")
+    _is_options_signal = bool(option_type or signal.get("is_options"))
+
     if notional_usd is not None and notional_usd > 0:
-        qty = notional_usd / entry if entry and entry > 0 else None
-        size_value = (
-            f"${notional_usd:,.2f} / {_fmt_qty(qty, symbol)}"
-            if qty is not None
-            else f"${notional_usd:,.2f}"
-        )
+        # For options: never show "N.NNNN SYMBOL" (that's share qty, meaningless for contracts)
+        if _is_options_signal:
+            size_value = f"${notional_usd:,.2f}"
+        else:
+            qty = notional_usd / entry if entry and entry > 0 else None
+            size_value = (
+                f"${notional_usd:,.2f} / {_fmt_qty(qty, symbol)}"
+                if qty is not None
+                else f"${notional_usd:,.2f}"
+            )
     elif size_pct is not None and cap_cents is not None and cap_cents > 0:
         invested = (cap_cents / 100) * (size_pct / 100)
-        qty      = invested / entry if entry and entry > 0 else None
-        size_value = (
-            f"${invested:,.2f} / {_fmt_qty(qty, symbol)}"
-            if qty is not None
-            else f"${invested:,.2f}"
-        )
+        if _is_options_signal:
+            size_value = f"${invested:,.2f}"
+        else:
+            qty = invested / entry if entry and entry > 0 else None
+            size_value = (
+                f"${invested:,.2f} / {_fmt_qty(qty, symbol)}"
+                if qty is not None
+                else f"${invested:,.2f}"
+            )
     else:
         dollar_label = "Size"
         size_value = f"{size_pct:.1f}%" if size_pct is not None else "—"
-
-    # Options-specific fields (resolved here so equity block can check it)
-    option_type = signal.get("option_type")
 
     fields = [
         {"name": "Strategy",    "value": signal.get("strategy") or "—", "inline": True},
