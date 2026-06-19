@@ -117,20 +117,20 @@ const PRIVATE_COMPANIES: PrivateCo[] = [
   {
     ticker: "OPENAI",
     name: "OpenAI",
-    valuation: 157_000_000_000,
-    last_round: "Oct 2024 Series F",
+    valuation: 1_000_000_000_000,
+    last_round: "Pre-IPO bankers engaged, $25B annualized revenue",
     category: "AI",
-    ipo_status: "Private — CEO stated IPO not imminent",
-    notes: "$6.6B raise at $157B post-money. Transitioning to capped-profit structure.",
+    ipo_status: "Q4 2026 IPO planned",
+    notes: "Preparing bankers for Q4 2026 listing at ~$1T valuation.",
   },
   {
     ticker: "ANTHROPIC",
     name: "Anthropic",
     valuation: 61_500_000_000,
-    last_round: "Mar 2025",
+    last_round: "Filed confidential S-1 June 1, 2026",
     category: "AI",
-    ipo_status: "Private — no IPO timeline announced",
-    notes: "Amazon & Google are strategic investors. $61.5B valuation post Mar 2025 round.",
+    ipo_status: "October 2026 target listing on NASDAQ or NYSE",
+    notes: "S-1 filing confidential. Listing as early as October 2026 per FT.",
   },
   {
     ticker: "STRIPE",
@@ -144,11 +144,11 @@ const PRIVATE_COMPANIES: PrivateCo[] = [
   {
     ticker: "DATABRICKS",
     name: "Databricks",
-    valuation: 62_000_000_000,
-    last_round: "Dec 2024 Series J",
+    valuation: 134_000_000_000,
+    last_round: "Series L December 2025 ($4B raised at $134B post-money)",
     category: "Data/AI",
-    ipo_status: "Private — IPO widely expected in 2025",
-    notes: "$10B raise at $62B valuation. ~$3B ARR. Actively preparing for IPO.",
+    ipo_status: "Private — CEO said NOT 2026",
+    notes: "$4.8B ARR. Ali Ghodsi (CEO) told Bloomberg June 4: '2026 is a terrible year to go public.'",
   },
 ];
 
