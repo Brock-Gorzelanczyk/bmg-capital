@@ -52,8 +52,8 @@ const BOT_DISPLAY: Record<string, string> = {
   crypto_quant_aggressive: "Quant Aggressive",
   crypto_quant_scalper: "Quant Scalper",
   crypto_quant_mean_reversion: "Quant MR",
-  options_income: "Equity Income",
-  options_directional: "Equity Directional",
+  options_income: "Options Income",
+  options_directional: "Options Directional",
 };
 
 const PERIODS: Period[] = ["7d", "30d", "90d", "all"];

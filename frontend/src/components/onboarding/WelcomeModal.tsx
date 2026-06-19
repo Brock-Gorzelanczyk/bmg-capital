@@ -83,7 +83,7 @@ const BOT_LABELS: Record<string, { name: string; description: string }> = {
       "Trades BTC/ETH intraday using momentum signals. High-frequency entries with tight stop-losses.",
   },
   options_income: {
-    name: "Equity Income Bot",
+    name: "Options Income Bot",
     description:
       "Trades quality equities with a dividend + growth focus to generate steady income.",
   },

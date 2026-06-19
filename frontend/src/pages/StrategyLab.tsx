@@ -212,12 +212,12 @@ const BOT_META: Record<
     assetClass: "crypto",
   },
   options_income: {
-    displayName: "Equity Income",
+    displayName: "Options Income",
     description: "Equity income — quality stocks, dividend + growth focus",
     assetClass: "stock",
   },
   options_directional: {
-    displayName: "Equity Directional",
+    displayName: "Options Directional",
     description: "Equity directional — tactical momentum & mean-reversion",
     assetClass: "stock",
   },

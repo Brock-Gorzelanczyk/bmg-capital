@@ -18,8 +18,8 @@ const BOT_LABELS: Record<string, string> = {
   crypto_quant_aggressive:     "Quant Aggressive",
   crypto_quant_mean_reversion: "Quant Mean Rev",
   crypto_quant_scalper:        "Quant Scalper",
-  options_income:              "Equity Income",
-  options_directional:         "Equity Directional",
+  options_income:              "Options Income",
+  options_directional:         "Options Directional",
   crypto_meanrev_2163:         "Mean Rev 2163",
 };
 

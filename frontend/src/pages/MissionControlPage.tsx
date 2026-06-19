@@ -577,7 +577,7 @@ export default function MissionControlPage() {
     "narrative_basket", "altseason_index",
     "altcoin_cycle_rotation", "btc_dominance_rotation", "crypto_btc_dominance_regime",
     "sopr_capitulation_buy", "dca_btc_eth", "funding_rate_carry",
-    "cash_and_carry", "liquidation_cascade",
+    "cash_and_carry", "liquidation_cascade", "liquidation_cascade_fade",
   ]);
   function isCryptoStrategy(strategyId: string, lab: string): boolean {
     if (lab === "crypto") return true;

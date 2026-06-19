@@ -113,12 +113,12 @@ def _post_signal_to_discord(signal_id: int, signal_dict: dict) -> None:
                     if not trade:
                         sig = db.get(BotSignal, signal_id)
                         if sig:
-                            cutoff = sig.ts - _timedelta(seconds=5)
                             trade = (
                                 db.query(BotTrade)
                                 .filter(
                                     BotTrade.allocation_id == sig.allocation_id,
-                                    BotTrade.ts >= cutoff,
+                                    BotTrade.ts >= sig.ts - _timedelta(seconds=5),
+                                    BotTrade.ts <= sig.ts + _timedelta(seconds=60),
                                     BotTrade.contract_count.isnot(None),
                                 )
                                 .order_by(BotTrade.id.desc())

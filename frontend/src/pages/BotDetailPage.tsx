@@ -134,7 +134,7 @@ const BOT_META: Record<
     ],
   },
   options_income: {
-    displayName: "Equity Income",
+    displayName: "Options Income",
     description: "High-IV wheel strategies on S&P 500 names — CSPs, CCs, iron condors, 30-45 DTE",
     assetClass: "options",
     ensemble: "weighted_vote",
@@ -144,7 +144,7 @@ const BOT_META: Record<
     ],
   },
   options_directional: {
-    displayName: "Equity Directional",
+    displayName: "Options Directional",
     description: "Momentum credit/debit spreads on Russell 1000 — bull puts, bear calls, LEAPS replacements",
     assetClass: "options",
     ensemble: "weighted_vote",
