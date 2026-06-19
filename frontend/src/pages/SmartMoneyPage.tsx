@@ -206,7 +206,13 @@ export default function SmartMoneyPage() {
 
   const refreshMut = useMutation({
     mutationFn: () => triggerCongressRefresh(365),
-    onSuccess: (data) => {
+    onMutate: () => {
+      // Show loading toast immediately — backend can take 30-60s (external HTTP)
+      const id = toast.loading("Fetching congressional data…");
+      return { toastId: id };
+    },
+    onSuccess: (data, _vars, ctx) => {
+      toast.dismiss(ctx?.toastId);
       qc.invalidateQueries({ queryKey: ["smart-money-congress"] });
       qc.invalidateQueries({ queryKey: ["smart-money-summary"] });
       if (data.status === "error") {
@@ -214,11 +220,15 @@ export default function SmartMoneyPage() {
       } else if (data.errors && data.errors.length > 0) {
         toast.warning(`Partial refresh: ${data.new ?? 0} new rows. Errors: ${data.errors.join("; ")}`);
       } else {
-        toast.success(`Congress data refreshed — ${data.new ?? 0} new rows, ${data.skipped ?? 0} already saved`);
+        toast.success(`Refreshed — ${data.new ?? 0} new rows, ${data.skipped ?? 0} already saved`);
       }
     },
-    onError: (err: any) => {
-      toast.error(`Refresh failed: ${err?.response?.data?.detail ?? err?.message ?? "network error"}`);
+    onError: (err: any, _vars, ctx) => {
+      toast.dismiss(ctx?.toastId);
+      // err.response.data.detail can be a nested object (e.g. 403 viewer_read_only)
+      const raw = err?.response?.data?.detail;
+      const msg = typeof raw === "string" ? raw : raw?.detail ?? raw?.error ?? err?.message ?? "network error";
+      toast.error(`Refresh failed: ${msg}`);
     },
   });
 

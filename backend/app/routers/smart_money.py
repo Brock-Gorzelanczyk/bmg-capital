@@ -101,10 +101,14 @@ async def trigger_congress_refresh(
     db: Session = Depends(get_db),
 ):
     """Admin endpoint: run congress data refresh synchronously, return result."""
+    import asyncio
     from app.services.smart_money.congress import fetch_and_upsert_congress
 
     try:
-        result = await fetch_and_upsert_congress(db, days_back=days_back)
+        result = await asyncio.wait_for(
+            fetch_and_upsert_congress(db, days_back=days_back),
+            timeout=60,
+        )
         logger.info("[smart-money] congress refresh done: %s", result)
         ok = len(result.get("errors", [])) == 0
         return {
@@ -114,6 +118,9 @@ async def trigger_congress_refresh(
             "skipped": result.get("skipped", 0),
             "errors": result.get("errors", []),
         }
+    except asyncio.TimeoutError:
+        logger.error("[smart-money] congress refresh timed out after 60s")
+        return {"status": "error", "days_back": days_back, "error": "Timed out after 60s — congress sources may be slow. Try again later."}
     except Exception as exc:
         logger.error("[smart-money] congress refresh failed: %s", exc, exc_info=True)
         return {"status": "error", "days_back": days_back, "error": str(exc)}
