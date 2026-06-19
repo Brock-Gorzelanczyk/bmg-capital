@@ -1479,7 +1479,7 @@ def setup_bot_scheduler(scheduler) -> None:
 
     # ------------------------------------------------------------------
     # congress_data_refresh: daily at 7:00 AM ET (pre-market)
-    # Fetches congressional disclosures via Quiver Quantitative (last 90 days).
+    # Fetches congressional disclosures via FMP Senate/House feeds (last 90 days).
     # ------------------------------------------------------------------
     def _refresh_congress_data() -> None:
         import asyncio as _asyncio

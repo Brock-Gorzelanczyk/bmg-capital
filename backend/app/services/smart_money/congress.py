@@ -1,8 +1,9 @@
 """
-Fetches Congressional stock disclosures from Quiver Quantitative.
-API: GET https://api.quiverquant.com/beta/live/congresstrading
-Auth: Authorization: Bearer <QUIVER_API_KEY>
-Rate limiting: fetch at most once per hour.
+Fetches Congressional stock disclosures from Financial Modeling Prep (FMP).
+API: GET https://financialmodelingprep.com/api/v4/senate-trading-rss-feed
+     GET https://financialmodelingprep.com/api/v4/house-disclosure-rss-feed
+Auth: ?apikey=<FMP_API_KEY>  (free plan — sign up at financialmodelingprep.com/register)
+Rate limiting: fetch at most once per hour; free plan allows 250 calls/day.
 """
 from __future__ import annotations
 
@@ -16,7 +17,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-QUIVER_CONGRESS_URL = "https://api.quiverquant.com/beta/live/congresstrading"
+FMP_BASE = "https://financialmodelingprep.com/api/v4"
+FMP_SENATE_URL = f"{FMP_BASE}/senate-trading-rss-feed"
+FMP_HOUSE_URL = f"{FMP_BASE}/house-disclosure-rss-feed"
 
 AMOUNT_MAP = {
     "$1,001 - $15,000":    (100100, 1500000),
@@ -70,77 +73,90 @@ def _normalize_transaction_type(raw: str | None) -> str:
     return r
 
 
-def _build_source_id(row: dict) -> str:
-    name = row.get("Representative") or ""
-    ticker = row.get("Ticker") or ""
-    tx_date = str(row.get("TransactionDate") or row.get("Date") or "")
-    tx_type = str(row.get("Transaction") or "")
-    amount = str(row.get("Range") or "")
-    return f"quiver:{name}:{ticker}:{tx_date}:{tx_type}:{amount}"
+def _build_source_id(chamber: str, row: dict) -> str:
+    first = row.get("firstName") or row.get("representative") or ""
+    last = row.get("lastName") or ""
+    name = f"{first} {last}".strip()
+    ticker = row.get("symbol") or row.get("ticker") or ""
+    tx_date = str(row.get("transactionDate") or row.get("txDate") or "")
+    tx_type = str(row.get("type") or "")
+    amount = str(row.get("amount") or "")
+    return f"fmp:{chamber}:{name}:{ticker}:{tx_date}:{tx_type}:{amount}"
 
 
-async def fetch_quiver_congress(timeout: int = 30) -> list[dict]:
-    """Fetch and normalize congressional trades from Quiver Quantitative."""
-    api_key = os.environ.get("QUIVER_API_KEY", "")
+async def fetch_fmp_congress(timeout: int = 30) -> list[dict]:
+    """Fetch and normalize congressional trades from FMP (Senate + House)."""
+    api_key = os.environ.get("FMP_API_KEY", "")
     if not api_key:
-        raise RuntimeError("QUIVER_API_KEY environment variable is not set")
+        raise RuntimeError("FMP_API_KEY environment variable is not set")
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Accept": "application/json",
-        "User-Agent": "BMG Capital app/1.0 (admin@bmgcapital.app)",
-    }
+    headers = {"Accept": "application/json"}
+    rows: list[dict] = []
+
+    sources = [
+        (FMP_SENATE_URL, "S"),
+        (FMP_HOUSE_URL, "H"),
+    ]
+
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        resp = await client.get(QUIVER_CONGRESS_URL, headers=headers)
-        resp.raise_for_status()
-        transactions = resp.json()
+        for url, chamber in sources:
+            # FMP paginates; fetch pages 0–9 (≈1000 rows) — enough for 90 days
+            for page in range(10):
+                try:
+                    resp = await client.get(url, params={"page": page, "apikey": api_key}, headers=headers)
+                    resp.raise_for_status()
+                    data = resp.json()
+                except Exception as exc:
+                    logger.warning("[congress-fmp] %s page %d failed: %s", url, page, exc)
+                    break
 
-    if isinstance(transactions, dict):
-        transactions = transactions.get("data") or list(transactions.values())[0]
+                if not isinstance(data, list) or not data:
+                    break  # no more pages
 
-    rows = []
-    for row in transactions:
-        if not isinstance(row, dict):
-            continue
+                for row in data:
+                    if not isinstance(row, dict):
+                        continue
 
-        name = (row.get("Representative") or "").strip()
-        ticker = (row.get("Ticker") or "").strip().upper() or None
-        tx_type_raw = row.get("Transaction") or ""
-        amount_raw = row.get("Range") or ""
-        tx_date = _parse_date(row.get("TransactionDate") or row.get("Date"))
-        disc_date = _parse_date(row.get("ReportDate"))
+                    first = (row.get("firstName") or row.get("representative") or "").strip()
+                    last = (row.get("lastName") or "").strip()
+                    name = f"{first} {last}".strip() or first or last
+                    ticker = (row.get("symbol") or row.get("ticker") or "").strip().upper() or None
+                    tx_type_raw = row.get("type") or ""
+                    amount_raw = row.get("amount") or ""
+                    tx_date = _parse_date(
+                        row.get("transactionDate") or row.get("txDate") or row.get("dateRecieved")
+                    )
+                    disc_date = _parse_date(
+                        row.get("disclosureDate") or row.get("dateRecieved") or row.get("reportDate")
+                    )
+                    asset_desc = (row.get("assetDescription") or row.get("asset") or "")[:500] or None
+                    lower, upper = _parse_amount(amount_raw)
 
-        # Quiver includes both chambers; map to H/S
-        chamber_raw = (row.get("Chamber") or row.get("House") or "").strip()
-        chamber = "S" if chamber_raw.lower().startswith("s") else "H"
+                    if not name or not tx_date:
+                        continue
 
-        lower, upper = _parse_amount(amount_raw)
-        source_id = _build_source_id(row)
+                    rows.append({
+                        "member_name": name,
+                        "party": None,
+                        "chamber": chamber,
+                        "state": None,
+                        "ticker": ticker,
+                        "asset_description": asset_desc,
+                        "transaction_type": _normalize_transaction_type(tx_type_raw),
+                        "amount_range": amount_raw[:50] if amount_raw else None,
+                        "amount_lower_cents": lower,
+                        "amount_upper_cents": upper,
+                        "transaction_date": tx_date,
+                        "disclosure_date": disc_date,
+                        "source": "fmp",
+                        "source_id": _build_source_id(chamber, row),
+                    })
 
-        if not name or not tx_date:
-            continue
-
-        rows.append({
-            "member_name": name,
-            "party": None,  # Quiver does not include party affiliation
-            "chamber": chamber,
-            "state": None,
-            "ticker": ticker,
-            "asset_description": None,
-            "transaction_type": _normalize_transaction_type(tx_type_raw),
-            "amount_range": amount_raw[:50] if amount_raw else None,
-            "amount_lower_cents": lower,
-            "amount_upper_cents": upper,
-            "transaction_date": tx_date,
-            "disclosure_date": disc_date,
-            "source": "quiver",
-            "source_id": source_id,
-        })
     return rows
 
 
 async def fetch_and_upsert_congress(db, days_back: int = 365) -> dict:
-    """Main entry point: fetch from Quiver, upsert into DB, return stats."""
+    """Main entry point: fetch from FMP, upsert into DB, return stats."""
     from app.db.models.smart_money import SmartMoneyCongressTrade
 
     cutoff = date.today() - timedelta(days=days_back)
@@ -149,7 +165,7 @@ async def fetch_and_upsert_congress(db, days_back: int = 365) -> dict:
     errors = []
 
     try:
-        rows = await fetch_quiver_congress()
+        rows = await fetch_fmp_congress()
         for r in rows:
             if r["transaction_date"] and r["transaction_date"] < cutoff:
                 continue
@@ -162,11 +178,11 @@ async def fetch_and_upsert_congress(db, days_back: int = 365) -> dict:
             db.add(SmartMoneyCongressTrade(**r))
             total_new += 1
         db.commit()
-        logger.info("[congress] quiver: %d new, %d skipped", total_new, total_skipped)
+        logger.info("[congress] fmp: %d new, %d skipped", total_new, total_skipped)
     except Exception as e:
-        errors.append(f"quiver: {e}")
+        errors.append(f"fmp: {e}")
         db.rollback()
-        logger.error("[congress] quiver fetch failed: %s", e, exc_info=True)
+        logger.error("[congress] fmp fetch failed: %s", e, exc_info=True)
 
     return {"new": total_new, "skipped": total_skipped, "errors": errors}
 
@@ -214,7 +230,7 @@ def get_recent_congress(db, limit: int = 50, offset: int = 0,
                 if r.disclosure_date and r.transaction_date else None
             ),
             "source": r.source,
-            "source_url": "https://quiverquant.com/congresstrading/",
+            "source_url": "https://financialmodelingprep.com/financial-summaries/congress-trading",
         }
 
     return [_row_to_dict(r) for r in rows], total
