@@ -1498,7 +1498,8 @@ _OPTIONS_STRATEGIES: frozenset[str] = frozenset({
 
 
 def _execute_options_signal(
-    db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str
+    db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str,
+    signal_id: int | None = None,
 ) -> None:
     """Execute an options signal — creates BotPosition + BotTrade with options fields."""
     import os
@@ -1563,6 +1564,7 @@ def _execute_options_signal(
             fees_cents=0,
             ts=now,
             position_id=pos.id,
+            signal_id=signal_id,
             is_paper=True,
             expected_fill_cents=fill_cents,
             slippage_bps=0.0,
@@ -1627,7 +1629,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     )
 
     if asset_class == "options" or _in_opt_set:
-        _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name)
+        _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name, signal_id=signal_id)
         return
     now = datetime.now(timezone.utc)
 

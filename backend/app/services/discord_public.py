@@ -216,9 +216,15 @@ def _build_signal_embed(signal: dict) -> dict:
     option_type = signal.get("option_type")
     _is_options_signal = bool(option_type or signal.get("is_options"))
 
-    if notional_usd is not None and notional_usd > 0:
-        # For options: never show "N.NNNN SYMBOL" (that's share qty, meaningless for contracts)
+    options_total_usd = signal.get("options_total_usd")
+    if _is_options_signal and options_total_usd is not None:
+        # Position data available (enriched post-execution) — show premium paid
+        dollar_label = "Total Premium"
+        size_value = f"${options_total_usd:,.2f}"
+    elif notional_usd is not None and notional_usd > 0:
+        # For options pre-execution or fallback: show dollar amount only (no share qty)
         if _is_options_signal:
+            dollar_label = "Capital Targeting"
             size_value = f"${notional_usd:,.2f}"
         else:
             qty = notional_usd / entry if entry and entry > 0 else None
@@ -230,6 +236,7 @@ def _build_signal_embed(signal: dict) -> dict:
     elif size_pct is not None and cap_cents is not None and cap_cents > 0:
         invested = (cap_cents / 100) * (size_pct / 100)
         if _is_options_signal:
+            dollar_label = "Capital Targeting"
             size_value = f"${invested:,.2f}"
         else:
             qty = invested / entry if entry and entry > 0 else None
@@ -268,15 +275,19 @@ def _build_signal_embed(signal: dict) -> dict:
             type_label = option_type.upper().replace("/", " / ")
             type_badge = f"📞/🔻 {type_label}"
         fields.append({"name": "Type", "value": type_badge, "inline": True})
-        # Specific contract details (populated when yfinance resolves chain)
-        if signal.get("strike_price") is not None:
-            fields.append({"name": "Strike",    "value": _fmt_price(float(signal["strike_price"])),     "inline": True})
-        if signal.get("expiration_date") is not None:
-            fields.append({"name": "Expiry",    "value": str(signal["expiration_date"]),                "inline": True})
+        # Specific contract details (enriched post-execution from BotPosition)
         if signal.get("contract_count") is not None:
             fields.append({"name": "Contracts", "value": str(signal["contract_count"]),                 "inline": True})
         if signal.get("premium") is not None:
             fields.append({"name": "Premium/Contract", "value": _fmt_price(float(signal["premium"])),   "inline": True})
+        if signal.get("strike_price") is not None:
+            fields.append({"name": "Strike",    "value": _fmt_price(float(signal["strike_price"])),     "inline": True})
+        if signal.get("expiration_date") is not None:
+            _dte = signal.get("options_dte")
+            _exp_str = str(signal["expiration_date"])
+            if _dte is not None:
+                _exp_str = f"{_exp_str} ({_dte} DTE)"
+            fields.append({"name": "Expiry", "value": _exp_str, "inline": True})
         # Setup description from strategy reason JSON (always available for options signals)
         if signal.get("options_strikes"):
             fields.append({"name": "Setup",   "value": signal["options_strikes"],                       "inline": False})

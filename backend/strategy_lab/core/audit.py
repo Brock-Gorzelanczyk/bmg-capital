@@ -84,12 +84,67 @@ def _post_signal_to_discord(signal_id: int, signal_dict: dict) -> None:
 
     Creates its own DB session so it never blocks or shares state with
     the caller's session.  Discord failures are logged and swallowed.
+
+    For options signals: waits 15 s so _execute_options_signal can commit
+    the BotPosition/BotTrade rows, then enriches signal_dict with actual
+    contract data (count, premium, strike, expiry) before building the embed.
     """
+    import time as _time
+    _is_options = bool(signal_dict.get("is_options") or signal_dict.get("option_type"))
+    if _is_options:
+        _time.sleep(15)
+
     try:
         from app.services.discord_public import post_signal
         from app.db.session import SessionLocal
         db = SessionLocal()
         try:
+            if _is_options:
+                try:
+                    from app.db.models.bots import BotTrade, BotPosition
+                    from datetime import date as _date
+                    trade = (
+                        db.query(BotTrade)
+                        .filter(BotTrade.signal_id == signal_id)
+                        .order_by(BotTrade.id.desc())
+                        .first()
+                    )
+                    if trade and trade.position_id:
+                        pos = db.get(BotPosition, trade.position_id)
+                        if pos and pos.contract_count:
+                            premium_usd = (pos.contract_premium_cents / 100) if pos.contract_premium_cents else None
+                            total_usd = (premium_usd * 100 * pos.contract_count) if premium_usd else None
+                            # DTE
+                            dte: int | None = None
+                            if pos.expiration_date:
+                                try:
+                                    exp = _date.fromisoformat(pos.expiration_date)
+                                    dte = (exp - _date.today()).days
+                                except Exception:
+                                    pass
+                            signal_dict = {
+                                **signal_dict,
+                                "option_type":      pos.option_type or signal_dict.get("option_type"),
+                                "strike_price":     pos.strike_price,
+                                "expiration_date":  pos.expiration_date,
+                                "contract_count":   pos.contract_count,
+                                "premium":          premium_usd,
+                                "options_total_usd": total_usd,
+                                "options_dte":      dte,
+                                # Clear equity-style invested amount — contract fields take over
+                                "notional_usd":     None,
+                                "starting_capital_cents": None,
+                                "size_pct":         None,
+                            }
+                            logger.debug(
+                                "[discord-options] enriched signal %d: %d contracts × $%.2f premium, "
+                                "strike=%.2f exp=%s dte=%s",
+                                signal_id, pos.contract_count, premium_usd or 0,
+                                pos.strike_price or 0, pos.expiration_date or "?", dte,
+                            )
+                except Exception as _enrich_exc:
+                    logger.warning("[discord-options] position enrich failed for signal %d: %s", signal_id, _enrich_exc)
+
             post_signal(signal_dict, db=db, signal_id=signal_id)
         finally:
             db.close()
