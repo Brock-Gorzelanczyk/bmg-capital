@@ -128,8 +128,9 @@ async def trigger_congress_refresh(
 
 @router.get("/diagnose/congress", dependencies=[Depends(require_admin)])
 async def diagnose_congress():
-    """Diagnose FMP connectivity. Shows API key presence + HTTP status + row count for both feeds."""
+    """Diagnose FMP congress feed connectivity — key presence, HTTP status, row count, sample fields."""
     import os
+    import asyncio
     import httpx
     from app.services.smart_money.congress import FMP_SENATE_URL, FMP_HOUSE_URL
 
@@ -137,41 +138,39 @@ async def diagnose_congress():
     api_key_present = bool(api_key)
 
     if not api_key_present:
-        return {
-            "sources": {
-                "fmp_senate": {"api_key_present": False, "error": "FMP_API_KEY env var is not set — sign up free at financialmodelingprep.com/register"},
-                "fmp_house":  {"api_key_present": False, "error": "FMP_API_KEY env var is not set"},
-            }
-        }
+        no_key = {"api_key_present": False, "error": "FMP_API_KEY not set — sign up free at financialmodelingprep.com/register"}
+        return {"sources": {"fmp_senate": no_key, "fmp_house": no_key}}
 
     async def _probe(label: str, url: str) -> dict:
         result: dict = {"source": label, "url": url, "api_key_present": True}
         try:
             async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-                resp = await client.get(url, params={"page": 0, "apikey": api_key}, headers={"Accept": "application/json"})
+                resp = await client.get(url, params={"apikey": api_key}, headers={"Accept": "application/json"})
             rows = 0
             parse_error = None
             sample_keys: list = []
+            sample_row: dict = {}
             try:
                 data = resp.json()
                 if isinstance(data, list):
                     rows = len(data)
                     if data and isinstance(data[0], dict):
                         sample_keys = list(data[0].keys())
+                        sample_row = {k: data[0][k] for k in list(data[0].keys())[:6]}
             except Exception as e:
                 parse_error = str(e)
             result.update({
                 "http_status": resp.status_code,
                 "row_count": rows,
                 "sample_keys": sample_keys,
+                "sample_row": sample_row,
                 "parse_error": parse_error,
-                "sample": str(resp.text[:300]) if resp.status_code != 200 else None,
+                "error_body": resp.text[:300] if resp.status_code != 200 else None,
             })
         except Exception as exc:
             result["error"] = str(exc)
         return result
 
-    import asyncio
     senate_result, house_result = await asyncio.gather(
         _probe("fmp_senate", FMP_SENATE_URL),
         _probe("fmp_house", FMP_HOUSE_URL),

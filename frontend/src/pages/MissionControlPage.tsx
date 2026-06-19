@@ -572,6 +572,12 @@ export default function MissionControlPage() {
     "whale_accumulation", "halving_phase", "nupl_signal", "sopr_reversal",
     "exchange_netflow", "funding_rate_contrarian", "basis_carry", "oi_divergence",
     "stablecoin_dominance", "btc_dominance_shift", "mvrv_signal",
+    // Additional crypto-only strategy IDs
+    "mvrv_zscore", "mvrv_zscore_accumulation",
+    "narrative_basket", "altseason_index",
+    "altcoin_cycle_rotation", "btc_dominance_rotation", "crypto_btc_dominance_regime",
+    "sopr_capitulation_buy", "dca_btc_eth", "funding_rate_carry",
+    "cash_and_carry", "liquidation_cascade",
   ]);
   function isCryptoStrategy(strategyId: string, lab: string): boolean {
     if (lab === "crypto") return true;
@@ -580,7 +586,9 @@ export default function MissionControlPage() {
     return s.includes("crypto") || s.includes("btc") || s.includes("eth") ||
       s.includes("stablecoin") || s.includes("defi") || s.includes("onchain") ||
       s.includes("whale") || s.includes("halving") || s.includes("sopr") ||
-      s.includes("netflow") || s.includes("funding_rate") || s.includes("basis_carry");
+      s.includes("netflow") || s.includes("funding_rate") || s.includes("basis_carry") ||
+      s.includes("mvrv") || s.includes("narrative_basket") || s.includes("altseason") ||
+      s.includes("altcoin") || s.includes("dominance_rotation") || s.includes("liquidation");
   }
   function isStockStrategy(strategyId: string, lab: string): boolean {
     const s = (strategyId + " " + lab).toLowerCase();

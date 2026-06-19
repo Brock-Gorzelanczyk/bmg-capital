@@ -101,14 +101,29 @@ def _post_signal_to_discord(signal_id: int, signal_dict: dict) -> None:
         try:
             if _is_options:
                 try:
-                    from app.db.models.bots import BotTrade, BotPosition
-                    from datetime import date as _date
+                    from app.db.models.bots import BotTrade, BotPosition, BotSignal
+                    from datetime import date as _date, timedelta as _timedelta
                     trade = (
                         db.query(BotTrade)
                         .filter(BotTrade.signal_id == signal_id)
                         .order_by(BotTrade.id.desc())
                         .first()
                     )
+                    # Fallback: signal_id may not be linked on older trades — find by allocation+time
+                    if not trade:
+                        sig = db.get(BotSignal, signal_id)
+                        if sig:
+                            cutoff = sig.ts - _timedelta(seconds=5)
+                            trade = (
+                                db.query(BotTrade)
+                                .filter(
+                                    BotTrade.allocation_id == sig.allocation_id,
+                                    BotTrade.ts >= cutoff,
+                                    BotTrade.contract_count.isnot(None),
+                                )
+                                .order_by(BotTrade.id.desc())
+                                .first()
+                            )
                     if trade:
                         # Prefer BotPosition (most accurate after fill); fall back to BotTrade fields
                         pos = db.get(BotPosition, trade.position_id) if trade.position_id else None

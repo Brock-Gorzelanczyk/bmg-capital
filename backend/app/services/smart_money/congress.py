@@ -1,15 +1,15 @@
 """
 Fetches Congressional stock disclosures from Financial Modeling Prep (FMP).
-API: GET https://financialmodelingprep.com/api/v4/senate-trading-rss-feed
-     GET https://financialmodelingprep.com/api/v4/house-disclosure-rss-feed
-Auth: ?apikey=<FMP_API_KEY>  (free plan — sign up at financialmodelingprep.com/register)
-Rate limiting: fetch at most once per hour; free plan allows 250 calls/day.
+Senate: GET https://financialmodelingprep.com/api/v4/senate-trading?apikey=KEY
+House:  GET https://financialmodelingprep.com/api/v4/senate-disclosure?apikey=KEY
+Free plan: 250 calls/day. Daily cron uses 2 calls total.
 """
 from __future__ import annotations
 
 import logging
 import os
 import re
+import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -18,8 +18,12 @@ import httpx
 logger = logging.getLogger(__name__)
 
 FMP_BASE = "https://financialmodelingprep.com/api/v4"
-FMP_SENATE_URL = f"{FMP_BASE}/senate-trading-rss-feed"
-FMP_HOUSE_URL = f"{FMP_BASE}/house-disclosure-rss-feed"
+FMP_SENATE_URL = f"{FMP_BASE}/senate-trading"
+FMP_HOUSE_URL = f"{FMP_BASE}/senate-disclosure"
+
+# 24-hour in-memory cache so manual "Fetch Now" doesn't burn quota
+_cache: dict[str, tuple[float, list]] = {}
+_CACHE_TTL = 86_400  # 24 hours
 
 AMOUNT_MAP = {
     "$1,001 - $15,000":    (100100, 1500000),
@@ -74,83 +78,90 @@ def _normalize_transaction_type(raw: str | None) -> str:
 
 
 def _build_source_id(chamber: str, row: dict) -> str:
-    first = row.get("firstName") or row.get("representative") or ""
-    last = row.get("lastName") or ""
+    first = (row.get("firstName") or "").strip()
+    last = (row.get("lastName") or "").strip()
     name = f"{first} {last}".strip()
-    ticker = row.get("symbol") or row.get("ticker") or ""
-    tx_date = str(row.get("transactionDate") or row.get("txDate") or "")
+    ticker = row.get("symbol") or ""
+    tx_date = str(row.get("transactionDate") or "")
     tx_type = str(row.get("type") or "")
     amount = str(row.get("amount") or "")
     return f"fmp:{chamber}:{name}:{ticker}:{tx_date}:{tx_type}:{amount}"
+
+
+async def _fetch_fmp_feed(url: str, api_key: str, cache_key: str, timeout: int = 30) -> list[dict]:
+    """Fetch one FMP feed with 24-hour cache."""
+    cached = _cache.get(cache_key)
+    if cached and time.time() - cached[0] < _CACHE_TTL:
+        logger.debug("[congress-fmp] cache hit for %s (%d rows)", cache_key, len(cached[1]))
+        return cached[1]
+
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        resp = await client.get(url, params={"apikey": api_key}, headers={"Accept": "application/json"})
+        resp.raise_for_status()
+        data = resp.json()
+
+    if not isinstance(data, list):
+        data = data.get("data") or list(data.values())[0] if isinstance(data, dict) else []
+
+    _cache[cache_key] = (time.time(), data)
+    logger.info("[congress-fmp] fetched %s: %d rows", cache_key, len(data))
+    return data
 
 
 async def fetch_fmp_congress(timeout: int = 30) -> list[dict]:
     """Fetch and normalize congressional trades from FMP (Senate + House)."""
     api_key = os.environ.get("FMP_API_KEY", "")
     if not api_key:
-        raise RuntimeError("FMP_API_KEY environment variable is not set")
+        raise RuntimeError("FMP_API_KEY environment variable is not set — sign up free at financialmodelingprep.com/register")
 
-    headers = {"Accept": "application/json"}
     rows: list[dict] = []
 
     sources = [
-        (FMP_SENATE_URL, "S"),
-        (FMP_HOUSE_URL, "H"),
+        (FMP_SENATE_URL, "S", "fmp_senate"),
+        (FMP_HOUSE_URL, "H", "fmp_house"),
     ]
 
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        for url, chamber in sources:
-            # FMP paginates; fetch pages 0–9 (≈1000 rows) — enough for 90 days
-            for page in range(10):
-                try:
-                    resp = await client.get(url, params={"page": page, "apikey": api_key}, headers=headers)
-                    resp.raise_for_status()
-                    data = resp.json()
-                except Exception as exc:
-                    logger.warning("[congress-fmp] %s page %d failed: %s", url, page, exc)
-                    break
+    for url, chamber, cache_key in sources:
+        try:
+            raw_rows = await _fetch_fmp_feed(url, api_key, cache_key, timeout)
+        except Exception as exc:
+            logger.warning("[congress-fmp] %s failed: %s", cache_key, exc)
+            continue
 
-                if not isinstance(data, list) or not data:
-                    break  # no more pages
+        for row in raw_rows:
+            if not isinstance(row, dict):
+                continue
 
-                for row in data:
-                    if not isinstance(row, dict):
-                        continue
+            first = (row.get("firstName") or "").strip()
+            last = (row.get("lastName") or "").strip()
+            name = f"{first} {last}".strip() or (row.get("office") or "").strip()
+            ticker = (row.get("symbol") or "").strip().upper() or None
+            tx_type_raw = row.get("type") or ""
+            amount_raw = row.get("amount") or ""
+            tx_date = _parse_date(row.get("transactionDate"))
+            disc_date = _parse_date(row.get("dateReceived") or row.get("dateRecieved"))
+            asset_desc = ((row.get("assetDescription") or row.get("comment") or "")[:500]) or None
+            lower, upper = _parse_amount(amount_raw)
 
-                    first = (row.get("firstName") or row.get("representative") or "").strip()
-                    last = (row.get("lastName") or "").strip()
-                    name = f"{first} {last}".strip() or first or last
-                    ticker = (row.get("symbol") or row.get("ticker") or "").strip().upper() or None
-                    tx_type_raw = row.get("type") or ""
-                    amount_raw = row.get("amount") or ""
-                    tx_date = _parse_date(
-                        row.get("transactionDate") or row.get("txDate") or row.get("dateRecieved")
-                    )
-                    disc_date = _parse_date(
-                        row.get("disclosureDate") or row.get("dateRecieved") or row.get("reportDate")
-                    )
-                    asset_desc = (row.get("assetDescription") or row.get("asset") or "")[:500] or None
-                    lower, upper = _parse_amount(amount_raw)
+            if not name or not tx_date:
+                continue
 
-                    if not name or not tx_date:
-                        continue
-
-                    rows.append({
-                        "member_name": name,
-                        "party": None,
-                        "chamber": chamber,
-                        "state": None,
-                        "ticker": ticker,
-                        "asset_description": asset_desc,
-                        "transaction_type": _normalize_transaction_type(tx_type_raw),
-                        "amount_range": amount_raw[:50] if amount_raw else None,
-                        "amount_lower_cents": lower,
-                        "amount_upper_cents": upper,
-                        "transaction_date": tx_date,
-                        "disclosure_date": disc_date,
-                        "source": "fmp",
-                        "source_id": _build_source_id(chamber, row),
-                    })
+            rows.append({
+                "member_name": name,
+                "party": None,  # FMP does not include party affiliation
+                "chamber": chamber,
+                "state": None,
+                "ticker": ticker,
+                "asset_description": asset_desc,
+                "transaction_type": _normalize_transaction_type(tx_type_raw),
+                "amount_range": amount_raw[:50] if amount_raw else None,
+                "amount_lower_cents": lower,
+                "amount_upper_cents": upper,
+                "transaction_date": tx_date,
+                "disclosure_date": disc_date,
+                "source": "fmp",
+                "source_id": _build_source_id(chamber, row),
+            })
 
     return rows
 

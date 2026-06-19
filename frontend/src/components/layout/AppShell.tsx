@@ -82,7 +82,7 @@ export default function AppShell() {
     qc.prefetchQuery({ queryKey: ["strategy-summary"],    queryFn: getSummary,       staleTime: 55_000 });
     qc.prefetchQuery({ queryKey: ["strategy-log"],        queryFn: () => getLog(80), staleTime: 55_000 });
     qc.prefetchQuery({ queryKey: ["strategy-equity"],     queryFn: getEquity,        staleTime: 290_000 });
-    qc.prefetchQuery({ queryKey: ["strategy-regime"],     queryFn: getRegime,        staleTime: 290_000 });
+    qc.prefetchQuery({ queryKey: ["portfolio-regime"], queryFn: () => import("@/api/client").then(m => m.default.get("/portfolio/regime/current").then(r => r.data)), staleTime: 290_000 });
     qc.fetchQuery({ queryKey: ["tier-me"], queryFn: getMyTier, staleTime: 300_000 })
       .then((d) => { if (d) useTierStore.getState().setTierData(d); })
       .catch(() => {});

@@ -317,14 +317,17 @@ export default function SmartMoneyPage() {
             <div className="px-5 py-3 border-b border-t-dim flex items-center justify-between flex-wrap gap-2">
               <div className="text-xs font-bold uppercase tracking-widest text-t-muted">Senate & House Disclosures</div>
               <div className="flex items-center gap-3 flex-wrap">
-                {/* Party filter */}
-                <div className="flex gap-1">
+                {/* Party filter — D/R/I disabled (FMP doesn't include party affiliation) */}
+                <div className="flex gap-1" title="Party filter unavailable — current data source does not include party affiliation">
                   {(["all", "D", "R", "I"] as PartyFilter[]).map((p) => (
-                    <button key={p} onClick={() => setPartyFilter(p)}
+                    <button key={p}
+                      onClick={() => p === "all" ? setPartyFilter("all") : undefined}
+                      disabled={p !== "all"}
                       className={cn("text-[10px] font-bold px-2 py-1 rounded border transition-colors",
-                        partyFilter === p
+                        p !== "all" && "opacity-35 cursor-not-allowed",
+                        partyFilter === p && p === "all"
                           ? "bg-t-bg2 border-t-mid text-t-hi"
-                          : "border-t-dim text-t-muted hover:text-t-hi"
+                          : "border-t-dim text-t-muted"
                       )}>{p === "all" ? "All" : p}</button>
                   ))}
                 </div>

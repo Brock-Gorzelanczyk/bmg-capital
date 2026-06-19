@@ -82,7 +82,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
     staleTime: 120_000,
     retry: 0,
   });
-  const regime: string = regimeData?.regime ?? "unknown";
+  const regime: string = regimeData?.regime ?? "CHOPPY";
 
   const { data: tierData } = useQuery({
     queryKey: ["tier-me"],
