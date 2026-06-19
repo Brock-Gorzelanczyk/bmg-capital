@@ -1109,3 +1109,121 @@ def generate_agent_token(
             "The agent fleet will use it for read-only API access."
         ),
     }
+
+
+@router.get("/options/position-audit")
+def options_position_audit(
+    post_to_discord: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Audit open positions in options bots. Identifies share positions that
+    shouldn't be there (misclassified), properly-stored option positions,
+    and expired contracts.
+
+    Pass ?post_to_discord=true to send a summary to #fund-updates.
+    """
+    from datetime import date
+    from app.db.models.bots import BotProfile, BotAllocation, BotPosition
+
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    today_str = date.today().isoformat()
+    results: Dict[str, Any] = {
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "bots": {},
+        "summary": {
+            "properly_options": 0,
+            "shares_misclassified": 0,
+            "expired": 0,
+            "total_open": 0,
+        }
+    }
+
+    for bot_name in ("options_income", "options_directional"):
+        prof = db.query(BotProfile).filter(BotProfile.name == bot_name).first()
+        if not prof:
+            continue
+        alloc_ids = [a.id for a in db.query(BotAllocation).filter(BotAllocation.profile_id == prof.id).all()]
+        if not alloc_ids:
+            continue
+
+        open_positions = (
+            db.query(BotPosition)
+            .filter(
+                BotPosition.allocation_id.in_(alloc_ids),
+                BotPosition.closed_at.is_(None),
+                BotPosition.quarantined_at.is_(None),
+            )
+            .all()
+        )
+
+        properly_options = []
+        shares_misclassified = []
+        expired = []
+
+        for p in open_positions:
+            row = {
+                "id": p.id,
+                "symbol": p.symbol,
+                "qty": p.qty,
+                "avg_cost_cents": p.avg_cost_cents,
+                "option_type": p.option_type,
+                "strike_price": p.strike_price,
+                "expiration_date": p.expiration_date,
+                "contract_count": p.contract_count,
+                "opened_at": p.opened_at.isoformat() if p.opened_at else None,
+            }
+            if p.option_type is None:
+                shares_misclassified.append(row)
+            elif p.expiration_date and p.expiration_date < today_str:
+                expired.append(row)
+            else:
+                properly_options.append(row)
+
+        results["bots"][bot_name] = {
+            "total_open": len(open_positions),
+            "properly_options": properly_options,
+            "shares_misclassified": shares_misclassified,
+            "expired": expired,
+        }
+        results["summary"]["properly_options"] += len(properly_options)
+        results["summary"]["shares_misclassified"] += len(shares_misclassified)
+        results["summary"]["expired"] += len(expired)
+        results["summary"]["total_open"] += len(open_positions)
+
+    # Optionally post to Discord fund-updates webhook
+    if post_to_discord:
+        wh_url = os.environ.get("DISCORD_WH_FUND_UPDATES")
+        if wh_url:
+            s = results["summary"]
+            lines = [
+                "**⚡ Options Position Audit**",
+                f"Total open: {s['total_open']} | Proper options: {s['properly_options']} | **Misclassified shares: {s['shares_misclassified']}** | Expired: {s['expired']}",
+                "",
+            ]
+            for bot_name, data in results["bots"].items():
+                if data["shares_misclassified"]:
+                    lines.append(f"**{bot_name}** — {len(data['shares_misclassified'])} share positions found:")
+                    for p in data["shares_misclassified"][:5]:
+                        lines.append(f"  • `{p['symbol']}` qty={p['qty']} avg_cost=${p['avg_cost_cents']/100:.2f} opened={p['opened_at'][:10] if p['opened_at'] else '?'}")
+                    if len(data["shares_misclassified"]) > 5:
+                        lines.append(f"  ... and {len(data['shares_misclassified'])-5} more")
+                if data["expired"]:
+                    lines.append(f"**{bot_name}** — {len(data['expired'])} expired option positions")
+            lines.append("")
+            lines.append("@BrockGorzy — reply with **Option A** (close all share positions at market) or **Option B** (mark as misclassified, leave open). Options bots will generate real contracts going forward.")
+
+            try:
+                import urllib.request, json as _json
+                payload = _json.dumps({"content": "\n".join(lines)}).encode()
+                req = urllib.request.Request(wh_url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+                urllib.request.urlopen(req, timeout=5)
+                results["discord_posted"] = True
+            except Exception as wh_exc:
+                results["discord_posted"] = False
+                results["discord_error"] = str(wh_exc)
+
+    return results

@@ -221,24 +221,72 @@ export async function postSignalToDiscord(signal: SignalInput): Promise<void> {
     const assetLabel  = isBuy ? "Acquired" : "Sold Short";
 
     const testPrefix = signal.isTest ? "[TEST] " : "";
-    const embed = new EmbedBuilder()
-      .setColor(color)
-      .setAuthor({ name: `${displayName} bot` })
-      .setTitle(`${testPrefix}${sideEmoji(signal.side)} ${direction} ${signal.symbol}`)
-      .setDescription(signal.reason)
-      .addFields(
-        { name: "Strategy",    value: signal.strategy,                                       inline: true },
-        { name: "Direction",   value: direction,                                             inline: true },
-        { name: "Confidence",  value: `${(signal.confidence * 100).toFixed(1)}%`,           inline: true },
-        { name: dollarLabel,   value: notionalStr,                                           inline: true },
-        { name: assetLabel,    value: qtyStr,                                                inline: true },
-        { name: "Allocation",  value: allocStr,                                              inline: true },
-        { name: "Entry",       value: entry  != null ? `$${fmtPrice(entry)}`              : "—", inline: true },
-        { name: "Stop",        value: stop   != null ? `$${fmtPrice(stop)}${stopPct   != null ? ` (${fmtPct(stopPct)})`   : ""}` : "—", inline: true },
-        { name: "Take Profit", value: target != null ? `$${fmtPrice(target)}${targetPct != null ? ` (${fmtPct(targetPct)})` : ""}` : "—", inline: true },
-      )
-      .setFooter({ text: COMPLIANCE_FOOTER })
-      .setTimestamp(new Date());
+
+    // Parse reason JSON for strategy metadata (options bots store structured JSON here)
+    let reasonMeta: Record<string, unknown> = {};
+    try { reasonMeta = JSON.parse(signal.reason); } catch { /* keep empty */ }
+
+    const isOptionsBot = OPTIONS_BOTS.has(signal.botProfile);
+
+    let embed: EmbedBuilder;
+
+    if (isOptionsBot) {
+      const spot   = typeof reasonMeta["spot"]    === "number" ? (reasonMeta["spot"]    as number) : null;
+      const setup  = typeof reasonMeta["setup"]   === "string" ? (reasonMeta["setup"]   as string) : signal.strategy;
+      const manage = typeof reasonMeta["manage"]  === "string" ? (reasonMeta["manage"]  as string) : null;
+      const ivr    = typeof reasonMeta["mkt_ivr"] === "number" ? (reasonMeta["mkt_ivr"] as number) : null;
+      const vix    = typeof reasonMeta["vix"]     === "number" ? (reasonMeta["vix"]     as number) : null;
+
+      const setupLabel = setup.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const descLines = [
+        spot != null ? `**Underlying:** ${signal.symbol} @ $${fmtPrice(spot)}` : `**Underlying:** ${signal.symbol}`,
+        manage ? `**Manage:** ${manage}` : null,
+      ].filter(Boolean) as string[];
+
+      embed = new EmbedBuilder()
+        .setColor(COLOR_BY_CATEGORY.options)
+        .setAuthor({ name: `${displayName} bot` })
+        .setTitle(`${testPrefix}⚡ OPTIONS — ${signal.symbol} — ${setupLabel}`)
+        .setDescription(descLines.join("\n") || "—")
+        .addFields(
+          { name: "Strategy",   value: setupLabel,                                              inline: true },
+          { name: "Confidence", value: `${(signal.confidence * 100).toFixed(1)}%`,             inline: true },
+          { name: "Allocation", value: allocStr,                                                inline: true },
+          ...(ivr != null ? [{ name: "IVR", value: `${ivr.toFixed(0)}%`, inline: true }] : []),
+          ...(vix != null ? [{ name: "VIX", value: `${vix.toFixed(1)}`,  inline: true }] : []),
+        )
+        .setFooter({ text: COMPLIANCE_FOOTER })
+        .setTimestamp(new Date());
+    } else {
+      embed = new EmbedBuilder()
+        .setColor(color)
+        .setAuthor({ name: `${displayName} bot` })
+        .setTitle(`${testPrefix}${sideEmoji(signal.side)} ${direction} ${signal.symbol}`)
+        .setDescription(
+          (() => {
+            if (Object.keys(reasonMeta).length > 0) {
+              return Object.entries(reasonMeta)
+                .map(([k, v]) => `**${k}:** ${v}`)
+                .join("\n")
+                .slice(0, 4096);
+            }
+            return signal.reason?.slice(0, 4096) || "—";
+          })()
+        )
+        .addFields(
+          { name: "Strategy",    value: signal.strategy,                                       inline: true },
+          { name: "Direction",   value: direction,                                             inline: true },
+          { name: "Confidence",  value: `${(signal.confidence * 100).toFixed(1)}%`,           inline: true },
+          { name: dollarLabel,   value: notionalStr,                                           inline: true },
+          { name: assetLabel,    value: qtyStr,                                                inline: true },
+          { name: "Allocation",  value: allocStr,                                              inline: true },
+          { name: "Entry",       value: entry  != null ? `$${fmtPrice(entry)}`              : "—", inline: true },
+          { name: "Stop",        value: stop   != null ? `$${fmtPrice(stop)}${stopPct   != null ? ` (${fmtPct(stopPct)})`   : ""}` : "—", inline: true },
+          { name: "Take Profit", value: target != null ? `$${fmtPrice(target)}${targetPct != null ? ` (${fmtPct(targetPct)})` : ""}` : "—", inline: true },
+        )
+        .setFooter({ text: COMPLIANCE_FOOTER })
+        .setTimestamp(new Date());
+    }
 
     let sentCount = 0;
     for (const channelId of channelIds) {

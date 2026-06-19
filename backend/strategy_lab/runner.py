@@ -1419,6 +1419,13 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     try:
         import yfinance as yf
         ticker = yf.Ticker(underlying)
+        # Fetch spot price if not available from reason JSON
+        if spot <= 0:
+            try:
+                _fi = ticker.fast_info
+                spot = float(getattr(_fi, "last_price", 0) or 0)
+            except Exception:
+                pass
         exps = ticker.options
         if exps:
             from datetime import datetime

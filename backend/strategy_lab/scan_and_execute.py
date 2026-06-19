@@ -235,7 +235,7 @@ def scan_and_execute(
                     "strategy": strat_name,
                     "confidence": round(sig.confidence, 4),
                     "side": sig.side,
-                    "reasons": {"reason": sig.reason},
+                    "reason": sig.reason,
                     "size_hint": float(getattr(sig, "size_hint", 0.1) or 0.1),
                 })
         except Exception as exc:
@@ -350,7 +350,7 @@ def scan_and_execute(
                         side=r["side"],
                         confidence=r["confidence"],
                         size_hint=min(1.0, max(0.0, default_size / 100.0)),
-                        reason=str(r.get("reasons", "")),
+                        reason=str(r.get("reason", "") or ""),
                         strategy=r["strategy"],
                         ts=datetime.now(timezone.utc),
                     )
@@ -387,7 +387,7 @@ def scan_and_execute(
                         side=r["side"],
                         confidence=r["confidence"],
                         size_hint=float(r.get("size_hint", 0.1)),
-                        reason=str(r.get("reasons", "")),
+                        reason=str(r.get("reason", "") or ""),
                         strategy=r["strategy"],
                         ts=datetime.now(timezone.utc),
                     )

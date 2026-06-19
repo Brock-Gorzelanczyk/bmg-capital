@@ -227,6 +227,10 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
 
     unrealized_pnl_cents = 0
     for p in open_pos_rows:
+        # Options positions: comparing stock price to option premium is wrong.
+        # Skip unrealized here; proper options MTM requires live option quotes.
+        if p.option_type is not None:
+            continue
         price = live_prices.get(p.symbol)
         if price and p.avg_cost_cents and p.qty:
             is_short = pos_side_map.get(p.id, "long") == "short"

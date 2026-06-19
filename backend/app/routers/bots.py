@@ -2269,6 +2269,47 @@ def get_positions(
 
     def _enrich(p: BotPosition) -> dict:
         d = _position_to_dict(p)
+
+        if p.option_type is not None and p.strike_price is not None and p.expiration_date and p.contract_count:
+            # Options position: compute P&L from option premium, not underlying stock price.
+            current_premium: float | None = None
+            try:
+                import yfinance as yf
+                ticker = yf.Ticker(p.symbol)
+                chain = ticker.option_chain(p.expiration_date)
+                df = chain.puts if "put" in (p.option_type or "").lower() else chain.calls
+                if df is not None and not df.empty:
+                    row = df.iloc[(df["strike"] - p.strike_price).abs().argsort()[:1]]
+                    if not row.empty:
+                        bid = float(row["bid"].iloc[0])
+                        ask = float(row["ask"].iloc[0])
+                        mid = (bid + ask) / 2
+                        current_premium = mid if mid > 0 else float(row["lastPrice"].iloc[0])
+            except Exception:
+                pass
+
+            entry_dollars = p.avg_cost_cents / 100  # option premium per share in dollars
+            multiplier = 100                         # US equity: 100 shares per contract
+            contracts = p.contract_count
+            if current_premium is not None and entry_dollars > 0:
+                is_short = getattr(p, "side", "long") == "short"
+                if is_short:
+                    unrealized = (entry_dollars - current_premium) * contracts * multiplier
+                else:
+                    unrealized = (current_premium - entry_dollars) * contracts * multiplier
+                cost_basis = entry_dollars * contracts * multiplier
+                d["current_price"] = round(current_premium, 4)
+                d["market_value"] = round(current_premium * contracts * multiplier, 2)
+                d["unrealized_pnl"] = round(unrealized, 2)
+                d["unrealized_pnl_pct"] = round(unrealized / cost_basis * 100 if cost_basis > 0 else 0, 2)
+            else:
+                d["current_price"] = None
+                d["market_value"] = None
+                d["unrealized_pnl"] = None
+                d["unrealized_pnl_pct"] = None
+            return d
+
+        # Stock/crypto position (existing logic)
         price = live_prices.get(p.symbol, 0.0)
         if price > 0 and p.avg_cost_cents and p.qty:
             entry = p.avg_cost_cents / 100
