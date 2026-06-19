@@ -1289,6 +1289,135 @@ def post_to_fund_updates(
     return {"posted": ok, "error": err or None}
 
 
+def _next_options_monthly_expiry() -> str:
+    """Return the nearest third-Friday monthly expiry ≥21 DTE from today (YYYY-MM-DD)."""
+    from datetime import date, timedelta
+    today = date.today()
+    year, month = today.year, today.month
+    for _ in range(6):
+        first = date(year, month, 1)
+        days_to_first_friday = (4 - first.weekday()) % 7
+        third_friday = first + timedelta(days=days_to_first_friday + 14)
+        if (third_friday - today).days >= 21:
+            return third_friday.strftime("%Y-%m-%d")
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+    raise RuntimeError("No valid monthly expiry found within 6 months")
+
+
+def _build_occ_symbol(root: str, expiry: str, call_or_put: str, strike: float) -> str:
+    """Build OCC option symbol, e.g. SPY260717C00595000."""
+    yy, mm, dd = expiry[2:4], expiry[5:7], expiry[8:10]
+    cp = "C" if call_or_put.lower().startswith("c") else "P"
+    return f"{root}{yy}{mm}{dd}{cp}{int(round(strike * 1000)):08d}"
+
+
+@router.post("/options/test-order")
+def options_test_order(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Prove end-to-end that backend can submit options orders to Alpaca paper.
+
+    Sends a $0.01 limit BUY of an OTM SPY call (~30 DTE). Cancels immediately
+    if accepted. No DB writes.
+
+    Returns verdict: WORKING | OPTIONS_NOT_ENABLED | INVALID_SYMBOL | MARKET_CLOSED | OTHER_ERROR.
+    """
+    if not getattr(current_user, "is_admin", False) and getattr(current_user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    from strategy_lab.brokers.alpaca_paper_stocks import PaperStocksAdapter
+
+    # Compute target expiry and strike
+    try:
+        expiry = _next_options_monthly_expiry()
+    except Exception as exc:
+        return {"verdict": "OTHER_ERROR", "error": f"expiry calc failed: {exc}"}
+
+    spot = 0.0
+    try:
+        import yfinance as yf
+        fi = yf.Ticker("SPY").fast_info
+        spot = float(getattr(fi, "last_price", 0) or 0)
+    except Exception:
+        pass
+    if spot <= 0:
+        spot = 595.0  # sane fallback if yfinance unavailable
+
+    # +$50 OTM call, rounded to nearest $5
+    strike = round((spot + 50.0) / 5) * 5
+    contract_symbol = _build_occ_symbol("SPY", expiry, "call", strike)
+
+    # Submit $0.01 limit (won't fill — proves Alpaca accepts it)
+    try:
+        broker = PaperStocksAdapter()
+        result = broker.submit_options_order(
+            contract_symbol=contract_symbol,
+            contracts=1,
+            side="buy",
+            limit_price=0.01,
+        )
+    except Exception as exc:
+        return {"verdict": "OTHER_ERROR", "error": str(exc), "contract_symbol": contract_symbol}
+
+    status = result["status_code"]
+    body = result["body"]
+    order_id = result.get("order_id")
+    error_msg = (body.get("message") or body.get("error") or "").lower()
+
+    if status in (200, 201):
+        verdict = "WORKING"
+    elif status == 403:
+        verdict = "OPTIONS_NOT_ENABLED"
+    elif status in (400, 422):
+        if "symbol" in error_msg or "not found" in error_msg or "invalid" in error_msg:
+            verdict = "INVALID_SYMBOL"
+        elif "option" in error_msg:
+            verdict = "OPTIONS_NOT_ENABLED"
+        elif "market" in error_msg and "closed" in error_msg:
+            verdict = "MARKET_CLOSED"
+        else:
+            verdict = "OTHER_ERROR"
+    else:
+        verdict = "OTHER_ERROR"
+
+    # Cancel immediately if accepted
+    cancelled = False
+    cancel_error = None
+    if order_id and verdict == "WORKING":
+        try:
+            cancelled = broker.cancel_order(order_id)
+        except Exception as exc:
+            cancel_error = str(exc)
+
+    # Post result to #fund-updates
+    emoji = "✅" if verdict == "WORKING" else "❌"
+    _discord_fund_updates(
+        f"{emoji} **test-order endpoint live** — Alpaca options order: **{verdict}**\n"
+        f"Symbol: `{contract_symbol}` (SPY +$50 OTM call, expiry {expiry})\n"
+        f"HTTP {status}" + (" — order accepted and cancelled" if cancelled else "")
+    )
+
+    logger.info(
+        "options/test-order: verdict=%s symbol=%s status=%d order_id=%s cancelled=%s",
+        verdict, contract_symbol, status, order_id, cancelled,
+    )
+    return {
+        "verdict": verdict,
+        "contract_symbol": contract_symbol,
+        "expiry": expiry,
+        "spot": spot,
+        "strike": strike,
+        "http_status": status,
+        "order_id": order_id,
+        "alpaca_response": body,
+        "order_cancelled": cancelled,
+        "cancel_error": cancel_error,
+    }
+
+
 @router.post("/options/announce-quarantine-complete")
 def announce_quarantine_complete(
     db: Session = Depends(get_db),

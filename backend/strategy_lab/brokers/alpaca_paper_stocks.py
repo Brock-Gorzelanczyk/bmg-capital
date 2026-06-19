@@ -84,6 +84,37 @@ class PaperStocksAdapter(BrokerAdapter):
     def cancel_order(self, order_id: str) -> bool:
         return self._delete(f"/orders/{order_id}")
 
+    def submit_options_order(
+        self,
+        contract_symbol: str,
+        contracts: int,
+        side: str,
+        limit_price: float,
+        time_in_force: str = "day",
+    ) -> dict:
+        """Submit a single-leg options limit order to Alpaca paper.
+
+        Returns raw dict with status_code, body, and order_id — does NOT
+        raise_for_status so callers can inspect error responses.
+        """
+        payload = {
+            "symbol": contract_symbol,
+            "qty": str(contracts),
+            "side": side,
+            "type": "limit",
+            "time_in_force": time_in_force,
+            "limit_price": str(limit_price),
+            "order_class": "simple",
+        }
+        resp = requests.post(
+            f"{_PAPER_BASE}/orders",
+            json=payload,
+            headers=self._headers,
+            timeout=10,
+        )
+        data = resp.json() if resp.content else {}
+        return {"status_code": resp.status_code, "body": data, "order_id": data.get("id")}
+
     def submit_bracket_order(
         self,
         symbol: str,
