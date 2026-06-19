@@ -4,7 +4,7 @@ import {
   LayoutDashboard, LineChart, BookMarked, Briefcase, BookOpen, BarChart2,
   FlaskConical, Layers, Bitcoin, PenTool, Radio,
   Filter, Newspaper, Microscope, Compass,
-  Droplets, ShieldCheck, Activity,
+  Activity,
   GraduationCap, Users, ScanSearch, Scale, Award,
   Search, Bell, Settings, LogOut, HelpCircle, ChevronUp, Inbox, Crown,
   Wallet, ScrollText, Building2, ArrowLeftRight, ClipboardList,
@@ -81,11 +81,6 @@ const NAV_MARKETS = [
   { to: "/news",      label: "News",      Icon: Newspaper },
   { to: "/research",  label: "Research",  Icon: Microscope },
   { to: "/discovery", label: "Discovery", Icon: Compass },
-];
-
-const NAV_CRYPTO_PLUS = [
-  { to: "/defi",     label: "DeFi",     Icon: Droplets },
-  { to: "/security", label: "Security", Icon: ShieldCheck },
 ];
 
 const NAV_LEARN = [
@@ -498,8 +493,6 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
         <NavSection label="Fund" items={NAV_FUND} expanded={expanded} />
 
         <NavSection label="Markets" items={NAV_MARKETS} expanded={expanded} />
-
-        <NavSection label="Crypto+" items={NAV_CRYPTO_PLUS} expanded={expanded} />
 
         <NavSection
           label="Learn"
