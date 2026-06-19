@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import TickerTape from "@/components/ui/TickerTape";
 import { BracketFrame, SectionLabel } from "@/components/design";
+import client from "@/api/client";
 import { pauseAllBots } from "@/api/bots";
 import { getDashboardV2, type DashboardV2, type DashV2Sleeve } from "@/api/dashboard";
 import { useIsViewer } from "@/store/authStore";
@@ -136,6 +137,16 @@ export default function Dashboard() {
     retry: 1,
   });
 
+  const { data: regime } = useQuery({
+    queryKey: ["portfolio-regime"],
+    queryFn: () => client.get<{
+      regime: string; confidence: number | null; days_in_regime: number;
+      vix_level: number | null; routing_enabled: boolean; snapshot_date: string | null;
+    }>("/portfolio/regime/current").then(r => r.data),
+    staleTime: 120_000,
+    retry: 0,
+  });
+
   const invalidateAll = () => qc.invalidateQueries({ queryKey: ["dashboard-v2"] });
   const pauseMut = useMutation({ mutationFn: pauseAllBots, onSuccess: invalidateAll });
 
@@ -230,18 +241,27 @@ export default function Dashboard() {
         {/* Row 3 – Market Regime */}
         <div className="mb-8 bg-t-bg1 border border-t-dim rounded-2xl p-5">
           <SectionLabel as="h2" className="mb-3 text-t-hi">Market Regime</SectionLabel>
-          {data?.regime ? (
-            <>
-              <div className="flex items-center gap-3 flex-wrap mb-3">
-                <span className="px-3 py-1 rounded-full bg-t-bg2 text-xs text-t-hi font-medium">
-                  {data.regime.label}
+          {regime ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="px-3 py-1 rounded-full bg-t-bg2 text-xs text-t-hi font-medium uppercase tracking-wide">
+                {regime.regime}
+              </span>
+              {regime.days_in_regime > 0 && (
+                <span className="px-3 py-1 rounded-full bg-t-bg2 text-xs text-t-muted font-medium">
+                  {regime.days_in_regime}d in regime
                 </span>
-                <span className="px-3 py-1 rounded-full bg-t-bg2 text-xs text-t-hi font-medium">
-                  BTC.D: <span className="font-mono-t tabular-nums">{data.regime.btc_dominance.toFixed(1)}%</span>
+              )}
+              {regime.confidence != null && (
+                <span className="px-3 py-1 rounded-full bg-t-bg2 text-xs text-t-muted font-medium font-mono-t tabular-nums">
+                  {(regime.confidence * 100).toFixed(0)}% conf
                 </span>
-              </div>
-              <p className="text-xs text-t-muted">{data.regime.description}</p>
-            </>
+              )}
+              {regime.vix_level != null && (
+                <span className="px-3 py-1 rounded-full bg-t-bg2 text-xs text-t-muted font-medium font-mono-t tabular-nums">
+                  VIX {regime.vix_level.toFixed(1)}
+                </span>
+              )}
+            </div>
           ) : (
             <p className="text-xs text-t-muted">Regime: Scanning markets...</p>
           )}
