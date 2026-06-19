@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from typing import Any
@@ -9,7 +10,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_TTL = 60.0  # 1-minute cache for live price updates
+_TTL = 300.0  # 5-minute cache — free-tier CoinGecko allows ~30 req/min; serve stale
 
 _caches: dict[str, dict[str, Any]] = {
     "top_coins":    {"data": None, "ts": 0.0},
@@ -22,10 +23,15 @@ _lock = threading.Lock()
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 FNG_BASE = "https://api.alternative.me"
 
-_HEADERS = {
-    "Accept": "application/json",
-    "User-Agent": "BMGCapital/1.0",
-}
+def _make_headers() -> dict:
+    """Build CoinGecko request headers, injecting API key if env var is set."""
+    h = {"Accept": "application/json", "User-Agent": "BMGCapital/1.0"}
+    key = os.environ.get("COINGECKO_API_KEY", "")
+    if key:
+        # Demo key → x-cg-demo-api-key; Pro key → x-cg-pro-api-key
+        header = "x-cg-pro-api-key" if key.startswith("CG-") else "x-cg-demo-api-key"
+        h[header] = key
+    return h
 
 
 def _get_cached(key: str) -> Any | None:
@@ -34,6 +40,12 @@ def _get_cached(key: str) -> Any | None:
         if c["data"] is not None and time.time() - c["ts"] < _TTL:
             return c["data"]
     return None
+
+
+def _get_stale(key: str) -> Any | None:
+    """Return cached data regardless of age (used as fallback on API failure)."""
+    with _lock:
+        return _caches[key]["data"]
 
 
 def _set_cached(key: str, data: Any) -> None:
@@ -59,13 +71,14 @@ def get_top_coins(limit: int = 100) -> list[dict]:
                     "sparkline": "true",
                     "price_change_percentage": "1h,24h,7d",
                 },
-                headers=_HEADERS,
+                headers=_make_headers(),
             )
             r.raise_for_status()
             raw = r.json()
     except Exception as e:
-        logger.warning(f"CoinGecko top_coins failed: {e}")
-        return []
+        stale = _get_stale("top_coins")
+        logger.warning(f"CoinGecko top_coins failed (returning %d stale rows): %s", len(stale) if stale else 0, e)
+        return stale or []
 
     result = []
     for c in raw:
@@ -203,7 +216,7 @@ def get_trending() -> list[dict]:
                         "sparkline": "true",
                         "price_change_percentage": "1h,24h,7d",
                     },
-                    headers=_HEADERS,
+                    headers=_make_headers(),
                 )
                 mr.raise_for_status()
                 for m in mr.json():
