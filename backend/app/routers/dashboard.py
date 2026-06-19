@@ -74,14 +74,15 @@ def get_dashboard_v2(
     cutoff_30d = (now - timedelta(days=30)).date()
 
     # ── Load allocations + profiles ──────────────────────────────────────────
-    # Join to BotProfile so disabled profiles (YAML enabled: false) are excluded.
-    # This prevents bots that have never traded from inflating portfolio value/counts.
+    # Filter by BotAllocation.enabled (per-user flag) NOT BotProfile.enabled
+    # (global YAML flag). Profile-level enabled is unreliable — many profiles
+    # have enabled=False in DB while the allocation itself is active.
     allocs = (
         db.query(BotAllocation)
         .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
         .filter(
             BotAllocation.user_id == current_user.id,
-            BotProfile.enabled.is_(True),
+            BotAllocation.enabled.is_(True),
         )
         .all()
     )
@@ -155,7 +156,7 @@ def get_dashboard_v2(
         profile_wl_count[wl.profile_id] = profile_wl_count.get(wl.profile_id, 0) + 1
 
     # ── Portfolio totals ──────────────────────────────────────────────────────
-    # allocs is already filtered to enabled profiles only (see query above).
+    # allocs is already filtered to enabled allocations only (see query above).
     total_starting = sum(a.starting_capital_cents or 0 for a in allocs)
     total_realized = sum(total_realized_by_alloc.values())
     total_today_pnl = sum(today_pnl_by_alloc.values())
