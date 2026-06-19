@@ -1,14 +1,13 @@
 """
-Fetches Congressional stock disclosures from:
-- Senate Stock Watcher: https://senatestockwatcher.com/api/v1/all_transactions.json
-- House Stock Watcher: https://housestockwatcher.com/api/all_transactions
-
-Both are open-source projects scraping official STOCK Act portals.
-Rate limiting: be polite — fetch at most once per hour.
+Fetches Congressional stock disclosures from Quiver Quantitative.
+API: GET https://api.quiverquant.com/beta/live/congresstrading
+Auth: Authorization: Bearer <QUIVER_API_KEY>
+Rate limiting: fetch at most once per hour.
 """
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -17,10 +16,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-SOURCES = {
-    "senate_stock_watcher": "https://senatestockwatcher.com/api/v1/all_transactions.json",
-    "house_stock_watcher": "https://housestockwatcher.com/api/all_transactions",
-}
+QUIVER_CONGRESS_URL = "https://api.quiverquant.com/beta/live/congresstrading"
 
 AMOUNT_MAP = {
     "$1,001 - $15,000":    (100100, 1500000),
@@ -38,11 +34,9 @@ AMOUNT_MAP = {
 def _parse_amount(amount_str: str | None) -> tuple[int | None, int | None]:
     if not amount_str:
         return None, None
-    # Try exact match first
     for k, v in AMOUNT_MAP.items():
         if k.lower() == amount_str.lower():
             return v
-    # Try regex extraction for "Over $X" patterns
     m = re.search(r"[\$]?([\d,]+)", amount_str)
     if m:
         val = int(m.group(1).replace(",", "")) * 100
@@ -76,104 +70,103 @@ def _normalize_transaction_type(raw: str | None) -> str:
     return r
 
 
-def _build_source_id(source: str, row: dict) -> str:
-    """Build a dedup key from available fields."""
-    name = row.get("representative") or row.get("senator") or row.get("name") or ""
-    ticker = row.get("ticker") or ""
-    tx_date = str(row.get("transaction_date") or row.get("transactionDate") or "")
-    tx_type = str(row.get("type") or row.get("transaction_type") or "")
-    amount = str(row.get("amount") or "")
-    return f"{source}:{name}:{ticker}:{tx_date}:{tx_type}:{amount}"
+def _build_source_id(row: dict) -> str:
+    name = row.get("Representative") or ""
+    ticker = row.get("Ticker") or ""
+    tx_date = str(row.get("TransactionDate") or row.get("Date") or "")
+    tx_type = str(row.get("Transaction") or "")
+    amount = str(row.get("Range") or "")
+    return f"quiver:{name}:{ticker}:{tx_date}:{tx_type}:{amount}"
 
 
-async def fetch_congress_transactions(source_key: str, url: str, timeout: int = 30) -> list[dict]:
-    """Fetch and normalize transactions from one source."""
+async def fetch_quiver_congress(timeout: int = 30) -> list[dict]:
+    """Fetch and normalize congressional trades from Quiver Quantitative."""
+    api_key = os.environ.get("QUIVER_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("QUIVER_API_KEY environment variable is not set")
+
     headers = {
-        "User-Agent": "BMG Capital app/1.0 (admin@bmgcapital.app)",
+        "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
+        "User-Agent": "BMG Capital app/1.0 (admin@bmgcapital.app)",
     }
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        resp = await client.get(url, headers=headers)
+        resp = await client.get(QUIVER_CONGRESS_URL, headers=headers)
         resp.raise_for_status()
-        data = resp.json()
+        transactions = resp.json()
 
-    # Both APIs return a list directly or wrapped in a key
-    if isinstance(data, dict):
-        transactions = data.get("transactions") or data.get("data") or list(data.values())[0]
-    else:
-        transactions = data
+    if isinstance(transactions, dict):
+        transactions = transactions.get("data") or list(transactions.values())[0]
 
     rows = []
     for row in transactions:
         if not isinstance(row, dict):
             continue
-        # Normalize field names (SSW and HSW have slightly different schemas)
-        name = (row.get("representative") or row.get("senator") or
-                row.get("name") or row.get("member") or "").strip()
-        ticker = (row.get("ticker") or "").strip().upper() or None
-        tx_type_raw = row.get("type") or row.get("transaction_type") or row.get("transactionType") or ""
-        amount_raw = row.get("amount") or row.get("amount_range") or ""
-        tx_date = _parse_date(row.get("transaction_date") or row.get("transactionDate") or row.get("tx_date"))
-        disc_date = _parse_date(row.get("disclosure_date") or row.get("disclosureDate"))
-        party = (row.get("party") or "").strip()[:1].upper() or None
-        state = (row.get("state") or "").strip()[:2].upper() or None
-        asset_desc = (row.get("asset_description") or row.get("assetDescription") or
-                      row.get("description") or row.get("comment") or "")
-        chamber = "S" if source_key == "senate_stock_watcher" else "H"
+
+        name = (row.get("Representative") or "").strip()
+        ticker = (row.get("Ticker") or "").strip().upper() or None
+        tx_type_raw = row.get("Transaction") or ""
+        amount_raw = row.get("Range") or ""
+        tx_date = _parse_date(row.get("TransactionDate") or row.get("Date"))
+        disc_date = _parse_date(row.get("ReportDate"))
+
+        # Quiver includes both chambers; map to H/S
+        chamber_raw = (row.get("Chamber") or row.get("House") or "").strip()
+        chamber = "S" if chamber_raw.lower().startswith("s") else "H"
+
         lower, upper = _parse_amount(amount_raw)
-        source_id = _build_source_id(source_key, row)
+        source_id = _build_source_id(row)
 
         if not name or not tx_date:
             continue
 
         rows.append({
             "member_name": name,
-            "party": party,
+            "party": None,  # Quiver does not include party affiliation
             "chamber": chamber,
-            "state": state,
+            "state": None,
             "ticker": ticker,
-            "asset_description": asset_desc[:500] if asset_desc else None,
+            "asset_description": None,
             "transaction_type": _normalize_transaction_type(tx_type_raw),
             "amount_range": amount_raw[:50] if amount_raw else None,
             "amount_lower_cents": lower,
             "amount_upper_cents": upper,
             "transaction_date": tx_date,
             "disclosure_date": disc_date,
-            "source": source_key,
+            "source": "quiver",
             "source_id": source_id,
         })
     return rows
 
 
 async def fetch_and_upsert_congress(db, days_back: int = 365) -> dict:
-    """Main entry point: fetch from both sources, upsert into DB, return stats."""
-    from app.db.models.smart_money import SmartMoneyCongressTrade  # import here to avoid circular
+    """Main entry point: fetch from Quiver, upsert into DB, return stats."""
+    from app.db.models.smart_money import SmartMoneyCongressTrade
 
     cutoff = date.today() - timedelta(days=days_back)
     total_new = 0
     total_skipped = 0
     errors = []
 
-    for source_key, url in SOURCES.items():
-        try:
-            rows = await fetch_congress_transactions(source_key, url)
-            for r in rows:
-                if r["transaction_date"] and r["transaction_date"] < cutoff:
-                    continue
-                # Upsert: skip if source_id already exists
-                existing = db.query(SmartMoneyCongressTrade).filter_by(
-                    source=r["source"], source_id=r["source_id"]
-                ).first()
-                if existing:
-                    total_skipped += 1
-                    continue
-                db.add(SmartMoneyCongressTrade(**r))
-                total_new += 1
-            db.commit()
-            logger.info("[congress] %s: %d new, %d skipped", source_key, total_new, total_skipped)
-        except Exception as e:
-            errors.append(f"{source_key}: {e}")
-            logger.error("[congress] fetch failed for %s: %s", source_key, e, exc_info=True)
+    try:
+        rows = await fetch_quiver_congress()
+        for r in rows:
+            if r["transaction_date"] and r["transaction_date"] < cutoff:
+                continue
+            existing = db.query(SmartMoneyCongressTrade).filter_by(
+                source=r["source"], source_id=r["source_id"]
+            ).first()
+            if existing:
+                total_skipped += 1
+                continue
+            db.add(SmartMoneyCongressTrade(**r))
+            total_new += 1
+        db.commit()
+        logger.info("[congress] quiver: %d new, %d skipped", total_new, total_skipped)
+    except Exception as e:
+        errors.append(f"quiver: {e}")
+        db.rollback()
+        logger.error("[congress] quiver fetch failed: %s", e, exc_info=True)
 
     return {"new": total_new, "skipped": total_skipped, "errors": errors}
 
@@ -221,11 +214,7 @@ def get_recent_congress(db, limit: int = 50, offset: int = 0,
                 if r.disclosure_date and r.transaction_date else None
             ),
             "source": r.source,
-            "source_url": (
-                f"https://senatestockwatcher.com/politician/{r.member_name.lower().replace(' ', '-')}"
-                if r.chamber == "S"
-                else "https://housestockwatcher.com/api/all_transactions"
-            ),
+            "source_url": "https://quiverquant.com/congresstrading/",
         }
 
     return [_row_to_dict(r) for r in rows], total

@@ -47,8 +47,8 @@ def get_congress_trades(
         "trades": trades,
         "total": total,
         "last_updated_at": last_updated,
-        "source": "Senate Stock Watcher (senatestockwatcher.com) + House Stock Watcher (housestockwatcher.com)",
-        "source_note": "Data sourced from official STOCK Act disclosure portals via open-source aggregators.",
+        "source": "Quiver Quantitative (quiverquant.com)",
+        "source_note": "Data sourced from official STOCK Act disclosure portals via Quiver Quantitative API.",
     }
 
 
@@ -128,56 +128,57 @@ async def trigger_congress_refresh(
 
 @router.get("/diagnose/congress", dependencies=[Depends(require_admin)])
 async def diagnose_congress():
-    """Diagnose SSW and HSW connectivity. Shows raw HTTP status + row count."""
-    import asyncio
+    """Diagnose Quiver Quantitative connectivity. Shows API key presence + HTTP status + row count."""
+    import os
     import httpx
+    from app.services.smart_money.congress import QUIVER_CONGRESS_URL
 
-    SOURCES = {
-        "senate_stock_watcher": "https://senatestockwatcher.com/api/v1/all_transactions.json",
-        "house_stock_watcher": "https://housestockwatcher.com/api/all_transactions",
-    }
-    results = {}
-    headers = {
-        "User-Agent": "BMG Capital app/1.0 (admin@bmgcapital.app)",
-        "Accept": "application/json",
+    api_key = os.environ.get("QUIVER_API_KEY", "")
+    api_key_present = bool(api_key)
+
+    result: dict = {
+        "source": "quiver_quantitative",
+        "url": QUIVER_CONGRESS_URL,
+        "api_key_present": api_key_present,
     }
 
-    async def _probe(key: str, url: str) -> dict:
+    if not api_key_present:
+        result["error"] = "QUIVER_API_KEY env var is not set — add it to Railway and redeploy"
+        return {"sources": {"quiver_quantitative": result}}
+
+    try:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+            "User-Agent": "BMG Capital app/1.0 (admin@bmgcapital.app)",
+        }
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            resp = await client.get(QUIVER_CONGRESS_URL, headers=headers)
+        rows = 0
+        parse_error = None
         try:
-            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-                resp = await client.get(url, headers=headers)
-            data = None
-            rows = 0
-            parse_error = None
-            try:
-                data = resp.json()
-                if isinstance(data, list):
-                    rows = len(data)
-                elif isinstance(data, dict):
-                    for v in data.values():
-                        if isinstance(v, list):
-                            rows = len(v)
-                            break
-            except Exception as e:
-                parse_error = str(e)
-            return {
-                "url": url,
-                "http_status": resp.status_code,
-                "content_type": resp.headers.get("content-type", ""),
-                "body_bytes": len(resp.content),
-                "row_count": rows,
-                "parse_error": parse_error,
-                "sample": str(resp.text[:200]) if resp.status_code != 200 else None,
-            }
-        except Exception as exc:
-            return {"url": url, "error": str(exc)}
+            data = resp.json()
+            if isinstance(data, list):
+                rows = len(data)
+            elif isinstance(data, dict):
+                for v in data.values():
+                    if isinstance(v, list):
+                        rows = len(v)
+                        break
+        except Exception as e:
+            parse_error = str(e)
+        result.update({
+            "http_status": resp.status_code,
+            "content_type": resp.headers.get("content-type", ""),
+            "body_bytes": len(resp.content),
+            "row_count": rows,
+            "parse_error": parse_error,
+            "sample": str(resp.text[:300]) if resp.status_code != 200 else None,
+        })
+    except Exception as exc:
+        result["error"] = str(exc)
 
-    tasks = [_probe(k, u) for k, u in SOURCES.items()]
-    probe_results = await asyncio.gather(*tasks)
-    for key, result in zip(SOURCES.keys(), probe_results):
-        results[key] = result
-
-    return {"sources": results}
+    return {"sources": {"quiver_quantitative": result}}
 
 
 @router.get("/crypto")
