@@ -1477,6 +1477,26 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     }
 
 
+_OPTIONS_STRATEGIES: frozenset[str] = frozenset({
+    "iron_condor_45dte",
+    "covered_call_30d",
+    "cash_secured_put",
+    "bull_put_credit_spread",
+    "bear_call_credit_spread",
+    "bull_call_debit_spread",
+    "long_call",
+    "long_put",
+    "long_straddle",
+    "long_strangle",
+    "long_call_directional",
+    "leaps_stock_replacement",
+    "pmcc_diagonal",
+    "jade_lizard",
+    "neutral_calendar_spread",
+    "wheel_strategy",
+})
+
+
 def _execute_options_signal(
     db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str
 ) -> None:
@@ -1588,9 +1608,12 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     from strategy_lab.core.execution import compute_bracket_prices
 
     asset_class = profile.get("asset_class", "stock")
+    _sig_strategy = (getattr(sig, "strategy", "") or "").strip()
 
-    # Route options profiles to the dedicated options executor
-    if asset_class == "options":
+    # Route to options executor if profile declares asset_class=options OR
+    # the signal's strategy is a known options strategy. The strategy-name
+    # check is a safety net for cases where profile YAML load returns {}.
+    if asset_class == "options" or _sig_strategy in _OPTIONS_STRATEGIES:
         _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name)
         return
     now = datetime.now(timezone.utc)

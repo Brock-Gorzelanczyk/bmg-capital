@@ -230,24 +230,36 @@ def _build_signal_embed(signal: dict) -> dict:
         dollar_label = "Size"
         size_value = f"{size_pct:.1f}%" if size_pct is not None else "—"
 
+    # Options-specific fields (resolved here so equity block can check it)
+    option_type = signal.get("option_type")
+
     fields = [
         {"name": "Strategy",    "value": signal.get("strategy") or "—", "inline": True},
         {"name": "Direction",   "value": direction,                      "inline": True},
         {"name": "Confidence",  "value": f"{conf_pct}%",                 "inline": True},
         {"name": dollar_label,  "value": size_value,                     "inline": True},
     ]
-    if entry is not None:
-        fields.append({"name": "Entry",       "value": _fmt_price(entry),              "inline": True})
-    if signal.get("stop") is not None:
-        fields.append({"name": "Stop",        "value": _fmt_price(signal["stop"]),     "inline": True})
-    if signal.get("target") is not None:
-        fields.append({"name": "Take Profit", "value": _fmt_price(signal["target"]),   "inline": True})
+    # Equity price levels — omit for options signals (options use their own fields below)
+    if not option_type:
+        if entry is not None:
+            fields.append({"name": "Entry",       "value": _fmt_price(entry),              "inline": True})
+        if signal.get("stop") is not None:
+            fields.append({"name": "Stop",        "value": _fmt_price(signal["stop"]),     "inline": True})
+        if signal.get("target") is not None:
+            fields.append({"name": "Take Profit", "value": _fmt_price(signal["target"]),   "inline": True})
 
-    # Options-specific fields
-    option_type = signal.get("option_type")
     if option_type:
-        type_badge = "📞 CALL" if option_type.lower() == "call" else "🔻 PUT"
-        fields.append({"name": "Type",      "value": type_badge,                                        "inline": True})
+        ot_lower = option_type.lower()
+        if ot_lower == "call":
+            type_badge = "📞 CALL"
+        elif ot_lower == "put":
+            type_badge = "🔻 PUT"
+        else:
+            # e.g. "call/put spread" → "📞/🔻 CALL / PUT SPREAD"
+            type_label = option_type.upper().replace("/", " / ")
+            type_badge = f"📞/🔻 {type_label}"
+        fields.append({"name": "Type", "value": type_badge, "inline": True})
+        # Specific contract details (populated when yfinance resolves chain)
         if signal.get("strike_price") is not None:
             fields.append({"name": "Strike",    "value": _fmt_price(float(signal["strike_price"])),     "inline": True})
         if signal.get("expiration_date") is not None:
@@ -256,6 +268,11 @@ def _build_signal_embed(signal: dict) -> dict:
             fields.append({"name": "Contracts", "value": str(signal["contract_count"]),                 "inline": True})
         if signal.get("premium") is not None:
             fields.append({"name": "Premium/Contract", "value": _fmt_price(float(signal["premium"])),   "inline": True})
+        # Setup description from strategy reason JSON (always available for options signals)
+        if signal.get("options_strikes"):
+            fields.append({"name": "Setup",   "value": signal["options_strikes"],                       "inline": False})
+        if signal.get("options_spot"):
+            fields.append({"name": "Spot",    "value": _fmt_price(float(signal["options_spot"])),       "inline": True})
 
     return {
         "author": {"name": f"{BOT_DISPLAY.get(bot, bot)} bot"},

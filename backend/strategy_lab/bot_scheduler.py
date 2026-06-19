@@ -1477,6 +1477,34 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
 
+    # ------------------------------------------------------------------
+    # congress_data_refresh: daily at 7:00 AM ET (pre-market)
+    # Fetches Senate + House Stock Watcher disclosures (last 90 days).
+    # ------------------------------------------------------------------
+    def _refresh_congress_data() -> None:
+        import asyncio as _asyncio
+        from app.db.session import SessionLocal as _SessionLocal
+        from app.services.smart_money.congress import fetch_and_upsert_congress as _fetch
+
+        _db = _SessionLocal()
+        try:
+            result = _asyncio.run(_fetch(_db, days_back=90))
+            logger.info("[congress-daily] refresh done: %s", result)
+        except Exception as exc:
+            logger.error("[congress-daily] refresh failed: %s", exc, exc_info=True)
+        finally:
+            _db.close()
+
+    scheduler.add_job(
+        _refresh_congress_data,
+        CronTrigger(hour=7, minute=0, timezone=ET),
+        id="congress_data_refresh",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+
     logger.warning(
         "[startup-trace] ALL BOT JOBS REGISTERED: stock_swing stock_day stock_lt "
         "crypto_swing crypto_day crypto_lt crypto_onchain "
@@ -1489,5 +1517,5 @@ def setup_bot_scheduler(scheduler) -> None:
         "risk_sentinel_premarket risk_sentinel_postclose "
         "data_quality_watcher operations "
         "defensive_halt_check resume_check compute_bot_stats macro_classification_daily "
-        "candidate_pipeline_daemon price_alert_monitor"
+        "candidate_pipeline_daemon price_alert_monitor congress_data_refresh"
     )

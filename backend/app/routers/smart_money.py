@@ -4,7 +4,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -97,25 +97,26 @@ def get_summary(
 
 @router.post("/refresh/congress", dependencies=[Depends(require_admin)])
 async def trigger_congress_refresh(
-    background_tasks: BackgroundTasks,
     days_back: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
 ):
-    """Admin endpoint: trigger a congress data refresh in the background."""
+    """Admin endpoint: run congress data refresh synchronously, return result."""
     from app.services.smart_money.congress import fetch_and_upsert_congress
-    from app.db.session import SessionLocal
 
-    async def _refresh():
-        _db = SessionLocal()
-        try:
-            result = await fetch_and_upsert_congress(_db, days_back=days_back)
-            logger.info("[smart-money] congress refresh done: %s", result)
-        except Exception as _e:
-            logger.error("[smart-money] congress refresh error: %s", _e, exc_info=True)
-        finally:
-            _db.close()
-
-    background_tasks.add_task(_refresh)
-    return {"status": "refresh queued", "days_back": days_back}
+    try:
+        result = await fetch_and_upsert_congress(db, days_back=days_back)
+        logger.info("[smart-money] congress refresh done: %s", result)
+        ok = len(result.get("errors", [])) == 0
+        return {
+            "status": "ok" if ok else "partial",
+            "days_back": days_back,
+            "new": result.get("new", 0),
+            "skipped": result.get("skipped", 0),
+            "errors": result.get("errors", []),
+        }
+    except Exception as exc:
+        logger.error("[smart-money] congress refresh failed: %s", exc, exc_info=True)
+        return {"status": "error", "days_back": days_back, "error": str(exc)}
 
 
 @router.get("/crypto")

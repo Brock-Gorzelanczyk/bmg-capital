@@ -182,6 +182,40 @@ def log_signal(
         daemon=True,
     ).start()
 
+    # Detect options signals by strategy name and extract setup from reason JSON
+    _OPT_STRATS = {
+        "iron_condor_45dte", "covered_call_30d", "cash_secured_put",
+        "bull_put_credit_spread", "bear_call_credit_spread", "bull_call_debit_spread",
+        "long_call", "long_put", "long_straddle", "long_strangle",
+        "long_call_directional", "leaps_stock_replacement", "pmcc_diagonal",
+        "jade_lizard", "neutral_calendar_spread", "wheel_strategy",
+    }
+    _sig_strategy = (signal.strategy or "").strip()
+    _is_options = _sig_strategy in _OPT_STRATS
+
+    _opt_type: str | None = None
+    _opt_setup_desc: str | None = None
+    _opt_strikes_desc: str | None = None
+    _opt_spot: float | None = None
+    if _is_options and signal.reason:
+        try:
+            import json as _json
+            _r = _json.loads(signal.reason)
+            _setup = _r.get("setup", _sig_strategy)
+            _opt_setup_desc = _r.get("setup", _sig_strategy)
+            _opt_strikes_desc = _r.get("strikes")
+            _opt_spot = float(_r.get("spot", 0) or 0) or None
+            if any(k in _setup for k in ("put", "csp", "cash_secured_put", "wheel", "bull_put", "jade_lizard")):
+                _opt_type = "put"
+            elif any(k in _setup for k in ("bear_call", "iron_condor", "condor", "strangle", "straddle")):
+                _opt_type = "call/put spread"
+            elif any(k in _setup for k in ("long_call", "leaps", "pmcc", "diagonal", "bull_call", "covered_call")):
+                _opt_type = "call"
+            else:
+                _opt_type = "call"
+        except Exception:
+            _opt_type = "call"
+
     signal_dict = {
         "bot":                    profile_name,
         "symbol":                 signal.symbol,
@@ -195,6 +229,11 @@ def log_signal(
         "target":                 target_price or None,
         "starting_capital_cents": _starting_capital_cents,
         "notional_usd":           notional_usd,
+        "option_type":            _opt_type,
+        "options_setup":          _opt_setup_desc,
+        "options_strikes":        _opt_strikes_desc,
+        "options_spot":           _opt_spot,
+        "is_options":             _is_options,
     }
 
     threading.Thread(

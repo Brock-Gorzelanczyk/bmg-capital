@@ -1,10 +1,10 @@
 import { TrendingUp, TrendingDown, Layers, Activity } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePortfolioSnapshot } from "@/hooks/usePortfolioSnapshot";
 import { botStatusBadge, BADGE_CLASSES } from "@/lib/botStatus";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
-import AllocationDonut from "@/components/ui/AllocationDonut";
+import AllocationDonut, { type LiveAllocationSlice } from "@/components/ui/AllocationDonut";
 import type { BotSnap, SleeveSnap } from "@/api/portfolioSnapshot";
 import client from "@/api/client";
 
@@ -292,10 +292,35 @@ function NavChart() {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
+interface AllocationLiveResponse {
+  as_of: string;
+  total_portfolio_value: number;
+  deployed_value: number;
+  cash_value: number;
+  slices: LiveAllocationSlice[];
+}
+
+async function fetchAllocationLive(): Promise<AllocationLiveResponse> {
+  const { data } = await client.get<AllocationLiveResponse>("/portfolio/allocation-live");
+  return data;
+}
+
 const SLEEVE_ORDER = ["stocks", "crypto", "options", "quant"] as const;
 
 export default function Portfolio() {
   const { snap, isLoading } = usePortfolioSnapshot();
+  const liveUpdatedAt = useRef<Date | null>(null);
+
+  const { data: liveAlloc } = useQuery({
+    queryKey: ["allocation-live"],
+    queryFn: () => {
+      liveUpdatedAt.current = new Date();
+      return fetchAllocationLive();
+    },
+    refetchInterval: 30_000,
+    staleTime: 29_000,
+    retry: 1,
+  });
 
   const totalValue = snap.total_value_cents;
   const todayPnl = snap.total_pnl_today_cents;
@@ -316,7 +341,6 @@ export default function Portfolio() {
     }));
 
   const deployedCents = SLEEVE_ORDER.reduce((acc, k) => acc + snap.by_sleeve[k].current_value_cents, 0);
-  // Use max of total and deployed so percentages always sum to 100% even if backend values diverge
   const donutTotal = Math.max(totalValue, deployedCents);
   const cashCents = Math.max(0, donutTotal - deployedCents);
   const allSlices = cashCents > 0 ? [...slices, { key: "cash", value_cents: cashCents }] : slices;
@@ -352,10 +376,18 @@ export default function Portfolio() {
         </div>
 
         {/* Allocation donut */}
-        {totalValue > 0 && allSlices.length > 0 && (
+        {(totalValue > 0 || liveAlloc) && (
           <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
             <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">Capital Allocation</p>
-            <AllocationDonut totalCents={donutTotal} slices={allSlices} size={160} />
+            {liveAlloc?.slices && liveAlloc.slices.length > 0 ? (
+              <AllocationDonut
+                liveSlices={liveAlloc.slices}
+                size={160}
+                updatedAt={liveUpdatedAt.current}
+              />
+            ) : allSlices.length > 0 ? (
+              <AllocationDonut totalCents={donutTotal} slices={allSlices} size={160} />
+            ) : null}
           </div>
         )}
 

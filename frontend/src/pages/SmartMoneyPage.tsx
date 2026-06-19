@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Bot, TrendingUp, TrendingDown, Search, RefreshCw, ExternalLink, Loader2 } from "lucide-react";
 import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import { cn } from "@/lib/utils";
@@ -205,11 +206,19 @@ export default function SmartMoneyPage() {
 
   const refreshMut = useMutation({
     mutationFn: () => triggerCongressRefresh(365),
-    onSuccess: () => {
-      setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ["smart-money-congress"] });
-        qc.invalidateQueries({ queryKey: ["smart-money-summary"] });
-      }, 8000);
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["smart-money-congress"] });
+      qc.invalidateQueries({ queryKey: ["smart-money-summary"] });
+      if (data.status === "error") {
+        toast.error(`Congress refresh failed: ${data.error ?? "unknown error"}`);
+      } else if (data.errors && data.errors.length > 0) {
+        toast.warning(`Partial refresh: ${data.new ?? 0} new rows. Errors: ${data.errors.join("; ")}`);
+      } else {
+        toast.success(`Congress data refreshed — ${data.new ?? 0} new rows, ${data.skipped ?? 0} already saved`);
+      }
+    },
+    onError: (err: any) => {
+      toast.error(`Refresh failed: ${err?.response?.data?.detail ?? err?.message ?? "network error"}`);
     },
   });
 
@@ -251,7 +260,7 @@ export default function SmartMoneyPage() {
                 {refreshMut.isPending
                   ? <Loader2 size={12} className="animate-spin" />
                   : <RefreshCw size={12} />}
-                {refreshMut.isPending ? "Queued…" : "Refresh"}
+                {refreshMut.isPending ? "Refreshing…" : "Refresh"}
               </button>
             </>
           )}
@@ -346,7 +355,7 @@ export default function SmartMoneyPage() {
                       className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-600/20 border border-violet-600/30 text-violet-400 hover:bg-violet-600/30 transition-colors disabled:opacity-50"
                     >
                       {refreshMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
-                      {refreshMut.isPending ? "Queued…" : "Fetch Now"}
+                      {refreshMut.isPending ? "Refreshing…" : "Fetch Now"}
                     </button>
                   </>
                 ) : (

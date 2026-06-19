@@ -1791,6 +1791,7 @@ def _snowflake_to_dt(snowflake: int) -> datetime:
 def purge_legacy_options_embeds(
     confirm: bool = False,
     purge_all_signals: bool = False,
+    keep_synthetic: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
@@ -1917,6 +1918,62 @@ def purge_legacy_options_embeds(
             _time.sleep(0.5)
 
         return {"deleted": deleted, "errors": errors}
+
+    # ── keep_synthetic path — runs after helpers are defined ──────────────────
+    if keep_synthetic:
+        _EXPECTED_CH = "1512905889974325280"
+        if ch_options != _EXPECTED_CH:
+            return {
+                "ok": False,
+                "error": (
+                    f"Channel ID mismatch: resolved {ch_options!r}, "
+                    f"expected {_EXPECTED_CH!r}. Aborting to prevent deletion from wrong channel."
+                ),
+            }
+
+        _SYNTHETIC_MARKERS = {
+            "synthetic_test_delete_me",
+            "spy260717c00800000",
+            "verifying options embed format",
+        }
+
+        def _is_synthetic_embed(msg: dict) -> bool:
+            for emb in (msg.get("embeds") or []):
+                texts = [
+                    emb.get("title") or "",
+                    emb.get("description") or "",
+                    (emb.get("footer") or {}).get("text") or "",
+                    (emb.get("author") or {}).get("name") or "",
+                ]
+                for field in (emb.get("fields") or []):
+                    texts.append(field.get("name") or "")
+                    texts.append(field.get("value") or "")
+                combined = " ".join(texts).lower()
+                if any(m in combined for m in _SYNTHETIC_MARKERS):
+                    return True
+            return False
+
+        all_msgs = _fetch_messages_before(ch_options, cutoff_snowflake)
+        synthetic_msgs = [m for m in all_msgs if _is_synthetic_embed(m)]
+        to_delete = [m for m in all_msgs if not _is_synthetic_embed(m)]
+
+        if not confirm:
+            return {
+                "dry_run": True,
+                "would_delete": len(to_delete),
+                "would_keep_synthetic": len(synthetic_msgs),
+                "channel": "options-signals",
+                "channel_id": ch_options,
+            }
+
+        result = _purge_channel(ch_options, filter_fn=_is_synthetic_embed)
+        return {
+            "options_signals": result,
+            "all_signals": {"skipped": True, "reason": "keep_synthetic=true — only #options-signals touched"},
+            "confirm": confirm,
+            "cutoff": _MARKET_OPEN_CUTOFF.isoformat(),
+            "kept_synthetic": len(synthetic_msgs),
+        }
 
     results: Dict[str, Any] = {"confirm": confirm, "cutoff": _MARKET_OPEN_CUTOFF.isoformat()}
 

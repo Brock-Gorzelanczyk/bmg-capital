@@ -70,6 +70,39 @@ def _bot_color(asset_class: str) -> str:
     return _ASSET_CLASS_COLOR.get(asset_class, "#94A3B8")
 
 
+_SLEEVE_COLORS = {
+    "stocks":  "#10B981",
+    "crypto":  "#9333EA",
+    "options": "#F97316",
+    "quant":   "#6366F1",
+    "cash":    "#94A3B8",
+}
+
+_SLEEVE_LABELS = {
+    "stocks":  "Stocks",
+    "crypto":  "Crypto",
+    "options": "Options",
+    "quant":   "Quant",
+    "cash":    "Cash",
+}
+
+_PROFILE_TO_SLEEVE = {
+    "stock_swing":                "stocks",
+    "stock_day":                  "stocks",
+    "stock_lt":                   "stocks",
+    "crypto_swing":               "crypto",
+    "crypto_day":                 "crypto",
+    "crypto_lt":                  "crypto",
+    "crypto_onchain":             "crypto",
+    "crypto_quant_aggressive":    "quant",
+    "crypto_quant_scalper":       "quant",
+    "crypto_quant_mean_reversion":"quant",
+    "crypto_meanrev_2163":        "quant",
+    "options_income":             "options",
+    "options_directional":        "options",
+}
+
+
 @router.get("")
 @router.get("/")
 async def get_portfolio(
@@ -538,6 +571,148 @@ def get_portfolio_snapshot(
             "by_sleeve":                  {"stocks": empty_sleeve, "crypto": empty_sleeve, "options": empty_sleeve, "quant": empty_sleeve},
             "bots":                       [],
         }
+
+
+@router.get("/allocation-live")
+def get_allocation_live(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Live capital allocation by sleeve: deployed positions + cash residual.
+
+    Response: {as_of, total_portfolio_value, deployed_value, cash_value, slices: [...]}
+    Each slice: {key, label, dollars, pct, color, position_count}
+    """
+    from app.db.models.bots import BotAllocation, BotProfile, BotPosition
+
+    allocations = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == current_user.id)
+        .all()
+    )
+    if not allocations:
+        return {
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "total_portfolio_value": 0.0,
+            "deployed_value": 0.0,
+            "cash_value": 0.0,
+            "slices": [],
+        }
+
+    alloc_by_id = {a.id: a for a in allocations}
+    profile_ids = list({a.profile_id for a in allocations})
+    profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+    profile_by_id = {p.id: p for p in profiles}
+
+    open_positions = (
+        db.query(BotPosition)
+        .filter(
+            BotPosition.allocation_id.in_(list(alloc_by_id.keys())),
+            BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
+        )
+        .all()
+    )
+
+    # Batch live prices for non-options positions
+    non_opt_symbols: list[str] = []
+    for pos in open_positions:
+        alloc = alloc_by_id.get(pos.allocation_id)
+        if not alloc:
+            continue
+        profile = profile_by_id.get(alloc.profile_id)
+        if not profile:
+            continue
+        sleeve = _PROFILE_TO_SLEEVE.get(profile.name, profile.asset_class)
+        if sleeve != "options" and not pos.option_type:
+            non_opt_symbols.append(pos.symbol)
+
+    price_map: dict[str, tuple[float, str]] = {}
+    if non_opt_symbols:
+        try:
+            price_map = _fetch_prices(list(set(non_opt_symbols)))
+        except Exception as exc:
+            logger.warning("allocation-live: price fetch failed: %s", exc)
+
+    # Aggregate by sleeve
+    sleeve_dollars: dict[str, float] = {k: 0.0 for k in _SLEEVE_LABELS if k != "cash"}
+    sleeve_positions: dict[str, int] = {k: 0 for k in _SLEEVE_LABELS if k != "cash"}
+
+    for pos in open_positions:
+        alloc = alloc_by_id.get(pos.allocation_id)
+        if not alloc:
+            continue
+        profile = profile_by_id.get(alloc.profile_id)
+        if not profile:
+            continue
+
+        sleeve = _PROFILE_TO_SLEEVE.get(profile.name, profile.asset_class or "stocks")
+        if sleeve not in sleeve_dollars:
+            sleeve = "stocks"
+
+        is_options = bool(pos.option_type) or sleeve == "options"
+
+        if is_options:
+            # Premium paid: avg_cost_cents stores premium in cents (per share equivalent)
+            # Deployed = premium_dollars × contracts × 100
+            premium_dollars = (pos.avg_cost_cents or 0) / 100.0
+            contracts = pos.contract_count or max(1, int(pos.qty or 1))
+            value = premium_dollars * contracts * 100
+        else:
+            live_price, _ = price_map.get(pos.symbol, (0.0, "unavailable"))
+            if live_price and float(live_price) > 0:
+                value = float(live_price) * pos.qty
+            else:
+                value = (pos.avg_cost_cents / 100.0) * pos.qty
+
+        sleeve_dollars[sleeve] += value
+        sleeve_positions[sleeve] += 1
+
+    # Get total portfolio value from snapshot for cash calculation
+    total_portfolio_dollars = 0.0
+    try:
+        from app.core.canonical import compute_strategy_lab_aggregate
+        agg = compute_strategy_lab_aggregate(current_user.id, db)
+        total_portfolio_dollars = (agg.get("total_value_cents") or 0) / 100.0
+    except Exception as exc:
+        logger.warning("allocation-live: aggregate failed: %s", exc)
+        total_portfolio_dollars = sum(sleeve_dollars.values())
+
+    deployed_total = sum(sleeve_dollars.values())
+    cash_dollars = max(0.0, total_portfolio_dollars - deployed_total)
+    grand_total = max(total_portfolio_dollars, deployed_total)
+
+    slices = []
+    for key in ["stocks", "crypto", "options", "quant"]:
+        dollars = sleeve_dollars[key]
+        pos_count = sleeve_positions[key]
+        if dollars > 0 or pos_count > 0:
+            slices.append({
+                "key": key,
+                "label": _SLEEVE_LABELS[key],
+                "dollars": round(dollars, 2),
+                "pct": round(dollars / grand_total * 100, 1) if grand_total > 0 else 0.0,
+                "color": _SLEEVE_COLORS[key],
+                "position_count": pos_count,
+            })
+
+    if cash_dollars > 0.01:
+        slices.append({
+            "key": "cash",
+            "label": "Cash",
+            "dollars": round(cash_dollars, 2),
+            "pct": round(cash_dollars / grand_total * 100, 1) if grand_total > 0 else 0.0,
+            "color": _SLEEVE_COLORS["cash"],
+            "position_count": 0,
+        })
+
+    return {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "total_portfolio_value": round(grand_total, 2),
+        "deployed_value": round(deployed_total, 2),
+        "cash_value": round(cash_dollars, 2),
+        "slices": slices,
+    }
 
 
 @router.get("/regime/current")

@@ -63,5 +63,14 @@ export const getCongressTrades = (params: CongressParams = {}): Promise<Congress
 export const getSmartMoneySummary = (): Promise<SmartMoneySummary> =>
   client.get("/smart-money/summary").then((r) => r.data);
 
-export const triggerCongressRefresh = (days_back = 30): Promise<{ status: string; days_back: number }> =>
+export interface CongressRefreshResult {
+  status: "ok" | "partial" | "error";
+  days_back: number;
+  new?: number;
+  skipped?: number;
+  errors?: string[];
+  error?: string;
+}
+
+export const triggerCongressRefresh = (days_back = 30): Promise<CongressRefreshResult> =>
   client.post(`/smart-money/refresh/congress?days_back=${days_back}`).then((r) => r.data);
