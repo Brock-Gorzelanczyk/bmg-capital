@@ -526,16 +526,7 @@ def run_risk_health_check(db: Session) -> dict:
     except Exception:
         pass
 
-    # Daily check-in to #fund-team-chat
-    try:
-        from agents.bus import post_daily_checkin as _checkin
-        dd = abs(summary.get("worst_dd_pct", 0))
-        _checkin(db, "risk_sentinel",
-                 f"Dick (CRO): Risk check {level} — Fleet 30d P&L ${summary['total_pnl_usd']:+,.0f}, "
-                 f"max drawdown {dd:.1f}%, {summary['stale_count']} stale bots. "
-                 f"{'No flags raised.' if level == 'GREEN' else 'Elevated — see #risk-alerts.'}")
-    except Exception:
-        pass
+    # Daily check-in suppressed — emergencies only per Brock's spec
 
     # Post paste-ready demotion requests to #fund-updates for bots with 7+ consecutive losses
     _DEMOTION_THRESHOLD = 7
