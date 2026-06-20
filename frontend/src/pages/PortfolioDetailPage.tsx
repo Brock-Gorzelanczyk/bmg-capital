@@ -95,6 +95,13 @@ interface TradeRecord {
   fill_price: number;
   realized_pnl: number | null;
   is_paper: boolean;
+  // Live MTM (open BUY trades — null for closed positions)
+  is_open?: boolean;
+  current_value_usd?: number | null;
+  unrealized_pnl?: number | null;
+  unrealized_pnl_pct?: number | null;
+  mark_to_market_at?: string | null;
+  stale_mtm?: boolean;
   // Options-specific (null for stock/crypto trades)
   option_type?: string | null;
   strike_price?: number | null;
@@ -114,9 +121,19 @@ function usePortfolioActivity(portfolioId: number | undefined) {
             .then((r) => r.data)
         : Promise.resolve({ trades: [], total: 0 }),
     enabled: !!portfolioId,
-    staleTime: 60_000,
+    staleTime: 55_000,
+    refetchInterval: 60_000,
     retry: 0,
   });
+}
+
+function useAgoLabel(updatedAt: number | undefined): string {
+  const now = Date.now();
+  if (!updatedAt) return "";
+  const secs = Math.floor((now - updatedAt) / 1000);
+  if (secs < 5)  return "just now";
+  if (secs < 60) return `${secs}s ago`;
+  return `${Math.floor(secs / 60)}m ago`;
 }
 
 // ── Bot card ──────────────────────────────────────────────────────────────────
@@ -313,8 +330,9 @@ function RecentActivity({
   assetClass: string;
 }) {
   const navigate = useNavigate();
-  const { data, isLoading } = usePortfolioActivity(portfolioId);
+  const { data, isLoading, dataUpdatedAt } = usePortfolioActivity(portfolioId);
   const trades = data?.trades ?? [];
+  const agoLabel = useAgoLabel(dataUpdatedAt);
 
   if (isLoading) {
     return (
@@ -339,87 +357,127 @@ function RecentActivity({
     );
   }
 
+  const hasOpenPositions = trades.some((t) => t.is_open);
+
   return (
-    <div className="rounded overflow-hidden" style={{ border: "1px solid rgba(74,222,128,0.1)", background: "#070d07" }}>
-      {trades.map((t, idx) => {
-        const isBuy = t.side === "buy";
-        const hasPnl = t.realized_pnl !== null;
-        const pnlPositive = (t.realized_pnl ?? 0) >= 0;
-        const ts = new Date(t.ts);
-        const isOptions = assetClass === "options" && t.contract_count != null;
-        const premium = t.contract_premium_cents != null ? t.contract_premium_cents / 100 : null;
-        const totalCost = premium != null && t.contract_count != null ? premium * 100 * t.contract_count : null;
-        return (
-          <div
-            key={t.id}
-            onClick={() => navigate(`/strategy/trade/${t.id}`)}
-            className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-white/[0.02]"
-            style={{ borderBottom: idx < trades.length - 1 ? "1px solid rgba(74,222,128,0.08)" : undefined }}
-          >
+    <div className="space-y-1.5">
+      {hasOpenPositions && (
+        <div className="flex items-center justify-end gap-1 px-0.5" style={{ color: "#50604f" }}>
+          <Clock size={9} />
+          <span className="text-[10px] font-mono">
+            {agoLabel ? `Updated ${agoLabel}` : "Live"}
+          </span>
+        </div>
+      )}
+      <div className="rounded overflow-hidden" style={{ border: "1px solid rgba(74,222,128,0.1)", background: "#070d07" }}>
+        {trades.map((t, idx) => {
+          const isBuy = t.side === "buy";
+          const hasPnl = t.realized_pnl !== null;
+          const pnlPositive = (t.realized_pnl ?? 0) >= 0;
+          const ts = new Date(t.ts);
+          const isOptions = assetClass === "options" && t.contract_count != null;
+          const premium = t.contract_premium_cents != null ? t.contract_premium_cents / 100 : null;
+          const totalCost = premium != null && t.contract_count != null ? premium * 100 * t.contract_count : null;
+
+          // Live unrealized P&L for open positions
+          const hasUnrealized = t.is_open && t.unrealized_pnl != null;
+          const unrealPos = (t.unrealized_pnl ?? 0) >= 0;
+          const unrealColor = pnlColor(t.unrealized_pnl ?? 0);
+
+          return (
             <div
-              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: isBuy ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.10)" }}
+              key={t.id}
+              onClick={() => navigate(`/strategy/trade/${t.id}`)}
+              className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-white/[0.02]"
+              style={{ borderBottom: idx < trades.length - 1 ? "1px solid rgba(74,222,128,0.08)" : undefined }}
             >
-              {isBuy
-                ? <ArrowUpRight size={13} className="text-lime-400" />
-                : <ArrowDownRight size={13} className="text-red-400" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold" style={{ color: "#eafbe9" }}>{t.underlying_symbol ?? t.symbol}</span>
-                {isOptions && t.option_type && (
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: isBuy ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.10)" }}
+              >
+                {isBuy
+                  ? <ArrowUpRight size={13} className="text-lime-400" />
+                  : <ArrowDownRight size={13} className="text-red-400" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold" style={{ color: "#eafbe9" }}>{t.underlying_symbol ?? t.symbol}</span>
+                  {isOptions && t.option_type && (
+                    <span
+                      className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase"
+                      style={{
+                        background: t.option_type.includes("call") ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
+                        color: t.option_type.includes("call") ? "#4ade80" : "#f87171",
+                      }}
+                    >
+                      {t.option_type}
+                    </span>
+                  )}
                   <span
                     className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase"
                     style={{
-                      background: t.option_type.includes("call") ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
-                      color: t.option_type.includes("call") ? "#4ade80" : "#f87171",
+                      background: isBuy ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
+                      color: isBuy ? "#4ade80" : "#f87171",
                     }}
                   >
-                    {t.option_type}
+                    {isOptions ? (isBuy ? "buy to open" : "sell to close") : t.side}
                   </span>
+                  <span className="text-[11px] font-mono" style={{ color: "#50604f" }}>{t.bot_display_name}</span>
+                </div>
+                {isOptions ? (
+                  <p className="text-xs font-mono mt-0.5" style={{ color: "#7e8e7e" }}>
+                    {t.contract_count} contract{(t.contract_count ?? 0) > 1 ? "s" : ""}
+                    {t.strike_price != null && <span> · <span style={{ color: "#9ca3af" }}>$</span>{t.strike_price.toFixed(0)} strike</span>}
+                    {premium != null && <span> · <span style={{ color: "#9ca3af" }}>$</span>{premium.toFixed(2)}/contract</span>}
+                    {totalCost != null && <span style={{ color: "#50604f" }}> (${totalCost.toLocaleString("en-US", { maximumFractionDigits: 0 })} total)</span>}
+                    {t.expiration_date && <span style={{ color: "#50604f" }}> · exp {t.expiration_date}</span>}
+                    {hasPnl && (
+                      <span className="ml-2 font-semibold" style={{ color: pnlPositive ? "#4ade80" : "#f87171" }}>
+                        · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized
+                      </span>
+                    )}
+                    {hasUnrealized && (
+                      <span className="ml-2 font-semibold" style={{ color: unrealColor }}>
+                        · live ${t.current_value_usd!.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {" "}{unrealPos ? "+" : ""}{t.unrealized_pnl!.toFixed(2)} ({unrealPos ? "+" : ""}{t.unrealized_pnl_pct!.toFixed(2)}%) unrealized
+                      </span>
+                    )}
+                    {t.is_open && !hasUnrealized && (
+                      <span className="ml-2" style={{ color: "#fbbf24" }}>
+                        {t.stale_mtm ? "⚠ stale" : "· live: pending"}
+                      </span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-xs font-mono mt-0.5" style={{ color: "#7e8e7e" }}>
+                    {formatTradeSize(t.qty, t.symbol, Math.abs(t.qty) * t.fill_price)}
+                    {hasPnl && (
+                      <span className="ml-2 font-semibold" style={{ color: pnlPositive ? "#4ade80" : "#f87171" }}>
+                        · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized
+                      </span>
+                    )}
+                    {hasUnrealized && (
+                      <span className="ml-2 font-semibold" style={{ color: unrealColor }}>
+                        · live ${t.current_value_usd!.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {" "}{unrealPos ? "+" : ""}{t.unrealized_pnl!.toFixed(2)} ({unrealPos ? "+" : ""}{t.unrealized_pnl_pct!.toFixed(2)}%) unrealized
+                      </span>
+                    )}
+                    {t.is_open && !hasUnrealized && (
+                      <span className="ml-2" style={{ color: t.stale_mtm ? "#fbbf24" : "#50604f" }}>
+                        {t.stale_mtm ? "⚠ stale" : "· live: pending"}
+                      </span>
+                    )}
+                  </p>
                 )}
-                <span
-                  className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase"
-                  style={{
-                    background: isBuy ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
-                    color: isBuy ? "#4ade80" : "#f87171",
-                  }}
-                >
-                  {isOptions ? (isBuy ? "buy to open" : "sell to close") : t.side}
-                </span>
-                <span className="text-[11px] font-mono" style={{ color: "#50604f" }}>{t.bot_display_name}</span>
               </div>
-              {isOptions ? (
-                <p className="text-xs font-mono mt-0.5" style={{ color: "#7e8e7e" }}>
-                  {t.contract_count} contract{(t.contract_count ?? 0) > 1 ? "s" : ""}
-                  {t.strike_price != null && <span> · <span style={{ color: "#9ca3af" }}>$</span>{t.strike_price.toFixed(0)} strike</span>}
-                  {premium != null && <span> · <span style={{ color: "#9ca3af" }}>$</span>{premium.toFixed(2)}/contract</span>}
-                  {totalCost != null && <span style={{ color: "#50604f" }}> (${totalCost.toLocaleString("en-US", { maximumFractionDigits: 0 })} total)</span>}
-                  {t.expiration_date && <span style={{ color: "#50604f" }}> · exp {t.expiration_date}</span>}
-                  {hasPnl && (
-                    <span className="ml-2 font-semibold" style={{ color: pnlPositive ? "#4ade80" : "#f87171" }}>
-                      · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized
-                    </span>
-                  )}
-                </p>
-              ) : (
-                <p className="text-xs font-mono mt-0.5" style={{ color: "#7e8e7e" }}>
-                  {formatTradeSize(t.qty, t.symbol, Math.abs(t.qty) * t.fill_price)}
-                  {hasPnl && (
-                    <span className="ml-2 font-semibold" style={{ color: pnlPositive ? "#4ade80" : "#f87171" }}>
-                      · {pnlPositive ? "+" : ""}${(t.realized_pnl!).toFixed(2)} realized
-                    </span>
-                  )}
-                </p>
-              )}
+              <div className="flex items-center gap-1 text-xs flex-shrink-0 font-mono" style={{ color: "#50604f" }}>
+                <Clock size={10} />
+                <span>{ts.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1 text-xs flex-shrink-0 font-mono" style={{ color: "#50604f" }}>
-              <Clock size={10} />
-              <span>{ts.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

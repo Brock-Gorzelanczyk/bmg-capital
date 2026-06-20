@@ -896,48 +896,141 @@ def get_portfolio_activity(
         .all()
     )
 
-    # For exit trades (sell / cover), look up the position to compute realized PnL
-    position_ids = [t.position_id for t in trades if t.position_id and t.side in ("sell", "cover")]
-    position_map = {}
-    if position_ids:
-        pos_rows = db.query(BotPosition).filter(BotPosition.id.in_(position_ids)).all()
+    # Fetch positions for ALL trades (sell/cover for realized P&L; buy for MTM)
+    all_position_ids = list({t.position_id for t in trades if t.position_id})
+    position_map: dict[int, BotPosition] = {}
+    if all_position_ids:
+        pos_rows = db.query(BotPosition).filter(BotPosition.id.in_(all_position_ids)).all()
         position_map = {p.id: p for p in pos_rows}
 
+    # Identify open stock/crypto positions linked to BUY trades
+    open_equity_pos: dict[int, BotPosition] = {}
+    open_options_pos: dict[int, BotPosition] = {}
+    for t in trades:
+        if t.side != "buy" or not t.position_id:
+            continue
+        pos = position_map.get(t.position_id)
+        if pos and not pos.closed_at and not pos.quarantined_at:
+            if pos.option_type:
+                open_options_pos[t.position_id] = pos
+            else:
+                open_equity_pos[t.position_id] = pos
+
+    # Batch live-price fetch for open equity positions
+    live_prices: dict[str, float] = {}
+    mtm_ts: str | None = None
+    equity_symbols = list({pos.symbol for pos in open_equity_pos.values()})
+    if equity_symbols:
+        try:
+            from app.services.live_prices import fetch_live_prices
+            live_prices = fetch_live_prices(equity_symbols)
+            mtm_ts = datetime.now(timezone.utc).isoformat()
+        except Exception as exc:
+            logger.warning("[activity-mtm] live price fetch failed: %s", exc)
+
+    # Per-contract options MTM via yfinance (best-effort, skips on any failure)
+    options_mid: dict[int, float | None] = {}
+    for pid, pos in open_options_pos.items():
+        try:
+            import yfinance as yf
+            ticker = pos.underlying_symbol or pos.symbol
+            expiry  = pos.expiration_date
+            strike  = pos.strike_price
+            opt_type = (pos.option_type or "").lower()
+            if ticker and expiry and strike:
+                yt = yf.Ticker(ticker)
+                chain = yt.option_chain(expiry)
+                df = chain.calls if "call" in opt_type else chain.puts
+                row = df[abs(df["strike"] - float(strike)) < 0.01]
+                if not row.empty:
+                    bid = float(row["bid"].iloc[0])
+                    ask = float(row["ask"].iloc[0])
+                    mid = (bid + ask) / 2 if bid > 0 and ask > 0 else float(row["lastPrice"].iloc[0])
+                    options_mid[pid] = mid
+                    if mtm_ts is None:
+                        mtm_ts = datetime.now(timezone.utc).isoformat()
+        except Exception as exc:
+            logger.debug("[activity-mtm] options MTM skipped pos=%d: %s", pid, exc)
+            options_mid[pid] = None
+
+    from app.core.canonical import DISPLAY_NAMES
     result = []
     for t in trades:
         bot_name = alloc_profile.get(t.allocation_id, "")
-        from app.core.canonical import DISPLAY_NAMES
-        display = DISPLAY_NAMES.get(bot_name, bot_name.replace("_", " ").title())
+        display  = DISPLAY_NAMES.get(bot_name, bot_name.replace("_", " ").title())
         fill_price = round(t.fill_price_cents / 100, 8)
 
+        # Realized P&L (exit trades only)
         realized_pnl = None
         if t.side in ("sell", "cover") and t.position_id and t.position_id in position_map:
             pos = position_map[t.position_id]
             entry_price = pos.avg_cost_cents / 100
             is_short = getattr(pos, "side", "long") == "short"
-            if is_short:
-                realized_pnl = round((entry_price - fill_price) * t.qty, 2)
-            else:
-                realized_pnl = round((fill_price - entry_price) * t.qty, 2)
+            realized_pnl = round(
+                ((entry_price - fill_price) if is_short else (fill_price - entry_price)) * t.qty, 2
+            )
+
+        # Live unrealized P&L (open BUY trades only)
+        is_open = False
+        current_value_usd: float | None = None
+        unrealized_pnl: float | None = None
+        unrealized_pnl_pct: float | None = None
+        pos_mark_ts: str | None = None
+
+        if t.side == "buy" and t.position_id:
+            pos = position_map.get(t.position_id)
+            if pos and not pos.closed_at and not pos.quarantined_at:
+                is_open = True
+                pos_mark_ts = mtm_ts
+                if pos.option_type:
+                    contracts   = pos.contract_count or max(1, int(pos.qty or 1))
+                    entry_prem  = (pos.avg_cost_cents or 0) / 100
+                    entry_total = entry_prem * contracts * 100
+                    cur_prem    = options_mid.get(t.position_id)
+                    if cur_prem is not None:
+                        current_value_usd = round(cur_prem * contracts * 100, 2)
+                        unrealized_pnl    = round(current_value_usd - entry_total, 2)
+                        unrealized_pnl_pct = round(unrealized_pnl / entry_total * 100, 2) if entry_total else 0
+                else:
+                    price = live_prices.get(pos.symbol)
+                    if price and pos.avg_cost_cents and pos.qty:
+                        entry_total = pos.avg_cost_cents * abs(pos.qty) / 100
+                        current_value_usd = round(price * abs(pos.qty), 2)
+                        is_short = getattr(pos, "side", "long") == "short"
+                        unrealized_pnl = round(
+                            (entry_total - current_value_usd) if is_short
+                            else (current_value_usd - entry_total), 2
+                        )
+                        unrealized_pnl_pct = round(
+                            unrealized_pnl / entry_total * 100, 2
+                        ) if entry_total else 0
 
         result.append({
-            "id": t.id,
-            "ts": t.ts.isoformat() if t.ts else None,
-            "bot_name": bot_name,
+            "id":              t.id,
+            "ts":              t.ts.isoformat() if t.ts else None,
+            "bot_name":        bot_name,
             "bot_display_name": display,
-            "symbol": t.symbol,
-            "side": t.side,
-            "qty": t.qty,
-            "fill_price": fill_price,
-            "fill_price_cents": t.fill_price_cents,
-            "realized_pnl": realized_pnl,
-            "is_paper": t.is_paper,
+            "symbol":          t.symbol,
+            "side":            t.side,
+            "qty":             t.qty,
+            "fill_price":      fill_price,
+            "fill_price_cents":t.fill_price_cents,
+            "realized_pnl":    realized_pnl,
+            "is_paper":        t.is_paper,
+            # Live MTM (open BUY trades)
+            "is_open":             is_open,
+            "current_value_usd":   current_value_usd,
+            "unrealized_pnl":      unrealized_pnl,
+            "unrealized_pnl_pct":  unrealized_pnl_pct,
+            "mark_to_market_at":   pos_mark_ts,
+            # stale_mtm: open position whose MTM data is unavailable
+            "stale_mtm":           is_open and unrealized_pnl is None,
             # Options-specific (None for stock/crypto trades)
-            "option_type": getattr(t, "option_type", None),
-            "strike_price": getattr(t, "strike_price", None),
-            "expiration_date": getattr(t, "expiration_date", None),
-            "underlying_symbol": getattr(t, "underlying_symbol", None),
-            "contract_count": getattr(t, "contract_count", None),
+            "option_type":         getattr(t, "option_type", None),
+            "strike_price":        getattr(t, "strike_price", None),
+            "expiration_date":     getattr(t, "expiration_date", None),
+            "underlying_symbol":   getattr(t, "underlying_symbol", None),
+            "contract_count":      getattr(t, "contract_count", None),
             "contract_premium_cents": getattr(t, "contract_premium_cents", None),
         })
 
