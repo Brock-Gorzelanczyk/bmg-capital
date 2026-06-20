@@ -276,7 +276,7 @@ async def lifespan(app: FastAPI):
             async def _seed_congress():
                 _seed_smc_db = SessionLocal()
                 try:
-                    result = await fetch_and_upsert_congress(_seed_smc_db, days_back=365)
+                    result = await fetch_and_upsert_congress(_seed_smc_db, days_back=30)
                     logger.info("[startup] smart_money_congress seeded: %s", result)
                 except Exception as _e:
                     logger.warning("[startup] smart_money_congress seed failed (non-fatal): %s", _e)

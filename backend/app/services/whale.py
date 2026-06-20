@@ -68,7 +68,7 @@ def get_large_holder_signal(symbol: str) -> dict:
             r.raise_for_status()
             data = r.json()
     except Exception as e:
-        logger.debug(f"CoinMetrics whale signal failed for {symbol}: {e}")
+        logger.warning("[whale] CoinMetrics request failed for %s: %s", asset, e)
         result = {"ok": False, "signal": "neutral", "large_holder_count": 0, "change_pct": 0.0}
         _set_cached(cache_key, result)
         return result
@@ -76,6 +76,7 @@ def get_large_holder_signal(symbol: str) -> dict:
     try:
         series = data.get("data", [])
         if len(series) < 7:
+            logger.warning("[whale] CoinMetrics returned only %d rows for %s (need 7)", len(series), asset)
             raise ValueError("Not enough data points")
 
         # Most recent value vs 7 days ago
@@ -102,7 +103,7 @@ def get_large_holder_signal(symbol: str) -> dict:
             "change_pct": round(change_pct, 2),
         }
     except Exception as e:
-        logger.debug(f"CoinMetrics whale parse failed for {symbol}: {e}")
+        logger.warning("[whale] CoinMetrics parse failed for %s: %s", asset, e)
         result = {"ok": False, "signal": "neutral", "large_holder_count": 0, "change_pct": 0.0}
 
     _set_cached(cache_key, result)

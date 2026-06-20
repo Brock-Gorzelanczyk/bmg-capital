@@ -126,6 +126,89 @@ async def trigger_congress_refresh(
         return {"status": "error", "days_back": days_back, "error": str(exc)}
 
 
+@router.get("/diagnose/crypto", dependencies=[Depends(require_admin)])
+async def diagnose_crypto():
+    """Probe CoinMetrics + Binance connectivity to debug the Crypto tab."""
+    import asyncio
+    import httpx as _httpx
+
+    async def _probe_coinmetrics(asset: str) -> dict:
+        url = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
+        try:
+            async with _httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.get(url, params={
+                    "assets": asset, "metrics": "AdrBal1in1MCnt",
+                    "frequency": "1d", "limit": 5, "pretty": "false",
+                }, headers={"Accept": "application/json", "User-Agent": "BMGCapital/1.0"})
+            data_rows, sample, parse_error = 0, {}, None
+            try:
+                d = resp.json()
+                rows = d.get("data", [])
+                data_rows = len(rows)
+                sample = rows[-1] if rows else {}
+            except Exception as pe:
+                parse_error = str(pe)
+            return {
+                "asset": asset, "http_status": resp.status_code,
+                "data_rows": data_rows, "sample_row": sample,
+                "parse_error": parse_error,
+                "error_body": resp.text[:400] if resp.status_code != 200 else None,
+            }
+        except Exception as exc:
+            return {"asset": asset, "error": str(exc)}
+
+    async def _probe_binance_premium(symbol: str) -> dict:
+        url = "https://fapi.binance.com/fapi/v1/premiumIndex"
+        try:
+            async with _httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                resp = await client.get(url, params={"symbol": symbol})
+            payload = None
+            try:
+                payload = resp.json()
+            except Exception:
+                pass
+            return {
+                "symbol": symbol, "http_status": resp.status_code,
+                "response": payload,
+                "error_body": resp.text[:400] if resp.status_code != 200 else None,
+            }
+        except Exception as exc:
+            return {"symbol": symbol, "error": str(exc)}
+
+    async def _probe_binance_funding(symbol: str) -> dict:
+        url = "https://fapi.binance.com/fapi/v1/fundingRate"
+        try:
+            async with _httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                resp = await client.get(url, params={"symbol": symbol, "limit": 1})
+            payload = None
+            try:
+                payload = resp.json()
+            except Exception:
+                pass
+            return {
+                "symbol": symbol, "http_status": resp.status_code,
+                "response": payload,
+                "error_body": resp.text[:400] if resp.status_code != 200 else None,
+            }
+        except Exception as exc:
+            return {"symbol": symbol, "error": str(exc)}
+
+    results = await asyncio.gather(
+        _probe_coinmetrics("btc"),
+        _probe_coinmetrics("eth"),
+        _probe_binance_premium("BTCUSDT"),
+        _probe_binance_premium("ETHUSDT"),
+        _probe_binance_funding("BTCUSDT"),
+        return_exceptions=True,
+    )
+
+    return {
+        "coinmetrics_community": {"btc": results[0], "eth": results[1]},
+        "binance_premiumIndex": {"BTCUSDT": results[2], "ETHUSDT": results[3]},
+        "binance_fundingRate": {"BTCUSDT": results[4]},
+    }
+
+
 @router.get("/diagnose/congress", dependencies=[Depends(require_admin)])
 async def diagnose_congress():
     """Diagnose FMP congress feed connectivity — key presence, HTTP status, row count, sample fields."""
@@ -200,29 +283,37 @@ def _build_crypto_smart_money() -> dict:
         ("ETH/USDT", "Ethereum", "eth"),
     ]:
         whale = get_large_holder_signal(symbol)
+        whale_ok = whale.get("ok", False)
         assets.append({
             "symbol": display,
             "ticker": coin_id.upper(),
             "signal": whale.get("signal", "neutral"),
-            "large_holder_count": whale.get("large_holder_count", 0),
-            "change_pct": whale.get("change_pct", 0.0),
+            "whale_ok": whale_ok,
+            # null when unavailable so frontend can show "—" instead of falsely-zero "0"
+            "large_holder_count": whale.get("large_holder_count") if whale_ok else None,
+            "change_pct": whale.get("change_pct") if whale_ok else None,
             "funding_rate": None,
         })
 
-    # Funding rates from Binance (free public API)
-    for i, (futures_sym, idx) in enumerate([("BTCUSDT", 0), ("ETHUSDT", 1)]):
+    # Funding rates from Binance premiumIndex (returns lastFundingRate for current period)
+    for futures_sym, idx in [("BTCUSDT", 0), ("ETHUSDT", 1)]:
         try:
             resp = _req.get(
-                "https://fapi.binance.com/fapi/v1/fundingRate",
-                params={"symbol": futures_sym, "limit": 1},
+                "https://fapi.binance.com/fapi/v1/premiumIndex",
+                params={"symbol": futures_sym},
                 timeout=6,
             )
             if resp.status_code == 200:
                 data = resp.json()
-                if data:
-                    assets[idx]["funding_rate"] = float(data[0].get("fundingRate", 0)) * 100
-        except Exception:
-            pass
+                # premiumIndex returns a single dict (not a list)
+                if isinstance(data, dict):
+                    raw = data.get("lastFundingRate") or data.get("fundingRate")
+                    if raw is not None:
+                        assets[idx]["funding_rate"] = float(raw) * 100
+            else:
+                logger.warning("[smart-money/crypto] Binance %s status %s: %s", futures_sym, resp.status_code, resp.text[:200])
+        except Exception as exc:
+            logger.warning("[smart-money/crypto] Binance %s failed: %s", futures_sym, exc)
 
     # Additional coins — just basic CoinMetrics large holder if available
     # (skip for now, only BTC/ETH supported by whale.py)

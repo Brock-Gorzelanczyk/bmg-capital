@@ -28,8 +28,9 @@ interface CryptoAsset {
   symbol: string;
   ticker: string;
   signal: "accumulating" | "distributing" | "neutral";
-  large_holder_count: number;
-  change_pct: number;
+  whale_ok: boolean;
+  large_holder_count: number | null;
+  change_pct: number | null;
   funding_rate: number | null;
 }
 
@@ -58,15 +59,22 @@ function CryptoSmartMoneyTab({ data, isLoading }: { data: CryptoSmartMoneyData |
     );
   }
 
-  const signalBadge = (signal: CryptoAsset["signal"]) => {
-    if (signal === "accumulating") {
+  const signalBadge = (asset: CryptoAsset) => {
+    if (!asset.whale_ok) {
+      return (
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-yellow-700/40 bg-yellow-900/20 text-yellow-400 uppercase tracking-wider">
+          Data unavailable
+        </span>
+      );
+    }
+    if (asset.signal === "accumulating") {
       return (
         <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-t-green/30 bg-t-green/10 text-t-green uppercase tracking-wider">
           Accumulating
         </span>
       );
     }
-    if (signal === "distributing") {
+    if (asset.signal === "distributing") {
       return (
         <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-t-red/30 bg-t-red/10 text-t-red uppercase tracking-wider">
           Distributing
@@ -91,7 +99,7 @@ function CryptoSmartMoneyTab({ data, isLoading }: { data: CryptoSmartMoneyData |
                 <div className="text-base font-bold text-t-hi">{asset.symbol}</div>
                 <div className="text-xs font-mono text-t-muted mt-0.5">{asset.ticker}</div>
               </div>
-              {signalBadge(asset.signal)}
+              {signalBadge(asset)}
             </div>
 
             {/* Stats grid */}
@@ -101,7 +109,7 @@ function CryptoSmartMoneyTab({ data, isLoading }: { data: CryptoSmartMoneyData |
                   Whale Wallets
                 </div>
                 <div className="text-lg font-bold font-mono-t text-t-hi">
-                  {asset.large_holder_count.toLocaleString()}
+                  {asset.large_holder_count != null ? asset.large_holder_count.toLocaleString() : "—"}
                 </div>
                 <div className="text-[10px] text-t-muted">≥$1M balance</div>
               </div>
@@ -112,9 +120,14 @@ function CryptoSmartMoneyTab({ data, isLoading }: { data: CryptoSmartMoneyData |
                 </div>
                 <div className={cn(
                   "text-lg font-bold font-mono-t",
-                  asset.change_pct > 0 ? "text-t-green" : asset.change_pct < 0 ? "text-t-red" : "text-t-muted"
+                  asset.change_pct == null ? "text-t-muted"
+                  : asset.change_pct > 0 ? "text-t-green"
+                  : asset.change_pct < 0 ? "text-t-red"
+                  : "text-t-muted"
                 )}>
-                  {asset.change_pct > 0 ? "+" : ""}{asset.change_pct.toFixed(2)}%
+                  {asset.change_pct != null
+                    ? `${asset.change_pct > 0 ? "+" : ""}${asset.change_pct.toFixed(2)}%`
+                    : "—"}
                 </div>
                 <div className="text-[10px] text-t-muted">holder count</div>
               </div>
