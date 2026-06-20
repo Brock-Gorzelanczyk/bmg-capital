@@ -169,7 +169,6 @@ async def fetch_fmp_congress(timeout: int = 30) -> list[dict]:
 
 async def fetch_and_upsert_congress(db, days_back: int = 365) -> dict:
     """Main entry point: fetch from FMP, upsert into DB, return stats."""
-    from sqlalchemy.exc import IntegrityError
     from app.db.models.smart_money import SmartMoneyCongressTrade
 
     cutoff = date.today() - timedelta(days=days_back)
@@ -179,35 +178,23 @@ async def fetch_and_upsert_congress(db, days_back: int = 365) -> dict:
 
     try:
         rows = await fetch_fmp_congress()
-    except Exception as e:
-        errors.append(f"fmp: {e}")
-        logger.error("[congress] fmp fetch failed: %s", e, exc_info=True)
-        return {"new": total_new, "skipped": total_skipped, "errors": errors}
-
-    for r in rows:
-        if r["transaction_date"] and r["transaction_date"] < cutoff:
-            continue
-        existing = db.query(SmartMoneyCongressTrade).filter_by(
-            source=r["source"], source_id=r["source_id"]
-        ).first()
-        if existing:
-            total_skipped += 1
-            continue
-        try:
+        for r in rows:
+            if r["transaction_date"] and r["transaction_date"] < cutoff:
+                continue
+            existing = db.query(SmartMoneyCongressTrade).filter_by(
+                source=r["source"], source_id=r["source_id"]
+            ).first()
+            if existing:
+                total_skipped += 1
+                continue
             db.add(SmartMoneyCongressTrade(**r))
-            db.flush()
             total_new += 1
-        except IntegrityError:
-            db.rollback()
-            total_skipped += 1
-
-    try:
         db.commit()
         logger.info("[congress] fmp: %d new, %d skipped", total_new, total_skipped)
     except Exception as e:
         errors.append(f"fmp: {e}")
         db.rollback()
-        logger.error("[congress] fmp commit failed: %s", e, exc_info=True)
+        logger.error("[congress] fmp fetch failed: %s", e, exc_info=True)
 
     return {"new": total_new, "skipped": total_skipped, "errors": errors}
 

@@ -24,6 +24,11 @@ def run(conn) -> dict:
     except Exception:
         return {"skipped": True, "reason": "table does not exist"}
 
+    if not rows:
+        # Table doesn't exist yet — create_all will handle creation with correct schema
+        logger.info("[m013] smart_money_congress does not exist yet — skipping")
+        return {"skipped": True, "reason": "table does not exist"}
+
     col_map = {r[1]: r[2].upper() for r in rows}  # name → type
     id_type = col_map.get("id", "")
 
@@ -32,7 +37,10 @@ def run(conn) -> dict:
         return {"skipped": True, "reason": "already correct"}
 
     # Check row count — warn if data exists (shouldn't happen, but be safe)
-    count = conn.execute(text("SELECT COUNT(*) FROM smart_money_congress")).scalar() or 0
+    try:
+        count = conn.execute(text("SELECT COUNT(*) FROM smart_money_congress")).scalar() or 0
+    except Exception:
+        count = 0
     if count > 0:
         logger.warning("[m013] smart_money_congress has %d rows — skipping recreation to avoid data loss", count)
         return {"skipped": True, "reason": f"table has {count} rows — refusing to drop"}
