@@ -258,6 +258,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m012_exc:
         logger.warning("[startup] m012_quarantine_misrouted_share_orders failed (non-fatal): %s", _m012_exc)
 
+    try:
+        from app.db.migrations.m013_fix_smart_money_congress_id import run as _run_m013
+        with engine.connect() as _m013_conn:
+            _run_m013(_m013_conn)
+    except Exception as _m013_exc:
+        logger.warning("[startup] m013_fix_smart_money_congress_id failed (non-fatal): %s", _m013_exc)
+
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
     _smc_db = SessionLocal()

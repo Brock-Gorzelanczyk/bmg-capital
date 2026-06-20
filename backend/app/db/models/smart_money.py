@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import BigInteger, Column, Date, DateTime, Index, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Date, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -11,7 +11,8 @@ from app.db.base import Base
 class SmartMoneyCongressTrade(Base):
     __tablename__ = "smart_money_congress"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # Integer (not BigInteger) required for SQLite rowid alias → auto-increment
+    id = Column(Integer, primary_key=True, autoincrement=True)
     member_name = Column(String(200), nullable=False)
     party = Column(String(1))
     chamber = Column(String(1))           # 'S' or 'H'
