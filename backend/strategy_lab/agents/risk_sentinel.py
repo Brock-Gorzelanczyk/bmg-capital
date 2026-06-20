@@ -3,7 +3,8 @@ Risk Sentinel — Deploy 2 Tier A autonomous risk watchdog.
 
 Monitors drawdown, fleet health, and position concentration.
 Holds veto power over Portfolio Manager.
-Runs every 30 minutes — posts to #risk-alerts when YELLOW or RED.
+Brock's spec: posts to #risk-alerts on RED or CRITICAL only (YELLOW suppressed).
+Same alert pattern deduped for 24h (no repeat spam for same condition).
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ DRAWDOWN_24H_RED_PCT  = -2.0  # 24h drawdown worse than -2% → RED
 FLEET_PAUSE_24H_PCT   = -3.0  # 24h pct required before "fleet pause" language is used
 FLEET_AUM_PAUSE_PCT   = -1.0  # 30d P&L as % of fleet AUM — below this, no pause language
 
-_ALERT_COOLDOWN_HOURS = 6
+_ALERT_COOLDOWN_HOURS = 24  # Brock's spec: same alert pattern fires at most once per day
 
 # In-memory dedup: level → (last_fired_at, trigger_frozenset)
 # Replaces DB-backed sentinel_cooldown table which silently failed on SQLite.
@@ -444,9 +445,9 @@ def run_risk_health_check(db: Session) -> dict:
         level, worst_dd_pct, drawdown_24h, len(stale), consec_max,
     )
 
-    # Post to Discord: skip GREEN; YELLOW posts embed only; RED adds @CIO mention;
-    # CRITICAL adds @CIO @here mention. All respect the cooldown + trigger dedup.
-    if level in ("YELLOW", "RED", "CRITICAL"):
+    # Post to Discord: RED/CRITICAL only (YELLOW suppressed per Brock's spec — emergencies only).
+    # RED: @CIO mention. CRITICAL: @CIO @here. Both respect 24h cooldown + trigger dedup.
+    if level in ("RED", "CRITICAL"):
         last_ts, last_trigger = _get_sentinel_state(db, level)
         current_trigger = frozenset(triggers)
         elapsed = (now - last_ts).total_seconds() if last_ts else float("inf")

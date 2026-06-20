@@ -198,28 +198,8 @@ def run_data_quality_check(db: Session) -> dict:
         logger.info("[dq_watcher] alert suppressed by dedup — hash=%s, same issues within %dh cooldown (%.1fh elapsed)",
                     issue_hash, _ALERT_COOLDOWN_HOURS, elapsed_hours)
     else:
-        embed = {
-            "author": {"name": "BMG Capital — Vick (Data Quality)"},
-            "title":  f"✅ Data Quality Check — {now.strftime('%Y-%m-%d')}",
-            "color":  0x16A34A,
-            "fields": [
-                {"name": "Regime Snapshot Age", "value": f"{regime['age_hours']}h" if regime.get('age_hours') is not None else "Never", "inline": True},
-                {"name": "Signal Count (6h)", "value": str(signals.get("signal_count", "N/A")), "inline": True},
-                {"name": "Status", "value": "No issues detected", "inline": False},
-            ],
-            "footer": {"text": "Vick (Data Quality) · Tier A · Hourly"},
-            "timestamp": now.isoformat(),
-        }
-        try:
-            from agents.plain_english import translate_for_brock, make_plain_english_field
-            _pe_text = " | ".join(f"{f['name']}: {f['value']}" for f in embed.get("fields", []) if not f['name'].startswith("💬"))
-            _pe = translate_for_brock(_pe_text, db=db, channel_id=ch, charge_agent="data_quality_watcher")
-            if _pe:
-                embed["fields"].append(make_plain_english_field(_pe))
-        except Exception as _pe_exc:
-            logger.debug("[dq_watcher] plain_english failed: %s", _pe_exc)
-        if ch and _post(ch, token, embed):
-            logger.info("[dq_watcher] green summary posted")
+        # Brock's spec: emergencies only — no "all clear" posts (Vick/#bmg-monitoring is silent when clean)
+        logger.info("[dq_watcher] clean — no Discord post (quiet mode)")
 
     # Publish to bus
     try:

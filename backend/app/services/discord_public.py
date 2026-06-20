@@ -1,19 +1,21 @@
 """
-Public Discord signal feed — posts every accepted bot signal to the public
+Public Discord signal feed — posts accepted bot signals to the public
 BMG Capital Discord server using the bot token + channel IDs.
 
-Channel routing:
-  all-signals  ← every bot
-  stocks       ← stock_swing | stock_day | stock_lt
-  crypto       ← crypto_swing | crypto_day | crypto_lt | crypto_onchain
-  options      ← options_income | options_directional
-  quant        ← crypto_quant_aggressive (dedicated channel, not crypto)
+Kill switch:
+  DISCORD_SIGNAL_POSTING_ENABLED=false  → all signal channel posts suppressed.
+  Set to "true" to re-enable. Defaults to false (quiet mode).
+
+Channel routing (when posting is enabled):
+  stocks   ← stock_swing | stock_day | stock_lt
+  crypto   ← crypto_swing | crypto_day | crypto_lt | crypto_onchain
+  options  ← options_income | options_directional
+  quant    ← crypto_quant_* (hourly summary; individual posts only at >90% conf)
 
 Env vars (DISCORD_CH_* names match Railway config):
-  DISCORD_BOT_TOKEN
-  DISCORD_CH_ALL_SIGNALS, DISCORD_CH_STOCKS_SIGNALS,
-  DISCORD_CH_CRYPTO_SIGNALS, DISCORD_CH_OPTIONS_SIGNALS,
-  DISCORD_CH_QUANT_SIGNALS (BMG_QUANT_SIGNALS_CHANNEL_ID)
+  DISCORD_BOT_TOKEN, DISCORD_SIGNAL_POSTING_ENABLED
+  DISCORD_CH_STOCKS_SIGNALS, DISCORD_CH_CRYPTO_SIGNALS,
+  DISCORD_CH_OPTIONS_SIGNALS, DISCORD_CH_QUANT_SIGNALS
   DISCORD_CH_DAILY_DIGEST, DISCORD_CH_WEEKLY_LEADERBOARD,
   DISCORD_CH_MONTHLY_RECAP
 """
@@ -40,6 +42,21 @@ _quant_buffer_lock = threading.Lock()
 logger = logging.getLogger(__name__)
 
 _channel_log_done = False
+_pause_banners_posted = False  # fire-once guard for startup banner
+
+
+def _signal_posting_enabled() -> bool:
+    """Return True only when DISCORD_SIGNAL_POSTING_ENABLED=true (default: false)."""
+    return os.getenv("DISCORD_SIGNAL_POSTING_ENABLED", "false").strip().lower() == "true"
+
+
+def should_post_to_fund_updates(event: str, urgency: str = "routine") -> bool:
+    """Gate for #fund-updates posts. Defaults to False (routine noise suppressed).
+
+    Only returns True when urgency="critical" — a bot failure requiring manual
+    intervention, an audit finding needing a code fix, or system-level emergency.
+    """
+    return urgency == "critical"
 
 
 def _log_channel_config() -> None:
@@ -394,6 +411,11 @@ def post_signal(
     if not cfg.discord_bot_token:
         return
 
+    # Kill switch — PART 1 of quiet mode
+    if not _signal_posting_enabled():
+        logger.debug("[discord-signal] posting disabled (DISCORD_SIGNAL_POSTING_ENABLED=false)")
+        return
+
     _log_channel_config()
 
     # Personal signals (scout / custom_bot) go to #my-signals only.
@@ -486,11 +508,56 @@ def post_signal(
             logger.debug("discord_posted_at update failed: %s", exc)
 
 
+def post_signal_channel_pause_banners() -> None:
+    """Post a one-time 📵 notice to each signal channel when quiet mode is active.
+
+    Called once at startup when DISCORD_SIGNAL_POSTING_ENABLED=false. Uses a
+    module-level flag so it fires at most once per process lifetime.
+    """
+    global _pause_banners_posted
+    if _pause_banners_posted or _signal_posting_enabled():
+        return
+    _pause_banners_posted = True
+
+    cfg = _cfg()
+    if not cfg.discord_bot_token:
+        return
+
+    channels = {
+        "all-signals":    cfg.discord_ch_all_signals    or cfg.discord_channel_all_signals,
+        "stocks-signals": cfg.discord_ch_stocks_signals or cfg.discord_channel_stocks,
+        "crypto-signals": cfg.discord_ch_crypto_signals or cfg.discord_channel_crypto,
+        "options-signals":cfg.discord_ch_options_signals or cfg.discord_channel_options,
+        "quant-signals":  cfg.discord_ch_quant_signals  or os.getenv("BMG_QUANT_SIGNALS_CHANNEL_ID", ""),
+        "my-signals":     os.getenv("DISCORD_CHANNEL_ID_MY_SIGNALS", ""),
+    }
+    url_tpl = "https://discord.com/api/v10/channels/{}/messages"
+    headers = {"Authorization": f"Bot {cfg.discord_bot_token}", "Content-Type": "application/json"}
+    content = (
+        "📵 **Signal posting paused.** "
+        "Set `DISCORD_SIGNAL_POSTING_ENABLED=true` in Railway to resume."
+    )
+    for name, ch in channels.items():
+        if not ch:
+            continue
+        try:
+            with httpx.Client(timeout=8) as http:
+                resp = http.post(url_tpl.format(ch), headers=headers, json={"content": content})
+                if resp.is_success:
+                    logger.info("[discord-banner] posted pause notice to #%s", name)
+                else:
+                    logger.debug("[discord-banner] #%s → %s", name, resp.status_code)
+        except Exception as exc:
+            logger.debug("[discord-banner] #%s failed: %s", name, exc)
+
+
 def post_quant_hourly_summary() -> None:
     """Drain the quant signal buffer and post an hourly summary to #quant-signals.
 
     Called by the scheduler every hour. If the buffer is empty, does nothing.
     """
+    if not _signal_posting_enabled():
+        return
     cfg = _cfg()
     ch_quant = cfg.discord_ch_quant_signals or os.getenv("BMG_QUANT_SIGNALS_CHANNEL_ID", "")
     if not cfg.discord_bot_token or not ch_quant:
@@ -542,6 +609,8 @@ def post_quant_hourly_summary() -> None:
 
 def post_quant_daily_summary(db=None) -> None:
     """Post 4 PM ET quant fleet daily recap to #quant-signals."""
+    if not _signal_posting_enabled():
+        return
     cfg = _cfg()
     ch_quant = cfg.discord_ch_quant_signals or os.getenv("BMG_QUANT_SIGNALS_CHANNEL_ID", "")
     if not cfg.discord_bot_token or not ch_quant:

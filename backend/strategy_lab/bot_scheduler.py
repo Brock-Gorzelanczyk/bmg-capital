@@ -954,17 +954,17 @@ def setup_bot_scheduler(scheduler) -> None:
         _job.__name__ = f"_queen_{session_name}"
         return _job
 
-    # Quiet mode: single daily brief at 6:30 AM ET, every day
+    # Brock's cadence spec: Brick/Queen → Mondays only at 6:30 AM ET
     scheduler.add_job(
         _make_queen_job("morning"),
-        CronTrigger(hour=6, minute=30, timezone=ET),
+        CronTrigger(day_of_week="mon", hour=6, minute=30, timezone=ET),
         id="queen_morning",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job queen_morning (6:30 AM ET daily)")
+    logger.warning("[startup-trace] registered job queen_morning (Mondays 6:30 AM ET)")
 
     # ------------------------------------------------------------------
     # Regime snapshot refresh — hourly, keeps regime_snapshots table fresh
@@ -1122,17 +1122,17 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
-    # Quiet mode: 6 AM daily (Mon-Sun) instead of 6 PM Mon-Fri — no startup immediate fire
+    # Brock's cadence spec: Wick/daily-plan → weekdays only at 6:00 AM ET
     scheduler.add_job(
         _run_operations,
-        CronTrigger(hour=6, minute=0, timezone=ET),
+        CronTrigger(day_of_week="mon-fri", hour=6, minute=0, timezone=ET),
         id="operations",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job operations (6 AM ET daily)")
+    logger.warning("[startup-trace] registered job operations (Mon-Fri 6 AM ET)")
 
     # ------------------------------------------------------------------
     # Daily standup: 7:00 AM ET — all agents contribute, Queen synthesizes plan
@@ -1149,16 +1149,17 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Brock's cadence spec: Nick/research-log → Mon/Thu/Sun at 7 AM ET (every 3 days)
     scheduler.add_job(
         _run_daily_standup,
-        CronTrigger(hour=7, minute=0, timezone=ET),
+        CronTrigger(day_of_week="mon,thu,sun", hour=7, minute=0, timezone=ET),
         id="daily_standup",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job daily_standup (7 AM ET)")
+    logger.warning("[startup-trace] registered job daily_standup (Mon/Thu/Sun 7 AM ET)")
 
     # ------------------------------------------------------------------
     # Macro Strategist: 7:05 AM ET daily — classify regime after standup
@@ -1174,17 +1175,17 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
-    # Quiet mode: 6:15 AM instead of 7:05 AM — no startup immediate fire
+    # Brock's cadence spec: Rick/macro → Mondays only at 6:15 AM ET
     scheduler.add_job(
         _run_macro_classification,
-        CronTrigger(hour=6, minute=15, timezone=ET),
+        CronTrigger(day_of_week="mon", hour=6, minute=15, timezone=ET),
         id="macro_classification_daily",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job macro_classification_daily (6:15 AM ET daily)")
+    logger.warning("[startup-trace] registered job macro_classification_daily (Mondays 6:15 AM ET)")
 
     # ------------------------------------------------------------------
     # Proposal reaction handler: every 60s — polls Discord for CIO reactions
@@ -1408,65 +1409,8 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered jobs price_alert_monitor (1min market + 5min 24/7)")
 
-    # ------------------------------------------------------------------
-    # Fleet EOD summary: 5:00 PM ET, Mon-Fri — post to #fund-updates
-    # ------------------------------------------------------------------
-    def _fleet_eod_summary():
-        try:
-            import os as _os
-            import httpx as _hx
-            from app.db.session import SessionLocal
-            from sqlalchemy import text as _text
-            from datetime import date, datetime, timezone
-
-            db = SessionLocal()
-            try:
-                today = date.today().isoformat()
-                cutoff = f"{today}T00:00:00"
-                rows = db.execute(_text("""
-                    SELECT bp.name, COUNT(bs.id) AS cnt, bp.asset_class
-                    FROM bot_signals bs
-                    JOIN bot_allocations ba ON ba.id = bs.allocation_id
-                    JOIN bot_profiles bp ON bp.id = ba.profile_id
-                    WHERE bs.ts >= :cutoff
-                    GROUP BY bp.name, bp.asset_class
-                    ORDER BY cnt DESC
-                """), {"cutoff": cutoff}).fetchall()
-            finally:
-                db.close()
-
-            total = sum(r[1] for r in rows)
-            bot_lines = "\n".join(
-                f"  {r[0]}: {r[1]} signal{'s' if r[1] != 1 else ''}"
-                for r in rows
-            ) or "  (no signals today)"
-
-            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-            content = (
-                f"**// CLAUDE CODE EOD — {today}**\n\n"
-                f"**Bot signals today: {total}**\n{bot_lines}\n\n"
-                f"*P0 bots now route via scan_and_execute (deployed {now_str}). "
-                f"XLM MTM fix live. P2 Discord two-way chat deployed.*\n\n"
-                f"Commits: 6c5f654 (P0+P2), e1e2c2e (pre-market fix), 077d6e7 (3 audit bugs)"
-            )
-            webhook = _os.getenv("DISCORD_WH_FUND_UPDATES", "").strip()
-            if webhook:
-                _hx.post(webhook, json={"content": content, "username": "👑 Brick (PM)"}, timeout=8)
-                logger.warning("[fleet-eod] posted EOD summary to #fund-updates")
-            else:
-                logger.warning("[fleet-eod] DISCORD_WH_FUND_UPDATES not set — EOD summary not posted")
-        except Exception as exc:
-            logger.error("[fleet-eod] EOD summary failed: %s", exc)
-
-    scheduler.add_job(
-        _fleet_eod_summary,
-        CronTrigger(day_of_week="mon-fri", hour=17, minute=0, timezone=ET),
-        id="fleet_eod_summary",
-        replace_existing=True,
-        max_instances=1,
-        misfire_grace_time=600,
-        coalesce=True,
-    )
+    # Fleet EOD summary: gated by should_post_to_fund_updates — suppressed in quiet mode.
+    # To re-enable: pass urgency="critical" to should_post_to_fund_updates, or remove gate.
 
     # ------------------------------------------------------------------
     # congress_data_refresh: daily at 7:00 AM ET (pre-market)
@@ -1504,9 +1448,62 @@ def setup_bot_scheduler(scheduler) -> None:
         "quarantine_dupes_periodic daily_discord_digest strategy_scout_scan "
         "strategy_forge_scan signal_explain_pregen "
         "tsmom_multi_asset quality_factor value_quality crypto_meanrev_2163 earnings_nlp "
-        "queen_morning queen_regime_alert_check "
+        "queen_morning(mon-only) queen_regime_alert_check "
         "risk_sentinel_premarket risk_sentinel_postclose "
-        "data_quality_watcher operations "
-        "defensive_halt_check resume_check compute_bot_stats macro_classification_daily "
+        "data_quality_watcher operations(weekdays-only) "
+        "defensive_halt_check resume_check compute_bot_stats "
+        "macro_classification_daily(mon-only) daily_standup(mon-thu-sun) "
         "candidate_pipeline_daemon price_alert_monitor congress_data_refresh"
+    )
+
+    # ------------------------------------------------------------------
+    # Startup: post pause banners to signal channels + "quiet mode active"
+    # message to #daily-plan when DISCORD_SIGNAL_POSTING_ENABLED=false.
+    # Fire once 30s after startup (enough time for DB to be ready).
+    # ------------------------------------------------------------------
+    def _post_quiet_mode_notice():
+        import os as _os
+        try:
+            from app.services.discord_public import post_signal_channel_pause_banners, _signal_posting_enabled
+            if _signal_posting_enabled():
+                return
+            post_signal_channel_pause_banners()
+            # Post "Quiet mode active" to #daily-plan
+            import httpx as _hx, subprocess as _sp
+            ch_daily_plan = _os.getenv("DISCORD_CH_DAILY_PLAN", "").strip()
+            bot_token = _os.getenv("DISCORD_BOT_TOKEN", "").strip()
+            try:
+                from app.config import settings as _s
+                bot_token = _s.discord_bot_token or bot_token
+            except Exception:
+                pass
+            if ch_daily_plan and bot_token:
+                try:
+                    sha = _sp.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=_sp.DEVNULL).decode().strip()
+                except Exception:
+                    sha = "unknown"
+                content = (
+                    f"📵 **Quiet mode active.** Signal channels paused. "
+                    f"Agent schedule reduced per Brock's spec. Commit `{sha}`.\n"
+                    f"Re-enable: set `DISCORD_SIGNAL_POSTING_ENABLED=true` in Railway."
+                )
+                try:
+                    _hx.post(
+                        f"https://discord.com/api/v10/channels/{ch_daily_plan}/messages",
+                        headers={"Authorization": f"Bot {bot_token}", "Content-Type": "application/json"},
+                        json={"content": content},
+                        timeout=8,
+                    )
+                    logger.warning("[quiet-mode] notice posted to #daily-plan")
+                except Exception as exc:
+                    logger.warning("[quiet-mode] #daily-plan post failed: %s", exc)
+        except Exception as exc:
+            logger.error("[quiet-mode] startup notice failed: %s", exc)
+
+    scheduler.add_job(
+        _post_quiet_mode_notice,
+        "date",
+        run_date=datetime.now(UTC),
+        id="quiet_mode_startup_notice",
+        replace_existing=True,
     )
