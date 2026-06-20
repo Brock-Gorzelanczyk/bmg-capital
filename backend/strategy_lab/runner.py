@@ -557,7 +557,9 @@ def run_bot_profile(profile_name: str) -> dict:
                 except Exception as exc:
                     logger.warning("[runner:%s] guardrail_checker failed: %s", profile_name, exc)
 
-                # Gather open positions for position_cap + exposure + correlation
+                # Gather open positions for position_cap + exposure + correlation.
+                # Must exclude quarantined_at IS NOT NULL — quarantined positions
+                # are not real open positions and must not count toward position_cap.
                 open_pos_rows: list = []
                 open_symbols: list[str] = []
                 try:
@@ -567,6 +569,7 @@ def run_bot_profile(profile_name: str) -> dict:
                         .filter(
                             BotPosition.allocation_id == alloc.id,
                             BotPosition.closed_at.is_(None),
+                            BotPosition.quarantined_at.is_(None),
                         )
                         .all()
                     )
@@ -1285,7 +1288,11 @@ def trace_bot_profile(profile_name: str, confidence_threshold_override: float | 
 
             open_pos_rows = (
                 db.query(_BPos)
-                .filter(_BPos.allocation_id == alloc.id, _BPos.closed_at.is_(None))
+                .filter(
+                    _BPos.allocation_id == alloc.id,
+                    _BPos.closed_at.is_(None),
+                    _BPos.quarantined_at.is_(None),
+                )
                 .all()
             )
             position_cap = int(profile.get("position_cap", 999))

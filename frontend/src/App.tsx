@@ -353,6 +353,7 @@ function AppInner() {
     <Routes>
       {/* URL alias redirects — outside layout so they fire before AppShell renders */}
       <Route path="/strategy-lab" element={<Navigate to="/strategy" replace />} />
+      <Route path="/strategy/lab" element={<Navigate to="/strategy" replace />} />
       <Route path="/strategy/analytics" element={<Navigate to="/strategy/performance" replace />} />
       <Route element={<AppShell />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -216,9 +216,9 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
             realized_30d_cents += fill_pnl
 
     # ── Open positions ────────────────────────────────────────────────────────
-    # All open positions (for count/display — matches admin count)
     open_pos_display = [p for p in all_positions if p.closed_at is None]
-    # Only non-quarantined for P&L (exclude synthetic seed data)
+    # Canonical "open position" = not closed AND not quarantined.
+    # open_pos_rows is used for ALL counts so portfolio matches bot-health.
     open_pos_rows = [p for p in open_pos_display if not p.quarantined_at]
 
     # ── Unrealized PnL from live prices ──────────────────────────────────────
@@ -344,7 +344,7 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         unrealized_pnl_cents=unrealized_pnl_cents,
         all_time_return_pct=all_time_return_pct,
         return_30d_pct=return_30d_pct,
-        open_positions_count=len(open_pos_display),
+        open_positions_count=len(open_pos_rows),
         watchlist_count=watchlist_count,
         sharpe_30d=sharpe_30d,
         capital_cents_within_portfolio=capital_within,
