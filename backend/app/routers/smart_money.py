@@ -47,8 +47,8 @@ def get_congress_trades(
         "trades": trades,
         "total": total,
         "last_updated_at": last_updated,
-        "source": "Financial Modeling Prep (financialmodelingprep.com)",
-        "source_note": "Data sourced from official STOCK Act disclosure portals via FMP Senate & House trading feeds.",
+        "source": "Financial Modeling Prep — /stable/ (senate-latest + house-latest)",
+        "source_note": "Data sourced from official STOCK Act disclosure portals via FMP stable API.",
     }
 
 

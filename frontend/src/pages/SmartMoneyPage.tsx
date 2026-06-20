@@ -440,7 +440,7 @@ export default function SmartMoneyPage() {
             )}
 
             <div className="px-5 py-2.5 border-t border-t-dim text-[10px] text-t-muted flex items-center justify-between flex-wrap gap-1">
-              <span>Data from Senate Stock Watcher + House Stock Watcher · SEC EDGAR STOCK Act disclosures</span>
+              <span>Data from Financial Modeling Prep (US Senate + House STOCK Act disclosures)</span>
               {congressData && (
                 <span className="opacity-70">{congressData.total.toLocaleString()} total trades · showing {filteredCongress.length}</span>
               )}

@@ -1,8 +1,9 @@
 """
 Fetches Congressional stock disclosures from Financial Modeling Prep (FMP).
-Senate: GET https://financialmodelingprep.com/api/v4/senate-trading?apikey=KEY
-House:  GET https://financialmodelingprep.com/api/v4/senate-disclosure?apikey=KEY
+Senate: GET https://financialmodelingprep.com/stable/senate-latest?apikey=KEY
+House:  GET https://financialmodelingprep.com/stable/house-latest?apikey=KEY
 Free plan: 250 calls/day. Daily cron uses 2 calls total.
+Note: /api/v4/ endpoints deprecated August 31, 2025 — use /stable/ only.
 """
 from __future__ import annotations
 
@@ -17,9 +18,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-FMP_BASE = "https://financialmodelingprep.com/api/v4"
-FMP_SENATE_URL = f"{FMP_BASE}/senate-trading"
-FMP_HOUSE_URL = f"{FMP_BASE}/senate-disclosure"
+FMP_BASE = "https://financialmodelingprep.com/stable"
+FMP_SENATE_URL = f"{FMP_BASE}/senate-latest"
+FMP_HOUSE_URL = f"{FMP_BASE}/house-latest"
 
 # 24-hour in-memory cache so manual "Fetch Now" doesn't burn quota
 _cache: dict[str, tuple[float, list]] = {}
