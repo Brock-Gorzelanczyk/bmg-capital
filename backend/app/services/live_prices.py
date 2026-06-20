@@ -65,6 +65,36 @@ _SKIP_KRAKEN: set[str] = {
     "SHIB/USD",  # Kraken has SHIB2/USDT, not SHIBUSD; Alpaca handles it correctly
 }
 
+# ── CoinGecko fallback mapping ────────────────────────────────────────────────
+# Third-tier fallback for symbols Kraken + Alpaca crypto both miss.
+# Maps our internal "BASE/USD" format → CoinGecko coin ID.
+_TO_COINGECKO_ID: dict[str, str] = {
+    "BTC/USD":   "bitcoin",
+    "ETH/USD":   "ethereum",
+    "SOL/USD":   "solana",
+    "AVAX/USD":  "avalanche-2",
+    "DOGE/USD":  "dogecoin",
+    "ADA/USD":   "cardano",
+    "LINK/USD":  "chainlink",
+    "POL/USD":   "matic-network",
+    "MATIC/USD": "matic-network",
+    "OP/USD":    "optimism",
+    "ARB/USD":   "arbitrum",
+    "BNB/USD":   "binancecoin",
+    "DOT/USD":   "polkadot",
+    "LTC/USD":   "litecoin",
+    "XLM/USD":   "stellar",
+    "XRP/USD":   "ripple",
+    "UNI/USD":   "uniswap",
+    "ATOM/USD":  "cosmos",
+    "NEAR/USD":  "near",
+    "APT/USD":   "aptos",
+    "SUI/USD":   "sui",
+    "TIA/USD":   "celestia",
+    "INJ/USD":   "injective-protocol",
+    "SHIB/USD":  "shiba-inu",
+}
+
 # Some Kraken response keys differ from the pair we requested.
 # Map pair → expected response key (only needed for legacy pairs).
 _KRAKEN_RESPONSE_KEY: dict[str, str] = {
@@ -180,6 +210,59 @@ def fetch_stock_prices_alpaca(symbols: list[str]) -> dict[str, float]:
     return prices
 
 
+def fetch_crypto_prices_coingecko(symbols: list[str], timeout: int = 8) -> dict[str, float]:
+    """Fetch crypto prices from CoinGecko free API (no auth required).
+
+    Third-tier fallback — only called when Kraken + Alpaca both return no price.
+
+    Args:
+        symbols: Internal "BASE/USD" symbols to look up.
+
+    Returns:
+        Dict mapping original symbol → USD price. Missing symbols are omitted.
+    """
+    if not symbols:
+        return {}
+
+    sym_to_id: dict[str, str] = {}
+    for sym in symbols:
+        cg_id = _TO_COINGECKO_ID.get(sym)
+        if cg_id:
+            sym_to_id[sym] = cg_id
+
+    if not sym_to_id:
+        return {}
+
+    ids_str = ",".join(set(sym_to_id.values()))
+    url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids_str}&vs_currencies=usd"
+    prices: dict[str, float] = {}
+
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "bmg-capital/1.0", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+
+        id_to_price: dict[str, float] = {}
+        for cg_id, vals in data.items():
+            usd = vals.get("usd")
+            if usd and float(usd) > 0:
+                id_to_price[cg_id] = float(usd)
+
+        for sym, cg_id in sym_to_id.items():
+            if cg_id in id_to_price:
+                prices[sym] = id_to_price[cg_id]
+
+        logger.debug("[live_prices] CoinGecko: %d/%d symbols fetched", len(prices), len(symbols))
+
+    except Exception as exc:
+        logger.warning("[live_prices] CoinGecko fallback failed: %s", exc)
+
+    return prices
+
+
 def fetch_live_prices(symbols: list[str]) -> dict[str, float]:
     """Fetch live prices, routing crypto to Kraken and stocks to Alpaca.
 
@@ -224,6 +307,12 @@ def fetch_live_prices(symbols: list[str]) -> dict[str, float]:
                             resolved_prices[sym] = float(trade.price)
             except Exception as exc:
                 logger.warning("[live_prices] Alpaca crypto fallback failed: %s", exc)
+
+        # Third tier: CoinGecko free API for anything still missing
+        still_missing = [s for s in crypto_syms if s not in resolved_prices]
+        if still_missing:
+            cg_prices = fetch_crypto_prices_coingecko(still_missing)
+            resolved_prices.update(cg_prices)
 
     if stock_syms:
         alpaca_prices = fetch_stock_prices_alpaca(stock_syms)

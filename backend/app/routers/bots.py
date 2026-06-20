@@ -896,62 +896,106 @@ def get_portfolio_activity(
         .all()
     )
 
-    # Fetch positions for ALL trades (sell/cover for realized P&L; buy for MTM)
+    # ── Position lookup ────────────────────────────────────────────────────────
+    # Fetch positions for ALL trades with a position_id (sell/cover for realized
+    # P&L; buy for open/closed detection).
     all_position_ids = list({t.position_id for t in trades if t.position_id})
     position_map: dict[int, BotPosition] = {}
     if all_position_ids:
         pos_rows = db.query(BotPosition).filter(BotPosition.id.in_(all_position_ids)).all()
         position_map = {p.id: p for p in pos_rows}
 
-    # Identify open stock/crypto positions linked to BUY trades
-    open_equity_pos: dict[int, BotPosition] = {}
-    open_options_pos: dict[int, BotPosition] = {}
-    for t in trades:
-        if t.side != "buy" or not t.position_id:
-            continue
-        pos = position_map.get(t.position_id)
-        if pos and not pos.closed_at and not pos.quarantined_at:
-            if pos.option_type:
-                open_options_pos[t.position_id] = pos
-            else:
-                open_equity_pos[t.position_id] = pos
+    # Cause 1 fix: for BUY trades without a position_id (legacy rows pre-FK era),
+    # do a fallback lookup — find the latest OPEN BotPosition for this
+    # allocation + symbol.  If the position was already closed, the query returns
+    # None → is_open stays False (prevents "live: pending" on closed orphans).
+    no_pid_buy_alloc_syms = list({
+        (t.allocation_id, t.symbol)
+        for t in trades
+        if t.side == "buy" and not t.position_id
+    })
+    # trade_id → fallback BotPosition (or None = no open position found)
+    fallback_pos_by_trade: dict[int, BotPosition | None] = {}
+    for alloc_id, symbol in no_pid_buy_alloc_syms:
+        fp = (
+            db.query(BotPosition)
+            .filter(
+                BotPosition.allocation_id == alloc_id,
+                BotPosition.symbol == symbol,
+                BotPosition.closed_at.is_(None),
+                BotPosition.quarantined_at.is_(None),
+            )
+            .order_by(BotPosition.id.desc())
+            .first()
+        )
+        # Associate ALL trades for this (alloc, symbol) combo with the result
+        for t in trades:
+            if t.side == "buy" and not t.position_id and t.allocation_id == alloc_id and t.symbol == symbol:
+                fallback_pos_by_trade[t.id] = fp
 
-    # Batch live-price fetch for open equity positions
+    # Determine which BUY trades are open and need live prices
+    # Key: (symbol, is_options). MTM uses trade's OWN qty/fill_price so we
+    # only need the live price — not the position's avg_cost.
+    open_equity_symbols: set[str] = set()
+    open_options_pos: dict[int, BotPosition] = {}  # trade_id → position (options only)
+
+    for t in trades:
+        if t.side != "buy":
+            continue
+        # Resolve position (via FK or fallback)
+        if t.position_id:
+            pos = position_map.get(t.position_id)
+            is_t_open = bool(pos and not pos.closed_at and not pos.quarantined_at)
+        else:
+            pos = fallback_pos_by_trade.get(t.id)
+            is_t_open = bool(pos)
+
+        if not is_t_open or not pos:
+            continue
+
+        if pos.option_type:
+            open_options_pos[t.id] = pos
+        else:
+            open_equity_symbols.add(t.symbol)
+
+    # ── Batch live-price fetch for open equity/crypto positions ────────────────
     live_prices: dict[str, float] = {}
     mtm_ts: str | None = None
-    equity_symbols = list({pos.symbol for pos in open_equity_pos.values()})
-    if equity_symbols:
+    if open_equity_symbols:
         try:
             from app.services.live_prices import fetch_live_prices
-            live_prices = fetch_live_prices(equity_symbols)
+            live_prices = fetch_live_prices(list(open_equity_symbols))
             mtm_ts = datetime.now(timezone.utc).isoformat()
+            missing = [s for s in open_equity_symbols if s not in live_prices]
+            if missing:
+                logger.warning("[activity-mtm] no price for symbols: %s", missing)
         except Exception as exc:
             logger.warning("[activity-mtm] live price fetch failed: %s", exc)
 
-    # Per-contract options MTM via yfinance (best-effort, skips on any failure)
+    # ── Per-contract options MTM via yfinance (best-effort) ───────────────────
     options_mid: dict[int, float | None] = {}
-    for pid, pos in open_options_pos.items():
+    for trade_id, pos in open_options_pos.items():
         try:
             import yfinance as yf
-            ticker = pos.underlying_symbol or pos.symbol
-            expiry  = pos.expiration_date
-            strike  = pos.strike_price
+            ticker   = pos.underlying_symbol or pos.symbol
+            expiry   = pos.expiration_date
+            strike   = pos.strike_price
             opt_type = (pos.option_type or "").lower()
             if ticker and expiry and strike:
-                yt = yf.Ticker(ticker)
+                yt    = yf.Ticker(ticker)
                 chain = yt.option_chain(expiry)
-                df = chain.calls if "call" in opt_type else chain.puts
-                row = df[abs(df["strike"] - float(strike)) < 0.01]
+                df    = chain.calls if "call" in opt_type else chain.puts
+                row   = df[abs(df["strike"] - float(strike)) < 0.01]
                 if not row.empty:
                     bid = float(row["bid"].iloc[0])
                     ask = float(row["ask"].iloc[0])
                     mid = (bid + ask) / 2 if bid > 0 and ask > 0 else float(row["lastPrice"].iloc[0])
-                    options_mid[pid] = mid
+                    options_mid[trade_id] = mid
                     if mtm_ts is None:
                         mtm_ts = datetime.now(timezone.utc).isoformat()
         except Exception as exc:
-            logger.debug("[activity-mtm] options MTM skipped pos=%d: %s", pid, exc)
-            options_mid[pid] = None
+            logger.debug("[activity-mtm] options MTM skipped trade=%d: %s", trade_id, exc)
+            options_mid[trade_id] = None
 
     from app.core.canonical import DISPLAY_NAMES
     result = []
@@ -970,40 +1014,52 @@ def get_portfolio_activity(
                 ((entry_price - fill_price) if is_short else (fill_price - entry_price)) * t.qty, 2
             )
 
-        # Live unrealized P&L (open BUY trades only)
+        # ── Live unrealized P&L (open BUY trades only) ────────────────────────
+        # Uses the trade's own qty × fill_price as entry cost, NOT the position's
+        # avg_cost × qty (which would be the whole position, not this specific lot).
         is_open = False
         current_value_usd: float | None = None
         unrealized_pnl: float | None = None
         unrealized_pnl_pct: float | None = None
         pos_mark_ts: str | None = None
 
-        if t.side == "buy" and t.position_id:
-            pos = position_map.get(t.position_id)
-            if pos and not pos.closed_at and not pos.quarantined_at:
-                is_open = True
+        if t.side == "buy":
+            # Determine open status via FK or fallback
+            if t.position_id:
+                pos = position_map.get(t.position_id)
+                is_open = bool(pos and not pos.closed_at and not pos.quarantined_at)
+            else:
+                pos = fallback_pos_by_trade.get(t.id)
+                is_open = bool(pos)
+
+            if is_open and pos:
                 pos_mark_ts = mtm_ts
+                trade_qty   = abs(t.qty or 0)
+                entry_cost  = fill_price * trade_qty  # this specific lot's cost
+
                 if pos.option_type:
-                    contracts   = pos.contract_count or max(1, int(pos.qty or 1))
-                    entry_prem  = (pos.avg_cost_cents or 0) / 100
-                    entry_total = entry_prem * contracts * 100
-                    cur_prem    = options_mid.get(t.position_id)
+                    # Options: per-trade contracts from BotTrade if available,
+                    # else fall back to position contract count
+                    contracts  = getattr(t, "contract_count", None) or pos.contract_count or max(1, int(trade_qty or 1))
+                    entry_prem = t.fill_price_cents / 100  # premium paid per contract
+                    entry_cost = entry_prem * contracts * 100
+                    cur_prem   = options_mid.get(t.id)
                     if cur_prem is not None:
-                        current_value_usd = round(cur_prem * contracts * 100, 2)
-                        unrealized_pnl    = round(current_value_usd - entry_total, 2)
-                        unrealized_pnl_pct = round(unrealized_pnl / entry_total * 100, 2) if entry_total else 0
+                        current_value_usd  = round(cur_prem * contracts * 100, 2)
+                        unrealized_pnl     = round(current_value_usd - entry_cost, 2)
+                        unrealized_pnl_pct = round(unrealized_pnl / entry_cost * 100, 2) if entry_cost else 0
                 else:
-                    price = live_prices.get(pos.symbol)
-                    if price and pos.avg_cost_cents and pos.qty:
-                        entry_total = pos.avg_cost_cents * abs(pos.qty) / 100
-                        current_value_usd = round(price * abs(pos.qty), 2)
-                        is_short = getattr(pos, "side", "long") == "short"
+                    price = live_prices.get(t.symbol)
+                    if price and trade_qty:
+                        current_value_usd  = round(price * trade_qty, 2)
+                        pos_side = getattr(pos, "side", "long") if pos else "long"
                         unrealized_pnl = round(
-                            (entry_total - current_value_usd) if is_short
-                            else (current_value_usd - entry_total), 2
+                            (entry_cost - current_value_usd) if pos_side == "short"
+                            else (current_value_usd - entry_cost), 2
                         )
                         unrealized_pnl_pct = round(
-                            unrealized_pnl / entry_total * 100, 2
-                        ) if entry_total else 0
+                            unrealized_pnl / entry_cost * 100, 2
+                        ) if entry_cost else 0
 
         result.append({
             "id":              t.id,
