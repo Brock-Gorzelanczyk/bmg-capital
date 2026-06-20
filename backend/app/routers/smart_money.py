@@ -128,17 +128,20 @@ async def trigger_congress_refresh(
 
 @router.get("/diagnose/crypto", dependencies=[Depends(require_admin)])
 async def diagnose_crypto():
-    """Probe CoinMetrics + Binance connectivity to debug the Crypto tab."""
+    """Probe CoinMetrics + Bybit connectivity to debug the Crypto tab."""
     import asyncio
     import httpx as _httpx
+    from datetime import datetime, timedelta, timezone as _tz
 
     async def _probe_coinmetrics(asset: str) -> dict:
         url = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
+        start = (datetime.now(_tz.utc) - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
         try:
             async with _httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 resp = await client.get(url, params={
                     "assets": asset, "metrics": "AdrBal1in1MCnt",
-                    "frequency": "1d", "limit": 5, "pretty": "false",
+                    "frequency": "1d", "start_time": start,
+                    "page_size": 14, "pretty": "false",
                 }, headers={"Accept": "application/json", "User-Agent": "BMGCapital/1.0"})
             data_rows, sample, parse_error = 0, {}, None
             try:
@@ -157,37 +160,26 @@ async def diagnose_crypto():
         except Exception as exc:
             return {"asset": asset, "error": str(exc)}
 
-    async def _probe_binance_premium(symbol: str) -> dict:
-        url = "https://fapi.binance.com/fapi/v1/premiumIndex"
+    async def _probe_bybit(symbol: str) -> dict:
+        url = "https://api.bybit.com/v5/market/funding/history"
         try:
             async with _httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-                resp = await client.get(url, params={"symbol": symbol})
-            payload = None
+                resp = await client.get(url, params={
+                    "category": "linear", "symbol": symbol, "limit": 1
+                })
+            payload, funding_rate = None, None
             try:
                 payload = resp.json()
+                items = payload.get("result", {}).get("list", [])
+                if items:
+                    funding_rate = items[0].get("fundingRate")
             except Exception:
                 pass
             return {
                 "symbol": symbol, "http_status": resp.status_code,
-                "response": payload,
-                "error_body": resp.text[:400] if resp.status_code != 200 else None,
-            }
-        except Exception as exc:
-            return {"symbol": symbol, "error": str(exc)}
-
-    async def _probe_binance_funding(symbol: str) -> dict:
-        url = "https://fapi.binance.com/fapi/v1/fundingRate"
-        try:
-            async with _httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-                resp = await client.get(url, params={"symbol": symbol, "limit": 1})
-            payload = None
-            try:
-                payload = resp.json()
-            except Exception:
-                pass
-            return {
-                "symbol": symbol, "http_status": resp.status_code,
-                "response": payload,
+                "funding_rate_raw": funding_rate,
+                "funding_rate_pct": float(funding_rate) * 100 if funding_rate else None,
+                "sample_response": payload,
                 "error_body": resp.text[:400] if resp.status_code != 200 else None,
             }
         except Exception as exc:
@@ -196,16 +188,14 @@ async def diagnose_crypto():
     results = await asyncio.gather(
         _probe_coinmetrics("btc"),
         _probe_coinmetrics("eth"),
-        _probe_binance_premium("BTCUSDT"),
-        _probe_binance_premium("ETHUSDT"),
-        _probe_binance_funding("BTCUSDT"),
+        _probe_bybit("BTCUSDT"),
+        _probe_bybit("ETHUSDT"),
         return_exceptions=True,
     )
 
     return {
         "coinmetrics_community": {"btc": results[0], "eth": results[1]},
-        "binance_premiumIndex": {"BTCUSDT": results[2], "ETHUSDT": results[3]},
-        "binance_fundingRate": {"BTCUSDT": results[4]},
+        "bybit_funding": {"BTCUSDT": results[2], "ETHUSDT": results[3]},
     }
 
 
@@ -295,31 +285,32 @@ def _build_crypto_smart_money() -> dict:
             "funding_rate": None,
         })
 
-    # Funding rates from Binance premiumIndex (returns lastFundingRate for current period)
-    for futures_sym, idx in [("BTCUSDT", 0), ("ETHUSDT", 1)]:
+    # Funding rates from Bybit linear perps (Binance is geo-blocked on Railway US IPs)
+    # GET /v5/market/funding/history → result.list[0].fundingRate
+    for bybit_sym, idx in [("BTCUSDT", 0), ("ETHUSDT", 1)]:
         try:
             resp = _req.get(
-                "https://fapi.binance.com/fapi/v1/premiumIndex",
-                params={"symbol": futures_sym},
-                timeout=6,
+                "https://api.bybit.com/v5/market/funding/history",
+                params={"category": "linear", "symbol": bybit_sym, "limit": 1},
+                timeout=8,
             )
             if resp.status_code == 200:
                 data = resp.json()
-                # premiumIndex returns a single dict (not a list)
-                if isinstance(data, dict):
-                    raw = data.get("lastFundingRate") or data.get("fundingRate")
+                items = data.get("result", {}).get("list", [])
+                if items:
+                    raw = items[0].get("fundingRate")
                     if raw is not None:
                         assets[idx]["funding_rate"] = float(raw) * 100
             else:
-                logger.warning("[smart-money/crypto] Binance %s status %s: %s", futures_sym, resp.status_code, resp.text[:200])
+                logger.warning("[smart-money/crypto] Bybit %s status %s: %s", bybit_sym, resp.status_code, resp.text[:200])
         except Exception as exc:
-            logger.warning("[smart-money/crypto] Binance %s failed: %s", futures_sym, exc)
+            logger.warning("[smart-money/crypto] Bybit %s failed: %s", bybit_sym, exc)
 
     # Additional coins — just basic CoinMetrics large holder if available
     # (skip for now, only BTC/ETH supported by whale.py)
 
     return {
         "assets": assets,
-        "source": "CoinMetrics Community API + Binance",
-        "note": "Addresses with ≥$1M balance (AdrBal1in1MCnt). Funding rate from Binance perps.",
+        "source": "CoinMetrics Community API + Bybit",
+        "note": "Addresses with ≥$1M balance (AdrBal1in1MCnt). Funding rate from Bybit perps.",
     }

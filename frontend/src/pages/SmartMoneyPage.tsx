@@ -160,7 +160,7 @@ function CryptoSmartMoneyTab({ data, isLoading }: { data: CryptoSmartMoneyData |
 
       {/* Source note */}
       <div className="text-[10px] text-t-muted px-1">
-        Source: CoinMetrics Community API (AdrBal1in1MCnt) · Binance perp funding
+        {data.source ?? "CoinMetrics Community API · Bybit perp funding"}
       </div>
     </div>
   );

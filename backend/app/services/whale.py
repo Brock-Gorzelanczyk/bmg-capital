@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -53,6 +54,9 @@ def get_large_holder_signal(symbol: str) -> dict:
         return cached
 
     try:
+        # CoinMetrics v4 uses start_time/end_time for range and page_size for count.
+        # `limit` is not a valid param and returns 400.
+        start_time = (datetime.now(timezone.utc) - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
         with httpx.Client(timeout=15) as client:
             r = client.get(
                 f"{COINMETRICS_BASE}/timeseries/asset-metrics",
@@ -60,7 +64,8 @@ def get_large_holder_signal(symbol: str) -> dict:
                     "assets": asset,
                     "metrics": "AdrBal1in1MCnt",
                     "frequency": "1d",
-                    "limit": 14,
+                    "start_time": start_time,
+                    "page_size": 14,
                     "pretty": "false",
                 },
                 headers=_HEADERS,
