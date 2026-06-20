@@ -21,10 +21,21 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time as _time
 from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
+
+# Change 5 — 5-minute per-signal dedup cache: "bot:symbol:side" → last-posted monotonic ts
+_dedup_cache: dict[str, float] = {}
+_dedup_lock = threading.Lock()
+_DEDUP_WINDOW = 300  # seconds
+
+# Change 2 — quant signal buffer for hourly summary
+_quant_buffer: list[dict] = []
+_quant_buffer_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +49,15 @@ def _log_channel_config() -> None:
         return
     _channel_log_done = True
     cfg = _cfg()
-    ch_all     = cfg.discord_ch_all_signals     or cfg.discord_channel_all_signals
     ch_stocks  = cfg.discord_ch_stocks_signals  or cfg.discord_channel_stocks
     ch_crypto  = cfg.discord_ch_crypto_signals  or cfg.discord_channel_crypto
     ch_options = cfg.discord_ch_options_signals or cfg.discord_channel_options
     ch_quant   = cfg.discord_ch_quant_signals   or os.getenv("BMG_QUANT_SIGNALS_CHANNEL_ID", "")
     logger.warning(
-        "[discord-channels] all=%s stocks=%s crypto=%s options=%s quant=%s",
-        ch_all or "MISSING", ch_stocks or "MISSING", ch_crypto or "MISSING",
+        "[discord-channels] stocks=%s crypto=%s options=%s quant=%s  (#all-signals deprecated)",
+        ch_stocks or "MISSING", ch_crypto or "MISSING",
         ch_options or "MISSING", ch_quant or "MISSING",
     )
-    # Per-bot routing map — any MISSING line means that bot's signals will only hit #all-signals
     routing = [
         ("stock_day",                   ch_stocks,  "DISCORD_CH_STOCKS_SIGNALS"),
         ("stock_swing",                 ch_stocks,  "DISCORD_CH_STOCKS_SIGNALS"),
@@ -59,9 +68,9 @@ def _log_channel_config() -> None:
         ("crypto_swing",                ch_crypto,  "DISCORD_CH_CRYPTO_SIGNALS"),
         ("crypto_lt",                   ch_crypto,  "DISCORD_CH_CRYPTO_SIGNALS"),
         ("crypto_onchain",              ch_crypto,  "DISCORD_CH_CRYPTO_SIGNALS"),
-        ("crypto_quant_scalper",        ch_quant,   "DISCORD_CH_QUANT_SIGNALS"),
-        ("crypto_quant_aggressive",     ch_quant,   "DISCORD_CH_QUANT_SIGNALS"),
-        ("crypto_quant_mean_reversion", ch_quant,   "DISCORD_CH_QUANT_SIGNALS"),
+        ("crypto_quant_scalper",        ch_quant,   "DISCORD_CH_QUANT_SIGNALS (hourly summary only)"),
+        ("crypto_quant_aggressive",     ch_quant,   "DISCORD_CH_QUANT_SIGNALS (hourly summary only)"),
+        ("crypto_quant_mean_reversion", ch_quant,   "DISCORD_CH_QUANT_SIGNALS (hourly summary only)"),
     ]
     logger.warning("[discord-routing-map]")
     for bot, ch, env_name in routing:
@@ -100,10 +109,13 @@ def _cfg():
 
 
 def _channel_ids_for_bot(bot_name: str) -> list[str]:
-    """Return ordered, deduped list of channel IDs for this bot."""
+    """Return ordered, deduped list of channel IDs for this bot.
+
+    #all-signals removed (Change 1) — halves Discord API call volume.
+    Quant bots only post here for high-conviction signals; hourly summary
+    uses post_quant_hourly_summary() which calls _post_to_channel() directly.
+    """
     cfg = _cfg()
-    # Prefer new DISCORD_CH_* names, fall back to legacy DISCORD_CHANNEL_* names.
-    ch_all     = cfg.discord_ch_all_signals     or cfg.discord_channel_all_signals
     ch_stocks  = cfg.discord_ch_stocks_signals  or cfg.discord_channel_stocks
     ch_crypto  = cfg.discord_ch_crypto_signals  or cfg.discord_channel_crypto
     ch_options = cfg.discord_ch_options_signals or cfg.discord_channel_options
@@ -111,17 +123,29 @@ def _channel_ids_for_bot(bot_name: str) -> list[str]:
 
     if bot_name in _QUANT_BOTS and not ch_quant:
         logger.warning(
-            "BMG_QUANT_SIGNALS_CHANNEL_ID not set — "
-            "Crypto Quant Aggressive signals will not post to Discord"
+            "BMG_QUANT_SIGNALS_CHANNEL_ID not set — quant signals will not post to Discord"
         )
 
     channels = []
-    if ch_all:                                           channels.append(ch_all)
-    if bot_name in _STOCKS_BOTS  and ch_stocks:         channels.append(ch_stocks)
-    if bot_name in _CRYPTO_BOTS  and ch_crypto:         channels.append(ch_crypto)
-    if bot_name in _OPTIONS_BOTS and ch_options:        channels.append(ch_options)
-    if bot_name in _QUANT_BOTS   and ch_quant:          channels.append(ch_quant)
+    if bot_name in _STOCKS_BOTS  and ch_stocks:  channels.append(ch_stocks)
+    if bot_name in _CRYPTO_BOTS  and ch_crypto:  channels.append(ch_crypto)
+    if bot_name in _OPTIONS_BOTS and ch_options: channels.append(ch_options)
+    if bot_name in _QUANT_BOTS   and ch_quant:   channels.append(ch_quant)
     return list(dict.fromkeys(channels))
+
+
+def _is_dedup(bot_name: str, symbol: str, side: str) -> bool:
+    """Return True if this bot/symbol/side combo posted to Discord within the last 5 min."""
+    key = f"{bot_name}:{symbol}:{side}"
+    now = _time.monotonic()
+    with _dedup_lock:
+        expired = [k for k, ts in _dedup_cache.items() if now - ts >= _DEDUP_WINDOW]
+        for k in expired:
+            del _dedup_cache[k]
+        if key in _dedup_cache:
+            return True
+        _dedup_cache[key] = now
+        return False
 
 
 def _fmt_price(price: float) -> str:
@@ -389,7 +413,48 @@ def post_signal(
         if row and row.discord_posted_at is not None:
             return
 
-    bot_name    = signal.get("bot", "")
+    bot_name   = signal.get("bot", "")
+    confidence = signal.get("confidence") or 0
+    notional   = signal.get("notional_usd") or 0
+
+    # Change 2 — quant bots use hourly summary; only high-conviction posts individually
+    if bot_name in _QUANT_BOTS:
+        high_conviction = confidence > 0.90 and notional > 5000
+        if not high_conviction:
+            with _quant_buffer_lock:
+                _quant_buffer.append({
+                    "bot":         bot_name,
+                    "symbol":      signal.get("symbol", ""),
+                    "side":        (signal.get("side") or "buy").lower(),
+                    "confidence":  confidence,
+                    "notional_usd": notional,
+                    "strategy":    signal.get("strategy", ""),
+                    "ts":          datetime.now(timezone.utc).isoformat(),
+                })
+            logger.debug(
+                "[quant-buffer] bot=%s symbol=%s conf=%.2f → buffered for hourly summary",
+                bot_name, signal.get("symbol", ""), confidence,
+            )
+            return
+
+    # Change 3 — skip Discord for low-confidence signals (< 65%)
+    if confidence < 0.65:
+        logger.debug(
+            "[discord-skip] confidence %.2f < 0.65  bot=%s symbol=%s",
+            confidence, bot_name, signal.get("symbol", ""),
+        )
+        return
+
+    # Change 5 — 5-minute dedup: same bot/symbol/side won't post twice in a window
+    symbol = signal.get("symbol", "")
+    side   = (signal.get("side") or "buy").lower()
+    if _is_dedup(bot_name, symbol, side):
+        logger.debug(
+            "[discord-dedup] suppressed duplicate bot=%s symbol=%s side=%s",
+            bot_name, symbol, side,
+        )
+        return
+
     channel_ids = _channel_ids_for_bot(bot_name)
     if not channel_ids:
         return
@@ -419,6 +484,147 @@ def post_signal(
                 db.commit()
         except Exception as exc:
             logger.debug("discord_posted_at update failed: %s", exc)
+
+
+def post_quant_hourly_summary() -> None:
+    """Drain the quant signal buffer and post an hourly summary to #quant-signals.
+
+    Called by the scheduler every hour. If the buffer is empty, does nothing.
+    """
+    cfg = _cfg()
+    ch_quant = cfg.discord_ch_quant_signals or os.getenv("BMG_QUANT_SIGNALS_CHANNEL_ID", "")
+    if not cfg.discord_bot_token or not ch_quant:
+        return
+
+    with _quant_buffer_lock:
+        if not _quant_buffer:
+            return
+        batch = list(_quant_buffer)
+        _quant_buffer.clear()
+
+    by_bot: dict[str, dict] = {}
+    for sig in batch:
+        bot = sig["bot"]
+        if bot not in by_bot:
+            by_bot[bot] = {"entries": 0, "exits": 0, "symbols": set()}
+        if sig["side"] in ("buy", "cover"):
+            by_bot[bot]["entries"] += 1
+        else:
+            by_bot[bot]["exits"] += 1
+        by_bot[bot]["symbols"].add(sig["symbol"])
+
+    total_entries = sum(v["entries"] for v in by_bot.values())
+    total_exits   = sum(v["exits"]   for v in by_bot.values())
+    all_symbols   = sorted({s for v in by_bot.values() for s in v["symbols"]})[:10]
+
+    lines = []
+    for bot_n, stats in sorted(by_bot.items()):
+        display  = BOT_DISPLAY.get(bot_n, bot_n)
+        top_syms = ", ".join(sorted(stats["symbols"])[:5])
+        lines.append(f"**{display}**: {stats['entries']} entries / {stats['exits']} exits — {top_syms}")
+
+    embed = {
+        "author":      {"name": "Quant Fleet — Hourly Summary"},
+        "title":       f"⚡ {total_entries + total_exits} signals last hour  ({total_entries} long, {total_exits} short)",
+        "description": "\n".join(lines) or "No signals buffered.",
+        "color":       0x6366F1,
+        "fields": [
+            {"name": "Top Symbols", "value": ", ".join(all_symbols) or "—", "inline": False},
+        ],
+        "footer":    {"text": COMPLIANCE_FOOTER},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        _post_to_channel(ch_quant, embed, cfg.discord_bot_token)
+    except Exception as exc:
+        logger.warning("quant hourly summary Discord post failed: %s", exc)
+
+
+def post_quant_daily_summary(db=None) -> None:
+    """Post 4 PM ET quant fleet daily recap to #quant-signals."""
+    cfg = _cfg()
+    ch_quant = cfg.discord_ch_quant_signals or os.getenv("BMG_QUANT_SIGNALS_CHANNEL_ID", "")
+    if not cfg.discord_bot_token or not ch_quant:
+        return
+
+    _close_db = False
+    if db is None:
+        try:
+            from app.db.session import SessionLocal
+            db = SessionLocal()
+            _close_db = True
+        except Exception:
+            return
+    try:
+        from app.db.models.bots import BotSignal, BotAllocation, BotProfile, BotTrade, BotDailyPnL
+        from sqlalchemy import func
+        from datetime import date
+
+        today = date.today()
+        quant_profiles = db.query(BotProfile).filter(BotProfile.name.in_(list(_QUANT_BOTS))).all()
+        quant_profile_ids = {p.id for p in quant_profiles}
+        if not quant_profile_ids:
+            return
+
+        sigs = (
+            db.query(BotSignal)
+            .join(BotAllocation, BotSignal.allocation_id == BotAllocation.id)
+            .filter(
+                BotAllocation.profile_id.in_(quant_profile_ids),
+                func.date(BotSignal.ts) == today,
+            )
+            .all()
+        )
+        buys  = sum(1 for s in sigs if s.side in ("buy", "cover"))
+        sells = sum(1 for s in sigs if s.side not in ("buy", "cover"))
+
+        trades = (
+            db.query(BotTrade)
+            .join(BotAllocation, BotTrade.allocation_id == BotAllocation.id)
+            .filter(
+                BotAllocation.profile_id.in_(quant_profile_ids),
+                BotTrade.side == "sell",
+                func.date(BotTrade.ts) == today,
+            )
+            .all()
+        )
+        winners  = sum(1 for t in trades if (t.realized_pnl_cents or 0) > 0)
+        win_rate = f"{100 * winners / len(trades):.0f}%" if trades else "—"
+
+        pnl_rows = (
+            db.query(BotDailyPnL)
+            .join(BotAllocation, BotDailyPnL.allocation_id == BotAllocation.id)
+            .filter(
+                BotAllocation.profile_id.in_(quant_profile_ids),
+                BotDailyPnL.date == today,
+            )
+            .all()
+        )
+        net_pnl = sum((r.realized_cents or 0) for r in pnl_rows) / 100
+        pnl_sign = "+" if net_pnl >= 0 else ""
+        all_syms = sorted({s.symbol for s in sigs})[:10]
+
+        embed = {
+            "author":      {"name": "Quant Fleet — Daily Summary"},
+            "title":       f"📊 Quant day: {len(sigs)} signals, {len(trades)} closed trades",
+            "color":       _COLOR_BUY if net_pnl >= 0 else _COLOR_SELL,
+            "fields": [
+                {"name": "Long entries",  "value": str(buys),                        "inline": True},
+                {"name": "Exits",         "value": str(sells),                       "inline": True},
+                {"name": "Win rate",      "value": win_rate,                         "inline": True},
+                {"name": "Net P&L",       "value": f"{pnl_sign}${net_pnl:,.2f}",    "inline": True},
+                {"name": "Top symbols",   "value": ", ".join(all_syms) or "—",       "inline": False},
+            ],
+            "footer":    {"text": COMPLIANCE_FOOTER},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            _post_to_channel(ch_quant, embed, cfg.discord_bot_token)
+        except Exception as exc:
+            logger.warning("quant daily summary Discord post failed: %s", exc)
+    finally:
+        if _close_db:
+            db.close()
 
 
 def post_daily_digest(digest: dict) -> None:

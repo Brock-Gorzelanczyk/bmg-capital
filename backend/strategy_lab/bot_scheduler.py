@@ -313,62 +313,53 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job bot_crypto_quant_aggressive (*/5 min, fires immediately)")
 
     # ------------------------------------------------------------------
-    # crypto_quant_aggressive: end-of-day summary to #quant-signals at 23:55 UTC
+    # Quant fleet hourly summary: every hour at :00, 24/7
+    # Drains _quant_buffer and posts a single embed to #quant-signals.
+    # If the buffer is empty (no quant signals that hour), silently skips.
     # ------------------------------------------------------------------
-    def _cqa_eod_summary():
+    def _quant_hourly_summary():
         try:
-            from app.services.discord_public import post_signal
+            from app.services.discord_public import post_quant_hourly_summary
+            post_quant_hourly_summary()
+        except Exception as exc:
+            logger.error("[quant-hourly-summary] failed: %s", exc)
+
+    scheduler.add_job(
+        _quant_hourly_summary,
+        CronTrigger(minute=0),  # top of every hour
+        id="quant_hourly_summary",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job quant_hourly_summary (every hour at :00)")
+
+    # ------------------------------------------------------------------
+    # Quant fleet daily summary: 4:00 PM ET — fleet stats for the day
+    # ------------------------------------------------------------------
+    def _quant_daily_summary():
+        try:
+            from app.services.discord_public import post_quant_daily_summary
             from app.db.session import SessionLocal
-            from app.db.models.bots import BotSignal, BotAllocation, BotProfile
-            from datetime import date
-            from sqlalchemy import func
             db = SessionLocal()
             try:
-                prof = db.query(BotProfile).filter(BotProfile.name == "crypto_quant_aggressive").first()
-                if not prof:
-                    return
-                today = date.today()
-                sigs = (
-                    db.query(BotSignal)
-                    .join(BotAllocation, BotSignal.allocation_id == BotAllocation.id)
-                    .filter(
-                        BotAllocation.profile_id == prof.id,
-                        func.date(BotSignal.ts) == today,
-                    )
-                    .all()
-                )
-                buys = sum(1 for s in sigs if s.side == "buy")
-                sells = sum(1 for s in sigs if s.side == "sell")
-                symbols = list({s.symbol for s in sigs})[:8]
-                summary_signal = {
-                    "bot": "crypto_quant_aggressive",
-                    "symbol": "PORTFOLIO",
-                    "side": "hold",
-                    "strategy": "EOD_SUMMARY",
-                    "reason": (
-                        f"End-of-day summary — Crypto Quant Aggressive\n"
-                        f"Signals today: {len(sigs)} ({buys} long, {sells} short)\n"
-                        f"Symbols: {', '.join(symbols) or 'none'}\n"
-                        f"Paper trading. Not investment advice. Not a registered investment adviser."
-                    ),
-                    "confidence": 1.0,
-                    "price": None,
-                    "size_pct": None,
-                    "stop": None,
-                    "target": None,
-                }
-                post_signal(summary_signal)
+                post_quant_daily_summary(db)
             finally:
                 db.close()
         except Exception as exc:
-            logger.error("cqa_eod_summary failed: %s", exc)
+            logger.error("[quant-daily-summary] failed: %s", exc)
 
     scheduler.add_job(
-        _cqa_eod_summary,
-        CronTrigger(hour=23, minute=55, timezone=UTC),
-        id="cqa_eod_summary",
+        _quant_daily_summary,
+        CronTrigger(hour=16, minute=0, timezone=ET),
+        id="quant_daily_summary",
         replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
     )
+    logger.warning("[startup-trace] registered job quant_daily_summary (4:00 PM ET daily)")
 
     # ------------------------------------------------------------------
     # crypto_quant_scalper: every 1 min, 24/7
