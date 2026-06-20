@@ -666,6 +666,14 @@ export interface TradeDetail {
   contract_count?: number | null;
   entry_premium_usd?: number | null;
   current_premium_usd?: number | null;
+  bid_usd?: number | null;
+  ask_usd?: number | null;
+  spot_price?: number | null;
+  implied_volatility?: number | null;
+  delta?: number | null;
+  theta?: number | null;
+  vega?: number | null;
+  gamma?: number | null;
 }
 
 export const getTradeDetail = (tradeId: number): Promise<TradeDetail> =>

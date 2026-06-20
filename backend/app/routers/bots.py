@@ -3950,9 +3950,48 @@ def get_trade_detail(
         realized_pnl = round((exit_price - entry_price) * contract_count * 100, 2)
 
     current_premium_usd = None
+    bid_usd = None
+    ask_usd = None
+    spot_price = None
+    implied_volatility = None
+    delta = None
+    theta = None
+    vega = None
+    gamma = None
+
     if is_real_options and trade.strike_price and trade.expiration_date and status == "open":
         try:
+            import math as _math
             import yfinance as yf
+
+            def _ncdf(x: float) -> float:
+                return 0.5 * (1 + _math.erf(x / _math.sqrt(2)))
+
+            def _npdf(x: float) -> float:
+                return _math.exp(-x * x / 2) / _math.sqrt(2 * _math.pi)
+
+            def _bs_greeks(S: float, K: float, T: float, sigma: float, opt: str) -> dict:
+                r = 0.05  # approx risk-free rate
+                if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
+                    return {}
+                d1 = (_math.log(S / K) + (r + sigma * sigma / 2) * T) / (sigma * _math.sqrt(T))
+                d2 = d1 - sigma * _math.sqrt(T)
+                is_call = opt.lower().startswith("c")
+                _delta = _ncdf(d1) if is_call else _ncdf(d1) - 1
+                _gamma = _npdf(d1) / (S * sigma * _math.sqrt(T))
+                _theta = (
+                    -(S * _npdf(d1) * sigma) / (2 * _math.sqrt(T))
+                    + (-1 if is_call else 1) * r * K * _math.exp(-r * T)
+                    * (_ncdf(d2) if is_call else _ncdf(-d2))
+                ) / 365
+                _vega = S * _npdf(d1) * _math.sqrt(T) / 100
+                return {
+                    "delta": round(_delta, 4),
+                    "gamma": round(_gamma, 6),
+                    "theta": round(_theta, 4),
+                    "vega": round(_vega, 4),
+                }
+
             _root = trade.underlying_symbol or trade.symbol
             _ticker = yf.Ticker(_root)
             _chain = _ticker.option_chain(trade.expiration_date)
@@ -3960,10 +3999,29 @@ def get_trade_detail(
             if _df is not None and not _df.empty:
                 _row = _df.iloc[(_df["strike"] - trade.strike_price).abs().argsort()[:1]]
                 if not _row.empty:
-                    _bid = float(_row["bid"].iloc[0])
-                    _ask = float(_row["ask"].iloc[0])
-                    _mid = (_bid + _ask) / 2
-                    current_premium_usd = round(_mid if _mid > 0 else float(_row["lastPrice"].iloc[0]), 4)
+                    r0 = _row.iloc[0]
+                    bid_usd = round(float(r0.get("bid", 0) or 0), 4) or None
+                    ask_usd = round(float(r0.get("ask", 0) or 0), 4) or None
+                    _mid = ((bid_usd or 0) + (ask_usd or 0)) / 2
+                    current_premium_usd = round(
+                        _mid if _mid > 0 else float(r0.get("lastPrice", 0) or 0), 4
+                    )
+                    _iv_raw = float(r0.get("impliedVolatility", 0) or 0)
+                    implied_volatility = round(_iv_raw, 4) if _iv_raw > 0 else None
+                    # Spot price for Greeks
+                    try:
+                        spot_price = round(float(_ticker.fast_info.last_price or 0), 4) or None
+                    except Exception:
+                        pass
+                    if spot_price and implied_volatility:
+                        from datetime import date as _date
+                        _expd = _date.fromisoformat(trade.expiration_date)
+                        _T = max(0, (_expd - _date.today()).days) / 365
+                        _g = _bs_greeks(spot_price, trade.strike_price, _T, implied_volatility, trade.option_type or "call")
+                        delta = _g.get("delta")
+                        gamma = _g.get("gamma")
+                        theta = _g.get("theta")
+                        vega = _g.get("vega")
         except Exception:
             pass
 
@@ -3999,6 +4057,14 @@ def get_trade_detail(
         "contract_count": trade.contract_count,
         "entry_premium_usd": round(trade.contract_premium_cents / 100, 4) if trade.contract_premium_cents else None,
         "current_premium_usd": current_premium_usd,
+        "bid_usd": bid_usd,
+        "ask_usd": ask_usd,
+        "spot_price": spot_price,
+        "implied_volatility": implied_volatility,
+        "delta": delta,
+        "theta": theta,
+        "vega": vega,
+        "gamma": gamma,
     }
 
 
