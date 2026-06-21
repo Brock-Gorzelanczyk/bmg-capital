@@ -124,6 +124,7 @@ const BotHealthPage = lazy(() => import("@/pages/BotHealthPage"));
 const SentinelDashboardPage = lazy(() => import("@/pages/SentinelDashboardPage"));
 const DisciplineReportPage = lazy(() => import("@/pages/DisciplineReportPage"));
 const HypothesesPage = lazy(() => import("@/pages/HypothesesPage"));
+const BrainGraphPage = lazy(() => import("@/pages/BrainGraphPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore, useIsViewer } from "@/store/authStore";
@@ -377,6 +378,7 @@ function AppInner() {
         <Route path="/strategy/analyst" element={<AnalystPage />} />
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
         <Route path="/strategy/hypotheses" element={<HypothesesPage />} />
+        <Route path="/strategy/brain" element={<AdminRoute><BrainGraphPage /></AdminRoute>} />
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
         <Route path="/strategy/bot/:botName" element={<BotDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
