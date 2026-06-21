@@ -56,12 +56,15 @@ def seed_hypotheses_from_strategies(db: Session) -> int:
             existing = db.query(Hypothesis).filter_by(strategy_id=sd.strategy_key).first()
             if existing:
                 continue
+            # Default new hypotheses to "testing" — promotion to live is a
+            # manual decision via the /strategy/hypotheses promote button.
+            # Existing rows are unaffected because we skip them above.
             row = Hypothesis(
                 name=sd.name,
                 strategy_id=sd.strategy_key,
                 direction="both",
-                status="live",  # existing strategies are live by default; new ones default to testing
-                regime_preference=None,
+                status="testing",
+                regime_preference=(sd.parameters or {}).get("regime_preference"),
                 factor_exposures=_default_factors(sd.category),
                 notes=None,
             )

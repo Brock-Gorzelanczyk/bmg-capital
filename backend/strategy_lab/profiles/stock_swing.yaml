@@ -64,6 +64,8 @@ strategies:
   - cup_and_handle
   - macd_crossover
   - earnings_drift_post
+  # Batch 1 (testing — discipline filter enforces regime + score + confluence)
+  - vwap_rejection_fade
 ensemble: weighted_vote
 position_cap: 8
 position_size_pct: 12.5

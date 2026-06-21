@@ -941,6 +941,99 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "is_active": True,
         "sort_order": 26,
     },
+    # ── Batch 1 (Phase 3) — JARVIS-inspired intraday/swing pattern strategies ──
+    {
+        "strategy_key": "vwap_rejection_fade",
+        "name": "VWAP Rejection Fade",
+        "category": "mean_reversion",
+        "description": (
+            "Fade an over-extension from VWAP after a rejection candle prints. "
+            "When price stretches > 2 ATRs from a volume-weighted typical-price "
+            "anchor and prints a wick > body candle that closes back through "
+            "the candle midrange, this strategy fires a mean-reversion entry "
+            "targeting VWAP. Built for choppy / low-volatility regimes — "
+            "the discipline filter's regime gate down-weights it in trending "
+            "markets."
+        ),
+        "source_originator": "BMG Capital — JARVIS-inspired",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["alpaca"],
+        "default_universe": [
+            "SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "META", "AMZN", "GOOGL", "TSLA",
+        ],
+        "parameters": {
+            "atr_period": 14,
+            "deviation_threshold_atrs": 2.0,
+            "wick_to_body_min": 1.0,
+            "rejection_close_frac": 0.66,
+            "max_confidence": 0.85,
+            "active_hours_et": "10:00-15:00",
+            "regime_preference": "low_vol",
+        },
+        "entry_conditions": [
+            {"type": "deviation_from_vwap_atrs", "gt": 2.0},
+            {"type": "rejection_candle", "wick_to_body_min": 1.0},
+            {"type": "close_reclaims_midrange", "frac": 0.66},
+        ],
+        "exit_conditions": [
+            {"type": "take_profit", "level": "vwap"},
+            {"type": "stop_loss", "level": "beyond_rejection_wick"},
+        ],
+        "context_conditions": None,
+        "structure_type": "simple",
+        "execution_schedule": {"cron": "50 15 * * 1-5"},
+        "signal_duration_required": None,
+        "category_accent_from": "#0ea5e9",
+        "category_accent_to": "#6366f1",
+        "is_active": True,
+        "sort_order": 27,
+    },
+    {
+        "strategy_key": "opening_range_breakdown",
+        "name": "Opening Range Breakdown",
+        "category": "breakout",
+        "description": (
+            "Trades a confirmed break of the 9:30–10:00 ET opening range with "
+            "volume confirmation (≥ 1.5× recent average). Symmetric: fires "
+            "LONG on a break above OR_high and SHORT on a break below OR_low. "
+            "Active 10:00–15:00 ET (waits for OR to close, exits before the "
+            "final hour). Works best on trending days; the discipline filter's "
+            "volatility_regime confluence factor suppresses panic-VIX days."
+        ),
+        "source_originator": "BMG Capital — JARVIS-inspired",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["alpaca"],
+        "default_universe": [
+            "SPY", "QQQ", "AAPL", "NVDA", "TSLA", "META", "AMD", "AMZN", "MSFT", "GOOGL",
+        ],
+        "parameters": {
+            "or_window_et": "09:30-10:00",
+            "volume_multiple_required": 1.5,
+            "max_confidence": 0.80,
+            "active_hours_et": "10:00-15:00",
+            "regime_preference": "any",
+        },
+        "entry_conditions": [
+            {"type": "opening_range_break", "direction": "either"},
+            {"type": "volume_multiple", "gte": 1.5},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "level": "opposite_or_extreme"},
+            {"type": "take_profit", "level": "2x_or_range_beyond_break"},
+        ],
+        "context_conditions": None,
+        "structure_type": "simple",
+        "execution_schedule": {"cron": "*/5 14-19 * * 1-5"},
+        "signal_duration_required": None,
+        "category_accent_from": "#f97316",
+        "category_accent_to": "#ef4444",
+        "is_active": True,
+        "sort_order": 28,
+    },
 ]
 
 # ── Registry cache ────────────────────────────────────────────────────────────

@@ -50,6 +50,8 @@ strategies:
   - gex_pin_reversion
   - fomc_drift
   - vwap_reversion_chop
+  # Batch 1 (testing — discipline filter enforces regime + score + confluence)
+  - opening_range_breakdown
 ensemble: any_above_threshold
 position_cap: 3
 position_size_pct: 5
