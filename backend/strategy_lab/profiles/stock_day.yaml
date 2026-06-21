@@ -54,6 +54,8 @@ strategies:
   - opening_range_breakdown
   # Batch 3 (testing — high-volume strategy, threshold raised below)
   - ofi_institutional_flow
+  # Batch 4 (testing — only fires 08:00-12:00 ET, naturally low volume)
+  - london_ny_overlap_continuation
 # Per-strategy composite_threshold overrides — read by the Phase 1 discipline filter.
 # OFI is naturally high-volume; threshold 70 (vs profile default 60) throttles to
 # higher-conviction setups only. Lower this back to 60 once we trust the volume.

@@ -52,6 +52,8 @@ strategies:
   - small_cap_value
   - shareholder_yield
   - monthly_rebalance
+  # Batch 4 (testing — cross-sectional 12-1 momentum, monthly rebalance)
+  - momentum_factor_model
 ensemble: factor_rank
 position_cap: 20
 position_size_pct: 5.0

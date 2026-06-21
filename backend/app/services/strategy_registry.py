@@ -1238,6 +1238,113 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "is_active": True,
         "sort_order": 32,
     },
+    # ── Batch 4 (Phase 3 final) — London-NY overlap + cross-sectional momentum ──
+    {
+        "strategy_key": "london_ny_overlap_continuation",
+        "name": "London-NY Overlap Continuation",
+        "category": "momentum",
+        "description": (
+            "During the 08:00-12:00 ET London/NY overlap (peak global "
+            "liquidity), trades continuation in the direction established "
+            "during the London session (03:00-08:00 ET). Requires "
+            "London-session move strength ≥ 0.5 ATR, then enters on a "
+            "pullback to within 0.2 ATR of London-session VWAP with the "
+            "level holding (last 5 bars haven't broken VWAP). Naturally "
+            "low-volume: 4-hour active window + multiple gates. Forced "
+            "thesis-exit at 12:00 ET (position-management concern — uses "
+            "London extreme as stop and 2× London range as target)."
+        ),
+        "source_originator": "BMG Capital — JARVIS-inspired",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["alpaca"],
+        "default_universe": [
+            "SPY", "QQQ", "AAPL", "NVDA", "TSLA", "META", "AMD", "AMZN", "MSFT", "GOOGL",
+        ],
+        "parameters": {
+            "london_session_et": "03:00-08:00",
+            "overlap_window_et": "08:00-12:00",
+            "london_strength_min_atr": 0.5,
+            "pullback_max_atr": 0.20,
+            "atr_period": 14,
+            "max_confidence": 0.80,
+            "active_hours_et": "08:00-12:00",
+            "regime_preference": "bull_trending",
+        },
+        "entry_conditions": [
+            {"type": "in_overlap_window", "window": "08:00-12:00_ET"},
+            {"type": "london_strength_atr", "gte": 0.5},
+            {"type": "pullback_to_session_vwap", "max_atr": 0.20},
+            {"type": "last_5_bars_held_vwap"},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "level": "london_session_extreme"},
+            {"type": "take_profit", "level": "2x_london_range_extended"},
+            {"type": "time_stop", "et": "12:00"},
+        ],
+        "context_conditions": None,
+        "structure_type": "simple",
+        "execution_schedule": {"cron": "*/5 8-12 * * 1-5"},
+        "signal_duration_required": None,
+        "category_accent_from": "#0ea5e9",
+        "category_accent_to": "#06b6d4",
+        "is_active": True,
+        "sort_order": 33,
+    },
+    {
+        "strategy_key": "momentum_factor_model",
+        "name": "Momentum Factor Model",
+        "category": "factor",
+        "description": (
+            "Classic Fama-French / AQR 12-1 momentum factor. Ranks the "
+            "watchlist by (12-month return − 1-month return) — captures "
+            "the longer trend while subtracting the short-term reversal. "
+            "Goes LONG the top decile and SHORT the bottom decile, "
+            "holding for one full month. Cross-sectional strategy: emits "
+            "10+ signals at once, then ZERO signals for the rest of the "
+            "month. Fires automatically on the first trading day of each "
+            "calendar month — detected from bar history (no scheduler "
+            "modification needed)."
+        ),
+        "source_originator": "BMG Capital — Fama-French / AQR factor research",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["alpaca"],
+        "default_universe": [
+            "SPY", "QQQ", "IWM", "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META",
+            "JPM", "JNJ", "V", "MA", "XOM", "PG", "HD", "CVX", "GLD", "TLT",
+            "BAC", "AVGO", "CRM", "AMD", "NFLX", "TSLA",
+        ],
+        "parameters": {
+            "lookback_total_days": 252,
+            "lookback_reversal_days": 21,
+            "decile_fraction": 0.10,
+            "min_ranked_symbols": 10,
+            "size_hint": 0.02,
+            "max_confidence": 0.85,
+            "active_hours_et": "any",
+            "regime_preference": "bull_trending",
+            "rebalance_cadence": "first_trading_day_of_month",
+        },
+        "entry_conditions": [
+            {"type": "is_first_trading_day_of_month"},
+            {"type": "decile_rank", "long_top_pct": 10, "short_bottom_pct": 10},
+        ],
+        "exit_conditions": [
+            {"type": "hold_until_next_rebalance"},
+            {"type": "close_all_at_next_first_trading_day"},
+        ],
+        "context_conditions": None,
+        "structure_type": "factor",
+        "execution_schedule": {"cron": "31 9 1-7 * 1-5"},
+        "signal_duration_required": None,
+        "category_accent_from": "#8b5cf6",
+        "category_accent_to": "#f97316",
+        "is_active": True,
+        "sort_order": 34,
+    },
 ]
 
 # ── Registry cache ────────────────────────────────────────────────────────────
