@@ -1034,6 +1034,104 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "is_active": True,
         "sort_order": 28,
     },
+    # ── Batch 2 (Phase 3) — PDH / PDL pattern strategies ──
+    {
+        "strategy_key": "pdh_breakout_continuation",
+        "name": "PDH Breakout Continuation",
+        "category": "breakout",
+        "description": (
+            "Previous Day High is the most-watched intraday resistance. When "
+            "today prints a new high above PDH on above-average volume AND "
+            "closes within 0.3 ATR of PDH while keeping its low above PDH, "
+            "the level has been accepted as new support. Enters long on the "
+            "pullback to PDH with a stop 0.5 ATR below the level and a 2R "
+            "profit target. Long-only by design (PDH-breakdown is a separate "
+            "pattern — see pdh_pdl_reversion for the failure-mode play)."
+        ),
+        "source_originator": "BMG Capital — JARVIS-inspired",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["alpaca"],
+        "default_universe": [
+            "SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "META", "AMZN", "GOOGL", "TSLA",
+        ],
+        "parameters": {
+            "atr_period": 14,
+            "pullback_max_atr": 0.30,
+            "volume_multiple_required": 1.2,
+            "max_confidence": 0.80,
+            "active_hours_et": "10:00-15:00",
+            "regime_preference": "bull_trending",
+        },
+        "entry_conditions": [
+            {"type": "today_high_exceeds_pdh"},
+            {"type": "volume_multiple", "gte": 1.2},
+            {"type": "close_within_atrs_of_pdh", "lte": 0.30},
+            {"type": "today_low_above_pdh"},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "level": "0.5_atr_below_pdh"},
+            {"type": "take_profit", "level": "2R_above_entry"},
+        ],
+        "context_conditions": None,
+        "structure_type": "simple",
+        "execution_schedule": {"cron": "50 15 * * 1-5"},
+        "signal_duration_required": None,
+        "category_accent_from": "#10b981",
+        "category_accent_to": "#0ea5e9",
+        "is_active": True,
+        "sort_order": 29,
+    },
+    {
+        "strategy_key": "pdh_pdl_reversion",
+        "name": "PDH / PDL Reversion",
+        "category": "mean_reversion",
+        "description": (
+            "Fades approaches to Previous Day High or Previous Day Low on "
+            "low-volume days when the level holds. Short setup: price within "
+            "0.2 ATR below PDH, today's volume < 0.8× recent average, today "
+            "didn't break the level. Symmetric long setup at PDL. Targets the "
+            "PDH-PDL midpoint. Built for choppy / ranging regimes — the "
+            "discipline filter's regime gate downweights it in trends and "
+            "the cross-asset confluence factor requires SPY to also be "
+            "ranging."
+        ),
+        "source_originator": "BMG Capital — JARVIS-inspired",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["alpaca"],
+        "default_universe": [
+            "SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "META", "AMZN", "GOOGL", "TSLA",
+        ],
+        "parameters": {
+            "atr_period": 14,
+            "approach_max_atr": 0.20,
+            "volume_ratio_max": 0.80,
+            "failed_break_lookback": 3,
+            "max_confidence": 0.75,
+            "active_hours_et": "10:00-15:00",
+            "regime_preference": "choppy",
+        },
+        "entry_conditions": [
+            {"type": "within_atrs_of_level", "lte": 0.20},
+            {"type": "volume_ratio_vs_avg", "lt": 0.80},
+            {"type": "no_breach_of_level"},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "level": "0.3_atr_through_level"},
+            {"type": "take_profit", "level": "pdh_pdl_midpoint"},
+        ],
+        "context_conditions": None,
+        "structure_type": "simple",
+        "execution_schedule": {"cron": "50 15 * * 1-5"},
+        "signal_duration_required": None,
+        "category_accent_from": "#a855f7",
+        "category_accent_to": "#ec4899",
+        "is_active": True,
+        "sort_order": 30,
+    },
 ]
 
 # ── Registry cache ────────────────────────────────────────────────────────────

@@ -66,6 +66,9 @@ strategies:
   - earnings_drift_post
   # Batch 1 (testing — discipline filter enforces regime + score + confluence)
   - vwap_rejection_fade
+  # Batch 2 (testing — PDH/PDL pattern strategies)
+  - pdh_breakout_continuation
+  - pdh_pdl_reversion
 ensemble: weighted_vote
 position_cap: 8
 position_size_pct: 12.5
