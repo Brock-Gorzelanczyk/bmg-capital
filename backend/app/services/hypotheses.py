@@ -98,106 +98,195 @@ def _session_label(ts: datetime) -> str:
     return "OVERNIGHT"
 
 
+_EMPTY_STATS: dict[str, Any] = {
+    "n_trades": 0,
+    "n_wins": 0,
+    "n_losses": 0,
+    "n_breakeven": 0,
+    "win_rate": 0.0,
+    "expected_r": 0.0,
+    "r_multiple": 0.0,
+    "last_trade": None,
+    "total_trades_all_sides": 0,
+    "last_signal_ts": None,
+}
+
+
 def _compute_trade_stats(db: Session, strategy_id: str) -> dict[str, Any]:
-    """Aggregate BotTrade rows for one strategy_id. Returns the live stats block.
+    """Aggregate per-strategy trade stats by joining BotSignal.strategy → BotTrade.signal_id.
 
-    Stats = closed trades only (side ∈ sell/cover and realized_pnl_cents is not null).
-    R-multiple is approximated as realized_pnl_cents / abs(starting risk).
-    Since we don't reliably have per-trade risk basis, we use a simpler proxy:
-    expected_r = (avg_pct_pnl_per_trade) — directionally honest, not strict R.
+    Neither BotTrade nor BotPosition stores `strategy`, so we route via BotSignal,
+    then compute realized P&L from (sell.fill_price - position.avg_cost) × qty.
+
+    Wrapped: any single sub-query failure returns the zero-stats block rather
+    than 500-ing the parent endpoint.
     """
-    from app.db.models.bots import BotTrade, BotSignal
+    try:
+        from app.db.models.bots import BotTrade, BotSignal, BotPosition
 
-    closed = (
-        db.query(BotTrade)
-        .filter(
-            BotTrade.strategy == strategy_id,
-            BotTrade.side.in_(("sell", "cover")),
-            BotTrade.realized_pnl_cents.isnot(None),
-            BotTrade.quarantined_at.is_(None),
+        sig_ids_subq = (
+            db.query(BotSignal.id)
+            .filter(BotSignal.strategy == strategy_id)
+            .subquery()
         )
-        .order_by(BotTrade.ts.desc())
-        .all()
-    )
 
-    n = len(closed)
-    wins = sum(1 for t in closed if (t.realized_pnl_cents or 0) > 0)
-    losses = sum(1 for t in closed if (t.realized_pnl_cents or 0) < 0)
-    breakeven = n - wins - losses
-    win_rate = (wins / n) if n else 0.0
-
-    # R-multiple proxy: avg_win / avg_loss as the multiple, expectancy as (wr × avg_win − (1−wr) × avg_loss).
-    avg_win_cents = (
-        sum(t.realized_pnl_cents for t in closed if (t.realized_pnl_cents or 0) > 0) / wins
-    ) if wins else 0
-    avg_loss_cents = (
-        sum(-t.realized_pnl_cents for t in closed if (t.realized_pnl_cents or 0) < 0) / losses
-    ) if losses else 0
-    r_multiple = (avg_win_cents / avg_loss_cents) if avg_loss_cents else 0.0
-    expectancy_cents = (win_rate * avg_win_cents) - ((1 - win_rate) * avg_loss_cents)
-    expected_r_proxy = (expectancy_cents / avg_loss_cents) if avg_loss_cents else 0.0
-
-    last = closed[0] if closed else None
-    last_block: dict[str, Any] | None = None
-    if last:
-        outcome = (
-            "win" if (last.realized_pnl_cents or 0) > 0
-            else "loss" if (last.realized_pnl_cents or 0) < 0
-            else "breakeven"
+        # All trades whose signal is for this strategy
+        all_trades = (
+            db.query(BotTrade)
+            .filter(
+                BotTrade.signal_id.in_(sig_ids_subq),
+                BotTrade.quarantined_at.is_(None),
+            )
+            .all()
         )
-        last_block = {
-            "side": last.side,
-            "price": (last.fill_price_cents / 100.0) if last.fill_price_cents else None,
-            "outcome": outcome,
-            "pnl_dollars": (last.realized_pnl_cents / 100.0) if last.realized_pnl_cents else 0.0,
-            "session": _session_label(last.ts) if last.ts else "OVERNIGHT",
-            "ts": last.ts.isoformat() if last.ts else None,
+
+        # Last signal time (separate query — useful even when no trades fired)
+        last_sig_ts = (
+            db.query(func.max(BotSignal.ts))
+            .filter(BotSignal.strategy == strategy_id)
+            .scalar()
+        )
+
+        if not all_trades:
+            return {
+                **_EMPTY_STATS,
+                "last_signal_ts": last_sig_ts.isoformat() if last_sig_ts else None,
+            }
+
+        # Group sell-side trades by position_id for P&L matching
+        sells_by_pos: dict[int, list] = {}
+        for t in all_trades:
+            if t.side in ("sell", "cover") and t.position_id:
+                sells_by_pos.setdefault(t.position_id, []).append(t)
+
+        # Pull positions referenced by any of our trades
+        pos_ids = list({t.position_id for t in all_trades if t.position_id is not None})
+        positions_by_id: dict[int, Any] = {}
+        if pos_ids:
+            for p in db.query(BotPosition).filter(BotPosition.id.in_(pos_ids)).all():
+                positions_by_id[p.id] = p
+
+        # Closed-trade outcomes
+        outcomes: list[dict[str, Any]] = []
+        for pos_id, sells in sells_by_pos.items():
+            pos = positions_by_id.get(pos_id)
+            if not pos or not pos.closed_at:
+                continue
+            last_sell = max(sells, key=lambda s: s.ts)
+            qty = abs(last_sell.qty or 0)
+            avg_cost = float(pos.avg_cost_cents or 0)
+            sell_px = float(last_sell.fill_price_cents or 0)
+            is_short = (pos.side or "long") == "short"
+            if is_short:
+                pnl_cents = (avg_cost - sell_px) * qty
+            else:
+                pnl_cents = (sell_px - avg_cost) * qty
+            pnl_cents -= float(last_sell.fees_cents or 0)
+            outcomes.append({
+                "pnl_cents": int(pnl_cents),
+                "sell_trade": last_sell,
+                "pos_side": pos.side,
+            })
+
+        n = len(outcomes)
+        wins = sum(1 for o in outcomes if o["pnl_cents"] > 0)
+        losses = sum(1 for o in outcomes if o["pnl_cents"] < 0)
+        breakeven = n - wins - losses
+        win_rate = (wins / n) if n else 0.0
+
+        avg_win_cents = (
+            sum(o["pnl_cents"] for o in outcomes if o["pnl_cents"] > 0) / wins
+        ) if wins else 0.0
+        avg_loss_cents = (
+            sum(-o["pnl_cents"] for o in outcomes if o["pnl_cents"] < 0) / losses
+        ) if losses else 0.0
+        r_multiple = (avg_win_cents / avg_loss_cents) if avg_loss_cents else 0.0
+        expectancy_cents = (win_rate * avg_win_cents) - ((1 - win_rate) * avg_loss_cents)
+        expected_r_proxy = (expectancy_cents / avg_loss_cents) if avg_loss_cents else 0.0
+
+        # "Last trade" block — most recent closed-outcome
+        last_block: dict[str, Any] | None = None
+        if outcomes:
+            latest = max(outcomes, key=lambda o: o["sell_trade"].ts)
+            sell = latest["sell_trade"]
+            pnl_cents = latest["pnl_cents"]
+            outcome_word = "win" if pnl_cents > 0 else "loss" if pnl_cents < 0 else "breakeven"
+            last_block = {
+                "side": sell.side,
+                "price": (sell.fill_price_cents / 100.0) if sell.fill_price_cents else None,
+                "outcome": outcome_word,
+                "pnl_dollars": round(pnl_cents / 100.0, 2),
+                "session": _session_label(sell.ts) if sell.ts else "OVERNIGHT",
+                "ts": sell.ts.isoformat() if sell.ts else None,
+            }
+
+        return {
+            "n_trades": n,
+            "n_wins": wins,
+            "n_losses": losses,
+            "n_breakeven": breakeven,
+            "win_rate": round(win_rate * 100, 1),
+            "expected_r": round(expected_r_proxy, 3),
+            "r_multiple": round(r_multiple, 2),
+            "last_trade": last_block,
+            "total_trades_all_sides": len(all_trades),
+            "last_signal_ts": last_sig_ts.isoformat() if last_sig_ts else None,
         }
 
-    # Total trades (any side) for activity volume
-    total_trades = db.query(func.count(BotTrade.id)).filter(
-        BotTrade.strategy == strategy_id,
-        BotTrade.quarantined_at.is_(None),
-    ).scalar() or 0
-
-    # Last signal (helps show "this thing is active")
-    last_sig_ts = db.query(func.max(BotSignal.ts)).filter(BotSignal.strategy == strategy_id).scalar()
-
-    return {
-        "n_trades": n,
-        "n_wins": wins,
-        "n_losses": losses,
-        "n_breakeven": breakeven,
-        "win_rate": round(win_rate * 100, 1),
-        "expected_r": round(expected_r_proxy, 3),
-        "r_multiple": round(r_multiple, 2),
-        "last_trade": last_block,
-        "total_trades_all_sides": total_trades,
-        "last_signal_ts": last_sig_ts.isoformat() if last_sig_ts else None,
-    }
+    except Exception as exc:
+        logger.warning("[hypotheses] _compute_trade_stats failed for %s: %s", strategy_id, exc)
+        return dict(_EMPTY_STATS)
 
 
 def list_live_hypotheses(db: Session) -> list[dict]:
-    """Return all hypotheses with derived live stats and config."""
+    """Return all hypotheses with derived live stats and config.
+
+    Per-row try/except so one corrupt hypothesis or query failure cannot
+    500 the whole endpoint.
+    """
     from app.db.models.hypotheses import Hypothesis
 
-    hyps = db.query(Hypothesis).order_by(Hypothesis.status.asc(), Hypothesis.name.asc()).all()
+    try:
+        hyps = db.query(Hypothesis).order_by(Hypothesis.status.asc(), Hypothesis.name.asc()).all()
+    except Exception as exc:
+        logger.error("[hypotheses] list_live_hypotheses query failed: %s", exc, exc_info=True)
+        return []
+
     out: list[dict] = []
     for h in hyps:
-        stats = _compute_trade_stats(db, h.strategy_id)
-        out.append({
-            "id": h.id,
-            "name": h.name,
-            "strategy_id": h.strategy_id,
-            "direction": h.direction,
-            "status": h.status,
-            "regime_preference": h.regime_preference,
-            "factor_exposures": h.factor_exposures or {},
-            "notes": h.notes,
-            "created_at": h.created_at.isoformat() if h.created_at else None,
-            "updated_at": h.updated_at.isoformat() if h.updated_at else None,
-            **stats,
-        })
+        try:
+            stats = _compute_trade_stats(db, h.strategy_id)
+            out.append({
+                "id": h.id,
+                "name": h.name,
+                "strategy_id": h.strategy_id,
+                "direction": h.direction,
+                "status": h.status,
+                "regime_preference": h.regime_preference,
+                "factor_exposures": h.factor_exposures or {},
+                "notes": h.notes,
+                "created_at": h.created_at.isoformat() if h.created_at else None,
+                "updated_at": h.updated_at.isoformat() if h.updated_at else None,
+                **stats,
+            })
+        except Exception as exc:
+            logger.warning("[hypotheses] row build failed for hypothesis #%s: %s", getattr(h, "id", "?"), exc)
+            try:
+                out.append({
+                    "id": getattr(h, "id", None),
+                    "name": getattr(h, "name", "?"),
+                    "strategy_id": getattr(h, "strategy_id", "?"),
+                    "direction": getattr(h, "direction", "both"),
+                    "status": getattr(h, "status", "testing"),
+                    "regime_preference": None,
+                    "factor_exposures": {},
+                    "notes": None,
+                    "created_at": None,
+                    "updated_at": None,
+                    **_EMPTY_STATS,
+                })
+            except Exception:
+                pass
     return out
 
 

@@ -14,6 +14,15 @@ router = APIRouter(prefix="/api/hypotheses", tags=["hypotheses"])
 logger = logging.getLogger(__name__)
 
 
+def _empty_dashboard() -> dict:
+    return {
+        "hypotheses": [],
+        "factor_exposures": {"mom": 0, "trd": 0, "vol": 0, "flw": 0, "mr": 0, "time": 0, "hyp": 0},
+        "system_events": [],
+        "summary": {"live": 0, "testing": 0, "retired": 0, "lessons": 0, "total": 0},
+    }
+
+
 @router.get("/live")
 def get_live_hypotheses(
     db: Session = Depends(get_db),
@@ -21,14 +30,29 @@ def get_live_hypotheses(
 ):
     """Hypothesis dashboard payload — every hypothesis with derived live stats,
     plus aggregated factor exposures and the recent system event log.
-    """
-    items = hyp_svc.list_live_hypotheses(db)
-    factors = hyp_svc.aggregate_factor_exposures(items)
-    events = hyp_svc.list_system_events(db, limit=20)
 
-    live_count = sum(1 for h in items if h["status"] == "live")
-    testing_count = sum(1 for h in items if h["status"] == "testing")
-    retired_count = sum(1 for h in items if h["status"] == "retired")
+    Wrapped so a backend error returns 200 with an empty dashboard rather than
+    a 500; the page renders normally and shows "no hypotheses".
+    """
+    try:
+        items = hyp_svc.list_live_hypotheses(db)
+    except Exception as exc:
+        logger.error("[hypotheses] /live failed in list_live_hypotheses: %s", exc, exc_info=True)
+        return _empty_dashboard()
+
+    try:
+        factors = hyp_svc.aggregate_factor_exposures(items)
+    except Exception:
+        factors = _empty_dashboard()["factor_exposures"]
+
+    try:
+        events = hyp_svc.list_system_events(db, limit=20)
+    except Exception:
+        events = []
+
+    live_count = sum(1 for h in items if h.get("status") == "live")
+    testing_count = sum(1 for h in items if h.get("status") == "testing")
+    retired_count = sum(1 for h in items if h.get("status") == "retired")
     lessons_count = 0
     try:
         from app.db.models.hypotheses import Lesson
