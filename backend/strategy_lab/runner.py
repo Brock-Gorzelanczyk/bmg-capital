@@ -686,6 +686,19 @@ def run_bot_profile(profile_name: str) -> dict:
                     else:
                         _notional_usd = _log_capital * _pre_size_pct / 100.0
 
+                    # ── Discipline filter — 3 gates (regime / score / confluence).
+                    # Evaluate BEFORE log_signal so we can suppress Discord posts
+                    # on filtered signals while still persisting the trace.
+                    try:
+                        from app.services.discipline import evaluate_gates as _eval_gates, persist_gate as _persist_gate
+                        _gate_result = _eval_gates(db, sig, profile, alloc.id)
+                    except Exception as _gate_exc:
+                        logger.warning("[discipline] evaluate failed for %s %s: %s",
+                                       profile_name, sig.symbol, _gate_exc)
+                        _gate_result = None
+
+                    _gates_filtered = bool(_gate_result and not _gate_result.all_passed)
+
                     # ── Persist signal to bot_signals now (before any execution guard
                     # that could continue/skip).  Wrapped so a DB error never aborts
                     # the scan loop.
@@ -697,6 +710,7 @@ def run_bot_profile(profile_name: str) -> dict:
                             stop_price=stop_info.get("stop_price"),
                             target_price=stop_info.get("target_price"),
                             notional_usd=_notional_usd,
+                            skip_discord=_gates_filtered,
                         )
                         logger.info(
                             "[scheduled] %s SIGNAL PERSISTED %s %s confidence=%.3f alloc=%d signal_id=%s",
@@ -707,6 +721,23 @@ def run_bot_profile(profile_name: str) -> dict:
                             "[scheduled] %s log_signal FAILED %s %s — traceback:",
                             profile_name, sig.side, sig.symbol, exc_info=True,
                         )
+
+                    # Write SignalGate trace row (best-effort) and short-circuit if filtered.
+                    if _gate_result is not None:
+                        try:
+                            _persist_gate(db, _signal_id, profile_name, sig, _gate_result)
+                        except Exception:
+                            pass
+                        if _gates_filtered:
+                            _alloc_skip_counts["discipline_gate"] = _alloc_skip_counts.get("discipline_gate", 0) + 1
+                            logger.info(
+                                "[discipline] %s FILTERED %s %s — reason=%s score=%d/%d confluence=%d/%d",
+                                profile_name, sig.side, sig.symbol,
+                                _gate_result.filter_reason,
+                                _gate_result.composite_score, _gate_result.composite_threshold,
+                                _gate_result.confluence_factors_passed, _gate_result.confluence_required,
+                            )
+                            continue
 
                     # skip_execution_guards: true in YAML bypasses anomaly/news/coordinator blocks.
                     _skip_guards = profile.get("skip_execution_guards", False)

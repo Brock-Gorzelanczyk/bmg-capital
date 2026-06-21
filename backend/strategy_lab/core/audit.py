@@ -186,6 +186,7 @@ def log_signal(
     stop_price: Optional[float] = None,
     target_price: Optional[float] = None,
     notional_usd: Optional[float] = None,
+    skip_discord: bool = False,
 ) -> Optional[int]:
     """Persist a Signal to bot_signals, then fire Discord embed in background.
 
@@ -325,11 +326,14 @@ def log_signal(
         "is_options":             _is_options,
     }
 
-    threading.Thread(
-        target=_post_signal_to_discord,
-        args=(row.id, signal_dict),
-        daemon=True,
-    ).start()
+    # Suppress Discord post when discipline gates filtered the signal.
+    # Row is still persisted so /admin/discipline-report can show the trace.
+    if not skip_discord:
+        threading.Thread(
+            target=_post_signal_to_discord,
+            args=(row.id, signal_dict),
+            daemon=True,
+        ).start()
 
     return row.id
 
