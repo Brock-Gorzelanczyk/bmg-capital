@@ -34,7 +34,7 @@ from app.alpaca.stream import stream_manager
 from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
-from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money, exams, admin, discipline
+from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money, exams, admin, discipline, hypotheses
 from app.routers import strategy_workshop, price_alerts
 from app.routers.admin_bots import router as admin_bots_router
 from app.routers.sentinel import router as sentinel_router
@@ -271,6 +271,24 @@ async def lifespan(app: FastAPI):
             _run_m014(_m014_conn)
     except Exception as _m014_exc:
         logger.warning("[startup] m014_signal_gates failed (non-fatal): %s", _m014_exc)
+
+    try:
+        from app.db.migrations.m015_hypotheses import run as _run_m015
+        with engine.connect() as _m015_conn:
+            _run_m015(_m015_conn)
+    except Exception as _m015_exc:
+        logger.warning("[startup] m015_hypotheses failed (non-fatal): %s", _m015_exc)
+
+    # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
+    try:
+        from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
+        _hyp_db = SessionLocal()
+        try:
+            _seed_hyp(_hyp_db)
+        finally:
+            _hyp_db.close()
+    except Exception as _hyp_seed_exc:
+        logger.warning("[startup] hypotheses seed failed (non-fatal): %s", _hyp_seed_exc)
 
     # Seed smart_money_congress if table is empty (non-fatal — network may be down)
     from app.db.models.smart_money import SmartMoneyCongressTrade
@@ -537,6 +555,7 @@ app.include_router(analyst.router)
 app.include_router(v2_shadow.router)
 app.include_router(smart_money.router)
 app.include_router(discipline.router)
+app.include_router(hypotheses.router)
 app.include_router(exams.router)
 app.include_router(exams.verify_router)
 app.include_router(admin.router)

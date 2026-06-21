@@ -123,6 +123,7 @@ const AdminBotDetailPage = lazy(() => import("@/pages/AdminBotDetailPage"));
 const BotHealthPage = lazy(() => import("@/pages/BotHealthPage"));
 const SentinelDashboardPage = lazy(() => import("@/pages/SentinelDashboardPage"));
 const DisciplineReportPage = lazy(() => import("@/pages/DisciplineReportPage"));
+const HypothesesPage = lazy(() => import("@/pages/HypothesesPage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore, useIsViewer } from "@/store/authStore";
@@ -375,6 +376,7 @@ function AppInner() {
         <Route path="/strategy/library/custom-bot" element={<Navigate to="/strategy/forge" replace />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
+        <Route path="/strategy/hypotheses" element={<HypothesesPage />} />
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
         <Route path="/strategy/bot/:botName" element={<BotDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
