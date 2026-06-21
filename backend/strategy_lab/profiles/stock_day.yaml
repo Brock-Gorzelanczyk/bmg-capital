@@ -52,6 +52,13 @@ strategies:
   - vwap_reversion_chop
   # Batch 1 (testing — discipline filter enforces regime + score + confluence)
   - opening_range_breakdown
+  # Batch 3 (testing — high-volume strategy, threshold raised below)
+  - ofi_institutional_flow
+# Per-strategy composite_threshold overrides — read by the Phase 1 discipline filter.
+# OFI is naturally high-volume; threshold 70 (vs profile default 60) throttles to
+# higher-conviction setups only. Lower this back to 60 once we trust the volume.
+strategy_thresholds:
+  ofi_institutional_flow: 70
 ensemble: any_above_threshold
 position_cap: 3
 position_size_pct: 5

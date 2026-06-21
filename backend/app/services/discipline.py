@@ -265,6 +265,25 @@ def _confluence_factors(
     return factors
 
 
+def _resolve_threshold(profile: dict, strategy: str | None) -> int:
+    """Lookup composite_threshold with per-strategy override → profile default → 60."""
+    overrides = (
+        profile.get("strategy_thresholds")
+        or (profile.get("discipline") or {}).get("strategy_thresholds")
+        or {}
+    )
+    if strategy and strategy in overrides:
+        try:
+            return int(overrides[strategy])
+        except (TypeError, ValueError):
+            pass
+    return int(
+        profile.get("composite_threshold")
+        or (profile.get("discipline") or {}).get("composite_threshold")
+        or 60
+    )
+
+
 def evaluate_gates(
     db,
     sig: Any,
@@ -272,11 +291,7 @@ def evaluate_gates(
     allocation_id: int,
 ) -> GateResult:
     """Run all 3 gates on a signal. Pure function — does not persist."""
-    threshold = int(
-        profile.get("composite_threshold")
-        or (profile.get("discipline") or {}).get("composite_threshold")
-        or 60
-    )
+    threshold = _resolve_threshold(profile, getattr(sig, "strategy", None))
     confluence_required = int(
         profile.get("confluence_required")
         or (profile.get("discipline") or {}).get("confluence_required")

@@ -1132,6 +1132,112 @@ STRATEGY_SEEDS: List[Dict[str, Any]] = [
         "is_active": True,
         "sort_order": 30,
     },
+    # ── Batch 3 (Phase 3) — multi-timeframe momentum + order flow imbalance ──
+    {
+        "strategy_key": "mtf_aligned_momentum_surge",
+        "name": "MTF Aligned Momentum Surge",
+        "category": "momentum",
+        "description": (
+            "Requires three timeframes (5m / 15m / 1h via stride resampling) "
+            "to agree on trend direction AND a 15m ADX(14) reading above 25 "
+            "before considering an entry. Enters on a pullback into the 5m "
+            "SMA(20) confirmed by a reversal candle — bullish engulfing-style "
+            "for longs, bearish for shorts. Naturally selective: 4-condition "
+            "gate produces low daily signal counts even on a 20-symbol crypto "
+            "universe."
+        ),
+        "source_originator": "BMG Capital — JARVIS-inspired",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["alpaca", "kraken"],
+        "default_universe": [
+            "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "ADA/USD",
+            "AVAX/USD", "DOT/USD", "LINK/USD", "DOGE/USD",
+        ],
+        "parameters": {
+            "sma_period": 20,
+            "adx_period": 14,
+            "adx_surge_threshold": 25,
+            "pullback_max_atr": 0.30,
+            "max_confidence": 0.85,
+            "active_hours_et": "09:30-16:00",
+            "regime_preference": "bull_trending",
+            "min_bars_required": 240,
+        },
+        "entry_conditions": [
+            {"type": "trend_alignment_3tf", "timeframes": ["5m", "15m", "1h"]},
+            {"type": "adx_above", "tf": "15m", "value": 25},
+            {"type": "pullback_to_sma20", "tf": "5m", "max_atr": 0.30},
+            {"type": "reversal_candle", "tf": "5m"},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "atr_multiple": 1.5},
+            {"type": "take_profit", "r_multiple": 3.0},
+            {"type": "adx_drop_below", "value": 20},
+        ],
+        "context_conditions": None,
+        "structure_type": "simple",
+        "execution_schedule": {"cron": "*/5 * * * *"},
+        "signal_duration_required": None,
+        "category_accent_from": "#3b82f6",
+        "category_accent_to": "#8b5cf6",
+        "is_active": True,
+        "sort_order": 31,
+    },
+    {
+        "strategy_key": "ofi_institutional_flow",
+        "name": "OFI Institutional Flow",
+        "category": "momentum",
+        "description": (
+            "Detects institutional-sized order-flow extremes by computing "
+            "per-bar Order Flow Imbalance (close-position proxy when trade "
+            "tape unavailable) and gating on a 2σ z-score vs the rolling "
+            "60-minute window. Fires LONG when z > +2 AND ofi > +0.3 AND "
+            "volume > 1.2× average; symmetric SHORT setup at z < -2. "
+            "Per-symbol 30-minute cooldown prevents duplicate signals when "
+            "OFI extremes persist across consecutive bars. Default "
+            "composite_threshold raised to 70 on stock_day via "
+            "strategy_thresholds override to throttle volume."
+        ),
+        "source_originator": "BMG Capital — JARVIS-inspired",
+        "version": 1,
+        "tier_required": "pro",
+        "comprehension_quiz_required": False,
+        "required_data_sources": ["alpaca"],
+        "default_universe": [
+            "SPY", "QQQ", "AAPL", "NVDA", "TSLA", "META", "AMD", "AMZN", "MSFT", "GOOGL",
+        ],
+        "parameters": {
+            "rolling_window_bars": 12,
+            "z_score_threshold": 2.0,
+            "ofi_min_abs": 0.30,
+            "volume_ratio_required": 1.2,
+            "cooldown_minutes": 30,
+            "max_confidence": 0.80,
+            "active_hours_et": "09:30-16:00",
+            "regime_preference": "any",
+            "composite_threshold_override": 70,
+        },
+        "entry_conditions": [
+            {"type": "ofi_z_score_abs", "gte": 2.0},
+            {"type": "ofi_abs", "gte": 0.30},
+            {"type": "volume_multiple", "gte": 1.2},
+            {"type": "cooldown_per_symbol", "minutes": 30},
+        ],
+        "exit_conditions": [
+            {"type": "stop_loss", "r_multiple": 0.5},
+            {"type": "take_profit", "r_multiple": 2.0},
+        ],
+        "context_conditions": None,
+        "structure_type": "simple",
+        "execution_schedule": {"cron": "*/5 14-19 * * 1-5"},
+        "signal_duration_required": None,
+        "category_accent_from": "#f59e0b",
+        "category_accent_to": "#10b981",
+        "is_active": True,
+        "sort_order": 32,
+    },
 ]
 
 # ── Registry cache ────────────────────────────────────────────────────────────

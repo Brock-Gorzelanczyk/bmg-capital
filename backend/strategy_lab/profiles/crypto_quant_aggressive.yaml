@@ -34,6 +34,8 @@ strategies:
   - crypto_quant_orderflow_imbalance
   - crypto_quant_funding_rate_arb
   - crypto_quant_donchian_breakout_5m
+  # Batch 3 (testing — multi-timeframe trend alignment + ADX surge)
+  - mtf_aligned_momentum_surge
 
 ensemble: any_above_threshold
 confidence_threshold: 0.45
