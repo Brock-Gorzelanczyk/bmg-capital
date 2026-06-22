@@ -261,12 +261,14 @@ function AdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Root path gate — first-time visitors see the cinematic intro at /intro,
- *  returning visitors (localStorage flag set) go straight to /dashboard. */
-function RootGate() {
+/** Login-page gate — first-time visitors see the cinematic intro before
+ *  the login form renders. After the intro plays, localStorage.bmg_intro_seen
+ *  is set so subsequent /login visits show the form immediately. */
+function IntroGate({ children }: { children: ReactNode }) {
   let seen = false;
   try { seen = !!window.localStorage.getItem("bmg_intro_seen"); } catch { /* SSR safety */ }
-  return <Navigate to={seen ? "/dashboard" : "/intro"} replace />;
+  if (!seen) return <Navigate to="/intro" replace />;
+  return <>{children}</>;
 }
 
 // Clean up old cache keys from previous versions
@@ -368,11 +370,8 @@ function AppInner() {
       <Route path="/strategy-lab" element={<Navigate to="/strategy" replace />} />
       <Route path="/strategy/lab" element={<Navigate to="/strategy" replace />} />
       <Route path="/strategy/analytics" element={<Navigate to="/strategy/performance" replace />} />
-      {/* Cinematic intro — full-viewport, outside AppShell. First-time visitors
-          land here via RootGate; returning visitors skip via localStorage flag. */}
-      <Route path="/intro" element={<IntroSequencePage />} />
-      <Route path="/" element={<RootGate />} />
       <Route element={<AppShell />}>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<Page component={StrategyLab} />} />
@@ -514,7 +513,17 @@ export default function App() {
             <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={LOGIN_V2 ? <LoginV2Page /> : <LoginPage />} />
+              {/* Cinematic intro — public, accessible to anonymous visitors.
+                  Always plays when navigated to directly. The login route
+                  below is gated by IntroGate so first-time visitors see the
+                  intro before the login form. */}
+              <Route path="/intro" element={<IntroSequencePage />} />
+              <Route
+                path="/login"
+                element={
+                  <IntroGate>{LOGIN_V2 ? <LoginV2Page /> : <LoginPage />}</IntroGate>
+                }
+              />
               <Route path="/signin" element={<Navigate to="/login" replace />} />
               <Route path="/signup" element={<Navigate to="/login" replace />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
