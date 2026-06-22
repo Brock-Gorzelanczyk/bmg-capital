@@ -198,10 +198,13 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
           )}
         </div>
 
-        {/* Replay cinematic intro — visible on every page, hidden on smallest screens */}
+        {/* Replay cinematic intro — visible on every page, hidden on smallest screens.
+            Passes the current pathname via router state so IntroSequencePage returns
+            here on done/skip/escape instead of dumping the user on /login. */}
         <Link
           to="/intro"
-          title="Replay the BMG Capital intro animation"
+          state={{ from: pathname }}
+          title="Replay the BMG Capital intro animation (Escape to exit)"
           className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold border transition-colors whitespace-nowrap"
           style={{ background: 'rgba(167,139,250,0.08)', borderColor: 'rgba(167,139,250,0.30)', color: '#a78bfa', fontFamily: 'var(--font-mono-t)', letterSpacing: '0.06em' }}
         >
