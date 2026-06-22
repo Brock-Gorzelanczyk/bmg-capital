@@ -90,9 +90,12 @@ export interface SignalTrace {
 export const getDisciplineReport = (days = 1): Promise<DisciplineReport> =>
   client.get(`/admin/discipline/filter-report?days=${days}`).then((r) => r.data);
 
-export const getRecentFiltered = (bot?: string, limit = 50): Promise<{ items: RecentFilteredItem[] }> => {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (bot) params.set("bot", bot);
+export const getRecentFiltered = (
+  opts: { bot?: string; strategy?: string; limit?: number } = {},
+): Promise<{ items: RecentFilteredItem[] }> => {
+  const params = new URLSearchParams({ limit: String(opts.limit ?? 50) });
+  if (opts.bot) params.set("bot", opts.bot);
+  if (opts.strategy) params.set("strategy", opts.strategy);
   return client.get(`/admin/discipline/recent-filtered?${params}`).then((r) => r.data);
 };
 

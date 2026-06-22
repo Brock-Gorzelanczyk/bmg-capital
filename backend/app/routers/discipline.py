@@ -196,14 +196,20 @@ def get_signal_trace(signal_id: int, db: Session = Depends(get_db)):
 def list_recent_filtered(
     limit: int = Query(50, ge=1, le=200),
     bot: Optional[str] = Query(None),
+    strategy: Optional[str] = Query(None, description="Filter by strategy name (e.g. ofi_institutional_flow)"),
     db: Session = Depends(get_db),
 ):
-    """Last N filtered signals — for "click to inspect" on the dashboard."""
+    """Last N filtered signals — for "click to inspect" on the dashboard.
+
+    Optional ?bot= and ?strategy= filters; both can be combined.
+    """
     from app.db.models.signal_gates import SignalGate
 
     q = db.query(SignalGate).filter(SignalGate.final_decision == "filtered")
     if bot:
         q = q.filter(SignalGate.bot_name == bot)
+    if strategy:
+        q = q.filter(SignalGate.strategy == strategy)
     rows = q.order_by(SignalGate.id.desc()).limit(limit).all()
     return {
         "items": [

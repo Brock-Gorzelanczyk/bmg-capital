@@ -144,6 +144,12 @@ export default function DisciplineReportPage() {
     setSearchParams(sp, { replace: true });
   };
   const [openTraceId, setOpenTraceId] = useState<number | null>(null);
+  const strategyFilter = searchParams.get("strategy") ?? undefined;
+  const clearStrategyFilter = () => {
+    const sp = new URLSearchParams(searchParams);
+    sp.delete("strategy");
+    setSearchParams(sp, { replace: true });
+  };
 
   const { data: report, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["discipline-report", window],
@@ -153,8 +159,8 @@ export default function DisciplineReportPage() {
   });
 
   const { data: filteredList } = useQuery({
-    queryKey: ["discipline-filtered"],
-    queryFn: () => getRecentFiltered(undefined, 50),
+    queryKey: ["discipline-filtered", strategyFilter],
+    queryFn: () => getRecentFiltered({ strategy: strategyFilter, limit: 50 }),
     refetchInterval: 60_000,
     staleTime: 55_000,
   });
@@ -303,8 +309,18 @@ export default function DisciplineReportPage() {
       {/* Recent filtered signals */}
       {filteredList && filteredList.items.length > 0 && (
         <div className="border border-t-dim bg-t-bg1 rounded-2xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-t-dim text-xs font-bold uppercase tracking-widest text-t-muted">
-            Recent Filtered Signals — click to inspect
+          <div className="px-5 py-3 border-b border-t-dim text-xs font-bold uppercase tracking-widest text-t-muted flex items-center gap-3 flex-wrap">
+            <span>Recent Filtered Signals — click to inspect</span>
+            {strategyFilter && (
+              <span className="text-[10px] font-bold bg-violet-600/20 border border-violet-600/40 text-violet-300 px-2 py-1 rounded normal-case tracking-normal flex items-center gap-1.5">
+                strategy = <code className="text-violet-200">{strategyFilter}</code>
+                <button
+                  onClick={clearStrategyFilter}
+                  className="text-violet-300 hover:text-violet-100 ml-1"
+                  aria-label="Clear strategy filter"
+                >×</button>
+              </span>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">

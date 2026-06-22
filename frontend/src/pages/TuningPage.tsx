@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -53,11 +53,19 @@ function RowCard({ row, icon: Icon }: { row: TuningRow; icon: any }) {
       {row.action.detail && (
         <div className="text-[11px] text-t-mid2 leading-snug">{row.action.detail}</div>
       )}
-      {row.top_filter_reason !== "none" && (
-        <div className="text-[10px] text-t-muted">
-          top filter: <span className="text-amber-400">{row.top_filter_reason}</span> ({row.top_filter_count})
-        </div>
-      )}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {row.top_filter_reason !== "none" ? (
+          <div className="text-[10px] text-t-muted">
+            top filter: <span className="text-amber-400">{row.top_filter_reason}</span> ({row.top_filter_count})
+          </div>
+        ) : <span />}
+        <Link
+          to={`/admin/discipline-report?strategy=${encodeURIComponent(row.strategy)}`}
+          className="text-[10px] font-semibold text-violet-300 hover:text-violet-200 underline decoration-dotted"
+        >
+          View signals →
+        </Link>
+      </div>
     </div>
   );
 }
