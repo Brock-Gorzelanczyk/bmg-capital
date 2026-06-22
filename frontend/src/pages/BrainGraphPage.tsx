@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import ForceGraph2D from "react-force-graph-2d";
-import { Brain, RefreshCw, X } from "lucide-react";
+import { Brain, RefreshCw, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/Skeleton";
 import {
@@ -95,6 +95,8 @@ export default function BrainGraphPage() {
     (LAYOUTS as readonly string[]).includes(parsedLayout ?? "") ? (parsedLayout as Layout) : "force",
   );
   const [selectedNode, setSelectedNode] = useState<BrainNode | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchError, setSearchError] = useState<string | null>(null);
   const fgRef = useRef<any>(null);
 
   // URL-syncing setters — wrap useState updates with searchParams writes.
@@ -130,6 +132,36 @@ export default function BrainGraphPage() {
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  /** Find a node by id (exact) or by label (case-insensitive substring),
+   *  center the graph on it, zoom in, and open the side panel. */
+  const handleSearch = (raw: string) => {
+    setSearchError(null);
+    const q = raw.trim();
+    if (!q || !data) return;
+    const lower = q.toLowerCase();
+    const node =
+      data.nodes.find((n) => n.id === q) ??
+      data.nodes.find((n) => n.id.toLowerCase() === lower) ??
+      data.nodes.find((n) => (n.label ?? "").toLowerCase().includes(lower));
+    if (!node) {
+      setSearchError("No node matches");
+      return;
+    }
+    setSelectedNode(node);
+    // The actual canvas position is set by the d3 simulation. Try to center.
+    try {
+      const live: any = data.nodes.find((n: any) => n.id === node.id);
+      const x = live?.x;
+      const y = live?.y;
+      if (typeof x === "number" && typeof y === "number") {
+        fgRef.current?.centerAt?.(x, y, 800);
+        fgRef.current?.zoom?.(4, 800);
+      }
+    } catch {
+      /* no-op — side panel still opens regardless */
+    }
+  };
 
   // Edge-incidence counts (computed once per data load) ────────────────────
   const incidenceMap = useMemo(() => {
@@ -372,6 +404,28 @@ export default function BrainGraphPage() {
                 {l}
               </label>
             ))}
+          </div>
+
+          {/* Node search — paste a node id or partial label, Enter to jump */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-t-muted" />
+              <input
+                type="text"
+                placeholder="search node…"
+                value={searchInput}
+                onChange={(e) => { setSearchInput(e.target.value); setSearchError(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSearch(searchInput); }}
+                className={cn(
+                  "bg-t-bg2 border text-t-hi text-[11px] rounded pl-6 pr-2 py-1 w-40 outline-none",
+                  searchError ? "border-t-red focus:border-t-red" : "border-t-dim focus:border-t-mid",
+                )}
+                aria-label="Search nodes by id or label"
+              />
+            </div>
+            {searchError && (
+              <span className="text-[10px] text-t-red">{searchError}</span>
+            )}
           </div>
         </div>
       </div>
