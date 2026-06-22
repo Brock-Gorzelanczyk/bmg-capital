@@ -157,7 +157,7 @@ function HypothesisCard({ h, onAction }: { h: Hypothesis; onAction: (id: number,
             <span className="text-t-muted">· {h.last_trade.session}</span>
           </>
         ) : (
-          <span className="text-t-muted italic">no closed trades yet</span>
+          <span className="text-t-muted italic">no closed trades yet — bot scans run Mon-Fri at scheduled cadence</span>
         )}
         <span className="ml-auto text-t-muted">
           sig {timeAgo(h.last_signal_ts)} ago
@@ -300,7 +300,14 @@ export default function HypothesesPage() {
   }
 
   if (!data) {
-    return <div className="max-w-7xl mx-auto px-4 py-12 text-center text-t-muted">Failed to load.</div>;
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-12 text-center space-y-2">
+        <div className="text-t-mid2 text-sm font-medium">Failed to load hypotheses</div>
+        <div className="text-t-muted text-xs">
+          Backend may still be starting (hypotheses table created in m015 migration). Try refresh in 30s.
+        </div>
+      </div>
+    );
   }
 
   const hyps = filter === "all" ? data.hypotheses : data.hypotheses.filter((h) => h.status === filter);
@@ -363,8 +370,17 @@ export default function HypothesesPage() {
         {/* Cards */}
         <div className="space-y-3">
           {hyps.length === 0 ? (
-            <div className="border border-t-dim bg-t-bg1 rounded-xl p-8 text-center text-t-muted text-sm">
-              No hypotheses match the filter.
+            <div className="border border-t-dim bg-t-bg1 rounded-xl p-8 text-center space-y-1.5">
+              <div className="text-t-mid2 text-sm font-medium">
+                {data.summary.total === 0
+                  ? "No hypotheses seeded yet"
+                  : `No hypotheses with status "${filter}"`}
+              </div>
+              <div className="text-t-muted text-xs">
+                {data.summary.total === 0
+                  ? "Hypotheses auto-seed from strategy_definitions on backend startup. If this persists, check Railway deploy logs."
+                  : "Try the All filter — there are " + data.summary.total + " hypotheses total across all statuses."}
+              </div>
             </div>
           ) : (
             hyps.map((h) => (

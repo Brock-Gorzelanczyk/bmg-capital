@@ -191,7 +191,14 @@ export default function DisciplineReportPage() {
   }
 
   if (!report) {
-    return <div className="max-w-7xl mx-auto px-4 py-12 text-center text-t-muted">Failed to load report.</div>;
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-12 text-center space-y-2">
+        <div className="text-t-mid2 text-sm font-medium">Failed to load discipline report</div>
+        <div className="text-t-muted text-xs">
+          Backend may still be starting (signal_gates table created in m014 migration). Try refresh in 30s.
+        </div>
+      </div>
+    );
   }
 
   const gates = [
@@ -262,9 +269,18 @@ export default function DisciplineReportPage() {
           <span className="text-t-hi font-bold">{String(report.gates_triggered).padStart(2, "0")} GATES TRIGGERED</span>
         </div>
         {gates.length === 0 ? (
-          <div className="border border-t-dim bg-t-bg1 rounded-xl p-6 text-center text-t-muted text-sm">
-            <Target className="inline text-t-green mr-2" size={16} />
-            No gates triggered in window — every analyzed signal passed all 3 checks.
+          <div className="border border-t-dim bg-t-bg1 rounded-xl p-6 text-center space-y-1.5">
+            <div className="text-sm">
+              <Target className="inline text-t-green mr-2" size={16} />
+              {report.signals_analyzed > 0
+                ? "No gates triggered — every analyzed signal passed all 3 checks."
+                : "No signals analyzed in this window yet."}
+            </div>
+            {report.signals_analyzed === 0 && (
+              <div className="text-[11px] text-t-muted">
+                Markets open Mon-Fri 9:30 AM ET. First filtered signals appear within ~10 minutes of a scan cycle.
+              </div>
+            )}
           </div>
         ) : (
           gates.map((g, i) => (

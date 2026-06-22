@@ -258,14 +258,14 @@ export default function TuningPage() {
           title="Top by Volume"
           icon={ArrowUp}
           rows={rec?.by_volume ?? []}
-          emptyHint="No signal activity in this window."
+          emptyHint="No signal activity in this window. Bots scan on cadence (5min intraday, swing/lt at scheduled times). First activity appears after a scan cycle runs."
         />
         <Section
           title="Top by Rejection Rate"
           icon={AlertTriangle}
           iconColor="text-amber-400"
           rows={rec?.by_reject_rate ?? []}
-          emptyHint="No strategies with ≥10 analyzed signals yet."
+          emptyHint="No strategies with ≥10 analyzed signals in this window yet. Widen the time range (7D / 30D) to see less-active strategies."
         />
       </div>
 
