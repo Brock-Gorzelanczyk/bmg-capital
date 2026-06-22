@@ -10,6 +10,7 @@ import {
   Building2,
   Zap, Globe, Eye, Cpu, Beaker,
   Radar, Hammer, ShieldAlert, ClipboardPen,
+  Gauge,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -81,6 +82,7 @@ const NAV_INTEL = [
   { to: "/admin/flow",        label: "Options Flow",    Icon: Zap    },
   { to: "/admin/macro",       label: "Macro Dashboard", Icon: Globe  },
   { to: "/admin/candidates",  label: "Candidates",      Icon: Beaker },
+  { to: "/admin/tuning",      label: "Tuning Advisor",  Icon: Gauge  },
 ];
 
 const NAV_FUND = [
