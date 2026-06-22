@@ -181,7 +181,7 @@ def build_graph(db: Session, days: int = 30) -> dict:
             n = session_n.get(sid, 0)
             pnl = session_pnl.get(sid, 0.0)
             add_node({
-                "id": sid, "type": "SESSION",
+                "id": sid, "type": "session",
                 "label": f"{m['label']} {m['date']}",
                 "size": _clamp(float(n), 4, 30),
                 "color": _pnl_color(pnl) if n > 0 else "#9ca3af",
@@ -200,7 +200,7 @@ def build_graph(db: Session, days: int = 30) -> dict:
         try:
             st = hyp_status.get(strat)
             add_node({
-                "id": f"strategy_{strat}", "type": "STRATEGY", "label": strat,
+                "id": f"strategy_{strat}", "type": "strategy", "label": strat,
                 "size": _clamp(5 + math.log1p(c) * 6, 5, 40),
                 "color": _status_color(st),
                 "meta": {"strategy": strat, "signal_count": c, "hypothesis_status": st},
@@ -214,7 +214,7 @@ def build_graph(db: Session, days: int = 30) -> dict:
             has_opt = sym_has_option.get(sym, False)
             ac = "options" if has_opt else ("crypto" if "/" in sym else "stocks")
             add_node({
-                "id": f"symbol_{sym}", "type": "SYMBOL", "label": sym,
+                "id": f"symbol_{sym}", "type": "symbol", "label": sym,
                 "size": _clamp(float(c), 4, 25),
                 "color": _asset_color(sym, has_opt),
                 "meta": {"symbol": sym, "asset_class": ac, "trade_count": c},
@@ -231,14 +231,14 @@ def build_graph(db: Session, days: int = 30) -> dict:
             strat = s.strategy or "unknown"
             nid = f"signal_{sid}"
             add_node({
-                "id": nid, "type": "SIGNAL",
+                "id": nid, "type": "signal",
                 "label": f"{s.symbol} {s.side}",
                 "size": _clamp(4 + (conf * 100.0) / 20.0, 4, 9),
                 "color": "#22c55e" if executed else "#9ca3af",
                 "meta": {"strategy": strat, "symbol": s.symbol, "side": s.side,
                          "confidence": conf, "executed": executed},
             })
-            edges.append({"source": nid, "target": f"strategy_{strat}", "type": "SIGNAL_STRATEGY"})
+            edges.append({"source": nid, "target": f"strategy_{strat}", "type": "uses_strategy"})
         except Exception as exc:
             logger.warning("[brain_graph] signal node failed: %s", exc)
 
@@ -253,7 +253,7 @@ def build_graph(db: Session, days: int = 30) -> dict:
             notional = abs(qty * fill)
             nid = f"trade_{tid}"
             add_node({
-                "id": nid, "type": "TRADE",
+                "id": nid, "type": "trade",
                 "label": f"{t.side} {t.symbol}",
                 "size": _clamp(4 + math.log1p(notional) / 2.0, 4, 10),
                 "color": color,
@@ -262,11 +262,11 @@ def build_graph(db: Session, days: int = 30) -> dict:
                          "notional": round(notional, 2)},
             })
             ss = trade_session.get(tid)
-            if ss: edges.append({"source": ss, "target": nid, "type": "SESSION_TRADE"})
+            if ss: edges.append({"source": ss, "target": nid, "type": "contains"})
             if getattr(t, "signal_id", None):
-                edges.append({"source": nid, "target": f"signal_{t.signal_id}", "type": "TRADE_SIGNAL"})
+                edges.append({"source": nid, "target": f"signal_{t.signal_id}", "type": "from_signal"})
             if t.symbol:
-                edges.append({"source": nid, "target": f"symbol_{t.symbol}", "type": "TRADE_SYMBOL"})
+                edges.append({"source": nid, "target": f"symbol_{t.symbol}", "type": "on_symbol"})
         except Exception as exc:
             logger.warning("[brain_graph] trade node failed: %s", exc)
 
@@ -274,7 +274,7 @@ def build_graph(db: Session, days: int = 30) -> dict:
     for l in lessons:
         try:
             add_node({
-                "id": f"lesson_{l.id}", "type": "LESSON",
+                "id": f"lesson_{l.id}", "type": "lesson",
                 "label": (l.lesson_text or "")[:60],
                 "size": 6, "color": "#8b5cf6",
                 "meta": {"hypothesis_id": getattr(l, "hypothesis_id", None),
