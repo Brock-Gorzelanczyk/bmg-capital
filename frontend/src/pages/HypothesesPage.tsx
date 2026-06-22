@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton, RowCardSkeleton } from "@/components/Skeleton";
+import { HelpIcon } from "@/components/Tooltip";
 import {
   getLiveHypotheses,
   promoteHypothesis,
@@ -128,14 +129,14 @@ function HypothesisCard({ h, onAction }: { h: Hypothesis; onAction: (id: number,
           <div className="text-base font-bold font-mono-t text-t-green">{h.n_wins}</div>
         </div>
         <div>
-          <div className="text-[9px] text-t-muted uppercase tracking-widest">WR</div>
+          <div className="text-[9px] text-t-muted uppercase tracking-widest">WR<HelpIcon term="win_rate" /></div>
           <div className={cn("text-base font-bold font-mono-t",
             h.win_rate >= 50 ? "text-t-green" : h.win_rate > 0 ? "text-amber-400" : "text-t-muted")}>
             {h.win_rate.toFixed(1)}%
           </div>
         </div>
         <div>
-          <div className="text-[9px] text-t-muted uppercase tracking-widest">EXP</div>
+          <div className="text-[9px] text-t-muted uppercase tracking-widest">EXP<HelpIcon term="expected_r" /></div>
           <div className={cn("text-base font-bold font-mono-t",
             h.expected_r > 0 ? "text-t-green" : h.expected_r < 0 ? "text-t-red" : "text-t-muted")}>
             {h.expected_r > 0 ? "+" : ""}{h.expected_r.toFixed(3)}R
@@ -188,7 +189,7 @@ function FactorExposureCard({ exposures, summary }: { exposures: Record<string, 
   ];
   return (
     <div className="border border-t-dim bg-t-bg1 rounded-xl p-4 space-y-3">
-      <div className="text-[10px] uppercase tracking-widest text-t-muted font-bold">FACTOR EXPOSURE</div>
+      <div className="text-[10px] uppercase tracking-widest text-t-muted font-bold">FACTOR EXPOSURE<HelpIcon term="factor_exposures" /></div>
       <div className="space-y-2">
         {labels.map(([label, key]) => (
           <FactorBar key={key} label={label} value={exposures[key] ?? 0} />

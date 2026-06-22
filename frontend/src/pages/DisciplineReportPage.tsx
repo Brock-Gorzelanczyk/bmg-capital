@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Ban, RefreshCw, ShieldCheck, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton, StatCardSkeleton } from "@/components/Skeleton";
+import { HelpIcon } from "@/components/Tooltip";
 import {
   getDisciplineReport,
   getRecentFiltered,
@@ -301,9 +302,9 @@ export default function DisciplineReportPage() {
                   <th className="px-4 py-2 text-left">Symbol</th>
                   <th className="px-4 py-2 text-left">Side</th>
                   <th className="px-4 py-2 text-left">Strategy</th>
-                  <th className="px-4 py-2 text-right">Score</th>
-                  <th className="px-4 py-2 text-right">Confluence</th>
-                  <th className="px-4 py-2 text-left">Reason</th>
+                  <th className="px-4 py-2 text-right">Score<HelpIcon term="composite_score" /></th>
+                  <th className="px-4 py-2 text-right">Confluence<HelpIcon term="confluence" /></th>
+                  <th className="px-4 py-2 text-left">Reason<HelpIcon term="filter_reason" /></th>
                 </tr>
               </thead>
               <tbody>

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton, StatCardSkeleton, RowCardSkeleton } from "@/components/Skeleton";
+import { HelpIcon } from "@/components/Tooltip";
 import { getTuningRecommendations, getPromotionCandidates, type Severity, type TuningRow } from "@/api/tuning";
 import { promoteHypothesis } from "@/api/hypotheses";
 
@@ -66,17 +67,21 @@ function Section({
   rows,
   emptyHint,
   iconColor,
+  helpTerm,
 }: {
   title: string;
   icon: any;
   rows: TuningRow[];
   emptyHint?: string;
   iconColor?: string;
+  helpTerm?: string;
 }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-t-muted font-bold">
-        <Icon size={12} className={iconColor ?? ""} /> {title} <span className="text-t-hi">({rows.length})</span>
+        <Icon size={12} className={iconColor ?? ""} /> {title}{" "}
+        {helpTerm && <HelpIcon term={helpTerm} />}
+        <span className="text-t-hi">({rows.length})</span>
       </div>
       {rows.length === 0 ? (
         <div className="text-[11px] italic text-t-muted px-2 py-3">
@@ -203,7 +208,7 @@ export default function TuningPage() {
           <div className="text-2xl font-bold font-mono-t text-t-green">{rec?.total_executed ?? 0}</div>
         </div>
         <div className="bg-t-bg1 border border-t-dim rounded-xl px-4 py-3">
-          <div className="text-[10px] uppercase tracking-widest text-t-muted">Promo Candidates</div>
+          <div className="text-[10px] uppercase tracking-widest text-t-muted">Promo Candidates<HelpIcon term="promotion_rule" /></div>
           <div className="text-2xl font-bold font-mono-t text-violet-400">{promo?.candidates.length ?? 0}</div>
         </div>
       </div>
@@ -216,6 +221,7 @@ export default function TuningPage() {
           iconColor="text-t-red"
           rows={rec?.red_flags ?? []}
           emptyHint="No red flags. Every strategy with ≥50 signals also has at least one execution."
+          helpTerm="red_flag"
         />
         <Section
           title="Volume Bombs — > 500/day"
@@ -223,6 +229,7 @@ export default function TuningPage() {
           iconColor="text-amber-400"
           rows={rec?.volume_bombs ?? []}
           emptyHint="No volume bombs. All strategies under 500 signals/day."
+          helpTerm="volume_bomb"
         />
       </div>
 
