@@ -10,12 +10,21 @@ All queries soft-fail; a missing table never 500s the endpoint.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+# 5-min TTL cache — matches brain_graph pattern. Tuning page polls every 60s
+# and a full /admin/tuning open could re-fan-out queries across many tabs.
+# Cache key: days (recommendations) or None (promotion candidates, which
+# doesn't take a window param).
+_REC_CACHE: dict[int, tuple[float, dict]] = {}
+_PROMO_CACHE: dict[str, tuple[float, dict]] = {}
+_CACHE_TTL = 300  # 5 min
 
 
 # Thresholds that drive recommendations. Tuned to the spec's monitoring rules:
@@ -250,3 +259,34 @@ def get_promotion_candidates(db: Session) -> dict[str, Any]:
         },
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ── Cached wrappers ─────────────────────────────────────────────────────────
+# Routers call these; the bare functions above are kept exported for direct
+# use (e.g. cron jobs) where freshness matters more than perf.
+
+def get_cached_recommendations(db: Session, days: int = 1) -> dict[str, Any]:
+    now = time.time()
+    entry = _REC_CACHE.get(days)
+    if entry and now - entry[0] < _CACHE_TTL:
+        return entry[1]
+    payload = get_tuning_recommendations(db, days=days)
+    _REC_CACHE[days] = (now, payload)
+    return payload
+
+
+def get_cached_promotion_candidates(db: Session) -> dict[str, Any]:
+    now = time.time()
+    entry = _PROMO_CACHE.get("default")
+    if entry and now - entry[0] < _CACHE_TTL:
+        return entry[1]
+    payload = get_promotion_candidates(db)
+    _PROMO_CACHE["default"] = (now, payload)
+    return payload
+
+
+def invalidate_cache() -> None:
+    """Manually clear both caches. Call after a state change (e.g. hypothesis
+    promote/retire) so the next dashboard fetch reflects new reality."""
+    _REC_CACHE.clear()
+    _PROMO_CACHE.clear()

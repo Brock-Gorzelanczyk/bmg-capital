@@ -83,6 +83,16 @@ def get_system_events(
     return {"items": hyp_svc.list_system_events(db, limit=limit)}
 
 
+def _invalidate_tuning_cache() -> None:
+    """Best-effort cache bust so the next dashboard fetch reflects the new
+    hypothesis status."""
+    try:
+        from app.services.tuning_advisor import invalidate_cache
+        invalidate_cache()
+    except Exception:
+        pass
+
+
 @router.post("/{hypothesis_id}/promote", dependencies=[Depends(require_admin)])
 def promote_hypothesis(hypothesis_id: int, db: Session = Depends(get_db)):
     """Move hypothesis status TESTING → LIVE. Manual gate per Brock's rule
@@ -90,6 +100,7 @@ def promote_hypothesis(hypothesis_id: int, db: Session = Depends(get_db)):
     result = hyp_svc.set_hypothesis_status(db, hypothesis_id, "live")
     if not result:
         raise HTTPException(404, "hypothesis not found")
+    _invalidate_tuning_cache()
     return result
 
 
@@ -98,6 +109,7 @@ def retire_hypothesis(hypothesis_id: int, db: Session = Depends(get_db)):
     result = hyp_svc.set_hypothesis_status(db, hypothesis_id, "retired")
     if not result:
         raise HTTPException(404, "hypothesis not found")
+    _invalidate_tuning_cache()
     return result
 
 
@@ -106,6 +118,7 @@ def demote_to_testing(hypothesis_id: int, db: Session = Depends(get_db)):
     result = hyp_svc.set_hypothesis_status(db, hypothesis_id, "testing")
     if not result:
         raise HTTPException(404, "hypothesis not found")
+    _invalidate_tuning_cache()
     return result
 
 

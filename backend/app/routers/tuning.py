@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_admin
-from app.services.tuning_advisor import get_promotion_candidates, get_tuning_recommendations
+from app.services.tuning_advisor import (
+    get_cached_promotion_candidates,
+    get_cached_recommendations,
+)
 
 router = APIRouter(prefix="/api/admin/tuning", tags=["tuning"])
 logger = logging.getLogger(__name__)
@@ -20,7 +23,7 @@ def recommendations(
 ):
     """Per-strategy signal volume + rejection breakdown + suggested action."""
     try:
-        return get_tuning_recommendations(db, days=days)
+        return get_cached_recommendations(db, days=days)
     except Exception as exc:
         logger.error("[tuning] recommendations failed: %s", exc, exc_info=True)
         return {
@@ -36,7 +39,7 @@ def recommendations(
 def promotion_candidates(db: Session = Depends(get_db)):
     """TESTING hypotheses ready for LIVE promotion (manual confirm required)."""
     try:
-        return get_promotion_candidates(db)
+        return get_cached_promotion_candidates(db)
     except Exception as exc:
         logger.error("[tuning] promotion_candidates failed: %s", exc, exc_info=True)
         return {"candidates": [], "rejected": [], "error": str(exc)}
