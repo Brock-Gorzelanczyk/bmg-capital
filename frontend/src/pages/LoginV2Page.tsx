@@ -306,6 +306,13 @@ function AuthModal({ onClose }: { onClose: () => void }) {
                 </>
               )}
             </p>
+            {/* Replay the cinematic intro — same target as the topbar PLAY INTRO
+                button (which only appears post-auth). */}
+            <p className="text-[10px] font-mono tracking-widest uppercase mt-3" style={{ color: "#2a4a2a" }}>
+              <Link to="/intro" style={{ color: `${G}50` }}>
+                ↻ REPLAY INTRO
+              </Link>
+            </p>
           </div>
         </div>
       </motion.div>
