@@ -56,8 +56,15 @@ function metaTimestamp(n: BrainNode): number {
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
+// Cap rendered nodes to keep ForceGraph2D smooth. Backend can return 30K+ on
+// a 30-day window; the canvas chokes far before then. When over cap, we
+// truncate after sorting by (incidence desc, size desc) so the most-connected
+// hubs survive.
+const RENDER_NODE_CAP = 3000;
+
 export default function BrainGraphPage() {
-  const [days, setDays] = useState<number>(30);
+  // Default 7d so the initial render is light. Users widen if they want.
+  const [days, setDays] = useState<number>(7);
   const [activeTypes, setActiveTypes] = useState<Set<BrainNodeType>>(
     () => new Set(NODE_TYPES),
   );
@@ -85,13 +92,28 @@ export default function BrainGraphPage() {
   }, [data]);
 
   // Filtered graph data ────────────────────────────────────────────────────
-  const graphData = useMemo(() => {
-    if (!data) return { nodes: [], links: [] };
-    const visibleNodes = data.nodes.filter(
-      (n) =>
-        activeTypes.has(n.type) &&
-        (incidenceMap.get(n.id) ?? 0) >= minConnections,
-    );
+  // `truncated` is true when the visible-node count exceeded RENDER_NODE_CAP
+  // and we sampled down to the top hubs to keep the canvas responsive.
+  const { graphData, truncated, totalVisible } = useMemo(() => {
+    if (!data) return { graphData: { nodes: [], links: [] }, truncated: false, totalVisible: 0 };
+    // Type filter is case-insensitive — defensive against backend type-case
+    // drift (we hit this exact bug during the Phase 4 audit).
+    const wanted = new Set(Array.from(activeTypes).map((t) => String(t).toLowerCase()));
+    let visibleNodes = data.nodes.filter((n) => {
+      const t = String(n.type ?? "").toLowerCase();
+      return wanted.has(t) && (incidenceMap.get(n.id) ?? 0) >= minConnections;
+    });
+    const totalVisibleCount = visibleNodes.length;
+    let didTruncate = false;
+    if (visibleNodes.length > RENDER_NODE_CAP) {
+      didTruncate = true;
+      visibleNodes = [...visibleNodes].sort((a, b) => {
+        const ca = incidenceMap.get(a.id) ?? 0;
+        const cb = incidenceMap.get(b.id) ?? 0;
+        if (cb !== ca) return cb - ca;
+        return (b.size ?? 0) - (a.size ?? 0);
+      }).slice(0, RENDER_NODE_CAP);
+    }
     const visibleIds = new Set(visibleNodes.map((n) => n.id));
     const visibleEdges = data.edges.filter(
       (e) => visibleIds.has(e.source) && visibleIds.has(e.target),
@@ -123,8 +145,12 @@ export default function BrainGraphPage() {
     }
 
     return {
-      nodes: nodesOut.map((n) => ({ ...n })),
-      links: visibleEdges.map((e) => ({ ...e })),
+      graphData: {
+        nodes: nodesOut.map((n) => ({ ...n })),
+        links: visibleEdges.map((e) => ({ ...e })),
+      },
+      truncated: didTruncate,
+      totalVisible: totalVisibleCount,
     };
   }, [data, activeTypes, minConnections, layout, incidenceMap]);
 
@@ -324,13 +350,27 @@ export default function BrainGraphPage() {
             </div>
           ) : graphData.nodes.length === 0 ? (
             <div
-              className="flex items-center justify-center text-t-muted text-sm"
+              className="flex flex-col items-center justify-center text-t-muted text-sm gap-2 text-center px-6"
               style={{ height: "70vh" }}
             >
-              No graph data available for the selected window.
+              <p>No graph data matches the current filters.</p>
+              {data && data.nodes.length > 0 && (
+                <p className="text-[10px] text-t-mid">
+                  API returned {data.nodes.length.toLocaleString()} nodes —
+                  check the type-toggle pills and min-connections slider above.
+                </p>
+              )}
             </div>
           ) : (
             <div style={{ height: "70vh" }}>
+              {truncated && (
+                <div className="px-3 py-2 mb-2 text-[10px] bg-amber-900/20 border border-amber-700/30 rounded text-amber-300">
+                  Rendering top {RENDER_NODE_CAP.toLocaleString()} of{" "}
+                  {totalVisible.toLocaleString()} visible nodes (by edge count) to
+                  keep the canvas responsive. Narrow the time range or raise
+                  min-connections to see fewer.
+                </div>
+              )}
               <ForceGraph2D
                 ref={fgRef}
                 graphData={graphData as any}
