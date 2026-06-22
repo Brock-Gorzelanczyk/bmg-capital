@@ -126,6 +126,7 @@ const DisciplineReportPage = lazy(() => import("@/pages/DisciplineReportPage"));
 const HypothesesPage = lazy(() => import("@/pages/HypothesesPage"));
 const BrainGraphPage = lazy(() => import("@/pages/BrainGraphPage"));
 const TuningPage = lazy(() => import("@/pages/TuningPage"));
+const IntroSequencePage = lazy(() => import("@/pages/IntroSequencePage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
 import { useAuthStore, useIsViewer } from "@/store/authStore";
@@ -260,6 +261,14 @@ function AdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Root path gate — first-time visitors see the cinematic intro at /intro,
+ *  returning visitors (localStorage flag set) go straight to /dashboard. */
+function RootGate() {
+  let seen = false;
+  try { seen = !!window.localStorage.getItem("bmg_intro_seen"); } catch { /* SSR safety */ }
+  return <Navigate to={seen ? "/dashboard" : "/intro"} replace />;
+}
+
 // Clean up old cache keys from previous versions
 ["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4", "BMG_QUERY_CACHE_v5"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
@@ -359,8 +368,11 @@ function AppInner() {
       <Route path="/strategy-lab" element={<Navigate to="/strategy" replace />} />
       <Route path="/strategy/lab" element={<Navigate to="/strategy" replace />} />
       <Route path="/strategy/analytics" element={<Navigate to="/strategy/performance" replace />} />
+      {/* Cinematic intro — full-viewport, outside AppShell. First-time visitors
+          land here via RootGate; returning visitors skip via localStorage flag. */}
+      <Route path="/intro" element={<IntroSequencePage />} />
+      <Route path="/" element={<RootGate />} />
       <Route element={<AppShell />}>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<Page component={StrategyLab} />} />
