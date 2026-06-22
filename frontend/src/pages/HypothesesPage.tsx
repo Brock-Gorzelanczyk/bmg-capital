@@ -13,6 +13,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton, RowCardSkeleton } from "@/components/Skeleton";
 import {
   getLiveHypotheses,
   promoteHypothesis,
@@ -264,9 +265,22 @@ export default function HypothesesPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-12 text-center text-t-muted text-sm">
-        <RefreshCw className="animate-spin inline mr-2" size={14} />
-        Loading hypotheses…
+      <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6 space-y-5">
+        <div className="space-y-2">
+          <Skeleton h="11px" w="180px" />
+          <Skeleton h="28px" w="240px" />
+          <Skeleton h="14px" w="55%" />
+        </div>
+        <Skeleton h="40px" />
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+          <div className="space-y-3">
+            <RowCardSkeleton /><RowCardSkeleton /><RowCardSkeleton /><RowCardSkeleton />
+          </div>
+          <div className="space-y-3">
+            <Skeleton h="220px" />
+            <Skeleton h="180px" />
+          </div>
+        </div>
       </div>
     );
   }

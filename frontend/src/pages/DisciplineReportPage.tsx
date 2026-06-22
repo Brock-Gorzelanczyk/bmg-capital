@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Ban, RefreshCw, ShieldCheck, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton, StatCardSkeleton } from "@/components/Skeleton";
 import {
   getDisciplineReport,
   getRecentFiltered,
@@ -153,9 +154,19 @@ export default function DisciplineReportPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-12 text-center text-t-muted text-sm">
-        <RefreshCw className="animate-spin inline mr-2" size={14} />
-        Loading discipline report…
+      <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6 space-y-5">
+        <div className="space-y-2">
+          <Skeleton h="11px" w="180px" />
+          <Skeleton h="28px" w="260px" />
+          <Skeleton h="14px" w="60%" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
+        </div>
+        <Skeleton h="12px" w="240px" />
+        <Skeleton h="80px" />
+        <Skeleton h="80px" />
+        <Skeleton h="80px" />
       </div>
     );
   }

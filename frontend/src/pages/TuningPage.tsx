@@ -13,6 +13,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton, StatCardSkeleton, RowCardSkeleton } from "@/components/Skeleton";
 import { getTuningRecommendations, getPromotionCandidates, type Severity, type TuningRow } from "@/api/tuning";
 import { promoteHypothesis } from "@/api/hypotheses";
 
@@ -121,8 +122,23 @@ export default function TuningPage() {
 
   if (recLoading || promoLoading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-12 text-center text-t-muted text-sm">
-        <RefreshCw className="animate-spin inline mr-2" size={14} /> Loading tuning data…
+      <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6 space-y-5">
+        <div className="space-y-2">
+          <Skeleton h="11px" w="120px" />
+          <Skeleton h="28px" w="220px" />
+          <Skeleton h="14px" w="60%" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="space-y-2"><Skeleton h="12px" w="40%" /><RowCardSkeleton /><RowCardSkeleton /></div>
+          <div className="space-y-2"><Skeleton h="12px" w="40%" /><RowCardSkeleton /><RowCardSkeleton /></div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="space-y-2"><Skeleton h="12px" w="40%" /><RowCardSkeleton /><RowCardSkeleton /></div>
+          <div className="space-y-2"><Skeleton h="12px" w="40%" /><RowCardSkeleton /><RowCardSkeleton /></div>
+        </div>
       </div>
     );
   }

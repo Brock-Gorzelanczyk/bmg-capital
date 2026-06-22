@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import ForceGraph2D from "react-force-graph-2d";
 import { Brain, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/Skeleton";
 import {
   getBrainGraph,
   type BrainNode,
@@ -330,8 +331,12 @@ export default function BrainGraphPage() {
         {/* Canvas card */}
         <div className="border border-t-dim bg-t-bg1 rounded-xl overflow-hidden relative">
           {isLoading ? (
-            <div className="flex items-center justify-center" style={{ height: "70vh" }}>
-              <RefreshCw className="animate-spin text-t-muted" size={22} />
+            <div className="p-4 space-y-3" style={{ height: "70vh" }}>
+              <div className="flex items-center justify-between">
+                <Skeleton h="12px" w="180px" />
+                <Skeleton h="12px" w="100px" />
+              </div>
+              <Skeleton h="calc(100% - 32px)" className="rounded-2xl" />
             </div>
           ) : isError || data?.stats.error ? (
             <div
