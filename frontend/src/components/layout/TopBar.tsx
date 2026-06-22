@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu, Clock, TrendingUp, TrendingDown, BarChart2, AlertTriangle } from "lucide-react";
+import { Bell, Wifi, WifiOff, Moon, Zap, LayoutGrid, Menu, Clock, TrendingUp, TrendingDown, BarChart2, AlertTriangle, PlayCircle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWsStore, useAlertStore, useUiStore, useNotificationStore, useMarketStore } from "@/store";
 import { useIsAdmin } from "@/store/authStore";
@@ -197,6 +197,18 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
             </>
           )}
         </div>
+
+        {/* Replay cinematic intro — visible on every page, hidden on smallest screens */}
+        <Link
+          to="/intro"
+          title="Replay the BMG Capital intro animation"
+          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold border transition-colors whitespace-nowrap"
+          style={{ background: 'rgba(167,139,250,0.08)', borderColor: 'rgba(167,139,250,0.30)', color: '#a78bfa', fontFamily: 'var(--font-mono-t)', letterSpacing: '0.06em' }}
+        >
+          <PlayCircle size={11} />
+          <span className="hidden md:inline">PLAY INTRO</span>
+          <span className="md:hidden">INTRO</span>
+        </Link>
 
         {/* Simple / Pro mode toggle */}
         <button
