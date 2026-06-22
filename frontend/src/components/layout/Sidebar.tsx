@@ -63,10 +63,11 @@ const NAV_TRADE = [
 ];
 
 const NAV_STRATEGY = [
-  { to: "/strategy",          label: "Strategy Lab",   Icon: FlaskConical },
-  { to: "/strategy/scout",    label: "Strategy Scout", Icon: Radar        },
-  { to: "/strategy/workshop", label: "Workshop",       Icon: ClipboardPen },
-  { to: "/strategy/forge",    label: "The Forge",      Icon: Hammer       },
+  { to: "/strategy",          label: "Strategy Lab",    Icon: FlaskConical },
+  { to: "/admin/tuning",      label: "Tuning Advisor",  Icon: Gauge        },
+  { to: "/strategy/scout",    label: "Strategy Scout",  Icon: Radar        },
+  { to: "/strategy/workshop", label: "Workshop",        Icon: ClipboardPen },
+  { to: "/strategy/forge",    label: "The Forge",       Icon: Hammer       },
 ];
 
 const NAV_MARKETS = [
@@ -82,7 +83,6 @@ const NAV_INTEL = [
   { to: "/admin/flow",        label: "Options Flow",    Icon: Zap    },
   { to: "/admin/macro",       label: "Macro Dashboard", Icon: Globe  },
   { to: "/admin/candidates",  label: "Candidates",      Icon: Beaker },
-  { to: "/admin/tuning",      label: "Tuning Advisor",  Icon: Gauge  },
 ];
 
 const NAV_FUND = [
