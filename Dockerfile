@@ -10,6 +10,11 @@ ARG VITE_DEMO_MODE=false
 ENV VITE_DEMO_MODE=$VITE_DEMO_MODE
 ARG VITE_ENABLE_LOGIN_SHOWCASE=false
 ENV VITE_ENABLE_LOGIN_SHOWCASE=$VITE_ENABLE_LOGIN_SHOWCASE
+# Raise Vite/Node heap to 4 GB — Phase 4 added react-force-graph-2d which
+# pulls in three.js (~38 MB) and inflates Vite's bundle-time working set.
+# The default ~1.5 GB ceiling can OOM-kill the build on Railway's small
+# builders without any error log surfacing to the deploy UI.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 # ── Stage 2: Python backend + static frontend ─────────────────────────────────
