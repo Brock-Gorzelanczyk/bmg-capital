@@ -89,11 +89,19 @@ def _compute_pipeline_health(
 
     if last_signal_ts.tzinfo is None:
         last_signal_ts = last_signal_ts.replace(tzinfo=timezone.utc)
-    minutes_since = (now - last_signal_ts).total_seconds() / 60
 
-    # Equity bots are expected silent on weekends
-    if is_weekend and bot_name in _STOCK_EQUITY_BOTS:
-        return "YELLOW" if has_posting_gap else "GREEN"
+    # Market-hours-aware staleness: equity bots only count silence during NYSE
+    # RTH (9:30-16:00 ET, Mon-Fri). Wall-clock silence from Fri-pm → Mon-am is
+    # not a fault — it's expected weekend behavior.
+    is_equity = bot_name in _STOCK_EQUITY_BOTS
+    if is_equity:
+        try:
+            from app.services.market_hours import effective_minutes_since
+            minutes_since = effective_minutes_since(last_signal_ts, "equity", now=now)
+        except Exception:
+            minutes_since = (now - last_signal_ts).total_seconds() / 60
+    else:
+        minutes_since = (now - last_signal_ts).total_seconds() / 60
 
     if signals_24h > 0 and discord_posts_24h == 0:
         return "RED"
@@ -183,9 +191,18 @@ def _check_bot_windows(db: Session) -> list[dict]:
             )
 
             minutes_since = None
+            minutes_since_rth = None
             if last_ts is not None:
                 lts = last_ts if last_ts.tzinfo else last_ts.replace(tzinfo=timezone.utc)
                 minutes_since = round((now - lts).total_seconds() / 60, 1)
+                if bot_name in _STOCK_EQUITY_BOTS:
+                    try:
+                        from app.services.market_hours import effective_minutes_since
+                        minutes_since_rth = round(
+                            effective_minutes_since(lts, "equity", now=now), 1
+                        )
+                    except Exception:
+                        minutes_since_rth = minutes_since
 
             # A14: categorize why a bot is DISABLED for dashboard display
             disable_category: str | None = None
@@ -208,6 +225,7 @@ def _check_bot_windows(db: Session) -> list[dict]:
                 "disable_category":       disable_category,
                 "last_signal_at":         last_ts.isoformat() if last_ts else None,
                 "minutes_since_last":     minutes_since,
+                "minutes_since_last_rth": minutes_since_rth,  # equity bots only; None for crypto/quant
                 "signals_24h":            signals_24h,
                 "discord_posts_24h":      discord_posts_24h,
                 "trades_24h":             trades_24h,

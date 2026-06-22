@@ -548,21 +548,14 @@ def _build_context(agent: str, db: Session) -> str:
         pass
 
     if agent in ("dick", "vick"):
+        # RTH-aware staleness: reuse the same logic Dick uses for risk-alerts so
+        # the agent briefing doesn't contradict the action layer (and so we don't
+        # falsely flag equity bots on weekends / after-hours).
         try:
-            stale_rows = db.execute(
-                text("""
-                    SELECT bp.name
-                    FROM bot_profiles bp
-                    JOIN bot_allocations ba ON ba.profile_id = bp.id
-                    WHERE bp.enabled = 1 AND ba.enabled = 1
-                      AND ba.id NOT IN (
-                        SELECT allocation_id FROM bot_signals
-                        WHERE ts >= datetime('now', '-6 hours')
-                      )
-                """)
-            ).fetchall()
-            if stale_rows:
-                lines.append("Stale bots (no signal 6h): " + ", ".join(r[0] for r in stale_rows))
+            from strategy_lab.agents.risk_sentinel import _get_stale_bots
+            stale_names = _get_stale_bots(db)
+            if stale_names:
+                lines.append("Stale bots (RTH-aware): " + ", ".join(stale_names))
         except Exception:
             pass
 

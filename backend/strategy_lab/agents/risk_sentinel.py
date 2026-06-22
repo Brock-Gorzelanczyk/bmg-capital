@@ -181,7 +181,12 @@ def _get_stale_bots(db: Session) -> list[str]:
                 continue
             if b.get("status") in ("ERROR", "NO_ALLOC", "UNKNOWN"):
                 continue
-            minutes_since = b.get("minutes_since_last")
+            # Prefer the RTH-aware metric for equity/options bots so we don't
+            # CRITICAL-page on expected weekend silence (Fri 4pm → Mon 9:30am
+            # is ~65 wall-clock hours but 0 RTH minutes).
+            minutes_since = b.get("minutes_since_last_rth")
+            if minutes_since is None:
+                minutes_since = b.get("minutes_since_last")
             if minutes_since is None:
                 continue  # never ran — cannot be stale
             expected = b.get("expected_interval_min") or 0

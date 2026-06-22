@@ -114,7 +114,10 @@ def get_attention_items(
         bots = _check_bot_windows(db)
         stale = [b for b in bots if b.get("status") == "STALE"]
         for b in stale[:3]:
-            minutes = b.get("minutes_since_last", 0) or 0
+            # Prefer RTH-aware minutes for equity bots — wall-clock silence
+            # during weekends is not a fault.
+            rth_min = b.get("minutes_since_last_rth")
+            minutes = rth_min if rth_min is not None else (b.get("minutes_since_last", 0) or 0)
             hours_h = round(minutes / 60, 1)
             display = _BOT_DISPLAY.get(b["bot"], b["bot"].replace("_", " ").title())
             last = b.get("last_signal", "?")
