@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -95,7 +96,18 @@ function Section({
 }
 
 export default function TuningPage() {
-  const [days, setDays] = useState<WindowKey>(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialDays = (() => {
+    const d = parseInt(searchParams.get("days") ?? "1", 10);
+    return ([1, 7, 30] as const).includes(d as WindowKey) ? (d as WindowKey) : 1;
+  })();
+  const [days, setDaysState] = useState<WindowKey>(initialDays);
+  const setDays = (next: WindowKey) => {
+    setDaysState(next);
+    const sp = new URLSearchParams(searchParams);
+    if (next === 1) sp.delete("days"); else sp.set("days", String(next));
+    setSearchParams(sp, { replace: true });
+  };
   const qc = useQueryClient();
 
   const { data: rec, isLoading: recLoading, refetch: refetchRec, isFetching: recFetching } = useQuery({

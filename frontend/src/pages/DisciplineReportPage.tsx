@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Ban, RefreshCw, ShieldCheck, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -130,7 +131,18 @@ function SignalTraceModal({ trace, onClose }: { trace: SignalTrace; onClose: () 
 }
 
 export default function DisciplineReportPage() {
-  const [window, setWindow] = useState<WindowKey>(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialWindow = (() => {
+    const w = parseInt(searchParams.get("window") ?? "1", 10);
+    return ([1, 7, 30] as const).includes(w as WindowKey) ? (w as WindowKey) : 1;
+  })();
+  const [window, setWindowState] = useState<WindowKey>(initialWindow);
+  const setWindow = (next: WindowKey) => {
+    setWindowState(next);
+    const sp = new URLSearchParams(searchParams);
+    if (next === 1) sp.delete("window"); else sp.set("window", String(next));
+    setSearchParams(sp, { replace: true });
+  };
   const [openTraceId, setOpenTraceId] = useState<number | null>(null);
 
   const { data: report, isLoading, refetch, isFetching } = useQuery({

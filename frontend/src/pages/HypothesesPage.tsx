@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -238,7 +239,19 @@ function SystemEventLog({ events }: { events: SystemEvent[] }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function HypothesesPage() {
-  const [filter, setFilter] = useState<"all" | "live" | "testing" | "retired">("all");
+  type FilterKey = "all" | "live" | "testing" | "retired";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialFilter: FilterKey = (() => {
+    const f = searchParams.get("filter");
+    return (["all", "live", "testing", "retired"] as const).includes(f as FilterKey) ? (f as FilterKey) : "all";
+  })();
+  const [filter, setFilterState] = useState<FilterKey>(initialFilter);
+  const setFilter = (next: FilterKey) => {
+    setFilterState(next);
+    const sp = new URLSearchParams(searchParams);
+    if (next === "all") sp.delete("filter"); else sp.set("filter", next);
+    setSearchParams(sp, { replace: true });
+  };
   const qc = useQueryClient();
 
   const { data, isLoading, refetch, isFetching } = useQuery({

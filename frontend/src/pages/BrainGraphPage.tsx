@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import ForceGraph2D from "react-force-graph-2d";
 import { Brain, RefreshCw, X } from "lucide-react";
@@ -64,15 +65,64 @@ function metaTimestamp(n: BrainNode): number {
 const RENDER_NODE_CAP = 3000;
 
 export default function BrainGraphPage() {
-  // Default 7d so the initial render is light. Users widen if they want.
-  const [days, setDays] = useState<number>(7);
-  const [activeTypes, setActiveTypes] = useState<Set<BrainNodeType>>(
-    () => new Set(NODE_TYPES),
+  // All filter state syncs to URL search params so a particular view is
+  // bookmarkable / shareable. Defaults match the no-param case (omit from URL).
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const parsedDays = parseInt(searchParams.get("days") ?? "7", 10);
+  const parsedMin = parseInt(searchParams.get("min") ?? "0", 10);
+  const parsedLayout = searchParams.get("layout") as Layout | null;
+  const parsedTypes = (() => {
+    const t = searchParams.get("types");
+    if (!t) return new Set(NODE_TYPES);
+    const allowed = new Set<BrainNodeType>(NODE_TYPES);
+    const out = new Set<BrainNodeType>();
+    for (const x of t.split(",")) {
+      const lower = x.toLowerCase() as BrainNodeType;
+      if (allowed.has(lower)) out.add(lower);
+    }
+    return out.size > 0 ? out : new Set(NODE_TYPES);
+  })();
+
+  const [days, setDaysState] = useState<number>(
+    [7, 30, 90].includes(parsedDays) ? parsedDays : 7,
   );
-  const [minConnections, setMinConnections] = useState<number>(0);
-  const [layout, setLayout] = useState<Layout>("force");
+  const [activeTypes, setActiveTypesState] = useState<Set<BrainNodeType>>(parsedTypes);
+  const [minConnections, setMinConnectionsState] = useState<number>(
+    Number.isFinite(parsedMin) ? Math.max(0, Math.min(5, parsedMin)) : 0,
+  );
+  const [layout, setLayoutState] = useState<Layout>(
+    (LAYOUTS as readonly string[]).includes(parsedLayout ?? "") ? (parsedLayout as Layout) : "force",
+  );
   const [selectedNode, setSelectedNode] = useState<BrainNode | null>(null);
   const fgRef = useRef<any>(null);
+
+  // URL-syncing setters — wrap useState updates with searchParams writes.
+  const setDays = (next: number) => {
+    setDaysState(next);
+    const sp = new URLSearchParams(searchParams);
+    if (next === 7) sp.delete("days"); else sp.set("days", String(next));
+    setSearchParams(sp, { replace: true });
+  };
+  const setActiveTypes = (next: Set<BrainNodeType>) => {
+    setActiveTypesState(next);
+    const sp = new URLSearchParams(searchParams);
+    if (next.size === NODE_TYPES.length) sp.delete("types");
+    else sp.set("types", Array.from(next).sort().join(","));
+    setSearchParams(sp, { replace: true });
+  };
+  const setMinConnections = (next: number) => {
+    setMinConnectionsState(next);
+    const sp = new URLSearchParams(searchParams);
+    if (next === 0) sp.delete("min"); else sp.set("min", String(next));
+    setSearchParams(sp, { replace: true });
+  };
+  const setLayout = (next: Layout) => {
+    setLayoutState(next);
+    const sp = new URLSearchParams(searchParams);
+    if (next === "force") sp.delete("layout"); else sp.set("layout", next);
+    setSearchParams(sp, { replace: true });
+  };
 
   const { data, isLoading, isFetching, refetch, isError } = useQuery({
     queryKey: ["brain-graph", days],
