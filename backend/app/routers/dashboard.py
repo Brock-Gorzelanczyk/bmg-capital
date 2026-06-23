@@ -109,7 +109,7 @@ def get_dashboard_v2(
     # numbers for this user — so we delegate to the same function here.
     # That way Dashboard, Mission Control, and Strategy Lab all share one
     # source of truth and there's no chance of split-brain.
-    from app.core.canonical import compute_strategy_lab_aggregate
+    from app.core.canonical import compute_strategy_lab_aggregate, compute_bot_snapshot
     try:
         agg = compute_strategy_lab_aggregate(current_user.id, db) or {}
     except Exception as exc:
@@ -136,6 +136,22 @@ def get_dashboard_v2(
         for e in leaderboard_from_agg
     }
 
+    # ── Per-allocation snapshots (canonical, NOT dependent on StrategyPortfolio) ──
+    # These include orphan allocations (no portfolio_id) that compute_strategy_lab_aggregate
+    # skips because it iterates StrategyPortfolio rows. We use these as the
+    # authoritative per-bot values; canonical's leaderboard is preferred when
+    # present (to stay aligned with Strategy Lab) but we fall back to direct
+    # snapshots so orphans aren't silently dropped.
+    bot_snapshots_by_alloc: dict[int, Any] = {}
+    for alloc in allocs:
+        p = alloc_to_profile.get(alloc.id)
+        if not p:
+            continue
+        try:
+            bot_snapshots_by_alloc[alloc.id] = compute_bot_snapshot(alloc, p, db)
+        except Exception as exc:
+            logger.warning("[dashboard] compute_bot_snapshot failed for alloc %s: %s", alloc.id, exc)
+
     today_pnl_by_alloc: dict[int, int] = {}
     pv_by_alloc: dict[int, int] = {}
     ret30_by_alloc: dict[int, float] = {}
@@ -144,10 +160,13 @@ def get_dashboard_v2(
         p = alloc_to_profile.get(alloc.id)
         if not p:
             continue
-        today_pnl_by_alloc[alloc.id]  = today_pnl_by_profile_name.get(p.name, 0)
-        pv_by_alloc[alloc.id]         = pv_by_profile_name.get(p.name, 0)
-        ret30_by_alloc[alloc.id]      = ret30_by_profile_name.get(p.name, 0.0)
-        total_realized_by_alloc[alloc.id] = realized_by_profile_name.get(p.name, 0)
+        bot_snap = bot_snapshots_by_alloc.get(alloc.id)
+        # Prefer canonical leaderboard value (matches Strategy Lab exactly);
+        # fall back to direct per-bot snapshot for orphans / missing entries.
+        today_pnl_by_alloc[alloc.id]  = today_pnl_by_profile_name.get(p.name, bot_snap.today_pnl_cents if bot_snap else 0)
+        pv_by_alloc[alloc.id]         = pv_by_profile_name.get(p.name, bot_snap.portfolio_value_cents if bot_snap else 0)
+        ret30_by_alloc[alloc.id]      = ret30_by_profile_name.get(p.name, bot_snap.return_30d_pct if bot_snap else 0.0)
+        total_realized_by_alloc[alloc.id] = realized_by_profile_name.get(p.name, bot_snap.realized_pnl_cents if bot_snap else 0)
 
     pnl_30d_by_alloc: dict[int, int] = {
         aid: int(round(ret30_by_alloc.get(aid, 0.0) / 100.0 * (a.starting_capital_cents or 0)))
@@ -193,16 +212,36 @@ def get_dashboard_v2(
     for wl in wl_rows:
         profile_wl_count[wl.profile_id] = profile_wl_count.get(wl.profile_id, 0) + 1
 
-    # ── Portfolio totals — taken straight from canonical aggregate ───────────
+    # ── Portfolio totals — sum from per-allocation snapshots ────────────────
+    # We sum pv_by_alloc / today_pnl_by_alloc directly instead of trusting
+    # agg["total_value_cents"], because canonical's aggregate iterates
+    # StrategyPortfolio rows and silently drops orphan allocations (any
+    # BotAllocation without a portfolio_id). Those orphans still represent real
+    # bot capital — excluding them was the root cause of Dashboard showing $—
+    # / a too-low number versus Strategy Lab.
     total_starting = sum(a.starting_capital_cents or 0 for a in allocs)
     total_realized = sum(total_realized_by_alloc.values())
-    total_value      = int(agg.get("total_value_cents") or 0)
-    total_today_pnl  = int(agg.get("today_pnl_cents") or 0)
-    today_pct        = float(agg.get("today_pnl_pct") or 0.0)
-    return_30d_pct   = float(agg.get("return_30d_pct") or 0.0)
-    # Fallback when canonical returned nothing (e.g. no StrategyPortfolio rows
-    # yet) — synthesize from starting capital so the page renders something
-    # instead of $—.
+    total_value      = sum(pv_by_alloc.values())
+    total_today_pnl  = sum(today_pnl_by_alloc.values())
+
+    # today_pnl_pct: derived from totals, not blindly copied from agg
+    yesterday_value = total_value - total_today_pnl
+    today_pct = round(total_today_pnl / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
+
+    # 30d return: weighted average by starting capital across all allocs
+    if total_starting > 0:
+        return_30d_pct = round(
+            sum(
+                ret30_by_alloc.get(a.id, 0.0) * (a.starting_capital_cents or 0)
+                for a in allocs
+            ) / total_starting,
+            2,
+        )
+    else:
+        return_30d_pct = float(agg.get("return_30d_pct") or 0.0)
+
+    # Final fallback when there are literally zero allocations / snapshots:
+    # use starting capital so the page renders something instead of $—.
     if total_value == 0 and total_starting > 0:
         total_value = total_starting
 
@@ -320,14 +359,17 @@ def get_dashboard_v2(
         )
         highlights.append({"symbol": row.symbol, "conviction": conviction, "thesis": thesis})
 
-    # ── Leaderboard — reuse canonical's leaderboard verbatim ─────────────────
-    # Just enrich with display_name + watchlist_count which canonical's
-    # version doesn't include.
+    # ── Leaderboard — start from canonical's, then add orphan allocations ────
+    # Canonical's leaderboard iterates StrategyPortfolio rows so it omits any
+    # BotAllocation without a portfolio_id. We append those orphans from the
+    # direct per-bot snapshots so the Top Bot widget sees every active bot.
     profile_by_name: dict[str, BotProfile] = {p.name: p for p in profiles}
     leaderboard = []
+    profiles_in_lb: set[str] = set()
     for e in leaderboard_from_agg:
         prof_name = e.get("profile") or ""
         prof = profile_by_name.get(prof_name)
+        profiles_in_lb.add(prof_name)
         leaderboard.append({
             "rank": e.get("rank") or 0,
             "profile": prof_name,
@@ -337,6 +379,28 @@ def get_dashboard_v2(
             "watchlist_count": profile_wl_count.get(prof.id, 0) if prof else 0,
             "portfolio_value_cents": e.get("portfolio_value_cents") or 0,
         })
+    # Append orphan-allocation bots not represented in canonical's leaderboard.
+    for alloc in allocs:
+        prof = alloc_to_profile.get(alloc.id)
+        if not prof or prof.name in profiles_in_lb:
+            continue
+        bot_snap = bot_snapshots_by_alloc.get(alloc.id)
+        if not bot_snap:
+            continue
+        profiles_in_lb.add(prof.name)
+        leaderboard.append({
+            "rank": 0,
+            "profile": prof.name,
+            "name": _DISPLAY_NAMES.get(prof.name, prof.name.replace("_", " ").title()),
+            "return_30d_pct": float(bot_snap.return_30d_pct or 0.0),
+            "today_pnl_cents": int(bot_snap.today_pnl_cents or 0),
+            "watchlist_count": profile_wl_count.get(prof.id, 0),
+            "portfolio_value_cents": int(bot_snap.portfolio_value_cents or 0),
+        })
+    # Re-rank by return_30d_pct desc so newly appended orphans get proper ranks.
+    leaderboard.sort(key=lambda x: x["return_30d_pct"], reverse=True)
+    for i, e in enumerate(leaderboard, start=1):
+        e["rank"] = i
 
     return {
         "portfolio": {

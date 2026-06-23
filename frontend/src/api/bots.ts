@@ -288,8 +288,10 @@ export interface StrategyPortfolio {
   color_hex: string;
   starting_capital_cents: number;
   current_value_cents: number;
-  pnl_cents: number;
-  pnl_pct: number;
+  pnl_cents: number;         // all-time
+  pnl_pct: number;           // all-time
+  today_pnl_cents?: number;  // populated by /bots/portfolios — sleeve cards prefer this
+  today_pnl_pct?: number;
   enabled: boolean;
   bots: BotListItem[];
 }

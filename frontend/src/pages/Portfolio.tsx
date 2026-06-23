@@ -134,7 +134,7 @@ function SleeveCard({ sleeveKey, sleeve, bots }: { sleeveKey: string; sleeve: Sl
         {bots.length === 0 ? (
           <p className="py-4 text-sm text-t-muted text-center">
             {sleeve.reserved_capital_cents > 0
-              ? `${sleeve.total_bots} dedicated bot${sleeve.total_bots !== 1 ? "s" : ""} · ${fmtUsd(sleeve.reserved_capital_cents)} deployed in ${sleeveKey} strategies`
+              ? `${sleeve.total_bots} dedicated bot${sleeve.total_bots !== 1 ? "s" : ""} · ${fmtUsd(sleeve.current_value_cents + sleeve.reserved_capital_cents)} allocated · ${fmtUsd(sleeve.current_value_cents)} deployed in ${sleeveKey} strategies`
               : "No bots configured"}
           </p>
         ) : (

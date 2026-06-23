@@ -156,7 +156,13 @@ def get_standup_contribution(db: Session, agent_id: str) -> dict:
 
             elif agent_id == "risk_sentinel":
                 level = payload.get("level", payload.get("status", "GREEN")).upper()
-                status = level.lower() if level in ("GREEN", "YELLOW", "RED") else "green"
+                # CRITICAL → red (most severe); fall back to green only for unknown values.
+                if level == "CRITICAL":
+                    status = "red"
+                elif level in ("GREEN", "YELLOW", "RED"):
+                    status = level.lower()
+                else:
+                    status = "green"
                 summary = subject or f"Risk level: {level}"
 
             elif agent_id == "data_quality_watcher":

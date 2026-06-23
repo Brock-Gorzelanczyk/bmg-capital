@@ -362,6 +362,25 @@ def scan_and_execute(
                     )
                     alloc_persisted += 1
                     signals_persisted += 1
+
+                    # ── Discipline trace (Phase 1) ──────────────────────────
+                    # Write one SignalGate row per BotSignal so the Tuning
+                    # Advisor at /admin/tuning has data to read. Trace-only
+                    # here — does NOT block execution. The runner.py path
+                    # both traces AND filters; this path is kept exec-neutral
+                    # to avoid changing live trading behavior.
+                    try:
+                        from app.services.discipline import (
+                            evaluate_gates as _eval_gates,
+                            persist_gate as _persist_gate,
+                        )
+                        _gate_result = _eval_gates(db, sig, profile, alloc.id)
+                        _persist_gate(db, signal_id, profile_name, sig, _gate_result)
+                    except Exception as _gate_exc:
+                        logger.debug(
+                            "[discipline] trace failed for %s %s: %s",
+                            profile_name, r["symbol"], _gate_exc,
+                        )
                 except Exception as _pe:
                     persist_errors.append({
                         "symbol": r["symbol"],

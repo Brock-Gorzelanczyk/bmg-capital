@@ -467,6 +467,10 @@ function AppInner() {
         <Route path="/robo/direct-index" element={<DirectIndexingPage />} />
         <Route path="/mission-control" element={<Page component={MissionControlPage} />} />
         <Route path="/mission" element={<Navigate to="/mission-control" replace />} />
+        <Route path="/smart-money" element={<Navigate to="/admin/smart-money" replace />} />
+        <Route path="/brain" element={<Navigate to="/strategy/brain" replace />} />
+        <Route path="/discipline" element={<Navigate to="/admin/discipline-report" replace />} />
+        <Route path="/hypotheses" element={<Navigate to="/strategy/hypotheses" replace />} />
         <Route path="/risk-console" element={<Page component={RiskConsolePage} />} />
         <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />

@@ -829,6 +829,14 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
     <div>
       <p className="panel-header mb-3">// BOT LEADERBOARD</p>
       <div className="bg-t-bg0 border border-t-dim rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-t-dim/50 bg-t-bg1/40">
+          <span className="w-4 flex-shrink-0" />
+          <span className="w-1.5 h-1.5 flex-shrink-0" />
+          <span className="flex-1" />
+          <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-20 text-right">All-Time</span>
+          <span className="w-24" />
+          <span className="w-14" />
+        </div>
         <div className="space-y-0">
           {entries.map((entry) => {
             const ret30 = entry.return_30d_pct ?? null;
@@ -869,8 +877,13 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
 function PortfolioTab({ portfolio }: { portfolio: StrategyPortfolio }) {
   const navigate = useNavigate();
   const currentUsd = portfolio.current_value_cents / 100;
-  const pnlUsd = portfolio.pnl_cents / 100;
-  const isPositive = portfolio.pnl_pct >= 0;
+  // Sleeve cards show TODAY's P&L so they line up with the per-bot leaderboard
+  // below (also today). Previously read pnl_cents which is all-time — that's
+  // what made "today" sleeves total -$5.5K while the leaderboard summed to -$114.
+  const todayCents = portfolio.today_pnl_cents ?? portfolio.pnl_cents;
+  const todayPct   = portfolio.today_pnl_pct   ?? portfolio.pnl_pct;
+  const pnlUsd = todayCents / 100;
+  const isPositive = todayPct >= 0;
 
   return (
     <button
@@ -888,7 +901,7 @@ function PortfolioTab({ portfolio }: { portfolio: StrategyPortfolio }) {
       </div>
       <div className={cn("text-xs font-medium mt-0.5 tabular-nums font-mono-t", isPositive ? "text-t-green" : "text-t-red")}>
         {isPositive ? "+" : ""}{pnlUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        {" "}({isPositive ? "+" : ""}{portfolio.pnl_pct.toFixed(2)}%)
+        {" "}({isPositive ? "+" : ""}{todayPct.toFixed(2)}% today)
       </div>
       <div className="text-[11px] text-t-gdim mt-1 font-ui-t">
         {portfolio.bots.length} bot{portfolio.bots.length !== 1 ? "s" : ""} · $100k each
