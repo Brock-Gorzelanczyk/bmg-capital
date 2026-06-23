@@ -1728,10 +1728,14 @@ def get_bot_cards(
         # Used to roll its own from BotPosition.exit_reason keyword matching, which
         # treated every "time stop" / "manual" exit as a loss even when the trade was
         # profitable. Canonical reads the same BotTrade fills as realized_pnl_cents.
-        if canonical_snap is not None and canonical_snap.win_rate is not None:
+        if canonical_snap is not None:
             win_rate_pct = canonical_snap.win_rate
+            wins = canonical_snap.win_count
+            losses = canonical_snap.loss_count
         else:
             win_rate_pct = None
+            wins = 0
+            losses = 0
 
         # open positions count (exclude quarantined — they don't appear in the positions table)
         open_positions_count = 0
