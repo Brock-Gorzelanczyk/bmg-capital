@@ -272,7 +272,7 @@ function IntroGate({ children }: { children: ReactNode }) {
 }
 
 // Clean up old cache keys from previous versions
-["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4", "BMG_QUERY_CACHE_v5"].forEach(k => {
+["REACT_QUERY_OFFLINE_CACHE", "BMG_QUERY_CACHE_v2", "BMG_QUERY_CACHE_v3", "BMG_QUERY_CACHE_v4", "BMG_QUERY_CACHE_v5", "BMG_QUERY_CACHE_v6", "BMG_QUERY_CACHE_v7"].forEach(k => {
   try { window.localStorage.removeItem(k); } catch {}
 });
 
@@ -287,16 +287,23 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      refetchOnWindowFocus: false,
+      // Audit bug 8: portfolio_value was showing stale numbers across sessions
+      // ($1.42M ghost) because the previous config kept queries in cache for
+      // 24h AND didn't refetch on window focus. So a value cached Friday at
+      // 3:50 PM would surface again Monday morning. Now: refetch on focus,
+      // and only keep cache 5 min so worst-case staleness is bounded.
+      refetchOnWindowFocus: true,
       staleTime: 30_000,
-      gcTime: 1000 * 60 * 60 * 24, // keep cache in memory 24h so persister can save it
+      gcTime: 5 * 60_000, // 5 min (was 24h — too long for portfolio data)
     },
   },
 });
 
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
-  key: "BMG_QUERY_CACHE_v7",
+  // Cache key bumped to v8 to invalidate any v7 entries on rollout —
+  // otherwise users see the old stale entries until the 5-min TTL expires.
+  key: "BMG_QUERY_CACHE_v8",
   throttleTime: 1000,
 });
 
@@ -459,6 +466,7 @@ function AppInner() {
         <Route path="/robo/goals" element={<GoalsPage />} />
         <Route path="/robo/direct-index" element={<DirectIndexingPage />} />
         <Route path="/mission-control" element={<Page component={MissionControlPage} />} />
+        <Route path="/mission" element={<Navigate to="/mission-control" replace />} />
         <Route path="/risk-console" element={<Page component={RiskConsolePage} />} />
         <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />

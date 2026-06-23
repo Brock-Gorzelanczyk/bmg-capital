@@ -101,31 +101,48 @@ def get_dashboard_v2(
         if a.profile_id in profile_map
     }
 
-    # ── P&L rows ─────────────────────────────────────────────────────────────
-    pnl_rows = (
-        db.query(BotDailyPnL).filter(BotDailyPnL.allocation_id.in_(alloc_ids)).all()
-        if alloc_ids else []
-    )
+    # ── Per-allocation canonical snapshots ────────────────────────────────────
+    # Audit bugs 2/3/4: previously read BotDailyPnL.unrealized_cents which is
+    # intentionally always 0 (see bot_executor.py:299 — canonical is supposed
+    # to compute unrealized from live prices). That made the Dashboard miss
+    # all open-position MTM gains, so today_pnl + portfolio_value were stale
+    # vs. Strategy Lab which uses canonical.
+    # Fix: compute one canonical snapshot per allocation and use those values
+    # everywhere downstream. Same source Strategy Lab uses → numbers agree.
+    from app.core.canonical import compute_bot_snapshot
+    snapshots_by_alloc: dict[int, "object"] = {}
+    for alloc in allocs:
+        prof = alloc_to_profile.get(alloc.id)
+        if not prof:
+            continue
+        try:
+            snapshots_by_alloc[alloc.id] = compute_bot_snapshot(alloc, prof, db)
+        except Exception as exc:
+            logger.warning("[dashboard] canonical snapshot failed for alloc %s: %s", alloc.id, exc)
 
-    total_realized_by_alloc: dict[int, int] = {}
-    today_pnl_by_alloc: dict[int, int] = {}
-    pnl_30d_by_alloc: dict[int, int] = {}
-    for row in pnl_rows:
-        aid = row.allocation_id
-        total_realized_by_alloc[aid] = total_realized_by_alloc.get(aid, 0) + row.realized_cents
-        if row.date == today:
-            today_pnl_by_alloc[aid] = (
-                today_pnl_by_alloc.get(aid, 0) + row.realized_cents + row.unrealized_cents
-            )
-        if row.date >= cutoff_30d:
-            pnl_30d_by_alloc[aid] = pnl_30d_by_alloc.get(aid, 0) + row.realized_cents
+    total_realized_by_alloc: dict[int, int] = {
+        aid: snap.realized_pnl_cents for aid, snap in snapshots_by_alloc.items()
+    }
+    today_pnl_by_alloc: dict[int, int] = {
+        aid: snap.today_pnl_cents for aid, snap in snapshots_by_alloc.items()
+    }
+    # 30d P&L is harder to derive per-allocation from a snapshot. Approximate
+    # via return_30d_pct × starting_capital. Close enough for the dashboard's
+    # 30d return display and not a number any view treats as authoritative.
+    pnl_30d_by_alloc: dict[int, int] = {
+        aid: int(round((snap.return_30d_pct or 0) / 100.0 * (snap.starting_capital_cents or 0)))
+        for aid, snap in snapshots_by_alloc.items()
+    }
 
-    # ── Open positions ───────────────────────────────────────────────────────
+    # ── Open positions (audit bug 5: add quarantine filter) ──────────────────
+    # Canonical excludes quarantined positions from counts. Dashboard was
+    # missing this filter so its position count drifted from Strategy Lab.
     open_pos = (
         db.query(BotPosition)
         .filter(
             BotPosition.allocation_id.in_(alloc_ids),
             BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
         )
         .all()
         if alloc_ids else []
@@ -156,18 +173,14 @@ def get_dashboard_v2(
     for wl in wl_rows:
         profile_wl_count[wl.profile_id] = profile_wl_count.get(wl.profile_id, 0) + 1
 
-    # ── Portfolio totals ──────────────────────────────────────────────────────
-    # allocs is already filtered to enabled allocations only (see query above).
+    # ── Portfolio totals (all derived from canonical snapshots) ──────────────
     total_starting = sum(a.starting_capital_cents or 0 for a in allocs)
     total_realized = sum(total_realized_by_alloc.values())
     total_today_pnl = sum(today_pnl_by_alloc.values())
-    # Include today's unrealized so open positions are reflected in portfolio value.
-    total_unrealized_today = sum(
-        row.unrealized_cents
-        for row in pnl_rows
-        if row.date == today and row.allocation_id in set(alloc_ids)
-    )
-    total_value = total_starting + total_realized + total_unrealized_today
+    # Canonical snapshot's portfolio_value_cents already includes live
+    # unrealized P&L from open positions, so this matches Strategy Lab's
+    # number to the cent.
+    total_value = sum(snap.portfolio_value_cents for snap in snapshots_by_alloc.values())
     prev_value = total_value - total_today_pnl
     today_pct = round(total_today_pnl / prev_value * 100, 2) if prev_value > 0 else 0.0
     total_30d_pnl = sum(pnl_30d_by_alloc.values())
@@ -185,10 +198,21 @@ def get_dashboard_v2(
         if not p:
             continue
         s = _AC_TO_SLEEVE.get(p.asset_class, "stocks")
-        start = alloc.starting_capital_cents or 0
-        realized = total_realized_by_alloc.get(alloc.id, 0)
-        sleeve_data[s]["value_cents"] += start + realized
-        sleeve_data[s]["pnl_cents"] += realized
+        snap = snapshots_by_alloc.get(alloc.id)
+        # Sleeve value + P&L derived from canonical snapshots so the sleeve
+        # cards match the bot leaderboard sums (audit bug 3 — was -$3,020
+        # on sleeve, +$837 on bot sum). value_cents and pnl_cents now both
+        # come from the same source Strategy Lab uses.
+        if snap is not None:
+            sleeve_data[s]["value_cents"] += snap.portfolio_value_cents
+            # pnl_cents on the sleeve card means TODAY's P&L (matches what
+            # frontend displays as "today" — alltime realized was the wrong
+            # field anyway since open positions weren't reflected).
+            sleeve_data[s]["pnl_cents"] += snap.today_pnl_cents
+        else:
+            # Fallback if canonical snapshot failed for this allocation —
+            # still show something, but flag with starting capital only.
+            sleeve_data[s]["value_cents"] += alloc.starting_capital_cents or 0
         sleeve_data[s]["bots_total"] += 1
         if alloc.enabled:
             sleeve_data[s]["bots_active"] += 1

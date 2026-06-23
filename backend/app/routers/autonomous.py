@@ -537,18 +537,30 @@ def get_stats_24h(
         )
         alloc_ids = [a.id for a in allocs]
 
-        # ── Today's P&L from BotDailyPnL — same source as Dashboard ─────────
+        # ── Today's P&L from canonical (was: BotDailyPnL where unrealized
+        # is always 0 — see bot_executor.py:299). Audit bug 3+4: this was
+        # the same split-brain that broke the Dashboard. Now derived from
+        # the same source Strategy Lab uses so all views agree. ─────────────
         today_pnl_cents = 0
         if alloc_ids:
-            pnl_rows = (
-                db.query(BotDailyPnL)
-                .filter(
-                    BotDailyPnL.allocation_id.in_(alloc_ids),
-                    BotDailyPnL.date == today,
-                )
-                .all()
-            )
-            today_pnl_cents = sum(r.realized_cents + r.unrealized_cents for r in pnl_rows)
+            try:
+                from app.core.canonical import compute_bot_snapshot
+                from app.db.models.bots import BotProfile as _BP
+                _profs = {
+                    p.id: p for p in db.query(_BP)
+                    .filter(_BP.id.in_({a.profile_id for a in allocs}))
+                    .all()
+                }
+                for a in allocs:
+                    p = _profs.get(a.profile_id)
+                    if not p:
+                        continue
+                    try:
+                        today_pnl_cents += compute_bot_snapshot(a, p, db).today_pnl_cents
+                    except Exception as _e:
+                        logger.warning("[autonomous] snapshot failed for alloc %s: %s", a.id, _e)
+            except Exception as _e:
+                logger.warning("[autonomous] canonical import failed, today_pnl stays 0: %s", _e)
 
         # ── Trade counts from bot_trades (not stale rollup table) ─────────────
         paper_buys = 0
