@@ -38,7 +38,15 @@ class PaperCryptoAdapter(BrokerAdapter):
 
     def _post(self, path: str, payload: dict) -> Any:
         resp = requests.post(f"{_PAPER_BASE}{path}", json=payload, headers=self._headers, timeout=10)
-        resp.raise_for_status()
+        if not resp.ok:
+            # Surface Alpaca's rejection reason ({"message": "..."}) instead of just
+            # the HTTP status code — otherwise "422 Unprocessable Entity" gives us
+            # nothing actionable when a bracket order fails (e.g. ATOM/USD).
+            body = resp.text[:500]
+            raise requests.HTTPError(
+                f"{resp.status_code} {resp.reason} for {path}: {body}",
+                response=resp,
+            )
         return resp.json()
 
     def _delete(self, path: str) -> bool:

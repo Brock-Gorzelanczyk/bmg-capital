@@ -2190,21 +2190,14 @@ def get_bot(
         row["today_pnl_pct"] = snap.today_pnl_pct
         row["equity_curve"] = snap.equity_curve
 
-        # win_rate_pct fix: compute actual win rate from closed positions (cap at 500 for perf)
-        closed_positions = db.query(BotPosition).filter(
-            BotPosition.allocation_id == allocation.id,
-            BotPosition.closed_at.isnot(None),
-        ).order_by(BotPosition.closed_at.desc()).limit(500).all()
-        wins = 0
-        losses = 0
-        for pos in closed_positions:
-            exit_r = pos.exit_reason or ""
-            if "target" in exit_r or "profit" in exit_r:
-                wins += 1
-            else:
-                losses += 1
-        total_closed = wins + losses
-        row["win_rate_pct"] = round(wins / total_closed * 100, 1) if total_closed > 0 else None
+        # win_rate from canonical: counts closed trades with positive realized PnL
+        # (same source as realized_pnl_cents). The previous heuristic here used
+        # BotPosition.exit_reason keyword matching, which treated every "time stop"
+        # or "manual" exit as a loss even when the trade was profitable — exactly
+        # the bug d2ddf1a fixed in get_bot_cards but missed this endpoint.
+        row["win_rate_pct"] = round(snap.win_rate * 100, 1) if snap.win_rate is not None else None
+        row["win_count"] = snap.win_count
+        row["loss_count"] = snap.loss_count
     else:
         row["demo"] = True
         row["return_30d_pct"] = None
