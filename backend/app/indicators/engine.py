@@ -111,6 +111,28 @@ def compute_indicators(df: pd.DataFrame, requested: List[str]) -> Dict[str, List
             result["DONCHIAN_mid"] = _clean(don.donchian_channel_mband().tolist())
             result["DONCHIAN_lower"] = _clean(don.donchian_channel_lband().tolist())
 
+        elif key.startswith("DONCHIAN_"):
+            # Parametric Donchian: DONCHIAN_20, DONCHIAN_55, etc.
+            # Emits DONCHIAN_N_upper / _mid / _lower.
+            try:
+                period = int(key.split("_")[1])
+                don = ta.volatility.DonchianChannel(high=high, low=low, close=close, window=period)
+                result[f"DONCHIAN_{period}_upper"] = _clean(don.donchian_channel_hband().tolist())
+                result[f"DONCHIAN_{period}_mid"] = _clean(don.donchian_channel_mband().tolist())
+                result[f"DONCHIAN_{period}_lower"] = _clean(don.donchian_channel_lband().tolist())
+            except Exception:
+                result[key] = [None] * n
+
+        elif key.startswith("ATR_"):
+            # Parametric ATR: ATR_14, ATR_20, etc. (the unparametrized ATR above defaults to ta's default window=14).
+            try:
+                period = int(key.split("_")[1])
+                result[key] = _clean(
+                    ta.volatility.AverageTrueRange(high=high, low=low, close=close, window=period).average_true_range().tolist()
+                )
+            except Exception:
+                result[key] = [None] * n
+
         elif key == "KELTNER":
             kc = ta.volatility.KeltnerChannel(high=high, low=low, close=close, window=20)
             result["KELTNER_upper"] = _clean(kc.keltner_channel_hband().tolist())

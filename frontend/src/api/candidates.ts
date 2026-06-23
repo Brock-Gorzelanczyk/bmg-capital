@@ -185,6 +185,34 @@ export interface StrategyDescription {
 export const getStrategyDescription = (name: string) =>
   client.get<StrategyDescription>(`/strategy-lab/description/${name}`).then((r) => r.data);
 
+// ── Strategy chart indicator spec (Scout Commit 1) ──────────────────────────
+
+export type ScoutIndicatorPanel = "price" | "subpanel_1" | "subpanel_2" | "volume";
+export type ScoutIndicatorType =
+  | "sma" | "ema" | "donchian" | "bollinger" | "rsi" | "macd"
+  | "vwap" | "vwap_bands" | "atr" | "bb_bandwidth" | "zscore"
+  | "prior_day_high_low" | "opening_range"
+  | "ofi" | "delta" | "relative_strength_vs_spy" | "session_markers" | "volume";
+
+export interface ScoutIndicatorSpec {
+  type: ScoutIndicatorType;
+  params: Record<string, unknown>;
+  panel: ScoutIndicatorPanel;
+  color: string;
+  label: string;
+}
+
+export interface ScoutIndicatorsResponse {
+  strategy_id: string;
+  indicators: ScoutIndicatorSpec[];
+  engine_keys: string;
+}
+
+export const getStrategyIndicators = (strategyId: string) =>
+  client
+    .get<ScoutIndicatorsResponse>(`/strategy-lab/indicators/${strategyId}`)
+    .then((r) => r.data);
+
 export type TrafficLightStatus = "GREEN" | "YELLOW" | "RED" | "PENDING";
 
 export interface TrafficLight {

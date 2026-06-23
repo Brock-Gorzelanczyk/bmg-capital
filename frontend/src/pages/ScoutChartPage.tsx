@@ -7,108 +7,47 @@ import { createChart, CandlestickSeries, LineSeries, ColorType, LineStyle } from
 import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 import { fetchBars } from "@/api/bars";
 import { createSetup, deleteSetup, getSetups } from "@/api/scout";
-import { getStrategyDescription } from "@/api/candidates";
+import { getStrategyDescription, getStrategyIndicators } from "@/api/candidates";
+import type { ScoutIndicatorSpec } from "@/api/candidates";
 import client from "@/api/client";
 import { cn } from "@/lib/utils";
+import SetupChecklist from "@/components/SetupChecklist";
 
-// ── Strategy → indicator config ───────────────────────────────────────────────
+// ── Strategy → indicator config (server-driven via /strategy-lab/indicators) ─
+// Each strategy declares its own overlay/subpanel set on the backend. We fetch
+// the spec for the active strategy and dispatch each entry to a renderer below.
+// This replaces the legacy hardcoded 50d/200d MA pair that was wrong for ~90%
+// of strategies.
 
-interface IndicatorConfig {
-  type: "SMA" | "EMA" | "RSI" | "BBANDS";
-  period: number;
-  color: string;
-  label: string;
-}
-
-interface StrategyChartConfig {
-  indicators: IndicatorConfig[];
-  triggerDescription: string;
-  apiIndicators: string; // comma-sep keys for fetchBars
-}
-
-const STRATEGY_CHART_CONFIG: Record<string, StrategyChartConfig> = {
-  golden_cross: {
-    indicators: [
-      { type: "SMA", period: 50,  color: "#a78bfa", label: "50d MA" },
-      { type: "SMA", period: 200, color: "#fb923c", label: "200d MA" },
-    ],
-    triggerDescription: "50d MA crosses above 200d MA",
-    apiIndicators: "SMA_50,SMA_200",
-  },
-  momentum_breakout: {
-    indicators: [
-      { type: "SMA", period: 20, color: "#a78bfa", label: "20d MA" },
-      { type: "SMA", period: 50, color: "#fb923c", label: "50d MA" },
-    ],
-    triggerDescription: "Price breaks above 20d resistance with volume",
-    apiIndicators: "SMA_20,SMA_50",
-  },
-  rsi2_mean_reversion: {
-    indicators: [
-      { type: "SMA", period: 200, color: "#fb923c", label: "200d MA" },
-    ],
-    triggerDescription: "RSI(2) drops below 10 while above 200d MA",
-    apiIndicators: "SMA_200,RSI_2",
-  },
-  macd_crossover: {
-    indicators: [
-      { type: "SMA", period: 12, color: "#4ade80", label: "12d EMA" },
-      { type: "SMA", period: 26, color: "#f87171", label: "26d EMA" },
-    ],
-    triggerDescription: "MACD line crosses above signal line",
-    apiIndicators: "SMA_12,SMA_26",
-  },
-  bollinger_squeeze: {
-    indicators: [
-      { type: "SMA", period: 20, color: "#a78bfa", label: "20d MA" },
-    ],
-    triggerDescription: "Bollinger band width contracts then breaks out",
-    apiIndicators: "SMA_20",
-  },
-  fifty_two_week_high_momentum: {
-    indicators: [
-      { type: "SMA", period: 50,  color: "#a78bfa", label: "50d MA" },
-      { type: "SMA", period: 200, color: "#fb923c", label: "200d MA" },
-    ],
-    triggerDescription: "Price near 52-week high with momentum",
-    apiIndicators: "SMA_50,SMA_200",
-  },
-  options_iron_condor_spy: {
-    indicators: [
-      { type: "SMA", period: 20, color: "#a78bfa", label: "20d MA" },
-      { type: "SMA", period: 50, color: "#fb923c", label: "50d MA" },
-    ],
-    triggerDescription: "ATR contracting + IVR > 30",
-    apiIndicators: "SMA_20,SMA_50",
-  },
-  crypto_quant_mean_reversion: {
-    indicators: [
-      { type: "SMA", period: 21, color: "#4ade80", label: "21d MA" },
-    ],
-    triggerDescription: "21-day z-score < -2.0 (price below lower band)",
-    apiIndicators: "SMA_21",
-  },
-  cross_sectional_momentum: {
-    indicators: [
-      { type: "SMA", period: 50,  color: "#a78bfa", label: "50d MA" },
-      { type: "SMA", period: 200, color: "#fb923c", label: "200d MA" },
-    ],
-    triggerDescription: "Top 20% ranked by 12-1M return",
-    apiIndicators: "SMA_50,SMA_200",
-  },
+const TRIGGER_DESCRIPTIONS: Record<string, string> = {
+  golden_cross: "50d MA crosses above 200d MA",
+  turtle_donchian_s2: "Close breaks above 55-bar Donchian high (S2 entry)",
+  turtle_donchian_s1: "Close breaks above 20-bar Donchian high (S1 entry)",
+  rsi2_mean_reversion: "RSI(2) drops below 10 while above 200d MA",
+  rsi_oversold: "RSI(14) drops below 30 (oversold reversion)",
+  macd_crossover: "MACD line crosses above signal line",
+  bollinger_squeeze: "Bollinger band width contracts then breaks out",
+  vwap_rejection_fade: "Price rejects from VWAP ±1σ band",
+  vwap_reversion: "Price reverts toward intraday VWAP",
+  opening_range_breakdown: "Price breaks below the opening-range low",
+  opening_range: "Price breaks the opening-range high or low",
+  pdh_breakout_continuation: "Price breaks prior day high and holds above VWAP",
+  pdh_breakout: "Price breaks prior day high on volume expansion",
+  pdh_pdl_reversion: "Price reverts away from prior day H/L",
+  mtf_aligned_momentum_surge: "20/50/200 MAs stacked bullish + RSI rising",
+  ofi_institutional_flow: "Sustained one-sided order flow imbalance",
+  london_ny_overlap_continuation: "Trend continues into London/NY session overlap",
+  momentum_factor_model: "High relative-strength vs SPY in top decile",
+  quant_mean_reversion: "Z-score < -2 with price below lower Bollinger",
+  quant_aggressive: "RSI(2) oversold inside Bollinger(10,2)",
+  quant_scalper: "VWAP touch + OFI flip (scalp entry)",
 };
 
-const DEFAULT_CONFIG: StrategyChartConfig = {
-  indicators: [
-    { type: "SMA", period: 50,  color: "#a78bfa", label: "50d MA" },
-    { type: "SMA", period: 200, color: "#fb923c", label: "200d MA" },
-  ],
-  triggerDescription: "Setup conditions met per strategy definition",
-  apiIndicators: "SMA_50,SMA_200",
-};
-
-function getConfig(strategyId: string): StrategyChartConfig {
-  return STRATEGY_CHART_CONFIG[strategyId] ?? DEFAULT_CONFIG;
+function getTriggerDescription(strategyId: string): string {
+  return (
+    TRIGGER_DESCRIPTIONS[strategyId] ??
+    "Setup conditions met per strategy definition"
+  );
 }
 
 // ── Price alert types ─────────────────────────────────────────────────────────
@@ -148,13 +87,13 @@ interface OHLCBar {
 function ScoutPriceChart({
   bars,
   indicators,
-  indicatorConfigs,
+  indicatorSpecs,
   crossoverMarkers,
   drawings,
 }: {
   bars: OHLCBar[];
   indicators: Record<string, (number | null)[]>;
-  indicatorConfigs: IndicatorConfig[];
+  indicatorSpecs: ScoutIndicatorSpec[];
   crossoverMarkers: { time: UTCTimestamp; direction: "up" | "down" }[];
   drawings: Drawing[];
 }) {
@@ -190,7 +129,7 @@ function ScoutPriceChart({
     });
     priceSeries.setData(bars);
 
-    // Horizontal price-level drawings
+    // Horizontal price-level drawings (user-added support/resistance lines)
     drawings.forEach((d) => {
       if (d.type === "horizontal") {
         priceSeries.createPriceLine({
@@ -204,26 +143,187 @@ function ScoutPriceChart({
       }
     });
 
-    // Indicator lines
-    indicatorConfigs.forEach((cfg) => {
-      const key = `${cfg.type}_${cfg.period}`;
+    // ── Indicator dispatcher ────────────────────────────────────────────────
+    // Each spec is rendered via its `type`. Anything not yet supported (or
+    // missing data) is skipped silently so the chart never breaks.
+    const addLine = (
+      key: string,
+      color: string,
+      label: string,
+      paneIndex = 0,
+      lineWidth: 1 | 2 = 2,
+      lineStyle: LineStyle = LineStyle.Solid,
+    ) => {
       const values = indicators[key];
-      if (!values) return;
-      const lineSeries = chart.addSeries(LineSeries, {
-        color: cfg.color,
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
+      if (!values || !values.length) return null;
+      const opts: any = {
+        color, lineWidth, lineStyle,
         priceLineVisible: false,
         crosshairMarkerVisible: false,
-        title: cfg.label,
-      });
-      const lineData = bars
+        title: label,
+      };
+      // lightweight-charts ≥ 5.x supports pane indices via 3rd arg; we
+      // fall back gracefully if the build doesn't.
+      const lineSeries = paneIndex > 0
+        ? (chart as any).addSeries(LineSeries, opts, paneIndex)
+        : chart.addSeries(LineSeries, opts);
+      const data = bars
         .map((b, i) => ({ time: b.time, value: values[i] }))
         .filter((d) => d.value != null) as { time: UTCTimestamp; value: number }[];
-      lineSeries.setData(lineData);
+      lineSeries.setData(data);
+      return lineSeries;
+    };
+
+    const renderPriorDayHighLow = (color: string, label: string) => {
+      // Compute prior session H/L from `bars` — group by calendar date,
+      // take the most recent COMPLETED day, draw horizontal price lines.
+      if (bars.length < 2) return;
+      const byDay = new Map<string, { high: number; low: number }>();
+      for (const b of bars) {
+        const day = new Date(b.time * 1000).toISOString().slice(0, 10);
+        const cur = byDay.get(day);
+        if (!cur) byDay.set(day, { high: b.high, low: b.low });
+        else {
+          cur.high = Math.max(cur.high, b.high);
+          cur.low = Math.min(cur.low, b.low);
+        }
+      }
+      const days = Array.from(byDay.keys()).sort();
+      if (days.length < 2) return;
+      const prior = byDay.get(days[days.length - 2]);
+      if (!prior) return;
+      priceSeries.createPriceLine({
+        price: prior.high, color, lineWidth: 1, lineStyle: LineStyle.Dashed,
+        title: `${label} (H)`, axisLabelVisible: true,
+      });
+      priceSeries.createPriceLine({
+        price: prior.low, color, lineWidth: 1, lineStyle: LineStyle.Dashed,
+        title: `${label} (L)`, axisLabelVisible: true,
+      });
+    };
+
+    const renderOpeningRange = (minutes: number, color: string, label: string) => {
+      // Find the first `minutes` worth of bars in the most recent session and
+      // draw H/L horizontal lines. For daily bars this degrades to "today's
+      // bar H/L"; for intraday bars it picks the first N min.
+      if (!bars.length) return;
+      const lastDay = new Date(bars[bars.length - 1].time * 1000).toISOString().slice(0, 10);
+      const sessionBars = bars.filter(
+        (b) => new Date(b.time * 1000).toISOString().slice(0, 10) === lastDay
+      );
+      if (!sessionBars.length) return;
+      const startTs = sessionBars[0].time;
+      const cutoff = startTs + minutes * 60;
+      const orBars = sessionBars.filter((b) => b.time <= cutoff);
+      if (!orBars.length) return;
+      const high = Math.max(...orBars.map((b) => b.high));
+      const low = Math.min(...orBars.map((b) => b.low));
+      priceSeries.createPriceLine({
+        price: high, color, lineWidth: 1, lineStyle: LineStyle.Dotted,
+        title: `${label} H`, axisLabelVisible: true,
+      });
+      priceSeries.createPriceLine({
+        price: low, color, lineWidth: 1, lineStyle: LineStyle.Dotted,
+        title: `${label} L`, axisLabelVisible: true,
+      });
+    };
+
+    indicatorSpecs.forEach((spec) => {
+      const p = (spec.params ?? {}) as Record<string, any>;
+      const pane = spec.panel === "subpanel_1" ? 1 : spec.panel === "subpanel_2" ? 2 : 0;
+      switch (spec.type) {
+        case "sma": {
+          addLine(`SMA_${Number(p.period ?? 20)}`, spec.color, spec.label);
+          break;
+        }
+        case "ema": {
+          addLine(`EMA_${Number(p.period ?? 20)}`, spec.color, spec.label);
+          break;
+        }
+        case "donchian": {
+          const period = Number(p.period ?? 20);
+          addLine(`DONCHIAN_${period}_upper`, spec.color, `${spec.label} ↑`, 0, 1);
+          addLine(`DONCHIAN_${period}_lower`, spec.color, `${spec.label} ↓`, 0, 1);
+          break;
+        }
+        case "bollinger": {
+          const period = Number(p.period ?? 20);
+          addLine(`BB_${period}_upper`, spec.color, `${spec.label} ↑`, 0, 1, LineStyle.Solid);
+          addLine(`BB_${period}_middle`, spec.color, `${spec.label} mid`, 0, 1, LineStyle.Dotted);
+          addLine(`BB_${period}_lower`, spec.color, `${spec.label} ↓`, 0, 1, LineStyle.Solid);
+          break;
+        }
+        case "rsi": {
+          const period = Number(p.period ?? 14);
+          const series = addLine(`RSI_${period}`, spec.color, spec.label, pane);
+          if (series) {
+            const ob = Number(p.overbought ?? 70);
+            const os = Number(p.oversold ?? 30);
+            try {
+              series.createPriceLine({ price: ob, color: "#f87171", lineWidth: 1, lineStyle: LineStyle.Dashed, title: String(ob), axisLabelVisible: true });
+              series.createPriceLine({ price: os, color: "#4ade80", lineWidth: 1, lineStyle: LineStyle.Dashed, title: String(os), axisLabelVisible: true });
+            } catch {}
+          }
+          break;
+        }
+        case "macd": {
+          addLine("MACD_line", spec.color, "MACD", pane);
+          addLine("MACD_signal", "#f87171", "Signal", pane, 1);
+          // Histogram could be a histogram series; render as faint line for now.
+          addLine("MACD_hist", "#7e8e7e", "Hist", pane, 1, LineStyle.Dotted);
+          break;
+        }
+        case "vwap": {
+          addLine("VWAP", spec.color, spec.label, 0, 2);
+          break;
+        }
+        case "vwap_bands": {
+          addLine("VWAP_UPPER", spec.color, "VWAP +σ", 0, 1, LineStyle.Dotted);
+          addLine("VWAP_LOWER", spec.color, "VWAP −σ", 0, 1, LineStyle.Dotted);
+          break;
+        }
+        case "atr": {
+          const period = Number(p.period ?? 14);
+          const key = period === 14 ? "ATR" : `ATR_${period}`;
+          addLine(key, spec.color, spec.label, pane);
+          break;
+        }
+        case "bb_bandwidth": {
+          addLine("BBWIDTH", spec.color, spec.label, pane);
+          break;
+        }
+        case "zscore": {
+          const series = addLine("ZSCORE", spec.color, spec.label, pane);
+          if (series) {
+            try {
+              series.createPriceLine({ price: 2, color: "#f87171", lineWidth: 1, lineStyle: LineStyle.Dashed, title: "+2σ", axisLabelVisible: true });
+              series.createPriceLine({ price: -2, color: "#4ade80", lineWidth: 1, lineStyle: LineStyle.Dashed, title: "−2σ", axisLabelVisible: true });
+            } catch {}
+          }
+          break;
+        }
+        case "prior_day_high_low": {
+          renderPriorDayHighLow(spec.color, spec.label);
+          break;
+        }
+        case "opening_range": {
+          renderOpeningRange(Number(p.minutes ?? 15), spec.color, spec.label);
+          break;
+        }
+        // Placeholders — the spec is rendered nowhere yet (data feed missing).
+        // Render path exists so future commits can light them up without
+        // touching the dispatcher.
+        case "ofi":
+        case "delta":
+        case "relative_strength_vs_spy":
+        case "session_markers":
+        case "volume":
+        default:
+          break;
+      }
     });
 
-    // Crossover markers
+    // Crossover markers (still useful for two-SMA strategies)
     if (crossoverMarkers.length > 0) {
       const markerSeries = chart.addSeries(LineSeries, { visible: false, priceLineVisible: false });
       markerSeries.setData(bars.map((b) => ({ time: b.time, value: b.close })));
@@ -251,7 +351,7 @@ function ScoutPriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [bars, indicators, indicatorConfigs, crossoverMarkers, drawings]);
+  }, [bars, indicators, indicatorSpecs, crossoverMarkers, drawings]);
 
   return <div ref={containerRef} className="w-full" style={{ height: 340 }} />;
 }
@@ -261,12 +361,18 @@ function ScoutPriceChart({
 function computeCrossovers(
   bars: OHLCBar[],
   indicators: Record<string, (number | null)[]>,
-  cfg: StrategyChartConfig
+  indicatorSpecs: ScoutIndicatorSpec[],
 ) {
-  // Only works for two-SMA golden/death cross pattern
-  const smaKeys = cfg.indicators.filter(i => i.type === "SMA").map(i => `SMA_${i.period}`);
-  if (smaKeys.length < 2) return [];
-  const [fastKey, slowKey] = smaKeys;
+  // Only meaningful for two-SMA golden/death-cross style strategies. For any
+  // other spec set we return [] (the chart still renders, just without arrows).
+  const smaPeriods = indicatorSpecs
+    .filter((s) => s.type === "sma")
+    .map((s) => Number((s.params as any)?.period))
+    .filter((p) => Number.isFinite(p))
+    .sort((a, b) => a - b);
+  if (smaPeriods.length < 2) return [];
+  const fastKey = `SMA_${smaPeriods[0]}`;
+  const slowKey = `SMA_${smaPeriods[1]}`;
   const fast = indicators[fastKey];
   const slow = indicators[slowKey];
   if (!fast || !slow) return [];
@@ -596,7 +702,20 @@ export default function ScoutChartPage() {
 
   const ticker = (rawTicker ?? "").toUpperCase();
   const sid = strategyId ?? "";
-  const cfg = getConfig(sid);
+
+  // Fetch the per-strategy chart indicator spec (server-driven).
+  // While this is loading we render the chart with no overlays — the chart
+  // itself still appears so the user sees price action immediately.
+  const { data: indicatorsCfg } = useQuery({
+    queryKey: ["scout-strategy-indicators", sid],
+    queryFn: () => getStrategyIndicators(sid),
+    staleTime: Infinity,
+    enabled: !!sid,
+  });
+
+  const indicatorSpecs: ScoutIndicatorSpec[] = indicatorsCfg?.indicators ?? [];
+  const apiIndicators = indicatorsCfg?.engine_keys ?? "";
+  const triggerDescription = getTriggerDescription(sid);
 
   // Fetch description for display name
   const { data: descData } = useQuery({
@@ -606,12 +725,12 @@ export default function ScoutChartPage() {
     retry: 1,
   });
 
-  // Fetch bars with indicators
+  // Fetch bars with indicators — engine keys depend on strategy spec.
   const { data: barsData, isLoading: barsLoading, isError: barsError } = useQuery({
-    queryKey: ["scout-chart-bars", ticker, cfg.apiIndicators],
-    queryFn: () => fetchBars(ticker, "1Day", cfg.apiIndicators, undefined, 365),
+    queryKey: ["scout-chart-bars", ticker, apiIndicators],
+    queryFn: () => fetchBars(ticker, "1Day", apiIndicators || undefined, undefined, 365),
     staleTime: 300_000,
-    enabled: !!ticker,
+    enabled: !!ticker && !!indicatorsCfg,
   });
 
   const bars: OHLCBar[] = useMemo(() => {
@@ -627,7 +746,10 @@ export default function ScoutChartPage() {
 
   const indicators = barsData?.indicators ?? {};
 
-  const crossovers = useMemo(() => computeCrossovers(bars, indicators, cfg), [bars, indicators, cfg]);
+  const crossovers = useMemo(
+    () => computeCrossovers(bars, indicators, indicatorSpecs),
+    [bars, indicators, indicatorSpecs],
+  );
 
   // Load saved price-level drawings
   const { data: savedDrawings } = useQuery<Drawing[]>({
@@ -702,33 +824,65 @@ export default function ScoutChartPage() {
     },
   });
 
-  // Find current setup status
+  // Find current setup status — only meaningful for two-SMA crossover strategies.
+  // For everything else we fall back to a price-only summary so the section
+  // still renders something useful.
   const currentStatus = useMemo(() => {
-    const smaKeys = cfg.indicators.filter(i => i.type === "SMA").map(i => `SMA_${i.period}`);
-    if (smaKeys.length < 2 || !bars.length) return null;
-    const [fastKey, slowKey] = smaKeys;
+    if (!bars.length) return null;
+    const smaSpecs = indicatorSpecs
+      .filter((s) => s.type === "sma")
+      .map((s) => ({
+        period: Number((s.params as any)?.period ?? 0),
+        label: s.label,
+      }))
+      .filter((s) => s.period > 0)
+      .sort((a, b) => a.period - b.period);
+    const last = bars.length - 1;
+    const currentPrice = bars[last]?.close;
+
+    if (smaSpecs.length < 2) {
+      // No crossover semantics — return minimal price status so the
+      // header subtitle and SETUP STATUS card still render.
+      return {
+        fastVal: null as number | null,
+        slowVal: null as number | null,
+        gap: 0,
+        isActive: false,
+        currentPrice,
+        fastLabel: "",
+        slowLabel: "",
+        crossedAt: null as string | null,
+        daysSince: null as number | null,
+        status: "WAITING" as const,
+      };
+    }
+
+    const fastKey = `SMA_${smaSpecs[0].period}`;
+    const slowKey = `SMA_${smaSpecs[1].period}`;
     const fastArr = indicators[fastKey];
     const slowArr = indicators[slowKey];
-    if (!fastArr || !slowArr) return null;
-    const last = bars.length - 1;
-    const fastVal = fastArr[last];
-    const slowVal = slowArr[last];
-    const currentPrice = bars[last]?.close;
-    if (fastVal == null || slowVal == null) return null;
+    const fastVal = fastArr?.[last] ?? null;
+    const slowVal = slowArr?.[last] ?? null;
+    if (fastVal == null || slowVal == null) {
+      return {
+        fastVal: null, slowVal: null, gap: 0, isActive: false, currentPrice,
+        fastLabel: smaSpecs[0].label, slowLabel: smaSpecs[1].label,
+        crossedAt: null, daysSince: null, status: "WAITING" as const,
+      };
+    }
     const gap = fastVal - slowVal;
     const isActive = gap > 0;
-    // Find when last upward cross happened
-    const lastUp = [...crossovers].reverse().find(c => c.direction === "up");
+    const lastUp = [...crossovers].reverse().find((c) => c.direction === "up");
     const daysSince = lastUp ? Math.round((Date.now() - lastUp.time * 1000) / 86400000) : null;
     return {
       fastVal, slowVal, gap, isActive, currentPrice,
-      fastLabel: cfg.indicators.find(i => i.type === "SMA")?.label ?? "Fast MA",
-      slowLabel: cfg.indicators.filter(i => i.type === "SMA")[1]?.label ?? "Slow MA",
+      fastLabel: smaSpecs[0].label,
+      slowLabel: smaSpecs[1].label,
       crossedAt: lastUp ? fmtDate(lastUp.time) : null,
       daysSince,
-      status: isActive ? "ACTIVE" : "WAITING",
+      status: isActive ? ("ACTIVE" as const) : ("WAITING" as const),
     };
-  }, [bars, indicators, cfg, crossovers]);
+  }, [bars, indicators, indicatorSpecs, crossovers]);
 
   // Past trigger performance (last 5 upward crossovers with forward return)
   const pastTriggers = useMemo(() => {
@@ -820,10 +974,14 @@ export default function ScoutChartPage() {
             {currentStatus && (
               <p className="text-xs text-t-muted font-mono-t mt-1">
                 Last price: ${currentStatus.currentPrice?.toFixed(2) ?? "—"}
-                {" · "}
-                {currentStatus.fastLabel}: ${currentStatus.fastVal?.toFixed(2) ?? "—"}
-                {" · "}
-                {currentStatus.slowLabel}: ${currentStatus.slowVal?.toFixed(2) ?? "—"}
+                {currentStatus.fastVal != null && currentStatus.slowVal != null && (
+                  <>
+                    {" · "}
+                    {currentStatus.fastLabel}: ${currentStatus.fastVal.toFixed(2)}
+                    {" · "}
+                    {currentStatus.slowLabel}: ${currentStatus.slowVal.toFixed(2)}
+                  </>
+                )}
               </p>
             )}
           </div>
@@ -861,8 +1019,8 @@ export default function ScoutChartPage() {
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-[10px] font-mono-t text-t-faint uppercase tracking-widest">// PRICE CHART — 1Y DAILY</span>
             <div className="flex gap-3 flex-wrap">
-              {cfg.indicators.map((ind) => (
-                <div key={`${ind.type}_${ind.period}`} className="flex items-center gap-1.5">
+              {indicatorSpecs.map((ind, i) => (
+                <div key={`${ind.type}_${i}`} className="flex items-center gap-1.5">
                   <div className="w-4 h-0.5 rounded" style={{ background: ind.color }} />
                   <span className="text-[10px] font-mono-t text-t-muted">{ind.label}</span>
                 </div>
@@ -885,7 +1043,7 @@ export default function ScoutChartPage() {
             <ScoutPriceChart
               bars={bars}
               indicators={indicators}
-              indicatorConfigs={cfg.indicators}
+              indicatorSpecs={indicatorSpecs}
               crossoverMarkers={crossovers.map(c => ({ time: c.time, direction: c.direction }))}
               drawings={drawings}
             />
@@ -901,6 +1059,9 @@ export default function ScoutChartPage() {
           />
         </div>
 
+        {/* Setup checklist — per-strategy trigger-condition table */}
+        <SetupChecklist ticker={ticker} strategyId={sid} />
+
         {/* Setup status */}
         {currentStatus && (
           <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 space-y-3">
@@ -908,15 +1069,17 @@ export default function ScoutChartPage() {
             <div className="space-y-1.5 text-sm font-mono-t">
               <div className="flex items-baseline gap-2">
                 <span className="text-t-gdim">Trigger:</span>
-                <span className="text-t-body">{cfg.triggerDescription}</span>
+                <span className="text-t-body">{triggerDescription}</span>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-t-gdim">Current gap:</span>
-                <span className={currentStatus.gap > 0 ? "text-t-green" : "text-t-red"}>
-                  {currentStatus.fastLabel} is ${Math.abs(currentStatus.gap).toFixed(2)}{" "}
-                  {currentStatus.gap > 0 ? "above" : "below"} {currentStatus.slowLabel}
-                </span>
-              </div>
+              {currentStatus.fastVal != null && currentStatus.slowVal != null && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-t-gdim">Current gap:</span>
+                  <span className={currentStatus.gap > 0 ? "text-t-green" : "text-t-red"}>
+                    {currentStatus.fastLabel} is ${Math.abs(currentStatus.gap).toFixed(2)}{" "}
+                    {currentStatus.gap > 0 ? "above" : "below"} {currentStatus.slowLabel}
+                  </span>
+                </div>
+              )}
               {currentStatus.crossedAt && (
                 <div className="flex items-baseline gap-2">
                   <span className="text-t-green">✓</span>
