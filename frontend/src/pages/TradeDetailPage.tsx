@@ -84,15 +84,16 @@ function ChartLegend({ entry, stop, takeProfit, exitPrice, livePrice, status }: 
   entry: number; stop: number | null; takeProfit: number | null;
   exitPrice: number | null; livePrice: number | null; status: "open" | "closed";
 }) {
-  const nowPrice = status === "open" ? livePrice : exitPrice;
-  const gd = groupDecimals(entry, stop, takeProfit, exitPrice, nowPrice);
+  const gd = groupDecimals(entry, stop, takeProfit, exitPrice, livePrice);
   const rows: { dot: string; label: string; price: number }[] = [
     { dot: "bg-blue-500", label: "Entry", price: entry },
   ];
   if (stop) rows.push({ dot: "bg-red-500", label: "Stop", price: stop });
   if (takeProfit) rows.push({ dot: "bg-green-500", label: "Target", price: takeProfit });
   if (status === "closed" && exitPrice) rows.push({ dot: "bg-amber-400", label: "Exit", price: exitPrice });
-  if (nowPrice != null) rows.push({ dot: "bg-cyan-400", label: status === "open" ? "Now" : "", price: nowPrice });
+  // Always show current price when available — even on closed trades, so user
+  // can see where the underlying is trading now relative to the closed position.
+  if (livePrice != null) rows.push({ dot: "bg-cyan-400", label: "Current", price: livePrice });
   return (
     <div className="absolute top-3 right-3 bg-zinc-900/90 backdrop-blur-sm border border-zinc-700/60 rounded-xl px-3 py-2 text-[11px] space-y-1 z-10 pointer-events-none">
       {rows.map((r) => (
@@ -134,9 +135,10 @@ function TradeChartSection({ symbol, entryPrice, entryTime, side, qty, stopLoss,
           <span className="flex items-center gap-1.5 text-blue-400">
             <span className="w-3 h-0.5 bg-blue-500 rounded inline-block" /> Entry {fmt$(entryPrice, gd)}
           </span>
-          {status === "open" && livePrice != null && (
+          {livePrice != null && (
             <span className="flex items-center gap-1.5 text-cyan-400">
-              Now {fmt$(livePrice, gd)}{" "}
+              <span className="w-3 h-0.5 bg-cyan-400 rounded inline-block opacity-70 [border-top:1px_dashed]" />
+              NOW {fmt$(livePrice, gd)}{" "}
               <span className={livePrice >= entryPrice ? "text-emerald-400" : "text-red-400"}>
                 ({fmtPct(livePrice, entryPrice)})
               </span>
@@ -657,7 +659,10 @@ export default function TradeDetailPage() {
 
   const isRealOptions = !!(trade?.option_type) && !trade?.is_legacy_share;
 
-  // Live spot price for the underlying (or the trade symbol for equity/crypto)
+  // Live spot price for the underlying (or the trade symbol for equity/crypto).
+  // Fetch for BOTH open AND closed trades so users can always see where the
+  // underlying is trading right now relative to the position. Closed trades
+  // poll less aggressively (30s) since urgency is lower.
   const priceSymbol = trade
     ? isRealOptions
       ? (trade.underlying_symbol ?? trade.symbol).replace("/", "-")
@@ -666,12 +671,17 @@ export default function TradeDetailPage() {
   const { data: prices } = useQuery({
     queryKey: ["latest-prices", priceSymbol],
     queryFn: () => getLatestPrices([priceSymbol]),
-    refetchInterval: 5_000,
+    refetchInterval: trade?.status === "open" ? 5_000 : 30_000,
     staleTime: 0,
-    enabled: !!priceSymbol && trade?.status === "open",
+    enabled: !!priceSymbol,
   });
-  const livePrice = trade?.status === "open"
-    ? (prices?.[priceSymbol] ?? prices?.[trade?.symbol ?? ""] ?? null) : null;
+  // Backend may key by normalized symbol (e.g. "BTC/USD" instead of "BTC-USD"),
+  // so try both shapes before giving up.
+  const livePrice: number | null =
+    prices?.[priceSymbol] ??
+    prices?.[trade?.symbol ?? ""] ??
+    prices?.[priceSymbol.replace("-", "/")] ??
+    null;
 
   // Prefer backend-returned spot_price (fetched with Greeks), fall back to live WebSocket price
   const spotPrice = isRealOptions ? (trade?.spot_price ?? livePrice) : livePrice;
