@@ -171,9 +171,11 @@ export interface LeaderboardTotals {
   starting_capital_usd: number;
   current_equity_usd: number;
   total_pnl_usd: number;
-  total_return_pct: number;   // capital-weighted, single number for "how is the fleet doing"
-  avg_return_pct: number;     // equal-weighted across allocations
-  bots_count: number;
+  total_return_pct: number;   // capital-weighted across active bots
+  avg_return_pct: number;     // equal-weighted across active bots
+  bots_count: number;         // actively trading
+  bots_total?: number;        // including disabled / paused
+  idle_capital_usd?: number;  // capital sitting in disabled / paused bots
 }
 
 export const getBotLeaderboardRanking = (

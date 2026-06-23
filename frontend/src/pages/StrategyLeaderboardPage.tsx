@@ -303,13 +303,26 @@ function BotLeaderboardTable({
       {totals && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 py-3 border-b border-t-dim bg-t-bg0/40">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">Bots</div>
-            <div className="text-t-hi font-semibold tabular-nums">{totals.bots_count}</div>
+            <div className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">Active bots</div>
+            <div className="text-t-hi font-semibold tabular-nums">
+              {totals.bots_count}
+              {totals.bots_total && totals.bots_total > totals.bots_count ? (
+                <span className="text-t-muted text-xs ml-1">/ {totals.bots_total}</span>
+              ) : null}
+            </div>
+            {totals.idle_capital_usd != null && totals.idle_capital_usd > 0 ? (
+              <div className="text-[10px] text-t-muted mt-0.5">
+                {fmtUsd(totals.idle_capital_usd).replace("+", "")} idle
+              </div>
+            ) : null}
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">Total P&amp;L</div>
             <div className={cn("font-semibold tabular-nums", usdColor(totals.total_pnl_usd))}>
               {fmtUsd(totals.total_pnl_usd)}
+            </div>
+            <div className="text-[10px] text-t-muted mt-0.5">
+              on {fmtUsd(totals.starting_capital_usd).replace("+", "")} active
             </div>
           </div>
           <div>

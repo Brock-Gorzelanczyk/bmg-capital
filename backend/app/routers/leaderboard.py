@@ -250,32 +250,44 @@ def get_strategy_leaderboard(
     for i, row in enumerate(rows, 1):
         row["rank"] = i
 
-    # Portfolio-wide totals across every allocation. Capital-weighted % so a
-    # 50% gain on a $1k bot doesn't outvote a 5% gain on a $100k bot. The
-    # equal-weighted average is also returned for the "every strat counts the
-    # same" framing.
-    total_starting_cents = sum(int(a.starting_capital_cents or 0) for a in allocs)
+    # Portfolio-wide totals over ACTIVE bots only. A bot that's disabled or
+    # auto-paused isn't deploying capital, so including it dilutes the %
+    # return toward zero (a flat 0% drag from $100k of idle capital obscures
+    # what the bots that ARE running are actually doing). Rows above still
+    # show every allocation so the user can see the idle ones.
+    def _is_active(a) -> bool:
+        return bool(a.enabled) and not a.paused_reason
+
+    active_allocs = [a for a in allocs if _is_active(a)]
+    total_starting_cents = sum(int(a.starting_capital_cents or 0) for a in active_allocs)
     total_current_cents = sum(
-        int(snapshots_by_alloc[aid].portfolio_value_cents)
-        if aid in snapshots_by_alloc
-        else int((a.starting_capital_cents or 0))
-        for aid, a in ((a.id, a) for a in allocs)
+        int(snapshots_by_alloc[a.id].portfolio_value_cents)
+        if a.id in snapshots_by_alloc
+        else int(a.starting_capital_cents or 0)
+        for a in active_allocs
     )
     total_pnl_cents = total_current_cents - total_starting_cents
     total_return_pct = (
         round(total_pnl_cents / total_starting_cents * 100, 2)
         if total_starting_cents else 0.0
     )
-    pct_values = [r["all_time_pnl_pct"] for r in rows if r["all_time_pnl_pct"] is not None]
+    active_ids = {a.id for a in active_allocs}
+    pct_values = [
+        r["all_time_pnl_pct"]
+        for r in rows
+        if r["all_time_pnl_pct"] is not None and r["allocation_id"] in active_ids
+    ]
     avg_return_pct = round(sum(pct_values) / len(pct_values), 2) if pct_values else 0.0
 
     totals = {
         "starting_capital_usd": round(total_starting_cents / 100, 2),
         "current_equity_usd":   round(total_current_cents / 100, 2),
         "total_pnl_usd":        round(total_pnl_cents / 100, 2),
-        "total_return_pct":     total_return_pct,    # capital-weighted
-        "avg_return_pct":       avg_return_pct,      # equal-weighted
-        "bots_count":           len(allocs),
+        "total_return_pct":     total_return_pct,    # capital-weighted, active only
+        "avg_return_pct":       avg_return_pct,      # equal-weighted, active only
+        "bots_count":           len(active_allocs),  # actively running
+        "bots_total":           len(allocs),         # incl. disabled / paused
+        "idle_capital_usd":     round((sum(int(a.starting_capital_cents or 0) for a in allocs) - total_starting_cents) / 100, 2),
     }
 
     return {
