@@ -1521,24 +1521,11 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     }
 
 
-_OPTIONS_STRATEGIES: frozenset[str] = frozenset({
-    "iron_condor_45dte",
-    "covered_call_30d",
-    "cash_secured_put",
-    "bull_put_credit_spread",
-    "bear_call_credit_spread",
-    "bull_call_debit_spread",
-    "long_call",
-    "long_put",
-    "long_straddle",
-    "long_strangle",
-    "long_call_directional",
-    "leaps_stock_replacement",
-    "pmcc_diagonal",
-    "jade_lizard",
-    "neutral_calendar_spread",
-    "wheel_strategy",
-})
+# Options routing is driven entirely by the profile's `asset_class: options`.
+# A hard-coded strategy frozenset used to double-check this, but maintaining
+# two sources of truth caused drift: any new options strategy added to a
+# profile YAML had to also be added to the frozenset to route correctly, and
+# the safety-net behaviour just hid misconfigured profiles. Trust the YAML.
 
 
 def _execute_options_signal(
@@ -1662,17 +1649,16 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     asset_class = profile.get("asset_class", "stock")
     _sig_strategy = (getattr(sig, "strategy", "") or "").strip()
-    _in_opt_set = _sig_strategy in _OPTIONS_STRATEGIES
 
     # Hard routing gate — log decision so Railway logs are proof
     logger.warning(
-        "[ROUTE:%s] %s %s — asset_class=%r strategy=%r in_opt_set=%s → path=%s",
+        "[ROUTE:%s] %s %s — asset_class=%r strategy=%r → path=%s",
         profile_name, sig.side, sig.symbol,
-        asset_class, _sig_strategy, _in_opt_set,
-        "OPTIONS" if (asset_class == "options" or _in_opt_set) else "EQUITY",
+        asset_class, _sig_strategy,
+        "OPTIONS" if asset_class == "options" else "EQUITY",
     )
 
-    if asset_class == "options" or _in_opt_set:
+    if asset_class == "options":
         _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name, signal_id=signal_id)
         return
     now = datetime.now(timezone.utc)
@@ -1742,11 +1728,16 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         logger.warning("[execute:%s] no price for %s — skipping order (live=0, broker=0, bars_fallback=0)", profile_name, sig.symbol)
         return
 
-    # Staleness guard: if bar-close is >2 hours old, the price is likely stale (yfinance fallback).
+    # Staleness guard: refuse the bar-close fallback if the bar is more than a
+    # trading-session-worth old. 2h was too strict for options bots running pre-
+    # and post-market — a legitimate close from earlier the same session would
+    # trip it. The 20% deviation check below catches truly stale prices when a
+    # live ticker is available; this is the belt for when it isn't.
+    _STALE_BAR_MAX_HOURS = 6.0
     if bar_close_used and bar_close_ts and bar_close_ts > 0:
         import time as _time
         bar_age_hours = (_time.time() - bar_close_ts) / 3600
-        if bar_age_hours > 2.0:
+        if bar_age_hours > _STALE_BAR_MAX_HOURS:
             logger.error(
                 "SANITY_FAIL: stale_bar_suspected for %s — bar close ts is %.1fh old, refusing trade "
                 "(price=%.4f; use live ticker to avoid bad fill)",

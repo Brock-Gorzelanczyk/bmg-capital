@@ -167,10 +167,25 @@ export const getBotTimeOfDay = (botName: string): Promise<{ time_of_day: TimeOfD
 export const getBotRegimeBreakdown = (botName: string): Promise<{ regimes: RegimeRow[] }> =>
   client.get(`${BASE}/bots/${botName}/regime-breakdown`).then((r) => r.data);
 
+export interface LeaderboardTotals {
+  starting_capital_usd: number;
+  current_equity_usd: number;
+  total_pnl_usd: number;
+  total_return_pct: number;   // capital-weighted, single number for "how is the fleet doing"
+  avg_return_pct: number;     // equal-weighted across allocations
+  bots_count: number;
+}
+
 export const getBotLeaderboardRanking = (
   sort: BotLbSort = "pnl",
   window: LbWindow = "all",
-): Promise<{ strategies: BotLeaderboardRow[]; total: number; sort: string; window: string }> =>
+): Promise<{
+  strategies: BotLeaderboardRow[];
+  total: number;
+  sort: string;
+  window: string;
+  totals?: LeaderboardTotals;
+}> =>
   client.get("/leaderboard/strategies", { params: { sort, window } }).then((r) => r.data);
 
 export const getStrategyLeaderboard = (

@@ -260,6 +260,7 @@ function BotLeaderboardTable({
   });
 
   const rows = data?.strategies ?? [];
+  const totals = data?.totals;
 
   if (isLoading) {
     return (
@@ -299,6 +300,38 @@ function BotLeaderboardTable({
 
   return (
     <div className="bg-t-bg1 border border-t-dim rounded-2xl overflow-hidden">
+      {totals && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 py-3 border-b border-t-dim bg-t-bg0/40">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">Bots</div>
+            <div className="text-t-hi font-semibold tabular-nums">{totals.bots_count}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">Total P&amp;L</div>
+            <div className={cn("font-semibold tabular-nums", usdColor(totals.total_pnl_usd))}>
+              {fmtUsd(totals.total_pnl_usd)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">
+              Total % (cap-weighted)
+            </div>
+            <div className={cn("font-semibold tabular-nums", pctColor(totals.total_return_pct / 100))}>
+              {totals.total_return_pct >= 0 ? "+" : ""}
+              {totals.total_return_pct.toFixed(2)}%
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">
+              Avg % (per bot)
+            </div>
+            <div className={cn("font-semibold tabular-nums", pctColor(totals.avg_return_pct / 100))}>
+              {totals.avg_return_pct >= 0 ? "+" : ""}
+              {totals.avg_return_pct.toFixed(2)}%
+            </div>
+          </div>
+        </div>
+      )}
       <div className={cn("grid gap-2 px-4 py-2 border-b border-t-dim", gridCols)}>
         {headers.map((h) => (
           <span key={h} className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t">{h}</span>

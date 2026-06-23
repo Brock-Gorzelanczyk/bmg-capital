@@ -1724,43 +1724,14 @@ def get_bot_cards(
             if std_r > 0:
                 sharpe_30d = round((mean_r / std_r) * math.sqrt(252), 2)
 
-        # win_rate_30d from BotTrade
-        trades_30d = []
-        if allocation:
-            trades_30d = db.query(BotTrade).filter(
-                BotTrade.allocation_id == allocation.id,
-                BotTrade.ts >= thirty_days_ago,
-                BotTrade.quarantined_at.is_(None),
-            ).all()
-
-        # A "win" = sell trade where fill_price > avg_cost of that position
-        # Simplified: any trade tagged "sell" with positive realized PnL
-        # For paper: count BotPosition rows closed in last 30 days
-        closed_positions_30d = []
-        if allocation:
-            closed_positions_30d = db.query(BotPosition).filter(
-                BotPosition.allocation_id == allocation.id,
-                BotPosition.closed_at >= thirty_days_ago,
-                BotPosition.closed_at.isnot(None),
-                BotPosition.quarantined_at.is_(None),
-            ).all()
-
-        wins = 0
-        losses = 0
-        for pos in closed_positions_30d:
-            # winning if position had positive PnL
-            # approximate: we don't store PnL on BotPosition directly,
-            # use exit_reason as proxy (stop_loss = loss, target = win)
-            exit_r = pos.exit_reason or ""
-            if "target" in exit_r or "profit" in exit_r:
-                wins += 1
-            elif "stop" in exit_r or "loss" in exit_r:
-                losses += 1
-            else:
-                # time stop or manual — count as loss if we don't know
-                losses += 1
-        total_closed = wins + losses
-        win_rate_pct = (wins / total_closed) if total_closed > 0 else None
+        # win_rate: read from canonical (counts closed trades with positive realized PnL).
+        # Used to roll its own from BotPosition.exit_reason keyword matching, which
+        # treated every "time stop" / "manual" exit as a loss even when the trade was
+        # profitable. Canonical reads the same BotTrade fills as realized_pnl_cents.
+        if canonical_snap is not None and canonical_snap.win_rate is not None:
+            win_rate_pct = canonical_snap.win_rate
+        else:
+            win_rate_pct = None
 
         # open positions count (exclude quarantined — they don't appear in the positions table)
         open_positions_count = 0
@@ -1771,18 +1742,31 @@ def get_bot_cards(
                 BotPosition.quarantined_at.is_(None),
             ).count()
 
-        # equity curve: full all-time history (portfolio value in dollars) for zoom controls
-        equity_curve = []
-        running_realized = 0
-        for r in all_daily_pnl_rows:
-            running_realized += (r.realized_cents or 0)
-            eod_val = getattr(r, 'portfolio_value_eod_cents', None)
-            val_cents = eod_val if eod_val else (capital_cents + running_realized)
-            equity_curve.append({
-                "date": r.date.isoformat(),
-                "portfolio": round(val_cents / 100, 2),  # dollars
-                "value_cents": val_cents,
-            })
+        # equity curve: prefer canonical (built from BotTrade fills, matches Dashboard
+        # and Strategy Lab). Fall back to BotDailyPnL only if canonical failed —
+        # historically the two diverged because BotDailyPnL rollup ran nightly while
+        # canonical updates per-fill.
+        if canonical_snap is not None and canonical_snap.equity_curve:
+            equity_curve = [
+                {
+                    "date": pt["date"],
+                    "portfolio": pt["portfolio"],
+                    "value_cents": int(pt["portfolio"] * 100),
+                }
+                for pt in canonical_snap.equity_curve
+            ]
+        else:
+            equity_curve = []
+            running_realized = 0
+            for r in all_daily_pnl_rows:
+                running_realized += (r.realized_cents or 0)
+                eod_val = getattr(r, 'portfolio_value_eod_cents', None)
+                val_cents = eod_val if eod_val else (capital_cents + running_realized)
+                equity_curve.append({
+                    "date": r.date.isoformat(),
+                    "portfolio": round(val_cents / 100, 2),
+                    "value_cents": val_cents,
+                })
 
         # top 3 watchlist
         watchlist_top3 = []

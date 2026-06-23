@@ -111,7 +111,14 @@ class BotSnapshot:
     watchlist_count: int
     sharpe_30d: Optional[float]
 
-    capital_cents_within_portfolio: int  # allocation within its portfolio
+    # win_rate: fraction (0–1) of closed trades with positive realized PnL.
+    # Computed from BotTrade sell/close/cover fills, same source as realized_pnl_cents.
+    # None when there are no closed trades yet.
+    win_rate: Optional[float] = None
+    win_count: int = 0
+    loss_count: int = 0
+
+    capital_cents_within_portfolio: int = 0  # allocation within its portfolio
 
     open_positions: list = field(default_factory=list)  # [{id, symbol, qty, avg_cost, ...}]
     equity_curve: list = field(default_factory=list)    # [{date, value_cents}]
@@ -189,6 +196,8 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     realized_pnl_cents = 0
     today_realized_cents = 0
     realized_30d_cents = 0
+    win_count = 0
+    loss_count = 0
 
     # Fallback avg_cost by symbol: last buy/short-entry price for trades without position_id
     buy_price_by_symbol: dict[str, float] = {}
@@ -209,11 +218,19 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         else:
             fill_pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
         realized_pnl_cents += fill_pnl
+        if fill_pnl > 0:
+            win_count += 1
+        elif fill_pnl < 0:
+            loss_count += 1
+        # fill_pnl == 0 is a scratch — neither win nor loss
         trade_date = t.ts.date() if hasattr(t.ts, "date") else t.ts
         if trade_date == today:
             today_realized_cents += fill_pnl
         if trade_date >= thirty_days_ago:
             realized_30d_cents += fill_pnl
+
+    total_closed = win_count + loss_count
+    win_rate = (win_count / total_closed) if total_closed > 0 else None
 
     # ── Open positions ────────────────────────────────────────────────────────
     open_pos_display = [p for p in all_positions if p.closed_at is None]
@@ -347,6 +364,9 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         open_positions_count=len(open_pos_rows),
         watchlist_count=watchlist_count,
         sharpe_30d=sharpe_30d,
+        win_rate=win_rate,
+        win_count=win_count,
+        loss_count=loss_count,
         capital_cents_within_portfolio=capital_within,
         open_positions=open_positions,
         equity_curve=equity_curve,

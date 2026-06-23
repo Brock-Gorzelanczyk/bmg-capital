@@ -250,4 +250,38 @@ def get_strategy_leaderboard(
     for i, row in enumerate(rows, 1):
         row["rank"] = i
 
-    return {"strategies": rows, "total": len(rows), "sort": sort, "window": window}
+    # Portfolio-wide totals across every allocation. Capital-weighted % so a
+    # 50% gain on a $1k bot doesn't outvote a 5% gain on a $100k bot. The
+    # equal-weighted average is also returned for the "every strat counts the
+    # same" framing.
+    total_starting_cents = sum(int(a.starting_capital_cents or 0) for a in allocs)
+    total_current_cents = sum(
+        int(snapshots_by_alloc[aid].portfolio_value_cents)
+        if aid in snapshots_by_alloc
+        else int((a.starting_capital_cents or 0))
+        for aid, a in ((a.id, a) for a in allocs)
+    )
+    total_pnl_cents = total_current_cents - total_starting_cents
+    total_return_pct = (
+        round(total_pnl_cents / total_starting_cents * 100, 2)
+        if total_starting_cents else 0.0
+    )
+    pct_values = [r["all_time_pnl_pct"] for r in rows if r["all_time_pnl_pct"] is not None]
+    avg_return_pct = round(sum(pct_values) / len(pct_values), 2) if pct_values else 0.0
+
+    totals = {
+        "starting_capital_usd": round(total_starting_cents / 100, 2),
+        "current_equity_usd":   round(total_current_cents / 100, 2),
+        "total_pnl_usd":        round(total_pnl_cents / 100, 2),
+        "total_return_pct":     total_return_pct,    # capital-weighted
+        "avg_return_pct":       avg_return_pct,      # equal-weighted
+        "bots_count":           len(allocs),
+    }
+
+    return {
+        "strategies": rows,
+        "total": len(rows),
+        "sort": sort,
+        "window": window,
+        "totals": totals,
+    }
