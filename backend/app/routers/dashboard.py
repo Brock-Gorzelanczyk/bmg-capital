@@ -104,37 +104,54 @@ def get_dashboard_v2(
         if a.profile_id in profile_map
     }
 
-    # ── Per-allocation canonical snapshots ────────────────────────────────────
-    # Audit bugs 2/3/4: previously read BotDailyPnL.unrealized_cents which is
-    # intentionally always 0 (see bot_executor.py:299 — canonical is supposed
-    # to compute unrealized from live prices). That made the Dashboard miss
-    # all open-position MTM gains, so today_pnl + portfolio_value were stale
-    # vs. Strategy Lab which uses canonical.
-    # Fix: compute one canonical snapshot per allocation and use those values
-    # everywhere downstream. Same source Strategy Lab uses → numbers agree.
-    from app.core.canonical import compute_bot_snapshot
-    snapshots_by_alloc: dict[int, "object"] = {}
-    for alloc in allocs:
-        prof = alloc_to_profile.get(alloc.id)
-        if not prof:
-            continue
-        try:
-            snapshots_by_alloc[alloc.id] = compute_bot_snapshot(alloc, prof, db)
-        except Exception as exc:
-            logger.warning("[dashboard] canonical snapshot failed for alloc %s: %s", alloc.id, exc)
+    # ── Delegate financial numbers to canonical aggregator ───────────────────
+    # Strategy Lab uses compute_strategy_lab_aggregate and shows correct
+    # numbers for this user — so we delegate to the same function here.
+    # That way Dashboard, Mission Control, and Strategy Lab all share one
+    # source of truth and there's no chance of split-brain.
+    from app.core.canonical import compute_strategy_lab_aggregate
+    try:
+        agg = compute_strategy_lab_aggregate(current_user.id, db) or {}
+    except Exception as exc:
+        logger.warning("[dashboard] canonical aggregate failed: %s", exc)
+        agg = {}
 
-    total_realized_by_alloc: dict[int, int] = {
-        aid: snap.realized_pnl_cents for aid, snap in snapshots_by_alloc.items()
+    leaderboard_from_agg = agg.get("leaderboard", []) or []
+    # Build per-allocation P&L lookups by joining leaderboard entries
+    # (keyed by profile.name) back to allocations.
+    today_pnl_by_profile_name: dict[str, int] = {
+        e.get("profile"): int(e.get("today_pnl_cents") or 0)
+        for e in leaderboard_from_agg
     }
-    today_pnl_by_alloc: dict[int, int] = {
-        aid: snap.today_pnl_cents for aid, snap in snapshots_by_alloc.items()
+    pv_by_profile_name: dict[str, int] = {
+        e.get("profile"): int(e.get("portfolio_value_cents") or 0)
+        for e in leaderboard_from_agg
     }
-    # 30d P&L is harder to derive per-allocation from a snapshot. Approximate
-    # via return_30d_pct × starting_capital. Close enough for the dashboard's
-    # 30d return display and not a number any view treats as authoritative.
+    ret30_by_profile_name: dict[str, float] = {
+        e.get("profile"): float(e.get("return_30d_pct") or 0.0)
+        for e in leaderboard_from_agg
+    }
+    realized_by_profile_name: dict[str, int] = {
+        e.get("profile"): int(e.get("realized_pnl_cents") or 0)
+        for e in leaderboard_from_agg
+    }
+
+    today_pnl_by_alloc: dict[int, int] = {}
+    pv_by_alloc: dict[int, int] = {}
+    ret30_by_alloc: dict[int, float] = {}
+    total_realized_by_alloc: dict[int, int] = {}
+    for alloc in allocs:
+        p = alloc_to_profile.get(alloc.id)
+        if not p:
+            continue
+        today_pnl_by_alloc[alloc.id]  = today_pnl_by_profile_name.get(p.name, 0)
+        pv_by_alloc[alloc.id]         = pv_by_profile_name.get(p.name, 0)
+        ret30_by_alloc[alloc.id]      = ret30_by_profile_name.get(p.name, 0.0)
+        total_realized_by_alloc[alloc.id] = realized_by_profile_name.get(p.name, 0)
+
     pnl_30d_by_alloc: dict[int, int] = {
-        aid: int(round((snap.return_30d_pct or 0) / 100.0 * (snap.starting_capital_cents or 0)))
-        for aid, snap in snapshots_by_alloc.items()
+        aid: int(round(ret30_by_alloc.get(aid, 0.0) / 100.0 * (a.starting_capital_cents or 0)))
+        for aid, a in {aa.id: aa for aa in allocs}.items()
     }
 
     # ── Open positions (audit bug 5: add quarantine filter) ──────────────────
@@ -176,18 +193,18 @@ def get_dashboard_v2(
     for wl in wl_rows:
         profile_wl_count[wl.profile_id] = profile_wl_count.get(wl.profile_id, 0) + 1
 
-    # ── Portfolio totals (all derived from canonical snapshots) ──────────────
+    # ── Portfolio totals — taken straight from canonical aggregate ───────────
     total_starting = sum(a.starting_capital_cents or 0 for a in allocs)
     total_realized = sum(total_realized_by_alloc.values())
-    total_today_pnl = sum(today_pnl_by_alloc.values())
-    # Canonical snapshot's portfolio_value_cents already includes live
-    # unrealized P&L from open positions, so this matches Strategy Lab's
-    # number to the cent.
-    total_value = sum(snap.portfolio_value_cents for snap in snapshots_by_alloc.values())
-    prev_value = total_value - total_today_pnl
-    today_pct = round(total_today_pnl / prev_value * 100, 2) if prev_value > 0 else 0.0
-    total_30d_pnl = sum(pnl_30d_by_alloc.values())
-    return_30d_pct = round(total_30d_pnl / total_starting * 100, 2) if total_starting else 0.0
+    total_value      = int(agg.get("total_value_cents") or 0)
+    total_today_pnl  = int(agg.get("today_pnl_cents") or 0)
+    today_pct        = float(agg.get("today_pnl_pct") or 0.0)
+    return_30d_pct   = float(agg.get("return_30d_pct") or 0.0)
+    # Fallback when canonical returned nothing (e.g. no StrategyPortfolio rows
+    # yet) — synthesize from starting capital so the page renders something
+    # instead of $—.
+    if total_value == 0 and total_starting > 0:
+        total_value = total_starting
 
     # ── Per-sleeve breakdown ─────────────────────────────────────────────────
     sleeve_data: dict[str, dict[str, int]] = {
@@ -201,21 +218,11 @@ def get_dashboard_v2(
         if not p:
             continue
         s = _AC_TO_SLEEVE.get(p.asset_class, "stocks")
-        snap = snapshots_by_alloc.get(alloc.id)
-        # Sleeve value + P&L derived from canonical snapshots so the sleeve
-        # cards match the bot leaderboard sums (audit bug 3 — was -$3,020
-        # on sleeve, +$837 on bot sum). value_cents and pnl_cents now both
-        # come from the same source Strategy Lab uses.
-        if snap is not None:
-            sleeve_data[s]["value_cents"] += snap.portfolio_value_cents
-            # pnl_cents on the sleeve card means TODAY's P&L (matches what
-            # frontend displays as "today" — alltime realized was the wrong
-            # field anyway since open positions weren't reflected).
-            sleeve_data[s]["pnl_cents"] += snap.today_pnl_cents
-        else:
-            # Fallback if canonical snapshot failed for this allocation —
-            # still show something, but flag with starting capital only.
-            sleeve_data[s]["value_cents"] += alloc.starting_capital_cents or 0
+        # Per-allocation values bucketed by sleeve. Falls back to starting
+        # capital if canonical didn't have data for this profile.
+        pv = pv_by_alloc.get(alloc.id) or (alloc.starting_capital_cents or 0)
+        sleeve_data[s]["value_cents"] += pv
+        sleeve_data[s]["pnl_cents"]   += today_pnl_by_alloc.get(alloc.id, 0)
         sleeve_data[s]["bots_total"] += 1
         if alloc.enabled:
             sleeve_data[s]["bots_active"] += 1
@@ -313,31 +320,23 @@ def get_dashboard_v2(
         )
         highlights.append({"symbol": row.symbol, "conviction": conviction, "thesis": thesis})
 
-    # ── Leaderboard ──────────────────────────────────────────────────────────
-    # Now derived from canonical snapshots (was: referenced the deleted
-    # pnl_rows variable, which silently 500'd the whole endpoint — that's
-    # why the Dashboard kept showing $— even after the earlier fix landed).
+    # ── Leaderboard — reuse canonical's leaderboard verbatim ─────────────────
+    # Just enrich with display_name + watchlist_count which canonical's
+    # version doesn't include.
+    profile_by_name: dict[str, BotProfile] = {p.name: p for p in profiles}
     leaderboard = []
-    for alloc in allocs:
-        p = alloc_to_profile.get(alloc.id)
-        if not p:
-            continue
-        start = alloc.starting_capital_cents or 1
-        snap = snapshots_by_alloc.get(alloc.id)
-        if snap is None:
-            continue
+    for e in leaderboard_from_agg:
+        prof_name = e.get("profile") or ""
+        prof = profile_by_name.get(prof_name)
         leaderboard.append({
-            "rank": 0,
-            "profile": p.name,
-            "name": _DISPLAY_NAMES.get(p.name, p.name.replace("_", " ").title()),
-            "return_30d_pct": snap.return_30d_pct,
-            "today_pnl_cents": snap.today_pnl_cents,
-            "watchlist_count": profile_wl_count.get(alloc.profile_id, 0),
-            "portfolio_value_cents": snap.portfolio_value_cents,
+            "rank": e.get("rank") or 0,
+            "profile": prof_name,
+            "name": _DISPLAY_NAMES.get(prof_name, prof_name.replace("_", " ").title()),
+            "return_30d_pct": e.get("return_30d_pct") or 0.0,
+            "today_pnl_cents": e.get("today_pnl_cents") or 0,
+            "watchlist_count": profile_wl_count.get(prof.id, 0) if prof else 0,
+            "portfolio_value_cents": e.get("portfolio_value_cents") or 0,
         })
-    leaderboard.sort(key=lambda x: x["return_30d_pct"], reverse=True)
-    for i, e in enumerate(leaderboard, 1):
-        e["rank"] = i
 
     return {
         "portfolio": {
