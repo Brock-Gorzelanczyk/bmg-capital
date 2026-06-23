@@ -364,6 +364,11 @@ function LoginForm() {
             </>
           )}
         </p>
+        <p className="mt-3 text-[10px] font-mono tracking-widest uppercase" style={{ color: "#2a4a2a" }}>
+          <Link to="/intro" state={{ from: "/login" }} className="text-[#4ade80]/50 hover:text-[#4ade80] transition-colors">
+            ↻ REPLAY INTRO
+          </Link>
+        </p>
       </div>
     </div>
   );
