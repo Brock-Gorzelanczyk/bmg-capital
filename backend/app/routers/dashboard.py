@@ -5,6 +5,7 @@ No dependency on StrategyPortfolio rows.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -13,6 +14,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
+
+logger = logging.getLogger(__name__)
 from app.db.models.bots import (
     BotAllocation,
     BotProfile,
