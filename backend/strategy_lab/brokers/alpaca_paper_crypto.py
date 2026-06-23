@@ -92,6 +92,7 @@ class PaperCryptoAdapter(BrokerAdapter):
         stop_price: float,
         target_price: float,
         limit_price: Optional[float] = None,
+        extended_hours: bool = False,  # accepted for signature parity with the stocks adapter — crypto trades 24/7
     ) -> dict:
         """Submit an OCO bracket order via Alpaca paper API for crypto.
 
