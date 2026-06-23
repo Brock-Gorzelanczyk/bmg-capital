@@ -252,7 +252,19 @@ def scan_and_execute(
     # ── 7. Persist + execute per allocation ───────────────────────────────────
     threshold = float(profile.get("confidence_threshold", 0.5))
     default_size = float(profile.get("position_size_pct", 5.0))
-    cooldown_min = float(profile.get("cooldown_minutes", 0))
+    # Cooldown is sourced from profile YAML (default 0 → 1-minute concurrent
+    # dedup only). Clamp to a sane 24h max so a typo in YAML or a stale
+    # bot_config_override row cannot silence a bot indefinitely (B2 of the
+    # options-bot triage). The clamp is intentionally loud — if a profile
+    # legitimately wants > 1 day cadence, that's what `cadence` is for.
+    _COOLDOWN_MAX_MINUTES = 1440  # 24h
+    raw_cooldown_min = float(profile.get("cooldown_minutes", 0))
+    cooldown_min = min(raw_cooldown_min, _COOLDOWN_MAX_MINUTES)
+    if raw_cooldown_min > _COOLDOWN_MAX_MINUTES:
+        logger.warning(
+            "[scan:%s] cooldown_minutes=%.0f exceeds 24h cap — clamped to %d",
+            profile_name, raw_cooldown_min, _COOLDOWN_MAX_MINUTES,
+        )
     position_cap = int(profile.get("position_cap", 999))
 
     logger.warning(
@@ -369,6 +381,12 @@ def scan_and_execute(
                     # here — does NOT block execution. The runner.py path
                     # both traces AND filters; this path is kept exec-neutral
                     # to avoid changing live trading behavior.
+                    #
+                    # Logging is intentionally loud (warning) when filtered or
+                    # when the trace itself errors — B3 of the options-bot
+                    # triage. The Tuning Advisor reads SignalGate rows; if
+                    # they're missing for a specific bot, we want it in the
+                    # Railway logs rather than hidden behind debug-level.
                     try:
                         from app.services.discipline import (
                             evaluate_gates as _eval_gates,
@@ -376,9 +394,18 @@ def scan_and_execute(
                         )
                         _gate_result = _eval_gates(db, sig, profile, alloc.id)
                         _persist_gate(db, signal_id, profile_name, sig, _gate_result)
+                        if not _gate_result.all_passed:
+                            logger.warning(
+                                "[discipline-trace] %s %s/%s WOULD-FILTER reason=%s "
+                                "score=%d/%d confluence=%d/%d (trace-only; not blocking exec)",
+                                profile_name, r["symbol"], r["side"],
+                                _gate_result.filter_reason,
+                                _gate_result.composite_score, _gate_result.composite_threshold,
+                                _gate_result.confluence_factors_passed, _gate_result.confluence_required,
+                            )
                     except Exception as _gate_exc:
-                        logger.debug(
-                            "[discipline] trace failed for %s %s: %s",
+                        logger.warning(
+                            "[discipline-trace] persist failed for %s %s: %s",
                             profile_name, r["symbol"], _gate_exc,
                         )
                 except Exception as _pe:
