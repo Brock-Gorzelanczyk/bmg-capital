@@ -1,11 +1,14 @@
 """Per-bot strategy leaderboard — all-time and windowed P&L ranked.
 
-All-time P&L aggregates from BotDailyPnL rows.
-Windowed P&L (24h/7d/30d/mtd) is computed from BotTrade realized fills
-because BotDailyPnL is an audit log, not a real-time source.
+All-time portfolio value comes from `compute_bot_snapshot` (canonical),
+which is the same source the Dashboard and Strategy Lab use, so the three
+surfaces never disagree.
+
+Windowed P&L (24h/7d/30d/mtd) is computed from BotTrade realized fills.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, date, timezone, timedelta
 from typing import Any
 
@@ -19,6 +22,9 @@ from app.dependencies import get_db, get_current_user
 from app.db.models.bots import BotAllocation, BotProfile, BotDailyPnL, BotTrade, BotPosition
 from app.db.models.allocation import BotPerformanceStats
 from app.db.models.users import User
+from app.core.canonical import compute_bot_snapshot
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/leaderboard", tags=["leaderboard"])
 
@@ -135,22 +141,20 @@ def get_strategy_leaderboard(
     profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
     profile_map = {p.id: p for p in profiles}
 
-    # ── Aggregate realized P&L from BotDailyPnL (single batch query) ────────
-    today = date.today()
-    pnl_rows = (
-        db.query(BotDailyPnL)
-        .filter(BotDailyPnL.allocation_id.in_(alloc_ids))
-        .all()
-    )
-    realized_by_alloc: dict[int, int] = {}
-    unrealized_today_by_alloc: dict[int, int] = {}
-    for row in pnl_rows:
-        aid = row.allocation_id
-        realized_by_alloc[aid] = realized_by_alloc.get(aid, 0) + row.realized_cents
-        if row.date == today:
-            unrealized_today_by_alloc[aid] = (
-                unrealized_today_by_alloc.get(aid, 0) + row.unrealized_cents
-            )
+    # ── Canonical per-allocation snapshots (one source of truth) ────────────
+    # BotDailyPnL.unrealized_cents is always 0 (see bot_executor.py:299) so
+    # summing it here would silently drop open-position value. The canonical
+    # snapshot reads live BotPosition rows + live prices, matching Dashboard
+    # and Strategy Lab exactly.
+    snapshots_by_alloc: dict[int, Any] = {}
+    for a in allocs:
+        prof = profile_map.get(a.profile_id)
+        if prof is None:
+            continue
+        try:
+            snapshots_by_alloc[a.id] = compute_bot_snapshot(a, prof, db)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[leaderboard] canonical snapshot failed for alloc %s: %s", a.id, exc)
 
     # ── Trade counts from bot_trades (nightly rollup may not have run yet) ──
     trade_count_rows = (
@@ -185,11 +189,10 @@ def get_strategy_leaderboard(
         bot_name = profile.name if profile else f"alloc_{alloc.id}"
         display = _DISPLAY_NAMES.get(bot_name, bot_name.replace("_", " ").title())
 
-        starting = alloc.starting_capital_cents or 0
-        realized = realized_by_alloc.get(alloc.id, 0)
-        unrealized_today = unrealized_today_by_alloc.get(alloc.id, 0)
+        snap = snapshots_by_alloc.get(alloc.id)
+        starting = (snap.starting_capital_cents if snap else None) or (alloc.starting_capital_cents or 0)
+        current_value = snap.portfolio_value_cents if snap else starting
 
-        current_value = starting + realized + unrealized_today
         current_equity_usd = round(current_value / 100, 2)
         all_time_pnl_usd = round((current_value - starting) / 100, 2)
         all_time_pnl_pct = (

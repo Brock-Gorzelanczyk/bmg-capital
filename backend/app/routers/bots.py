@@ -1676,11 +1676,12 @@ def get_bot_cards(
         yesterday_value = portfolio_value_cents - today_pnl_cents
         today_pnl_pct = (today_pnl_cents / yesterday_value) if yesterday_value else 0
 
-        # 7d avg P&L
+        # 7d avg P&L — BotDailyPnL.unrealized_cents is always 0 (bot_executor.py:299)
+        # so we only sum realized. Daily MTM swings aren't reflected in this average.
         rows_7d = [r for r in daily_pnl_rows if r.date >= seven_days_ago]
         if rows_7d:
             daily_pnl_avg_7d_cents = int(
-                sum((r.realized_cents or 0) + (r.unrealized_cents or 0) for r in rows_7d) / len(rows_7d)
+                sum((r.realized_cents or 0) for r in rows_7d) / len(rows_7d)
             )
         else:
             daily_pnl_avg_7d_cents = None  # show "—"
@@ -1688,7 +1689,7 @@ def get_bot_cards(
         # 30d avg P&L
         if len(daily_pnl_rows) >= 5:  # require at least 5 data points
             daily_pnl_avg_30d_cents = int(
-                sum((r.realized_cents or 0) + (r.unrealized_cents or 0) for r in daily_pnl_rows) / len(daily_pnl_rows)
+                sum((r.realized_cents or 0) for r in daily_pnl_rows) / len(daily_pnl_rows)
             )
         else:
             daily_pnl_avg_30d_cents = None
