@@ -710,3 +710,42 @@ async def ticker_scan(
 
     _scan_cache[cache_key] = (response, time.monotonic())
     return response
+
+
+# ── Scout Setup Checklist (Commit 2) ─────────────────────────────────────────
+
+
+@router.get("/{strategy_id}/checklist")
+async def get_strategy_checklist(
+    strategy_id: str,
+    symbol: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Per-strategy trigger checklist for the Scout chart page.
+
+    Returns the pass/fail state of every declared trigger condition for
+    `strategy_id` against the most recent bars for `symbol`. Status is
+    "armed" when all `primary` conditions pass.
+    """
+    from app.routers.bars import _fetch_bars_for_symbol
+    from app.services.strategy_triggers import evaluate_checklist
+
+    try:
+        bars_payload = await _fetch_bars_for_symbol(symbol.upper(), None, None, "1Day")
+        bars = bars_payload.get("bars") or []
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("checklist bars fetch failed for %s: %s", symbol, e)
+        bars = []
+
+    if not bars:
+        return {
+            "status": "not_armed",
+            "conditions": [],
+            "error": f"No bar data for {symbol.upper()}",
+        }
+
+    # Cap to last ~400 bars — plenty for any 252d/200d indicator
+    bars = bars[-400:]
+    return evaluate_checklist(strategy_id, bars)
