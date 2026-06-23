@@ -1638,11 +1638,19 @@ def get_bot_cards(
         # Windowed slices for period metrics (Sharpe, return_30d, etc.)
         daily_pnl_rows = [r for r in all_daily_pnl_rows if r.date >= thirty_days_ago]
 
-        # today_pnl
+        # today_pnl + portfolio_value: prefer canonical (BotDailyPnL.unrealized_cents
+        # is always 0 — see bot_executor.py:299 — so reading it adds 0 to portfolio
+        # value and today P&L for any bot with open positions). Falls back to the
+        # old BotDailyPnL math if canonical fails for some reason so the endpoint
+        # never 500s on a working bot.
         today_row = next((r for r in all_daily_pnl_rows if r.date == today), None)
-        today_pnl_cents = (
-            (today_row.realized_cents or 0) + (today_row.unrealized_cents or 0)
-        ) if today_row else 0
+        canonical_snap = None
+        try:
+            from app.core.canonical import compute_bot_snapshot as _cbs
+            if allocation and bot_profile:
+                canonical_snap = _cbs(allocation, bot_profile, db)
+        except Exception as _csnap_exc:
+            logger.warning("[bots] canonical snapshot failed for bot %s: %s", bot_name, _csnap_exc)
 
         # capital base (use starting_capital_cents if set, else estimate from capital_pct)
         # $100k paper balance default
@@ -1651,12 +1659,18 @@ def get_bot_cards(
         capital_cents = int(PAPER_BALANCE * (capital_pct / 100)) if allocation else 0
         starting_capital = getattr(allocation, 'starting_capital_cents', None) or capital_cents
 
-        # portfolio_value = capital + ALL-TIME cumulative realized + today unrealized
-        cumulative_realized = sum(
-            (r.realized_cents or 0) for r in all_daily_pnl_rows
-        )
-        today_unrealized = (today_row.unrealized_cents or 0) if today_row else 0
-        portfolio_value_cents = capital_cents + cumulative_realized + today_unrealized
+        if canonical_snap is not None:
+            today_pnl_cents = canonical_snap.today_pnl_cents
+            portfolio_value_cents = canonical_snap.portfolio_value_cents
+        else:
+            today_pnl_cents = (
+                (today_row.realized_cents or 0) + (today_row.unrealized_cents or 0)
+            ) if today_row else 0
+            cumulative_realized = sum(
+                (r.realized_cents or 0) for r in all_daily_pnl_rows
+            )
+            today_unrealized = (today_row.unrealized_cents or 0) if today_row else 0
+            portfolio_value_cents = capital_cents + cumulative_realized + today_unrealized
 
         # today_pnl_pct
         yesterday_value = portfolio_value_cents - today_pnl_cents
