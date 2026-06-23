@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import time
 from datetime import timezone, datetime, timedelta
@@ -13,6 +14,8 @@ from pydantic import BaseModel
 
 from app.indicators.engine import compute_indicators
 from app.services.bar_cache import get_cached, set_cache
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/bars", tags=["bars"])
 

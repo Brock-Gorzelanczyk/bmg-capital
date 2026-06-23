@@ -248,6 +248,12 @@ def run_bot_profile(profile_name: str) -> dict:
                     BotAllocation.profile_id == bp.id,
                     BotAllocation.enabled.is_(True),
                     BotAllocation.paper_mode.is_(True),
+                    # Skip paused allocations (admin_lock / health_halt /
+                    # consecutive_loss_demotion_*). Before this filter, any
+                    # allocation marked as paused would still execute trades
+                    # because only `enabled` was checked. Pauses are supposed
+                    # to be hard stops — observed via /admin/bot-health.
+                    BotAllocation.paused_reason.is_(None),
                 )
                 .all()
             )
