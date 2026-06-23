@@ -62,6 +62,35 @@ def _cached_live_prices(symbols: list[str]) -> dict[str, float]:
         logger.warning("[canonical] live price fetch failed (non-fatal): %s", exc)
         return {}
 
+
+def _option_unrealized_cents(pos, current_mark_cents: Optional[int], pos_side_map: dict) -> int:
+    """Unrealized P&L (cents) for one open option position.
+
+    Formula:
+      long:  (current_mark - entry_premium) × contracts × 100
+      short: (entry_premium - current_mark) × contracts × 100
+
+    where avg_cost_cents is the entry premium per share in cents, qty is the
+    contract count, and the ×100 multiplier converts per-share to per-contract
+    (US equity options = 100 shares per contract).
+
+    Returns 0 when:
+      - no live mark (fetch failed / illiquid bid=ask=0 / composite contract)
+      - missing entry or qty
+    """
+    if current_mark_cents is None:
+        return 0
+    entry = pos.avg_cost_cents
+    qty = pos.qty
+    if not entry or not qty:
+        return 0
+    contracts = float(qty)
+    is_short = pos_side_map.get(pos.id, "long") == "short"
+    if is_short:
+        return int((entry - current_mark_cents) * contracts * 100)
+    return int((current_mark_cents - entry) * contracts * 100)
+
+
 # ── Display names (single source of truth) ────────────────────────────────────
 
 DISPLAY_NAMES: dict[str, str] = {
@@ -239,15 +268,35 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     open_pos_rows = [p for p in open_pos_display if not p.quarantined_at]
 
     # ── Unrealized PnL from live prices ──────────────────────────────────────
-    symbols_needed = list({p.symbol for p in open_pos_rows})
+    # Split: equities/crypto use spot-price feeds; options use option-quote feed.
+    equity_positions = [p for p in open_pos_rows if p.option_type is None]
+    option_positions = [p for p in open_pos_rows if p.option_type is not None]
+
+    symbols_needed = list({p.symbol for p in equity_positions})
     live_prices = _cached_live_prices(symbols_needed)
 
+    # Fetch live option marks (60s cached) for open option positions.
+    option_marks_cents: dict[int, Optional[int]] = {}
+    if option_positions:
+        try:
+            from app.services.option_marks import occ_for_position, fetch_option_marks_cents
+            occ_by_pos: dict[int, str] = {}
+            for p in option_positions:
+                occ = occ_for_position(p)
+                if occ:
+                    occ_by_pos[p.id] = occ
+                else:
+                    logger.info(
+                        "options:mtm:composite symbol=%s type=%s pos_id=%d (no single-leg OCC)",
+                        p.symbol, p.option_type, p.id,
+                    )
+            mark_by_occ = fetch_option_marks_cents(list(set(occ_by_pos.values())))
+            option_marks_cents = {pid: mark_by_occ.get(occ) for pid, occ in occ_by_pos.items()}
+        except Exception as exc:
+            logger.warning("[canonical] option mark fetch failed (non-fatal): %s", exc)
+
     unrealized_pnl_cents = 0
-    for p in open_pos_rows:
-        # Options positions: comparing stock price to option premium is wrong.
-        # Skip unrealized here; proper options MTM requires live option quotes.
-        if p.option_type is not None:
-            continue
+    for p in equity_positions:
         price = live_prices.get(p.symbol)
         if price and p.avg_cost_cents and p.qty:
             is_short = pos_side_map.get(p.id, "long") == "short"
@@ -255,6 +304,10 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
                 unrealized_pnl_cents += int((p.avg_cost_cents - price * 100) * p.qty)
             else:
                 unrealized_pnl_cents += int((price * 100 - p.avg_cost_cents) * p.qty)
+
+    for p in option_positions:
+        mark_cents = option_marks_cents.get(p.id)
+        unrealized_pnl_cents += _option_unrealized_cents(p, mark_cents, pos_side_map)
 
     # ── Portfolio value (the invariant) ──────────────────────────────────────
     portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
@@ -283,17 +336,41 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     price_ts = datetime.now(timezone.utc).isoformat()
     open_positions = []
     for p in open_pos_display:
-        price = live_prices.get(p.symbol)
         cost = p.avg_cost_cents / 100 if p.avg_cost_cents else None
         qty = p.qty or 0
-        market_val = round(price * qty, 2) if price and qty else None
         _pos_short = pos_side_map.get(p.id, "long") == "short"
-        if price and cost:
-            unreal = round((cost - price) * qty, 2) if _pos_short else round((price - cost) * qty, 2)
-            unreal_pct = round((cost - price) / cost * 100, 2) if _pos_short else round((price - cost) / cost * 100, 2)
+
+        if p.option_type is not None:
+            # Option position: use option-quote mark, not underlying spot.
+            mark_cents = option_marks_cents.get(p.id)
+            if mark_cents is not None:
+                mark_dollars = mark_cents / 100.0
+                contracts = float(qty)
+                market_val = round(mark_dollars * contracts * 100, 2)
+                pnl_cents = _option_unrealized_cents(p, mark_cents, pos_side_map)
+                unreal = round(pnl_cents / 100.0, 2)
+                cost_basis_cents = (p.avg_cost_cents or 0) * contracts * 100
+                unreal_pct = round(pnl_cents / cost_basis_cents * 100, 2) if cost_basis_cents > 0 else None
+                cur_price = round(mark_dollars, 4)
+                cur_ts = price_ts
+            else:
+                market_val = None
+                unreal = None
+                unreal_pct = None
+                cur_price = None
+                cur_ts = None
         else:
-            unreal = None
-            unreal_pct = None
+            price = live_prices.get(p.symbol)
+            market_val = round(price * qty, 2) if price and qty else None
+            if price and cost:
+                unreal = round((cost - price) * qty, 2) if _pos_short else round((price - cost) * qty, 2)
+                unreal_pct = round((cost - price) / cost * 100, 2) if _pos_short else round((price - cost) / cost * 100, 2)
+            else:
+                unreal = None
+                unreal_pct = None
+            cur_price = price
+            cur_ts = price_ts if price else None
+
         open_positions.append({
             "id": p.id,
             "symbol": p.symbol,
@@ -302,8 +379,8 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
             "avg_cost": round(cost, 2) if cost else None,
             "opened_at": p.opened_at.isoformat() if p.opened_at else None,
             "is_paper": p.is_paper,
-            "current_price": price,
-            "current_price_at": price_ts if price else None,
+            "current_price": cur_price,
+            "current_price_at": cur_ts,
             "market_value": market_val,
             "unrealized_pnl": unreal,
             "unrealized_pnl_pct": unreal_pct,
