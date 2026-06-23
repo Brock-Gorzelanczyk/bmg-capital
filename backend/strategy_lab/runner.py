@@ -1412,6 +1412,20 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     Returns a dict with: option_type, strike_price, expiration_date,
     underlying_symbol, contract_count, contract_premium_cents, display_premium.
     Falls back to estimation when yfinance is unavailable.
+
+    Strike/DTE selection is *setup-aware*:
+      • Long-directional debit buyers (long_call_directional, leaps_stock_replacement,
+        bull_call_debit_spread): deep-ITM ~0.85 delta proxy (strike ≈ spot × 0.85
+        for calls, spot × 1.15 for puts), 30-60 DTE clamp.
+      • Short-premium credit sellers (cash_secured_put, wheel, bull_put_credit_spread,
+        bear_call_credit_spread, iron_condor_45dte, jade_lizard): ~16-delta OTM
+        short strike (~1 std dev OTM, approximated as ±8% from spot), 30-60 DTE
+        clamp, force-close logic enforced elsewhere at 21 DTE.
+      • Spreads/diagonals (pmcc, calendar): ATM-ish for the long leg.
+
+    Sizing: notional capped at 5% of *sleeve* via the upstream position_dollars
+    feed; if even 1 contract exceeds that budget we return contract_count=0 and
+    the caller must skip the trade.
     """
     import json
     import math
@@ -1434,32 +1448,56 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     setup = reason_data.get("setup", "")
     spot = float(reason_data.get("spot", 0) or 0)
 
-    # Infer option_type from setup name
-    if any(k in setup for k in ("put", "csp", "cash_secured_put", "wheel", "bull_put", "jade_lizard")):
+    # ── Classify the setup → intent ──────────────────────────────────────────
+    # intent ∈ {"long_directional", "short_credit", "spread_debit",
+    #           "spread_credit", "diagonal", "neutral_credit"}
+    LONG_DIRECTIONAL = {"long_call_directional", "leaps_stock_replacement"}
+    SHORT_CREDIT_PUT = {"cash_secured_put", "wheel_strategy", "bull_put_credit_spread", "jade_lizard"}
+    SHORT_CREDIT_CALL = {"covered_call_30d", "bear_call_credit_spread"}
+    NEUTRAL_CREDIT = {"iron_condor_45dte", "neutral_calendar_spread"}
+    SPREAD_DEBIT = {"bull_call_debit_spread"}
+    DIAGONAL = {"pmcc_diagonal"}
+
+    if setup in LONG_DIRECTIONAL:
+        intent = "long_directional"
+        option_type = "call"
+    elif setup in SHORT_CREDIT_PUT:
+        intent = "short_credit"
         option_type = "put"
-    elif any(k in setup for k in ("bear_call", "iron_condor", "zero_dte")):
-        option_type = "call/put spread"
-    elif "condor" in setup:
-        option_type = "iron condor"
-    elif "pmcc" in setup or "diagonal" in setup or "leaps" in setup:
+    elif setup in SHORT_CREDIT_CALL:
+        intent = "short_credit"
+        option_type = "call"
+    elif setup in NEUTRAL_CREDIT:
+        intent = "neutral_credit"
+        option_type = "iron condor" if "condor" in setup else "calendar"
+    elif setup in SPREAD_DEBIT:
+        intent = "spread_debit"
+        option_type = "call"
+    elif setup in DIAGONAL:
+        intent = "diagonal"
         option_type = "call"
     else:
-        option_type = "call"
+        # Conservative fallback: treat as short_credit put (safest default for
+        # unknown income-style setups; long-bias would force lottery tickets).
+        intent = "short_credit"
+        option_type = "put" if any(k in setup for k in ("put", "csp", "wheel")) else "call"
 
-    # Infer target DTE from setup
-    dte = 45
-    if "zero_dte" in setup or "0dte" in setup:
-        dte = 0
-    elif "leaps" in setup:
-        dte = 365
-    elif "30d" in setup or "debit" in setup or "credit" in setup:
-        dte = 30
-    elif "45dte" in setup or "45" in setup:
-        dte = 45
+    # ── DTE selection: target 45, clamp 30-60, hard reject > 90 ──────────────
+    # All entries (directional AND income) target the same window per the
+    # tastytrade canonical structure. LEAPS-style 12-18mo exposure is rebuilt
+    # by rolling 45 DTE positions, NOT by buying 2027 contracts upfront.
+    DTE_TARGET = 45
+    DTE_MIN, DTE_MAX = 30, 60
+    DTE_HARD_REJECT = 90
 
-    expiration_date = (date.today() + timedelta(days=dte)).isoformat()
+    # Diagonal/PMCC long leg wants longer-dated (~120-180 DTE), but the short
+    # leg drives entries; for now keep diagonals on the 45 DTE path and surface
+    # a TODO in the follow-up notes.
+    target_dte = DTE_TARGET
+    expiration_date = (date.today() + timedelta(days=target_dte)).isoformat()
+    selected_dte = target_dte  # populated from real chain if available
 
-    # Try yfinance for real option chain
+    # ── Try yfinance for real option chain ───────────────────────────────────
     try:
         import yfinance as yf
         ticker = yf.Ticker(underlying)
@@ -1473,24 +1511,103 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
         exps = ticker.options
         if exps:
             from datetime import datetime
-            target_dt = date.today() + timedelta(days=dte)
-            # Find nearest expiry to target DTE
-            best_exp = min(
-                exps,
-                key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - target_dt).days)
-            )
+            today = date.today()
+            # Filter expiries to the 30-60 DTE window
+            eligible = []
+            for e in exps:
+                try:
+                    edt = datetime.strptime(e, "%Y-%m-%d").date()
+                    d = (edt - today).days
+                    if DTE_MIN <= d <= DTE_MAX:
+                        eligible.append((e, d))
+                except Exception:
+                    continue
+            if not eligible:
+                # Hard reject — no contract in the 30-60 DTE window
+                logger.warning(
+                    "[options] %s setup=%s: no expiry in [%d,%d] DTE window — REJECTING signal",
+                    underlying, setup, DTE_MIN, DTE_MAX,
+                )
+                return {
+                    "option_type": option_type,
+                    "strike_price": None,
+                    "expiration_date": None,
+                    "underlying_symbol": underlying,
+                    "contract_count": 0,
+                    "contract_premium_cents": 0,
+                    "display_premium": 0.0,
+                    "reject_reason": f"no_expiry_in_{DTE_MIN}_{DTE_MAX}_dte",
+                }
+            # Pick the expiry closest to 45 DTE
+            best_exp, best_dte = min(eligible, key=lambda x: abs(x[1] - DTE_TARGET))
+            # Belt-and-suspenders: never trade > 90 DTE even if classified
+            if best_dte > DTE_HARD_REJECT:
+                logger.warning(
+                    "[options] %s setup=%s: nearest expiry %dd > %dd hard limit — REJECTING",
+                    underlying, setup, best_dte, DTE_HARD_REJECT,
+                )
+                return {
+                    "option_type": option_type,
+                    "strike_price": None,
+                    "expiration_date": None,
+                    "underlying_symbol": underlying,
+                    "contract_count": 0,
+                    "contract_premium_cents": 0,
+                    "display_premium": 0.0,
+                    "reject_reason": f"dte_{best_dte}_exceeds_hard_{DTE_HARD_REJECT}",
+                }
             expiration_date = best_exp
+            selected_dte = best_dte
+
             chain = ticker.option_chain(best_exp)
-            df = chain.calls if "put" not in option_type else chain.puts
+            # NB: spreads/condors will key off the *short* leg; we model the
+            # short put for credit-put strategies and the short call for
+            # credit-call/condor strategies. Premium is the *net* per-contract
+            # cash flow we use for sizing.
+            if intent == "short_credit" and option_type == "call":
+                df = chain.calls
+            elif intent == "short_credit" and option_type == "put":
+                df = chain.puts
+            elif intent == "neutral_credit":
+                # Use the short call leg of the condor for sizing; the put-side
+                # is symmetric and the resolver only emits one strike for the
+                # legacy schema.
+                df = chain.calls
+            elif intent in ("long_directional", "spread_debit", "diagonal"):
+                df = chain.calls if option_type == "call" else chain.puts
+            else:
+                df = chain.calls
+
             if not df.empty and spot > 0:
-                # Find ATM or slightly OTM strike
-                if "put" in option_type:
-                    # CSP/bear put: slightly OTM = 95-97% of spot
-                    target_strike = spot * 0.96
-                    row = df.iloc[(df["strike"] - target_strike).abs().argsort()[:1]]
+                # ── Strike selection by intent ────────────────────────────
+                if intent == "long_directional":
+                    # Delta-1 swing: target ~0.85 delta.
+                    # Without a Greeks feed, deep-ITM proxy:
+                    #   calls → strike ≈ spot × 0.85 (ITM by 15%)
+                    #   puts  → strike ≈ spot × 1.15 (ITM by 15%)
+                    if option_type == "call":
+                        target_strike = spot * 0.85
+                    else:
+                        target_strike = spot * 1.15
+                elif intent == "spread_debit":
+                    # Long leg ATM, target slightly ITM call (delta ~0.55)
+                    target_strike = spot * 0.99
+                elif intent == "short_credit" and option_type == "put":
+                    # ~16-delta short put: ~1 std dev OTM. For a 45 DTE
+                    # at typical 25% IV that's roughly 8% OTM.
+                    target_strike = spot * 0.92
+                elif intent == "short_credit" and option_type == "call":
+                    target_strike = spot * 1.08
+                elif intent == "neutral_credit":
+                    # 16-delta short call leg of the condor
+                    target_strike = spot * 1.08
+                elif intent == "diagonal":
+                    # PMCC: long leg deep-ITM (delta ~0.80)
+                    target_strike = spot * 0.85
                 else:
-                    # Call/LEAPS: ATM strike
-                    row = df.iloc[(df["strike"] - spot).abs().argsort()[:1]]
+                    target_strike = spot
+
+                row = df.iloc[(df["strike"] - target_strike).abs().argsort()[:1]]
                 if not row.empty:
                     strike_price = float(row["strike"].iloc[0])
                     mid = (float(row["bid"].iloc[0]) + float(row["ask"].iloc[0])) / 2
@@ -1498,16 +1615,56 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     except Exception as yf_exc:
         logger.debug("[options] yfinance chain lookup failed for %s: %s", underlying, yf_exc)
 
-    # Fallback estimation when yfinance unavailable or returned nothing
+    # ── Fallback estimation when yfinance unavailable ────────────────────────
     if spot <= 0:
         spot = 100.0  # generic fallback
     if strike_price is None:
-        strike_price = round(spot * (0.95 if "put" in option_type else 1.0), 2)
+        # Mirror the intent-aware targets above for the fallback path so the
+        # estimated trade still reflects the *correct* strike geometry.
+        if intent == "long_directional":
+            strike_price = round(spot * (0.85 if option_type == "call" else 1.15), 2)
+        elif intent == "spread_debit":
+            strike_price = round(spot * 0.99, 2)
+        elif intent == "short_credit" and option_type == "put":
+            strike_price = round(spot * 0.92, 2)
+        elif intent == "short_credit" and option_type == "call":
+            strike_price = round(spot * 1.08, 2)
+        elif intent == "neutral_credit":
+            strike_price = round(spot * 1.08, 2)
+        elif intent == "diagonal":
+            strike_price = round(spot * 0.85, 2)
+        else:
+            strike_price = round(spot, 2)
     if contract_premium is None:
-        # Rough estimate: 3-5% of spot for ATM 30-45 DTE
-        contract_premium = round(spot * 0.035, 2)
+        # Fallback premium estimate. Deep-ITM ≈ intrinsic + ~3% extrinsic.
+        if intent == "long_directional":
+            intrinsic = max(0.0, spot - strike_price) if option_type == "call" else max(0.0, strike_price - spot)
+            contract_premium = round(intrinsic + spot * 0.03, 2)
+        elif intent in ("short_credit", "neutral_credit"):
+            # Short premium: ~1-1.5% of spot for 16-delta 45 DTE
+            contract_premium = round(spot * 0.012, 2)
+        else:
+            contract_premium = round(spot * 0.035, 2)
 
-    contract_count = max(1, math.floor(position_dollars / (contract_premium * 100)))
+    # ── Sizing: cap notional at 5% of sleeve per trade ───────────────────────
+    # `position_dollars` is set upstream from profile.position_size_pct of
+    # sleeve capital. We *additionally* hard-cap at 5% (NOTIONAL_CAP_PCT) of
+    # the sleeve to prevent any single contract from blowing the budget.
+    # NB: position_dollars already encodes the per-trade allocation; we
+    # interpret it as the *max premium-at-risk for this trade*. If even one
+    # contract exceeds it, we return contract_count=0 → caller must skip.
+    max_premium_at_risk = position_dollars  # already sleeve_capital × position_size_pct
+    per_contract_cost = max(0.01, contract_premium) * 100
+    raw_count = math.floor(max_premium_at_risk / per_contract_cost)
+    contract_count = max(0, raw_count)
+
+    if contract_count == 0:
+        logger.warning(
+            "[options] %s setup=%s: 1 contract ($%.0f premium) exceeds per-trade budget "
+            "$%.0f — REJECTING signal (was previously forced to 1 contract = over-allocation bug)",
+            underlying, setup, per_contract_cost, max_premium_at_risk,
+        )
+
     contract_premium_cents = round(contract_premium * 100, 2)
 
     return {
@@ -1518,6 +1675,8 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
         "contract_count": contract_count,
         "contract_premium_cents": contract_premium_cents,
         "display_premium": contract_premium,
+        "selected_dte": selected_dte,
+        "intent": intent,
     }
 
 
@@ -1534,6 +1693,7 @@ def _execute_options_signal(
 ) -> None:
     """Execute an options signal — creates BotPosition + BotTrade with options fields."""
     import os
+    import json
     from datetime import datetime, timezone
     from app.db.models.bots import BotPosition, BotTrade
 
@@ -1541,9 +1701,39 @@ def _execute_options_signal(
     capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
     position_dollars = capital_usd * (final_size_pct / 100.0)
 
+    # Hard sleeve-level notional cap: never risk more than 5% of sleeve capital
+    # on a single options contract (regardless of profile.position_size_pct).
+    # This is the third leg of the AMD-LEAPS fix — even if the profile says
+    # 15% and the smart-sizer agrees, options notional gets clamped here.
+    OPTIONS_MAX_NOTIONAL_PCT = 0.05
+    notional_cap = capital_usd * OPTIONS_MAX_NOTIONAL_PCT
+    if position_dollars > notional_cap:
+        logger.info(
+            "[options:%s] %s clamping per-trade budget $%.0f → $%.0f (5%% sleeve cap)",
+            profile_name, sig.symbol, position_dollars, notional_cap,
+        )
+        position_dollars = notional_cap
+
     opt = _resolve_option_details(sig, position_dollars)
     premium = opt["display_premium"]
     contract_count = opt["contract_count"]
+
+    # Skip if sizing logic rejected the trade (DTE filter or 1-contract > budget)
+    if contract_count <= 0:
+        reject_reason = opt.get("reject_reason", "contract_count_zero")
+        setup_label = "?"
+        if sig.reason:
+            try:
+                setup_label = json.loads(sig.reason).get("setup", "?")
+            except Exception:
+                pass
+        logger.warning(
+            "[options:%s] SKIPPING %s %s setup=%s — reason=%s strike=%s exp=%s premium=%.2f budget=$%.0f",
+            profile_name, sig.side, sig.symbol, setup_label,
+            reject_reason, opt.get("strike_price"), opt.get("expiration_date"),
+            premium, position_dollars,
+        )
+        return
 
     # fill_price_cents = total premium paid per contract (in cents)
     fill_cents = premium * 100
