@@ -18,6 +18,12 @@ strategies:
   - btc_dominance_rotation
   - dollar_cost_average_dip
   - yield_overlay
+# yield_overlay pre-dates Phase 1's discipline filter and doesn't emit
+# the factor fields (volume_agreement / mtf_alignment / cross_asset_agree)
+# so its composite score lands ~53 vs the 60-default. Scoped override —
+# the other 4 strategies score fine at 60 and stay at the bot default.
+strategy_thresholds:
+  yield_overlay: 50
 cooldown_minutes: 240
 position_cap: 8
 position_size_pct: 20.0
