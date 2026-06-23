@@ -311,24 +311,26 @@ def get_dashboard_v2(
         highlights.append({"symbol": row.symbol, "conviction": conviction, "thesis": thesis})
 
     # ── Leaderboard ──────────────────────────────────────────────────────────
+    # Now derived from canonical snapshots (was: referenced the deleted
+    # pnl_rows variable, which silently 500'd the whole endpoint — that's
+    # why the Dashboard kept showing $— even after the earlier fix landed).
     leaderboard = []
     for alloc in allocs:
         p = alloc_to_profile.get(alloc.id)
         if not p:
             continue
         start = alloc.starting_capital_cents or 1
-        pnl30 = pnl_30d_by_alloc.get(alloc.id, 0)
+        snap = snapshots_by_alloc.get(alloc.id)
+        if snap is None:
+            continue
         leaderboard.append({
             "rank": 0,
             "profile": p.name,
             "name": _DISPLAY_NAMES.get(p.name, p.name.replace("_", " ").title()),
-            "return_30d_pct": round(pnl30 / start * 100, 2) if start else 0.0,
-            "today_pnl_cents": today_pnl_by_alloc.get(alloc.id, 0),
+            "return_30d_pct": snap.return_30d_pct,
+            "today_pnl_cents": snap.today_pnl_cents,
             "watchlist_count": profile_wl_count.get(alloc.profile_id, 0),
-            "portfolio_value_cents": start + total_realized_by_alloc.get(alloc.id, 0) + sum(
-            r.unrealized_cents for r in pnl_rows
-            if r.allocation_id == alloc.id and r.date == today
-        ),
+            "portfolio_value_cents": snap.portfolio_value_cents,
         })
     leaderboard.sort(key=lambda x: x["return_30d_pct"], reverse=True)
     for i, e in enumerate(leaderboard, 1):
