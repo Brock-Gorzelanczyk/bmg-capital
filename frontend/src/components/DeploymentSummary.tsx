@@ -3,6 +3,12 @@ import { BracketFrame, SectionLabel } from "@/components/design";
 import { cn } from "@/lib/utils";
 import client from "@/api/client";
 
+// TODO(Group D / D4): wire allocator dry-run loading state once the
+// allocator dry-run JSON ships in Group E. Use <ProgressBar/> + skeleton
+// from frontend/src/components/{ProgressBar,Skeleton}.tsx so this widget
+// matches the rest of the Group D loading treatment (Screener, Scout chart,
+// Backtest panel, Mission Control feed).
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LiveSlice {

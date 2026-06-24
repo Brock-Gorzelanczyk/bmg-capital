@@ -151,6 +151,21 @@
 
 /* ── Scout / terminal animations ───────────────────────────────────────── */
 @keyframes bmg-pulse    { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+/* ── Loading / progress primitives (Group D) ───────────────────────────── */
+/* Used by <Skeleton/> shimmer variant and <ProgressBar/> indeterminate mode.
+ * The shimmer slides a translucent green highlight across the placeholder so
+ * it reads as "loading content" rather than "empty box". The indeterminate
+ * progress animation slides a fixed-width bar back and forth — same green
+ * palette so the busy/idle state matches the rest of the terminal UI. */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes progress-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
 @keyframes bmg-violetglow {
   0%,100%{ box-shadow:0 0 24px rgba(167,139,250,0.22), inset 0 0 22px rgba(167,139,250,0.04) }
   50%{ box-shadow:0 0 40px rgba(167,139,250,0.38), inset 0 0 26px rgba(167,139,250,0.08) }

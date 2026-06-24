@@ -6,18 +6,43 @@ interface SkeletonProps {
   w?: string;
   /** Optional inline height — accepts any CSS string. */
   h?: string;
+  /** Alias for `w` — matches the spec the rest of the loading UI uses. */
+  width?: string;
+  /** Alias for `h`. */
+  height?: string;
+  /** When true, render a sliding green shimmer overlay instead of the
+   *  cheaper pulse animation. Use this on hero loading screens where the
+   *  user is staring at the placeholder for more than a beat. */
+  shimmer?: boolean;
 }
 
-/** Animated gray-block placeholder. Match the eventual content shape so the
- *  layout doesn't jump when real data lands. */
-export function Skeleton({ className, w, h }: SkeletonProps) {
+/** Animated placeholder block. Match the eventual content shape so the
+ *  layout doesn't jump when real data lands.
+ *
+ *  Two animation modes:
+ *   • default → `animate-pulse` (cheap, in-and-out opacity)
+ *   • shimmer → translucent green highlight sliding across the box
+ *               (matches the terminal palette; uses the @keyframes shimmer
+ *               defined in index.css). */
+export function Skeleton({
+  className,
+  w,
+  h,
+  width,
+  height,
+  shimmer = false,
+}: SkeletonProps) {
   return (
     <div
       className={cn(
-        "rounded-md bg-t-bg2/60 animate-pulse",
+        "rounded-md",
+        shimmer
+          ? // Shimmer mode — gradient sized 200% so the keyframe can slide.
+            "bg-[linear-gradient(90deg,rgba(74,222,128,0.04)_0%,rgba(74,222,128,0.14)_50%,rgba(74,222,128,0.04)_100%)] bg-[length:200%_100%] [animation:shimmer_1.6s_ease-in-out_infinite]"
+          : "bg-t-bg2/60 animate-pulse",
         className,
       )}
-      style={{ width: w, height: h }}
+      style={{ width: width ?? w, height: height ?? h }}
       aria-hidden="true"
     />
   );

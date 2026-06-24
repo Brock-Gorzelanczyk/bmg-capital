@@ -13,6 +13,7 @@ import client from "@/api/client";
 import { cn } from "@/lib/utils";
 import SetupChecklist from "@/components/SetupChecklist";
 import BacktestPanel from "@/components/BacktestPanel";
+import { ProgressBar } from "@/components/ProgressBar";
 
 // ── Strategy → indicator config (server-driven via /strategy-lab/indicators) ─
 // Each strategy declares its own overlay/subpanel set on the backend. We fetch
@@ -688,6 +689,82 @@ function SaveModal({
   );
 }
 
+// ── Chart skeleton (Group D loading state) ───────────────────────────────────
+// Renders a chart-shaped placeholder: a 340-px frame with axis tick marks
+// and a horizontal mid-line. No candles, no bars — just enough scaffolding
+// so the user sees the chart's eventual shape while bars are in flight. The
+// ProgressBar across the top carries the descriptive "loading X for SYMBOL"
+// text (and elapsed counter once we cross 5 s).
+
+function ChartSkeleton({
+  ticker,
+  windowLabel,
+  startedAt,
+}: {
+  ticker: string;
+  windowLabel: string;
+  startedAt?: number;
+}) {
+  // Generate a handful of fake Y-axis tick marks + X-axis labels so the
+  // skeleton looks like a real chart frame, not a blank box.
+  const yTicks = 5;
+  const xTicks = 6;
+  return (
+    <div
+      className="relative bg-t-bg0 rounded-xl border border-t-dim/40 overflow-hidden"
+      style={{ height: 340 }}
+      role="status"
+      aria-label={`Loading ${windowLabel} chart for ${ticker}`}
+    >
+      {/* Progress bar across the top edge */}
+      <div className="absolute top-0 left-0 right-0 px-4 py-3 z-10">
+        <ProgressBar
+          label={`Loading ${windowLabel} bars for ${ticker}…`}
+          startedAt={startedAt}
+        />
+      </div>
+
+      {/* Y axis (right side, like the real chart) */}
+      <div className="absolute top-12 bottom-6 right-2 flex flex-col justify-between items-end">
+        {[...Array(yTicks)].map((_, i) => (
+          <div
+            key={i}
+            className="h-[8px] w-8 rounded bg-t-bg2/60 animate-pulse"
+            style={{ animationDelay: `${i * 60}ms` }}
+          />
+        ))}
+      </div>
+
+      {/* X axis labels (bottom) */}
+      <div className="absolute bottom-1 left-4 right-12 flex justify-between">
+        {[...Array(xTicks)].map((_, i) => (
+          <div
+            key={i}
+            className="h-[8px] w-10 rounded bg-t-bg2/60 animate-pulse"
+            style={{ animationDelay: `${i * 60}ms` }}
+          />
+        ))}
+      </div>
+
+      {/* Horizontal grid lines */}
+      <div className="absolute top-12 bottom-6 left-4 right-12 pointer-events-none">
+        {[...Array(yTicks)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute left-0 right-0 border-t border-t-dim/30"
+            style={{ top: `${(i * 100) / (yTicks - 1)}%` }}
+          />
+        ))}
+      </div>
+
+      {/* Subtle shimmer band across the plot area to advertise activity */}
+      <div
+        className="absolute top-12 bottom-6 left-4 right-12 rounded bg-[linear-gradient(90deg,rgba(74,222,128,0)_0%,rgba(74,222,128,0.08)_50%,rgba(74,222,128,0)_100%)] bg-[length:200%_100%] [animation:shimmer_2s_ease-in-out_infinite] pointer-events-none"
+      />
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ScoutChartPage() {
@@ -753,29 +830,45 @@ export default function ScoutChartPage() {
   // intraday timeframes:
   //   1D  → 5y   |  4H → 1y   |  1H → 6mo
   //   15m → 1mo  |  5m → 2wk  |  1m → 3d
-  const { barsTimeframe, startIso, tfLabel } = useMemo(() => {
-    const map: Record<ScoutTimeframe, { bars: string; days: number; label: string }> = {
-      "1D":  { bars: "1Day",  days: 365 * 5, label: "DAILY" },
-      "4H":  { bars: "4Hour", days: 365,     label: "4-HOUR" },
-      "1H":  { bars: "1Hour", days: 180,     label: "HOURLY" },
-      "15m": { bars: "15Min", days: 30,      label: "15-MIN" },
-      "5m":  { bars: "5Min",  days: 14,      label: "5-MIN" },
-      "1m":  { bars: "1Min",  days: 3,       label: "1-MIN" },
+  const { barsTimeframe, startIso, tfLabel, windowLabel } = useMemo(() => {
+    const map: Record<ScoutTimeframe, { bars: string; days: number; label: string; window: string }> = {
+      "1D":  { bars: "1Day",  days: 365 * 5, label: "DAILY",   window: "5y daily" },
+      "4H":  { bars: "4Hour", days: 365,     label: "4-HOUR",  window: "1y 4-hour" },
+      "1H":  { bars: "1Hour", days: 180,     label: "HOURLY",  window: "6mo hourly" },
+      "15m": { bars: "15Min", days: 30,      label: "15-MIN",  window: "1mo 15-min" },
+      "5m":  { bars: "5Min",  days: 14,      label: "5-MIN",   window: "2wk 5-min" },
+      "1m":  { bars: "1Min",  days: 3,       label: "1-MIN",   window: "3d 1-min" },
     };
     const cfg = map[timeframe] ?? map["1D"];
     const d = new Date();
     d.setUTCDate(d.getUTCDate() - cfg.days);
-    return { barsTimeframe: cfg.bars, startIso: d.toISOString().slice(0, 10), tfLabel: cfg.label };
+    return {
+      barsTimeframe: cfg.bars,
+      startIso: d.toISOString().slice(0, 10),
+      tfLabel: cfg.label,
+      windowLabel: cfg.window,
+    };
   }, [timeframe]);
 
   // Fetch bars with indicators — engine keys depend on strategy spec; the
   // timeframe + start window depend on the active chip.
-  const { data: barsData, isLoading: barsLoading, isError: barsError } = useQuery({
+  const { data: barsData, isLoading: barsLoading, isFetching: barsFetching, isError: barsError } = useQuery({
     queryKey: ["scout-chart-bars", ticker, apiIndicators, barsTimeframe, startIso],
     queryFn: () => fetchBars(ticker, barsTimeframe, apiIndicators || undefined, startIso),
     staleTime: 300_000,
     enabled: !!ticker && !!indicatorsCfg,
   });
+
+  // Track when a fetch starts so the ProgressBar can show an elapsed counter
+  // after 5 s (for cold queries against intraday lookbacks that take a while).
+  const [barsFetchStart, setBarsFetchStart] = useState<number | null>(null);
+  useEffect(() => {
+    if (barsFetching && barsFetchStart == null) {
+      setBarsFetchStart(Date.now());
+    } else if (!barsFetching && barsFetchStart != null) {
+      setBarsFetchStart(null);
+    }
+  }, [barsFetching, barsFetchStart]);
 
   const bars: OHLCBar[] = useMemo(() => {
     if (!barsData?.bars) return [];
@@ -1100,20 +1193,34 @@ export default function ScoutChartPage() {
               )}
             </div>
           </div>
-          {barsLoading ? (
+          {barsFetching && bars.length === 0 ? (
+            // Chart-shaped skeleton — axes drawn, no bars. Communicates the
+            // shape of the eventual content so the panel doesn't jump on
+            // load. Includes a progress bar + descriptive "loading X
+            // timeframe bars for SYMBOL" text per the Group D brief.
+            <ChartSkeleton
+              ticker={ticker}
+              windowLabel={windowLabel}
+              startedAt={barsFetchStart ?? undefined}
+            />
+          ) : barsLoading ? (
             <div className="h-[340px] bg-t-bg0 rounded-xl animate-pulse" />
           ) : barsError || bars.length === 0 ? (
             <div className="h-[340px] bg-t-bg0 rounded-xl flex items-center justify-center text-t-muted text-sm font-mono-t">
               Chart data unavailable for {ticker}
             </div>
           ) : (
-            <ScoutPriceChart
-              bars={bars}
-              indicators={indicators}
-              indicatorSpecs={indicatorSpecs}
-              crossoverMarkers={crossovers.map(c => ({ time: c.time, direction: c.direction }))}
-              drawings={drawings}
-            />
+            // Real chart — fade in once data lands so the skeleton-to-chart
+            // transition isn't a hard cut.
+            <div className="animate-[fadeIn_200ms_ease-out]">
+              <ScoutPriceChart
+                bars={bars}
+                indicators={indicators}
+                indicatorSpecs={indicatorSpecs}
+                crossoverMarkers={crossovers.map(c => ({ time: c.time, direction: c.direction }))}
+                drawings={drawings}
+              />
+            </div>
           )}
 
           {/* Price level annotations — lives inside chart card so it's always in-frame */}

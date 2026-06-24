@@ -23,6 +23,7 @@ import { usePortfolioSnapshot } from "@/hooks/usePortfolioSnapshot";
 import client from "@/api/client";
 import { formatCurrency, timeAgo, cn } from "@/lib/utils";
 import type { PaperAccount } from "@/api/paper";
+import { Skeleton } from "@/components/Skeleton";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -427,7 +428,7 @@ export default function MissionControlPage() {
     refetchInterval: 15_000,
   });
 
-  const { data: signalFeedData, refetch: refetchSignals } = useQuery({
+  const { data: signalFeedData, isLoading: signalsLoading, refetch: refetchSignals } = useQuery({
     queryKey: ["bot-signals-feed"],
     queryFn: () => getSignalsFeed(20),
     refetchInterval: 15_000,
@@ -1061,7 +1062,12 @@ export default function MissionControlPage() {
           </div>
 
           <div className="space-y-2">
-            {(signalFeedData?.signals ?? []).length === 0 ? (
+            {signalsLoading && !signalFeedData ? (
+              // Group D loading: skeleton rows that mimic the SignalFeedCard
+              // layout. Replaces the bare "Loading…" text so the feed reads
+              // as "data on the way" rather than "no data".
+              <ActivityFeedSkeleton />
+            ) : (signalFeedData?.signals ?? []).length === 0 ? (
               <div className="text-center py-12 text-[var(--text-tertiary)] text-sm">
                 No signals yet — bots will post here when they fire
               </div>
@@ -1185,6 +1191,40 @@ export default function MissionControlPage() {
         />
       )}
     </div>
+  );
+}
+
+// ── Activity feed skeleton (Group D loading state) ─────────────────────────
+// Renders 4 SignalFeedCard-shaped rows with shimmer placeholders so the feed
+// reads as "loading content" rather than "no content" on first paint. The
+// width/height proportions match the real cards so there's no layout jump
+// when the data lands.
+
+function ActivityFeedSkeleton() {
+  return (
+    <>
+      {[...Array(4)].map((_, i) => (
+        <div
+          key={i}
+          className={cn(
+            "border border-[var(--border-subtle)] rounded-xl p-3 border-l-4 border-l-[var(--border-emphasis)]",
+          )}
+        >
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Skeleton h="16px" w="16px" className="rounded-full" shimmer />
+              <Skeleton h="12px" w="120px" shimmer />
+              <Skeleton h="14px" w="60px" className="rounded" shimmer />
+              <Skeleton h="10px" w="40px" shimmer />
+            </div>
+            <Skeleton h="10px" w="44px" shimmer />
+          </div>
+          <div className="mt-1.5">
+            <Skeleton h="11px" w={`${60 + ((i * 11) % 30)}%`} shimmer />
+          </div>
+        </div>
+      ))}
+    </>
   );
 }
 

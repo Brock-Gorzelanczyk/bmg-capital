@@ -9,6 +9,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import client from "@/api/client";
 import { cn } from "@/lib/utils";
+import { ProgressBar } from "./ProgressBar";
+import { Skeleton } from "./Skeleton";
 
 type SortKey = "date" | "return" | "hold";
 type YearFilter = 1 | 3 | 5 | 0; // 0 == ALL
@@ -85,6 +87,20 @@ export default function BacktestPanel({ ticker, strategyId, onSelectTrigger }: P
     retry: 0,
   });
 
+  // ProgressBar surfaces an elapsed counter after 5 s. We capture the
+  // fetch start when the query key changes (i.e. a new backtest run begins).
+  // Using useMemo keyed on [ticker, strategyId, years] gives us a fresh
+  // start timestamp per request without setState-in-effect lint trips.
+  const fetchStart = useMemo(
+    () => Date.now(),
+    [ticker, strategyId, years],
+  );
+
+  // Human-readable lookback window for the loading message — derived from
+  // the same year filter we send to the backend so the two stay in sync.
+  const yearsLabel =
+    years === 0 ? "all available" : `${years} year${years === 1 ? "" : "s"}`;
+
   const triggers = useMemo(() => {
     const rows = [...(data?.triggers ?? [])];
     rows.sort((a, b) => {
@@ -158,7 +174,40 @@ export default function BacktestPanel({ ticker, strategyId, onSelectTrigger }: P
       </div>
 
       {isLoading && (
-        <div className="text-t-muted text-xs py-6 text-center">Loading backtest…</div>
+        // Group D loading: indeterminate progress bar describing the work
+        // ("Backtesting N years of bars…") + a skeleton of the stat strip
+        // and triggers table so the panel doesn't visually collapse.
+        <div className="space-y-3 py-1">
+          <ProgressBar
+            label={`Backtesting ${yearsLabel} of bars for ${ticker}…`}
+            detail={strategyId}
+            startedAt={fetchStart}
+          />
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            {[...Array(7)].map((_, i) => (
+              <div
+                key={i}
+                className="bg-t-bg0 border border-t-dim/40 rounded-md p-2 space-y-1"
+              >
+                <Skeleton h="9px" w="60%" />
+                <Skeleton h="14px" w="50%" />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1.5 pt-1">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton h="11px" w="80px" shimmer />
+                <Skeleton h="11px" w="50px" shimmer />
+                <Skeleton h="11px" w="50px" shimmer />
+                <div className="ml-auto flex items-center gap-3">
+                  <Skeleton h="11px" w="44px" shimmer />
+                  <Skeleton h="11px" w="32px" shimmer />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {isError && (

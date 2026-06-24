@@ -10,6 +10,8 @@ import AskAIDrawer from "@/components/ui/AskAIDrawer";
 import SymbolChartDrawer from "@/components/ui/SymbolChartDrawer";
 import { TICKER_NAMES } from "@/data/tickerNames";
 import SectorPill from "@/components/ui/SectorPill";
+import { ProgressBar } from "@/components/ProgressBar";
+import { Skeleton } from "@/components/Skeleton";
 
 // ── Heatmap color helper ──────────────────────────────────────────────────────
 
@@ -186,6 +188,7 @@ export default function Screener() {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [scanStartedAt, setScanStartedAt] = useState<number | null>(null);
   const [ran, setRan] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState<string | null>(null);
@@ -331,6 +334,7 @@ export default function Screener() {
 
   const run = async (filterList = filters) => {
     setLoading(true);
+    setScanStartedAt(Date.now());
     setRan(false);
     setSuggestions([]);
     setActivePreset(null);
@@ -348,12 +352,14 @@ export default function Screener() {
       }
     } finally {
       setLoading(false);
+      setScanStartedAt(null);
       setRan(true);
     }
   };
 
   const runPresetScreen = async (key: string) => {
     setLoading(true);
+    setScanStartedAt(Date.now());
     setRan(false);
     setSuggestions([]);
     setActivePreset(key);
@@ -364,6 +370,7 @@ export default function Screener() {
       setDataAsOf(res.data_as_of);
     } finally {
       setLoading(false);
+      setScanStartedAt(null);
       setRan(true);
     }
   };
@@ -609,10 +616,32 @@ export default function Screener() {
         </div>
       )}
 
-      {/* Loading state */}
+      {/* Loading state — animated progress bar + skeleton results so the
+          screener feels alive even while the backend takes a couple seconds
+          to scan the ~800-stock universe. Backend has no progress endpoint
+          today, so we run an indeterminate bar with an elapsed-time counter
+          (kicks in after 5 s, per Group D brief). */}
       {loading && (
-        <div className="text-center py-8 text-[var(--text-secondary)] text-sm animate-pulse">
-          Scanning 500+ stocks...
+        <div className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+          <ProgressBar
+            label={`Scanning ${liveUniverseCount ? liveUniverseCount.toLocaleString() : "836"} stocks…`}
+            startedAt={scanStartedAt ?? undefined}
+          />
+          <div className="space-y-2 pt-1">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 border-b border-[var(--border-subtle)]/40 last:border-b-0 pb-2 last:pb-0"
+              >
+                <Skeleton h="14px" w="64px" shimmer />
+                <Skeleton h="11px" w="40%" shimmer />
+                <div className="ml-auto flex items-center gap-3">
+                  <Skeleton h="12px" w="56px" shimmer />
+                  <Skeleton h="12px" w="48px" shimmer />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
