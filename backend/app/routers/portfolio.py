@@ -380,7 +380,7 @@ def get_portfolio_snapshot(
             db.rollback()
 
         from app.db.models.bots import StrategyPortfolio, BotAllocation, BotProfile
-        from app.core.canonical import compute_portfolio_snapshot, compute_bot_snapshot, compute_strategy_lab_aggregate
+        from app.core.canonical import compute_portfolio_snapshot, compute_bot_snapshot
 
         portfolios = (
             db.query(StrategyPortfolio)
@@ -406,15 +406,39 @@ def get_portfolio_snapshot(
             snap = compute_portfolio_snapshot(port, pairs, db)
             port_snaps[port.asset_class] = (port, snap)
 
-        # ── Authoritative totals from canonical (matches Dashboard + Strategy Lab) ──
-        # Previously this endpoint summed port_snaps directly which silently dropped
-        # orphan allocations (any BotAllocation without a StrategyPortfolio binding),
-        # producing a $400k+ split-brain vs Dashboard. Delegate to canonical so all
-        # surfaces report identical totals.
-        agg = compute_strategy_lab_aggregate(current_user.id, db) or {}
-        total_value = int(agg.get("total_value_cents") or 0)
-        total_today_pnl = int(agg.get("today_pnl_cents") or 0)
-        total_open_pos = int(agg.get("total_open_positions") or 0)
+        # ── Per-allocation snapshots — single source of truth for totals ──
+        # Previously this endpoint called compute_strategy_lab_aggregate (which
+        # itself does compute_bot_snapshot per alloc × 2). Combined with the
+        # per_alloc_snaps loop below + port_snaps loop above that produced
+        # ~4× duplicate work per allocation. Compute once here, sum directly,
+        # and reuse for sleeve bucketing.
+        per_alloc_snaps: dict[int, Any] = {}
+        for alloc in all_allocs:
+            prof = profile_map.get(alloc.profile_id)
+            if not prof:
+                continue
+            try:
+                per_alloc_snaps[alloc.id] = compute_bot_snapshot(alloc, prof, db)
+            except Exception as exc:
+                logger.warning("snapshot: compute_bot_snapshot failed for alloc %d: %s", alloc.id, exc)
+
+        # Totals from per-alloc snapshots (matches Dashboard + Strategy Lab).
+        # Allocs that failed the snapshot fall back to starting_capital so we
+        # never silently drop a real allocation.
+        total_value = 0
+        total_today_pnl = 0
+        total_open_pos = 0
+        starting_weighted_ret30 = 0.0
+        for alloc in all_allocs:
+            snap = per_alloc_snaps.get(alloc.id)
+            if snap:
+                total_value += int(snap.portfolio_value_cents or 0)
+                total_today_pnl += int(snap.today_pnl_cents or 0)
+                total_open_pos += int(snap.open_positions_count or 0)
+                starting_weighted_ret30 += float(snap.return_30d_pct or 0.0) * int(snap.starting_capital_cents or 0)
+            else:
+                total_value += int(alloc.starting_capital_cents or 0)
+
         total_starting = sum(int(a.starting_capital_cents or 0) for a in all_allocs)
         total_alltime_pnl = total_value - total_starting
 
@@ -422,7 +446,7 @@ def get_portfolio_snapshot(
             (total_value - total_starting) / total_starting * 100, 2
         ) if total_starting else 0.0
 
-        return_30d_pct = float(agg.get("return_30d_pct") or 0.0)
+        return_30d_pct = round(starting_weighted_ret30 / total_starting, 2) if total_starting else 0.0
 
         # Sleeve reservations
         try:
@@ -436,20 +460,6 @@ def get_portfolio_snapshot(
             _sleeve_reservations = {}
 
         sleeve_keys = ["stocks", "crypto", "options", "quant"]
-
-        # ── Per-sleeve bucketing from per-allocation data ─────────────────
-        # Bucket every allocation (including orphans) into its sleeve via
-        # _PROFILE_TO_SLEEVE (with profile.asset_class as fallback), so
-        # sum(by_sleeve.current_value_cents) == total_value to the cent.
-        per_alloc_snaps: dict[int, Any] = {}
-        for alloc in all_allocs:
-            prof = profile_map.get(alloc.profile_id)
-            if not prof:
-                continue
-            try:
-                per_alloc_snaps[alloc.id] = compute_bot_snapshot(alloc, prof, db)
-            except Exception as exc:
-                logger.warning("snapshot: compute_bot_snapshot failed for alloc %d: %s", alloc.id, exc)
 
         sleeve_buckets: dict[str, dict] = {
             k: {
@@ -581,12 +591,14 @@ def get_portfolio_snapshot(
                     "description":            _BOT_DESCRIPTIONS.get(profile_name, ""),
                 })
 
-        # ── Invariant: sum(sleeves) + reserved == total_value ± 1¢ ──────
-        # Loud log if violated — protects against silent split-brain regression.
+        # ── Invariant: sum(sleeves.current_value_cents) == total_value ± 1¢ ──
+        # Reserved capital is a SEPARATE bucket (sleeve_config.reserved_capital_cents),
+        # not part of total_value (which comes from canonical's per-alloc sum).
+        # Loud log if drift — protects against split-brain regression.
         sleeve_sum = sum(by_sleeve[k]["current_value_cents"] for k in sleeve_keys)
-        reserved_sum = sum(_sleeve_reservations.values())
-        invariant_diff = abs(total_value - (sleeve_sum + reserved_sum))
+        invariant_diff = abs(total_value - sleeve_sum)
         if invariant_diff > 100:  # > $1 drift
+            reserved_sum = sum(_sleeve_reservations.values())
             logger.error(
                 "[portfolio/snapshot] invariant violation user=%s total=%d sleeve_sum=%d reserved=%d diff=%d",
                 current_user.id, total_value, sleeve_sum, reserved_sum, invariant_diff,
