@@ -24,8 +24,10 @@ _UNIVERSES: dict[str, list[str]] = {
     "crypto_swing":      ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "LINK/USD", "DOT/USD", "MATIC/USD"],
     "crypto_day":        ["BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD", "MATIC/USD"],
     "crypto_lt":         ["BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "AVAX/USD", "DOT/USD"],
-    "options_income":    ["AAPL", "MSFT", "SPY", "NVDA", "AMZN", "QQQ", "GOOGL", "META", "TSLA", "JPM"],
-    "options_directional": ["SPY", "QQQ", "NVDA", "TSLA", "META", "MSFT", "AAPL", "AMZN", "AMD", "GOOGL"],
+    # NOTE: options_income / options_directional intentionally absent — they
+    # execute via strategy_lab/scan_and_execute → runner._execute_options_signal
+    # which writes real contracts (option_type, strike, expiration). This
+    # equity simulator must NEVER run for options bots. See _execute_bot gate.
 }
 
 # Typical price ranges (used when live price unavailable)
@@ -51,8 +53,6 @@ _HOLD_DAYS: dict[str, tuple[int, int]] = {
     "crypto_swing": (2, 14),
     "crypto_day":  (1, 2),
     "crypto_lt":   (30, 180),
-    "options_income": (10, 45),
-    "options_directional": (7, 30),
 }
 
 _DEFAULT_POSITION_CAP = 4
@@ -65,8 +65,6 @@ _STOP_PCT: dict[str, float] = {
     "crypto_swing": 0.10,
     "crypto_day": 0.04,
     "crypto_lt": 0.15,
-    "options_income": 0.08,
-    "options_directional": 0.10,
 }
 _TARGET_PCT: dict[str, float] = {
     "stock_swing": 0.15,
@@ -75,8 +73,6 @@ _TARGET_PCT: dict[str, float] = {
     "crypto_swing": 0.20,
     "crypto_day": 0.08,
     "crypto_lt": 0.40,
-    "options_income": 0.12,
-    "options_directional": 0.20,
 }
 
 
@@ -168,6 +164,24 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
     from app.db.models.bots import BotPosition, BotTrade, BotDailyPnL
 
     bot_name = profile.name
+
+    # ── HARD GATE: options bots execute via strategy_lab, not this simulator ──
+    # This file is a profile-agnostic equity paper-trader. For options_directional
+    # / options_income it was writing fractional shares with NULL option_type
+    # (34/36 recent options-bot trades came from here). The real options path is
+    # strategy_lab/scan_and_execute → runner._execute_options_signal which
+    # populates option_type/strike/expiration/contract_count. Two prior fixes
+    # (4ed0a9e, 17aa7f3) only repaired the strategy_lab path and never noticed
+    # this parallel cron at scheduler.py:978-985 was the actual source of the
+    # share-style trades. Hard-gate here so the bug can't sneak back via a
+    # YAML rename or a new universe entry.
+    if profile.asset_class == "options" or bot_name.startswith("options_"):
+        logger.debug(
+            "bot_executor: skipping options profile %s — strategy_lab/scan_and_execute owns this path",
+            bot_name,
+        )
+        return
+
     config = profile.config_json or {}
     position_cap = config.get("position_cap", _DEFAULT_POSITION_CAP)
     hold_min, hold_max = _HOLD_DAYS.get(bot_name, (3, 21))
@@ -175,6 +189,16 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
 
     daily_seed = f"{bot_name}-{user_id}-{today}"
     rng = _rng(daily_seed)
+
+    # Defense-in-depth regression guard. If a future refactor accidentally
+    # drops the early-return above, every BotTrade write below would
+    # silently regress to the share-style-for-options bug. Belt + suspenders.
+    def _assert_not_options_profile():
+        if profile.asset_class == "options" or bot_name.startswith("options_"):
+            raise RuntimeError(
+                f"bot_executor: refused to write equity BotTrade for options profile "
+                f"{bot_name!r} — options bots execute via strategy_lab/scan_and_execute"
+            )
 
     # ── 1. Close positions past their hold period ─────────────────────────────
     open_positions = (
@@ -197,6 +221,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
             pos.closed_at = now
             pos.exit_reason = "target_reached" if exit_price > entry_price else "stop_loss"
 
+            _assert_not_options_profile()
             db.add(BotTrade(
                 allocation_id=alloc.id,
                 symbol=pos.symbol,
@@ -262,6 +287,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 stop_price_usd=round(entry_price * (1 - stop_pct), 4),
                 target_price_usd=round(entry_price * (1 + target_pct), 4),
             )
+            _assert_not_options_profile()
             db.add(pos)
             db.flush()  # get pos.id
 
