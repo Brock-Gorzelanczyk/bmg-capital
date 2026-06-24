@@ -32,7 +32,13 @@ import math
 
 
 def _bar_close(bar: dict) -> float | None:
-    v = bar.get("close") if isinstance(bar, dict) else None
+    if not isinstance(bar, dict):
+        return None
+    # bars endpoint returns short keys (c/h/l/o/t/v); cached/legacy callers
+    # may pass long keys (close/high/low/time). Accept both.
+    v = bar.get("close")
+    if v is None:
+        v = bar.get("c")
     try:
         return float(v) if v is not None else None
     except (TypeError, ValueError):
@@ -40,7 +46,11 @@ def _bar_close(bar: dict) -> float | None:
 
 
 def _bar_high(bar: dict) -> float | None:
-    v = bar.get("high") if isinstance(bar, dict) else None
+    if not isinstance(bar, dict):
+        return None
+    v = bar.get("high")
+    if v is None:
+        v = bar.get("h")
     try:
         return float(v) if v is not None else None
     except (TypeError, ValueError):
@@ -48,7 +58,11 @@ def _bar_high(bar: dict) -> float | None:
 
 
 def _bar_low(bar: dict) -> float | None:
-    v = bar.get("low") if isinstance(bar, dict) else None
+    if not isinstance(bar, dict):
+        return None
+    v = bar.get("low")
+    if v is None:
+        v = bar.get("l")
     try:
         return float(v) if v is not None else None
     except (TypeError, ValueError):
@@ -56,6 +70,8 @@ def _bar_low(bar: dict) -> float | None:
 
 
 def _bar_time(bar: dict) -> str:
+    if not isinstance(bar, dict):
+        return ""
     return str(bar.get("time") or bar.get("t") or bar.get("date") or "")
 
 
@@ -93,6 +109,8 @@ def _rsi(values: list[float], period: int, i: int) -> float | None:
     for k in range(i - period + 1, i + 1):
         if k == 0:
             continue
+        if values[k] is None or values[k - 1] is None:
+            return None
         diff = values[k] - values[k - 1]
         if diff >= 0:
             gains.append(diff)

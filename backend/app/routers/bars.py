@@ -440,13 +440,19 @@ async def get_bars(
         requested = [i.strip() for i in indicators.split(",")]
 
         # For daily+ timeframes with long-period indicators, prepend warm-up bars
-        # so the full indicator series is valid for every visible bar.
+        # so the full indicator series is valid for every visible bar. The
+        # warm-up window is derived from the largest indicator period in the
+        # request — frontend never has to pass an explicit buffer.
         warmup_ohlcv: list[dict] = []
         if start and timeframe in DAILY_TIMEFRAMES:
             lookback = _max_indicator_lookback(indicators)
             if lookback > 0:
+                # Add a safety margin so holidays / weekends / data gaps can't
+                # eat into the lookback window. +15 bars or +25%, whichever is
+                # larger, comfortably covers a year of market closures.
+                margin_bars = max(15, math.ceil(lookback * 0.25))
                 days_per_bar = _DAYS_PER_BAR.get(timeframe, 1.5)
-                extra_days = math.ceil(lookback * days_per_bar)
+                extra_days = math.ceil((lookback + margin_bars) * days_per_bar)
                 warmup_start = start_dt - timedelta(days=extra_days)
                 warmup_key = f"__warmup_{symbol}_{timeframe}_{warmup_start.date().isoformat()}_{start_str}"
                 warmup_cached = get_cached(cache_sym, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str)
