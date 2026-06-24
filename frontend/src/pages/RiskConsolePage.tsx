@@ -492,22 +492,14 @@ export default function RiskConsolePage() {
                     }).catch(() => toast.error("Failed to pause bots"));
                   }}
                 />
-                <QuickBtn
-                  label="Reduce exposure to 50%"
-                  hint="trim"
-                  color="#dce8dc"
-                  border="rgba(74,222,128,0.18)"
-                  hoverBorder="rgba(74,222,128,0.4)"
-                  onClick={() => toast.info("Exposure trim queued (paper only)")}
-                />
-                <QuickBtn
-                  label="Hedge with SPY puts"
-                  hint="options"
-                  color="#dce8dc"
-                  border="rgba(74,222,128,0.18)"
-                  hoverBorder="rgba(74,222,128,0.4)"
-                  onClick={() => toast.info("Hedge order queued (paper only)")}
-                />
+                {/* "Reduce exposure to 50%" and "Hedge with SPY puts" buttons
+                    removed — both only toast'd "queued (paper only)" without
+                    actually placing any order. Dangerous UX during a real
+                    drawdown: a panicking user clicks "Reduce exposure",
+                    believes their fleet just trimmed, and walks away exposed.
+                    Re-add when the trim/hedge order paths are wired through
+                    runner.execute → broker. Pause All Bots above DOES work
+                    (calls pauseAllBots → POST /bots/v2/pause-all). */}
               </div>
             </div>
           </div>

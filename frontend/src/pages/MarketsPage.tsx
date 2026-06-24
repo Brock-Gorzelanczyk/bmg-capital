@@ -272,8 +272,9 @@ function CryptoTab() {
                 <th className="text-left text-[10px] text-t-muted uppercase py-2 px-2">Coin</th>
                 <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">Price</th>
                 <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
-                  onClick={() => setSortCol("pct_24h")}>1H {sortCol === "pct_24h" ? "▼" : ""}</th>
-                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3">24H</th>
+                  onClick={() => setSortCol("pct_1h")}>1H {sortCol === "pct_1h" ? "▼" : ""}</th>
+                <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
+                  onClick={() => setSortCol("pct_24h")}>24H {sortCol === "pct_24h" ? "▼" : ""}</th>
                 <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"
                   onClick={() => setSortCol("pct_7d")}>7D {sortCol === "pct_7d" ? "▼" : ""}</th>
                 <th className="text-right text-[10px] text-t-muted uppercase py-2 px-3 cursor-pointer hover:text-t-mid2"

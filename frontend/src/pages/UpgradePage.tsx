@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Gift } from "lucide-react";
 import { simulateDepositMatch } from "@/api/depositMatch";
@@ -65,6 +66,7 @@ const TIERS = [
 type BillingCycle = "monthly" | "annual";
 
 export default function UpgradePage() {
+  const navigate = useNavigate();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [depositAmt, setDepositAmt] = useState(500);
 
@@ -134,7 +136,10 @@ export default function UpgradePage() {
               </ul>
 
               {tier.id !== "free" ? (
-                <button className="w-full py-3 rounded-xl font-bold text-sm bg-[#4ade80] text-black hover:bg-[#a3e635] transition-colors">
+                <button
+                  onClick={() => navigate("/pricing")}
+                  className="w-full py-3 rounded-xl font-bold text-sm bg-[#4ade80] text-black hover:bg-[#a3e635] transition-colors"
+                >
                   Start 7-Day Free Trial
                 </button>
               ) : (

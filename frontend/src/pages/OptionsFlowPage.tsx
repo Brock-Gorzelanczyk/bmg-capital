@@ -105,9 +105,8 @@ export default function OptionsFlowPage() {
           <p className="text-[var(--text-tertiary)] text-sm mt-0.5">Live unusual options activity · Large premium trades · Institutional positioning</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors px-3 py-1.5 rounded-lg bg-[var(--bg-elevated-2)] cursor-pointer">
-            <RefreshCw size={12} /> Refresh
-          </button>
+          {/* Refresh button removed — this page renders hardcoded FLOW_DATA,
+              there's nothing to refetch. Re-add when wired to a live source. */}
           <button onClick={() => setAiOpen(true)}
             className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
             <Bot size={12} /> Ask AI

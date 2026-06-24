@@ -684,10 +684,8 @@ export default function ScannersPage() {
               style={{ background: "rgba(59,130,246,0.25)", color: "var(--text-primary)", border: "1px solid rgba(59,130,246,0.4)" }}>
               <Plus size={13} />Create Scanner
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-              style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}>
-              <RefreshCw size={12} />Refresh
-            </button>
+            {/* Refresh button removed — scanners render from hardcoded SCANNERS
+                + EXPLAIN_DATA, nothing to refetch yet. Re-add when wired. */}
           </div>
         </div>
       </div>

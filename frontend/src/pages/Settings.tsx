@@ -627,27 +627,10 @@ function PrivacySection() {
 // ── Security ──────────────────────────────────────────────────────────────────
 
 function SecuritySection() {
-  const [showPwForm, setShowPwForm] = useState(false);
-  const [pwForm, setPwForm]         = useState({ current: "", next: "", confirm: "" });
-  const [pwLoading, setPwLoading]   = useState(false);
-
-  const handleChangePw = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pwForm.next !== pwForm.confirm) {
-      toast.error("Passwords don't match");
-      return;
-    }
-    if (pwForm.next.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-    setPwLoading(true);
-    // Placeholder — backend endpoint not yet wired
-    await new Promise((r) => setTimeout(r, 800));
-    setPwLoading(false);
-    toast.success("Password change coming soon!");
-    setShowPwForm(false);
-  };
+  // Self-service password change isn't wired yet (no backend endpoint).
+  // The prior form sleep+toasted success without doing anything — that's a
+  // worse outcome than telling the user honestly, especially after they
+  // believed they'd rotated a leaked password.
 
   const sessions = [
     { device: "MacBook Pro", location: "Chicago, IL", last: "Active now",  current: true },
@@ -662,49 +645,13 @@ function SecuritySection() {
         <div className="px-4 py-2.5 border-b border-[var(--border-subtle)]/60">
           <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Password</span>
         </div>
-        {!showPwForm ? (
-          <SettingRow label="Password" sublabel="Last changed: unknown" last>
-            <button
-              onClick={() => setShowPwForm(true)}
-              className="text-xs font-semibold text-[var(--accent-positive)] hover:text-[#60A5FA] transition-colors"
-            >
-              Change
-            </button>
-          </SettingRow>
-        ) : (
-          <form onSubmit={handleChangePw} className="px-4 py-4 space-y-3">
-            {[
-              { key: "current", placeholder: "Current password" },
-              { key: "next",    placeholder: "New password (8+ chars)" },
-              { key: "confirm", placeholder: "Confirm new password" },
-            ].map(({ key, placeholder }) => (
-              <input
-                key={key}
-                type="password"
-                value={pwForm[key as keyof typeof pwForm]}
-                onChange={(e) => setPwForm({ ...pwForm, [key]: e.target.value })}
-                placeholder={placeholder}
-                className="w-full bg-[#020617] border border-[var(--border-emphasis)] text-[var(--text-primary)] text-sm px-3 py-2 rounded-lg placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-              />
-            ))}
-            <div className="flex gap-2 pt-1">
-              <button
-                type="submit"
-                disabled={pwLoading}
-                className="bg-[var(--accent-positive)] hover:brightness-110 disabled:opacity-50 text-[var(--text-primary)] text-sm font-semibold px-4 py-2 rounded-lg"
-              >
-                {pwLoading ? "Saving…" : "Update password"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowPwForm(false)}
-                className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] text-sm px-3 py-2"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
+        <SettingRow
+          label="Password"
+          sublabel="Email support@bmgcapital.com to change your password — self-serve coming soon"
+          last
+        >
+          <span className="text-xs font-medium text-[var(--text-tertiary)] bg-[var(--bg-elevated-2)] px-2.5 py-1 rounded-lg">Coming soon</span>
+        </SettingRow>
       </Card>
 
       <Card>
