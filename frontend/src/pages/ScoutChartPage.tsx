@@ -20,37 +20,6 @@ import BacktestPanel from "@/components/BacktestPanel";
 // This replaces the legacy hardcoded 50d/200d MA pair that was wrong for ~90%
 // of strategies.
 
-const TRIGGER_DESCRIPTIONS: Record<string, string> = {
-  golden_cross: "50d MA crosses above 200d MA",
-  turtle_donchian_s2: "Close breaks above 55-bar Donchian high (S2 entry)",
-  turtle_donchian_s1: "Close breaks above 20-bar Donchian high (S1 entry)",
-  rsi2_mean_reversion: "RSI(2) drops below 10 while above 200d MA",
-  rsi_oversold: "RSI(14) drops below 30 (oversold reversion)",
-  macd_crossover: "MACD line crosses above signal line",
-  bollinger_squeeze: "Bollinger band width contracts then breaks out",
-  vwap_rejection_fade: "Price rejects from VWAP ±1σ band",
-  vwap_reversion: "Price reverts toward intraday VWAP",
-  opening_range_breakdown: "Price breaks below the opening-range low",
-  opening_range: "Price breaks the opening-range high or low",
-  pdh_breakout_continuation: "Price breaks prior day high and holds above VWAP",
-  pdh_breakout: "Price breaks prior day high on volume expansion",
-  pdh_pdl_reversion: "Price reverts away from prior day H/L",
-  mtf_aligned_momentum_surge: "20/50/200 MAs stacked bullish + RSI rising",
-  ofi_institutional_flow: "Sustained one-sided order flow imbalance",
-  london_ny_overlap_continuation: "Trend continues into London/NY session overlap",
-  momentum_factor_model: "High relative-strength vs SPY in top decile",
-  quant_mean_reversion: "Z-score < -2 with price below lower Bollinger",
-  quant_aggressive: "RSI(2) oversold inside Bollinger(10,2)",
-  quant_scalper: "VWAP touch + OFI flip (scalp entry)",
-};
-
-function getTriggerDescription(strategyId: string): string {
-  return (
-    TRIGGER_DESCRIPTIONS[strategyId] ??
-    "Setup conditions met per strategy definition"
-  );
-}
-
 // ── Price alert types ─────────────────────────────────────────────────────────
 
 interface PriceAlert {
@@ -745,7 +714,6 @@ export default function ScoutChartPage() {
 
   const indicatorSpecs: ScoutIndicatorSpec[] = indicatorsCfg?.indicators ?? [];
   const apiIndicators = indicatorsCfg?.engine_keys ?? "";
-  const triggerDescription = getTriggerDescription(sid);
 
   // ── Timeframe chip rail ────────────────────────────────────────────────────
   // The full chip set is fixed at 6 (1D / 4H / 1H / 15m / 5m / 1m). The
@@ -918,7 +886,7 @@ export default function ScoutChartPage() {
 
     if (smaSpecs.length < 2) {
       // No crossover semantics — return minimal price status so the
-      // header subtitle and SETUP STATUS card still render.
+      // header subtitle still renders.
       return {
         fastVal: null as number | null,
         slowVal: null as number | null,
@@ -1160,38 +1128,6 @@ export default function ScoutChartPage() {
 
         {/* Setup checklist — per-strategy trigger-condition table */}
         <SetupChecklist ticker={ticker} strategyId={sid} />
-
-        {/* Setup status */}
-        {currentStatus && (
-          <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 space-y-3">
-            <span className="text-[10px] font-mono-t text-t-faint uppercase tracking-widest">// SETUP STATUS</span>
-            <div className="space-y-1.5 text-sm font-mono-t">
-              <div className="flex items-baseline gap-2">
-                <span className="text-t-gdim">Trigger:</span>
-                <span className="text-t-body">{triggerDescription}</span>
-              </div>
-              {currentStatus.fastVal != null && currentStatus.slowVal != null && (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-t-gdim">Current gap:</span>
-                  <span className={currentStatus.gap > 0 ? "text-t-green" : "text-t-red"}>
-                    {currentStatus.fastLabel} is ${Math.abs(currentStatus.gap).toFixed(2)}{" "}
-                    {currentStatus.gap > 0 ? "above" : "below"} {currentStatus.slowLabel}
-                  </span>
-                </div>
-              )}
-              {currentStatus.crossedAt && (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-t-green">✓</span>
-                  <span className="text-t-body">
-                    {currentStatus.status === "ACTIVE"
-                      ? `Crossed ${currentStatus.daysSince ?? "?"} days ago (${currentStatus.crossedAt}) — setup ACTIVE`
-                      : `Last cross: ${currentStatus.crossedAt}`}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Past triggers — multi-year backtest, stats card, equity curve, clickable rows */}
         <BacktestPanel ticker={ticker} strategyId={sid} />
