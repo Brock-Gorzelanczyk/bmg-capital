@@ -12,6 +12,7 @@ import type { ScoutIndicatorSpec } from "@/api/candidates";
 import client from "@/api/client";
 import { cn } from "@/lib/utils";
 import SetupChecklist from "@/components/SetupChecklist";
+import BacktestPanel from "@/components/BacktestPanel";
 
 // ── Strategy → indicator config (server-driven via /strategy-lab/indicators) ─
 // Each strategy declares its own overlay/subpanel set on the backend. We fetch
@@ -884,24 +885,9 @@ export default function ScoutChartPage() {
     };
   }, [bars, indicators, indicatorSpecs, crossovers]);
 
-  // Past trigger performance (last 5 upward crossovers with forward return)
-  const pastTriggers = useMemo(() => {
-    return crossovers
-      .filter(c => c.direction === "up")
-      .slice(-5)
-      .map((c) => {
-        const entryPrice = bars[c.barIndex]?.close;
-        const exitBarIdx = Math.min(c.barIndex + 60, bars.length - 1);
-        const exitPrice = bars[exitBarIdx]?.close;
-        const fwd = entryPrice && exitPrice ? (exitPrice - entryPrice) / entryPrice : null;
-        return {
-          date: fmtDate(c.time),
-          forwardReturn: fwd,
-          daysHeld: Math.min(60, bars.length - 1 - c.barIndex),
-        };
-      })
-      .reverse();
-  }, [crossovers, bars]);
+  // Past triggers moved to BacktestPanel (Commit 3) — multi-year history with
+  // win rate, Sharpe, max DD, equity curve etc. Replaces the old 5-row table
+  // that only knew about SMA crossovers.
 
   // Find existing setup for this pairing
   const { data: setupsData } = useQuery({
@@ -1094,34 +1080,8 @@ export default function ScoutChartPage() {
           </div>
         )}
 
-        {/* Past triggers */}
-        {pastTriggers.length > 0 && (
-          <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 space-y-3">
-            <span className="text-[10px] font-mono-t text-t-faint uppercase tracking-widest">// PAST TRIGGERS ON {ticker}</span>
-            <table className="w-full text-xs font-mono-t">
-              <thead>
-                <tr className="text-t-gdim border-b border-t-dim/50">
-                  <th className="text-left pb-2 font-medium">Date</th>
-                  <th className="text-left pb-2 font-medium">Side</th>
-                  <th className="text-right pb-2 font-medium">60-day fwd</th>
-                  <th className="text-right pb-2 font-medium">Days</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pastTriggers.map((t, i) => (
-                  <tr key={i} className="border-b border-t-dim/30 last:border-0">
-                    <td className="py-1.5 text-t-body">{t.date}</td>
-                    <td className="py-1.5 text-t-green">Cross UP</td>
-                    <td className={cn("py-1.5 text-right", t.forwardReturn == null ? "text-t-muted" : t.forwardReturn >= 0 ? "text-t-green" : "text-t-red")}>
-                      {t.forwardReturn != null ? fmtPct(t.forwardReturn) : "—"}
-                    </td>
-                    <td className="py-1.5 text-right text-t-muted">{t.daysHeld}d</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {/* Past triggers — multi-year backtest, stats card, equity curve, clickable rows */}
+        <BacktestPanel ticker={ticker} strategyId={sid} />
       </div>
 
       {showSaveModal && (

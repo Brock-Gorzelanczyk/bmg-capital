@@ -749,3 +749,46 @@ async def get_strategy_checklist(
     # Cap to last ~400 bars — plenty for any 252d/200d indicator
     bars = bars[-400:]
     return evaluate_checklist(strategy_id, bars)
+
+
+# ── Scout Past Triggers / Backtest (Commit 3) ────────────────────────────────
+
+
+@router.get("/{strategy_id}/backtest")
+async def get_strategy_backtest(
+    strategy_id: str,
+    symbol: str,
+    years: int = 5,
+    hold_days: int = 30,
+    current_user: User = Depends(get_current_user),
+):
+    """Replay the strategy's entry triggers across history for the Scout page.
+
+    Returns the full set of historical triggers within the requested lookback
+    window plus aggregate stats (win_rate, avg_return, Sharpe, max_dd, profit
+    factor, avg_hold_days) and a compounded equity curve.
+
+    `years` controls the lookback (1/3/5/ALL). `hold_days` is the forward-walk
+    window per trade — held fixed across strategies so historical results are
+    apples-to-apples on the chart.
+    """
+    from app.routers.bars import _fetch_bars_for_symbol
+    from app.services.strategy_backtest import run_backtest
+
+    try:
+        bars_payload = await _fetch_bars_for_symbol(symbol.upper(), None, None, "1Day")
+        bars = bars_payload.get("bars") or []
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("backtest bars fetch failed for %s: %s", symbol, e)
+        bars = []
+
+    # Trim to the requested year window. 252 trading days / year is the
+    # canonical convention. years <= 0 (or anything weird) means "ALL".
+    if isinstance(years, int) and years > 0:
+        bar_cap = years * 252
+        bars = bars[-bar_cap:]
+
+    result = run_backtest(strategy_id, symbol.upper(), bars, years_requested=max(0, int(years)), hold_days=max(1, int(hold_days)))
+    return result.to_dict()
