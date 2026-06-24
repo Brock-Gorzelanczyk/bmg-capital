@@ -468,7 +468,14 @@ async def get_bars(
                         wrows = _fetch_yf_ohlcv(wt, warmup_start.date().isoformat(), start_str, interval, timeframe, adjustment)
                         warmup_ohlcv = [{"open": r["open"], "high": r["high"], "low": r["low"], "close": r["close"], "volume": r["volume"]} for r in wrows]
                         set_cache(cache_sym, f"{timeframe}_warmup", warmup_start.date().isoformat(), start_str, warmup_ohlcv, 86400)
-                    except Exception:
+                    except Exception as warmup_exc:
+                        # Surface the failure — silently swallowing meant Donchian(55)
+                        # and other long-period indicators rendered with a left-side
+                        # gap and we had no signal that warm-up was broken.
+                        logger.warning(
+                            "[bars] warm-up fetch failed for %s %s lookback=%d window=%s..%s: %s",
+                            symbol, timeframe, lookback, warmup_start.date().isoformat(), start_str, warmup_exc,
+                        )
                         warmup_ohlcv = []  # fall back to no warm-up — indicators may start late
 
         full_ohlcv = warmup_ohlcv + main_ohlcv
