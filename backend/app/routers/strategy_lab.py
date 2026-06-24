@@ -387,6 +387,18 @@ def get_portfolio(
 
     result = compute_strategy_lab_aggregate(current_user.id, db)
 
+    # Invariant: sum(portfolios.portfolio_value_cents) <= total_value_cents
+    # (orphans live outside portfolios → total can exceed portfolio sum, but
+    # the inverse is impossible). Log loud on violation.
+    if result:
+        total_v = int(result.get("total_value_cents") or 0)
+        port_sum = sum(int(p.get("portfolio_value_cents") or 0) for p in result.get("portfolios", []))
+        if port_sum - total_v > 100:  # portfolios > total → impossible
+            logger.error(
+                "[strategy-lab/portfolio] invariant violation user=%s total=%d portfolio_sum=%d",
+                current_user.id, total_v, port_sum,
+            )
+
     # If aggregate returns empty (no portfolios seeded), return safe zeros.
     if not result:
         return {

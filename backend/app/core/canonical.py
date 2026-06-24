@@ -564,6 +564,43 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
     profile_map = {p.id: p for p in profiles}
 
+    # ── Per-allocation snapshots (SINGLE SOURCE OF TRUTH for totals) ──────
+    # Compute once per alloc and use as the authoritative source for all
+    # totals returned. Mirrors Dashboard's pattern exactly, eliminating any
+    # chance of a Dashboard/Strategy-Lab split-brain on portfolio_value.
+    # Allocs whose profile is missing or whose snapshot raises fall back to
+    # starting_capital so we never silently drop a real dollar.
+    bot_snap_by_alloc: dict[int, BotSnapshot] = {}
+    fallback_value_by_alloc: dict[int, int] = {}
+    fallback_starting_by_alloc: dict[int, int] = {}
+    for a in all_allocs:
+        prof = profile_map.get(a.profile_id)
+        if prof is None:
+            fallback_value_by_alloc[a.id] = int(a.starting_capital_cents or 0)
+            fallback_starting_by_alloc[a.id] = int(a.starting_capital_cents or 0)
+            continue
+        try:
+            bot_snap_by_alloc[a.id] = compute_bot_snapshot(a, prof, db)
+        except Exception as exc:
+            logger.warning(
+                "[canonical] compute_bot_snapshot failed for alloc %d: %s — falling back to starting",
+                a.id, exc,
+            )
+            fallback_value_by_alloc[a.id] = int(a.starting_capital_cents or 0)
+            fallback_starting_by_alloc[a.id] = int(a.starting_capital_cents or 0)
+
+    total_value = (
+        sum(s.portfolio_value_cents or 0 for s in bot_snap_by_alloc.values())
+        + sum(fallback_value_by_alloc.values())
+    )
+    total_starting = (
+        sum(s.starting_capital_cents or 0 for s in bot_snap_by_alloc.values())
+        + sum(fallback_starting_by_alloc.values())
+    )
+    total_today_pnl = sum(s.today_pnl_cents or 0 for s in bot_snap_by_alloc.values())
+    total_open_positions = sum(s.open_positions_count or 0 for s in bot_snap_by_alloc.values())
+
+    # ── Per-portfolio snapshots (response breakdown only) ──────────────────
     portfolio_snapshots = []
     accounted_alloc_ids: set[int] = set()
     for port in portfolios:
@@ -572,38 +609,26 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         accounted_alloc_ids.update(a.id for a, _ in pairs)
         portfolio_snapshots.append(compute_portfolio_snapshot(port, pairs, db))
 
-    # Per-allocation snapshots (canonical source). Includes orphan allocations
-    # that aren't attached to any StrategyPortfolio so the headline total
-    # always reflects every dollar the user has allocated to a bot. Falls back
-    # to starting_capital_cents when a snapshot fails so we never silently
-    # report None for a real allocation.
-    orphan_value = 0
-    orphan_starting = 0
-    for a in all_allocs:
-        if a.id in accounted_alloc_ids:
-            continue
-        prof = profile_map.get(a.profile_id)
-        if prof is None:
-            orphan_value += int(a.starting_capital_cents or 0)
-            orphan_starting += int(a.starting_capital_cents or 0)
-            continue
-        try:
-            snap = compute_bot_snapshot(a, prof, db)
-            orphan_value += int(snap.portfolio_value_cents or 0)
-            orphan_starting += int(snap.starting_capital_cents or 0)
-        except Exception as exc:
-            logger.warning(
-                "[canonical] orphan alloc %d snapshot failed (falling back to starting): %s",
-                a.id, exc,
-            )
-            orphan_value += int(a.starting_capital_cents or 0)
-            orphan_starting += int(a.starting_capital_cents or 0)
-
-    total_starting = sum(s.starting_capital_cents for s in portfolio_snapshots) + orphan_starting
-    total_value = sum(s.portfolio_value_cents for s in portfolio_snapshots) + orphan_value
-    total_today_pnl = sum(s.today_pnl_cents for s in portfolio_snapshots)
-    total_open_positions = sum(s.open_positions_count for s in portfolio_snapshots)
     total_watchlist = sum(s.watchlist_count for s in portfolio_snapshots)
+
+    # Diagnostic: surface any drift between the per-alloc sum (authoritative)
+    # and the portfolio_snapshots + orphan path. Useful for spotting cases
+    # where _ensure_portfolios_for_user binds an alloc into a portfolio with
+    # a sleeve mismatch, etc.
+    orphan_alloc_ids = [a.id for a in all_allocs if a.id not in accounted_alloc_ids]
+    orphan_value_diag = sum(
+        (bot_snap_by_alloc[aid].portfolio_value_cents or 0) if aid in bot_snap_by_alloc
+        else fallback_value_by_alloc.get(aid, 0)
+        for aid in orphan_alloc_ids
+    )
+    portfolio_sum_diag = sum(s.portfolio_value_cents for s in portfolio_snapshots)
+    diag_total = portfolio_sum_diag + orphan_value_diag
+    if abs(total_value - diag_total) > 100:  # > $1 drift
+        logger.error(
+            "[canonical] split-brain drift: per_alloc=%d portfolio_sum=%d orphan=%d diag_total=%d diff=%d allocs=%d",
+            total_value, portfolio_sum_diag, orphan_value_diag, diag_total,
+            total_value - diag_total, len(all_allocs),
+        )
 
     all_time_pct = round((total_value - total_starting) / total_starting * 100, 2) if total_starting else 0.0
     yesterday_total = total_value - total_today_pnl
@@ -645,13 +670,10 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     best = leaderboard[0] if leaderboard else None
     worst = leaderboard[-1] if leaderboard else None
 
-    # Integrity assertion — total_value MUST equal portfolios + orphans.
-    portfolio_sum = sum(s.portfolio_value_cents for s in portfolio_snapshots) + orphan_value
-    if abs(total_value - portfolio_sum) > 10_000:
-        logger.error(
-            "Aggregate integrity failure: total=%d portfolio_sum=%d diff=%d",
-            total_value, portfolio_sum, abs(total_value - portfolio_sum),
-        )
+    # Integrity check is now inline above where total_value is derived from
+    # per-allocation snapshots (single source of truth). The previous block
+    # logged drift between the portfolio_snapshots+orphan path and total_value
+    # — that drift is now captured by the split-brain diagnostic earlier.
 
     return {
         "total_value_cents": total_value,

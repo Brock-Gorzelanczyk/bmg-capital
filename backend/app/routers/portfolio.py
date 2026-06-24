@@ -380,7 +380,7 @@ def get_portfolio_snapshot(
             db.rollback()
 
         from app.db.models.bots import StrategyPortfolio, BotAllocation, BotProfile
-        from app.core.canonical import compute_portfolio_snapshot
+        from app.core.canonical import compute_portfolio_snapshot, compute_bot_snapshot, compute_strategy_lab_aggregate
 
         portfolios = (
             db.query(StrategyPortfolio)
@@ -398,7 +398,7 @@ def get_portfolio_snapshot(
         profiles = db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
         profile_map = {p.id: p for p in profiles}
 
-        # Build per-portfolio snapshots
+        # Build per-portfolio snapshots (used for per-sleeve breakdown + bots list)
         port_snaps = {}
         for port in portfolios:
             port_allocs = [a for a in all_allocs if a.portfolio_id == port.id]
@@ -406,27 +406,23 @@ def get_portfolio_snapshot(
             snap = compute_portfolio_snapshot(port, pairs, db)
             port_snaps[port.asset_class] = (port, snap)
 
-        # Aggregate totals
-        total_value = sum(s.portfolio_value_cents for _, s in port_snaps.values())
-        total_starting = sum(s.starting_capital_cents for _, s in port_snaps.values())
-        total_open_pos = sum(s.open_positions_count for _, s in port_snaps.values())
-        total_today_pnl = sum(s.today_pnl_cents for _, s in port_snaps.values())
+        # ── Authoritative totals from canonical (matches Dashboard + Strategy Lab) ──
+        # Previously this endpoint summed port_snaps directly which silently dropped
+        # orphan allocations (any BotAllocation without a StrategyPortfolio binding),
+        # producing a $400k+ split-brain vs Dashboard. Delegate to canonical so all
+        # surfaces report identical totals.
+        agg = compute_strategy_lab_aggregate(current_user.id, db) or {}
+        total_value = int(agg.get("total_value_cents") or 0)
+        total_today_pnl = int(agg.get("today_pnl_cents") or 0)
+        total_open_pos = int(agg.get("total_open_positions") or 0)
+        total_starting = sum(int(a.starting_capital_cents or 0) for a in all_allocs)
         total_alltime_pnl = total_value - total_starting
 
         return_alltime_pct = round(
             (total_value - total_starting) / total_starting * 100, 2
         ) if total_starting else 0.0
 
-        return_30d_pct = 0.0
-        if total_starting:
-            return_30d_pct = round(
-                sum(
-                    s.return_30d_pct * s.starting_capital_cents
-                    for _, s in port_snaps.values()
-                    if s.starting_capital_cents
-                ) / total_starting,
-                2,
-            )
+        return_30d_pct = float(agg.get("return_30d_pct") or 0.0)
 
         # Sleeve reservations
         try:
@@ -441,15 +437,65 @@ def get_portfolio_snapshot(
 
         sleeve_keys = ["stocks", "crypto", "options", "quant"]
 
-        # Compute each sleeve's numerator (deployed + reserved) independently.
-        # Use the SUM of numerators as the denominator — this guarantees
-        # sum(sleeve_pct) == 100% by identity, even if StrategyPortfolio rows
-        # double-count quant bots across the crypto and quant sleeves.
+        # ── Per-sleeve bucketing from per-allocation data ─────────────────
+        # Bucket every allocation (including orphans) into its sleeve via
+        # _PROFILE_TO_SLEEVE (with profile.asset_class as fallback), so
+        # sum(by_sleeve.current_value_cents) == total_value to the cent.
+        per_alloc_snaps: dict[int, Any] = {}
+        for alloc in all_allocs:
+            prof = profile_map.get(alloc.profile_id)
+            if not prof:
+                continue
+            try:
+                per_alloc_snaps[alloc.id] = compute_bot_snapshot(alloc, prof, db)
+            except Exception as exc:
+                logger.warning("snapshot: compute_bot_snapshot failed for alloc %d: %s", alloc.id, exc)
+
+        sleeve_buckets: dict[str, dict] = {
+            k: {
+                "starting_capital_cents": 0,
+                "current_value_cents":    0,
+                "open_positions":         0,
+                "today_pnl_cents":        0,
+                "active_bots":            0,
+                "total_bots":             0,
+                "bot_ids":                [],
+                "return_30d_weighted":    0.0,
+            } for k in sleeve_keys
+        }
+        for alloc in all_allocs:
+            prof = profile_map.get(alloc.profile_id)
+            if not prof:
+                continue
+            sleeve = _PROFILE_TO_SLEEVE.get(prof.name, prof.asset_class or "stocks")
+            if sleeve == "stock":
+                sleeve = "stocks"
+            if sleeve not in sleeve_buckets:
+                sleeve = "stocks"
+            snap = per_alloc_snaps.get(alloc.id)
+            pv = int(snap.portfolio_value_cents or 0) if snap else int(alloc.starting_capital_cents or 0)
+            start_cap = int(snap.starting_capital_cents or 0) if snap else int(alloc.starting_capital_cents or 0)
+            today_pnl = int(snap.today_pnl_cents or 0) if snap else 0
+            open_pos = int(snap.open_positions_count or 0) if snap else 0
+            ret30 = float(snap.return_30d_pct or 0.0) if snap else 0.0
+
+            sleeve_buckets[sleeve]["current_value_cents"] += pv
+            sleeve_buckets[sleeve]["starting_capital_cents"] += start_cap
+            sleeve_buckets[sleeve]["today_pnl_cents"] += today_pnl
+            sleeve_buckets[sleeve]["open_positions"] += open_pos
+            sleeve_buckets[sleeve]["total_bots"] += 1
+            sleeve_buckets[sleeve]["return_30d_weighted"] += ret30 * start_cap
+            if alloc.enabled:
+                sleeve_buckets[sleeve]["active_bots"] += 1
+            if prof.name not in sleeve_buckets[sleeve]["bot_ids"]:
+                sleeve_buckets[sleeve]["bot_ids"].append(prof.name)
+
+        # Compute each sleeve's numerator (deployed + reserved). Use the SUM
+        # of numerators as the denominator — guarantees sum(sleeve_pct) == 100%
+        # by identity.
         sleeve_numerators: dict[str, int] = {}
         for k in sleeve_keys:
-            deployed = port_snaps[k][1].portfolio_value_cents if k in port_snaps else 0
-            reserved = _sleeve_reservations.get(k, 0)
-            sleeve_numerators[k] = deployed + reserved
+            sleeve_numerators[k] = sleeve_buckets[k]["current_value_cents"] + _sleeve_reservations.get(k, 0)
 
         total_aum = sum(sleeve_numerators.values())
 
@@ -469,26 +515,22 @@ def get_portfolio_snapshot(
         # Per-sleeve breakdown
         by_sleeve: dict = {}
         for key in sleeve_keys:
-            if key not in port_snaps:
-                empty = _empty_sleeve()
-                empty["reserved_capital_cents"] = _sleeve_reservations.get(key, 0)
-                by_sleeve[key] = empty
-                continue
-            _, snap = port_snaps[key]
-            bot_ids_in_sleeve = [
-                bot.profile_name for bot in snap.bots
-            ]
+            bucket = sleeve_buckets[key]
+            start = bucket["starting_capital_cents"]
+            value = bucket["current_value_cents"]
+            ret_30d = round(bucket["return_30d_weighted"] / start, 2) if start else 0.0
+            ret_alltime = round((value - start) / start * 100, 2) if start else 0.0
             by_sleeve[key] = {
-                "starting_capital_cents": snap.starting_capital_cents,
-                "current_value_cents":    snap.portfolio_value_cents,
-                "open_positions":         snap.open_positions_count,
-                "today_pnl_cents":        snap.today_pnl_cents,
-                "alltime_pnl_cents":      snap.portfolio_value_cents - snap.starting_capital_cents,
-                "alltime_return_pct":     snap.all_time_return_pct,
-                "return_30d_pct":         snap.return_30d_pct,
-                "active_bots":            snap.bots_active,
-                "total_bots":             snap.bots_total,
-                "bot_ids":                bot_ids_in_sleeve,
+                "starting_capital_cents": start,
+                "current_value_cents":    value,
+                "open_positions":         bucket["open_positions"],
+                "today_pnl_cents":        bucket["today_pnl_cents"],
+                "alltime_pnl_cents":      value - start,
+                "alltime_return_pct":     ret_alltime,
+                "return_30d_pct":         ret_30d,
+                "active_bots":            bucket["active_bots"],
+                "total_bots":             bucket["total_bots"],
+                "bot_ids":                bucket["bot_ids"],
                 "reserved_capital_cents": _sleeve_reservations.get(key, 0),
             }
 
@@ -538,6 +580,17 @@ def get_portfolio_snapshot(
                     "allocation_pct_of_sleeve": alloc_pct,
                     "description":            _BOT_DESCRIPTIONS.get(profile_name, ""),
                 })
+
+        # ── Invariant: sum(sleeves) + reserved == total_value ± 1¢ ──────
+        # Loud log if violated — protects against silent split-brain regression.
+        sleeve_sum = sum(by_sleeve[k]["current_value_cents"] for k in sleeve_keys)
+        reserved_sum = sum(_sleeve_reservations.values())
+        invariant_diff = abs(total_value - (sleeve_sum + reserved_sum))
+        if invariant_diff > 100:  # > $1 drift
+            logger.error(
+                "[portfolio/snapshot] invariant violation user=%s total=%d sleeve_sum=%d reserved=%d diff=%d",
+                current_user.id, total_value, sleeve_sum, reserved_sum, invariant_diff,
+            )
 
         return {
             "as_of":                      datetime.now(timezone.utc).isoformat(),

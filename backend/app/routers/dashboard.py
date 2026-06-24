@@ -402,6 +402,15 @@ def get_dashboard_v2(
     for i, e in enumerate(leaderboard, start=1):
         e["rank"] = i
 
+    # Invariant: sum(sleeve_data.value_cents) == total_value (±$1).
+    # Loud log if violated — catches sleeve-bucketing regressions.
+    sleeve_sum = sum(sleeve_data[s]["value_cents"] for s in sleeve_data)
+    if abs(total_value - sleeve_sum) > 100:
+        logger.error(
+            "[dashboard/v2] invariant violation user=%s total=%d sleeve_sum=%d diff=%d",
+            current_user.id, total_value, sleeve_sum, total_value - sleeve_sum,
+        )
+
     return {
         "portfolio": {
             "total_value_cents": total_value,
