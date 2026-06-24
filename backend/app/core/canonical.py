@@ -149,6 +149,11 @@ class BotSnapshot:
 
     capital_cents_within_portfolio: int = 0  # allocation within its portfolio
 
+    # Capital currently deployed in open positions (entry-cost notional).
+    # Matches the "deployed" definition used by /portfolio/allocation-live so
+    # downstream UI can show "X% of $Y deployed" without a second round trip.
+    deployed_cents: int = 0
+
     open_positions: list = field(default_factory=list)  # [{id, symbol, qty, avg_cost, ...}]
     equity_curve: list = field(default_factory=list)    # [{date, value_cents}]
 
@@ -266,6 +271,21 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     # Canonical "open position" = not closed AND not quarantined.
     # open_pos_rows is used for ALL counts so portfolio matches bot-health.
     open_pos_rows = [p for p in open_pos_display if not p.quarantined_at]
+
+    # ── Deployed capital (entry-cost notional) ────────────────────────────────
+    # Sum of qty × avg_cost across open positions. Equities: dollars-at-cost.
+    # Options: premium × contracts × 100 (per-share entry × contract multiplier).
+    # Mirrors the definition used by /api/portfolio/allocation-live so the
+    # leaderboard "deployed %" and the deployment summary widget agree.
+    deployed_cents = 0
+    for p in open_pos_rows:
+        if not p.avg_cost_cents or not p.qty:
+            continue
+        if p.option_type is not None:
+            contracts = float(p.qty)
+            deployed_cents += int(p.avg_cost_cents * contracts * 100)
+        else:
+            deployed_cents += int(p.avg_cost_cents * p.qty)
 
     # ── Unrealized PnL from live prices ──────────────────────────────────────
     # Split: equities/crypto use spot-price feeds; options use option-quote feed.
@@ -445,6 +465,7 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         win_count=win_count,
         loss_count=loss_count,
         capital_cents_within_portfolio=capital_within,
+        deployed_cents=deployed_cents,
         open_positions=open_positions,
         equity_curve=equity_curve,
     )
@@ -654,6 +675,10 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "watchlist_count": bot.watchlist_count,
                 "portfolio_value_cents": bot.portfolio_value_cents,
                 "realized_pnl_cents": bot.realized_pnl_cents,
+                # Capital deployed in open positions (entry-cost notional).
+                # Used by Strategy Lab + Dashboard to show "X% of $Y deployed".
+                "deployed_cents": bot.deployed_cents,
+                "starting_capital_cents": bot.starting_capital_cents,
             })
     leaderboard.sort(
         key=lambda x: (

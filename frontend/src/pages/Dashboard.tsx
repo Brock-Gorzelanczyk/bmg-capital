@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import TickerTape from "@/components/ui/TickerTape";
 import { BracketFrame, SectionLabel } from "@/components/design";
 import client from "@/api/client";
-import { pauseAllBots } from "@/api/bots";
+import { pauseAllBots, getStrategyLabPortfolio } from "@/api/bots";
 import { getDashboardV2, type DashboardV2, type DashV2Sleeve } from "@/api/dashboard";
 import { useIsViewer } from "@/store/authStore";
 import type { AnalystHighlight } from "@/api/analyst";
@@ -137,6 +137,17 @@ export default function Dashboard() {
     retry: 1,
   });
 
+  // Strategy Lab portfolio carries per-bot deployed_cents + starting_capital_cents
+  // (added in canonical.py) — used by the Strategy Spotlight top-bot widget.
+  // Shared cache key with Strategy Lab page; no extra round trip when both open.
+  const { data: slPortfolio } = useQuery({
+    queryKey: ["strategy-lab-portfolio"],
+    queryFn: getStrategyLabPortfolio,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    retry: 0,
+  });
+
   const { data: regime } = useQuery({
     queryKey: ["portfolio-regime"],
     queryFn: () => client.get<{
@@ -161,6 +172,17 @@ export default function Dashboard() {
   const topBot = leaderboard.length > 0
     ? leaderboard.reduce((a, b) => b.return_30d_pct > a.return_30d_pct ? b : a)
     : null;
+
+  // Look up topBot's deployed_cents + starting_capital_cents from the canonical
+  // strategy-lab leaderboard (dashboard-v2's stripped shape doesn't carry them).
+  const slLeaderboard = (slPortfolio?.leaderboard ?? []) as ReadonlyArray<{
+    profile: string;
+    deployed_cents?: number;
+    starting_capital_cents?: number;
+  }>;
+  const topBotDeploy = topBot
+    ? slLeaderboard.find((e) => e.profile === topBot.profile)
+    : undefined;
 
   const signals = data?.recent_signals ?? [];
 
@@ -384,6 +406,17 @@ export default function Dashboard() {
               <div>
                 <div className="text-base font-bold text-t-hi capitalize">{topBot.name.replace(/_/g, " ")}</div>
                 <div className="text-xs text-t-muted mt-0.5">30-day leader</div>
+                {topBotDeploy && (topBotDeploy.starting_capital_cents ?? 0) > 0 && (
+                  <div className="text-[11px] text-t-mid2 mt-1 font-mono-t tabular-nums">
+                    deployed:{" "}
+                    {(
+                      ((topBotDeploy.deployed_cents ?? 0) /
+                        (topBotDeploy.starting_capital_cents ?? 1)) *
+                      100
+                    ).toFixed(0)}
+                    % of {fmtUsd(topBotDeploy.starting_capital_cents ?? 0)}
+                  </div>
+                )}
               </div>
               <span className={cn("text-lg font-bold tabular-nums font-mono-t", topBot.return_30d_pct >= 0 ? "text-t-green" : "text-t-red")}>
                 {fmtPct(topBot.return_30d_pct)}

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import SymbolChartDrawer from "@/components/ui/SymbolChartDrawer";
 import AllocationDonut from "@/components/ui/AllocationDonut";
+import DeploymentSummary from "@/components/DeploymentSummary";
 import { toast } from "sonner";
 import {
   getBots,
@@ -835,6 +836,7 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
           <span className="flex-1" />
           <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-20 text-right">All-Time</span>
           <span className="w-24" />
+          <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-28 text-right">Deployed</span>
           <span className="w-14" />
         </div>
         <div className="space-y-0">
@@ -845,6 +847,21 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
             const tPos = tPnl >= 0;
             const isCrypto = entry.profile.includes("crypto");
             const isOptions = entry.profile.includes("options") && !["options_income", "options_directional"].includes(entry.profile);
+            // deployed_cents + starting_capital_cents added in canonical.py
+            // but not yet typed on PortfolioLeaderboardEntry — cast to read.
+            const ext = entry as unknown as {
+              deployed_cents?: number;
+              starting_capital_cents?: number;
+            };
+            const deployedCents = ext.deployed_cents ?? 0;
+            const startingCents = ext.starting_capital_cents ?? 0;
+            const deployedPct = startingCents > 0 ? (deployedCents / startingCents) * 100 : 0;
+            const startingUsd = startingCents / 100;
+            const startingLabel = startingUsd >= 1_000_000
+              ? `$${(startingUsd / 1_000_000).toFixed(2)}M`
+              : startingUsd >= 1_000
+              ? `$${(startingUsd / 1_000).toFixed(0)}k`
+              : `$${startingUsd.toFixed(0)}`;
             return (
               <button
                 key={entry.profile}
@@ -859,6 +876,11 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
                 </span>
                 <span className={cn("text-xs w-24 text-right tabular-nums font-mono-t", tPos ? "text-t-green" : "text-t-red")}>
                   {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
+                </span>
+                <span className="text-[10px] w-28 text-right tabular-nums font-mono-t text-t-mid2">
+                  {startingCents > 0
+                    ? `${deployedPct.toFixed(0)}% of ${startingLabel}`
+                    : "—"}
                 </span>
                 <span className="text-[10px] text-t-gdim w-14 text-right flex-shrink-0 font-ui-t">
                   {entry.watchlist_count > 0 ? `${entry.watchlist_count} names` : "—"}
@@ -2180,6 +2202,9 @@ export default function StrategyLab() {
 
           {/* 8. Capital Allocation + Open Positions detail (at bottom) */}
           <PortfolioHero onNavigateBot={(name) => navigate(`/strategy/${name}`)} />
+
+          {/* 8b. Deployment summary — allocated / deployed / cash */}
+          <DeploymentSummary />
 
           {/* Comparison table */}
           {!isLoading && bots.length > 0 && <ComparisonTable bots={bots} tierByAllocId={tierByAllocId} />}

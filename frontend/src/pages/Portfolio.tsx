@@ -5,6 +5,7 @@ import { usePortfolioSnapshot } from "@/hooks/usePortfolioSnapshot";
 import { botStatusBadge, BADGE_CLASSES } from "@/lib/botStatus";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import AllocationDonut, { type LiveAllocationSlice } from "@/components/ui/AllocationDonut";
+import DeploymentSummary from "@/components/DeploymentSummary";
 import type { BotSnap, SleeveSnap } from "@/api/portfolioSnapshot";
 import client from "@/api/client";
 
@@ -397,6 +398,9 @@ export default function Portfolio() {
             </div>
           </div>
         </div>
+
+        {/* Deployment summary (allocated / deployed / cash) */}
+        <DeploymentSummary />
 
         {/* Allocation donut */}
         {(totalValue > 0 || liveAlloc) && (
