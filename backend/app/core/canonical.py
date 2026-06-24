@@ -458,10 +458,19 @@ def compute_portfolio_snapshot(
     """
     Canonical computation for one StrategyPortfolio.
     allocs_with_profiles: list of (BotAllocation, BotProfile) tuples for this portfolio.
+
+    SELF-CONSISTENCY (Option A):
+      portfolio_value_cents     = SUM(bot.portfolio_value_cents)
+      starting_capital_cents    = SUM(bot.starting_capital_cents)
+      portfolio_value           = starting + realized + unrealized  (still holds)
+
+    The portfolio row's own starting_capital_cents column is informational only
+    and can drift from the sum of its allocations (e.g. a new bot is added
+    without updating the parent). Trusting the children keeps the rollup
+    consistent with bot-detail pages and eliminates the discrepancy log.
     """
     bot_snapshots = [compute_bot_snapshot(alloc, profile, db) for alloc, profile in allocs_with_profiles]
 
-    starting_capital_cents = int(port.starting_capital_cents or 0)
     realized_pnl_cents = sum(s.realized_pnl_cents for s in bot_snapshots)
     unrealized_pnl_cents = sum(s.unrealized_pnl_cents for s in bot_snapshots)
     today_pnl_cents = sum(s.today_pnl_cents for s in bot_snapshots)
@@ -469,9 +478,20 @@ def compute_portfolio_snapshot(
     watchlist_count = sum(s.watchlist_count for s in bot_snapshots)
     bots_active = sum(1 for s in bot_snapshots if s.enabled)
 
-    # Portfolio value: starting + realized + unrealized
-    # (mirrors how bot_executor and seed compute values)
-    portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
+    # Derive starting + value from the children so they always reconcile.
+    # Fallback to port.starting_capital_cents when there are no allocations.
+    bot_starting_sum = sum(s.starting_capital_cents for s in bot_snapshots)
+    starting_capital_cents = bot_starting_sum if bot_snapshots else int(port.starting_capital_cents or 0)
+    portfolio_value_cents = sum(s.portfolio_value_cents for s in bot_snapshots) if bot_snapshots else starting_capital_cents
+
+    # Surface drift between the StrategyPortfolio row and its allocations so
+    # data ops can reconcile, but do not let it change the reported value.
+    port_starting_row = int(port.starting_capital_cents or 0)
+    if bot_snapshots and abs(bot_starting_sum - port_starting_row) > 10_000:
+        logger.info(
+            "Portfolio %d (%s) starting_capital drift: row=%d sum(allocations)=%d diff=%d (using allocation sum)",
+            port.id, port.name, port_starting_row, bot_starting_sum, bot_starting_sum - port_starting_row,
+        )
 
     yesterday_value = portfolio_value_cents - today_pnl_cents
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
@@ -491,15 +511,6 @@ def compute_portfolio_snapshot(
                 if s.starting_capital_cents
             ) / total_weight,
             2,
-        )
-
-    # Integrity check — log if bots don't sum to portfolio value within $100
-    bot_value_sum = sum(s.portfolio_value_cents for s in bot_snapshots)
-    discrepancy = abs(bot_value_sum - portfolio_value_cents)
-    if discrepancy > 10_000:  # > $100
-        logger.warning(
-            "Portfolio %d (%s) value discrepancy: portfolio=%d bots_sum=%d diff=%d",
-            port.id, port.name, portfolio_value_cents, bot_value_sum, discrepancy,
         )
 
     return PortfolioSnapshot(
@@ -554,13 +565,42 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     profile_map = {p.id: p for p in profiles}
 
     portfolio_snapshots = []
+    accounted_alloc_ids: set[int] = set()
     for port in portfolios:
         port_allocs = [a for a in all_allocs if a.portfolio_id == port.id]
         pairs = [(a, profile_map[a.profile_id]) for a in port_allocs if a.profile_id in profile_map]
+        accounted_alloc_ids.update(a.id for a, _ in pairs)
         portfolio_snapshots.append(compute_portfolio_snapshot(port, pairs, db))
 
-    total_starting = sum(s.starting_capital_cents for s in portfolio_snapshots)
-    total_value = sum(s.portfolio_value_cents for s in portfolio_snapshots)
+    # Per-allocation snapshots (canonical source). Includes orphan allocations
+    # that aren't attached to any StrategyPortfolio so the headline total
+    # always reflects every dollar the user has allocated to a bot. Falls back
+    # to starting_capital_cents when a snapshot fails so we never silently
+    # report None for a real allocation.
+    orphan_value = 0
+    orphan_starting = 0
+    for a in all_allocs:
+        if a.id in accounted_alloc_ids:
+            continue
+        prof = profile_map.get(a.profile_id)
+        if prof is None:
+            orphan_value += int(a.starting_capital_cents or 0)
+            orphan_starting += int(a.starting_capital_cents or 0)
+            continue
+        try:
+            snap = compute_bot_snapshot(a, prof, db)
+            orphan_value += int(snap.portfolio_value_cents or 0)
+            orphan_starting += int(snap.starting_capital_cents or 0)
+        except Exception as exc:
+            logger.warning(
+                "[canonical] orphan alloc %d snapshot failed (falling back to starting): %s",
+                a.id, exc,
+            )
+            orphan_value += int(a.starting_capital_cents or 0)
+            orphan_starting += int(a.starting_capital_cents or 0)
+
+    total_starting = sum(s.starting_capital_cents for s in portfolio_snapshots) + orphan_starting
+    total_value = sum(s.portfolio_value_cents for s in portfolio_snapshots) + orphan_value
     total_today_pnl = sum(s.today_pnl_cents for s in portfolio_snapshots)
     total_open_positions = sum(s.open_positions_count for s in portfolio_snapshots)
     total_watchlist = sum(s.watchlist_count for s in portfolio_snapshots)
@@ -605,8 +645,8 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     best = leaderboard[0] if leaderboard else None
     worst = leaderboard[-1] if leaderboard else None
 
-    # Integrity assertion
-    portfolio_sum = sum(s.portfolio_value_cents for s in portfolio_snapshots)
+    # Integrity assertion — total_value MUST equal portfolios + orphans.
+    portfolio_sum = sum(s.portfolio_value_cents for s in portfolio_snapshots) + orphan_value
     if abs(total_value - portfolio_sum) > 10_000:
         logger.error(
             "Aggregate integrity failure: total=%d portfolio_sum=%d diff=%d",
@@ -615,6 +655,9 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
 
     return {
         "total_value_cents": total_value,
+        # Alias for callers that read portfolio_value_cents at the aggregate
+        # level (mirrors the per-portfolio shape). Always populated — never None.
+        "portfolio_value_cents": total_value,
         "yesterday_value_cents": yesterday_total,
         "today_pnl_cents": total_today_pnl,
         "today_pnl_pct": today_pct,

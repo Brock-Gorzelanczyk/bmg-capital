@@ -22,6 +22,10 @@ risk_overlay:
 paper_only: true
 starting_capital_cents: 10000000
 tier: T0
+# INCUBATING-PENDING-DATA: requires EV/EBIT + quality fundamentals feed (FMP or
+# equivalent) plus an SP500 screener resolver to populate universe.symbols.
+# universe.symbols is intentionally empty — leave enabled: false until the
+# fundamentals + screener pipelines are wired.
 enabled: false
 notes: "AQR QMJ-style cheap-and-good. ~1.3 Sharpe claimed since 1956, 30% haircut applied → ~0.9 expected. EV/EBIT + quality composite z-score."
 discord:

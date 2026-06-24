@@ -279,6 +279,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m015_exc:
         logger.warning("[startup] m015_hypotheses failed (non-fatal): %s", _m015_exc)
 
+    try:
+        from app.db.migrations.m016_add_bot_health_status import run as _run_m016
+        with engine.connect() as _m016_conn:
+            _run_m016(_m016_conn)
+    except Exception as _m016_exc:
+        logger.warning("[startup] m016_add_bot_health_status failed (non-fatal): %s", _m016_exc)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp

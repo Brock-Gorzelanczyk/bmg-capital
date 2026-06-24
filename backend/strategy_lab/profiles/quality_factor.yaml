@@ -22,6 +22,10 @@ risk_overlay:
 paper_only: true
 starting_capital_cents: 10000000
 tier: T0
+# INCUBATING-PENDING-DATA: requires fundamentals feed (FMP free tier or Alpaca
+# fundamentals) and an SP500 screener that populates universe.symbols at runtime.
+# universe.symbols is intentionally empty — leave enabled: false until the
+# screener + fundamentals resolver are wired end-to-end.
 enabled: false
 notes: "Novy-Marx (2013) Gross Profitability + ROE + low D/E. ~0.7 Sharpe claimed, 30% haircut → ~0.5. Quarterly rebalance. Proxy data: FMP free tier or Alpaca fundamentals."
 discord:

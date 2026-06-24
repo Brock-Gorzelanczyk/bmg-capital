@@ -292,6 +292,15 @@ def run_health_check(
 
     notes = "; ".join(notes_parts) if notes_parts else None
 
+    # Derive a coarse health_status (GREEN|YELLOW|RED) consumed by
+    # fleet_sentinel red-transition checks and the queen daily brief.
+    if not heartbeat_ok or paused_by_health:
+        health_status = "RED"
+    elif divergence_sigma is not None and divergence_sigma > (_DIVERGENCE_PAUSE_THRESHOLD * 0.6):
+        health_status = "YELLOW"
+    else:
+        health_status = "GREEN"
+
     # Upsert health record for today
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     existing = (
@@ -312,6 +321,7 @@ def run_health_check(
         existing.paused_by_health = paused_by_health
         existing.heartbeat_ok = heartbeat_ok
         existing.notes = notes
+        existing.health_status = health_status
     else:
         row = BotHealth(
             allocation_id=allocation_id,
@@ -322,6 +332,7 @@ def run_health_check(
             paused_by_health=paused_by_health,
             heartbeat_ok=heartbeat_ok,
             notes=notes,
+            health_status=health_status,
         )
         db.add(row)
 

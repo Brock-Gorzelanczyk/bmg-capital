@@ -184,6 +184,9 @@ class BotHealth(Base):
     strategies_disabled: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     heartbeat_ok: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # GREEN | YELLOW | RED | NULL — populated by run_health_check; consumed by
+    # strategy_lab.core.fleet_sentinel._check_red_transitions and queen briefings.
+    health_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
 
 class RegimeSnapshot(Base):

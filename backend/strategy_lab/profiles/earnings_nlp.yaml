@@ -25,6 +25,10 @@ risk_overlay:
 paper_only: true
 starting_capital_cents: 10000000
 tier: T0
+# INCUBATING-PENDING-DATA: requires earnings transcript API integration
+# (Seeking Alpha / Motley Fool Pro / Refinitiv / EDGAR Form 4-8K) before activation.
+# universe.symbols is empty by design — do NOT flip enabled to true until the
+# transcript feed is wired and a symbol source resolver populates the universe.
 enabled: false
 notes: "Loughran-McDonald earnings tone delta. Top-decile tone improvement → long next open, hold 1-3 days. BLOCKED: needs transcript feed."
 discord:
