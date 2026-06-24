@@ -1306,7 +1306,7 @@ function QuickLookupPanel() {
       await createSetup(symbol, strategyId);
       qc.invalidateQueries({ queryKey: ["scout-setups"] });
       toast.success(`Armed ${symbol} × ${strategyId}`);
-      setTimeout(() => navigate(`/strategy/scout/chart/${symbol}/${strategyId}`), 600);
+      setTimeout(() => navigate(`/strategy/scout/chart/${encodeURIComponent(symbol)}/${strategyId}`), 600);
     } catch {
       toast.error("Failed to arm pairing");
     }

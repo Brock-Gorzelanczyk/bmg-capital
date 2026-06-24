@@ -488,7 +488,7 @@ export default function StrategyWorkshopPage() {
                     </p>
                   </div>
                   <button
-                    onClick={() => navigate(`/strategy/scout/chart/${selected.ticker}/${selected.strategy_id}`)}
+                    onClick={() => navigate(`/strategy/scout/chart/${encodeURIComponent(selected.ticker)}/${selected.strategy_id}`)}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-mono-t text-t-violet border border-t-violet/30 rounded-lg hover:bg-t-violet/10 shrink-0"
                   >
                     Open chart <ArrowRight size={14} />
@@ -515,7 +515,7 @@ export default function StrategyWorkshopPage() {
                 <div
                   className="bg-t-bg0 border border-t-dim rounded-xl overflow-hidden cursor-pointer hover:border-t-mid transition-colors group"
                   style={{ height: 220 }}
-                  onClick={() => navigate(`/strategy/scout/chart/${selected.ticker}/${selected.strategy_id}`)}
+                  onClick={() => navigate(`/strategy/scout/chart/${encodeURIComponent(selected.ticker)}/${selected.strategy_id}`)}
                 >
                   <div className="h-full flex flex-col items-center justify-center gap-3 text-t-muted group-hover:text-t-mid2 transition-colors">
                     <div className="w-12 h-12 rounded-full border border-t-dim flex items-center justify-center group-hover:border-t-mid transition-colors">

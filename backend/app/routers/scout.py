@@ -197,10 +197,14 @@ def _fetch_bars_for_ticker(ticker: str, period: str = "1y") -> list[dict]:
     Uses Ticker.history() instead of yf.download() because the latter returns
     a MultiIndex DataFrame for single-symbol calls (yfinance ≥ 0.2), causing
     column-name mismatches. Ticker.history() always returns a flat DataFrame.
+
+    Normalizes crypto-style "BTC/USD" → "BTC-USD" via the same helper bars.py
+    uses, so quick-lookup works for crypto symbols.
     """
     try:
         import yfinance as yf
-        hist = yf.Ticker(ticker).history(period=period, interval="1d", auto_adjust=True)
+        from app.routers.bars import _normalize_symbol
+        hist = yf.Ticker(_normalize_symbol(ticker)).history(period=period, interval="1d", auto_adjust=True)
         if hist is None or hist.empty:
             return []
         hist.columns = [str(c).lower() for c in hist.columns]

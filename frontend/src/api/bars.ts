@@ -23,6 +23,8 @@ export async function fetchBars(
   if (indicators) params.indicators = indicators;
   if (start) params.start = start;
   if (limit) params.limit = String(limit);
-  const { data } = await client.get<BarsResponse>(`/bars/${symbol}`, { params });
+  // encodeURIComponent so symbols with "/" (crypto like BTC/USD) become
+  // a single path segment that FastAPI's {symbol} matches cleanly.
+  const { data } = await client.get<BarsResponse>(`/bars/${encodeURIComponent(symbol)}`, { params });
   return data;
 }
