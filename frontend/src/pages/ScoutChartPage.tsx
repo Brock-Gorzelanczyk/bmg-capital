@@ -311,15 +311,44 @@ function ScoutPriceChart({
           renderOpeningRange(Number(p.minutes ?? 15), spec.color, spec.label);
           break;
         }
-        // Placeholders — the spec is rendered nowhere yet (data feed missing).
-        // Render path exists so future commits can light them up without
-        // touching the dispatcher.
+        // Placeholders — the data feed isn't wired up yet. Render a dashed
+        // zero-line in a dedicated subpanel so the user sees that the chart
+        // KNOWS about this indicator (just doesn't have data yet). The
+        // legend chip carries the "(coming soon)" suffix from the backend
+        // spec; the visual stub here ensures the chart doesn't silently
+        // fall back to the old 50/200 MA template.
         case "ofi":
         case "delta":
         case "relative_strength_vs_spy":
-        case "session_markers":
+        case "session_markers": {
+          try {
+            const placeholderPane = pane > 0 ? pane : 2;
+            const placeholder = (chart as any).addSeries(
+              LineSeries,
+              {
+                color: spec.color,
+                lineWidth: 1,
+                lineStyle: LineStyle.Dotted,
+                priceLineVisible: false,
+                crosshairMarkerVisible: false,
+                title: spec.label,
+              },
+              placeholderPane,
+            );
+            placeholder.setData(
+              bars.map((b) => ({ time: b.time, value: 0 })),
+            );
+          } catch {
+            /* lightweight-charts pane creation may fail on older builds */
+          }
+          break;
+        }
         case "volume":
+          // Volume gets its own treatment elsewhere; skip here.
+          break;
         default:
+          // Unknown type — render nothing rather than falling back to a
+          // generic MA so we never silently lie about what's on the chart.
           break;
       }
     });
@@ -727,9 +756,17 @@ export default function ScoutChartPage() {
   });
 
   // Fetch bars with indicators — engine keys depend on strategy spec.
+  // We pass an explicit `start` (1Y ago) so the backend returns ~365 daily bars
+  // instead of its 15-year default. This keeps the chart label ("1Y DAILY")
+  // honest and avoids hauling six years of bars over the wire.
+  const oneYearAgoIso = useMemo(() => {
+    const d = new Date();
+    d.setUTCFullYear(d.getUTCFullYear() - 1);
+    return d.toISOString().slice(0, 10);
+  }, []);
   const { data: barsData, isLoading: barsLoading, isError: barsError } = useQuery({
-    queryKey: ["scout-chart-bars", ticker, apiIndicators],
-    queryFn: () => fetchBars(ticker, "1Day", apiIndicators || undefined, undefined, 365),
+    queryKey: ["scout-chart-bars", ticker, apiIndicators, oneYearAgoIso],
+    queryFn: () => fetchBars(ticker, "1Day", apiIndicators || undefined, oneYearAgoIso),
     staleTime: 300_000,
     enabled: !!ticker && !!indicatorsCfg,
   });
@@ -1003,7 +1040,11 @@ export default function ScoutChartPage() {
         {/* Chart */}
         <div className="bg-t-bg1 border border-t-dim rounded-2xl p-4 space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-[10px] font-mono-t text-t-faint uppercase tracking-widest">// PRICE CHART — 1Y DAILY</span>
+            <span className="text-[10px] font-mono-t text-t-faint uppercase tracking-widest">
+              // PRICE CHART — {bars.length > 0
+                ? `${bars.length} DAILY BARS (${fmtDate(bars[0].time)} → ${fmtDate(bars[bars.length - 1].time)})`
+                : "1Y DAILY"}
+            </span>
             <div className="flex gap-3 flex-wrap">
               {indicatorSpecs.map((ind, i) => (
                 <div key={`${ind.type}_${i}`} className="flex items-center gap-1.5">
