@@ -259,6 +259,8 @@ async def _fetch_bars_for_symbol(
         start_dt = end_dt - timedelta(days=days_back)
     else:
         start_dt = datetime.fromisoformat(start)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
         max_days = YF_MAX_DAYS.get(timeframe)
         if max_days:
             earliest = end_dt - timedelta(days=max_days)
@@ -393,6 +395,8 @@ async def get_bars(
         start_dt = end_dt - timedelta(days=days_back)
     else:
         start_dt = datetime.fromisoformat(start)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
         max_days = YF_MAX_DAYS.get(timeframe)
         if max_days:
             earliest = end_dt - timedelta(days=max_days)
