@@ -158,10 +158,9 @@ def _fetch_bot_signal(db: Session, signal_id: int) -> dict:
     from sqlalchemy import text
     row = db.execute(
         text("""
-            SELECT bs.id, ba.symbol, bs.side, bs.confidence, bs.entry_price,
+            SELECT bs.id, bs.symbol, bs.side, bs.confidence, bs.entry_price,
                    bs.stop_price, bs.target_price, bs.reason, bs.strategy
             FROM bot_signals bs
-            JOIN bot_allocations ba ON ba.id = bs.allocation_id
             WHERE bs.id = :id
         """),
         {"id": signal_id},

@@ -55,11 +55,10 @@ def run_explain_pregen() -> None:
     try:
         # ── Bot signals: latest per allocation ────────────────────────────────
         bot_rows = db.execute(text("""
-            SELECT bs.id, ba.symbol, bs.side, bs.confidence,
+            SELECT bs.id, bs.symbol, bs.side, bs.confidence,
                    bs.entry_price, bs.stop_price, bs.target_price,
                    bs.reason, bs.strategy
             FROM bot_signals bs
-            JOIN bot_allocations ba ON ba.id = bs.allocation_id
             WHERE bs.id IN (
                 SELECT MAX(id) FROM bot_signals GROUP BY allocation_id
             )
