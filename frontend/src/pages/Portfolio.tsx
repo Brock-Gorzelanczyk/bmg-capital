@@ -19,10 +19,10 @@ function fmtPct(pct: number) {
 }
 
 const SLEEVE_META: Record<string, { label: string; emoji: string; colorClass: string }> = {
-  stocks:  { label: "Equities",       emoji: "📈", colorClass: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
-  crypto:  { label: "Digital Assets", emoji: "🪙", colorClass: "bg-t-green/10 text-t-green border-t-mid" },
-  options: { label: "Derivatives",    emoji: "⚡", colorClass: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
-  quant:   { label: "Quant",          emoji: "∑",  colorClass: "bg-violet-500/10 text-violet-400 border-violet-500/20" },
+  stocks:  { label: "Stocks",  emoji: "📈", colorClass: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+  crypto:  { label: "Crypto",  emoji: "🪙", colorClass: "bg-t-green/10 text-t-green border-t-mid" },
+  options: { label: "Options", emoji: "⚡", colorClass: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
+  quant:   { label: "Quant",   emoji: "∑",  colorClass: "bg-violet-500/10 text-violet-400 border-violet-500/20" },
 };
 
 // ─── Sub-components ──────────────────────────────────────────────────────────

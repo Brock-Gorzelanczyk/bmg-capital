@@ -954,17 +954,17 @@ def setup_bot_scheduler(scheduler) -> None:
         _job.__name__ = f"_queen_{session_name}"
         return _job
 
-    # Brock's cadence spec: Brick/Queen → Mondays only at 6:30 AM ET
+    # Brock's cadence spec: Brick/Queen → weekdays at 6:30 AM ET
     scheduler.add_job(
         _make_queen_job("morning"),
-        CronTrigger(day_of_week="mon", hour=6, minute=30, timezone=ET),
+        CronTrigger(day_of_week="mon-fri", hour=6, minute=30, timezone=ET),
         id="queen_morning",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=1800,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job queen_morning (Mondays 6:30 AM ET)")
+    logger.warning("[startup-trace] registered job queen_morning (weekdays 6:30 AM ET)")
 
     # ------------------------------------------------------------------
     # Regime snapshot refresh — hourly, keeps regime_snapshots table fresh
