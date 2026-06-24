@@ -812,23 +812,52 @@ async def get_strategy_backtest(
     window per trade — held fixed across strategies so historical results are
     apples-to-apples on the chart.
     """
+    from datetime import timedelta
+
     from app.routers.bars import _fetch_bars_for_symbol
     from app.services.strategy_backtest import run_backtest
 
+    sym = symbol.upper()
+    years_req = max(0, int(years))
+    hold = max(1, int(hold_days))
+
+    # Bound the fetch window. Passing start=None makes _fetch_bars_for_symbol
+    # default to a 15-year lookback (5475 days) — on Railway that yfinance
+    # request frequently hangs or returns empty, the broad except below
+    # swallowed the error and the endpoint silently shipped bars=[] →
+    # trigger_count=0. We now fetch only the requested window plus ~1y of
+    # warm-up for long-period indicators (200d SMA, 55d Donchian), and bail
+    # fast with a clear HTTP error if yfinance misbehaves.
+    end_dt = datetime.now(timezone.utc)
+    if years_req > 0:
+        # Pad with 400 calendar days so detectors with 200d/55d look-backs
+        # have full state at the start of the user-visible window.
+        lookback_days = years_req * 366 + 400
+    else:
+        # "ALL" — give yfinance 15y but still impose a hard timeout.
+        lookback_days = 15 * 366
+    start_iso = (end_dt - timedelta(days=lookback_days)).date().isoformat()
+
     try:
-        bars_payload = await _fetch_bars_for_symbol(symbol.upper(), None, None, "1Day")
+        bars_payload = await asyncio.wait_for(
+            _fetch_bars_for_symbol(sym, start_iso, None, "1Day"),
+            timeout=10.0,
+        )
         bars = bars_payload.get("bars") or []
+    except asyncio.TimeoutError:
+        logger.warning("backtest bars fetch timed out for %s", sym)
+        raise HTTPException(status_code=504, detail=f"Price data fetch timed out for {sym}")
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning("backtest bars fetch failed for %s: %s", symbol, e)
-        bars = []
+        logger.warning("backtest bars fetch failed for %s: %s", sym, e)
+        raise HTTPException(status_code=503, detail=f"Price data unavailable for {sym}: {e}")
 
     # Trim to the requested year window. 252 trading days / year is the
     # canonical convention. years <= 0 (or anything weird) means "ALL".
-    if isinstance(years, int) and years > 0:
-        bar_cap = years * 252
+    if years_req > 0:
+        bar_cap = years_req * 252
         bars = bars[-bar_cap:]
 
-    result = run_backtest(strategy_id, symbol.upper(), bars, years_requested=max(0, int(years)), hold_days=max(1, int(hold_days)))
+    result = run_backtest(strategy_id, sym, bars, years_requested=years_req, hold_days=hold)
     return result.to_dict()
