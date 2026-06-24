@@ -729,26 +729,66 @@ async def get_strategy_checklist(
     """
     from app.routers.bars import _fetch_bars_for_symbol
     from app.services.strategy_triggers import evaluate_checklist
+    from datetime import timedelta
+
+    sym = symbol.upper()
+
+    # Bound the fetch window: 2Y of daily bars (~504) covers every condition in
+    # the registry (max needed = 200d SMA + 20d slope = 221 bars). Shorter
+    # window = fewer bars from yfinance = far less likely to time out on
+    # Railway's IP range (see commit 810c90e for prior yfinance-hang fix).
+    end_dt = datetime.now(timezone.utc)
+    start_dt = end_dt - timedelta(days=2 * 365 + 30)
+    start_iso = start_dt.date().isoformat()
 
     try:
-        bars_payload = await _fetch_bars_for_symbol(symbol.upper(), None, None, "1Day")
+        # 8s timeout matches the candidates fix in 810c90e — yfinance can hang
+        # indefinitely on Railway; fail fast and surface a useful error instead.
+        bars_payload = await asyncio.wait_for(
+            _fetch_bars_for_symbol(sym, start_iso, None, "1Day"),
+            timeout=8.0,
+        )
         bars = bars_payload.get("bars") or []
-    except HTTPException:
-        raise
+    except asyncio.TimeoutError:
+        logger.warning("checklist bars fetch timed out for %s", sym)
+        return {
+            "status": "not_armed",
+            "conditions": [],
+            "error": f"Price data fetch timed out for {sym}",
+        }
+    except HTTPException as e:
+        logger.warning("checklist bars HTTPException for %s: %s", sym, e.detail)
+        return {
+            "status": "not_armed",
+            "conditions": [],
+            "error": f"No bar data for {sym}",
+        }
     except Exception as e:
-        logger.warning("checklist bars fetch failed for %s: %s", symbol, e)
-        bars = []
+        logger.warning("checklist bars fetch failed for %s: %s", sym, e)
+        return {
+            "status": "not_armed",
+            "conditions": [],
+            "error": f"Price data unavailable for {sym}",
+        }
 
     if not bars:
         return {
             "status": "not_armed",
             "conditions": [],
-            "error": f"No bar data for {symbol.upper()}",
+            "error": f"No bar data for {sym}",
         }
 
     # Cap to last ~400 bars — plenty for any 252d/200d indicator
     bars = bars[-400:]
-    return evaluate_checklist(strategy_id, bars)
+    try:
+        return evaluate_checklist(strategy_id, bars)
+    except Exception as e:
+        logger.exception("checklist evaluate failed for %s/%s", strategy_id, sym)
+        return {
+            "status": "not_armed",
+            "conditions": [],
+            "error": f"Checklist evaluation error: {e}",
+        }
 
 
 # ── Scout Past Triggers / Backtest (Commit 3) ────────────────────────────────
