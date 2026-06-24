@@ -879,10 +879,16 @@ def compute_leaderboard(
         _cset(cache_key, [])
         return []
 
+    # Batch-load profiles to avoid N+1 (was one BotProfile query per alloc)
+    profile_ids = list({a.profile_id for a in allocations})
+    profile_map = {
+        p.id: p for p in db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+    }
+
     rows = []
     for alloc in allocations:
         metrics = compute_bot_metrics(db, alloc.id, days=days)
-        profile = db.query(BotProfile).filter(BotProfile.id == alloc.profile_id).first()
+        profile = profile_map.get(alloc.profile_id)
         rows.append({
             "allocation_id": alloc.id,
             "bot_name": profile.name if profile else f"alloc_{alloc.id}",

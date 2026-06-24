@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Zap, Trash2, Plus, X, Bell } from "lucide-react";
 import { createChart, CandlestickSeries, LineSeries, ColorType, LineStyle } from "lightweight-charts";
-import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
+import type { IChartApi, UTCTimestamp } from "lightweight-charts";
 import { fetchBars } from "@/api/bars";
 import { createSetup, deleteSetup, getSetups } from "@/api/scout";
 import { getStrategyDescription, getStrategyIndicators } from "@/api/candidates";
