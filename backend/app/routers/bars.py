@@ -239,7 +239,12 @@ async def _fetch_bars_for_symbol(
 ) -> dict:
     """Fetch OHLCV bars for a single symbol. Returns same shape as GET /{symbol} (without indicators)."""
     interval = YF_INTERVAL_MAP.get(timeframe, "1d")
-    end_dt = datetime.now(timezone.utc) if not end else datetime.fromisoformat(end)
+    if end:
+        end_dt = datetime.fromisoformat(end)
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=timezone.utc)
+    else:
+        end_dt = datetime.now(timezone.utc)
 
     if not start:
         if timeframe == "1Month":
@@ -375,7 +380,12 @@ async def get_bars(
     if to_ts is not None and end is None:
         end = datetime.utcfromtimestamp(to_ts + 86400).strftime("%Y-%m-%d")  # inclusive
 
-    end_dt = datetime.now(timezone.utc) if not end else datetime.fromisoformat(end)
+    if end:
+        end_dt = datetime.fromisoformat(end)
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=timezone.utc)
+    else:
+        end_dt = datetime.now(timezone.utc)
 
     if not start:
         if timeframe == "1Month":
