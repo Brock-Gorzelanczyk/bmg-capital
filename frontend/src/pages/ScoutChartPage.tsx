@@ -8,7 +8,7 @@ import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 import { fetchBars } from "@/api/bars";
 import { createSetup, deleteSetup, getSetups } from "@/api/scout";
 import { getStrategyDescription, getStrategyIndicators } from "@/api/candidates";
-import type { ScoutIndicatorSpec } from "@/api/candidates";
+import type { ScoutIndicatorSpec, ScoutTimeframe } from "@/api/candidates";
 import client from "@/api/client";
 import { cn } from "@/lib/utils";
 import SetupChecklist from "@/components/SetupChecklist";
@@ -747,6 +747,31 @@ export default function ScoutChartPage() {
   const apiIndicators = indicatorsCfg?.engine_keys ?? "";
   const triggerDescription = getTriggerDescription(sid);
 
+  // ── Timeframe chip rail ────────────────────────────────────────────────────
+  // The full chip set is fixed at 6 (1D / 4H / 1H / 15m / 5m / 1m). The
+  // strategy's `timeframes.allowed` controls which chips are interactive; the
+  // rest render grayed out so the user can see what's not on offer for this
+  // strategy (and why). Default selection comes from `timeframes.default`,
+  // falling back to "1D" when the backend hasn't shipped the new field yet.
+  const allTimeframes: ScoutTimeframe[] = ["1D", "4H", "1H", "15m", "5m", "1m"];
+  const allowedTimeframes: ScoutTimeframe[] =
+    indicatorsCfg?.timeframes?.allowed ?? ["1D", "4H"];
+  const defaultTimeframe: ScoutTimeframe =
+    indicatorsCfg?.timeframes?.default ?? "1D";
+
+  const [timeframe, setTimeframe] = useState<ScoutTimeframe>(defaultTimeframe);
+
+  // Once the indicators config arrives, snap the active chip to the strategy's
+  // declared default. We only do this once per strategy mount; if the user
+  // clicks a different chip we keep their choice.
+  const tfInitialized = useRef(false);
+  useEffect(() => {
+    if (!tfInitialized.current && indicatorsCfg?.timeframes?.default) {
+      setTimeframe(indicatorsCfg.timeframes.default);
+      tfInitialized.current = true;
+    }
+  }, [indicatorsCfg?.timeframes?.default]);
+
   // Fetch description for display name
   const { data: descData } = useQuery({
     queryKey: ["strategy-desc", sid],
@@ -755,18 +780,31 @@ export default function ScoutChartPage() {
     retry: 1,
   });
 
-  // Fetch bars with indicators — engine keys depend on strategy spec.
-  // We pass an explicit `start` (1Y ago) so the backend returns ~365 daily bars
-  // instead of its 15-year default. This keeps the chart label ("1Y DAILY")
-  // honest and avoids hauling six years of bars over the wire.
-  const oneYearAgoIso = useMemo(() => {
+  // Compute the bars-endpoint timeframe token + the lookback `start` date for
+  // the active chip. History depths are sized so the chart loads fast even on
+  // intraday timeframes:
+  //   1D  → 5y   |  4H → 1y   |  1H → 6mo
+  //   15m → 1mo  |  5m → 2wk  |  1m → 3d
+  const { barsTimeframe, startIso, tfLabel } = useMemo(() => {
+    const map: Record<ScoutTimeframe, { bars: string; days: number; label: string }> = {
+      "1D":  { bars: "1Day",  days: 365 * 5, label: "DAILY" },
+      "4H":  { bars: "4Hour", days: 365,     label: "4-HOUR" },
+      "1H":  { bars: "1Hour", days: 180,     label: "HOURLY" },
+      "15m": { bars: "15Min", days: 30,      label: "15-MIN" },
+      "5m":  { bars: "5Min",  days: 14,      label: "5-MIN" },
+      "1m":  { bars: "1Min",  days: 3,       label: "1-MIN" },
+    };
+    const cfg = map[timeframe] ?? map["1D"];
     const d = new Date();
-    d.setUTCFullYear(d.getUTCFullYear() - 1);
-    return d.toISOString().slice(0, 10);
-  }, []);
+    d.setUTCDate(d.getUTCDate() - cfg.days);
+    return { barsTimeframe: cfg.bars, startIso: d.toISOString().slice(0, 10), tfLabel: cfg.label };
+  }, [timeframe]);
+
+  // Fetch bars with indicators — engine keys depend on strategy spec; the
+  // timeframe + start window depend on the active chip.
   const { data: barsData, isLoading: barsLoading, isError: barsError } = useQuery({
-    queryKey: ["scout-chart-bars", ticker, apiIndicators, oneYearAgoIso],
-    queryFn: () => fetchBars(ticker, "1Day", apiIndicators || undefined, oneYearAgoIso),
+    queryKey: ["scout-chart-bars", ticker, apiIndicators, barsTimeframe, startIso],
+    queryFn: () => fetchBars(ticker, barsTimeframe, apiIndicators || undefined, startIso),
     staleTime: 300_000,
     enabled: !!ticker && !!indicatorsCfg,
   });
@@ -1039,11 +1077,45 @@ export default function ScoutChartPage() {
 
         {/* Chart */}
         <div className="bg-t-bg1 border border-t-dim rounded-2xl p-4 space-y-3">
+          {/* Timeframe chip rail — all 6 chips render, but only `allowed`
+              ones are clickable. Disabled chips stay visible so the user can
+              see what's NOT on offer for this strategy. Style matches the
+              BacktestPanel year-range chips. */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-[10px] font-mono-t text-t-faint uppercase tracking-widest">
+              // TIMEFRAME
+            </span>
+            <div className="flex items-center gap-1 flex-wrap">
+              {allTimeframes.map((tf) => {
+                const allowed = allowedTimeframes.includes(tf);
+                const active = timeframe === tf;
+                return (
+                  <button
+                    key={tf}
+                    onClick={() => allowed && setTimeframe(tf)}
+                    disabled={!allowed}
+                    title={allowed ? `Switch to ${tf}` : `${tf} not supported by this strategy`}
+                    className={cn(
+                      "text-[10px] font-mono-t px-2 py-1 rounded border transition-colors",
+                      active && allowed
+                        ? "border-t-mid text-t-hi bg-t-bg2"
+                        : allowed
+                          ? "border-t-dim/40 text-t-muted hover:text-t-hi hover:border-t-dim"
+                          : "border-t-dim/20 text-t-faint/50 cursor-not-allowed"
+                    )}
+                  >
+                    {tf}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-[10px] font-mono-t text-t-faint uppercase tracking-widest">
               // PRICE CHART — {bars.length > 0
-                ? `${bars.length} DAILY BARS (${fmtDate(bars[0].time)} → ${fmtDate(bars[bars.length - 1].time)})`
-                : "1Y DAILY"}
+                ? `${bars.length} ${tfLabel} BARS (${fmtDate(bars[0].time)} → ${fmtDate(bars[bars.length - 1].time)})`
+                : `${tfLabel}`}
             </span>
             <div className="flex gap-3 flex-wrap">
               {indicatorSpecs.map((ind, i) => (

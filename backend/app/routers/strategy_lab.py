@@ -331,15 +331,22 @@ def get_strategy_indicators(strategy_id: str) -> dict:
     (SMA 20 + SMA 50) for unknown strategies — never 404s so the chart always
     renders.
     """
-    from app.services.strategy_indicators import indicators_as_dicts, engine_keys_for_strategy
+    from app.services.strategy_indicators import (
+        indicators_as_dicts,
+        engine_keys_for_strategy,
+        get_timeframes_for_strategy,
+    )
 
     specs = indicators_as_dicts(strategy_id)
     engine_keys = engine_keys_for_strategy(strategy_id)
+    timeframes = get_timeframes_for_strategy(strategy_id)
     return {
         "strategy_id": strategy_id,
         "indicators": specs,
         # Comma-separated keys the frontend can pass straight to GET /api/bars/{symbol}?indicators=…
         "engine_keys": ",".join(engine_keys),
+        # {"default": "1D", "allowed": ["1D", "4H", ...]} — chart timeframe chip rail.
+        "timeframes": timeframes,
     }
 
 

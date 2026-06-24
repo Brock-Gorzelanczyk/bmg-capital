@@ -202,10 +202,22 @@ export interface ScoutIndicatorSpec {
   label: string;
 }
 
+// Timeframe tokens recognized by the Scout chart chip rail. Each token maps
+// 1:1 to a bars-endpoint timeframe (e.g. "1D" → "1Day", "5m" → "5Min").
+export type ScoutTimeframe = "1D" | "4H" | "1H" | "15m" | "5m" | "1m";
+
+export interface ScoutTimeframesConfig {
+  default: ScoutTimeframe;
+  allowed: ScoutTimeframe[];
+}
+
 export interface ScoutIndicatorsResponse {
   strategy_id: string;
   indicators: ScoutIndicatorSpec[];
   engine_keys: string;
+  // Added in Scout FIX 2: per-strategy timeframe defaults + allowed set.
+  // Optional for back-compat with older backends that haven't shipped it yet.
+  timeframes?: ScoutTimeframesConfig;
 }
 
 export const getStrategyIndicators = (strategyId: string) =>

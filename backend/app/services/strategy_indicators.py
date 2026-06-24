@@ -319,6 +319,43 @@ DEFAULT_INDICATORS: List[IndicatorSpec] = [
 ]
 
 
+# ── Per-strategy timeframe defaults / allowed set ────────────────────────────
+# The Scout chart renders a chip rail above the chart that lets the user swap
+# timeframes. Each strategy declares its native timeframe + the set the user is
+# allowed to view; chips outside the allowed set are rendered disabled so the
+# user can see that the strategy is, e.g., intraday-only and won't behave on
+# daily bars. Keys mirror STRATEGY_INDICATORS above; anything not present here
+# falls back to DEFAULT_TIMEFRAMES (1D-only swing default).
+#
+# Supported timeframe tokens (must match the keys the frontend translates to
+# the bars endpoint's timeframe parameter):
+#   "1D", "4H", "1H", "15m", "5m", "1m"
+
+DEFAULT_TIMEFRAMES: Dict[str, Any] = {"default": "1D", "allowed": ["1D", "4H"]}
+
+STRATEGY_TIMEFRAMES: Dict[str, Dict[str, Any]] = {
+    "turtle_donchian_s2":      {"default": "1D", "allowed": ["1D", "4H"]},
+    "golden_cross":            {"default": "1D", "allowed": ["1D", "4H"]},
+    "rsi_oversold":            {"default": "1D", "allowed": ["1D", "4H", "1H"]},
+    "vwap_rejection_fade":     {"default": "5m", "allowed": ["1m", "5m", "15m", "1H"]},
+    "opening_range_breakdown": {"default": "5m", "allowed": ["1m", "5m", "15m"]},
+    "stock_day":               {"default": "15m", "allowed": ["5m", "15m", "1H"]},
+    "quant_scalper":           {"default": "1m", "allowed": ["1m", "5m"]},
+    "ofi_institutional_flow":  {"default": "5m", "allowed": ["1m", "5m", "15m"]},
+}
+
+
+def get_timeframes_for_strategy(strategy_id: str) -> Dict[str, Any]:
+    """Return {"default": tf, "allowed": [tf, ...]} for a strategy id.
+
+    Falls back to DEFAULT_TIMEFRAMES (1D default, [1D, 4H] allowed) for anything
+    not in the explicit table. Returns a fresh dict each call so callers can
+    mutate freely without poisoning the module-level constant.
+    """
+    cfg = STRATEGY_TIMEFRAMES.get(strategy_id, DEFAULT_TIMEFRAMES)
+    return {"default": cfg["default"], "allowed": list(cfg["allowed"])}
+
+
 def get_indicators_for_strategy(strategy_id: str) -> List[IndicatorSpec]:
     """Return the indicator spec list for a strategy id (falls back to default)."""
     return STRATEGY_INDICATORS.get(strategy_id, DEFAULT_INDICATORS)
