@@ -47,7 +47,7 @@ PER_SLEEVE_FLOOR = 0.10                  # 10% min per sleeve
 PER_SLEEVE_CAP = 0.40                    # 40% max per sleeve
 BOT_LEVERAGE_CAP = 1.25                  # bot can't carry > 1.25x its weight
 FLEET_LEVERAGE_CAP = 1.00                # fleet stays unleveraged
-V1_DEPLOYMENT_CAP = 0.35                 # 35% of NAV deployed in V1
+V1_DEPLOYMENT_CAP = 0.60                 # 60% of NAV deployed in V1 (lifted from 35% per Brock's 7-day push)
 VOL_LOOKBACK_DAYS = 60                   # for realized_vol_60d
 
 # Bots excluded from V1 (NAV contamination from B CRITICAL gate aftermath)
@@ -324,8 +324,9 @@ def propose_rebalance(db: Session, user_id: int) -> dict[str, Any]:
     return {
         "executed": False,
         "warning_banner": (
-            "DATA INTEGRITY NOTE: Options sleeve excluded due to post-gate cleanup. "
-            "V1 deployment cap = 35%, not the long-run 85% target — staged ramp. "
+            "V1 deployment cap: 60% (was 35%). Brock's explicit greenlight "
+            "to push faster. Options sleeve still excluded due to NAV history "
+            "contamination from the 6/19-6/24 equity-fallback fills. "
             "Output is informational. Execute requires manual confirmation gate."
         ),
         "as_of": datetime.now(timezone.utc).isoformat(),
