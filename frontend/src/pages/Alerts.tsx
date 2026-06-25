@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { cn, timeAgo } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  Bell, BellOff, TrendingUp, TrendingDown, Zap, AlertTriangle, Activity,
+  Bell, BellOff, AlertTriangle, Activity,
   Filter, Search, ChevronDown, ChevronRight, X, Check, Eye, VolumeX,
-  Star, Clock, Trash2, Settings, BarChart2, ExternalLink,
+  Clock, Settings, BarChart2, ExternalLink,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ function AlertRow({
 }) {
   const [hover, setHover] = useState(false);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <div
@@ -203,13 +205,9 @@ function AlertRow({
         {/* Hover action row */}
         {hover && (
           <div className="flex items-center gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => toast.info("Opening chart…")}
+            <button onClick={() => navigate(`/strategy/scout/chart/${encodeURIComponent(alert.ticker)}/turtle_donchian_s2`)}
               className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[var(--text-secondary)] bg-[var(--border-subtle)]/60 hover:bg-[var(--border-emphasis)] transition-colors">
               <BarChart2 size={10} /> View Chart
-            </button>
-            <button onClick={() => toast.success("Trade panel opening…")}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[var(--text-primary)] bg-[var(--accent-positive)]/20 hover:bg-[var(--accent-positive)]/30 transition-colors">
-              <TrendingUp size={10} /> Trade
             </button>
             <div className="relative">
               <button onClick={() => setSnoozeOpen((o) => !o)}
@@ -243,6 +241,7 @@ function AlertRow({
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
 
 function DetailPanel({ alert, onClose, onMuteType }: { alert: Alert; onClose: () => void; onMuteType: (type: string) => void }) {
+  const navigate = useNavigate();
   const isUp = alert.importance !== "Breaking" || alert.type !== "risk_drawdown";
   return (
     <div className="flex flex-col h-full bg-[var(--bg-elevated)] border-l border-[var(--border-subtle)]">
@@ -291,14 +290,6 @@ function DetailPanel({ alert, onClose, onMuteType }: { alert: Alert; onClose: ()
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => toast.success("Trade panel opening…")}
-            className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold bg-[var(--accent-positive)]/20 text-[var(--accent-positive)] hover:bg-[var(--accent-positive)]/30 transition-colors">
-            <TrendingUp size={13} /> Trade
-          </button>
-          <button onClick={() => toast.success(`${alert.ticker} added to watchlist`)}
-            className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold bg-zinc-700/50 text-[var(--text-secondary)] hover:bg-zinc-700 transition-colors">
-            <Star size={13} /> Add to Watchlist
-          </button>
           <button onClick={() => toast.info(`${alert.ticker} muted`)}
             className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold bg-zinc-700/50 text-[var(--text-secondary)] hover:bg-zinc-700 transition-colors">
             <VolumeX size={13} /> Mute Ticker
@@ -315,7 +306,7 @@ function DetailPanel({ alert, onClose, onMuteType }: { alert: Alert; onClose: ()
           <Settings size={11} /> Show me fewer like this
         </button>
 
-        <button onClick={() => toast.info("Opening external chart…")}
+        <button onClick={() => navigate(`/strategy/scout/chart/${encodeURIComponent(alert.ticker)}/turtle_donchian_s2`)}
           className="w-full py-2 rounded-lg text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] flex items-center justify-center gap-1.5 transition-colors">
           <ExternalLink size={11} /> View on Chart Page
         </button>
