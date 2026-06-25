@@ -1615,6 +1615,61 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job watchlist_stale_sweep_nightly (02:00 CT)")
 
+    # ------------------------------------------------------------------
+    # COMMIT 13 — Cooldown re-entry storm detection (every 30 min during RTH)
+    # ------------------------------------------------------------------
+    def _run_cooldown_storm_check() -> None:
+        try:
+            from app.db.session import SessionLocal as _SL
+            from sqlalchemy import text as _sql
+            from app.services.discord import send_ops_alert as _alert
+
+            db = _SL()
+            try:
+                rows = db.execute(_sql(
+                    "SELECT a.profile_id, p.name AS bot_name, bt.symbol, "
+                    "       COUNT(*) AS entries_4h "
+                    "FROM bot_trades bt "
+                    "JOIN bot_allocations a ON a.id = bt.allocation_id "
+                    "JOIN bot_profiles p ON p.id = a.profile_id "
+                    "WHERE bt.ts >= datetime('now','-4 hours') "
+                    "  AND bt.side IN ('buy','short') "
+                    "GROUP BY a.profile_id, bt.symbol "
+                    "HAVING COUNT(*) > 2 "
+                    "ORDER BY entries_4h DESC"
+                )).fetchall()
+                if not rows:
+                    logger.info("[cooldown-storm] clean (no pairs > 2 entries in 4h)")
+                    return
+                storms = [(r[1], r[2], int(r[3])) for r in rows]
+                fields = [
+                    {"name": f"{name} / {sym}", "value": f"{n} entries in 4h", "inline": True}
+                    for name, sym, n in storms[:10]
+                ]
+                _alert(
+                    title="Cooldown re-entry storm detected",
+                    message=f"{len(storms)} (bot, symbol) pair(s) opened > 2 positions in the last 4 hours.",
+                    severity="warn",
+                    source="bot_scheduler.cooldown_storm_check",
+                    fields=fields,
+                )
+                logger.warning("[cooldown-storm] %d pairs flagged", len(storms))
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("[cooldown-storm] check failed: %s", exc, exc_info=True)
+
+    scheduler.add_job(
+        _run_cooldown_storm_check,
+        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/30", timezone=ET),
+        id="cooldown_storm_check_rth",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job cooldown_storm_check_rth (every 30min RTH)")
+
     # Fleet EOD summary: gated by should_post_to_fund_updates — suppressed in quiet mode.
     # To re-enable: pass urgency="critical" to should_post_to_fund_updates, or remove gate.
 

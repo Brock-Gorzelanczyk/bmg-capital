@@ -2861,3 +2861,70 @@ def watchlist_sweep_stale(
         "ts": datetime.now(timezone.utc).isoformat(),
         "by_user_id": current_user.id,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 13 — Cooldown re-entry storm detection
+# Surfaces any (profile, symbol) pair that opened > 2 positions in the last 4h.
+# Re-entry storms usually mean a stop got hit, cooldown was too short, and the
+# bot re-bought into the same loser — a clear over-trading signal.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/cooldown/storm-check")
+def cooldown_storm_check(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return (profile, symbol) pairs that opened > 2 entries within 4h.
+
+    Posts a warn ops alert when any storms are found.
+    """
+    from sqlalchemy import text as _sql
+    from app.services.discord import send_ops_alert as _alert
+
+    rows = db.execute(_sql(
+        "SELECT a.profile_id, p.name AS bot_name, bt.symbol, COUNT(*) AS entries_4h "
+        "FROM bot_trades bt "
+        "JOIN bot_allocations a ON a.id = bt.allocation_id "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE bt.ts >= datetime('now','-4 hours') "
+        "  AND bt.side IN ('buy','short') "
+        "GROUP BY a.profile_id, bt.symbol "
+        "HAVING COUNT(*) > 2 "
+        "ORDER BY entries_4h DESC"
+    )).fetchall()
+
+    storms = [
+        {
+            "profile_id": int(r[0]) if r[0] is not None else None,
+            "bot_name": r[1],
+            "symbol": r[2],
+            "entries_4h": int(r[3]),
+        }
+        for r in rows
+    ]
+
+    if storms:
+        try:
+            fields = [
+                {"name": f"{s['bot_name']} / {s['symbol']}",
+                 "value": f"{s['entries_4h']} entries in 4h",
+                 "inline": True}
+                for s in storms[:10]
+            ]
+            _alert(
+                title="Cooldown re-entry storm detected",
+                message=f"{len(storms)} (bot, symbol) pair(s) opened > 2 positions in the last 4 hours.",
+                severity="warn",
+                source="admin.cooldown_storm_check",
+                fields=fields,
+            )
+        except Exception as exc:
+            logger.warning("[cooldown_storm_check] ops alert failed: %s", exc)
+
+    return {
+        "storms": storms,
+        "count": len(storms),
+        "window_hours": 4,
+        "threshold_entries": 2,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
