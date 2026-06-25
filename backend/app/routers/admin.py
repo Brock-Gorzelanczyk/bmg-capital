@@ -2354,3 +2354,107 @@ def closes_stop_asymmetry(
         "report": report,
         "top_flagged": top_flagged,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 9 — Per-strategy discipline gate-rate report
+# Group signal_gates by strategy. gate_rate = gated / total.
+# Flag STARVED (>85% gated, >100 signals) and UNFILTERED
+# (<15% gated, >100 signals). Posts both flagged groups to ops channel.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/discipline/gate-rate")
+def discipline_gate_rate(
+    days: int = Query(7, ge=1, le=90, description="Lookback window in days"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Group signal_gates by strategy. Report gate_rate and flag extremes.
+
+    `gated` = final_decision != 'executed' (the SignalGate default for a
+    passing row). Anything else (typically 'filtered') is a gated decision.
+    """
+    from sqlalchemy import text
+
+    rows = db.execute(text(f"""
+        SELECT
+            strategy,
+            COUNT(*) AS total,
+            SUM(CASE WHEN final_decision != 'executed' THEN 1 ELSE 0 END) AS gated
+        FROM signal_gates
+        WHERE created_at >= datetime('now', '-{int(days)} days')
+        GROUP BY strategy
+        ORDER BY total DESC
+    """)).fetchall()
+
+    report = []
+    starved = []
+    unfiltered = []
+    for r in rows:
+        strategy = r[0] or "(unknown)"
+        total = int(r[1] or 0)
+        gated = int(r[2] or 0)
+        gate_rate = (gated / total * 100.0) if total > 0 else 0.0
+        flags = []
+        if total > 100 and gate_rate > 85.0:
+            flags.append("STARVED")
+        if total > 100 and gate_rate < 15.0:
+            flags.append("UNFILTERED")
+        entry = {
+            "strategy": strategy,
+            "total": total,
+            "gated": gated,
+            "gate_rate": round(gate_rate, 2),
+            "flags": flags,
+        }
+        report.append(entry)
+        if "STARVED" in flags:
+            starved.append(entry)
+        if "UNFILTERED" in flags:
+            unfiltered.append(entry)
+
+    # Post both flagged groups to ops channel — fire-and-forget.
+    try:
+        from app.services.discord import send_ops_alert
+
+        def _fmt(group_label: str, group: list) -> str:
+            if not group:
+                return f"{group_label}: none\n"
+            lines = [
+                f"  {g['strategy'][:30]:<30} total={g['total']:>5} "
+                f"gated={g['gated']:>5} rate={g['gate_rate']:>5.1f}%"
+                for g in group
+            ]
+            return f"{group_label}:\n" + "\n".join(lines) + "\n"
+
+        message = (
+            "```\n"
+            + _fmt(f"STARVED (>85% gated, >100 signals)", starved)
+            + "\n"
+            + _fmt(f"UNFILTERED (<15% gated, >100 signals)", unfiltered)
+            + "```"
+        )
+        severity = "warn" if (starved or unfiltered) else "info"
+
+        send_ops_alert(
+            title=f"Gate-rate report · {days}d · {len(starved)} starved · {len(unfiltered)} unfiltered",
+            message=message[:1900],
+            severity=severity,
+            source="admin.discipline_gate_rate",
+            fields=[
+                {"name": "window_days", "value": str(days), "inline": True},
+                {"name": "strategies_inspected", "value": str(len(report)), "inline": True},
+                {"name": "starved", "value": str(len(starved)), "inline": True},
+                {"name": "unfiltered", "value": str(len(unfiltered)), "inline": True},
+            ],
+        )
+    except Exception as exc:
+        logger.warning("[discipline_gate_rate] ops alert failed: %s", exc)
+
+    return {
+        "ok": True,
+        "window_days": days,
+        "strategies_inspected": len(report),
+        "report": report,
+        "starved": starved,
+        "unfiltered": unfiltered,
+    }
