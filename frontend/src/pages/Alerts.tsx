@@ -205,7 +205,7 @@ function AlertRow({
         {/* Hover action row */}
         {hover && (
           <div className="flex items-center gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => navigate(`/strategy/scout/chart/${encodeURIComponent(alert.ticker)}/turtle_donchian_s2`)}
+            <button onClick={() => navigate(`/strategy/scout/chart/${encodeURIComponent(alert.ticker)}/golden_cross`)}
               className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-[var(--text-secondary)] bg-[var(--border-subtle)]/60 hover:bg-[var(--border-emphasis)] transition-colors">
               <BarChart2 size={10} /> View Chart
             </button>
@@ -306,7 +306,7 @@ function DetailPanel({ alert, onClose, onMuteType }: { alert: Alert; onClose: ()
           <Settings size={11} /> Show me fewer like this
         </button>
 
-        <button onClick={() => navigate(`/strategy/scout/chart/${encodeURIComponent(alert.ticker)}/turtle_donchian_s2`)}
+        <button onClick={() => navigate(`/strategy/scout/chart/${encodeURIComponent(alert.ticker)}/golden_cross`)}
           className="w-full py-2 rounded-lg text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] flex items-center justify-center gap-1.5 transition-colors">
           <ExternalLink size={11} /> View on Chart Page
         </button>
