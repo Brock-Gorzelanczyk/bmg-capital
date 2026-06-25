@@ -146,9 +146,12 @@ function StatCard({ label, value, sub, valueColor = "#eafbe9", accent = false }:
 function RiskBudgets() {
   return (
     <div style={CARD}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
         <span style={{ ...MONO, fontSize: 12, color: "#dce8dc", letterSpacing: "0.06em" }}>RISK BUDGET BY SLEEVE</span>
         <span style={{ ...MONO, fontSize: 10, color: "#50604f" }}>used / cap</span>
+      </div>
+      <div style={{ ...MONO, fontSize: 10, color: "#50604f", marginBottom: 14 }}>
+        VAR-weighted — not the same as $-weighted Capital Allocation on the Portfolio page
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
         {BUDGETS.map(b => {

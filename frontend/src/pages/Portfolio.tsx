@@ -405,7 +405,8 @@ export default function Portfolio() {
         {/* Allocation donut */}
         {(totalValue > 0 || liveAlloc) && (
           <div className="bg-t-bg1 border border-t-dim rounded-2xl p-5 mb-8">
-            <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-4">Capital Allocation</p>
+            <p className="text-xs font-semibold text-t-muted uppercase tracking-wider mb-1">Capital Allocation</p>
+            <p className="text-[10px] font-mono-t text-t-faint mb-4">$-weighted — not the same as VAR-weighted Risk Budget on the Risk Console</p>
             {liveAlloc?.slices && liveAlloc.slices.length > 0 ? (
               <AllocationDonut
                 liveSlices={liveAlloc.slices}
