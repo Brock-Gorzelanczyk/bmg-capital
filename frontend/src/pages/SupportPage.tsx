@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { BracketFrame, SectionLabel, BMGButton } from "@/components/design";
-import { Mail, ChevronDown, ChevronRight } from "lucide-react";
+import { Mail, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SUPPORT_EMAIL = "support@bmgcapital.io";
@@ -87,12 +88,29 @@ export default function SupportPage() {
         </BracketFrame>
 
         <div className="bg-t-bg1 border border-t-dim rounded-2xl">
-          <div className="px-4 py-3 border-b border-t-dim">
+          <div className="px-4 py-3 border-b border-t-dim flex items-center justify-between gap-3">
             <SectionLabel>// COMMON QUESTIONS</SectionLabel>
+            <Link
+              to="/pricing#faq"
+              className="inline-flex items-center gap-1 text-[10px] font-mono-t uppercase tracking-[0.15em] text-[var(--bmg-green)] hover:underline"
+            >
+              Full FAQ <ExternalLink size={10} />
+            </Link>
           </div>
           {FAQ_ITEMS.map((item) => (
             <FAQRow key={item.q} q={item.q} a={item.a} />
           ))}
+        </div>
+
+        {/* System Status — hardcoded "operational" until a real status feed
+            (Statuspage / health-check aggregator) is wired. Surfaces here
+            so users have one place to check before emailing support. */}
+        <div className="bg-t-bg1 border border-t-dim rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+          <SectionLabel>// SYSTEM STATUS</SectionLabel>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[var(--bmg-green)] animate-pulse" />
+            <span className="text-xs font-mono-t text-t-hi">All systems operational</span>
+          </div>
         </div>
 
         <p className="text-[10px] font-mono-t text-t-faint text-center uppercase tracking-[0.15em]">

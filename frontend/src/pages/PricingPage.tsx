@@ -489,7 +489,7 @@ export default function PricingPage() {
         </div>
 
         {/* ── FAQ ─────────────────────────────────────────────────────────── */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        <div id="faq" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 scroll-mt-20">
           <h2 className="text-base font-bold text-white mb-2">Frequently asked questions</h2>
           {FAQ_ITEMS.map((item) => (
             <FAQItem key={item.q} q={item.q} a={item.a} />
