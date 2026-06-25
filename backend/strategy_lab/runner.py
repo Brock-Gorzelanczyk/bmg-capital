@@ -583,14 +583,22 @@ def run_bot_profile(profile_name: str) -> dict:
                 except Exception as exc:
                     logger.warning("[runner:%s] Could not fetch open positions: %s", profile_name, exc)
 
-                # ── FIX D: position_cap enforcement ──────────────────────────────
-                position_cap = int(profile.get("position_cap", 999))
+                # ── FIX D: max_concurrent_positions enforcement ──────────────────
+                # Reads max_concurrent_positions first (Brock's 7-day push spec),
+                # falls back to position_cap, then 999.
+                position_cap = int(
+                    profile.get("max_concurrent_positions")
+                    or profile.get("position_cap")
+                    or 999
+                )
                 if len(open_pos_rows) >= position_cap:
                     logger.warning(
-                        "[guardrail] %s alloc=%d blocked: open_positions=%d >= position_cap=%d",
+                        "[guardrail] %s alloc=%d blocked: max_concurrent_positions_reached open=%d cap=%d",
                         profile_name, alloc.id, len(open_pos_rows), position_cap,
                     )
-                    _alloc_skip_counts["position_cap"] = _alloc_skip_counts.get("position_cap", 0) + 1
+                    _alloc_skip_counts["max_concurrent_positions"] = (
+                        _alloc_skip_counts.get("max_concurrent_positions", 0) + 1
+                    )
                     continue
 
                 # ── FIX E: max_gross_exposure_pct enforcement ─────────────────────

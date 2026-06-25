@@ -271,7 +271,14 @@ def scan_and_execute(
             "[scan:%s] cooldown_minutes=%.0f exceeds 24h cap — clamped to %d",
             profile_name, raw_cooldown_min, _COOLDOWN_MAX_MINUTES,
         )
-    position_cap = int(profile.get("position_cap", 999))
+    # max_concurrent_positions takes precedence — Brock's 7-day push spec
+    # adds tighter per-class caps (day/scalper 3, swing 4, options 4,
+    # quant 5, lt 6). Falls back to legacy position_cap then 999 (no cap).
+    position_cap = int(
+        profile.get("max_concurrent_positions")
+        or profile.get("position_cap")
+        or 999
+    )
 
     logger.warning(
         "[scan:%s] cooldown_minutes=%.0f position_cap=%d",

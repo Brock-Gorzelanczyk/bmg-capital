@@ -80,3 +80,6 @@ risk:
   target_position_count: 8
   max_position_pct: 0.07
   max_total_deployed_pct: 0.70
+
+# 7-day deployment push (Brock 2026-06-24): concentrate capital into fewer, bigger positions.
+max_concurrent_positions: 4
