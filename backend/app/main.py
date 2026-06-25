@@ -314,6 +314,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m020_exc:
         logger.warning("[startup] m020_add_bot_threshold_dynamic failed (non-fatal): %s", _m020_exc)
 
+    try:
+        from app.db.migrations.m021_merge_and_resize_allocations import run as _run_m021
+        with engine.connect() as _m021_conn:
+            _run_m021(_m021_conn)
+    except Exception as _m021_exc:
+        logger.warning("[startup] m021_merge_and_resize_allocations failed (non-fatal): %s", _m021_exc)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
