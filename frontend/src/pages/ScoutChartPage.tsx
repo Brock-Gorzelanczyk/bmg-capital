@@ -852,12 +852,27 @@ export default function ScoutChartPage() {
 
   // Fetch bars with indicators — engine keys depend on strategy spec; the
   // timeframe + start window depend on the active chip.
-  const { data: barsData, isLoading: barsLoading, isFetching: barsFetching, isError: barsError } = useQuery({
+  const { data: barsData, isLoading: barsLoading, isFetching: barsFetching, isError: barsError, error: barsErrorObj } = useQuery({
     queryKey: ["scout-chart-bars", ticker, apiIndicators, barsTimeframe, startIso],
     queryFn: () => fetchBars(ticker, barsTimeframe, apiIndicators || undefined, startIso),
     staleTime: 300_000,
     enabled: !!ticker && !!indicatorsCfg,
+    retry: 0,
   });
+
+  // Surface specific status codes so non-SPY equity loads (which often hit
+  // yfinance rate limits) report something actionable instead of a generic
+  // "Chart data unavailable". 504 = upstream timeout, 503 = rate limit,
+  // 404 = unknown symbol, 5xx anything else = backend error.
+  const barsStatus: number | null = (barsErrorObj as { response?: { status?: number } } | null)?.response?.status ?? null;
+  const barsErrorText: string = (() => {
+    if (!barsError) return "";
+    if (barsStatus === 504) return `Price data fetch timed out for ${ticker} — try a shorter window or wait a minute.`;
+    if (barsStatus === 503) return `Upstream rate-limited for ${ticker}. SPY is heavily cached; non-SPY equities hit yfinance directly. Try again in ~1 min.`;
+    if (barsStatus === 404) return `No price data for "${ticker}". Check the symbol — yfinance accepts plain US tickers (e.g. NVDA, AAPL) and "BTC-USD" form for crypto.`;
+    if (barsStatus && barsStatus >= 500) return `Backend error ${barsStatus} loading ${ticker}. Logged for investigation.`;
+    return `Chart data unavailable for ${ticker}`;
+  })();
 
   // Track when a fetch starts so the ProgressBar can show an elapsed counter
   // after 5 s (for cold queries against intraday lookbacks that take a while).
@@ -1206,8 +1221,8 @@ export default function ScoutChartPage() {
           ) : barsLoading ? (
             <div className="h-[340px] bg-t-bg0 rounded-xl animate-pulse" />
           ) : barsError || bars.length === 0 ? (
-            <div className="h-[340px] bg-t-bg0 rounded-xl flex items-center justify-center text-t-muted text-sm font-mono-t">
-              Chart data unavailable for {ticker}
+            <div className="h-[340px] bg-t-bg0 rounded-xl flex items-center justify-center text-t-muted text-sm font-mono-t px-6 text-center">
+              {barsErrorText || `Chart data unavailable for ${ticker}`}
             </div>
           ) : (
             // Real chart — fade in once data lands so the skeleton-to-chart
