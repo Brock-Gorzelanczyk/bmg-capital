@@ -183,6 +183,9 @@ export default function TuningPage() {
           <p className="text-t-muted text-sm mt-1">
             Monday-morning triage: which strategies need attention, which are ready to promote.
           </p>
+          <p className="text-t-faint text-xs mt-1 font-mono-t">
+            Scope: global discipline-gate analyses across all bots — not the same as Mission Control's per-user "signals fired".
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {([
