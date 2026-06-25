@@ -364,6 +364,21 @@ def get_dashboard_v2(
     # BotAllocation without a portfolio_id. We append those orphans from the
     # direct per-bot snapshots so the Top Bot widget sees every active bot.
     profile_by_name: dict[str, BotProfile] = {p.name: p for p in profiles}
+    # Build a profile_name → starting_capital_cents map (sum across all
+    # allocations of that profile) so leaderboard entries can carry
+    # deployed_cents + starting_capital_cents without forcing the Dashboard
+    # to fetch /strategy-lab/portfolio just for those two fields.
+    starting_by_profile: dict[str, int] = {}
+    deployed_by_profile: dict[str, int] = {}
+    for alloc in allocs:
+        prof = alloc_to_profile.get(alloc.id)
+        if not prof:
+            continue
+        starting_by_profile[prof.name] = starting_by_profile.get(prof.name, 0) + int(alloc.starting_capital_cents or 0)
+        bot_snap = bot_snapshots_by_alloc.get(alloc.id)
+        if bot_snap is not None:
+            deployed_by_profile[prof.name] = deployed_by_profile.get(prof.name, 0) + int(getattr(bot_snap, "deployed_cents", 0) or 0)
+
     leaderboard = []
     profiles_in_lb: set[str] = set()
     for e in leaderboard_from_agg:
@@ -378,6 +393,11 @@ def get_dashboard_v2(
             "today_pnl_cents": e.get("today_pnl_cents") or 0,
             "watchlist_count": profile_wl_count.get(prof.id, 0) if prof else 0,
             "portfolio_value_cents": e.get("portfolio_value_cents") or 0,
+            # New: emit per-bot deployed + starting so the Dashboard's
+            # Strategy Spotlight widget can show "X% of $Y deployed" without
+            # cross-fetching /strategy-lab/portfolio.
+            "deployed_cents": int(e.get("deployed_cents") or deployed_by_profile.get(prof_name, 0)),
+            "starting_capital_cents": int(e.get("starting_capital_cents") or starting_by_profile.get(prof_name, 0)),
         })
     # Append orphan-allocation bots not represented in canonical's leaderboard.
     for alloc in allocs:
@@ -396,6 +416,8 @@ def get_dashboard_v2(
             "today_pnl_cents": int(bot_snap.today_pnl_cents or 0),
             "watchlist_count": profile_wl_count.get(prof.id, 0),
             "portfolio_value_cents": int(bot_snap.portfolio_value_cents or 0),
+            "deployed_cents": int(getattr(bot_snap, "deployed_cents", 0) or 0),
+            "starting_capital_cents": int(bot_snap.starting_capital_cents or 0),
         })
     # Re-rank by return_30d_pct desc so newly appended orphans get proper ranks.
     leaderboard.sort(key=lambda x: x["return_30d_pct"], reverse=True)

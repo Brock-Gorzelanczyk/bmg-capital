@@ -19,6 +19,8 @@ export interface DashV2LeaderboardEntry {
   today_pnl_cents: number;
   watchlist_count: number;
   portfolio_value_cents: number;
+  deployed_cents: number;
+  starting_capital_cents: number;
 }
 
 export interface DashboardV2 {
