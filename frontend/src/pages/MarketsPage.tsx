@@ -226,7 +226,7 @@ function CryptoTab() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<CryptoFilter>("top100");
   const [search, setSearch] = useState("");
-  const [sortCol, setSortCol] = useState<"market_cap" | "pct_24h" | "pct_7d" | "total_volume">("market_cap");
+  const [sortCol, setSortCol] = useState<"market_cap" | "pct_1h" | "pct_24h" | "pct_7d" | "total_volume">("market_cap");
 
   const { data, isLoading } = useQuery({
     queryKey: ["markets-crypto"],
