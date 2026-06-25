@@ -2010,3 +2010,39 @@ def purge_legacy_options_embeds(
         )
 
     return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 1 — Ops alert verification endpoint
+# Lets Brock send a synthetic ops alert to verify the new routing works
+# end-to-end without waiting for a real incident. Routes through
+# send_ops_alert() → alert_webhook_url, gated by DISCORD_OPS_ALERTS_ENABLED
+# (independent of DISCORD_SIGNAL_POSTING_ENABLED).
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/ops-alert/test")
+def test_ops_alert(
+    severity: str = Query("info", regex="^(info|warn|critical)$"),
+    current_user=Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Send a synthetic ops alert. Use ?severity=info|warn|critical."""
+    from app.services.discord import send_ops_alert, _ops_alerts_enabled, _ops_webhook_url
+    ok = send_ops_alert(
+        title="Synthetic test alert",
+        message=(
+            "If you see this in the ops channel, the new send_ops_alert routing "
+            f"is working. Triggered by user {current_user.id} via "
+            "POST /api/admin/ops-alert/test."
+        ),
+        severity=severity,
+        source="admin.test_ops_alert",
+        fields=[
+            {"name": "DISCORD_OPS_ALERTS_ENABLED", "value": str(_ops_alerts_enabled()), "inline": True},
+            {"name": "Webhook configured", "value": "yes" if _ops_webhook_url() else "no", "inline": True},
+        ],
+    )
+    return {
+        "ok": ok,
+        "ops_alerts_enabled": _ops_alerts_enabled(),
+        "webhook_configured": bool(_ops_webhook_url()),
+        "severity": severity,
+    }
