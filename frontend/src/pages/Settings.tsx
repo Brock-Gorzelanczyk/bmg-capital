@@ -667,6 +667,8 @@ function SecuritySection() {
 
 function SubscriptionSection({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
   const [portalLoading, setPortalLoading] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const { data: tierData } = useQuery({
     queryKey: ["tier-me"],
     queryFn: getMyTier,
@@ -698,6 +700,28 @@ function SubscriptionSection({ navigate }: { navigate: ReturnType<typeof useNavi
       toast.error(e?.response?.data?.detail ?? "Could not open billing portal");
     }
   };
+
+  // No dedicated /cancel endpoint exists. Cancellations are processed in the
+  // Stripe customer portal — so the "Cancel subscription" button confirms
+  // intent then routes there. Honors the PricingPage FAQ promise without
+  // fabricating a fake mutation.
+  const handleCancel = async () => {
+    setCancelLoading(true);
+    try {
+      const { url } = await createPortal();
+      window.location.href = url;
+    } catch (e: any) {
+      setCancelLoading(false);
+      setConfirmingCancel(false);
+      toast.error(e?.response?.data?.detail ?? "Could not open billing portal");
+    }
+  };
+
+  const canCancel =
+    !!tierData?.has_stripe &&
+    tier !== "free" &&
+    !tierData?.cancel_at_period_end &&
+    status !== "cancelled";
 
   return (
     <div className="space-y-4">
@@ -759,6 +783,45 @@ function SubscriptionSection({ navigate }: { navigate: ReturnType<typeof useNavi
               <ExternalLink size={14} />
               {portalLoading ? "Opening portal…" : "Manage billing & invoices"}
             </button>
+          )}
+
+          {canCancel && (
+            <>
+              {!confirmingCancel ? (
+                <button
+                  onClick={() => setConfirmingCancel(true)}
+                  className="flex items-center justify-center gap-2 w-full bg-transparent hover:bg-[var(--accent-negative-bg)] border border-[var(--accent-negative)]/30 hover:border-[var(--accent-negative)]/60 text-[var(--accent-negative)] text-sm font-medium rounded-xl px-4 py-2.5 transition-colors"
+                >
+                  Cancel subscription
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2 bg-[var(--accent-negative-bg)] border border-[var(--accent-negative)]/20 rounded-xl px-3 py-3">
+                    <AlertTriangle size={14} className="text-[var(--accent-negative)] shrink-0 mt-0.5" />
+                    <p className="text-sm text-[var(--accent-negative)]">
+                      Cancel your subscription? You'll keep access until the end of the current billing period.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCancel}
+                      disabled={cancelLoading}
+                      className="flex-1 bg-[var(--accent-negative)] hover:brightness-110 disabled:opacity-50 text-white text-sm font-bold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLink size={13} />
+                      {cancelLoading ? "Opening Stripe…" : "Continue to Stripe"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingCancel(false)}
+                      disabled={cancelLoading}
+                      className="flex-1 bg-[var(--bg-elevated-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-sm font-medium py-2.5 rounded-xl border border-[var(--border-emphasis)] transition-colors disabled:opacity-50"
+                    >
+                      Keep subscription
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </Card>
