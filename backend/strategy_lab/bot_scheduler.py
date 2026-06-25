@@ -1772,6 +1772,109 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job threshold_auto_promote_nightly (04:00 ET)")
 
+    # ── Cash Floor passive rebalance ────────────────────────────────────────
+    # Fires twice on RTH weekdays:
+    #   09:35 ET — 5 min after market open, so first day's $100K deploys
+    #              promptly into SPY/QQQ.
+    #   15:50 ET — 10 min before close, daily rebalance to maintain 60/40.
+    # Both runs respect CAPITAL_EXECUTE_ENABLED kill switch — if it's off,
+    # the job logs the skip and exits without touching positions.
+    def _run_cash_floor_rebalance(tag: str) -> None:
+        import os as _os
+        if _os.getenv("CAPITAL_EXECUTE_ENABLED", "false").strip().lower() != "true":
+            logger.warning("[cash-floor:%s] skipped — CAPITAL_EXECUTE_ENABLED=false", tag)
+            return
+        try:
+            from app.db.session import SessionLocal
+            from app.db.models.bots import BotAllocation, BotProfile, BotPosition, BotTrade
+            from app.services.cash_floor import propose_rebalance
+            from app.services.friction import model_friction_cents
+            from datetime import datetime as _dt, timezone as _tz
+            _db = SessionLocal()
+            try:
+                cf_prof = _db.query(BotProfile).filter(BotProfile.name == "cash_floor").first()
+                if cf_prof is None:
+                    logger.warning("[cash-floor:%s] no cash_floor profile — skipped", tag)
+                    return
+                # Iterate all enabled cash_floor allocations across users
+                for alloc in _db.query(BotAllocation).filter(
+                    BotAllocation.profile_id == cf_prof.id,
+                    BotAllocation.enabled.is_(True),
+                ).all():
+                    plan = propose_rebalance(_db)
+                    now = _dt.now(_tz.utc)
+                    for trade in plan.get("trades_to_place", []):
+                        live_px = trade.get("limit_price_hint_usd") or 0
+                        if live_px <= 0:
+                            continue
+                        symbol = trade["symbol"]
+                        approx_dollars = float(trade["approx_dollars"])
+                        qty = round(approx_dollars / live_px, 4)
+                        if qty <= 0:
+                            continue
+                        fill_cents = int(round(live_px * 100))
+                        friction = model_friction_cents("stock", qty, live_px)
+                        side = trade["side"]
+                        if side == "buy":
+                            existing = _db.query(BotPosition).filter(
+                                BotPosition.allocation_id == alloc.id,
+                                BotPosition.symbol == symbol,
+                                BotPosition.closed_at.is_(None),
+                                BotPosition.quarantined_at.is_(None),
+                            ).first()
+                            if existing:
+                                old_qty = float(existing.qty or 0)
+                                old_cost = float(existing.avg_cost_cents or 0)
+                                new_qty = old_qty + qty
+                                existing.qty = new_qty
+                                existing.avg_cost_cents = (
+                                    ((old_qty * old_cost) + (qty * fill_cents)) / new_qty
+                                    if new_qty > 0 else fill_cents
+                                )
+                                pos = existing
+                            else:
+                                pos = BotPosition(
+                                    allocation_id=alloc.id, symbol=symbol, qty=qty,
+                                    avg_cost_cents=fill_cents, side="long",
+                                    opened_at=now, closed_at=None, is_paper=True,
+                                    stop_price_usd=None, target_price_usd=None,
+                                    trailing_stop_activated=False,
+                                )
+                                _db.add(pos); _db.flush()
+                            _db.add(BotTrade(
+                                allocation_id=alloc.id, symbol=symbol, side="buy",
+                                qty=qty, fill_price_cents=fill_cents,
+                                fees_cents=friction, ts=now, position_id=pos.id,
+                                is_paper=True, expected_fill_cents=fill_cents,
+                                slippage_bps=3.0, strategy="cash_floor",
+                            ))
+                _db.commit()
+                logger.warning("[cash-floor:%s] rebalance committed", tag)
+            finally:
+                _db.close()
+        except Exception as exc:
+            logger.error("[cash-floor:%s] failed: %s", tag, exc, exc_info=True)
+
+    scheduler.add_job(
+        lambda: _run_cash_floor_rebalance("open"),
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=35, timezone=ET),
+        id="cash_floor_open",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        lambda: _run_cash_floor_rebalance("close"),
+        CronTrigger(day_of_week="mon-fri", hour=15, minute=50, timezone=ET),
+        id="cash_floor_close",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered jobs cash_floor_open (09:35 ET) + cash_floor_close (15:50 ET)")
+
     # Fleet EOD summary: gated by should_post_to_fund_updates — suppressed in quiet mode.
     # To re-enable: pass urgency="critical" to should_post_to_fund_updates, or remove gate.
 

@@ -321,6 +321,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m021_exc:
         logger.warning("[startup] m021_merge_and_resize_allocations failed (non-fatal): %s", _m021_exc)
 
+    try:
+        from app.db.migrations.m023_add_inception_capital_cents import run as _run_m023
+        with engine.connect() as _m023_conn:
+            _run_m023(_m023_conn)
+    except Exception as _m023_exc:
+        logger.warning("[startup] m023_add_inception_capital_cents failed (non-fatal): %s", _m023_exc)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp

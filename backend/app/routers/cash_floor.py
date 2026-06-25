@@ -100,32 +100,190 @@ def rebalance(
     if not verified:
         raise HTTPException(status_code=403, detail=f"confirm token rejected: {why}")
 
-    # Ops alert: the gate fired, but V1 still refuses the write.
+    # ── Position-write loop ─────────────────────────────────────────────
+    # Paper convention: write BotPosition + BotTrade rows directly. The
+    # cash_floor BotAllocation receives them; bot_id (strategy) is tagged
+    # so canonical can separate Cash Floor P&L from active alpha strategies.
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotAllocation, BotProfile, BotPosition, BotTrade
+    from app.services.friction import model_friction_cents
+
+    # Resolve the cash_floor allocation for the operator. Fail if missing —
+    # the allocation should be created via the clean-slate restart endpoint.
+    cf_profile = db.query(BotProfile).filter(BotProfile.name == "cash_floor").first()
+    if cf_profile is None:
+        raise HTTPException(status_code=400, detail="cash_floor BotProfile missing")
+    cf_alloc = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.profile_id == cf_profile.id,
+            BotAllocation.enabled.is_(True),
+        )
+        .first()
+    )
+    if cf_alloc is None:
+        raise HTTPException(status_code=400, detail="cash_floor allocation missing for this user")
+
+    now = datetime.now(timezone.utc)
+    written_trades: list[dict] = []
+    for trade in plan["trades_to_place"]:
+        symbol = trade["symbol"]
+        side = trade["side"]  # "buy" or "sell"
+        approx_dollars = float(trade["approx_dollars"])
+        live_px = trade.get("limit_price_hint_usd") or 0
+        if live_px <= 0:
+            # No live price — refuse this leg (Cash Floor is passive; we
+            # only place when we have a recent quote).
+            written_trades.append({
+                "symbol": symbol, "side": side, "status": "skipped_no_price",
+            })
+            continue
+
+        # Round to nearest 1/100 share (Alpaca fractional default).
+        qty = round(approx_dollars / live_px, 4)
+        if qty <= 0:
+            written_trades.append({
+                "symbol": symbol, "side": side, "status": "skipped_zero_qty",
+            })
+            continue
+
+        fill_cents = int(round(live_px * 100))
+        friction_cents = model_friction_cents("stock", qty, live_px)
+
+        if side == "buy":
+            # New position (or add — Cash Floor only holds one open position
+            # per symbol; if one exists, this is a top-up to the SAME position).
+            existing = (
+                db.query(BotPosition)
+                .filter(
+                    BotPosition.allocation_id == cf_alloc.id,
+                    BotPosition.symbol == symbol,
+                    BotPosition.closed_at.is_(None),
+                    BotPosition.quarantined_at.is_(None),
+                )
+                .first()
+            )
+            if existing:
+                # Weighted-average cost up.
+                old_qty = float(existing.qty or 0)
+                old_cost = float(existing.avg_cost_cents or 0)
+                new_qty = old_qty + qty
+                new_avg = ((old_qty * old_cost) + (qty * fill_cents)) / new_qty if new_qty > 0 else fill_cents
+                existing.qty = new_qty
+                existing.avg_cost_cents = new_avg
+                existing.updated_at = now if hasattr(existing, "updated_at") else None
+                pos = existing
+            else:
+                pos = BotPosition(
+                    allocation_id=cf_alloc.id,
+                    symbol=symbol,
+                    qty=qty,
+                    avg_cost_cents=fill_cents,
+                    side="long",
+                    opened_at=now,
+                    closed_at=None,
+                    is_paper=True,
+                    stop_price_usd=None,    # passive: no stop
+                    target_price_usd=None,  # passive: no target
+                    trailing_stop_activated=False,
+                )
+                db.add(pos)
+                db.flush()
+            db.add(BotTrade(
+                allocation_id=cf_alloc.id,
+                symbol=symbol,
+                side="buy",
+                qty=qty,
+                fill_price_cents=fill_cents,
+                fees_cents=friction_cents,
+                ts=now,
+                position_id=pos.id,
+                is_paper=True,
+                expected_fill_cents=fill_cents,
+                slippage_bps=3.0,
+                strategy="cash_floor",
+            ))
+            written_trades.append({
+                "symbol": symbol, "side": "buy", "qty": qty,
+                "fill_cents": fill_cents, "friction_cents": friction_cents,
+                "position_id": pos.id, "status": "filled",
+            })
+        elif side == "sell":
+            # Trim — partially close existing position(s) for that symbol.
+            existing = (
+                db.query(BotPosition)
+                .filter(
+                    BotPosition.allocation_id == cf_alloc.id,
+                    BotPosition.symbol == symbol,
+                    BotPosition.closed_at.is_(None),
+                    BotPosition.quarantined_at.is_(None),
+                )
+                .first()
+            )
+            if not existing:
+                written_trades.append({
+                    "symbol": symbol, "side": "sell", "status": "skipped_no_position",
+                })
+                continue
+            trim_qty = min(qty, float(existing.qty or 0))
+            if trim_qty >= float(existing.qty or 0):
+                existing.closed_at = now
+                existing.exit_reason = "cash_floor_rebalance"
+            else:
+                existing.qty = float(existing.qty) - trim_qty
+            db.add(BotTrade(
+                allocation_id=cf_alloc.id,
+                symbol=symbol,
+                side="sell",
+                qty=trim_qty,
+                fill_price_cents=fill_cents,
+                fees_cents=friction_cents,
+                ts=now,
+                position_id=existing.id,
+                is_paper=True,
+                expected_fill_cents=fill_cents,
+                slippage_bps=3.0,
+                strategy="cash_floor",
+            ))
+            written_trades.append({
+                "symbol": symbol, "side": "sell", "qty": trim_qty,
+                "fill_cents": fill_cents, "friction_cents": friction_cents,
+                "position_id": existing.id, "status": "trimmed",
+            })
+
+    db.commit()
+
     try:
         from app.services.discord import send_ops_alert
+        filled = [t for t in written_trades if t.get("status") in ("filled", "trimmed")]
         send_ops_alert(
-            title="[cash-floor] gate passed → write step intentionally absent",
+            title="[cash-floor] rebalance executed",
             message=(
-                f"All gates passed for Cash Floor rebalance.\n"
-                f"Trades to place: {plan.get('trade_count')}\n"
-                f"To actually execute, edit cash_floor.rebalance and replace "
-                f"the return with the trade-write loop."
+                f"Cash Floor rebalance complete.\n"
+                f"Trades placed: {len(filled)}\n"
+                + "\n".join(
+                    f"  {t['side'].upper()} {t.get('qty', '?'):.4f} {t['symbol']} "
+                    f"@ ${t.get('fill_cents', 0)/100:.2f} "
+                    f"({t.get('status')})"
+                    for t in written_trades[:10]
+                )
             ),
-            severity="warn",
+            severity="info",
             source="cash_floor.rebalance",
         )
     except Exception:
         pass
 
     return {
-        "executed": False,
-        "reason": "v1_scaffolding_only",
-        "note": (
-            "All gates passed. The actual BotTrade + BotPosition writes for "
-            "SPY / QQQ are intentionally not generated. Replace the final "
-            "return with the position-write loop manually + redeploy."
-        ),
-        "would_have_executed": True,
-        "plan": plan,
+        "executed": True,
         "operator_user_id": current_user.id,
+        "allocation_id": cf_alloc.id,
+        "trades": written_trades,
+        "trade_count": len(written_trades),
+        "plan_summary": {
+            "fleet_nav_cents": plan.get("fleet_nav_cents"),
+            "deployable_cents": plan.get("deployable_cents"),
+            "cash_floor_target_cents": plan.get("cash_floor_target_cents"),
+        },
     }

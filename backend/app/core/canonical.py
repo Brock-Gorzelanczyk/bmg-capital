@@ -203,6 +203,16 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
 
     # ── Starting capital ──────────────────────────────────────────────────────
     starting_capital_cents = int(alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 0)
+    # inception_capital_cents (added in m023) is the ORIGINAL seed capital
+    # for this bot, preserved across capital adjustments. Used as the
+    # denominator for all_time_return so leaderboard P&L history doesn't
+    # get silently recomputed when starting_capital_cents changes (clean-
+    # slate restart etc.). Falls back to starting_capital_cents on older
+    # rows where the column wasn't populated.
+    inception_capital_cents = int(
+        getattr(alloc, "inception_capital_cents", None)
+        or starting_capital_cents
+    )
 
     # ── All positions (open + closed) for avg_cost lookup ────────────────────
     all_positions = (
@@ -338,10 +348,13 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
     # ── All-time return ───────────────────────────────────────────────────────
+    # Uses inception_capital_cents as the denominator so a clean-slate
+    # restart or capital adjustment doesn't silently rewrite the historical
+    # leaderboard %. Falls back to starting_capital_cents.
     all_time_return_pct = 0.0
-    if starting_capital_cents:
+    if inception_capital_cents:
         all_time_return_pct = round(
-            (portfolio_value_cents - starting_capital_cents) / starting_capital_cents * 100, 2
+            (portfolio_value_cents - inception_capital_cents) / inception_capital_cents * 100, 2
         )
 
     # ── 30-day return (realized trades in last 30d / starting capital) ────────
@@ -517,9 +530,17 @@ def compute_portfolio_snapshot(
     yesterday_value = portfolio_value_cents - today_pnl_cents
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
+    # Sum bot-level inception capital (added in m023) for the all-time
+    # return denominator so portfolio-level returns also survive a
+    # clean-slate restart without rewriting history.
+    bot_inception_sum = sum(
+        int(getattr(alloc, "inception_capital_cents", None) or alloc.starting_capital_cents or 0)
+        for alloc, _profile in allocs_with_profiles
+    )
+    inception_denom = bot_inception_sum or starting_capital_cents
     all_time_return_pct = round(
-        (portfolio_value_cents - starting_capital_cents) / starting_capital_cents * 100, 2
-    ) if starting_capital_cents else 0.0
+        (portfolio_value_cents - inception_denom) / inception_denom * 100, 2
+    ) if inception_denom else 0.0
 
     # 30d return: average across bots weighted by starting capital
     return_30d_pct = 0.0
