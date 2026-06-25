@@ -293,6 +293,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m017_exc:
         logger.warning("[startup] m017_disable_incubating_allocations failed (non-fatal): %s", _m017_exc)
 
+    try:
+        from app.db.migrations.m018_add_bot_heartbeat import run as _run_m018
+        with engine.connect() as _m018_conn:
+            _run_m018(_m018_conn)
+    except Exception as _m018_exc:
+        logger.warning("[startup] m018_add_bot_heartbeat failed (non-fatal): %s", _m018_exc)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
@@ -577,6 +584,8 @@ app.include_router(tuning.router)
 app.include_router(exams.router)
 app.include_router(exams.verify_router)
 app.include_router(admin.router)
+from app.routers.concentration import router as concentration_router
+app.include_router(concentration_router)
 app.include_router(admin_bots_router)
 app.include_router(sentinel_router)
 app.include_router(dashboard_router)

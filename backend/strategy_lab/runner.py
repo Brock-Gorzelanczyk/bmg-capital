@@ -1988,6 +1988,45 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     is_short = sig.side == "sell"
 
+    # ── Per-name concentration cap (3% of fleet NAV) ──────────────────────
+    # Reject longs that would push single-name exposure over the cap.
+    # No-op if fleet NAV is unavailable (fresh deploy / empty nav_history)
+    # so trading doesn't grind to a halt on a missing baseline.
+    if not is_short:
+        try:
+            from app.services.concentration import check_per_name_cap
+            new_notional_cents = int(round(position_dollars * 100))
+            allowed, conc_reason, conc_details = check_per_name_cap(
+                db, sig.symbol, new_notional_cents,
+            )
+            if not allowed:
+                logger.warning(
+                    "[concentration] REJECT %s %s: %s details=%s",
+                    profile_name, sig.symbol, conc_reason, conc_details,
+                )
+                try:
+                    from app.services.discord import send_ops_alert
+                    send_ops_alert(
+                        title="[concentration] entry rejected",
+                        message=(
+                            f"{profile_name} {sig.side} {sig.symbol} rejected: "
+                            f"would push exposure to "
+                            f"{conc_details['post_exposure_pct']:.2f}% (cap {conc_details['cap_pct']:.2f}%)"
+                        ),
+                        severity="warn",
+                        source="runner.concentration_cap",
+                        fields=[
+                            {"name": "Symbol",       "value": sig.symbol, "inline": True},
+                            {"name": "Cap %",        "value": f"{conc_details['cap_pct']:.2f}", "inline": True},
+                            {"name": "Post-entry %", "value": f"{conc_details['post_exposure_pct']:.2f}", "inline": True},
+                        ],
+                    )
+                except Exception:
+                    pass
+                return
+        except Exception as conc_exc:
+            logger.warning("[concentration] check raised, continuing: %s", conc_exc)
+
     # 3. Compute stop and target from profile rules (reversed for shorts)
     if is_short:
         _sl_pct = abs(profile.get("stop_loss_pct", 8.0)) / 100
