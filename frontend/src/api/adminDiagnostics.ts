@@ -420,6 +420,44 @@ export interface ForceCompleteResponse {
 export const forceEodComplete = (reason: string): Promise<ForceCompleteResponse> =>
   client.post<ForceCompleteResponse>("/admin/reconciliation/force-complete", { reason }).then((r) => r.data);
 
+// ── Cash Floor ───────────────────────────────────────────────────────────────
+
+export interface CashFloorPosition {
+  symbol: string;
+  qty: number;
+  avg_cost_cents: number;
+  notional_cents: number;
+  target_cents: number;
+  drift_cents: number;
+  drift_shares: number | null;
+  live_price_usd: number | null;
+}
+
+export interface CashFloorStatus {
+  as_of: string;
+  fleet_nav_cents: number;
+  active_deployment_cents: number;
+  cash_floor_target_pct: number;
+  cash_floor_target_cents: number;
+  actual_cash_pct: number;
+  deployable_cents: number;
+  target_allocation: {
+    spy_target_cents: number;
+    qqq_target_cents: number;
+    spy_weight_pct: number;
+    qqq_weight_pct: number;
+  };
+  current_positions: CashFloorPosition[];
+  total_cash_floor_holding_cents: number;
+  cash_floor_pct_of_fleet: number;
+  needs_buy: boolean;
+  needs_trim: boolean;
+  error?: string;
+}
+
+export const getCashFloorStatus = (): Promise<CashFloorStatus> =>
+  client.get<CashFloorStatus>("/admin/cash-floor/status").then((r) => r.data);
+
 // ── Watchlist Sweep ──────────────────────────────────────────────────────────
 
 export interface WatchlistSweepResponse {

@@ -13,7 +13,7 @@ import {
   getAllocationInventory, getStopAsymmetry, getDisciplineGateRate,
   getCooldownStorm, getLegacyQuarantineAudit, getDirectionalReconcile,
   getLastDryRun, runAllocatorDryRun, testOpsAlert, forceEodComplete,
-  sweepStaleWatchlist,
+  sweepStaleWatchlist, getCashFloorStatus,
   type DryRunResponse, type OpsAlertResponse,
 } from "@/api/adminDiagnostics";
 
@@ -580,6 +580,75 @@ function DryRunCard({ qcRefresh }: { qcRefresh: number }) {
   );
 }
 
+function CashFloorCard({ qcRefresh }: { qcRefresh: number }) {
+  const q = useQuery({
+    queryKey: ["adm-cash-floor", qcRefresh],
+    queryFn: getCashFloorStatus,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const d = q.data;
+  return (
+    <DiagnosticCard
+      title="Cash Floor — passive SPY/QQQ" icon={Layers}
+      lastUpdated={d?.as_of}
+      isLoading={q.isLoading} isFetching={q.isFetching} error={q.error}
+      onRefetch={() => q.refetch()}
+      full
+    >
+      {!d || d.error ? (
+        <div className="text-[11px] italic text-t-muted">{d?.error ?? "—"}</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-t-bg2 border border-t-dim rounded px-2 py-1.5">
+              <div className="text-[9px] uppercase text-t-muted tracking-wider">Fleet NAV</div>
+              <div className="text-sm font-mono-t text-t-hi">{fmtCents(d.fleet_nav_cents)}</div>
+            </div>
+            <div className="bg-t-bg2 border border-t-dim rounded px-2 py-1.5">
+              <div className="text-[9px] uppercase text-t-muted tracking-wider">Active Deploy</div>
+              <div className="text-sm font-mono-t text-t-hi">{fmtCents(d.active_deployment_cents)}</div>
+            </div>
+            <div className="bg-t-bg2 border border-t-dim rounded px-2 py-1.5">
+              <div className="text-[9px] uppercase text-t-muted tracking-wider">Cash Now</div>
+              <div className="text-sm font-mono-t text-t-hi">{fmtPct(d.actual_cash_pct, 2)}</div>
+            </div>
+          </div>
+          <div className="text-[11px] text-t-mid2 font-mono-t">
+            Floor target {fmtPct(d.cash_floor_target_pct, 0)} · CF holding{" "}
+            <span className="text-t-hi font-bold">{fmtCents(d.total_cash_floor_holding_cents)}</span>{" "}
+            ({fmtPct(d.cash_floor_pct_of_fleet, 2)} of fleet) ·
+            {d.needs_buy ? <span className="text-t-green ml-1">needs BUY</span>
+              : d.needs_trim ? <span className="text-amber-300 ml-1">needs TRIM</span>
+              : <span className="text-t-muted ml-1">at target</span>}
+          </div>
+          <Table headers={["sym", "held $", "target $", "drift $", "drift sh", "px"]}>
+            {d.current_positions.map((p) => (
+              <tr key={p.symbol} className="border-b border-t-dim/40">
+                <td className="py-1 px-1.5 text-t-hi font-semibold">{p.symbol}</td>
+                <td className="py-1 px-1.5 text-t-mid2">{fmtCents(p.notional_cents)}</td>
+                <td className="py-1 px-1.5 text-t-mid2">{fmtCents(p.target_cents)}</td>
+                <td className={cn(
+                  "py-1 px-1.5 font-mono-t",
+                  p.drift_cents > 0 ? "text-t-green" : p.drift_cents < 0 ? "text-amber-300" : "text-t-muted",
+                )}>
+                  {(p.drift_cents > 0 ? "+" : "") + fmtCents(p.drift_cents)}
+                </td>
+                <td className="py-1 px-1.5 text-t-mid2 font-mono-t">
+                  {p.drift_shares == null ? "—" : (p.drift_shares > 0 ? "+" : "") + p.drift_shares.toFixed(2)}
+                </td>
+                <td className="py-1 px-1.5 text-t-mid2 font-mono-t">
+                  {p.live_price_usd == null ? "—" : `$${p.live_price_usd.toFixed(2)}`}
+                </td>
+              </tr>
+            ))}
+          </Table>
+        </div>
+      )}
+    </DiagnosticCard>
+  );
+}
+
 function RunDryRunCard() {
   const qc = useQueryClient();
   const [result, setResult] = useState<DryRunResponse | null>(null);
@@ -812,10 +881,11 @@ export default function AdminDiagnosticsPage() {
         <QuarantineCard qcRefresh={qcRefresh} />
       </div>
 
-      {/* Reconcile + Dry-run */}
+      {/* Reconcile + Dry-run + Cash Floor */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <DirectionalReconcileCard qcRefresh={qcRefresh} />
         <DryRunCard qcRefresh={qcRefresh} />
+        <CashFloorCard qcRefresh={qcRefresh} />
       </div>
 
       {/* Actions row */}

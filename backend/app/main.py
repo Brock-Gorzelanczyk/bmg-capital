@@ -599,6 +599,8 @@ from app.routers.capital_execute import router as capital_execute_router
 app.include_router(capital_execute_router)
 from app.routers.friction import router as friction_router
 app.include_router(friction_router)
+from app.routers.cash_floor import router as cash_floor_router
+app.include_router(cash_floor_router)
 app.include_router(admin_bots_router)
 app.include_router(sentinel_router)
 app.include_router(dashboard_router)
