@@ -300,6 +300,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m018_exc:
         logger.warning("[startup] m018_add_bot_heartbeat failed (non-fatal): %s", _m018_exc)
 
+    try:
+        from app.db.migrations.m019_add_modeled_fees_cents import run as _run_m019
+        with engine.connect() as _m019_conn:
+            _run_m019(_m019_conn)
+    except Exception as _m019_exc:
+        logger.warning("[startup] m019_add_modeled_fees_cents failed (non-fatal): %s", _m019_exc)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
@@ -590,6 +597,8 @@ from app.routers.allocator import router as allocator_router
 app.include_router(allocator_router)
 from app.routers.capital_execute import router as capital_execute_router
 app.include_router(capital_execute_router)
+from app.routers.friction import router as friction_router
+app.include_router(friction_router)
 app.include_router(admin_bots_router)
 app.include_router(sentinel_router)
 app.include_router(dashboard_router)
