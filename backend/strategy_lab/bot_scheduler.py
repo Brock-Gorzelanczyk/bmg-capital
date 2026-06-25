@@ -27,6 +27,82 @@ def _run_bot_position_monitor(bot_name: str) -> None:
         logger.error("bot_position_monitor[%s] failed: %s", bot_name, exc)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# COMMIT 10 — Watchlist staleness sweep (module-level so admin endpoint can call)
+# ──────────────────────────────────────────────────────────────────────────────
+_INCUBATING_PROFILE_NAMES = ("earnings_nlp", "quality_factor", "value_quality")
+
+
+def run_watchlist_stale_sweep() -> dict:
+    """Soft-remove watchlist entries older than 7 days (status → stale_removed).
+
+    Skips incubating profiles whose allocations are intentionally inactive.
+    Returns {"swept": N} on success or {"error": ...} on failure.
+    """
+    from app.db.session import SessionLocal as _SL
+    from sqlalchemy import text as _sql
+    from app.services.discord import send_ops_alert as _alert
+
+    db = _SL()
+    try:
+        inc_ids_rows = db.execute(_sql(
+            "SELECT id FROM bot_profiles WHERE name IN (:p0, :p1, :p2)"
+        ), {
+            "p0": _INCUBATING_PROFILE_NAMES[0],
+            "p1": _INCUBATING_PROFILE_NAMES[1],
+            "p2": _INCUBATING_PROFILE_NAMES[2],
+        }).fetchall()
+        inc_ids = [r[0] for r in inc_ids_rows]
+        inc_clause = ""
+        params: dict = {}
+        if inc_ids:
+            placeholders = ",".join(f":i{i}" for i in range(len(inc_ids)))
+            inc_clause = f"AND profile_id NOT IN ({placeholders})"
+            params = {f"i{i}": inc_ids[i] for i in range(len(inc_ids))}
+
+        count_row = db.execute(_sql(
+            f"SELECT COUNT(*) FROM bot_watchlist "
+            f"WHERE status IN ('active','watching','pending_entry') "
+            f"  AND added_at < datetime('now', '-7 days') "
+            f"  {inc_clause}"
+        ), params).fetchone()
+        stale_count = int(count_row[0] if count_row else 0)
+
+        updated = 0
+        if stale_count > 0:
+            result = db.execute(_sql(
+                f"UPDATE bot_watchlist SET status = 'stale_removed' "
+                f"WHERE status IN ('active','watching','pending_entry') "
+                f"  AND added_at < datetime('now', '-7 days') "
+                f"  {inc_clause}"
+            ), params)
+            db.commit()
+            updated = getattr(result, "rowcount", stale_count) or stale_count
+
+        logger.warning("[watchlist-sweep] swept %d stale entries (≥7d, non-incubating)", updated)
+        if updated > 0:
+            try:
+                _alert(
+                    title="Watchlist staleness sweep",
+                    message=f"Soft-removed {updated} watchlist entries older than 7 days "
+                            f"(status → stale_removed).",
+                    severity="info",
+                    source="bot_scheduler.watchlist_sweep",
+                    fields=[
+                        {"name": "swept_count", "value": str(updated), "inline": True},
+                        {"name": "exempt_profiles", "value": ",".join(_INCUBATING_PROFILE_NAMES), "inline": False},
+                    ],
+                )
+            except Exception as exc:
+                logger.warning("[watchlist-sweep] ops alert failed: %s", exc)
+        return {"swept": updated, "stale_count": stale_count}
+    except Exception as exc:
+        logger.error("[watchlist-sweep] failed: %s", exc, exc_info=True)
+        return {"error": str(exc)}
+    finally:
+        db.close()
+
+
 def _run_and_log(profile_name: str) -> None:
     """Thin wrapper so APScheduler job invocations appear in Railway logs."""
     logger.warning("[scheduled] %s scan START", profile_name)
@@ -1522,6 +1598,22 @@ def setup_bot_scheduler(scheduler) -> None:
         coalesce=True,
     )
     logger.warning("[startup-trace] registered jobs bot_heartbeat (stock 5min RTH + crypto 4h)")
+
+    # ------------------------------------------------------------------
+    # COMMIT 10 — Watchlist staleness sweep (nightly 2 AM Central)
+    # ------------------------------------------------------------------
+    # Module-level run_watchlist_stale_sweep() is also called by the on-demand
+    # POST /api/admin/watchlist/sweep-stale endpoint.
+    scheduler.add_job(
+        run_watchlist_stale_sweep,
+        CronTrigger(hour=2, minute=0, timezone=pytz.timezone("America/Chicago")),
+        id="watchlist_stale_sweep_nightly",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job watchlist_stale_sweep_nightly (02:00 CT)")
 
     # Fleet EOD summary: gated by should_post_to_fund_updates — suppressed in quiet mode.
     # To re-enable: pass urgency="critical" to should_post_to_fund_updates, or remove gate.

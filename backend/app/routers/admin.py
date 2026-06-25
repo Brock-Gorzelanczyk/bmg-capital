@@ -2830,3 +2830,34 @@ def bot_heartbeats(
         "stale_count": sum(1 for r in result if r["is_stale"]),
         "ts": now.isoformat(),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 10 — Watchlist stale sweep on-demand endpoint
+# Runs the same sweep the nightly 2 AM cron does. Used to clean the current
+# state without waiting for the next scheduled tick.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/watchlist/sweep-stale")
+def watchlist_sweep_stale(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Trigger the watchlist staleness sweep immediately.
+
+    Soft-removes (status → stale_removed) any bot_watchlist row older than
+    7 days whose status is active/watching/pending_entry, excluding
+    incubating profile allocations. Reuses the module-level worker the
+    nightly cron calls so behavior stays identical.
+    """
+    try:
+        from strategy_lab.bot_scheduler import run_watchlist_stale_sweep
+        result = run_watchlist_stale_sweep()
+    except Exception as exc:
+        logger.error("[watchlist_sweep_stale] failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {
+        "ok": True,
+        "result": result,
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "by_user_id": current_user.id,
+    }
