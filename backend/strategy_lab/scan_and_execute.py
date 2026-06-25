@@ -251,7 +251,13 @@ def scan_and_execute(
 
     # ── 7. Persist + execute per allocation ───────────────────────────────────
     threshold = float(profile.get("confidence_threshold", 0.5))
-    default_size = float(profile.get("position_size_pct", 5.0))
+    # position_size_pct_override takes precedence — Brock's 7-day push spec
+    # adds per-bot overrides (25% for proven bots, 15% for newer bots, 10%
+    # default). Falls through to legacy position_size_pct then 5.0.
+    default_size = float(
+        profile.get("position_size_pct_override")
+        or profile.get("position_size_pct", 5.0)
+    )
     # Cooldown is sourced from profile YAML (default 0 → 1-minute concurrent
     # dedup only). Clamp to a sane 24h max so a typo in YAML or a stale
     # bot_config_override row cannot silence a bot indefinitely (B2 of the

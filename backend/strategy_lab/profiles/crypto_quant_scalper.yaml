@@ -62,3 +62,6 @@ risk:
 
 # Bypass anomaly/news/bot_coordinator execution guards so scheduled scans execute.
 skip_execution_guards: true
+
+# 7-day deployment push (Brock 2026-06-24): bump sizing for active newer bots.
+position_size_pct_override: 15
