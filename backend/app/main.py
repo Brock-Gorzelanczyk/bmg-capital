@@ -586,6 +586,8 @@ app.include_router(exams.verify_router)
 app.include_router(admin.router)
 from app.routers.concentration import router as concentration_router
 app.include_router(concentration_router)
+from app.routers.allocator import router as allocator_router
+app.include_router(allocator_router)
 app.include_router(admin_bots_router)
 app.include_router(sentinel_router)
 app.include_router(dashboard_router)
