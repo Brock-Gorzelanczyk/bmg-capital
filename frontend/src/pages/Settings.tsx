@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   LogOut, User, Crown, Zap, Star, ExternalLink, AlertCircle, TrendingUp,
   Bell, Shield, Eye, Palette, CreditCard, Database, Monitor, ChevronRight,
-  Check, Copy, Trash2, Download, Lock, Key, Smartphone, Globe, BarChart2,
+  Check, Copy, Trash2, Download, Lock, Key, BarChart2,
   Moon, Sun, Sliders, RefreshCw, AlertTriangle, Info,
   SlidersHorizontal, HeartPulse, Activity, Grid3X3, TestTube2, Cpu,
 } from "lucide-react";
@@ -632,11 +632,6 @@ function SecuritySection() {
   // worse outcome than telling the user honestly, especially after they
   // believed they'd rotated a leaked password.
 
-  const sessions = [
-    { device: "MacBook Pro", location: "Chicago, IL", last: "Active now",  current: true },
-    { device: "iPhone 15",   location: "Chicago, IL", last: "2 hours ago", current: false },
-  ];
-
   return (
     <div className="space-y-4">
       <SectionHeader title="Security" subtitle="Manage your credentials and active sessions" />
@@ -663,45 +658,7 @@ function SecuritySection() {
         </SettingRow>
       </Card>
 
-      <Card>
-        <div className="px-4 py-2.5 border-b border-[var(--border-subtle)]/60">
-          <span className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest">Active Sessions</span>
-        </div>
-        {sessions.map((s, i) => (
-          <div
-            key={s.device}
-            className={cn(
-              "flex items-center justify-between px-4 py-3 gap-3",
-              i < sessions.length - 1 && "border-b border-[var(--border-subtle)]/60"
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[var(--bg-elevated-2)] flex items-center justify-center">
-                <Smartphone size={14} className="text-[var(--text-tertiary)]" />
-              </div>
-              <div>
-                <div className="text-sm text-[var(--text-primary)] flex items-center gap-2">
-                  {s.device}
-                  {s.current && (
-                    <span className="text-[10px] bg-[var(--accent-positive)]/10 text-[var(--accent-positive)] px-1.5 py-0.5 rounded font-semibold">
-                      This device
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-[var(--text-tertiary)] flex items-center gap-1.5 mt-0.5">
-                  <Globe size={10} />
-                  {s.location} · {s.last}
-                </div>
-              </div>
-            </div>
-            {!s.current && (
-              <button className="text-xs text-[var(--accent-negative)] hover:text-[#EF4444] transition-colors">
-                Revoke
-              </button>
-            )}
-          </div>
-        ))}
-      </Card>
+      {/* Restore when /api/sessions ships */}
     </div>
   );
 }
