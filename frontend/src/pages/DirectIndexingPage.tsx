@@ -347,7 +347,7 @@ export default function DirectIndexingPage() {
           </span>
           <span className="text-[var(--text-tertiary)] text-sm">·</span>
           <span className="text-sm text-[var(--text-secondary)]">
-            {diInfo?.position_count ?? 187} positions
+            your custom basket
           </span>
         </div>
         <div className="flex items-center gap-4 flex-wrap text-sm">
