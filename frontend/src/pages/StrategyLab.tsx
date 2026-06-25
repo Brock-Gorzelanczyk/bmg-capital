@@ -1850,6 +1850,20 @@ export default function StrategyLab() {
   });
   const portfolios: StrategyPortfolio[] = portfolioData?.portfolios ?? [];
 
+  // Canonical headline number — same source as Dashboard + PortfolioHero.
+  // /api/bots/portfolios sums per-StrategyPortfolio only and silently drops
+  // orphan allocations (allocs not bound to a portfolio row), which is why
+  // the per-portfolio sum can underreport vs. the canonical aggregate. We
+  // read total_value_cents from /api/strategy-lab/portfolio (which routes
+  // through compute_strategy_lab_aggregate → per-allocation totals) so the
+  // headline always matches the rest of the app.
+  const { data: labAggregate } = useQuery({
+    queryKey: ["strategy-lab-portfolio"],
+    queryFn: getStrategyLabPortfolio,
+    staleTime: 30_000,
+    retry: 0,
+  });
+
   const { data: regime, isLoading: regimeLoading } = useQuery({
     queryKey: ["regime"],
     queryFn: getRegime,
@@ -2052,9 +2066,14 @@ export default function StrategyLab() {
             </div>
           </div>
 
-          {/* 1. Portfolio value header — sum of sleeve values (no separate API call) */}
+          {/* 1. Portfolio value header — canonical total from
+              compute_strategy_lab_aggregate (matches Dashboard + Portfolio). */}
           {!portfoliosLoading && portfolios.length > 0 && (() => {
-            const totalUsd = portfolios.reduce((s, p) => s + (p.current_value_cents || 0), 0) / 100;
+            // Prefer canonical aggregate; fall back to per-sleeve sum only if
+            // the aggregate hasn't loaded yet (avoids a 0 flash on first paint).
+            const aggregateUsd = (labAggregate?.total_value_cents ?? 0) / 100;
+            const fallbackUsd = portfolios.reduce((s, p) => s + (p.current_value_cents || 0), 0) / 100;
+            const totalUsd = aggregateUsd > 0 ? aggregateUsd : fallbackUsd;
             return (
               <div className="bg-t-bg0 border border-t-dim rounded-xl px-5 py-4 flex items-center justify-between gap-4">
                 <div>
@@ -2062,7 +2081,7 @@ export default function StrategyLab() {
                   <p className="text-4xl font-bold text-t-hi tabular-nums font-mono-t">
                     ${totalUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                   </p>
-                  <p className="text-xs text-t-muted mt-1 font-ui-t">Sum across all 4 sleeves · updates every 60s</p>
+                  <p className="text-xs text-t-muted mt-1 font-ui-t">Canonical aggregate · updates every 60s</p>
                 </div>
               </div>
             );
