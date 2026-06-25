@@ -269,7 +269,15 @@ def get_cached_recommendations(db: Session, days: int = 1) -> dict[str, Any]:
     now = time.time()
     entry = _REC_CACHE.get(days)
     if entry and now - entry[0] < _CACHE_TTL:
-        return entry[1]
+        # Never serve a cached zero — if the cached payload says "no
+        # signals analyzed in the window", recompute. The 5-min TTL was
+        # holding stuck-at-zero state after container restarts that
+        # populated cache before any scan cycle had run. Cache only
+        # invalidates on hypothesis promote, so a single bad cache fill
+        # used to leave the Tuning Advisor reading 0 for the full window
+        # despite the discipline filter writing rows continuously.
+        if int(entry[1].get("total_analyzed", 0) or 0) > 0:
+            return entry[1]
     payload = get_tuning_recommendations(db, days=days)
     _REC_CACHE[days] = (now, payload)
     return payload
