@@ -8,7 +8,6 @@ import {
   ArrowDownRight,
   TrendingDown,
   Sparkles,
-  ChevronRight,
   Save,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -204,10 +203,6 @@ function NotEnabledHero({ currentBalance }: { currentBalance: number }) {
             {formatCurrency(Math.max(MIN_BALANCE - currentBalance, 0), 0)} more to unlock
           </p>
         </div>
-
-        <button className="w-full py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-400 text-sm font-semibold hover:bg-blue-500/15 transition-colors">
-          Learn More
-        </button>
       </div>
     </div>
   );
@@ -342,9 +337,6 @@ export default function DirectIndexingPage() {
             </p>
           </div>
         </div>
-        <button className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-          Tracking Error <ArrowUpRight size={13} />
-        </button>
       </div>
 
       {/* Summary card */}
@@ -530,9 +522,6 @@ export default function DirectIndexingPage() {
             </div>
           ))}
         </div>
-        <button className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors mt-1">
-          View All {diInfo?.position_count ?? 187} Positions <ChevronRight size={13} />
-        </button>
       </div>
 
       {/* Fixed bottom save bar */}
