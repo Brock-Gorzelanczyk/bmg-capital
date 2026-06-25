@@ -2178,3 +2178,72 @@ def force_complete_reconciliation(
         "audit_log_length": len(_FORCE_COMPLETE_REASONS),
         "by_user_id": current_user.id,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 5 — Portfolio health invariant probe
+# Hits Dashboard / Portfolio / Strategy Lab data sources (they all delegate to
+# compute_strategy_lab_aggregate, so reading the response shape three ways
+# gives us a single canonical PV that we then assert is internally consistent).
+# If max divergence > $500 (50_000 cents, 0.5% of $1M) → ops alert severity=warn.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/portfolio-health")
+def portfolio_health(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Probe the three primary PV surfaces.
+
+    Returns max_divergence_cents and posts a warn ops alert when divergence
+    exceeds $500 (50_000 cents) — the same threshold the canonical aggregator
+    uses for its internal split-brain diagnostic, surfaced as a poll-able
+    endpoint for external monitors.
+    """
+    from app.core.canonical import compute_strategy_lab_aggregate
+    from app.services.discord import send_ops_alert
+
+    agg = compute_strategy_lab_aggregate(current_user.id, db) or {}
+
+    # All three surfaces (Dashboard, Portfolio, Strategy Lab) call this exact
+    # aggregator. We extract three independent reads to validate that the
+    # response itself is internally consistent — alias fields must match and
+    # the per-portfolio breakdown must sum back to the fleet total.
+    strategy_lab_pv = int(agg.get("total_value_cents") or 0)
+    dashboard_pv = int(agg.get("portfolio_value_cents") or 0)  # alias used by Dashboard
+    portfolio_breakdown_pv = sum(
+        int(p.get("portfolio_value_cents") or 0) for p in (agg.get("portfolios") or [])
+    )
+
+    values = [dashboard_pv, portfolio_breakdown_pv, strategy_lab_pv]
+    max_divergence = (max(values) - min(values)) if values else 0
+    status = "ok" if max_divergence <= 50_000 else "warn"
+
+    if status == "warn":
+        try:
+            send_ops_alert(
+                title="Portfolio PV divergence detected",
+                message=(
+                    f"Dashboard / Portfolio / Strategy-Lab PV diverge by "
+                    f"{max_divergence} cents (>$500). Investigate canonical "
+                    "aggregator integrity."
+                ),
+                severity="warn",
+                source="admin.portfolio_health",
+                fields=[
+                    {"name": "dashboard_pv_cents", "value": str(dashboard_pv), "inline": True},
+                    {"name": "portfolio_pv_cents", "value": str(portfolio_breakdown_pv), "inline": True},
+                    {"name": "strategy_lab_pv_cents", "value": str(strategy_lab_pv), "inline": True},
+                    {"name": "max_divergence_cents", "value": str(max_divergence), "inline": True},
+                ],
+            )
+        except Exception as exc:
+            logger.warning("[portfolio-health] ops alert failed: %s", exc)
+
+    return {
+        "dashboard_pv_cents": dashboard_pv,
+        "portfolio_pv_cents": portfolio_breakdown_pv,
+        "strategy_lab_pv_cents": strategy_lab_pv,
+        "max_divergence_cents": max_divergence,
+        "status": status,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }

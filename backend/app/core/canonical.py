@@ -700,6 +700,27 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     # logged drift between the portfolio_snapshots+orphan path and total_value
     # — that drift is now captured by the split-brain diagnostic earlier.
 
+    # ── COMMIT 5: Canonical invariant — fleet = sleeves + cash ───────────────
+    # Cash isn't separately tracked in this aggregate (capital lives inside
+    # allocations as starting_capital_cents and is implicitly part of
+    # portfolio_value via the invariant `value = starting + realized + unrealized`).
+    # We compare fleet total_value vs the per-portfolio breakdown sum + orphan,
+    # treating orphan_value_diag + (any unaccounted cash) as effective "cash".
+    # > 100 cents drift → warn log so ops can investigate without breaking the API.
+    sleeve_sum_cents = sum(p.get("portfolio_value_cents", 0) for p in [
+        {
+            "portfolio_value_cents": s.portfolio_value_cents,
+        }
+        for s in portfolio_snapshots
+    ])
+    fleet_total = total_value
+    total_cash_cents = orphan_value_diag  # orphan allocations act as residual "cash"
+    if abs(fleet_total - (sleeve_sum_cents + total_cash_cents)) > 100:
+        logger.warning(
+            "[canonical-invariant] fleet %d != sleeves %d + cash %d (drift)",
+            fleet_total, sleeve_sum_cents, total_cash_cents,
+        )
+
     return {
         "total_value_cents": total_value,
         # Alias for callers that read portfolio_value_cents at the aggregate
