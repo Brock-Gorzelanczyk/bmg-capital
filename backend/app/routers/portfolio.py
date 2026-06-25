@@ -715,7 +715,13 @@ def get_allocation_live(
         if sleeve not in sleeve_dollars:
             sleeve = "stocks"
 
-        is_options = bool(pos.option_type) or sleeve == "options"
+        # Use option_type as the SOLE indicator (matching canonical.py:284).
+        # The prior `or sleeve == "options"` fallback over-counted by 100x for
+        # leftover share-style positions written by the pre-0931c1e equity
+        # simulator into options bots — TSLA qty=3.6415 × $391.74 then × 100
+        # inflated to $142k instead of $1.4k. The hard gate stopped new
+        # writes; this prevents the leftovers from misreporting the sleeve.
+        is_options = bool(pos.option_type)
 
         if is_options:
             # Premium paid: avg_cost_cents stores premium in cents (per share equivalent)
