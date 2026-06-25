@@ -43,21 +43,26 @@ def run(conn) -> dict:
         logger.info("[m021] bot_profiles missing — no-op")
         return {"skipped_reason": "profiles_table_missing"}
 
-    # All enabled rows grouped by profile_id, ordered by row id
+    # All enabled rows grouped by (user_id, profile_id) — not just
+    # profile_id. The original m021 grouped globally, which silently
+    # merged one user's allocs INTO another user's lowest-id row when
+    # they shared a profile. Per-user dedup preserves multi-tenant
+    # separation.
     rows = conn.execute(text("""
-        SELECT a.id, a.profile_id, a.starting_capital_cents, p.name
+        SELECT a.id, a.user_id, a.profile_id, a.starting_capital_cents, p.name
           FROM bot_allocations a
           JOIN bot_profiles p ON p.id = a.profile_id
          WHERE a.enabled = 1
-         ORDER BY a.profile_id, a.id
+         ORDER BY a.user_id, a.profile_id, a.id
     """)).fetchall()
 
-    by_profile: dict[int, list] = {}
+    by_user_profile: dict[tuple[int, int], list] = {}
     for r in rows:
-        by_profile.setdefault(int(r[1]), []).append({
+        by_user_profile.setdefault((int(r[1]), int(r[2])), []).append({
             "id": int(r[0]),
-            "start_cents": int(r[2] or 0),
-            "name": r[3],
+            "user_id": int(r[1]),
+            "start_cents": int(r[3] or 0),
+            "name": r[4],
         })
 
     merged_profiles = 0
@@ -65,7 +70,7 @@ def run(conn) -> dict:
     rows_resized = 0
     summary: list[dict] = []
 
-    for profile_id, members in by_profile.items():
+    for (user_id, profile_id), members in by_user_profile.items():
         members.sort(key=lambda m: m["id"])
         canonical = members[0]
         duplicates = members[1:]
@@ -99,6 +104,7 @@ def run(conn) -> dict:
             rows_resized += 1
 
         summary.append({
+            "user_id": user_id,
             "profile": canonical["name"],
             "canonical_id": canonical["id"],
             "canonical_old_cents": canonical["start_cents"],
