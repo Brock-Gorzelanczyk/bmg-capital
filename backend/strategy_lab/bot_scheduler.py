@@ -1670,6 +1670,80 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job cooldown_storm_check_rth (every 30min RTH)")
 
+    # ------------------------------------------------------------------
+    # COMMIT 15 — Brain Graph edge decay TTL (nightly 3 AM ET)
+    # ------------------------------------------------------------------
+    # NOTE: The brain_edges table does NOT exist in the current schema. The
+    # decay job is stubbed: it logs that the table is missing and exits.
+    # When the Brain Graph subsystem ships its table (columns expected:
+    # id, weight, updated_at) the body should be replaced with:
+    #
+    #   UPDATE brain_edges SET weight = weight * 0.95
+    #     WHERE updated_at < datetime('now','-30 days') AND weight > 0.01;
+    #   DELETE FROM brain_edges WHERE weight < 0.01;
+    #
+    # Registering the cron now keeps the scheduler shape stable and gives
+    # us a single place to flip the implementation on when the table lands.
+    def _run_brain_edge_decay() -> None:
+        try:
+            from app.db.session import SessionLocal as _SL
+            from sqlalchemy import text as _sql
+
+            db = _SL()
+            try:
+                # Check if brain_edges table exists. SQLite-portable check.
+                exists_row = db.execute(_sql(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name='brain_edges'"
+                )).fetchone()
+                if not exists_row:
+                    logger.info(
+                        "[brain-decay] brain_edges table does not exist yet — "
+                        "decay job is a no-op until the Brain Graph subsystem ships."
+                    )
+                    return
+                # When the table exists in the future, replace the no-op above
+                # with the decay + delete SQL. Kept here for traceability.
+                decay_result = db.execute(_sql(
+                    "UPDATE brain_edges SET weight = weight * 0.95 "
+                    "WHERE updated_at < datetime('now', '-30 days') AND weight > 0.01"
+                ))
+                decayed = getattr(decay_result, "rowcount", 0) or 0
+                delete_result = db.execute(_sql(
+                    "DELETE FROM brain_edges WHERE weight < 0.01"
+                ))
+                deleted = getattr(delete_result, "rowcount", 0) or 0
+                db.commit()
+                logger.warning(
+                    "[brain-decay] decayed=%d deleted=%d", decayed, deleted,
+                )
+                if decayed or deleted:
+                    try:
+                        from app.services.discord import send_ops_alert as _alert
+                        _alert(
+                            title="Brain Graph edge decay sweep",
+                            message=f"Decayed {decayed} edges (×0.95), deleted {deleted} (weight < 0.01).",
+                            severity="info",
+                            source="bot_scheduler.brain_edge_decay",
+                        )
+                    except Exception as exc:
+                        logger.warning("[brain-decay] ops alert failed: %s", exc)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("[brain-decay] failed: %s", exc, exc_info=True)
+
+    scheduler.add_job(
+        _run_brain_edge_decay,
+        CronTrigger(hour=3, minute=0, timezone=ET),
+        id="brain_edge_decay_nightly",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job brain_edge_decay_nightly (03:00 ET) — stubbed until brain_edges ships")
+
     # Fleet EOD summary: gated by should_post_to_fund_updates — suppressed in quiet mode.
     # To re-enable: pass urgency="critical" to should_post_to_fund_updates, or remove gate.
 
