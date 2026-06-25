@@ -1,0 +1,3 @@
+# Pipeline state files — do not commit, regenerated on every ship-feature run
+*.md
+!.gitignore
