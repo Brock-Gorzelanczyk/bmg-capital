@@ -852,7 +852,7 @@ export default function ScoutChartPage() {
 
   // Fetch bars with indicators — engine keys depend on strategy spec; the
   // timeframe + start window depend on the active chip.
-  const { data: barsData, isLoading: barsLoading, isFetching: barsFetching, isError: barsError, error: barsErrorObj } = useQuery({
+  const { data: barsData, isLoading: barsLoading, isFetching: barsFetching, isError: barsError, error: barsErrorObj, refetch: refetchBars } = useQuery({
     queryKey: ["scout-chart-bars", ticker, apiIndicators, barsTimeframe, startIso],
     queryFn: () => fetchBars(ticker, barsTimeframe, apiIndicators || undefined, startIso),
     staleTime: 300_000,
@@ -860,17 +860,40 @@ export default function ScoutChartPage() {
     retry: 0,
   });
 
-  // Surface specific status codes so non-SPY equity loads (which often hit
-  // yfinance rate limits) report something actionable instead of a generic
-  // "Chart data unavailable". 504 = upstream timeout, 503 = rate limit,
-  // 404 = unknown symbol, 5xx anything else = backend error.
-  const barsStatus: number | null = (barsErrorObj as { response?: { status?: number } } | null)?.response?.status ?? null;
+  // Distinguishes 429 (upstream rate-limit), 503/504 (timeout/unavailable),
+  // 404 (symbol not in yfinance), 5xx-other (backend error), and the
+  // empty-bars case where the request succeeded but no data came back
+  // (cache miss + scheduled refresh pending). Logs the full error to the
+  // browser console so it's debuggable from DevTools.
+  const barsStatus: number | null =
+    (barsErrorObj as { response?: { status?: number } } | null)?.response?.status ?? null;
+  const barsResponseBody: unknown =
+    (barsErrorObj as { response?: { data?: unknown } } | null)?.response?.data ?? null;
+  useEffect(() => {
+    if (barsError && barsErrorObj) {
+      console.error("[ScoutChart] bars fetch failed", {
+        ticker,
+        timeframe: barsTimeframe,
+        status: barsStatus,
+        body: barsResponseBody,
+        error: barsErrorObj,
+      });
+    }
+    // We intentionally log only on transition to error; barsErrorObj changes
+    // identity per attempt so guard via barsError boolean.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barsError]);
+
   const barsErrorText: string = (() => {
+    if (!barsError && barsData && (barsData.bars ?? []).length === 0) {
+      return `Bars endpoint returned empty array for ${ticker} ${barsTimeframe} — no data in cache, scheduled refresh pending.`;
+    }
     if (!barsError) return "";
+    if (barsStatus === 429) return `Data source returned 429 for ${ticker} — rate limited, retry in 60s.`;
     if (barsStatus === 504) return `Price data fetch timed out for ${ticker} — try a shorter window or wait a minute.`;
-    if (barsStatus === 503) return `Upstream rate-limited for ${ticker}. SPY is heavily cached; non-SPY equities hit yfinance directly. Try again in ~1 min.`;
-    if (barsStatus === 404) return `No price data for "${ticker}". Check the symbol — yfinance accepts plain US tickers (e.g. NVDA, AAPL) and "BTC-USD" form for crypto.`;
-    if (barsStatus && barsStatus >= 500) return `Backend error ${barsStatus} loading ${ticker}. Logged for investigation.`;
+    if (barsStatus === 503) return `Data source returned 503 for ${ticker} — upstream unavailable. SPY is heavily cached; non-SPY equities hit yfinance directly. Try again in ~1 min.`;
+    if (barsStatus === 404) return `Data source returned 404 for ${ticker} — symbol not found in yfinance. Plain US tickers (NVDA, AAPL) and crypto in BTC-USD form are supported.`;
+    if (barsStatus && barsStatus >= 500) return `Data source returned ${barsStatus} for ${ticker} — internal error, check logs.`;
     return `Chart data unavailable for ${ticker}`;
   })();
 
@@ -1221,8 +1244,15 @@ export default function ScoutChartPage() {
           ) : barsLoading ? (
             <div className="h-[340px] bg-t-bg0 rounded-xl animate-pulse" />
           ) : barsError || bars.length === 0 ? (
-            <div className="h-[340px] bg-t-bg0 rounded-xl flex items-center justify-center text-t-muted text-sm font-mono-t px-6 text-center">
-              {barsErrorText || `Chart data unavailable for ${ticker}`}
+            <div className="h-[340px] bg-t-bg0 rounded-xl flex flex-col items-center justify-center gap-3 text-t-muted text-sm font-mono-t px-6 text-center">
+              <div>{barsErrorText || `Chart data unavailable for ${ticker}`}</div>
+              <button
+                onClick={() => refetchBars()}
+                disabled={barsFetching}
+                className="px-3 py-1.5 rounded-lg border border-t-mid/40 hover:border-t-mid hover:text-t-hi disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium transition-colors"
+              >
+                {barsFetching ? "Retrying…" : "Retry"}
+              </button>
             </div>
           ) : (
             // Real chart — fade in once data lands so the skeleton-to-chart
