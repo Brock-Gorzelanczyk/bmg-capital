@@ -2593,3 +2593,170 @@ def options_legacy_quarantine_audit(
         "fake_count": fake_count,
         "classifications": classifications,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 16 — Equity Directional reconciliation report
+# Diff three views of a single bot profile so the next discrepancy is
+# caught before a user sees it. Sources:
+#   1. bot_allocations.enabled (DB ground truth)
+#   2. compute_strategy_lab_aggregate(...).leaderboard entry
+#   3. compute_bot_snapshot(alloc, profile, db) per-alloc
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/bot/{profile_name}/reconciliation")
+def bot_reconciliation(
+    profile_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Reconcile the 3 canonical views of a bot profile (e.g.
+    options_directional a.k.a. "equity_directional"). Posts a Discord
+    ops alert with severity=warn on any divergence.
+    """
+    from app.db.models.bots import BotAllocation, BotProfile
+    from app.core.canonical import (
+        compute_bot_snapshot,
+        compute_strategy_lab_aggregate,
+    )
+
+    profile = (
+        db.query(BotProfile)
+        .filter(BotProfile.name == profile_name)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail=f"profile not found: {profile_name}")
+
+    # Source 1: bot_allocations.enabled — restrict to current_user so the
+    # endpoint reflects the requesting user's view of the bot.
+    allocs = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.profile_id == profile.id,
+            BotAllocation.user_id == current_user.id,
+        )
+        .order_by(BotAllocation.id)
+        .all()
+    )
+
+    source1_entries = [
+        {
+            "allocation_id": a.id,
+            "enabled": bool(a.enabled),
+            "paused_reason": a.paused_reason,
+            "portfolio_id": a.portfolio_id,
+        }
+        for a in allocs
+    ]
+    source1_enabled = any(e["enabled"] for e in source1_entries) if source1_entries else None
+
+    # Source 2: canonical leaderboard entry for this profile.
+    source2_entry = None
+    leaderboard_error = None
+    try:
+        agg = compute_strategy_lab_aggregate(current_user.id, db)
+        leaderboard = agg.get("leaderboard", []) if isinstance(agg, dict) else []
+        for e in leaderboard:
+            if e.get("profile") == profile_name:
+                source2_entry = e
+                break
+    except Exception as exc:
+        leaderboard_error = str(exc)
+        logger.warning("[reconciliation] leaderboard compute failed: %s", exc)
+
+    # Source 3: per-alloc compute_bot_snapshot — one row per alloc on this profile.
+    source3_entries = []
+    snapshot_errors = []
+    for a in allocs:
+        try:
+            snap = compute_bot_snapshot(a, profile, db)
+            source3_entries.append({
+                "allocation_id": a.id,
+                "enabled": bool(snap.enabled),
+                "today_pnl_cents": int(snap.today_pnl_cents or 0),
+                "open_positions_count": int(snap.open_positions_count or 0),
+                "portfolio_value_cents": int(snap.portfolio_value_cents or 0),
+            })
+        except Exception as exc:
+            snapshot_errors.append({"allocation_id": a.id, "error": str(exc)})
+
+    # ── Compute divergence ────────────────────────────────────────────────
+    s2_today = int(source2_entry.get("today_pnl_cents") or 0) if source2_entry else 0
+    s3_today_sum = sum(e["today_pnl_cents"] for e in source3_entries)
+    pnl_divergence_cents = abs(s2_today - s3_today_sum)
+
+    # Open-position divergence — leaderboard doesn't carry per-profile open count
+    # directly; if absent, compare s3 sum against itself (== 0). We carry the
+    # count anyway for the operator.
+    s3_open_sum = sum(e["open_positions_count"] for e in source3_entries)
+
+    # Enabled-status divergence: leaderboard implicitly assumes "exists in
+    # aggregate". Compare DB ground truth to whether profile appears in the
+    # leaderboard at all — if there's an enabled alloc but no leaderboard entry,
+    # that's a real divergence worth flagging.
+    enabled_status_diverges = False
+    if source1_enabled is True and source2_entry is None:
+        enabled_status_diverges = True
+    elif source1_enabled is False and source2_entry is not None:
+        # Profile appears in leaderboard but no enabled alloc — possible cache /
+        # capture from another portfolio. Worth flagging.
+        enabled_status_diverges = True
+
+    # Cross-source enabled diff (DB vs. snapshot)
+    s3_any_enabled = any(e["enabled"] for e in source3_entries) if source3_entries else None
+    if source1_enabled is not None and s3_any_enabled is not None and source1_enabled != s3_any_enabled:
+        enabled_status_diverges = True
+
+    max_divergence_cents = pnl_divergence_cents
+    severity = "info"
+    if pnl_divergence_cents > 100 or enabled_status_diverges:  # > $1
+        severity = "warn"
+
+    # Post reconciliation result to ops channel — fire-and-forget.
+    try:
+        from app.services.discord import send_ops_alert
+
+        message = (
+            f"Profile: {profile_name}\n"
+            f"DB enabled: {source1_enabled}\n"
+            f"Leaderboard today_pnl: ${s2_today/100:.2f}\n"
+            f"Snapshot sum today_pnl: ${s3_today_sum/100:.2f}\n"
+            f"Snapshot open_positions: {s3_open_sum}\n"
+            f"|Δ pnl| = ${pnl_divergence_cents/100:.2f}\n"
+            f"enabled_status_diverges: {enabled_status_diverges}\n"
+        )
+        if leaderboard_error:
+            message += f"leaderboard_error: {leaderboard_error[:200]}\n"
+        if snapshot_errors:
+            message += f"snapshot_errors: {len(snapshot_errors)}\n"
+
+        send_ops_alert(
+            title=f"Bot reconciliation · {profile_name} · {severity}",
+            message=message[:1900],
+            severity=severity,
+            source="admin.bot_reconciliation",
+            fields=[
+                {"name": "allocations", "value": str(len(allocs)), "inline": True},
+                {"name": "|Δ pnl| cents", "value": str(pnl_divergence_cents), "inline": True},
+                {"name": "enabled_diverges", "value": str(enabled_status_diverges), "inline": True},
+            ],
+        )
+    except Exception as exc:
+        logger.warning("[bot_reconciliation] ops alert failed: %s", exc)
+
+    return {
+        "ok": True,
+        "profile_name": profile_name,
+        "source1_bot_allocations": {
+            "any_enabled": source1_enabled,
+            "entries": source1_entries,
+        },
+        "source2_leaderboard": source2_entry,
+        "source2_error": leaderboard_error,
+        "source3_snapshots": source3_entries,
+        "source3_errors": snapshot_errors,
+        "pnl_divergence_cents": pnl_divergence_cents,
+        "max_divergence_cents": max_divergence_cents,
+        "enabled_status_diverges": enabled_status_diverges,
+        "severity": severity,
+    }
