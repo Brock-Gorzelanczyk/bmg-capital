@@ -2151,3 +2151,30 @@ def allocations_inventory(
         "inventory": inventory,
         "orphans": orphans,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 3 — EOD reconciliation force-complete override
+# When compute_and_store_nav halts because the recompute swing exceeds the
+# $5K threshold, this endpoint lets an operator override after manual review
+# of the diff posted to the ops channel. Audit log retained in-process via
+# compute_nav._FORCE_COMPLETE_REASONS.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/reconciliation/force-complete")
+def force_complete_reconciliation(
+    reason: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Force the EOD NAV recompute to overwrite a halted-row. Requires a reason.
+    Posts an override confirmation to the ops channel."""
+    if not reason or len(reason.strip()) < 5:
+        raise HTTPException(status_code=400, detail="reason must be ≥5 chars")
+    from app.jobs.compute_nav import compute_and_store_nav, _FORCE_COMPLETE_REASONS
+    result = compute_and_store_nav(db, force=True, force_reason=reason.strip())
+    return {
+        "ok": True,
+        "result": result,
+        "audit_log_length": len(_FORCE_COMPLETE_REASONS),
+        "by_user_id": current_user.id,
+    }

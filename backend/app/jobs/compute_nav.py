@@ -13,11 +13,21 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
+from typing import Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text as sql_text
 
 logger = logging.getLogger(__name__)
+
+# ── $5K reclassification halt guard ──────────────────────────────────────────
+# If a recompute would move today's stored NAV by more than $5K, halt the
+# overwrite and alert ops. Protects against a quarantine wave or asset_class
+# reclassification silently flipping the headline at midnight. Override via
+# POST /api/admin/reconciliation/force-complete with a reason (admin-only).
+HALT_GUARD_THRESHOLD_CENTS = 500_000  # $5,000
+
+_FORCE_COMPLETE_REASONS: list[dict] = []  # in-process audit log of overrides
 
 
 def _ensure_nav_history_table(db: Session) -> None:
@@ -35,10 +45,15 @@ def _ensure_nav_history_table(db: Session) -> None:
         logger.debug("[compute_nav] table ensure failed: %s", exc)
 
 
-def compute_and_store_nav(db: Session) -> dict:
+def compute_and_store_nav(db: Session, *, force: bool = False, force_reason: Optional[str] = None) -> dict:
     """
     Compute today's NAV and persist to nav_history.
-    Returns {"date", "nav_cents", "pct_change"}.
+    Returns {"date", "nav_cents", "pct_change"} or {..., "halted": True, ...}.
+
+    Halt guard: if |new_nav - existing_nav_for_today| > $5K and force=False,
+    abort the write, alert ops, return halted=True. Existing row stays put.
+    Operator reviews the diff in ops channel; can re-run with force=True via
+    POST /api/admin/reconciliation/force-complete + a reason.
     """
     _ensure_nav_history_table(db)
     today = date.today().isoformat()
@@ -86,6 +101,49 @@ def compute_and_store_nav(db: Session) -> dict:
             prev_nav = prev_row[0]
             pct_change = round((nav_cents - prev_nav) / prev_nav * 100, 4) if prev_nav != 0 else 0.0
 
+        # ── HALT GUARD ─────────────────────────────────────────────────
+        existing_today = db.execute(sql_text(
+            "SELECT nav_cents FROM nav_history WHERE date = :today"
+        ), {"today": today}).fetchone()
+        if existing_today and existing_today[0] is not None and not force:
+            swing_cents = abs(nav_cents - existing_today[0])
+            if swing_cents > HALT_GUARD_THRESHOLD_CENTS:
+                try:
+                    from app.services.discord import send_ops_alert
+                    send_ops_alert(
+                        title="[EOD HALT] NAV recompute swing > $5K",
+                        message=(
+                            f"compute_and_store_nav refused to overwrite today's NAV.\n"
+                            f"Existing nav: ${existing_today[0]/100:,.2f}\n"
+                            f"New recompute: ${nav_cents/100:,.2f}\n"
+                            f"Swing: ${swing_cents/100:,.2f} (threshold $5,000)\n"
+                            f"Date: {today}\n"
+                            f"Override: POST /api/admin/reconciliation/force-complete "
+                            f"with a reason."
+                        ),
+                        severity="critical",
+                        source="compute_nav.halt_guard",
+                        fields=[
+                            {"name": "Existing (¢)", "value": str(existing_today[0]), "inline": True},
+                            {"name": "New (¢)",      "value": str(nav_cents),         "inline": True},
+                            {"name": "Swing (¢)",    "value": str(swing_cents),       "inline": True},
+                        ],
+                    )
+                except Exception as alert_exc:
+                    logger.error("[compute_nav] ops alert failed: %s", alert_exc)
+                logger.error(
+                    "[compute_nav HALT] swing $%d > $5K threshold; existing=$%d new=$%d date=%s",
+                    swing_cents, existing_today[0], nav_cents, today,
+                )
+                return {
+                    "date": today,
+                    "nav_cents": existing_today[0],
+                    "pct_change": pct_change,
+                    "halted": True,
+                    "swing_cents": swing_cents,
+                    "new_nav_cents": nav_cents,
+                }
+
         db.execute(sql_text("""
             INSERT INTO nav_history (date, nav_cents, pct_change, computed_at)
             VALUES (:date, :nav, :pct, :ts)
@@ -95,6 +153,26 @@ def compute_and_store_nav(db: Session) -> dict:
                 computed_at = excluded.computed_at
         """), {"date": today, "nav": nav_cents, "pct": pct_change, "ts": now})
         db.commit()
+
+        if force:
+            _FORCE_COMPLETE_REASONS.append({
+                "date": today, "ts": now,
+                "reason": force_reason or "(none)",
+                "nav_cents": nav_cents,
+            })
+            try:
+                from app.services.discord import send_ops_alert
+                send_ops_alert(
+                    title="[EOD] force-complete override accepted",
+                    message=(
+                        f"compute_and_store_nav written with force=True.\n"
+                        f"Reason: {force_reason or '(none)'}\nNew nav: ${nav_cents/100:,.2f}"
+                    ),
+                    severity="warn",
+                    source="compute_nav.force_complete",
+                )
+            except Exception:
+                pass
 
         logger.warning(
             "[compute_nav] date=%s nav=$%.0f pct_change=%s realized=$%.0f unrealized=$%.0f",
