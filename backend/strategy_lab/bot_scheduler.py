@@ -1409,6 +1409,120 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered jobs price_alert_monitor (1min market + 5min 24/7)")
 
+    # ------------------------------------------------------------------
+    # COMMIT 7 — Scheduler heartbeat / per-bot signal cadence
+    # ------------------------------------------------------------------
+    # Every 5 min during RTH (stocks) and every 4hr always-on (crypto), poll
+    # MAX(bot_signals.ts) per bot, compare to bot_heartbeat.expected_cadence_minutes,
+    # and fire an ops alert if stale. Crypto cadence = 240 min (4h); stocks = 90.
+    def _run_bot_heartbeat_check(asset_class_filter: str = "all") -> None:
+        try:
+            from app.db.session import SessionLocal as _SL
+            from sqlalchemy import text as _sql
+            from app.services.discord import send_ops_alert as _alert
+            from datetime import datetime as _dt, timezone as _tz
+
+            db = _SL()
+            try:
+                # Ensure rows exist for every enabled bot profile with sensible
+                # default cadence by asset class. Safe to repeat — UPSERT pattern.
+                profile_rows = db.execute(_sql(
+                    "SELECT p.name, p.asset_class FROM bot_profiles p "
+                    "JOIN bot_allocations a ON a.profile_id = p.id "
+                    "WHERE a.enabled = 1 GROUP BY p.name, p.asset_class"
+                )).fetchall()
+                for name, asset_class in profile_rows:
+                    cadence = 240 if str(asset_class).lower().startswith("crypto") else 90
+                    db.execute(_sql(
+                        "INSERT INTO bot_heartbeat (bot_name, expected_cadence_minutes, updated_at) "
+                        "VALUES (:n, :c, CURRENT_TIMESTAMP) "
+                        "ON CONFLICT(bot_name) DO UPDATE SET expected_cadence_minutes=:c, "
+                        "updated_at=CURRENT_TIMESTAMP"
+                    ), {"n": name, "c": cadence})
+
+                # Update last_signal_at / last_scan_at from bot_signals MAX(ts)
+                last_sig_rows = db.execute(_sql(
+                    "SELECT p.name, MAX(s.ts) AS last_ts "
+                    "FROM bot_signals s "
+                    "JOIN bot_allocations a ON a.id = s.allocation_id "
+                    "JOIN bot_profiles p ON p.id = a.profile_id "
+                    "GROUP BY p.name"
+                )).fetchall()
+                for name, last_ts in last_sig_rows:
+                    if last_ts:
+                        db.execute(_sql(
+                            "UPDATE bot_heartbeat SET last_signal_at = :t, last_scan_at = :t, "
+                            "updated_at = CURRENT_TIMESTAMP WHERE bot_name = :n"
+                        ), {"n": name, "t": last_ts})
+                db.commit()
+
+                # Now check staleness
+                stale_rows = db.execute(_sql(
+                    "SELECT bot_name, last_signal_at, expected_cadence_minutes "
+                    "FROM bot_heartbeat WHERE last_signal_at IS NOT NULL"
+                )).fetchall()
+                now = _dt.now(_tz.utc)
+                stale_list: list[tuple[str, int, int]] = []
+                for name, last_signal_at, cadence in stale_rows:
+                    if asset_class_filter == "crypto" and (cadence or 0) < 200:
+                        continue
+                    if asset_class_filter == "stock" and (cadence or 0) > 200:
+                        continue
+                    if isinstance(last_signal_at, str):
+                        try:
+                            last_signal_at = _dt.fromisoformat(last_signal_at.replace("Z", "+00:00"))
+                        except Exception:
+                            continue
+                    if last_signal_at.tzinfo is None:
+                        last_signal_at = last_signal_at.replace(tzinfo=_tz.utc)
+                    age_min = int((now - last_signal_at).total_seconds() / 60)
+                    threshold = max(int(cadence or 90) * 2, 30)
+                    if age_min > threshold:
+                        stale_list.append((name, age_min, threshold))
+
+                if stale_list:
+                    fields = [
+                        {"name": n, "value": f"{age}m old (threshold {th}m)", "inline": True}
+                        for n, age, th in stale_list[:10]
+                    ]
+                    _alert(
+                        title=f"Bot heartbeat stale ({asset_class_filter})",
+                        message=f"{len(stale_list)} bot(s) have not emitted signals within cadence threshold.",
+                        severity="warn",
+                        source="bot_scheduler.heartbeat",
+                        fields=fields,
+                    )
+                    logger.warning("[heartbeat] %d stale bots (%s): %s",
+                                   len(stale_list), asset_class_filter,
+                                   [n for n, _, _ in stale_list])
+                else:
+                    logger.info("[heartbeat] all bots fresh (filter=%s, checked=%d)",
+                                asset_class_filter, len(stale_rows))
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.error("[heartbeat] check failed: %s", exc, exc_info=True)
+
+    scheduler.add_job(
+        lambda: _run_bot_heartbeat_check("stock"),
+        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/5", timezone=ET),
+        id="bot_heartbeat_stock_rth",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=120,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        lambda: _run_bot_heartbeat_check("crypto"),
+        IntervalTrigger(hours=4),
+        id="bot_heartbeat_crypto_4h",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered jobs bot_heartbeat (stock 5min RTH + crypto 4h)")
+
     # Fleet EOD summary: gated by should_post_to_fund_updates — suppressed in quiet mode.
     # To re-enable: pass urgency="critical" to should_post_to_fund_updates, or remove gate.
 

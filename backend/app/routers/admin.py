@@ -2760,3 +2760,73 @@ def bot_reconciliation(
         "enabled_status_diverges": enabled_status_diverges,
         "severity": severity,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 7 — Bot heartbeat read endpoint
+# Surfaces the bot_heartbeat table joined with bot_profiles for display names,
+# with computed minutes-since-last-signal so admin UI can render stale badges
+# without doing the math client-side.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/bot-heartbeats")
+def bot_heartbeats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return the latest heartbeat state for each bot. Includes minutes_since
+    and is_stale (last_signal_at older than 2× expected cadence)."""
+    from sqlalchemy import text as _sql
+
+    rows = db.execute(_sql(
+        "SELECT h.bot_name, h.last_signal_at, h.last_scan_at, "
+        "       h.expected_cadence_minutes, h.updated_at, p.asset_class "
+        "FROM bot_heartbeat h "
+        "LEFT JOIN bot_profiles p ON p.name = h.bot_name "
+        "ORDER BY h.bot_name"
+    )).fetchall()
+
+    now = datetime.now(timezone.utc)
+    result: list[dict] = []
+    for r in rows:
+        bot_name, last_signal_at, last_scan_at, cadence, updated_at, asset_class = r
+        last_signal_dt = last_signal_at
+        if isinstance(last_signal_dt, str):
+            try:
+                last_signal_dt = datetime.fromisoformat(last_signal_dt.replace("Z", "+00:00"))
+            except Exception:
+                last_signal_dt = None
+        if last_signal_dt is not None and last_signal_dt.tzinfo is None:
+            last_signal_dt = last_signal_dt.replace(tzinfo=timezone.utc)
+        minutes_since = (
+            int((now - last_signal_dt).total_seconds() / 60)
+            if last_signal_dt is not None else None
+        )
+        cadence_int = int(cadence or 0)
+        threshold = max(cadence_int * 2, 30) if cadence_int else None
+        is_stale = bool(
+            minutes_since is not None and threshold is not None
+            and minutes_since > threshold
+        )
+        try:
+            from app.core.canonical import display_name as _dn
+            display = _dn(bot_name)
+        except Exception:
+            display = bot_name
+        result.append({
+            "bot_name": bot_name,
+            "display_name": display,
+            "asset_class": asset_class,
+            "last_signal_at": last_signal_at.isoformat() if hasattr(last_signal_at, "isoformat") else last_signal_at,
+            "last_scan_at": last_scan_at.isoformat() if hasattr(last_scan_at, "isoformat") else last_scan_at,
+            "expected_cadence_minutes": cadence_int or None,
+            "minutes_since_last_signal": minutes_since,
+            "is_stale": is_stale,
+            "updated_at": updated_at.isoformat() if hasattr(updated_at, "isoformat") else updated_at,
+        })
+
+    return {
+        "heartbeats": result,
+        "count": len(result),
+        "stale_count": sum(1 for r in result if r["is_stale"]),
+        "ts": now.isoformat(),
+    }
