@@ -301,11 +301,7 @@ function AvatarDropdown({
           <div className="py-1">
             <DropdownItem icon={Inbox} label="Notifications" badge={notifUnread} onClick={() => go("/notifications")} />
             <DropdownItem icon={Settings} label="Settings" onClick={() => go("/settings")} />
-            <DropdownItem
-              icon={HelpCircle}
-              label="Help & Support"
-              onClick={() => { window.location.href = "mailto:support@bmgcapital.com"; }}
-            />
+            <DropdownItem icon={HelpCircle} label="Help & Support" onClick={() => go("/support")} />
           </div>
 
           <div className="border-t border-[var(--border-dim)] py-1">
