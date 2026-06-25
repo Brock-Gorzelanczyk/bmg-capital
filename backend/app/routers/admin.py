@@ -2928,3 +2928,36 @@ def cooldown_storm_check(
         "threshold_entries": 2,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Discipline threshold auto-promote — view + manual trigger
+# Reads bot_threshold_dynamic (populated by the nightly auto-promote job).
+# POST endpoint runs the job on-demand (the nightly run still fires
+# independently in bot_scheduler).
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/discipline/threshold-status")
+def discipline_threshold_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Current dynamic threshold overrides + their basis."""
+    from app.services.threshold_auto_promote import threshold_status
+    rows = threshold_status(db)
+    return {
+        "ok": True,
+        "count": len(rows),
+        "loose_count": sum(1 for r in rows if r.get("threshold") == 50),
+        "tight_count": sum(1 for r in rows if r.get("threshold") == 80),
+        "rows": rows,
+    }
+
+
+@router.post("/discipline/threshold-auto-promote/run")
+def discipline_threshold_auto_promote_run(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Trigger the nightly auto-promote evaluation manually."""
+    from app.services.threshold_auto_promote import run_threshold_auto_promote
+    return run_threshold_auto_promote(db)

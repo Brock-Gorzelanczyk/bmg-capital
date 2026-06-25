@@ -1744,6 +1744,34 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job brain_edge_decay_nightly (03:00 ET) — stubbed until brain_edges ships")
 
+    # ── Discipline threshold auto-promote (nightly 04:00 ET) ────────────────
+    def _run_threshold_auto_promote() -> None:
+        try:
+            from app.db.session import SessionLocal
+            from app.services.threshold_auto_promote import run_threshold_auto_promote
+            _db = SessionLocal()
+            try:
+                result = run_threshold_auto_promote(_db)
+                logger.warning(
+                    "[threshold-auto-promote] done loose=%s tight=%s",
+                    result.get("loose_count"), result.get("tight_count"),
+                )
+            finally:
+                _db.close()
+        except Exception as exc:
+            logger.error("[threshold-auto-promote] failed: %s", exc, exc_info=True)
+
+    scheduler.add_job(
+        _run_threshold_auto_promote,
+        CronTrigger(hour=4, minute=0, timezone=ET),
+        id="threshold_auto_promote_nightly",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job threshold_auto_promote_nightly (04:00 ET)")
+
     # Fleet EOD summary: gated by should_post_to_fund_updates — suppressed in quiet mode.
     # To re-enable: pass urgency="critical" to should_post_to_fund_updates, or remove gate.
 

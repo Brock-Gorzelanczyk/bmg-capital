@@ -39,3 +39,7 @@ risk:
   target_position_count: 10
   max_position_pct: 0.06
   max_total_deployed_pct: 0.70
+
+# 7-day deployment push (Brock 2026-06-24): looser discipline for proven bots.
+# Scale 0-100; default 60. Lower = more signals pass.
+composite_threshold_override: 50

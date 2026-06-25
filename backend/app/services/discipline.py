@@ -265,8 +265,44 @@ def _confluence_factors(
     return factors
 
 
-def _resolve_threshold(profile: dict, strategy: str | None) -> int:
-    """Lookup composite_threshold with per-strategy override → profile default → 60."""
+def _resolve_threshold(profile: dict, strategy: str | None, db=None, profile_id: int | None = None) -> int:
+    """Composite-threshold lookup with this precedence:
+
+      1. Dynamic auto-promote override (DB table bot_threshold_dynamic, populated
+         nightly by the auto-promote job — loosens proven bots, tightens broken
+         ones based on rolling 30-day Sharpe + trade count).
+      2. YAML composite_threshold_override (per-bot manual override, Brock's
+         7-day push spec — proven bots at 50 vs the global default of 60).
+      3. Per-strategy override (profile.strategy_thresholds[strategy]).
+      4. Profile default (composite_threshold).
+      5. Hard fallback 60.
+
+    Scale is 0-100 integer. LOWER = LOOSER (more signals pass). HIGHER = STRICTER.
+    """
+    # 1. Dynamic override (auto-promote / auto-tighten)
+    if db is not None and profile_id is not None:
+        try:
+            from sqlalchemy import text as _sql
+            row = db.execute(_sql(
+                "SELECT threshold FROM bot_threshold_dynamic WHERE profile_id = :pid"
+            ), {"pid": profile_id}).fetchone()
+            if row and row[0] is not None:
+                return int(row[0])
+        except Exception:
+            pass
+
+    # 2. Manual YAML override (Brock's spec for proven bots)
+    yaml_override = (
+        profile.get("composite_threshold_override")
+        or (profile.get("discipline") or {}).get("composite_threshold_override")
+    )
+    if yaml_override is not None:
+        try:
+            return int(yaml_override)
+        except (TypeError, ValueError):
+            pass
+
+    # 3. Per-strategy override
     overrides = (
         profile.get("strategy_thresholds")
         or (profile.get("discipline") or {}).get("strategy_thresholds")
@@ -277,6 +313,8 @@ def _resolve_threshold(profile: dict, strategy: str | None) -> int:
             return int(overrides[strategy])
         except (TypeError, ValueError):
             pass
+
+    # 4. Profile default · 5. Hard fallback
     return int(
         profile.get("composite_threshold")
         or (profile.get("discipline") or {}).get("composite_threshold")
@@ -291,7 +329,16 @@ def evaluate_gates(
     allocation_id: int,
 ) -> GateResult:
     """Run all 3 gates on a signal. Pure function — does not persist."""
-    threshold = _resolve_threshold(profile, getattr(sig, "strategy", None))
+    # Pull profile_id from the BotAllocation so threshold can resolve a
+    # dynamic auto-promote override from bot_threshold_dynamic if one exists.
+    _pid: int | None = None
+    try:
+        from app.db.models.bots import BotAllocation as _BA
+        _alloc = db.query(_BA).filter(_BA.id == allocation_id).first()
+        _pid = _alloc.profile_id if _alloc else None
+    except Exception:
+        _pid = None
+    threshold = _resolve_threshold(profile, getattr(sig, "strategy", None), db=db, profile_id=_pid)
     confluence_required = int(
         profile.get("confluence_required")
         or (profile.get("discipline") or {}).get("confluence_required")

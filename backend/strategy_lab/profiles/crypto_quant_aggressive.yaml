@@ -112,3 +112,7 @@ risk:
 
 # Bypass anomaly/news/bot_coordinator execution guards so scheduled scans execute.
 skip_execution_guards: true
+
+# 7-day deployment push (Brock 2026-06-24): looser discipline for proven bots.
+# Scale 0-100; default 60. Lower = more signals pass.
+composite_threshold_override: 50

@@ -307,6 +307,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m019_exc:
         logger.warning("[startup] m019_add_modeled_fees_cents failed (non-fatal): %s", _m019_exc)
 
+    try:
+        from app.db.migrations.m020_add_bot_threshold_dynamic import run as _run_m020
+        with engine.connect() as _m020_conn:
+            _run_m020(_m020_conn)
+    except Exception as _m020_exc:
+        logger.warning("[startup] m020_add_bot_threshold_dynamic failed (non-fatal): %s", _m020_exc)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
