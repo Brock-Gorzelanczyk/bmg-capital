@@ -2458,3 +2458,138 @@ def discipline_gate_rate(
         "starved": starved,
         "unfiltered": unfiltered,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 11 — 20 leftover quarantine row classification
+# Classifies the rows left from the misclassified_legacy_pre_17aa7f3
+# sweep using a 4-gate filter. NO auto-action — posts the table to ops
+# for per-row greenlight.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/options/legacy-quarantine-audit")
+def options_legacy_quarantine_audit(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """4-gate audit of the leftover legacy-quarantined option positions.
+
+    Gates:
+      - option_type IS NOT NULL          → +1
+      - strike_price > 100               → +1
+      - avg_cost_cents/100 > 10          → +1 (premium > $10)
+      - symbol matches OCC format        → +1 (^[A-Z]+\\d{6}[CP]\\d{8}$)
+
+    gates_passed ≥ 3 → REAL (unquarantine candidate).
+    Else            → FAKE (retire candidate).
+    """
+    import re as _re
+    from sqlalchemy import text
+
+    rows = db.execute(text("""
+        SELECT id, allocation_id, symbol, option_type, strike_price, expiration_date,
+               avg_cost_cents, qty, opened_at, quarantine_reason
+        FROM bot_positions
+        WHERE quarantine_reason = 'misclassified_legacy_pre_17aa7f3'
+          AND opened_at >= '2026-06-19 03:16:00'
+    """)).fetchall()
+
+    occ_re = _re.compile(r"^[A-Z]+\d{6}[CP]\d{8}$")
+
+    classifications = []
+    real_count = 0
+    fake_count = 0
+    for r in rows:
+        pos_id = r[0]
+        alloc_id = r[1]
+        symbol = r[2] or ""
+        option_type = r[3]
+        strike_price = r[4]
+        expiration_date = r[5]
+        avg_cost_cents = r[6]
+        qty = r[7]
+        opened_at = r[8]
+        quarantine_reason = r[9]
+
+        gates_passed = 0
+        gate_detail = {}
+
+        g1 = option_type is not None
+        gate_detail["option_type_not_null"] = g1
+        if g1:
+            gates_passed += 1
+
+        g2 = (strike_price is not None) and (float(strike_price) > 100.0)
+        gate_detail["strike_gt_100"] = g2
+        if g2:
+            gates_passed += 1
+
+        premium_dollars = (float(avg_cost_cents) / 100.0) if avg_cost_cents is not None else 0.0
+        g3 = premium_dollars > 10.0
+        gate_detail["premium_gt_10"] = g3
+        if g3:
+            gates_passed += 1
+
+        g4 = bool(occ_re.match(symbol))
+        gate_detail["occ_format"] = g4
+        if g4:
+            gates_passed += 1
+
+        classification = "REAL" if gates_passed >= 3 else "FAKE"
+        if classification == "REAL":
+            real_count += 1
+        else:
+            fake_count += 1
+
+        classifications.append({
+            "id": pos_id,
+            "allocation_id": alloc_id,
+            "symbol": symbol,
+            "option_type": option_type,
+            "strike_price": strike_price,
+            "expiration_date": expiration_date,
+            "avg_cost_cents": avg_cost_cents,
+            "qty": qty,
+            "opened_at": str(opened_at) if opened_at is not None else None,
+            "quarantine_reason": quarantine_reason,
+            "gates_passed": gates_passed,
+            "gate_detail": gate_detail,
+            "classification": classification,
+        })
+
+    # Post the classification table to ops channel — fire-and-forget.
+    try:
+        from app.services.discord import send_ops_alert
+
+        lines = [
+            f"#{c['id']:>5} {c['classification']:<4} g={c['gates_passed']} "
+            f"{(c['symbol'] or '')[:24]:<24} strike={c['strike_price']} "
+            f"prem={(c['avg_cost_cents'] or 0)/100:.2f}"
+            for c in classifications
+        ]
+        if lines:
+            message = "```\n" + "\n".join(lines)[:1700] + "\n```"
+        else:
+            message = "No leftover legacy-quarantined options rows match the audit filter."
+
+        send_ops_alert(
+            title=f"Legacy quarantine audit · {len(classifications)} rows · REAL={real_count} FAKE={fake_count}",
+            message=message,
+            severity="info",
+            source="admin.options_legacy_quarantine_audit",
+            fields=[
+                {"name": "total_rows", "value": str(len(classifications)), "inline": True},
+                {"name": "REAL (unquarantine candidates)", "value": str(real_count), "inline": True},
+                {"name": "FAKE (retire candidates)", "value": str(fake_count), "inline": True},
+                {"name": "action", "value": "NO auto-action; per-row greenlight required", "inline": False},
+            ],
+        )
+    except Exception as exc:
+        logger.warning("[options_legacy_quarantine_audit] ops alert failed: %s", exc)
+
+    return {
+        "ok": True,
+        "total_rows": len(classifications),
+        "real_count": real_count,
+        "fake_count": fake_count,
+        "classifications": classifications,
+    }
