@@ -65,6 +65,7 @@ const NAV_TRADE = [
 const NAV_STRATEGY = [
   { to: "/strategy",                  label: "Strategy Lab",      Icon: FlaskConical },
   { to: "/admin/tuning",              label: "Tuning Advisor",    Icon: Gauge        },
+  { to: "/admin/diagnostics",         label: "Diagnostics",       Icon: Cpu          },
   { to: "/admin/discipline-report",   label: "Discipline Report", Icon: ShieldAlert  },
   { to: "/strategy/hypotheses",       label: "Hypotheses",        Icon: Beaker       },
   { to: "/strategy/brain",            label: "Brain Graph",       Icon: Cpu          },
