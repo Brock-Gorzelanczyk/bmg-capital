@@ -146,21 +146,26 @@ function MonthlyHeatmap({ monthly }: { monthly: Array<{ year: number; month: num
 
 // ── Strategy attribution table ─────────────────────────────────────────────────
 
-type AttrSort = "pnl" | "return";
+type AttrSort = "contrib" | "raw_return";
+type SortDir = "asc" | "desc";
 
 function AttributionTable({
-  rows, totalCapital, sortBy, onToggleSort,
+  rows, totalCapital, sortBy, sortDir, onSort,
 }: {
   rows: StrategyRow[];
   totalCapital: number;
   sortBy: AttrSort;
-  onToggleSort: () => void;
+  sortDir: SortDir;
+  onSort: (col: AttrSort) => void;
 }) {
   if (!rows.length) return <p className="text-zinc-600 text-xs text-center py-6">No strategy data</p>;
-  const sorted = [...rows].sort((a, b) =>
-    sortBy === "pnl" ? b.pnl_usd - a.pnl_usd : (b.raw_return_pct ?? 0) - (a.raw_return_pct ?? 0)
-  );
+  const dirMul = sortDir === "desc" ? 1 : -1;
+  const sorted = [...rows].sort((a, b) => {
+    if (sortBy === "contrib") return (b.pnl_usd - a.pnl_usd) * dirMul;
+    return ((b.raw_return_pct ?? 0) - (a.raw_return_pct ?? 0)) * dirMul;
+  });
   const totPnl = rows.reduce((s, r) => s + r.pnl_usd, 0);
+  const arrow = sortDir === "desc" ? "▼" : "▲";
 
   return (
     <div className="overflow-x-auto">
@@ -170,15 +175,15 @@ function AttributionTable({
             <th className="text-left text-[10px] text-zinc-600 uppercase py-2 pr-4">Strategy</th>
             <th
               className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400 select-none"
-              onClick={onToggleSort}
+              onClick={() => onSort("raw_return")}
             >
-              Raw Return% {sortBy === "return" ? "▼" : ""}
+              Raw Return% {sortBy === "raw_return" ? arrow : ""}
             </th>
             <th
               className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3 cursor-pointer hover:text-zinc-400 select-none"
-              onClick={onToggleSort}
+              onClick={() => onSort("contrib")}
             >
-              $ Contrib {sortBy === "pnl" ? "▼" : ""}
+              $ Contrib {sortBy === "contrib" ? arrow : ""}
             </th>
             <th className="text-right text-[10px] text-zinc-600 uppercase py-2 px-3">Capital</th>
             <th className="text-right text-[10px] text-zinc-600 uppercase py-2 pl-3">Weight</th>
@@ -358,7 +363,16 @@ const ALL_BOTS = Object.keys(BOT_DISPLAY);
 
 function ByBotTab({ period }: { period: Period }) {
   const [selectedBot, setSelectedBot] = useState(ALL_BOTS[6]); // default: crypto_quant_scalper
-  const [attrSort, setAttrSort] = useState<AttrSort>("pnl");
+  const [attrSort, setAttrSort] = useState<AttrSort>("contrib");
+  const [attrSortDir, setAttrSortDir] = useState<SortDir>("desc");
+  function onAttrSort(col: AttrSort) {
+    if (col === attrSort) {
+      setAttrSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setAttrSort(col);
+      setAttrSortDir("desc");
+    }
+  }
   const curveDays = period === "7d" ? 7 : period === "30d" ? 30 : period === "90d" ? 90 : 365;
 
   const { data: metrics, isLoading } = useQuery({
@@ -460,17 +474,18 @@ function ByBotTab({ period }: { period: Period }) {
                   // STRATEGY ATTRIBUTION
                 </p>
                 <button
-                  onClick={() => setAttrSort((s) => s === "pnl" ? "return" : "pnl")}
+                  onClick={() => onAttrSort(attrSort === "contrib" ? "raw_return" : "contrib")}
                   className="text-[10px] text-zinc-500 hover:text-zinc-300 border border-zinc-700 rounded px-2 py-0.5"
                 >
-                  Sort: {attrSort === "pnl" ? "$ P&L" : "Return %"}
+                  Sort: {attrSort === "contrib" ? "$ P&L" : "Return %"}
                 </button>
               </div>
               <AttributionTable
                 rows={attrData.attribution}
                 totalCapital={attrData.total_capital_usd}
                 sortBy={attrSort}
-                onToggleSort={() => setAttrSort((s) => s === "pnl" ? "return" : "pnl")}
+                sortDir={attrSortDir}
+                onSort={onAttrSort}
               />
             </div>
           )}
