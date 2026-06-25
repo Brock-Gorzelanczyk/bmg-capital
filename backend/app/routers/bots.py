@@ -166,21 +166,28 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
                 db.add(alloc)
                 db.flush()
 
-            # Assign portfolio and capital — always sync so capital updates propagate
-            # (also corrects stale IDs after DB resets where old portfolio row was deleted)
+            # Assign portfolio and capital — sync so legitimate capital updates
+            # propagate, BUT never silently SHRINK starting_capital_cents away
+            # from a higher value (m021 resized canonicals to $200K and we don't
+            # want this seeding loop reverting them every portfolio request).
             if alloc.portfolio_id != existing.id:
                 alloc.portfolio_id = existing.id
-            if (alloc.capital_cents_within_portfolio or 0) != capital_cents:
+            if (alloc.capital_cents_within_portfolio or 0) < capital_cents:
                 alloc.capital_cents_within_portfolio = capital_cents
                 alloc.updated_at = now
-            if (alloc.starting_capital_cents or 0) != capital_cents:
+            if (alloc.starting_capital_cents or 0) < capital_cents:
                 alloc.starting_capital_cents = capital_cents
                 alloc.updated_at = now
 
-            # Re-enable if accidentally disabled — paper bots should always be active
-            # unless explicitly halted by the health monitor or marked as not yet implemented.
+            # Re-enable if accidentally disabled — paper bots should always be
+            # active UNLESS explicitly halted (health/admin) OR they were demoted
+            # by the m021 dedup migration (paused_reason starts with
+            # 'merged_into_'). Re-enabling a merged dupe would resurrect the
+            # split-capital problem the migration just fixed.
             HARD_PAUSE_REASONS = {"health_halt", "admin_lock"}
-            if not alloc.enabled and alloc.paused_reason not in HARD_PAUSE_REASONS:
+            paused_reason = (alloc.paused_reason or "")
+            is_merged_dupe = paused_reason.startswith("merged_into_")
+            if not alloc.enabled and paused_reason not in HARD_PAUSE_REASONS and not is_merged_dupe:
                 alloc.enabled = True
                 alloc.paused_reason = None
                 alloc.updated_at = now
