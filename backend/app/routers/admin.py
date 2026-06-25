@@ -2247,3 +2247,110 @@ def portfolio_health(
         "status": status,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 8 — Stop-hit asymmetry report
+# Counts closes vs stops per bot over a configurable window.
+# stop_pct = stops / total_closes. Flag review_required when >45% with
+# >200 closes — catches Crypto Day/Swing bleeding before it compounds.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/closes/stop-asymmetry")
+def closes_stop_asymmetry(
+    days: int = Query(7, ge=1, le=90, description="Lookback window in days"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Group bot_trades by bot, count closes vs stops over the window.
+
+    Stop = BotTrade.side in ('sell','close','cover')
+           AND linked bot_positions.exit_reason = 'stop_loss'.
+    Flag review_required=true if stop_pct > 45 over >200 closes.
+    """
+    from sqlalchemy import text
+
+    # SQLite: use datetime('now', '-N days') — INTERVAL is not supported.
+    rows = db.execute(text(f"""
+        SELECT
+            a.id   AS allocation_id,
+            p.id   AS profile_id,
+            p.name AS profile_name,
+            SUM(CASE WHEN LOWER(t.side) IN ('sell','close','cover') THEN 1 ELSE 0 END) AS total_closes,
+            SUM(CASE
+                WHEN LOWER(t.side) IN ('sell','close','cover')
+                 AND pos.exit_reason = 'stop_loss'
+                THEN 1 ELSE 0 END) AS stops
+        FROM bot_trades t
+        JOIN bot_allocations a ON a.id = t.allocation_id
+        JOIN bot_profiles p    ON p.id = a.profile_id
+        LEFT JOIN bot_positions pos ON pos.id = t.position_id
+        WHERE t.ts >= datetime('now', '-{int(days)} days')
+        GROUP BY a.id, p.id, p.name
+        ORDER BY stops DESC
+    """)).fetchall()
+
+    report = []
+    for r in rows:
+        alloc_id = r[0]
+        profile_id = r[1]
+        profile_name = r[2]
+        total_closes = int(r[3] or 0)
+        stops = int(r[4] or 0)
+        stop_pct = (stops / total_closes * 100.0) if total_closes > 0 else 0.0
+        review_required = bool(stop_pct > 45.0 and total_closes > 200)
+        report.append({
+            "allocation_id": alloc_id,
+            "profile_id": profile_id,
+            "profile_name": profile_name,
+            "total_closes": total_closes,
+            "stops": stops,
+            "stop_pct": round(stop_pct, 2),
+            "review_required": review_required,
+        })
+
+    flagged = [r for r in report if r["review_required"]]
+    flagged_sorted = sorted(flagged, key=lambda x: x["stop_pct"], reverse=True)
+    top_flagged = flagged_sorted[:10]
+
+    # Post flagged report to ops channel — fire-and-forget.
+    try:
+        from app.services.discord import send_ops_alert
+
+        if top_flagged:
+            lines = [
+                f"{r['profile_name'][:30]:<30} closes={r['total_closes']:>5} "
+                f"stops={r['stops']:>4} stop_pct={r['stop_pct']:>5.1f}%"
+                for r in top_flagged
+            ]
+            message = "```\n" + "\n".join(lines)[:1700] + "\n```"
+            severity = "warn"
+        else:
+            message = (
+                f"No bots crossed the stop-asymmetry threshold "
+                f"(>45% stop rate over 200+ closes) in the last {days} days. "
+                f"Inspected {len(report)} bots."
+            )
+            severity = "info"
+
+        send_ops_alert(
+            title=f"Stop-asymmetry report · {days}d · {len(flagged)} flagged",
+            message=message,
+            severity=severity,
+            source="admin.closes_stop_asymmetry",
+            fields=[
+                {"name": "window_days", "value": str(days), "inline": True},
+                {"name": "bots_inspected", "value": str(len(report)), "inline": True},
+                {"name": "bots_flagged", "value": str(len(flagged)), "inline": True},
+            ],
+        )
+    except Exception as exc:
+        logger.warning("[closes_stop_asymmetry] ops alert failed: %s", exc)
+
+    return {
+        "ok": True,
+        "window_days": days,
+        "bots_inspected": len(report),
+        "bots_flagged": len(flagged),
+        "report": report,
+        "top_flagged": top_flagged,
+    }
