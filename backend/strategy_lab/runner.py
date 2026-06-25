@@ -1776,19 +1776,33 @@ def _execute_options_signal(
         db.add(pos)
         db.flush()
 
+        # Friction model: options pay slippage 5bps + $0.65/contract commission
+        try:
+            from app.services.friction import model_friction_cents, slippage_bps_for
+            _opt_friction_cents = model_friction_cents(
+                asset_class="options",
+                qty=float(contract_count),
+                fill_price_dollars=fill_cents / 100.0,
+                contracts=float(contract_count),
+            )
+            _opt_slip_bps = float(slippage_bps_for("options"))
+        except Exception:
+            _opt_friction_cents = 0
+            _opt_slip_bps = 0.0
+
         trade = BotTrade(
             allocation_id=alloc.id,
             symbol=sig.symbol,
             side=sig.side,
             qty=float(contract_count),
             fill_price_cents=fill_cents,
-            fees_cents=0,
+            fees_cents=_opt_friction_cents,
             ts=now,
             position_id=pos.id,
             signal_id=signal_id,
             is_paper=True,
             expected_fill_cents=fill_cents,
-            slippage_bps=0.0,
+            slippage_bps=_opt_slip_bps,
             # Options fields
             option_type=opt["option_type"],
             strike_price=opt["strike_price"],
@@ -2110,20 +2124,37 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         db.add(pos)
         db.flush()  # get pos.id
 
+        # ── Friction model (slippage + commission) ─────────────────────
+        # Apply per-asset-class friction so the headline Sharpe isn't
+        # inflated by zero-cost paper fills. Written to fees_cents — the
+        # existing column already subtracted from realized P&L by
+        # canonical.compute_bot_snapshot.
+        try:
+            from app.services.friction import model_friction_cents, slippage_bps_for
+            _friction_cents = model_friction_cents(
+                asset_class=asset_class,
+                qty=qty,
+                fill_price_dollars=entry_price,
+            )
+            _slip_bps = float(slippage_bps_for(asset_class))
+        except Exception:
+            _friction_cents = 0
+            _slip_bps = 0.0
+
         trade = BotTrade(
             allocation_id=alloc.id,
             symbol=sig.symbol,
             side="short" if is_short else "buy",  # "short" marks entry; "cover" marks exit
             qty=qty,
             fill_price_cents=fill_cents,
-            fees_cents=0,
+            fees_cents=_friction_cents,
             ts=now,
             position_id=pos.id,
             signal_id=signal_id,
             is_paper=True,
             alpaca_order_id=order_id,
             expected_fill_cents=fill_cents,
-            slippage_bps=0.0,
+            slippage_bps=_slip_bps,
         )
         db.add(trade)
         db.commit()
