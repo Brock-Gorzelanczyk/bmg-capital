@@ -2046,3 +2046,108 @@ def test_ops_alert(
         "webhook_configured": bool(_ops_webhook_url()),
         "severity": severity,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMMIT 4 — Identify 17th allocation (orphan hunt)
+# Enumerate every BotAllocation row + classify (active / incubating /
+# retired / orphan). Vol-targeting must exclude orphans from its weight
+# math until each is reclassified.
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/allocations/inventory")
+def allocations_inventory(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """List every bot_allocations row with a classification label.
+
+    Classification rules:
+      - enabled=1                                  → active
+      - paused_reason LIKE '%incubat%'             → incubating
+      - paused_reason LIKE '%retire%'              → retired
+      - enabled=0 + no clear paused_reason         → orphan
+    """
+    from sqlalchemy import text
+
+    rows = db.execute(text("""
+        SELECT a.id, a.user_id, a.profile_id, p.name, a.enabled,
+               a.starting_capital_cents, a.capital_cents_within_portfolio,
+               a.paused_reason, a.tier, a.portfolio_id
+        FROM bot_allocations a
+        JOIN bot_profiles p ON p.id = a.profile_id
+        ORDER BY a.id
+    """)).fetchall()
+
+    def _classify(enabled: Any, paused_reason: Any) -> str:
+        is_enabled = bool(enabled)
+        pr = (paused_reason or "").lower()
+        if is_enabled:
+            return "active"
+        if "incubat" in pr:
+            return "incubating"
+        if "retire" in pr:
+            return "retired"
+        return "orphan"
+
+    inventory = []
+    counts: Dict[str, int] = {"active": 0, "incubating": 0, "retired": 0, "orphan": 0}
+    orphans: list = []
+    for r in rows:
+        cls = _classify(r[4], r[7])
+        counts[cls] = counts.get(cls, 0) + 1
+        entry = {
+            "id": r[0],
+            "user_id": r[1],
+            "profile_id": r[2],
+            "name": r[3],
+            "enabled": bool(r[4]),
+            "starting_capital_cents": r[5],
+            "capital_cents_within_portfolio": r[6],
+            "paused_reason": r[7],
+            "tier": r[8],
+            "portfolio_id": r[9],
+            "classification": cls,
+        }
+        inventory.append(entry)
+        if cls == "orphan":
+            orphans.append(entry)
+
+    # Post the full list to ops channel — fire-and-forget.
+    try:
+        from app.services.discord import send_ops_alert
+
+        # Trim list to fit Discord embed limits (1900 char description max).
+        list_lines = [
+            f"#{e['id']:>3} {e['classification']:<10} {e['name'][:32]:<32} "
+            f"enabled={int(e['enabled'])} tier={e['tier']}"
+            for e in inventory
+        ]
+        message = "```\n" + "\n".join(list_lines)[:1700] + "\n```"
+        fields = [
+            {"name": "active", "value": str(counts["active"]), "inline": True},
+            {"name": "incubating", "value": str(counts["incubating"]), "inline": True},
+            {"name": "retired", "value": str(counts["retired"]), "inline": True},
+            {"name": "orphan", "value": str(counts["orphan"]), "inline": True},
+            {"name": "total", "value": str(len(inventory)), "inline": True},
+        ]
+        if orphans:
+            orph_str = ", ".join(f"#{o['id']} {o['name']}" for o in orphans[:10])
+            fields.append({"name": "Orphans flagged", "value": orph_str[:1024], "inline": False})
+
+        send_ops_alert(
+            title=f"Allocation inventory · {len(inventory)} rows · {counts['orphan']} orphan(s)",
+            message=message,
+            severity="info",
+            source="admin.allocations_inventory",
+            fields=fields,
+        )
+    except Exception as exc:
+        logger.warning("[allocations_inventory] ops alert failed: %s", exc)
+
+    return {
+        "ok": True,
+        "total": len(inventory),
+        "counts": counts,
+        "inventory": inventory,
+        "orphans": orphans,
+    }
