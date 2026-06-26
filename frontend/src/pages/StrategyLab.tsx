@@ -36,6 +36,7 @@ import { getSetups, getSignals as getScoutSignals, type ScoutSignal } from "@/ap
 import { getForgeBots, getForgeSignals, type ForgeSignal } from "@/api/forge";
 import { getAnalystSummary, type AnalystSummaryItem } from "@/api/analyst";
 import { cn } from "@/lib/utils";
+import { formatSleeveSubtitle } from "@/lib/formatAllocation";
 import { useIsViewer } from "@/store/authStore";
 
 // ─── Candidate metadata ───────────────────────────────────────────────────────
@@ -926,7 +927,7 @@ function PortfolioTab({ portfolio }: { portfolio: StrategyPortfolio }) {
         {" "}({isPositive ? "+" : ""}{todayPct.toFixed(2)}% today)
       </div>
       <div className="text-[11px] text-t-gdim mt-1 font-ui-t">
-        {portfolio.bots.length} bot{portfolio.bots.length !== 1 ? "s" : ""} · $100k each
+        {formatSleeveSubtitle(portfolio.bots)}
       </div>
     </button>
   );
