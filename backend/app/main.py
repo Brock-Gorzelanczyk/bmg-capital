@@ -335,6 +335,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m024_exc:
         logger.warning("[startup] m024_corrective_capital_reset failed (non-fatal): %s", _m024_exc)
 
+    try:
+        from app.db.migrations.m025_clean_slate_one_million import run as _run_m025
+        with engine.connect() as _m025_conn:
+            _run_m025(_m025_conn)
+    except Exception as _m025_exc:
+        logger.warning("[startup] m025_clean_slate_one_million failed (non-fatal): %s", _m025_exc)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
