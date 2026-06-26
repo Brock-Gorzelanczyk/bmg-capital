@@ -2134,8 +2134,23 @@ export default function StrategyLab() {
             <RegimeBar regime={regime} isLoading={regimeLoading} />
           </div>
 
-          {/* 5. Candidates in incubation */}
-          <CandidatesSection />
+          {/* 5. Candidates in incubation — click-through tile (full section lives at /strategy/candidates) */}
+          <Link
+            to="/strategy/candidates"
+            className="block bg-t-bg0 border border-dashed border-t-dim hover:border-t-mid hover:bg-t-bg1/40 rounded-xl px-5 py-4 transition-all duration-150 group"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono-t text-[11px] uppercase tracking-widest text-t-gdim group-hover:text-t-muted">
+                  // CANDIDATES IN INCUBATION
+                </p>
+                <p className="text-xs text-t-dim mt-1 font-ui-t">
+                  → 17 paper-shadow strategies awaiting promotion
+                </p>
+              </div>
+              <span className="text-t-gdim group-hover:text-t-muted text-lg">→</span>
+            </div>
+          </Link>
 
           {/* 6. LAB MODULES quick-nav */}
           <div>

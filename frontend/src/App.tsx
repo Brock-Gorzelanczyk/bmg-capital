@@ -18,6 +18,7 @@ const WatchlistPage = lazy(() => import("@/pages/WatchlistPage"));
 const Portfolio = lazy(() => import("@/pages/Portfolio"));
 const Alerts = lazy(() => import("@/pages/Alerts"));
 const StrategyLab = lazy(() => import("@/pages/StrategyLab"));
+const StrategyCandidates = lazy(() => import("@/pages/StrategyCandidates"));
 const News = lazy(() => import("@/pages/News"));
 const Earnings = lazy(() => import("@/pages/Earnings"));
 const Research = lazy(() => import("@/pages/Research"));
@@ -384,6 +385,7 @@ function AppInner() {
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<Page component={StrategyLab} />} />
+        <Route path="/strategy/candidates" element={<Page component={StrategyCandidates} />} />
         <Route path="/signals" element={<SignalsFeedPage />} />
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
         <Route path="/strategy/scout/chart/:ticker/:strategyId" element={<ScoutChartPage />} />

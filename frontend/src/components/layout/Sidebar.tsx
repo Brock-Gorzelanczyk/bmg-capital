@@ -55,23 +55,15 @@ const PREFETCH_MAP: Record<string, (qc: QueryClient) => void> = {
 // ─── 6-section nav layout ─────────────────────────────────────────────────────
 
 const NAV_TRADE = [
-  { to: "/",                label: "Dashboard",       Icon: LayoutDashboard },
-  { to: "/mission-control", label: "Mission Control", Icon: Cpu             },
-  { to: "/portfolio",       label: "Portfolio",       Icon: Briefcase       },
-  { to: "/risk-console",    label: "Risk Console",    Icon: ShieldAlert     },
-  { to: "/activity",        label: "Activity",        Icon: Activity        },
+  { to: "/",          label: "Dashboard", Icon: LayoutDashboard },
+  { to: "/portfolio", label: "Portfolio", Icon: Briefcase       },
 ];
 
 const NAV_STRATEGY = [
-  { to: "/strategy",                  label: "Strategy Lab",      Icon: FlaskConical },
-  { to: "/admin/tuning",              label: "Tuning Advisor",    Icon: Gauge        },
-  { to: "/admin/diagnostics",         label: "Diagnostics",       Icon: Cpu          },
-  { to: "/admin/discipline-report",   label: "Discipline Report", Icon: ShieldAlert  },
-  { to: "/strategy/hypotheses",       label: "Hypotheses",        Icon: Beaker       },
-  { to: "/strategy/brain",            label: "Brain Graph",       Icon: Cpu          },
-  { to: "/strategy/scout",            label: "Strategy Scout",    Icon: Radar        },
-  { to: "/strategy/workshop",         label: "Workshop",          Icon: ClipboardPen },
-  { to: "/strategy/forge",            label: "The Forge",         Icon: Hammer       },
+  { to: "/strategy",          label: "Strategy Lab",   Icon: FlaskConical },
+  { to: "/strategy/scout",    label: "Strategy Scout", Icon: Radar        },
+  { to: "/strategy/workshop", label: "Workshop",       Icon: ClipboardPen },
+  { to: "/strategy/forge",    label: "The Forge",      Icon: Hammer       },
 ];
 
 const NAV_MARKETS = [
@@ -97,6 +89,17 @@ const NAV_FUND = [
 const NAV_LEARN = [
   { to: "/learn/tracks",      label: "Learning Center", Icon: GraduationCap },
   { to: "/learn/certificates",label: "Certificates",    Icon: Award         },
+];
+
+const NAV_INTERNAL = [
+  { to: "/mission-control",         label: "Mission Control",   Icon: Cpu          },
+  { to: "/risk-console",            label: "Risk Console",      Icon: ShieldAlert  },
+  { to: "/activity",                label: "Activity",          Icon: Activity     },
+  { to: "/admin/tuning",            label: "Tuning Advisor",    Icon: Gauge        },
+  { to: "/admin/diagnostics",       label: "Diagnostics",       Icon: Cpu          },
+  { to: "/admin/discipline-report", label: "Discipline Report", Icon: ShieldAlert  },
+  { to: "/strategy/hypotheses",     label: "Hypotheses",        Icon: Beaker       },
+  { to: "/strategy/brain",          label: "Brain Graph",       Icon: Cpu          },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -466,8 +469,7 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
           items={NAV_TRADE}
           expanded={expanded}
           itemDots={{
-            "/":               { static: showDigestDot },
-            "/mission-control":{ pulse: showAutonomousDot },
+            "/": { static: showDigestDot },
           }}
         />
 
@@ -484,6 +486,15 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
           items={NAV_LEARN}
           expanded={expanded}
           headerRight={streak > 0 ? <StreakBadge streak={streak} size="sm" /> : undefined}
+        />
+
+        <NavSection
+          label="Internal"
+          items={NAV_INTERNAL}
+          expanded={expanded}
+          itemDots={{
+            "/mission-control": { pulse: showAutonomousDot },
+          }}
         />
       </nav>
 
