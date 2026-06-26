@@ -771,3 +771,132 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             for s in portfolio_snapshots
         ],
     }
+
+
+# ── get_canonical_portfolio_state — single named contract for every consumer ──
+
+# Canonical sleeve labels. Every consumer of canonical state sees ONE of these
+# five strings — never lowercase, never "equities", never "stock" (singular).
+# Backend code paths that today emit "stocks"/"crypto"/etc. lowercase get
+# normalized through CANONICAL_SLEEVE_LABEL_MAP below.
+CANONICAL_SLEEVES = ("Stocks", "Crypto", "Options", "Quant", "Cash")
+_SLEEVE_LABEL_MAP = {
+    # Stocks
+    "stock": "Stocks", "stocks": "Stocks", "equity": "Stocks", "equities": "Stocks",
+    # Crypto
+    "crypto": "Crypto", "cryptocurrency": "Crypto",
+    # Options
+    "option": "Options", "options": "Options",
+    # Quant
+    "quant": "Quant", "quantitative": "Quant",
+    # Cash
+    "cash": "Cash", "cash_floor": "Cash", "cash floor": "Cash",
+}
+
+
+def _canonicalize_sleeve(raw: str | None) -> str:
+    """Normalize a raw sleeve string to one of CANONICAL_SLEEVES.
+
+    Unknown labels fall back to "Quant" rather than raising — the canonical
+    state contract returns a normalized response even when upstream data is
+    dirty. Ship 7 will hard-error on unknown labels; this wrapper does not.
+    """
+    if not raw:
+        return "Cash"
+    key = str(raw).strip().lower()
+    return _SLEEVE_LABEL_MAP.get(key, "Quant")
+
+
+def get_canonical_portfolio_state(user_id: int, db: Session) -> dict:
+    """Single canonical portfolio state. Every endpoint that needs portfolio,
+    sleeve, or P&L data MUST call this function — no bypass paths.
+
+    Returns:
+        {
+            "portfolio_value_cents": int,
+            "sleeve_totals": {"Stocks": int, "Crypto": int, "Options": int,
+                              "Quant": int, "Cash": int},
+            "today_pnl_cents": int,
+            "per_bot": [
+                {"bot_id": str, "sleeve": str, "starting_cents": int,
+                 "current_cents": int, "today_pnl_cents": int,
+                 "deployed_cents": int, "deployed_pct": float}
+            ],
+            "last_computed_at": ISO-8601 str (UTC),
+        }
+
+    Numbers are sourced from compute_strategy_lab_aggregate — which is the
+    same function Dashboard, Strategy Lab, Portfolio, and Mission Control
+    already use (or will use after PART B refactors). Calling this wrapper
+    guarantees byte-for-byte equality across surfaces.
+    """
+    agg = compute_strategy_lab_aggregate(user_id, db) or {}
+
+    leaderboard = agg.get("leaderboard", []) or []
+    portfolios = agg.get("portfolios", []) or []
+
+    # Map portfolio_id -> canonical sleeve label.
+    sleeve_by_portfolio: dict[int, str] = {
+        p["id"]: _canonicalize_sleeve(p.get("asset_class")) for p in portfolios
+    }
+
+    # ── Resolve per-bot sleeve via allocation -> portfolio_id -> sleeve ─────
+    from app.db.models.bots import BotAllocation, BotProfile
+
+    allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == user_id)
+        .all()
+    )
+    profile_id_to_name: dict[int, str] = {
+        p.id: p.name
+        for p in db.query(BotProfile).filter(
+            BotProfile.id.in_({a.profile_id for a in allocs})
+        ).all()
+    }
+    name_to_sleeve: dict[str, str] = {}
+    for a in allocs:
+        name = profile_id_to_name.get(a.profile_id)
+        if not name:
+            continue
+        # Cash floor: orphan allocation (portfolio_id IS NULL). Canonical sleeve
+        # is "Cash".
+        if a.portfolio_id is None or name == "cash_floor":
+            name_to_sleeve[name] = "Cash"
+        else:
+            name_to_sleeve[name] = sleeve_by_portfolio.get(a.portfolio_id, "Quant")
+
+    # ── Build per_bot from leaderboard + alloc lookup ──────────────────────
+    per_bot: list[dict] = []
+    sleeve_totals: dict[str, int] = {s: 0 for s in CANONICAL_SLEEVES}
+
+    for entry in leaderboard:
+        profile_name = entry.get("profile") or ""
+        sleeve = name_to_sleeve.get(profile_name, "Quant")
+        starting = int(entry.get("starting_capital_cents") or 0)
+        current = int(entry.get("portfolio_value_cents") or 0)
+        today_pnl = int(entry.get("today_pnl_cents") or 0)
+        deployed = int(entry.get("deployed_cents") or 0)
+        deployed_pct = round((deployed / current * 100.0), 2) if current > 0 else 0.0
+
+        per_bot.append({
+            "bot_id": profile_name,
+            "sleeve": sleeve,
+            "starting_cents": starting,
+            "current_cents": current,
+            "today_pnl_cents": today_pnl,
+            "deployed_cents": deployed,
+            "deployed_pct": deployed_pct,
+        })
+        sleeve_totals[sleeve] = sleeve_totals.get(sleeve, 0) + current
+
+    portfolio_value = int(agg.get("portfolio_value_cents") or agg.get("total_value_cents") or 0)
+    today_pnl = int(agg.get("today_pnl_cents") or 0)
+
+    return {
+        "portfolio_value_cents": portfolio_value,
+        "sleeve_totals": sleeve_totals,
+        "today_pnl_cents": today_pnl,
+        "per_bot": per_bot,
+        "last_computed_at": datetime.now(timezone.utc).isoformat(),
+    }
