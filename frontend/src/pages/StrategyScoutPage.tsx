@@ -1271,16 +1271,49 @@ function ScanTickerTab() {
 
 // ── Quick Lookup panel ────────────────────────────────────────────────────────
 
+// SHIP 4: sortable result table columns. avg_return is the default sort
+// (descending) per spec. Strategy and ARM columns are not sortable.
+type LookupSortKey = "sharpe" | "avg_return" | "win_rate" | "trades";
+
 function QuickLookupPanel() {
   const [ticker, setTicker] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<QuickLookupResult[] | null>(null);
   const [symbol, setSymbol] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<LookupSortKey>("avg_return");
+  const [sortDesc, setSortDesc] = useState(true);
   const qc = useQueryClient();
   const navigate = useNavigate();
 
   const QUICK_TICKERS = ["NVDA", "AAPL", "TSLA", "SPY", "BTC/USD", "ETH/USD"];
+
+  // Re-sort whenever results or sort state changes. Backend already applies
+  // default avg_return desc; this keeps the UI in sync when the user clicks
+  // a header to flip sort.
+  const sortedResults = useMemo<QuickLookupResult[] | null>(() => {
+    if (!results) return null;
+    const rows = [...results];
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "sharpe":     cmp = a.sharpe - b.sharpe; break;
+        case "avg_return": cmp = a.avg_return_pct - b.avg_return_pct; break;
+        case "win_rate":   cmp = a.win_rate_pct - b.win_rate_pct; break;
+        case "trades":     cmp = a.trades_per_year - b.trades_per_year; break;
+      }
+      return sortDesc ? -cmp : cmp;
+    });
+    return rows;
+  }, [results, sortKey, sortDesc]);
+
+  function flipSort(k: LookupSortKey) {
+    if (sortKey === k) setSortDesc(!sortDesc);
+    else {
+      setSortKey(k);
+      setSortDesc(true);
+    }
+  }
 
   async function handleLookup(sym?: string) {
     const s = (sym ?? ticker).trim().toUpperCase();
@@ -1370,7 +1403,7 @@ function QuickLookupPanel() {
       {/* Loading */}
       {loading && (
         <div style={{ marginTop: 14, fontFamily: MONO, fontSize: 11, color: C.dim }}>
-          Running 2y walk-forward backtest across strategies… (5-10s first run, cached 1h)
+          Running 5y backtest across strategies (canonical Past Triggers engine, min 20 triggers)… (5-10s first run, cached 1h)
         </div>
       )}
 
@@ -1379,69 +1412,124 @@ function QuickLookupPanel() {
         <div style={{ marginTop: 14, fontFamily: MONO, fontSize: 11, color: "#f87171" }}>{error}</div>
       )}
 
-      {/* Results */}
-      {results !== null && !loading && (
+      {/* Results — SHIP 4: sortable table, default AVG RETURN desc */}
+      {sortedResults !== null && !loading && (
         <div style={{ marginTop: 14 }}>
-          {results.length === 0 ? (
+          {sortedResults.length === 0 ? (
             <div style={{ fontFamily: MONO, fontSize: 11, color: C.dim }}>
-              No strategies cleared the quality threshold for {symbol} over 2y. Try a different ticker.
+              No strategies with ≥20 triggers over 5y for {symbol}. Try a different ticker.
             </div>
           ) : (
             <>
               <div style={{ fontFamily: MONO, fontSize: 9, color: C.faint, letterSpacing: "0.12em", marginBottom: 8 }}>
-                RESULTS — {symbol} — ranked by 2y composite score (Sharpe × Win% × log trades)
+                RESULTS — {symbol} — ranked by 5y AVG RETURN (min 20 triggers, hold 30d)
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                {results.map((r, i) => (
-                  <div key={r.strategy_id} style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "8px 10px", borderRadius: 4,
-                    background: i === 0 ? "rgba(167,139,250,0.06)" : "transparent",
-                    border: `1px solid ${i === 0 ? C.violetBorder : C.borderDim}`,
-                    flexWrap: "wrap",
-                  }}>
-                    {/* Rank */}
-                    <span style={{ fontFamily: MONO, fontSize: 10, color: C.faint, width: 18, flexShrink: 0 }}>
-                      {i + 1}.
-                    </span>
-                    {/* Strategy name */}
-                    <span style={{ fontFamily: MONO, fontSize: 12, color: i === 0 ? C.violet : C.hi, flex: "1 1 160px" }}>
-                      {r.display_name}
-                    </span>
-                    {/* Metrics */}
-                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>
-                        Sharpe <span style={{ color: r.sharpe >= 1 ? C.green : r.sharpe >= 0.5 ? C.body : C.dim }}>{r.sharpe.toFixed(2)}</span>
-                      </span>
-                      <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>
-                        Win <span style={{ color: r.win_rate_pct >= 55 ? C.green : C.body }}>{r.win_rate_pct.toFixed(0)}%</span>
-                      </span>
-                      <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid }}>
-                        Trades <span style={{ color: C.body }}>{r.trades_per_year}/yr</span>
-                      </span>
-                    </div>
-                    {/* Arm button */}
-                    <button
-                      onClick={() => handleArm(r.strategy_id)}
-                      style={{
-                        background: "none", border: `1px solid ${C.violetBorder}`,
-                        borderRadius: 4, padding: "3px 10px",
-                        fontFamily: MONO, fontSize: 9, color: C.violet,
-                        cursor: "pointer", letterSpacing: "0.08em", whiteSpace: "nowrap",
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = C.violetDim; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
-                    >
-                      ARM
-                    </button>
-                  </div>
-                ))}
+              <div style={{ overflowX: "auto" }}>
+                <table style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontFamily: MONO,
+                  fontSize: 11,
+                }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${C.borderDim}`, color: C.faint }}>
+                      <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500, width: 28 }}>#</th>
+                      <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 500 }}>STRATEGY</th>
+                      <LookupSortTh label="SHARPE"     k="sharpe"     sortKey={sortKey} desc={sortDesc} onClick={flipSort} />
+                      <LookupSortTh label="AVG RETURN" k="avg_return" sortKey={sortKey} desc={sortDesc} onClick={flipSort} />
+                      <LookupSortTh label="WIN"        k="win_rate"   sortKey={sortKey} desc={sortDesc} onClick={flipSort} />
+                      <LookupSortTh label="TRADES"     k="trades"     sortKey={sortKey} desc={sortDesc} onClick={flipSort} />
+                      <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, width: 60 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedResults.map((r, i) => (
+                      <tr key={r.strategy_id} style={{
+                        borderBottom: `1px solid ${C.borderDim}`,
+                        background: i === 0 ? "rgba(167,139,250,0.05)" : "transparent",
+                      }}>
+                        <td style={{ padding: "8px", color: C.faint, fontSize: 10 }}>{i + 1}</td>
+                        <td style={{ padding: "8px", color: i === 0 ? C.violet : C.hi }}>{r.display_name}</td>
+                        <td style={{
+                          padding: "8px",
+                          textAlign: "right",
+                          color: r.sharpe >= 1 ? C.green : r.sharpe >= 0.5 ? C.body : C.dim,
+                          fontVariantNumeric: "tabular-nums",
+                        }}>{r.sharpe.toFixed(2)}</td>
+                        <td style={{
+                          padding: "8px",
+                          textAlign: "right",
+                          fontWeight: 600,
+                          color: r.avg_return_pct >= 0 ? C.green : C.red,
+                          fontVariantNumeric: "tabular-nums",
+                        }}>
+                          {r.avg_return_pct >= 0 ? "+" : ""}{r.avg_return_pct.toFixed(2)}%
+                        </td>
+                        <td style={{
+                          padding: "8px",
+                          textAlign: "right",
+                          color: r.win_rate_pct >= 55 ? C.green : C.body,
+                          fontVariantNumeric: "tabular-nums",
+                        }}>{r.win_rate_pct.toFixed(0)}%</td>
+                        <td style={{
+                          padding: "8px",
+                          textAlign: "right",
+                          color: C.body,
+                          fontVariantNumeric: "tabular-nums",
+                        }}>{r.trades_per_year}/yr</td>
+                        <td style={{ padding: "8px", textAlign: "right" }}>
+                          <button
+                            onClick={() => handleArm(r.strategy_id)}
+                            style={{
+                              background: "none", border: `1px solid ${C.violetBorder}`,
+                              borderRadius: 4, padding: "3px 10px",
+                              fontFamily: MONO, fontSize: 9, color: C.violet,
+                              cursor: "pointer", letterSpacing: "0.08em", whiteSpace: "nowrap",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = C.violetDim; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+                          >
+                            ARM
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+interface LookupSortThProps {
+  label: string;
+  k: LookupSortKey;
+  sortKey: LookupSortKey;
+  desc: boolean;
+  onClick: (k: LookupSortKey) => void;
+}
+
+function LookupSortTh({ label, k, sortKey, desc, onClick }: LookupSortThProps) {
+  const active = sortKey === k;
+  return (
+    <th
+      onClick={() => onClick(k)}
+      style={{
+        textAlign: "right",
+        padding: "6px 8px",
+        fontWeight: 500,
+        cursor: "pointer",
+        userSelect: "none",
+        color: active ? C.hi : C.faint,
+        letterSpacing: "0.06em",
+      }}
+    >
+      {label}{active ? (desc ? " ↓" : " ↑") : ""}
+    </th>
   );
 }
 

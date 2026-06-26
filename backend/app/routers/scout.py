@@ -469,62 +469,88 @@ def _strategies_for_symbol(symbol: str) -> list[str]:
     return relevant if relevant else list(SCOUT_CATALOG.keys())
 
 
-def _simulate_strategy_on_bars(strategy_id: str, ticker: str, bars: list[dict]) -> dict | None:
-    """
-    Walk-forward simulation: every STEP bars from warmup onward, check if strategy fires.
-    If it fires, hold for HOLD_DAYS bars and record the return.
-    Returns performance dict or None if insufficient trades.
+# ── SHIP 4 — Reconciliation helper ─────────────────────────────────────────────
+#
+# The quick-lookup listing and Past Triggers panel previously called two
+# different backtest implementations with different windows and hold periods,
+# producing different numbers for the same (symbol, strategy) pair. This is
+# the "portfolio split-brain" pattern from vault/known-issues #1 applied to a
+# new surface.
+#
+# CANONICAL SOURCE for both surfaces is now `run_backtest` from
+# `app.services.strategy_backtest`. We call it with the SAME parameters used
+# by the Past Triggers panel (5y window, hold_days=30) so the two surfaces
+# reconcile exactly within ±0.1 on sharpe, ±1% on win rate, ±0.1% on
+# avg_return — and trigger counts match exactly.
+#
+# Min sample: strategies with <20 triggers over the lookback are excluded
+# from the listing entirely. A 2-trade 100% win rate is statistical noise.
+
+# Listing parameters MUST match BacktestPanel.tsx default (years=5) and the
+# /api/strategy/{id}/backtest endpoint default (hold_days=30) so the two
+# surfaces are computing the same backtest, full stop.
+_LISTING_YEARS = 5
+_LISTING_HOLD_DAYS = 30
+_LISTING_MIN_TRIGGERS = 20
+
+
+def _reconciled_stats_for_strategy(strategy_id: str, ticker: str, bars: list[dict]) -> dict | None:
+    """Run the CANONICAL Past Triggers backtest and shape the result for the
+    quick-lookup listing.
+
+    Returns None if the strategy has fewer than _LISTING_MIN_TRIGGERS over the
+    lookback window — these are excluded from default ranks to avoid promoting
+    statistically meaningless results (e.g. 2 trades, 100% win rate).
+
+    Returns the same keys the legacy `_simulate_strategy_on_bars` produced
+    (sharpe, win_rate_pct, trades_per_year, composite_score) plus a new
+    `avg_return_pct` field formatted as a signed percent (×100 of the decimal
+    return). Caller is responsible for the canonical source — do NOT
+    recompute these in JSX.
     """
     import math
 
-    meta = SCOUT_CATALOG.get(strategy_id)
-    if not meta:
+    from app.services.strategy_backtest import run_backtest
+
+    if SCOUT_CATALOG.get(strategy_id) is None:
         return None
 
-    warmup = max(meta.get("min_bars", 50), 30)
-    HOLD_DAYS = 15
-    STEP = 15  # check every 15 bars to keep wall-clock reasonable
+    result = run_backtest(
+        strategy_id,
+        ticker,
+        bars,
+        years_requested=_LISTING_YEARS,
+        hold_days=_LISTING_HOLD_DAYS,
+    )
 
-    if len(bars) < warmup + HOLD_DAYS + STEP:
+    n = int(result.trigger_count or 0)
+    if n < _LISTING_MIN_TRIGGERS:
         return None
 
-    trade_returns: list[float] = []
-    for i in range(warmup, len(bars) - HOLD_DAYS - 1, STEP):
-        try:
-            result = _run_strategy(strategy_id, ticker, bars[: i + 1])
-        except Exception:
-            continue
-        if not result:
-            continue
+    # Past Triggers reports decimals (0.05 = 5%). Listing UI used percent
+    # numbers. We expose BOTH in the response: win_rate_pct (percent for
+    # display), avg_return_pct (percent for display + sort), and keep
+    # sharpe/trigger_count exactly as the canonical function returned them.
+    sharpe = float(result.sharpe) if result.sharpe is not None else 0.0
+    win_rate_pct = (float(result.win_rate) * 100.0) if result.win_rate is not None else 0.0
+    avg_return_decimal = float(result.avg_return) if result.avg_return is not None else 0.0
+    avg_return_pct = avg_return_decimal * 100.0
 
-        entry = bars[i]["c"]
-        exit_p = bars[i + HOLD_DAYS]["c"]
-        if entry <= 0:
-            continue
+    # trades_per_year normalises the trigger count over the bar window so
+    # users still get a "fires per year" sense without comparing absolute
+    # counts across strategies with different histories.
+    years_avail = max(0.1, float(result.years_available or 0.0))
+    trades_per_year = max(1, round(n / years_avail))
 
-        side = result.get("side", "buy")
-        ret = (exit_p - entry) / entry if side in ("buy", "cover", "long") else (entry - exit_p) / entry
-        trade_returns.append(ret)
+    # composite_score kept in the payload for diagnostics; no longer the
+    # primary sort key (default sort is now avg_return_pct desc).
+    composite = sharpe * (win_rate_pct / 100.0) * math.log(max(2, n))
 
-    if len(trade_returns) < 3:
-        return None
-
-    n = len(trade_returns)
-    wins = sum(1 for r in trade_returns if r > 0)
-    win_rate = (wins / n) * 100
-    avg = sum(trade_returns) / n
-    variance = sum((r - avg) ** 2 for r in trade_returns) / n
-    std = variance ** 0.5
-    sharpe = avg / std * math.sqrt(252 / HOLD_DAYS) if std > 0 else 0.0
-
-    trading_days = len(bars) - warmup - HOLD_DAYS
-    years = max(0.1, trading_days / 252)
-    trades_per_year = max(1, round(n / years))
-
-    composite = sharpe * (win_rate / 100) * math.log(max(2, n))
     return {
-        "sharpe":         round(sharpe, 2),
-        "win_rate_pct":   round(win_rate, 1),
+        "sharpe":          round(sharpe, 2),
+        "win_rate_pct":    round(win_rate_pct, 1),
+        "avg_return_pct":  round(avg_return_pct, 2),
+        "trigger_count":   n,
         "trades_per_year": trades_per_year,
         "composite_score": round(max(0.0, composite), 3),
     }
@@ -537,9 +563,10 @@ def quick_lookup(
     current_user=Depends(get_current_user),
 ):
     """
-    Rank all asset-class-relevant strategies against a ticker by 2y walk-forward
-    composite score: sharpe × win_rate × log(trade_count).
-    Results cached 1h per symbol. First call: 5-10s. Subsequent calls: instant.
+    Rank all asset-class-relevant strategies against a ticker using the same
+    backtest engine the Past Triggers panel uses (run_backtest, 5y window,
+    hold_days=30). Strategies with <20 triggers are excluded. Default sort is
+    AVG RETURN desc. Results cached 1h per symbol.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -547,14 +574,18 @@ def quick_lookup(
     if not symbol:
         raise HTTPException(status_code=422, detail="symbol is required")
 
-    cache_key = f"ql:{symbol}"
+    # Cache prefix bumped from "ql:" → "ql2:" so stale 2y/walk-forward results
+    # from the previous implementation do not poison post-deploy lookups.
+    cache_key = f"ql2:{symbol}"
     cached = _lookup_cache_get(cache_key)
     if cached is not None:
         cached_copy = dict(cached)
         cached_copy["cached"] = True
         return cached_copy
 
-    bars = _fetch_bars_for_ticker(symbol, period="2y")
+    # Fetch 5y of bars to match the Past Triggers default. yfinance accepts
+    # "5y" as a period string.
+    bars = _fetch_bars_for_ticker(symbol, period=f"{_LISTING_YEARS}y")
     if not bars:
         raise HTTPException(status_code=422, detail=f"No price data found for {symbol}")
 
@@ -563,7 +594,7 @@ def quick_lookup(
     results: list[dict] = []
     with ThreadPoolExecutor(max_workers=6) as pool:
         futures = {
-            pool.submit(_simulate_strategy_on_bars, sid, symbol, bars): sid
+            pool.submit(_reconciled_stats_for_strategy, sid, symbol, bars): sid
             for sid in strategy_ids
         }
         for future in as_completed(futures, timeout=60):
@@ -573,7 +604,7 @@ def quick_lookup(
             except Exception as exc:
                 logger.debug("[quick-lookup] %s failed: %s", sid, exc)
                 stats = None
-            if stats and stats["composite_score"] > 0:
+            if stats:
                 meta = SCOUT_CATALOG[sid]
                 results.append({
                     "strategy_id":   sid,
@@ -582,12 +613,17 @@ def quick_lookup(
                     **stats,
                 })
 
-    results.sort(key=lambda x: -x["composite_score"])
+    # Default sort: AVG RETURN desc. composite_score remains in the payload
+    # for diagnostic visibility but is no longer the primary rank key.
+    results.sort(key=lambda x: -x["avg_return_pct"])
     response = {
         "symbol":    symbol,
         "bar_count": len(bars),
         "results":   results[:10],
         "cached":    False,
+        "lookback_years": _LISTING_YEARS,
+        "hold_days":      _LISTING_HOLD_DAYS,
+        "min_triggers":   _LISTING_MIN_TRIGGERS,
     }
     _lookup_cache_set(cache_key, response)
     return response
