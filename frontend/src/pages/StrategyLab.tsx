@@ -2145,7 +2145,7 @@ export default function StrategyLab() {
                   // CANDIDATES IN INCUBATION
                 </p>
                 <p className="text-xs text-t-dim mt-1 font-ui-t">
-                  → 17 paper-shadow strategies awaiting promotion
+                  → {CANDIDATE_META.length} paper-shadow strategies awaiting promotion
                 </p>
               </div>
               <span className="text-t-gdim group-hover:text-t-muted text-lg">→</span>
@@ -2175,32 +2175,6 @@ export default function StrategyLab() {
               ))}
             </div>
           </div>
-
-          {/* 7. Prebuilt bot tiles */}
-          {isLoading ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-                <div key={i} className="h-36 rounded-2xl bg-t-bg0 border border-t-dim animate-pulse" />
-              ))}
-            </div>
-          ) : (
-            <div className={cn(
-              "grid gap-4",
-              railOpen
-                ? "grid-cols-1 sm:grid-cols-2"
-                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
-            )}>
-              {bots.map((item) => (
-                <BotCard
-                  key={item.profile.name}
-                  item={item}
-                  onNavigate={(name) => navigate(`/strategy/${name}`)}
-                  isViewer={isViewer}
-                  tier={item.allocation?.id != null ? tierByAllocId[item.allocation.id] : undefined}
-                />
-              ))}
-            </div>
-          )}
 
           {/* My Signals feed — Scout + Forge combined */}
           {mySignals.length > 0 && (
