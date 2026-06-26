@@ -238,16 +238,22 @@ def run(conn) -> dict:
     conn.commit()
 
     # --- Step 6: Acceptance gate — read back and assert ---
+    # Scope to the CANONICAL alloc_id set resolved in Step 2 (name_to_alloc.values()).
+    # Using the same `enabled = 1 AND p.name IN (...)` filter would re-select all
+    # duplicate enabled rows that MIN(id) deliberately excluded, causing a false
+    # RuntimeError on the unupdated duplicate row (known-issue #3 trap).
+    canonical_alloc_ids = list(name_to_alloc.values())
+    id_params = {f"aid{i}": aid for i, aid in enumerate(canonical_alloc_ids)}
+    id_placeholders = ", ".join(f":aid{i}" for i in range(len(canonical_alloc_ids)))
+
     verify_rows = conn.execute(
         text(f"""
             SELECT p.name, a.starting_capital_cents, a.inception_capital_cents
               FROM bot_allocations a
               JOIN bot_profiles p ON p.id = a.profile_id
-             WHERE a.user_id = :uid
-               AND a.enabled = 1
-               AND p.name IN ({name_placeholders})
+             WHERE a.id IN ({id_placeholders})
         """),
-        {"uid": TARGET_USER_ID, **name_params},
+        {**id_params},
     ).fetchall()
 
     sum_starting = 0
