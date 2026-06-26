@@ -263,7 +263,11 @@ def _demo_equity_curve(profile_name: str) -> list[dict]:
 
 # ── Serializers ───────────────────────────────────────────────────────────────
 
-def _profile_to_dict(p: BotProfile, allocation: Optional[BotAllocation] = None) -> dict:
+def _profile_to_dict(
+    p: BotProfile,
+    allocation: Optional[BotAllocation] = None,
+    sleeve_pct: float | None = None,
+) -> dict:
     return {
         "id": p.id,
         "name": p.name,
@@ -272,16 +276,17 @@ def _profile_to_dict(p: BotProfile, allocation: Optional[BotAllocation] = None) 
         "config": p.config_json or {},
         "enabled": p.enabled,
         "created_at": p.created_at.isoformat() if p.created_at else None,
-        "allocation": _allocation_to_dict(allocation) if allocation else None,
+        "allocation": _allocation_to_dict(allocation, sleeve_pct) if allocation else None,
     }
 
 
-def _allocation_to_dict(a: BotAllocation) -> dict:
+def _allocation_to_dict(a: BotAllocation, sleeve_pct: float | None = None) -> dict:
     return {
         "id": a.id,
         "profile_id": a.profile_id,
         "capital_pct": a.capital_pct,
         "starting_capital_cents": a.starting_capital_cents,
+        "sleeve_pct": sleeve_pct,
         "risk_profile": a.risk_profile,
         "paper_mode": a.paper_mode,
         "go_live_requested": a.go_live_requested,
@@ -410,13 +415,35 @@ def list_bots(
         )
         user_allocations = {a.profile_id: a for a in allocs}
 
+    # Per-sleeve starting totals = SUM(alloc.starting_capital_cents) for all enabled
+    # allocs bound to that portfolio. Mirrors compute_portfolio_snapshot's
+    # self-consistency rule (canonical trusts child sum over the sleeve row).
+    # Allocs with portfolio_id IS NULL (orphans, e.g. cash_floor) get sleeve_pct=None.
+    sleeve_starting_by_portfolio: dict[int, int] = {}
+    if profiles:
+        for a in allocs:
+            if a.portfolio_id is None or not a.enabled:
+                continue
+            sleeve_starting_by_portfolio[a.portfolio_id] = (
+                sleeve_starting_by_portfolio.get(a.portfolio_id, 0)
+                + int(a.starting_capital_cents or 0)
+            )
+
     from app.core.canonical import compute_bot_snapshot
 
     result = []
     for p in profiles:
         allocation = user_allocations.get(p.id)
 
-        row = _profile_to_dict(p, allocation)
+        # Canonical % of sleeve = starting_capital_cents / SUM(siblings).
+        sleeve_pct: float | None = None
+        if allocation is not None and allocation.portfolio_id is not None:
+            sleeve_total = sleeve_starting_by_portfolio.get(allocation.portfolio_id, 0)
+            starting = int(allocation.starting_capital_cents or 0)
+            if sleeve_total > 0 and starting > 0:
+                sleeve_pct = round(starting / sleeve_total * 100, 1)
+
+        row = _profile_to_dict(p, allocation, sleeve_pct)
         row["display_name"] = _DISPLAY_NAMES.get(p.name, p.name.replace("_", " ").title())
 
         if allocation is not None:
