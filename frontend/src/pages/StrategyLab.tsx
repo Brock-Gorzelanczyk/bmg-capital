@@ -251,6 +251,17 @@ function formatPnl(val: number): string {
   return `${sign}$${abs.toFixed(2)}`;
 }
 
+// "ALLOCATED" dollar formatter for the BotCard Capital Allocated stat.
+// Whole-dollar formatting with commas at >= $1000; 2-decimal precision below.
+// Returns null when value is missing or non-positive — caller falls through.
+function formatDollarsWhole(usd: number | null | undefined): string | null {
+  if (usd == null || !isFinite(usd) || usd <= 0) return null;
+  if (usd >= 1000) {
+    return `$${Math.round(usd).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  }
+  return `$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function formatPct(val: number): string {
   const sign = val >= 0 ? "+" : "";
   return `${sign}${val.toFixed(2)}%`;
@@ -1161,7 +1172,18 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
         <div>
           <p className="text-t-gdim text-xs mb-0.5 font-ui-t">Capital Allocated</p>
           <p className="text-sm font-semibold text-t-hi tabular-nums font-mono-t">
-            {allocation ? `${allocation.capital_pct}%` : "—"}
+            {(() => {
+              if (!allocation) return "—";
+              const dollars = formatDollarsWhole(stats?.starting_capital_usd ?? null);
+              const sleevePct = allocation.sleeve_pct;
+              if (dollars && sleevePct != null) {
+                return `${dollars} · ${sleevePct.toFixed(1)}% of sleeve`;
+              }
+              if (dollars) return dollars;
+              if (sleevePct != null) return `${sleevePct.toFixed(1)}% of sleeve`;
+              // Fallback to legacy stale field only when both canonical values are unavailable
+              return `${allocation.capital_pct}%`;
+            })()}
           </p>
         </div>
       </div>

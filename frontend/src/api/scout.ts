@@ -109,7 +109,15 @@ export interface QuickLookupResult {
   display_name: string;
   category: string;
   sharpe: number;
+  /** Win rate already in percent (0-100). Canonical, do NOT re-multiply. */
   win_rate_pct: number;
+  /**
+   * Average per-trigger return as a signed percent (e.g. -1.34 for -1.34%).
+   * Canonical from the backend Past Triggers backtest. Render as-is — no
+   * JSX recomputation. See vault/skills/05 cents-vs-percent convention.
+   */
+  avg_return_pct: number;
+  trigger_count: number;
   trades_per_year: number;
   composite_score: number;
 }
@@ -119,6 +127,9 @@ export interface QuickLookupResponse {
   bar_count: number;
   results: QuickLookupResult[];
   cached: boolean;
+  lookback_years?: number;
+  hold_days?: number;
+  min_triggers?: number;
 }
 
 export const quickLookup = (symbol: string) =>

@@ -19,6 +19,7 @@ export interface BotAllocation {
   profile_id: number;
   capital_pct: number;
   starting_capital_cents?: number;
+  sleeve_pct: number | null;  // canonical % of sleeve (SUM-of-children); null for orphan/disabled allocs
   risk_profile: "conservative" | "standard" | "aggressive";
   paper_mode: true;        // always true in v1
   go_live_requested: boolean;
