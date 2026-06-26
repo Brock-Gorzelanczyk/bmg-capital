@@ -328,6 +328,13 @@ async def lifespan(app: FastAPI):
     except Exception as _m023_exc:
         logger.warning("[startup] m023_add_inception_capital_cents failed (non-fatal): %s", _m023_exc)
 
+    try:
+        from app.db.migrations.m024_corrective_capital_reset import run as _run_m024
+        with engine.connect() as _m024_conn:
+            _run_m024(_m024_conn)
+    except Exception as _m024_exc:
+        logger.warning("[startup] m024_corrective_capital_reset failed (non-fatal): %s", _m024_exc)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
