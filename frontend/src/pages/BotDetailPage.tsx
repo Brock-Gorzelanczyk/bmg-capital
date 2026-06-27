@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { BracketFrame, SectionLabel } from "@/components/design";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -2753,13 +2753,22 @@ export default function BotDetailPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6 animate-page-in">
       {/* Back nav */}
-      <button
-        onClick={() => navigate("/strategy")}
-        className="flex items-center gap-1.5 text-t-muted hover:text-t-hi text-sm transition-colors font-ui-t"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Strategy Lab
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate("/strategy")}
+          className="flex items-center gap-1.5 text-t-muted hover:text-t-hi text-sm transition-colors font-ui-t"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Strategy Lab
+        </button>
+        {/* Cross-link to whole-book LP factsheet */}
+        <Link
+          to="/fund/tear-sheet"
+          className="text-xs text-t-gdim hover:text-t-mid2 transition-colors font-mono-t tracking-wide"
+        >
+          ← Back to Fund Tear Sheet
+        </Link>
+      </div>
 
       {/* Tab system — top of page, below back nav */}
       <TabBar active={activeTab} onChange={setActiveTab} />
