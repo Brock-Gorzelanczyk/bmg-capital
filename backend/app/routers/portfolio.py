@@ -522,12 +522,48 @@ def get_portfolio_snapshot(
             "cash_pct":    0.0,
         }
 
-        # Per-sleeve breakdown
+        # ── Per-sleeve breakdown ── current_value_cents is sourced from the
+        # canonical aggregator to GUARANTEE parity with Dashboard / Strategy
+        # Lab / Diagnostics. Metadata (active_bots, bot_ids, return_30d) stays
+        # accumulated from the local per-alloc snapshot loop above — canonical
+        # doesn't expose those today.
+        try:
+            from app.core.canonical import (
+                get_canonical_portfolio_state,
+                _canonicalize_sleeve,
+            )
+            _canonical_state = get_canonical_portfolio_state(current_user.id, db)
+            _canonical_sleeve_cents = _canonical_state.get("sleeve_totals", {}) or {}
+        except Exception as _canon_exc:
+            logger.warning(
+                "[portfolio/snapshot] canonical state lookup failed (falling back to "
+                "local sleeve_buckets — may diverge from Dashboard): %s",
+                _canon_exc,
+            )
+            _canonical_state = None
+            _canonical_sleeve_cents = {}
+
+        # Map response keys (lowercase) -> canonical Title Case labels.
+        # Cash isn't a sleeve bucket here (it's a separate row in capital_allocation)
+        # so we don't propagate canonical's "Cash" value.
+        _RESPONSE_TO_CANONICAL = {
+            "stocks":  "Stocks",
+            "crypto":  "Crypto",
+            "options": "Options",
+            "quant":   "Quant",
+        }
+
         by_sleeve: dict = {}
         for key in sleeve_keys:
             bucket = sleeve_buckets[key]
             start = bucket["starting_capital_cents"]
-            value = bucket["current_value_cents"]
+            # CANONICAL is the source of truth for current_value_cents. Fall back
+            # to local accumulation only if canonical lookup failed above.
+            canonical_value = _canonical_sleeve_cents.get(_RESPONSE_TO_CANONICAL[key])
+            if canonical_value is not None:
+                value = int(canonical_value)
+            else:
+                value = bucket["current_value_cents"]
             ret_30d = round(bucket["return_30d_weighted"] / start, 2) if start else 0.0
             ret_alltime = round((value - start) / start * 100, 2) if start else 0.0
             by_sleeve[key] = {

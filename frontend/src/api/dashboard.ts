@@ -44,6 +44,7 @@ export interface DashboardV2 {
     stocks: DashV2Sleeve;
     crypto: DashV2Sleeve;
     options: DashV2Sleeve;
+    quant?: DashV2Sleeve;
   };
   health: {
     bots_active: number;
