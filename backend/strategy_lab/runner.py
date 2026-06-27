@@ -1746,6 +1746,15 @@ def _execute_options_signal(
     # fill_price_cents = total premium paid per contract (in cents)
     fill_cents = premium * 100
 
+    # ── Slippage haircut on options entry (paper-only) ─────────────────────
+    # Options-buy worsens premium upward; options-sell (write) worsens downward.
+    # Default 8 bps/side via SLIPPAGE_HAIRCUT_BPS env.
+    try:
+        from strategy_lab.core.slippage import apply_entry_haircut
+        fill_cents = float(apply_entry_haircut(int(round(fill_cents)), sig.side))
+    except Exception as _slip_exc:
+        logger.warning("[options:%s] slippage haircut skipped for %s: %s", profile_name, sig.symbol, _slip_exc)
+
     logger.warning(
         "[options:%s] %s %s %s strike=%.2f exp=%s contracts=%d premium=%.2f total=$%.0f",
         profile_name, sig.side, sig.symbol, opt["option_type"],
@@ -2120,6 +2129,17 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             # Fall through — still create DB rows as simulated paper fill
 
     fill_cents = entry_price * 100  # float — preserves sub-penny precision (e.g. SHIB)
+
+    # ── Slippage haircut (paper-only) ──────────────────────────────────────
+    # Worsen the entry fill so paper P&L reflects real-broker friction.
+    # buy → higher fill; sell (short entry) → lower fill. Default 8 bps/side
+    # via SLIPPAGE_HAIRCUT_BPS env. Codebase is paper-only per CLAUDE.md, so
+    # applied unconditionally.
+    try:
+        from strategy_lab.core.slippage import apply_entry_haircut
+        fill_cents = float(apply_entry_haircut(int(round(fill_cents)), sig.side))
+    except Exception as _slip_exc:
+        logger.warning("[execute:%s] slippage haircut skipped for %s: %s", profile_name, sig.symbol, _slip_exc)
 
     # 5–6. Create BotPosition + BotTrade — wrapped so a DB error can't corrupt the
     # session and block all subsequent signals in this scan cycle.

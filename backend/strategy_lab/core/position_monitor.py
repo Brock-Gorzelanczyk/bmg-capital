@@ -58,6 +58,17 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     is_short = getattr(pos, "side", "long") == "short"
     fill_cents = price_usd * 100  # float — preserves sub-penny precision
 
+    # ── Slippage haircut on exit (paper-only) ──────────────────────────────
+    # Long exit = sell at quote → fill LOWER. Short cover = buy at quote → fill HIGHER.
+    # Default 8 bps/side via SLIPPAGE_HAIRCUT_BPS env. Combined with the entry
+    # haircut, a flat round-trip nets ~ -2 * bps of notional (the friction cost).
+    try:
+        from strategy_lab.core.slippage import apply_exit_haircut
+        _exit_side = "buy" if is_short else "sell"
+        fill_cents = float(apply_exit_haircut(int(round(fill_cents)), _exit_side))
+    except Exception as _slip_exc:
+        logger.warning("[monitor] slippage haircut skipped for %s: %s", pos.symbol, _slip_exc)
+
     # Log exit signal so health checker sees recent bot activity; capture id for trade FK.
     # Uses begin_nested() (savepoint) so a flush failure never corrupts the outer transaction.
     _exit_signal_id: int | None = None
@@ -125,10 +136,13 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
             logger.debug("[monitor] exit discord post skipped for %s: %s", pos.symbol, _disc_exc)
 
     entry_usd = pos.avg_cost_cents / 100.0
-    pnl = (entry_usd - price_usd) * pos.qty if is_short else (price_usd - entry_usd) * pos.qty
+    # Use haircut-adjusted fill (fill_cents) for realized P&L so the slippage
+    # cost lands in the books — flat round-trip nets ~ -2 * haircut_bps notional.
+    exit_usd = fill_cents / 100.0
+    pnl = (entry_usd - exit_usd) * pos.qty if is_short else (exit_usd - entry_usd) * pos.qty
     logger.info(
         "[monitor] CLOSED %s qty=%.6f entry=%.4f exit=%.4f pnl=%.2f reason=%s pos_id=%d",
-        pos.symbol, pos.qty, entry_usd, price_usd, pnl, reason, pos.id,
+        pos.symbol, pos.qty, entry_usd, exit_usd, pnl, reason, pos.id,
     )
 
     # Update daily P&L snapshot
