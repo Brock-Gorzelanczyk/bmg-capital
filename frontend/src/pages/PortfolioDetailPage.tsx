@@ -692,6 +692,19 @@ export default function PortfolioDetailPage() {
               <span style={{ color: accent }}>{portfolio.name}</span>
             </div>
 
+            <Link
+              to="/portfolio/factor-attribution"
+              className="font-mono text-[11px] tracking-[0.06em] rounded transition-all hover:opacity-80"
+              style={{
+                padding: "5px 10px",
+                color: "#4ade80",
+                background: "transparent",
+                border: "1px solid rgba(74,222,128,0.3)",
+              }}
+            >
+              Factor Attribution →
+            </Link>
+
             <div className="flex items-center gap-2 ml-auto">
               {siblings.map((sib) => {
                 const sibAccent = SLEEVE_ACCENT[sib.asset_class]?.color ?? sib.color_hex ?? "#4ade80";
