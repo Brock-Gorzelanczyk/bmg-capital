@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_admin
 from app.db.models.users import User
 
 logger = logging.getLogger(__name__)
@@ -2961,3 +2961,21 @@ def discipline_threshold_auto_promote_run(
     """Trigger the nightly auto-promote evaluation manually."""
     from app.services.threshold_auto_promote import run_threshold_auto_promote
     return run_threshold_auto_promote(db)
+
+
+# ── GET /api/admin/reconcile/broker ──────────────────────────────────────────
+# Phase 3 — broker vs DB position reconciliation diagnostic.
+# READ-ONLY. Never mutates broker state, never auto-closes/auto-creates rows.
+@router.get("/reconcile/broker")
+def reconcile_broker(
+    user_id: int = Query(1, description="user_id to reconcile (default 1 = Brock)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Run a one-shot broker vs DB position diff for the given user.
+
+    Mirrors the daily scheduled job at 4:05 PM ET but on-demand. Returns the
+    full report dict; see `app.ops.broker_reconciliation` for shape.
+    """
+    from app.ops.broker_reconciliation import reconcile_positions
+    return reconcile_positions(db, user_id=user_id)

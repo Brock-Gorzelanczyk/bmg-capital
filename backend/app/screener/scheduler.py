@@ -1070,3 +1070,16 @@ def setup_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
     )
+
+    # Broker reconciliation — 4:05 PM ET, M-F (after market close)
+    # Diffs Alpaca paper positions against bot_positions; posts Discord ops
+    # alert if any divergence. READ-ONLY, never mutates broker state.
+    from app.jobs.broker_reconcile import run_broker_reconcile_job
+    scheduler.add_job(
+        run_broker_reconcile_job,
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=5, timezone=ET),
+        id="broker_reconcile_daily",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
