@@ -77,10 +77,20 @@ TOTAL_TARGET_CENTS = sum(ALLOCATIONS.values())   # 100,000,000 = $1,000,000
 
 @router.post("/restart")
 def clean_slate_restart(
+    hard: bool = False,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """Execute the clean-slate restart. Single atomic transaction."""
+    """Execute the clean-slate restart. Single atomic transaction.
+
+    Args:
+        hard: when True, ALSO wipes bot_trade and bot_daily_pnl history for
+            user_id=1 and clears bot_state cooldowns. Without this, the
+            canonical aggregator's portfolio_value still includes historical
+            realized P&L (= starting + realized + unrealized), so PV reads
+            >$1M even after restart. hard=True forces PV to exactly $1M.
+            Destructive — historical trade audit is gone after.
+    """
     if os.getenv("CLEAN_SLATE_ENABLED", "false").strip().lower() != "true":
         return {
             "executed": False,
@@ -93,6 +103,12 @@ def clean_slate_restart(
             "target_total_cents": TOTAL_TARGET_CENTS,
             "target_total_dollars": TOTAL_TARGET_CENTS / 100,
             "allocations_spec": {k: v / 100 for k, v in ALLOCATIONS.items()},
+            "hard_mode_available": True,
+            "hard_mode_note": (
+                "Append ?hard=true to ALSO wipe bot_trade + bot_daily_pnl for "
+                "user 1 and clear cooldowns. Without hard mode, portfolio_value "
+                "still includes historical realized P&L."
+            ),
         }
 
     if current_user.id != TARGET_USER_ID:
@@ -130,6 +146,42 @@ def clean_slate_restart(
         """), {"now": now_iso})
 
         summary["positions_closed"] = int(open_count)
+
+        # ── STEP 1b (hard mode only): wipe trade + daily_pnl history ────
+        # Destructive — historical realized P&L is gone after this. Without
+        # it, canonical PV = starting + realized + unrealized still reads
+        # >$1M because realized history persists. hard=True forces PV to
+        # exactly $1M.
+        if hard:
+            trades_deleted = db.execute(sql_text("""
+                DELETE FROM bot_trades
+                 WHERE allocation_id IN (
+                     SELECT id FROM bot_allocations WHERE user_id = :uid
+                 )
+            """), {"uid": TARGET_USER_ID}).rowcount or 0
+
+            daily_pnl_deleted = db.execute(sql_text("""
+                DELETE FROM bot_daily_pnl
+                 WHERE allocation_id IN (
+                     SELECT id FROM bot_allocations WHERE user_id = :uid
+                 )
+            """), {"uid": TARGET_USER_ID}).rowcount or 0
+
+            # Best-effort cooldown reset (table may or may not exist).
+            cooldown_reset = 0
+            try:
+                cooldown_reset = db.execute(sql_text(
+                    "UPDATE bot_state SET cooldown_until = NULL"
+                )).rowcount or 0
+            except Exception:
+                # No bot_state table — cooldowns may be runtime-only. OK.
+                cooldown_reset = -1
+
+            summary["hard_mode"] = {
+                "trades_deleted": int(trades_deleted),
+                "daily_pnl_deleted": int(daily_pnl_deleted),
+                "cooldown_reset": int(cooldown_reset),
+            }
 
         # ── STEP 2: ensure cash_floor BotProfile exists ─────────────────
         cf_row = db.execute(sql_text(
@@ -196,15 +248,31 @@ def clean_slate_restart(
 
             if existing:
                 alloc_id = int(existing[0])
-                db.execute(sql_text("""
-                    UPDATE bot_allocations
-                       SET enabled = 1,
-                           paused_reason = NULL,
-                           starting_capital_cents = :cap,
-                           capital_cents_within_portfolio = :cap,
-                           updated_at = :now
-                     WHERE id = :id
-                """), {"cap": target_cents, "now": now_iso, "id": alloc_id})
+                # In hard mode, also reset current_capital_cents + inception so
+                # any surface reading those columns directly sees $1M, not the
+                # historical-realized-inflated value m025 wrote.
+                if hard:
+                    db.execute(sql_text("""
+                        UPDATE bot_allocations
+                           SET enabled = 1,
+                               paused_reason = NULL,
+                               starting_capital_cents = :cap,
+                               inception_capital_cents = :cap,
+                               current_capital_cents = :cap,
+                               capital_cents_within_portfolio = :cap,
+                               updated_at = :now
+                         WHERE id = :id
+                    """), {"cap": target_cents, "now": now_iso, "id": alloc_id})
+                else:
+                    db.execute(sql_text("""
+                        UPDATE bot_allocations
+                           SET enabled = 1,
+                               paused_reason = NULL,
+                               starting_capital_cents = :cap,
+                               capital_cents_within_portfolio = :cap,
+                               updated_at = :now
+                         WHERE id = :id
+                    """), {"cap": target_cents, "now": now_iso, "id": alloc_id})
                 per_bot.append({
                     "bot": bot_name, "alloc_id": alloc_id,
                     "cents": target_cents, "action": "updated",
