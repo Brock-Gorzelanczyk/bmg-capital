@@ -2155,12 +2155,14 @@ export default function StrategyLab() {
           {/* 6. LAB MODULES quick-nav */}
           <div>
             <p className="panel-header mb-2">// LAB MODULES</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {([
                 { to: "/strategy/scout",       label: "SCOUT",       badge: `${activeScoutCount} armed` },
                 { to: "/strategy/forge",        label: "FORGE",       badge: `${activeForgeCount} active` },
                 { to: "/strategy/performance",  label: "ANALYTICS",   badge: null },
                 { to: "/strategy/leaderboard",  label: "LEADERBOARD", badge: null },
+                // FUND TEAR SHEET — Open Fund Sheet →
+                { to: "/fund/tear-sheet",       label: "FUND TEAR SHEET", badge: "open →" },
               ] as const).map(({ to, label, badge }) => (
                 <Link
                   key={to}
