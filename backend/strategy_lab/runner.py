@@ -1722,6 +1722,47 @@ def _execute_options_signal(
         )
         position_dollars = notional_cap
 
+    # ── Phase 5: per-user concentration / sector / cluster gates (options) ──
+    # Wire-in is BEFORE contract count compute. Options notional measured at
+    # the budget level (post per-trade sleeve clamp). _resolve_option_details
+    # will scale contract_count off this same budget so it's consistent.
+    try:
+        from strategy_lab.core.concentration_gate import check_concentration
+        from app.db.models.bots import BotSignal as _BotSig_conc_opt
+        _allowed_conc, _conc_reason = check_concentration(
+            db,
+            user_id=int(alloc.user_id),
+            allocation_id=int(alloc.id),
+            symbol=sig.symbol,
+            proposed_notional=float(position_dollars),
+            profile=profile or {},
+        )
+        if not _allowed_conc:
+            logger.warning(
+                "[concentration] %s %s blocked: %s",
+                profile_name, sig.symbol, _conc_reason,
+            )
+            try:
+                db.add(_BotSig_conc_opt(
+                    allocation_id=alloc.id,
+                    ts=now,
+                    symbol=sig.symbol,
+                    side="hold",
+                    confidence=float(getattr(sig, "confidence", 0.0) or 0.0),
+                    reason=f"concentration: {_conc_reason}",
+                    strategy=getattr(sig, "strategy", None),
+                ))
+                db.commit()
+            except Exception as _conc_log_exc:
+                logger.warning("[concentration] hold-row write failed: %s", _conc_log_exc)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+            return
+    except Exception as _conc_exc:
+        logger.warning("[concentration] gate raised, continuing: %s", _conc_exc)
+
     opt = _resolve_option_details(sig, position_dollars)
     premium = opt["display_premium"]
     contract_count = opt["contract_count"]
@@ -2004,6 +2045,48 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         "[sizing-mode] %s %s: enabled=%s notional=%.2f capital=%.0f",
         profile_name, sig.symbol, _use_deployment_sizer, position_dollars, capital_usd,
     )
+
+    # ── Phase 5: per-user concentration / sector / cluster gates ────────────
+    # Stacked, fail-fast. On reject we write a bot_signals hold row so the
+    # decision is visible in the signal log and bail before qty/order.
+    try:
+        from strategy_lab.core.concentration_gate import check_concentration
+        from app.db.models.bots import BotSignal as _BotSig_conc
+        _allowed_conc, _conc_reason = check_concentration(
+            db,
+            user_id=int(alloc.user_id),
+            allocation_id=int(alloc.id),
+            symbol=sig.symbol,
+            proposed_notional=float(position_dollars),
+            profile=profile or {},
+        )
+        if not _allowed_conc:
+            logger.warning(
+                "[concentration] %s %s blocked: %s",
+                profile_name, sig.symbol, _conc_reason,
+            )
+            try:
+                db.add(_BotSig_conc(
+                    allocation_id=alloc.id,
+                    ts=now,
+                    symbol=sig.symbol,
+                    side="hold",
+                    confidence=float(getattr(sig, "confidence", 0.0) or 0.0),
+                    reason=f"concentration: {_conc_reason}",
+                    strategy=getattr(sig, "strategy", None),
+                    entry_price=entry_price if entry_price > 0 else None,
+                ))
+                db.commit()
+            except Exception as _conc_log_exc:
+                logger.warning("[concentration] hold-row write failed: %s", _conc_log_exc)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+            return
+    except Exception as _conc_exc:
+        logger.warning("[concentration] gate raised, continuing: %s", _conc_exc)
+
     qty = round(position_dollars / entry_price, 6)
     if qty <= 0:
         return
