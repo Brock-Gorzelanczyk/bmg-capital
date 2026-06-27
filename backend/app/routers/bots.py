@@ -1686,12 +1686,25 @@ def get_bot_cards(
         except Exception as _csnap_exc:
             logger.warning("[bots] canonical snapshot failed for bot %s: %s", bot_name, _csnap_exc)
 
-        # capital base (use starting_capital_cents if set, else estimate from capital_pct)
-        # $100k paper balance default
+        # capital base — canonical source is starting_capital_cents (Ship 2 / m023).
+        # capital_pct is a STORAGE COLUMN used by the Queen for tuning intent and
+        # never reflects actual sizing (see vault #1 split-brain). The actual position
+        # sizer in runner.py:_execute_signal reads starting_capital_cents — this card
+        # must match. Fallback to capital_pct × PAPER_BALANCE only for legacy rows
+        # where starting_capital_cents was never populated.
         PAPER_BALANCE = 100_000_00  # cents = $100,000
-        capital_pct = allocation.capital_pct if allocation else 0
-        capital_cents = int(PAPER_BALANCE * (capital_pct / 100)) if allocation else 0
-        starting_capital = getattr(allocation, 'starting_capital_cents', None) or capital_cents
+        capital_pct = allocation.capital_pct if allocation else 0  # kept for display payload
+        if allocation:
+            starting_capital = (
+                getattr(allocation, 'starting_capital_cents', None)
+                or int(PAPER_BALANCE * (capital_pct / 100))
+            )
+        else:
+            starting_capital = 0
+        # `capital_cents` is the basis for Sharpe / return_30d / equity_curve fallback.
+        # Bind it to the canonical starting_capital so risk/perf metrics agree with the
+        # sizer rather than diverging from a stale 10% storage default.
+        capital_cents = starting_capital
 
         if canonical_snap is not None:
             today_pnl_cents = canonical_snap.today_pnl_cents
