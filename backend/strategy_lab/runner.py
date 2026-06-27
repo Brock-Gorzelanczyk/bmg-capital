@@ -1870,6 +1870,41 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         "OPTIONS" if asset_class == "options" else "EQUITY",
     )
 
+    # ── Fund-level halt (pre-trade) ───────────────────────────────────────
+    # Peak-to-current NAV drawdown gate. -1.5% pauses NEW entries; does NOT
+    # flatten existing positions. Safe-default allow on any failure so a
+    # diagnostic error never silently halts the fleet. See vault
+    # context/06-decision-history.md (Drawdown kill).
+    try:
+        from strategy_lab.core.fund_halt import check_fund_halt
+        _fh_allowed, _fh_reason = check_fund_halt(db, getattr(alloc, "user_id", 0) or 0)
+    except Exception as _fh_exc:
+        logger.warning("[fund-halt] check failed (non-fatal): %s", _fh_exc)
+        _fh_allowed, _fh_reason = True, ""
+
+    if not _fh_allowed:
+        logger.warning("[fund-halt] blocked: %s", _fh_reason)
+        try:
+            from app.db.models.bots import BotSignal as _BSig
+            _hold_row = _BSig(
+                allocation_id=alloc.id,
+                ts=datetime.now(timezone.utc),
+                symbol=sig.symbol,
+                side="hold",
+                confidence=float(getattr(sig, "confidence", 0.0) or 0.0),
+                reason=f"fund_halt: {_fh_reason}",
+                strategy=getattr(sig, "strategy", None),
+            )
+            db.add(_hold_row)
+            db.commit()
+        except Exception as _persist_exc:
+            logger.warning("[fund-halt] hold-signal persist failed: %s", _persist_exc)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        return
+
     if asset_class == "options":
         _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name, signal_id=signal_id)
         return
