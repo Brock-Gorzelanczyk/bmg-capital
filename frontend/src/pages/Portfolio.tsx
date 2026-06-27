@@ -357,11 +357,15 @@ export default function Portfolio() {
   // part of the sleeve's portfolio value (the $200k options reservation lives
   // inside the options StrategyPortfolio as starting capital). Adding it again
   // would double-count and push the total above 100%.
+  //
+  // Render ALL four canonical sleeves (Stocks/Crypto/Options/Quant) even when
+  // current_value_cents is 0. Pre-2026-06-27 the filter `> 0` dropped Options
+  // when nothing was deployed, leaving an incomplete pie. A zero-value slice
+  // still surfaces the sleeve's existence to the user.
   const slices = SLEEVE_ORDER
-    .filter((k) => snap.by_sleeve[k].current_value_cents > 0)
     .map((k) => ({
       key: k,
-      value_cents: snap.by_sleeve[k].current_value_cents,
+      value_cents: snap.by_sleeve[k]?.current_value_cents ?? 0,
     }));
 
   const deployedCents = SLEEVE_ORDER.reduce((acc, k) => acc + snap.by_sleeve[k].current_value_cents, 0);

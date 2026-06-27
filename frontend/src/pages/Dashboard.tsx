@@ -274,17 +274,32 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Row 4 – 3 Sleeve Cards */}
+        {/* Row 4 – 4 Sleeve Cards (Stocks/Crypto/Options/Quant). Render every
+            canonical sleeve even if the API omits one — Dashboard was missing
+            Quant pre-2026-06-27 because this array was hardcoded to 3. */}
         <div className="mb-8">
           {data?.sleeves ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {(["stocks", "crypto", "options"] as const).map((key) => (
-                <SleeveCard key={key} id={key} sleeve={data.sleeves[key]} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {(["stocks", "crypto", "options", "quant"] as const).map((key) => (
+                data.sleeves[key] ? (
+                  <SleeveCard key={key} id={key} sleeve={data.sleeves[key]} />
+                ) : (
+                  <div key={key} className="bg-t-bg1 border border-t-dim rounded-2xl p-6 opacity-60">
+                    <div className="text-sm font-medium text-t-mid2 uppercase tracking-wide mb-2">{key}</div>
+                    <div className="text-2xl font-bold text-t-muted font-mono-t tabular-nums">--</div>
+                    <div className="text-xs text-t-muted mt-1">sleeve missing from payload</div>
+                  </div>
+                )
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[{ emoji: "📈", name: "Stocks" }, { emoji: "🪙", name: "Crypto" }, { emoji: "⚡", name: "Options" }].map((p) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { emoji: "📈", name: "Stocks" },
+                { emoji: "🪙", name: "Crypto" },
+                { emoji: "⚡", name: "Options" },
+                { emoji: "∑",  name: "Quant"   },
+              ].map((p) => (
                 <Link key={p.name} to="/strategy" className="bg-t-bg1 border border-t-dim rounded-2xl p-6 hover:border-t-mid card-hover transition-colors">
                   <div className="flex items-center gap-2 mb-4">
                     <span className="text-xl">{p.emoji}</span>

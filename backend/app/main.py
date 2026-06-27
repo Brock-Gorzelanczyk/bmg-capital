@@ -331,16 +331,30 @@ async def lifespan(app: FastAPI):
     try:
         from app.db.migrations.m024_corrective_capital_reset import run as _run_m024
         with engine.connect() as _m024_conn:
-            _run_m024(_m024_conn)
+            _m024_result = _run_m024(_m024_conn)
+        logger.warning("[startup] m024 OK: %s", _m024_result)
     except Exception as _m024_exc:
-        logger.warning("[startup] m024_corrective_capital_reset failed (non-fatal): %s", _m024_exc)
+        # exc_info=True so the FULL traceback lands in Railway logs.
+        # Migrations failing silently was the root cause of the
+        # 2026-06-27 $1.7M divergence — never make a migration failure
+        # quiet again.
+        logger.error("[startup] m024_corrective_capital_reset FAILED: %s", _m024_exc, exc_info=True)
 
     try:
         from app.db.migrations.m025_clean_slate_one_million import run as _run_m025
         with engine.connect() as _m025_conn:
-            _run_m025(_m025_conn)
+            _m025_result = _run_m025(_m025_conn)
+        logger.warning("[startup] m025 OK: %s", _m025_result)
     except Exception as _m025_exc:
-        logger.warning("[startup] m025_clean_slate_one_million failed (non-fatal): %s", _m025_exc)
+        logger.error("[startup] m025_clean_slate_one_million FAILED: %s", _m025_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m026_disable_non_spec_allocations import run as _run_m026
+        with engine.connect() as _m026_conn:
+            _m026_result = _run_m026(_m026_conn)
+        logger.warning("[startup] m026 OK: %s", _m026_result)
+    except Exception as _m026_exc:
+        logger.error("[startup] m026_disable_non_spec_allocations FAILED: %s", _m026_exc, exc_info=True)
 
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
