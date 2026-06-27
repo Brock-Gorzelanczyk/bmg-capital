@@ -97,6 +97,7 @@ const WfaResultPage = lazy(() => import("@/pages/WfaResultPage"));
 const TradeDetailPage = lazy(() => import("@/pages/TradeDetailPage"));
 const AnalystPage = lazy(() => import("@/pages/AnalystPage"));
 const PortfolioDetailPage = lazy(() => import("@/pages/PortfolioDetailPage"));
+const FactorAttributionPage = lazy(() => import("@/pages/FactorAttributionPage"));
 const NetPortfolio = lazy(() => import("@/pages/NetPortfolio"));
 const NetWorthPage = lazy(() => import("@/pages/NetWorthPage"));
 const StrategyLibraryPage = lazy(() => import("@/pages/StrategyLibraryPage"));
@@ -400,6 +401,7 @@ function AppInner() {
         <Route path="/strategy/library/custom-bot" element={<Navigate to="/strategy/forge" replace />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
+        <Route path="/portfolio/factor-attribution" element={<FactorAttributionPage />} />
         <Route path="/strategy/hypotheses" element={<HypothesesPage />} />
         <Route path="/strategy/brain" element={<AdminRoute><BrainGraphPage /></AdminRoute>} />
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />

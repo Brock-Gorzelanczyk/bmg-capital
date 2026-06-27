@@ -245,6 +245,25 @@ def get_regime_breakdown(
     return {"regimes": regime}
 
 
+# ── Factor attribution (Phase 6) ──────────────────────────────────────────────
+
+@router.get("/factor-attribution")
+def get_factor_attribution(
+    window: str = Query("30d", regex="^(7d|30d|90d|ytd)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(_flag),
+):
+    """Decompose portfolio P&L over a window into beta vs alpha.
+
+    Returns gross/net exposure, by-sector/strategy/asset-class fractions,
+    and top contributors / detractors by symbol.  Scoped to the logged-in
+    user via ``BotAllocation.user_id``.
+    """
+    from app.services.factor_attribution_service import compute_factor_attribution
+    return compute_factor_attribution(db, current_user.id, window=window)
+
+
 # ── Strategy leaderboard ──────────────────────────────────────────────────────
 
 @router.get("/strategy-leaderboard")
