@@ -222,6 +222,14 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
             pos.exit_reason = "target_reached" if exit_price > entry_price else "stop_loss"
 
             _assert_not_options_profile()
+            # Asset-class hard gate (SHIP 14 follow-up). Refuses the exit trade
+            # before any BotTrade insert. Follows the same pattern as
+            # strategy_lab/runner.py _execute_signal.
+            from app.services.asset_class_registry import validate_order as _validate_order
+            try:
+                _validate_order(bot_name, pos.symbol)
+            except RuntimeError:
+                continue  # already logged + ops-alerted inside validate_order
             db.add(BotTrade(
                 allocation_id=alloc.id,
                 symbol=pos.symbol,
@@ -288,6 +296,14 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 target_price_usd=round(entry_price * (1 + target_pct), 4),
             )
             _assert_not_options_profile()
+            # Asset-class hard gate (SHIP 14 follow-up). Refuses the entry trade
+            # before any BotTrade insert. Follows the same pattern as
+            # strategy_lab/runner.py _execute_signal.
+            from app.services.asset_class_registry import validate_order as _validate_order
+            try:
+                _validate_order(bot_name, sym)
+            except RuntimeError:
+                continue  # already logged + ops-alerted inside validate_order
             db.add(pos)
             db.flush()  # get pos.id
 
