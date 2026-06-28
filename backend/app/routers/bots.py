@@ -133,10 +133,10 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
             )
             db.add(existing)
             db.flush()
-        else:
-            # Sync capital to current target (idempotent upgrade)
-            if existing.starting_capital_cents != target_capital:
-                existing.starting_capital_cents = target_capital
+        # m027 PART 1 fix: do NOT overwrite existing.starting_capital_cents on
+        # subsequent calls. Migrations own this field. The prior "idempotent
+        # upgrade" pattern was inflating sleeve totals on every portfolio API
+        # fetch — see .pipeline/01-spec-autogrow-findings.md.
 
         # Create or bind allocations for each bot in this portfolio
         for bot_name, capital_cents in defn["bots"].items():
@@ -166,17 +166,14 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
                 db.add(alloc)
                 db.flush()
 
-            # Assign portfolio and capital — sync so legitimate capital updates
-            # propagate, BUT never silently SHRINK starting_capital_cents away
-            # from a higher value (m021 resized canonicals to $200K and we don't
-            # want this seeding loop reverting them every portfolio request).
+            # m027 PART 1 fix: bind portfolio_id only. NEVER write capital
+            # fields on existing allocation rows — this seed loop was the
+            # auto-grow source that inflated user 1's book to $1.7M after
+            # m025 set per-bot amounts below the legacy $100K floor.
+            # capital_cents_within_portfolio and starting_capital_cents are
+            # owned by migrations only. See .pipeline/01-spec-autogrow-findings.md.
             if alloc.portfolio_id != existing.id:
                 alloc.portfolio_id = existing.id
-            if (alloc.capital_cents_within_portfolio or 0) < capital_cents:
-                alloc.capital_cents_within_portfolio = capital_cents
-                alloc.updated_at = now
-            if (alloc.starting_capital_cents or 0) < capital_cents:
-                alloc.starting_capital_cents = capital_cents
                 alloc.updated_at = now
 
             # Re-enable if accidentally disabled — paper bots should always be
