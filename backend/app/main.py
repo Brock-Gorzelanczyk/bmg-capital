@@ -356,6 +356,35 @@ async def lifespan(app: FastAPI):
     except Exception as _m026_exc:
         logger.error("[startup] m026_disable_non_spec_allocations FAILED: %s", _m026_exc, exc_info=True)
 
+    try:
+        from app.db.migrations.m027_force_clean_slate import run as _run_m027
+        with engine.connect() as _m027_conn:
+            _m027_result = _run_m027(_m027_conn)
+        logger.warning("[startup] m027 OK: %s", _m027_result)
+    except Exception as _m027_exc:
+        logger.error("[startup] m027_force_clean_slate FAILED: %s", _m027_exc, exc_info=True)
+
+    # Register the capital audit ORM listener AFTER m027 runs so its initial
+    # writes don't spam the audit log. Listener catches every subsequent
+    # ORM-level write to bot_allocations capital fields, proving the
+    # auto-grow kill in routers/bots.py:_ensure_portfolios_for_user holds.
+    try:
+        from app.services.capital_audit import register_capital_audit_listener
+        register_capital_audit_listener()
+    except Exception as _audit_exc:
+        logger.error("[startup] capital_audit listener FAILED to register: %s",
+                     _audit_exc, exc_info=True)
+
+    # Run capital invariant check on boot — logs OK/WARN/CRIT and posts to
+    # ops Discord on drift. Scheduler also runs this every 5 min (see
+    # screener/scheduler.py).
+    try:
+        from app.services.capital_invariant import run_check_with_session
+        run_check_with_session(user_id=1)
+    except Exception as _inv_exc:
+        logger.error("[startup] capital_invariant boot check failed: %s",
+                     _inv_exc, exc_info=True)
+
     # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
     try:
         from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp

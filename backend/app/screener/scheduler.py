@@ -1083,3 +1083,18 @@ def setup_scheduler() -> None:
         max_instances=1,
         coalesce=True,
     )
+
+    # Capital invariant watchdog — every 5 minutes, all days.
+    # Asserts SUM(starting_capital_cents) for enabled user_1 allocations
+    # equals $1,000,000 within ±$1. On drift > $1: logs CRITICAL + posts
+    # to ops Discord (DISCORD_WH_OPS). Catches any future auto-grow source
+    # within 5 minutes of it firing.
+    from app.services.capital_invariant import run_check_with_session as _run_capital_inv
+    scheduler.add_job(
+        _run_capital_inv,
+        CronTrigger(minute="*/5"),
+        id="capital_invariant_watchdog",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )

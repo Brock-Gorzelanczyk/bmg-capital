@@ -2249,6 +2249,38 @@ def portfolio_health(
     }
 
 
+# ─── Capital Invariant — m027 watchdog endpoint ─────────────────────────────
+@router.get("/capital-invariant")
+def capital_invariant(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """SUM(starting_capital_cents) for enabled allocations under user_id=1
+    must equal $1,000,000 within ±$1. Surfaces the watchdog state plus the
+    capital_audit_log row count for the last 24h (excluding m027 markers).
+
+    Status semantics:
+      ok   — drift ≤ $1
+      warn — drift in ($1, $100]
+      crit — drift > $100  (logs CRITICAL + Discord ops alert)
+    """
+    from app.services.capital_invariant import check_capital_invariant
+    status = check_capital_invariant(db, user_id=1)
+    return {
+        "status":                status.status,
+        "is_valid":              status.is_valid,
+        "current_sum_cents":     status.current_sum_cents,
+        "expected_sum_cents":    100_000_000,
+        "drift_cents":           status.drift_cents,
+        "drift_dollars":         status.drift_dollars,
+        "enabled_count":         status.enabled_count,
+        "expected_count":        status.expected_count,
+        "audit_log_rows_24h":    status.audit_log_rows_24h,
+        "per_bot":               status.per_bot,
+        "last_checked_at":       status.last_checked_at,
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # COMMIT 8 — Stop-hit asymmetry report
 # Counts closes vs stops per bot over a configurable window.
