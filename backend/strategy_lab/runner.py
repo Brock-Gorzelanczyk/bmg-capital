@@ -1722,14 +1722,6 @@ def _execute_options_signal(
         )
         position_dollars = notional_cap
 
-    # Asset-class hard gate (SHIP 14). Refuses the order before any broker
-    # submit or DB write. Caller's try/except handles the rollback.
-    from app.services.asset_class_registry import validate_order as _validate_order
-    try:
-        _validate_order(profile_name, sig.symbol)
-    except RuntimeError:
-        return  # already logged + ops-alerted inside validate_order
-
     # ── Phase 5: per-user concentration / sector / cluster gates (options) ──
     # Wire-in is BEFORE contract count compute. Options notional measured at
     # the budget level (post per-trade sleeve clamp). _resolve_option_details
@@ -1911,12 +1903,6 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             "[exec] SKIP side=%s symbol=%s profile=%s — only buy/sell handled",
             sig.side, sig.symbol, profile_name,
         )
-        return
-
-    from app.services.asset_class_registry import validate_order as _validate_order
-    try:
-        _validate_order(profile_name, sig.symbol)
-    except RuntimeError:
         return
 
     from datetime import datetime, timezone

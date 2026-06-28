@@ -1808,11 +1808,6 @@ def setup_bot_scheduler(scheduler) -> None:
                         if live_px <= 0:
                             continue
                         symbol = trade["symbol"]
-                        from app.services.asset_class_registry import validate_order as _validate_order
-                        try:
-                            _validate_order("cash_floor", symbol)
-                        except RuntimeError:
-                            continue  # skip this single trade, keep processing rest of plan
                         approx_dollars = float(trade["approx_dollars"])
                         qty = round(approx_dollars / live_px, 4)
                         if qty <= 0:
