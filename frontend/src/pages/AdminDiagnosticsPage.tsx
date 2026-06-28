@@ -13,7 +13,7 @@ import {
   getAllocationInventory, getStopAsymmetry, getDisciplineGateRate,
   getCooldownStorm, getLegacyQuarantineAudit, getDirectionalReconcile,
   getLastDryRun, runAllocatorDryRun, testOpsAlert, forceEodComplete,
-  sweepStaleWatchlist, getCashFloorStatus,
+  sweepStaleWatchlist, getCashFloorStatus, getCrossSleeveQuarantine,
   type DryRunResponse, type OpsAlertResponse,
 } from "@/api/adminDiagnostics";
 
@@ -455,6 +455,47 @@ function QuarantineCard({ qcRefresh }: { qcRefresh: number }) {
   );
 }
 
+function CrossSleeveQuarantineCard({ qcRefresh }: { qcRefresh: number }) {
+  const q = useQuery({
+    queryKey: ["adm-cross-sleeve-quarantine", qcRefresh],
+    queryFn: getCrossSleeveQuarantine,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const rows = q.data?.rows ?? [];
+  const count = q.data?.unresolved_count ?? 0;
+  return (
+    <DiagnosticCard
+      title="// CROSS-SLEEVE QUARANTINE" icon={ScanLine}
+      lastUpdated={q.data?.as_of}
+      isLoading={q.isLoading} isFetching={q.isFetching} error={q.error}
+      onRefetch={() => q.refetch()}
+      full
+    >
+      <div className="mb-2 text-[11px] font-mono-t">
+        <span className="text-t-muted uppercase tracking-wider">unresolved:</span>{" "}
+        <span className={cn(
+          "font-bold",
+          count === 0 ? "text-t-green" : "text-amber-300",
+        )}>{count}</span>
+      </div>
+      <Table headers={["bot_id", "symbol", "required", "actual", "detected"]}>
+        {rows.length === 0 ? (
+          <EmptyRow cols={5} text="No cross-sleeve violations." />
+        ) : rows.map((r) => (
+          <tr key={r.id} className="border-b border-t-dim/40">
+            <td className="py-1 px-1.5 text-t-hi font-semibold">{r.bot_id}</td>
+            <td className="py-1 px-1.5 text-t-mid2">{r.actual_symbol}</td>
+            <td className="py-1 px-1.5 text-t-mid2">{r.declared_asset_class}</td>
+            <td className="py-1 px-1.5 text-amber-300 font-bold">{r.actual_asset_class}</td>
+            <td className="py-1 px-1.5 text-t-mid2">{fmtTime(r.detected_at)}</td>
+          </tr>
+        ))}
+      </Table>
+    </DiagnosticCard>
+  );
+}
+
 function DirectionalReconcileCard({ qcRefresh }: { qcRefresh: number }) {
   const q = useQuery({
     queryKey: ["adm-directional-reconcile", qcRefresh],
@@ -879,6 +920,7 @@ export default function AdminDiagnosticsPage() {
         <StopAsymmetryCard qcRefresh={qcRefresh} />
         <GateRateCard qcRefresh={qcRefresh} />
         <QuarantineCard qcRefresh={qcRefresh} />
+        <CrossSleeveQuarantineCard qcRefresh={qcRefresh} />
       </div>
 
       {/* Reconcile + Dry-run + Cash Floor */}
@@ -902,7 +944,7 @@ export default function AdminDiagnosticsPage() {
 
       {/* Footer */}
       <div className="text-[10px] text-center italic text-t-muted py-3 font-mono-t">
-        17 endpoints · invariants, audits, controls — one console.
+        18 endpoints · invariants, audits, controls — one console.
       </div>
     </div>
   );

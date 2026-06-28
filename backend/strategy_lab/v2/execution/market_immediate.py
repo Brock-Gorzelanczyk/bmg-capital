@@ -53,6 +53,13 @@ class MarketImmediateExecution(ExecutionModel):
                 estimated_fill_usd=qty * price if price else None,
             )
 
+            from app.services.asset_class_registry import validate_order as _validate_order
+            try:
+                _validate_order(ctx.bot_id, target.symbol)
+            except RuntimeError as _vexc:
+                ctx.log("error", f"asset_class_violation: {_vexc}")
+                continue  # skip this target, process the rest
+
             resp = await ctx.broker.submit_order(order)
             ctx.log(
                 "info",

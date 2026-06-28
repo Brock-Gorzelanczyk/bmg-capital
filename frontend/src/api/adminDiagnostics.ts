@@ -311,6 +311,27 @@ export const getLegacyQuarantineAudit = (): Promise<QuarantineResponse> =>
     })),
   }));
 
+// ── Cross-Sleeve Quarantine (SHIP 14) ────────────────────────────────────────
+
+export interface CrossSleeveQuarantineRow {
+  id: number;
+  position_id: number;
+  bot_id: string;
+  user_id: number;
+  declared_asset_class: string;
+  actual_symbol: string;
+  actual_asset_class: string;
+  detected_at: string;
+  action: string;
+}
+export interface CrossSleeveQuarantineResponse {
+  as_of: string;
+  unresolved_count: number;
+  rows: CrossSleeveQuarantineRow[];
+}
+export const getCrossSleeveQuarantine = (): Promise<CrossSleeveQuarantineResponse> =>
+  client.get<CrossSleeveQuarantineResponse>("/admin/cross-sleeve-quarantine").then((r) => r.data);
+
 // ── Equity Directional Reconcile ─────────────────────────────────────────────
 
 export interface DirectionalReconcileResponse {

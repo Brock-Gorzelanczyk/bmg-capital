@@ -56,6 +56,23 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     from app.db.models.bots import BotTrade, BotSignal
 
     is_short = getattr(pos, "side", "long") == "short"
+
+    # Exit trades must respect the same gate — a misrouted exit on a crypto-bot
+    # equity position should refuse rather than write a phantom trade row.
+    # Look up profile name via alloc.profile_id since the caller doesn't pass it.
+    from app.services.asset_class_registry import validate_order as _validate_order
+    from app.db.models.bots import BotProfile as _BotProfile
+    _prof_row = db.get(_BotProfile, alloc.profile_id)
+    _bot_id_for_gate = _prof_row.name if _prof_row else ""
+    try:
+        _validate_order(_bot_id_for_gate, pos.symbol)
+    except RuntimeError:
+        # Position is already cross-sleeve; do NOT write the exit trade. Let the
+        # quarantine surface handle it. Mark closed_at? NO — leaves position
+        # open so Brock can review per row (per decision-history mass-action
+        # restraint).
+        return
+
     fill_cents = price_usd * 100  # float — preserves sub-penny precision
 
     # ── Slippage haircut on exit (paper-only) ──────────────────────────────

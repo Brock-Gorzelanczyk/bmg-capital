@@ -3664,6 +3664,12 @@ def debug_force_trade(
     if not alloc:
         return {"steps": steps, "error": "No crypto_swing allocation — enable the bot first"}
 
+    from app.services.asset_class_registry import validate_order as _validate_order
+    try:
+        _validate_order("crypto_swing", "BTC/USD")
+    except RuntimeError as _vexc:
+        return {"steps": steps, "error": str(_vexc)}
+
     # b. Fetch live BTC price
     btc_price: float = 97_000.0
     try:

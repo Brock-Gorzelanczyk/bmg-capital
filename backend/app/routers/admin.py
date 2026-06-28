@@ -1334,6 +1334,12 @@ def synthetic_fill_test(
     if not alloc:
         return {"ok": False, "error": f"No paper allocation for '{_OPTIONS_DIRECTIONAL_BOT}'"}
 
+    from app.services.asset_class_registry import validate_order as _validate_order
+    try:
+        _validate_order(_OPTIONS_DIRECTIONAL_BOT, _SYN_SYMBOL)
+    except RuntimeError as _vexc:
+        return {"ok": False, "error": f"asset_class_violation: {_vexc}"}
+
     now = datetime.now(timezone.utc)
     try:
         pos = BotPosition(
@@ -3011,3 +3017,49 @@ def reconcile_broker(
     """
     from app.ops.broker_reconciliation import reconcile_positions
     return reconcile_positions(db, user_id=user_id)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHIP 14 — Cross-sleeve quarantine diagnostics (m028)
+# Read-only view of unresolved cross-sleeve violations seeded by m028.
+# No per-row mutation endpoints in this ship (out of scope per spec).
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/cross-sleeve-quarantine")
+def cross_sleeve_quarantine(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Count of unresolved cross-sleeve violations + top 10 by detected_at DESC.
+
+    Shape matches frontend AdminDiagnosticsPage expectations (see
+    known-issues.md #4 — diagnostics shape mismatch).
+    """
+    from sqlalchemy import text as _text
+    unresolved_count = db.execute(_text("""
+        SELECT COUNT(*) FROM cross_sleeve_quarantine_s14 WHERE resolved_at IS NULL
+    """)).scalar() or 0
+    rows = db.execute(_text("""
+        SELECT id, position_id, bot_id, user_id, declared_asset_class,
+               actual_symbol, actual_asset_class, detected_at, action
+          FROM cross_sleeve_quarantine_s14
+         WHERE resolved_at IS NULL
+         ORDER BY detected_at DESC
+         LIMIT 10
+    """)).fetchall()
+    return {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "unresolved_count": int(unresolved_count),
+        "rows": [
+            {
+                "id": int(r[0]),
+                "position_id": int(r[1]),
+                "bot_id": r[2],
+                "user_id": int(r[3]),
+                "declared_asset_class": r[4],
+                "actual_symbol": r[5],
+                "actual_asset_class": r[6],
+                "detected_at": r[7],
+                "action": r[8],
+            } for r in rows
+        ],
+    }

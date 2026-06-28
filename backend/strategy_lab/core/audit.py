@@ -354,6 +354,22 @@ def log_fill(
     """Persist a filled trade to bot_trades."""
     from app.db.models.bots import BotTrade
 
+    # Lazy import + lookup. log_fill is called from several places; gating here
+    # closes the back-door (a future caller cannot bypass the runner gate).
+    from app.services.asset_class_registry import validate_order as _validate_order
+    from app.db.models.bots import BotAllocation as _BotAlloc, BotProfile as _BotProfile
+    _alloc_row = db.get(_BotAlloc, allocation_id)
+    _bot_id_for_gate = ""
+    if _alloc_row is not None:
+        _prof_row = db.get(_BotProfile, _alloc_row.profile_id)
+        if _prof_row is not None:
+            _bot_id_for_gate = _prof_row.name
+    try:
+        _validate_order(_bot_id_for_gate, symbol)
+    except RuntimeError as _vexc:
+        logger.error("[log_fill] refused: %s", _vexc)
+        return  # caller already returns None
+
     row = BotTrade(
         allocation_id=allocation_id,
         symbol=symbol,

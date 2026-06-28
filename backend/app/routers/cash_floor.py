@@ -130,6 +130,16 @@ def rebalance(
     for trade in plan["trades_to_place"]:
         symbol = trade["symbol"]
         side = trade["side"]  # "buy" or "sell"
+        # Asset-class hard gate (SHIP 14). cash_floor is equity-only and only
+        # allows SPY/QQQ. Skip this leg if it violates the registry.
+        from app.services.asset_class_registry import validate_order as _validate_order
+        try:
+            _validate_order("cash_floor", symbol)
+        except RuntimeError:
+            written_trades.append({
+                "symbol": symbol, "side": side, "status": "skipped_asset_class_violation",
+            })
+            continue
         approx_dollars = float(trade["approx_dollars"])
         live_px = trade.get("limit_price_hint_usd") or 0
         if live_px <= 0:
