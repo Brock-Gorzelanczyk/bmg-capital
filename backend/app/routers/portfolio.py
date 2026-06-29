@@ -565,14 +565,24 @@ def get_portfolio_snapshot(
             _canonical_sleeve_cents = {}
 
         # Map response keys (lowercase) -> canonical Title Case labels.
-        # Cash isn't a sleeve bucket here (it's a separate row in capital_allocation)
-        # so we don't propagate canonical's "Cash" value.
+        # Cash Floor's canonical bucket is "Cash"; we ROLL IT INTO the stocks
+        # sleeve so by_sleeve.sum equals total_value (no $1+ divergence WARN).
+        # PART 5 fix: previously cash_floor's value was orphaned (not in any
+        # of the 4 sleeve_keys + not in capital_allocation), causing a
+        # ~10% divergence between by_sleeve and total_value.
         _RESPONSE_TO_CANONICAL = {
             "stocks":  "Stocks",
             "crypto":  "Crypto",
             "options": "Options",
             "quant":   "Quant",
         }
+        # PART 5: fold canonical "Cash" (cash_floor allocations) into "stocks"
+        # sleeve since cash_floor is asset_class=equity per asset_class_registry.
+        _cash_floor_canonical_cents = int(_canonical_sleeve_cents.get("Cash", 0) or 0)
+        if _cash_floor_canonical_cents and "Stocks" in _canonical_sleeve_cents:
+            _canonical_sleeve_cents["Stocks"] = int(
+                _canonical_sleeve_cents.get("Stocks", 0) or 0
+            ) + _cash_floor_canonical_cents
 
         by_sleeve: dict = {}
         for key in sleeve_keys:

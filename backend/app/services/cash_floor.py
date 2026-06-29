@@ -47,17 +47,20 @@ def _fleet_nav_cents(db: Session) -> Optional[int]:
 def _current_active_deployment_cents(db: Session) -> int:
     """Sum entry-cost notional across open positions EXCLUDING Cash Floor.
 
-    Cash Floor positions are tagged via the strategy column on bot_trades —
-    'cash_floor' — so we can subtract them out and avoid double-counting.
+    Cash Floor positions are identified by joining bot_positions →
+    bot_allocations → bot_profiles where the profile name is 'cash_floor'.
+    The legacy `bot_trades.strategy` column referenced previously does NOT
+    exist on the bot_trades schema (caused schema-drift error in prod).
     """
     try:
         row = db.execute(sql_text("""
             SELECT COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0)
               FROM bot_positions bp
-              LEFT JOIN bot_trades bt ON bt.position_id = bp.id
+              LEFT JOIN bot_allocations ba ON ba.id = bp.allocation_id
+              LEFT JOIN bot_profiles bf ON bf.id = ba.profile_id
              WHERE bp.closed_at IS NULL
                AND bp.quarantined_at IS NULL
-               AND COALESCE(bt.strategy, '') != 'cash_floor'
+               AND COALESCE(bf.name, '') != 'cash_floor'
         """)).fetchone()
         return int(row[0]) if row and row[0] is not None else 0
     except Exception as exc:
@@ -72,11 +75,12 @@ def _cash_floor_position(db: Session, symbol: str) -> dict:
             SELECT COALESCE(SUM(bp.qty), 0) AS qty,
                    COALESCE(MAX(bp.avg_cost_cents), 0) AS avg_cost_cents
               FROM bot_positions bp
-              LEFT JOIN bot_trades bt ON bt.position_id = bp.id
+              LEFT JOIN bot_allocations ba ON ba.id = bp.allocation_id
+              LEFT JOIN bot_profiles bf ON bf.id = ba.profile_id
              WHERE bp.symbol = :sym
                AND bp.closed_at IS NULL
                AND bp.quarantined_at IS NULL
-               AND bt.strategy = 'cash_floor'
+               AND bf.name = 'cash_floor'
         """), {"sym": symbol}).fetchone()
         qty = float(row[0]) if row else 0.0
         avg_cost_cents = int(row[1]) if row else 0
