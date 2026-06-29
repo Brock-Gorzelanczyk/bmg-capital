@@ -240,9 +240,11 @@ def get_dashboard_v2(
     total_value      = sum(pv_by_alloc.values())
     total_today_pnl  = sum(today_pnl_by_alloc.values())
 
-    # today_pnl_pct: derived from totals, not blindly copied from agg
+    # today_pnl_pct: derived from totals, not blindly copied from agg.
+    # 4-decimal precision: small negative P&L (e.g. -$15 on $1M = -0.0015%)
+    # was rounding to -0.0, which JS treats as ≥0 and rendered as "+0.00%".
     yesterday_value = total_value - total_today_pnl
-    today_pct = round(total_today_pnl / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
+    today_pct = round(total_today_pnl / yesterday_value * 100, 4) if yesterday_value > 0 else 0.0
 
     # 30d return: weighted average by starting capital across all allocs
     if total_starting > 0:

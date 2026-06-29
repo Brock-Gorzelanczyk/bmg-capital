@@ -19,7 +19,10 @@ function fmtUsd(cents: number): string {
 }
 
 function fmtPct(val: number): string {
-  const sign = val >= 0 ? "+" : "";
+  // Use strict > 0 (not >= 0) so JS's negative-zero (-0) renders without
+  // a misleading "+" sign. Backend now returns 4-decimal precision so
+  // tiny negative P&L (e.g. -$15 on $1M = -0.0015%) keeps the sign.
+  const sign = val > 0 ? "+" : "";
   return `${sign}${val.toFixed(2)}%`;
 }
 
