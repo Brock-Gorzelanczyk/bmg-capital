@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, Component, type ReactNode } from "react";
 import { LLMUsageCard } from "@/components/diagnostics/LLMUsageCard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -19,6 +19,42 @@ import {
 } from "@/api/adminDiagnostics";
 import { getCrossSleeveQuarantine } from "@/api/adminQuarantine";
 import { AutoPausedBotsCard } from "@/components/diagnostics/AutoPausedBotsCard";
+
+// ─── Per-card error boundary ────────────────────────────────────────────────
+// Prevents one diagnostic card crashing from killing the whole page.
+// 2026-06-29 incident: LLMUsageCard accessed `.length` on an undefined
+// `top_callers_7d` and nuked the entire Diagnostics page until reload.
+class CardErrorBoundary extends Component<
+  { name: string; children: ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-2xl p-4 bg-t-bg1 border border-t-red/40 flex flex-col gap-2 min-h-[200px]">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={14} className="text-t-red flex-shrink-0" />
+            <span className="text-[11px] uppercase tracking-widest text-t-red font-semibold">
+              {this.props.name} crashed
+            </span>
+          </div>
+          <pre className="text-[10px] text-t-muted font-mono-t whitespace-pre-wrap break-words flex-1">
+            {(this.state.error as Error).message?.slice(0, 200) ?? "Unknown error"}
+          </pre>
+          <button
+            onClick={() => { this.setState({ error: null }); }}
+            className="px-2 py-1 rounded border border-t-mid/40 hover:border-t-mid text-t-mid2 hover:text-t-hi text-[11px] font-medium self-start"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -907,27 +943,27 @@ export default function AdminDiagnosticsPage() {
 
       {/* Top row — health-at-a-glance */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <PortfolioHealthCard qcRefresh={qcRefresh} />
-        <CooldownStormCard qcRefresh={qcRefresh} />
-        <AutoPausedBotsCard qcRefresh={qcRefresh} />
+        <CardErrorBoundary name="Portfolio Health"><PortfolioHealthCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Cooldown Storm"><CooldownStormCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Auto-Paused Bots"><AutoPausedBotsCard qcRefresh={qcRefresh} /></CardErrorBoundary>
       </div>
 
       {/* Concentration + Heartbeats + Inventory */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ConcentrationCard qcRefresh={qcRefresh} />
-        <HeartbeatCard qcRefresh={qcRefresh} />
-        <InventoryCard qcRefresh={qcRefresh} />
-        <StopAsymmetryCard qcRefresh={qcRefresh} />
-        <GateRateCard qcRefresh={qcRefresh} />
-        <QuarantineCard qcRefresh={qcRefresh} />
-        <CrossSleeveQuarantineCard qcRefresh={qcRefresh} />
+        <CardErrorBoundary name="Concentration"><ConcentrationCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Heartbeats"><HeartbeatCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Inventory"><InventoryCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Stop Asymmetry"><StopAsymmetryCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Gate Rate"><GateRateCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Quarantine"><QuarantineCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Cross-Sleeve Quarantine"><CrossSleeveQuarantineCard qcRefresh={qcRefresh} /></CardErrorBoundary>
       </div>
 
       {/* Reconcile + Dry-run + Cash Floor */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DirectionalReconcileCard qcRefresh={qcRefresh} />
-        <DryRunCard qcRefresh={qcRefresh} />
-        <CashFloorCard qcRefresh={qcRefresh} />
+        <CardErrorBoundary name="Directional Reconcile"><DirectionalReconcileCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Dry-Run"><DryRunCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Cash Floor"><CashFloorCard qcRefresh={qcRefresh} /></CardErrorBoundary>
       </div>
 
       {/* Actions row */}
@@ -936,15 +972,15 @@ export default function AdminDiagnosticsPage() {
         <span className="text-[10px] uppercase tracking-widest text-t-muted font-bold">Actions</span>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RunDryRunCard />
-        <OpsAlertTestCard />
-        <ForceCompleteCard qcRefresh={qcRefresh} />
-        <WatchlistSweepCard />
+        <CardErrorBoundary name="Run Dry-Run"><RunDryRunCard /></CardErrorBoundary>
+        <CardErrorBoundary name="Ops Alert Test"><OpsAlertTestCard /></CardErrorBoundary>
+        <CardErrorBoundary name="Force Complete"><ForceCompleteCard qcRefresh={qcRefresh} /></CardErrorBoundary>
+        <CardErrorBoundary name="Watchlist Sweep"><WatchlistSweepCard /></CardErrorBoundary>
       </div>
 
       {/* LLM Usage */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <LLMUsageCard />
+        <CardErrorBoundary name="LLM Usage"><LLMUsageCard /></CardErrorBoundary>
       </div>
 
       {/* Footer */}
