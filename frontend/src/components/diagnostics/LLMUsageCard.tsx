@@ -140,7 +140,7 @@ export function LLMUsageCard() {
       )}
 
       {/* Top callers table */}
-      {d && d.top_callers_7d.length > 0 && (
+      {d && (d.top_callers_7d ?? []).length > 0 && (
         <div className="space-y-1.5">
           <div className="text-[9px] uppercase tracking-wider text-t-muted font-semibold">Top callers (7d)</div>
           <div className="overflow-x-auto">
@@ -153,7 +153,7 @@ export function LLMUsageCard() {
                 </tr>
               </thead>
               <tbody>
-                {d.top_callers_7d.map((row) => (
+                {(d.top_callers_7d ?? []).map((row) => (
                   <tr key={row.agent_name} className="border-b border-t-dim/30 hover:bg-t-bg2/50">
                     <td className="py-1 px-1.5 text-t-hi">{row.agent_name}</td>
                     <td className="py-1 px-1.5 text-right text-t-mid2">{row.calls.toLocaleString()}</td>
@@ -167,13 +167,13 @@ export function LLMUsageCard() {
       )}
 
       {/* 7-day trend sparkline (relay vs fallback) */}
-      {d && d.trend_7d.length > 0 && (
+      {d && (d.trend_7d ?? []).length > 0 && (
         <div className="space-y-1">
           <div className="text-[9px] uppercase tracking-wider text-t-muted font-semibold">7-day trend</div>
           <div className="flex items-end gap-1 h-10">
-            {d.trend_7d.map((day) => {
+            {(d.trend_7d ?? []).map((day) => {
               const total = day.relay + day.api_fallback;
-              const maxVal = Math.max(...d.trend_7d.map((x) => x.relay + x.api_fallback), 1);
+              const maxVal = Math.max(...(d.trend_7d ?? []).map((x) => x.relay + x.api_fallback), 1);
               const heightPct = total > 0 ? Math.max(10, (total / maxVal) * 100) : 4;
               return (
                 <div
@@ -193,8 +193,8 @@ export function LLMUsageCard() {
             })}
           </div>
           <div className="flex justify-between text-[9px] text-t-muted">
-            <span>{d.trend_7d[0]?.date.slice(5)}</span>
-            <span>{d.trend_7d[d.trend_7d.length - 1]?.date.slice(5)}</span>
+            <span>{(d.trend_7d ?? [])[0]?.date.slice(5)}</span>
+            <span>{(d.trend_7d ?? [])[(d.trend_7d ?? []).length - 1]?.date.slice(5)}</span>
           </div>
         </div>
       )}
