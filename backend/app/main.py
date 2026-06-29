@@ -364,6 +364,14 @@ async def lifespan(app: FastAPI):
     except Exception as _m027_exc:
         logger.error("[startup] m027_force_clean_slate FAILED: %s", _m027_exc, exc_info=True)
 
+    try:
+        from app.db.migrations.m028_quarantine_cross_sleeve import run as _run_m028
+        with engine.connect() as _m028_conn:
+            _m028_result = _run_m028(_m028_conn)
+        logger.warning("[startup] m028 OK: %s", _m028_result)
+    except Exception as _m028_exc:
+        logger.error("[startup] m028_quarantine_cross_sleeve FAILED: %s", _m028_exc, exc_info=True)
+
     # Register the capital audit ORM listener AFTER m027 runs so its initial
     # writes don't spam the audit log. Listener catches every subsequent
     # ORM-level write to bot_allocations capital fields, proving the
@@ -682,6 +690,8 @@ app.include_router(cash_floor_router)
 from app.routers.clean_slate import router as clean_slate_router
 app.include_router(clean_slate_router)
 app.include_router(admin_bots_router)
+from app.routers.admin_quarantine import router as admin_quarantine_router
+app.include_router(admin_quarantine_router)
 app.include_router(sentinel_router)
 app.include_router(dashboard_router)
 app.include_router(scout_router)

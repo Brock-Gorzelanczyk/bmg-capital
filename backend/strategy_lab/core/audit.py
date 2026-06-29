@@ -350,9 +350,36 @@ def log_fill(
     position_id: Optional[int] = None,
     is_paper: bool = True,
     fees_cents: int = 0,
+    bot_id: Optional[str] = None,
 ) -> None:
     """Persist a filled trade to bot_trades."""
     from app.db.models.bots import BotTrade
+
+    # ── SHIP 2 asset-class gate (path #9) — before BotTrade insert ──────────
+    # Resolve bot_id from allocation if not passed directly.
+    _resolved_bot_id = bot_id
+    if not _resolved_bot_id:
+        try:
+            from app.db.models.bots import BotAllocation, BotProfile
+            _alloc = db.get(BotAllocation, allocation_id)
+            if _alloc:
+                _prof = db.get(BotProfile, _alloc.profile_id)
+                if _prof:
+                    _resolved_bot_id = _prof.name
+        except Exception as _lookup_exc:
+            logger.warning("[asset_class_gate] log_fill bot_id lookup failed: %s", _lookup_exc)
+
+    if _resolved_bot_id:
+        try:
+            from app.services.asset_class_registry import validate_order
+            validate_order(_resolved_bot_id, symbol)
+        except RuntimeError as _acr_exc:
+            logger.error(
+                "[asset_class_gate] log_fill BLOCKED bot=%s symbol=%s: %s",
+                _resolved_bot_id, symbol, _acr_exc,
+            )
+            return
+    # ── end asset-class gate ─────────────────────────────────────────────────
 
     row = BotTrade(
         allocation_id=allocation_id,

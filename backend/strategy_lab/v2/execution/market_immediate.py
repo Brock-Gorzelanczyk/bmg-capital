@@ -53,6 +53,15 @@ class MarketImmediateExecution(ExecutionModel):
                 estimated_fill_usd=qty * price if price else None,
             )
 
+            # ── SHIP 2 asset-class gate (path #10) — before submit_order ───
+            try:
+                from app.services.asset_class_registry import validate_order
+                validate_order(ctx.bot_id, order.symbol)
+            except RuntimeError as _acr_exc:
+                ctx.log("error", f"[asset_class_gate] BLOCKED {order.symbol}: {_acr_exc}")
+                continue
+            # ── end asset-class gate ─────────────────────────────────────────
+
             resp = await ctx.broker.submit_order(order)
             ctx.log(
                 "info",

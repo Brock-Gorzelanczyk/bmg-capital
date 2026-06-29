@@ -55,6 +55,33 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     """Record exit trade and mark position closed."""
     from app.db.models.bots import BotTrade, BotSignal
 
+    # ── SHIP 2 asset-class gate (path #4) — BEFORE BotTrade insert ──────────
+    # Closing an existing position, so bot_id comes from the allocation profile.
+    try:
+        from app.db.models.bots import BotProfile
+        from app.services.asset_class_registry import validate_order_with_user
+        _prof = db.get(BotProfile, alloc.profile_id)
+        _bot_id = _prof.name if _prof else None
+        if _bot_id:
+            validate_order_with_user(
+                bot_id=_bot_id,
+                symbol=pos.symbol,
+                user_id=int(alloc.user_id) if alloc.user_id else None,
+            )
+    except RuntimeError as _acr_exc:
+        logger.warning(
+            "[asset_class_gate] _close_position BLOCKED pos_id=%s symbol=%s: %s",
+            getattr(pos, "id", "?"), pos.symbol, _acr_exc,
+        )
+        return
+    except Exception as _acr_lookup_exc:
+        # Don't block close if profile lookup fails — log and continue
+        logger.warning(
+            "[asset_class_gate] _close_position profile lookup failed pos_id=%s: %s",
+            getattr(pos, "id", "?"), _acr_lookup_exc,
+        )
+    # ── end asset-class gate ─────────────────────────────────────────────────
+
     is_short = getattr(pos, "side", "long") == "short"
     fill_cents = price_usd * 100  # float — preserves sub-penny precision
 

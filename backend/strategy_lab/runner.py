@@ -1705,6 +1705,24 @@ def _execute_options_signal(
     from datetime import datetime, timezone
     from app.db.models.bots import BotPosition, BotTrade
 
+    # ── SHIP 2 asset-class gate (path #1) — BEFORE notional cap ─────────────
+    # validate_order raises RuntimeError on class mismatch or allowlist violation.
+    # Defense in depth: options bots must trade OCC-format symbols only.
+    try:
+        from app.services.asset_class_registry import validate_order_with_user
+        validate_order_with_user(
+            bot_id=profile_name,
+            symbol=sig.symbol,
+            user_id=int(alloc.user_id) if alloc.user_id else None,
+        )
+    except RuntimeError as _acr_exc:
+        logger.error(
+            "[asset_class_gate:%s] _execute_options_signal BLOCKED %s: %s",
+            profile_name, sig.symbol, _acr_exc,
+        )
+        return
+    # ── end asset-class gate ─────────────────────────────────────────────────
+
     now = datetime.now(timezone.utc)
     capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
     position_dollars = capital_usd * (final_size_pct / 100.0)
@@ -1897,6 +1915,23 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
       6. Create BotTrade row (entry fill)
     """
     import os
+
+    # ── SHIP 2 asset-class gate (path #2) — BEFORE bracket submit ───────────
+    # validate_order raises RuntimeError on class mismatch or allowlist violation.
+    try:
+        from app.services.asset_class_registry import validate_order_with_user
+        validate_order_with_user(
+            bot_id=profile_name,
+            symbol=sig.symbol,
+            user_id=int(alloc.user_id) if alloc.user_id else None,
+        )
+    except RuntimeError as _acr_exc:
+        logger.error(
+            "[asset_class_gate:%s] _execute_signal BLOCKED %s: %s",
+            profile_name, sig.symbol, _acr_exc,
+        )
+        return
+    # ── end asset-class gate ─────────────────────────────────────────────────
 
     if sig.side not in ("buy", "sell"):
         logger.info(
@@ -2286,6 +2321,23 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         except Exception:
             _friction_cents = 0
             _slip_bps = 0.0
+
+        # ── SHIP 2 asset-class gate (path #3, defense-in-depth) — BEFORE BotTrade insert ──
+        # Catches exit-path and any future refactor that adds a new entry here.
+        try:
+            from app.services.asset_class_registry import validate_order_with_user
+            validate_order_with_user(
+                bot_id=profile_name,
+                symbol=sig.symbol,
+                user_id=int(alloc.user_id) if alloc.user_id else None,
+            )
+        except RuntimeError as _acr3_exc:
+            logger.error(
+                "[asset_class_gate:%s] _execute_signal BotTrade insert BLOCKED %s: %s",
+                profile_name, sig.symbol, _acr3_exc,
+            )
+            raise  # re-raise so outer except catches and does rollback
+        # ── end asset-class gate ─────────────────────────────────────────────
 
         trade = BotTrade(
             allocation_id=alloc.id,

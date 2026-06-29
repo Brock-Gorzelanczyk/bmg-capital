@@ -1808,6 +1808,17 @@ def setup_bot_scheduler(scheduler) -> None:
                         if live_px <= 0:
                             continue
                         symbol = trade["symbol"]
+                        # ── SHIP 2 asset-class gate (path #5) ────────────────
+                        try:
+                            from app.services.asset_class_registry import validate_order
+                            validate_order("cash_floor", symbol)
+                        except RuntimeError as _acr_exc:
+                            logger.error(
+                                "[asset_class_gate:cash_floor] scheduler rebalance "
+                                "BLOCKED %s: %s", symbol, _acr_exc,
+                            )
+                            continue
+                        # ── end asset-class gate ─────────────────────────────
                         approx_dollars = float(trade["approx_dollars"])
                         qty = round(approx_dollars / live_px, 4)
                         if qty <= 0:
