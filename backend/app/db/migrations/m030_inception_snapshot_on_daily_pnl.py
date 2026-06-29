@@ -50,14 +50,20 @@ def run(conn) -> dict:
     note_column_added = False
     archive_tables_created = 0
 
-    # 1. Add inception_capital_cents_snapshot column if missing
+    # 1. Add inception_capital_cents_snapshot column if missing.
+    # Use try/except to handle re-runs on a DB where the column already exists
+    # (SQLite raises OperationalError: duplicate column name on a second ADD).
     if not _column_exists(conn, "bot_daily_pnl", "inception_capital_cents_snapshot"):
-        conn.execute(text(
-            "ALTER TABLE bot_daily_pnl "
-            "ADD COLUMN inception_capital_cents_snapshot INTEGER NOT NULL DEFAULT 0"
-        ))
-        column_added = True
-        logger.info("[m030] Added inception_capital_cents_snapshot column to bot_daily_pnl")
+        try:
+            conn.execute(text(
+                "ALTER TABLE bot_daily_pnl "
+                "ADD COLUMN inception_capital_cents_snapshot INTEGER NOT NULL DEFAULT 0"
+            ))
+            column_added = True
+            logger.info("[m030] Added inception_capital_cents_snapshot column to bot_daily_pnl")
+        except Exception as exc:
+            # Column already exists (e.g. prior failed run in production).
+            logger.warning("[m030] ADD COLUMN inception_capital_cents_snapshot skipped: %s", exc)
 
     # 2. Add note column if missing (used for track_reset_marker rows)
     if not _column_exists(conn, "bot_daily_pnl", "note"):
@@ -77,10 +83,11 @@ def run(conn) -> dict:
     if has_inception_col:
         conn.execute(text("""
             UPDATE bot_daily_pnl
-               SET inception_capital_cents_snapshot = (
-                   SELECT COALESCE(a.inception_capital_cents, a.starting_capital_cents, 0)
-                     FROM bot_allocations a
-                    WHERE a.id = bot_daily_pnl.allocation_id
+               SET inception_capital_cents_snapshot = COALESCE(
+                   (SELECT inception_capital_cents
+                      FROM bot_allocations
+                     WHERE bot_allocations.id = bot_daily_pnl.allocation_id),
+                   0
                )
              WHERE inception_capital_cents_snapshot = 0
         """))
@@ -89,10 +96,11 @@ def run(conn) -> dict:
         if _column_exists(conn, "bot_allocations", "starting_capital_cents"):
             conn.execute(text("""
                 UPDATE bot_daily_pnl
-                   SET inception_capital_cents_snapshot = (
-                       SELECT COALESCE(a.starting_capital_cents, 0)
-                         FROM bot_allocations a
-                        WHERE a.id = bot_daily_pnl.allocation_id
+                   SET inception_capital_cents_snapshot = COALESCE(
+                       (SELECT starting_capital_cents
+                          FROM bot_allocations
+                         WHERE bot_allocations.id = bot_daily_pnl.allocation_id),
+                       0
                    )
                  WHERE inception_capital_cents_snapshot = 0
             """))

@@ -273,3 +273,90 @@ def test_m030_creates_archive_tables():
     assert "bot_daily_pnl_archive" in tables
 
     raw.close()
+
+
+# ---------------------------------------------------------------------------
+# P0 hotfix regression test (2026-06-28)
+# Reproduces production failure: bot_allocations.inception_capital_cents = NULL
+# causes the backfill UPDATE to set snapshot to NULL, violating NOT NULL DEFAULT 0.
+# With the COALESCE fix the snapshot must land on 0, not NULL, and not crash.
+# ---------------------------------------------------------------------------
+
+_NULL_INCEPTION_DDL = """
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    migration_name TEXT PRIMARY KEY,
+    applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS bot_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS bot_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    starting_capital_cents INTEGER NOT NULL DEFAULT 0,
+    inception_capital_cents INTEGER,
+    current_capital_cents   INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS bot_daily_pnl (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    allocation_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    realized_cents INTEGER NOT NULL DEFAULT 0,
+    unrealized_cents INTEGER NOT NULL DEFAULT 0,
+    fees_cents INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS bot_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    allocation_id INTEGER,
+    symbol TEXT
+);
+"""
+
+
+def test_m030_backfill_handles_null_inception_capital_cents():
+    """P0 hotfix: when inception_capital_cents is NULL in bot_allocations,
+    the backfill must set snapshot to 0 (via COALESCE), never NULL or crash."""
+    raw = sqlite3.connect(":memory:")
+    raw.executescript(_NULL_INCEPTION_DDL)
+
+    # Seed an allocation with inception_capital_cents explicitly NULL
+    cur = raw.execute("INSERT INTO bot_profiles (name) VALUES (?)", ("null_inception_bot",))
+    pid = cur.lastrowid
+    cur2 = raw.execute(
+        "INSERT INTO bot_allocations "
+        "(profile_id, user_id, enabled, starting_capital_cents, "
+        " inception_capital_cents, current_capital_cents) "
+        "VALUES (?, 1, 1, 5000000, NULL, 5000000)",
+        (pid,),
+    )
+    alloc_id = cur2.lastrowid
+
+    # Seed a daily_pnl row pointing to that allocation
+    raw.execute(
+        "INSERT INTO bot_daily_pnl (allocation_id, date, realized_cents) "
+        "VALUES (?, '2026-06-28', 250)",
+        (alloc_id,),
+    )
+    raw.commit()
+
+    # Run m030 — must not raise, must not set NULL
+    result = _run_m030(raw)
+    assert result["executed"] is True, f"Expected m030 to execute, got: {result}"
+
+    # The snapshot for the NULL-inception row must be 0, not NULL
+    row = raw.execute(
+        "SELECT inception_capital_cents_snapshot FROM bot_daily_pnl "
+        "WHERE allocation_id = ?",
+        (alloc_id,),
+    ).fetchone()
+    assert row is not None, "bot_daily_pnl row missing after m030"
+    snapshot = row[0]
+    assert snapshot == 0, (
+        f"Expected snapshot=0 for NULL inception row, got snapshot={snapshot!r}. "
+        "COALESCE fix is not working."
+    )
+
+    raw.close()
