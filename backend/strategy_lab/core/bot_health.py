@@ -16,6 +16,39 @@ logger = logging.getLogger(__name__)
 # Divergence threshold above which the bot is auto-paused
 _DIVERGENCE_PAUSE_THRESHOLD = 0.5
 
+# PART 7: in-process rate limiter for heartbeat writes during order placement.
+# Prevents DB write storm — at most 1 update per minute per allocation_id.
+# Survives process lifetime, resets on restart (acceptable; logs are source of truth).
+_LAST_ORDER_HEARTBEAT_AT: dict[int, datetime] = {}
+_ORDER_HEARTBEAT_MIN_INTERVAL_SEC = 60
+
+
+def record_order_placement_heartbeat(allocation_id: int, db: Session) -> bool:
+    """Best-effort heartbeat write triggered by a successful order placement.
+
+    Differs from scheduled scan heartbeat (`record_heartbeat`) by being
+    RATE-LIMITED to once per minute per allocation. Active-trading bots
+    update their heartbeat from the execution path so the diagnostics
+    "stale" view doesn't false-positive when scans are rare.
+
+    Returns True if a write happened, False if rate-limited or failed.
+    """
+    now = datetime.now(timezone.utc)
+    last = _LAST_ORDER_HEARTBEAT_AT.get(allocation_id)
+    if last is not None:
+        if (now - last).total_seconds() < _ORDER_HEARTBEAT_MIN_INTERVAL_SEC:
+            return False
+    try:
+        record_heartbeat(allocation_id, db)
+        _LAST_ORDER_HEARTBEAT_AT[allocation_id] = now
+        return True
+    except Exception as exc:
+        logger.warning(
+            "record_order_placement_heartbeat failed for alloc=%d: %s",
+            allocation_id, exc,
+        )
+        return False
+
 
 def record_heartbeat(allocation_id: int, db: Session) -> None:
     """

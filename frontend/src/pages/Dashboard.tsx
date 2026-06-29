@@ -52,6 +52,7 @@ const SLEEVE_META: Record<string, { name: string; emoji: string }> = {
   stocks:  { name: "Stocks",  emoji: "📈" },
   crypto:  { name: "Crypto",  emoji: "🪙" },
   options: { name: "Options", emoji: "⚡" },
+  quant:   { name: "Quant",   emoji: "🧮" },
 };
 
 function SleeveCard({ id, sleeve }: { id: string; sleeve: DashV2Sleeve }) {
