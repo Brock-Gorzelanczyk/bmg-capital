@@ -57,15 +57,30 @@ _EXPECTED_NAMES = (
 
 
 def check_capital_invariant(db, user_id: int = 1) -> CapitalInvariantStatus:
-    """Pure check. Returns CapitalInvariantStatus."""
+    """Pure check. Returns CapitalInvariantStatus.
+
+    Capital is capital — counts ALL 13 SPEC bots regardless of `enabled`.
+    A bot being paused (e.g. options_income paused by m033 because its
+    strategy emits invalid symbols) does NOT remove its capital allocation.
+    Pre-2026-06-29 the query filtered by `enabled = 1`, which made the
+    watchdog false-trigger CRIT whenever a SPEC bot was paused.
+
+    Excludes m021 merged-dupes (paused_reason='merged_into_<id>') because
+    those are zombie rows the dedup migration left for reversibility.
+    """
     from sqlalchemy import text
 
-    rows = db.execute(text("""
+    name_params = {f"n{i}": name for i, name in enumerate(_EXPECTED_NAMES)}
+    name_ph = ", ".join(f":n{i}" for i in range(len(_EXPECTED_NAMES)))
+    rows = db.execute(text(f"""
         SELECT p.name, a.starting_capital_cents
           FROM bot_allocations a
           JOIN bot_profiles p ON p.id = a.profile_id
-         WHERE a.user_id = :uid AND a.enabled = 1
-    """), {"uid": user_id}).fetchall()
+         WHERE a.user_id = :uid
+           AND p.name IN ({name_ph})
+           AND (a.paused_reason IS NULL
+                OR a.paused_reason NOT LIKE 'merged_into_%')
+    """), {"uid": user_id, **name_params}).fetchall()
 
     per_bot = [{"name": r[0], "starting_cents": int(r[1] or 0)} for r in rows]
     current_sum = sum(b["starting_cents"] for b in per_bot)
