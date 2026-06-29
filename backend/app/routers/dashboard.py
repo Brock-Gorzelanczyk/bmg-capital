@@ -66,9 +66,25 @@ _DISPLAY_NAMES: dict[str, str] = {
 _AC_TO_SLEEVE: dict[str, str] = {
     "stock": "stocks",
     "crypto": "crypto",
-    "quant": "crypto",
+    "quant": "quant",
     "options": "options",
 }
+
+# Quant bots have asset_class=crypto in m027 SPEC. Route them to the
+# dedicated "quant" sleeve so the Dashboard shows all 4 sleeve cards.
+# PART 6 fix: previously asset_class=crypto routed them to "crypto" bucket
+# and the Dashboard rendered only 3 sleeves with "sleeve missing from payload".
+_QUANT_PROFILE_NAMES = frozenset({
+    "crypto_quant_aggressive",
+    "crypto_quant_scalper",
+    "crypto_quant_mean_reversion",
+})
+
+
+def _profile_sleeve(profile_name: str, asset_class: str | None) -> str:
+    if profile_name in _QUANT_PROFILE_NAMES:
+        return "quant"
+    return _AC_TO_SLEEVE.get(asset_class or "", "stocks")
 
 
 @router.get("/v2")
@@ -248,7 +264,7 @@ def get_dashboard_v2(
     # ── Per-sleeve breakdown ─────────────────────────────────────────────────
     sleeve_data: dict[str, dict[str, int]] = {
         s: {"value_cents": 0, "open_positions": 0, "watching": 0, "pnl_cents": 0, "bots_active": 0, "bots_total": 0}
-        for s in ("stocks", "crypto", "options")
+        for s in ("stocks", "crypto", "options", "quant")
     }
     seen_profile_sleeve: set[tuple[int, str]] = set()
 
@@ -256,7 +272,7 @@ def get_dashboard_v2(
         p = alloc_to_profile.get(alloc.id)
         if not p:
             continue
-        s = _AC_TO_SLEEVE.get(p.asset_class, "stocks")
+        s = _profile_sleeve(p.name, p.asset_class)
         # Per-allocation values bucketed by sleeve. Falls back to starting
         # capital if canonical didn't have data for this profile.
         pv = pv_by_alloc.get(alloc.id) or (alloc.starting_capital_cents or 0)
@@ -274,7 +290,7 @@ def get_dashboard_v2(
         p = alloc_to_profile.get(pos.allocation_id)
         if not p:
             continue
-        s = _AC_TO_SLEEVE.get(p.asset_class, "stocks")
+        s = _profile_sleeve(p.name, p.asset_class)
         sleeve_data[s]["open_positions"] += 1
 
     # ── Sleeve reservations ───────────────────────────────────────────────────

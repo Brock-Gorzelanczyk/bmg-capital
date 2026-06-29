@@ -1902,6 +1902,12 @@ def _execute_options_signal(
             )
 
         db.commit()
+        # PART 7: heartbeat from execution path (rate-limited 1/min/alloc)
+        try:
+            from strategy_lab.core.bot_health import record_order_placement_heartbeat
+            record_order_placement_heartbeat(alloc.id, db)
+        except Exception:
+            pass  # heartbeat is best-effort; never blocks order flow
         logger.info(
             "[options:%s] Opened %s × %d contracts %s @ $%.2f/contract (pos=%d trade=%d)",
             profile_name, sig.symbol, contract_count, opt["option_type"], premium, pos.id, trade.id,
@@ -2383,6 +2389,12 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             )
 
         db.commit()
+        # PART 7: heartbeat from execution path (rate-limited 1/min/alloc)
+        try:
+            from strategy_lab.core.bot_health import record_order_placement_heartbeat
+            record_order_placement_heartbeat(alloc.id, db)
+        except Exception:
+            pass  # heartbeat is best-effort; never blocks order flow
     except Exception as _db_exc:
         logger.error("[execute:%s] DB write failed for %s: %s", profile_name, sig.symbol, _db_exc)
         try:

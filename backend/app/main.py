@@ -380,6 +380,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m030_exc:
         logger.error("[startup] m030_inception_snapshot_on_daily_pnl FAILED: %s", _m030_exc, exc_info=True)
 
+    # PART 2 (Layer 1+3): close equity positions held by options bots and
+    # PAUSE both options bots so they stop emitting equity signals until
+    # their strategies are redesigned to emit OCC option symbols.
+    try:
+        from app.db.migrations.m033_close_options_bot_equity_violations import run as _run_m033
+        with engine.connect() as _m033_conn:
+            _m033_result = _run_m033(_m033_conn)
+        logger.warning("[startup] m033 OK: %s", _m033_result)
+    except Exception as _m033_exc:
+        logger.error("[startup] m033_close_options_bot_equity_violations FAILED: %s", _m033_exc, exc_info=True)
+
     # SHIP 6: m038 bot_symbol_cooldown table (24h clamp per bot+symbol).
     try:
         from app.db.migrations.m038_bot_symbol_cooldown import run as _run_m038

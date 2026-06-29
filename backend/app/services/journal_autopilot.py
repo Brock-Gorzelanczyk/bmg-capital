@@ -18,7 +18,7 @@ async def auto_prompt_trade_reflection(user_id: int, db: Session) -> None:
     try:
         from app.db.models.paper import PaperTransaction
         from app.db.models.autopilot import AutopilotAction
-        from app.core.config import settings
+        from app.config import settings
 
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         sells = db.query(PaperTransaction).filter(
@@ -164,7 +164,7 @@ async def generate_quarterly_review(user_id: int, db: Session) -> None:
 
         from app.db.models.paper import PaperTransaction
         from app.db.models.autopilot import AutopilotAction
-        from app.core.config import settings
+        from app.config import settings
 
         quarter_start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
         existing = (
