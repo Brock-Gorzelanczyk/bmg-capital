@@ -222,6 +222,19 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
             pos.exit_reason = "target_reached" if exit_price > entry_price else "stop_loss"
 
             _assert_not_options_profile()
+            # ── SHIP 2 asset-class gate (path #12, exit) ─────────────────────
+            try:
+                from app.services.asset_class_registry import validate_order
+                validate_order(bot_name, pos.symbol)
+            except RuntimeError as _acr_exc:
+                logger.error(
+                    "[asset_class_gate:%s] bot_executor exit BLOCKED %s: %s",
+                    bot_name, pos.symbol, _acr_exc,
+                )
+                # Skip this close — don't write the BotTrade; continue to next position
+                pos.closed_at = None  # revert the close mark set above
+                continue
+            # ── end asset-class gate ─────────────────────────────────────────
             db.add(BotTrade(
                 allocation_id=alloc.id,
                 symbol=pos.symbol,
@@ -288,6 +301,17 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 target_price_usd=round(entry_price * (1 + target_pct), 4),
             )
             _assert_not_options_profile()
+            # ── SHIP 2 asset-class gate (path #12, entry) ────────────────────
+            try:
+                from app.services.asset_class_registry import validate_order
+                validate_order(bot_name, sym)
+            except RuntimeError as _acr_exc:
+                logger.error(
+                    "[asset_class_gate:%s] bot_executor entry BLOCKED %s: %s",
+                    bot_name, sym, _acr_exc,
+                )
+                continue
+            # ── end asset-class gate ─────────────────────────────────────────
             db.add(pos)
             db.flush()  # get pos.id
 

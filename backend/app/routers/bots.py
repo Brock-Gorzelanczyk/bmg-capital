@@ -3644,6 +3644,20 @@ def debug_force_trade(
         raise HTTPException(429, f"Rate limited — wait {wait}s before calling force-trade again")
     _FORCE_TRADE_COOLDOWNS[current_user.id] = _time.time()
 
+    # ── SHIP 2 asset-class gate (path #7) — function entry, before Alpaca POST ──
+    # debug_force_trade hard-wires crypto_swing x BTC/USD; validate explicitly so
+    # any future change to the symbol surfaces as a 422 to the admin caller.
+    try:
+        from app.services.asset_class_registry import validate_order_with_user
+        validate_order_with_user(
+            bot_id="crypto_swing",
+            symbol="BTC/USD",
+            user_id=getattr(current_user, "id", None),
+        )
+    except RuntimeError as _acr_exc:
+        raise HTTPException(status_code=422, detail=str(_acr_exc))
+    # ── end asset-class gate ─────────────────────────────────────────────────
+
     steps: dict = {}
 
     # a. Find allocation
@@ -3753,6 +3767,17 @@ def debug_force_trade(
     steps["e_position"] = {"ok": True, "position_id": pos_row.id, "qty": qty, "avg_cost_usd": btc_price}
 
     # f. Insert bot_trade
+    # ── SHIP 2 asset-class gate (path #6) — defense-in-depth before BotTrade ──
+    try:
+        from app.services.asset_class_registry import validate_order_with_user
+        validate_order_with_user(
+            bot_id="crypto_swing",
+            symbol="BTC/USD",
+            user_id=getattr(current_user, "id", None),
+        )
+    except RuntimeError as _acr_exc:
+        raise HTTPException(status_code=422, detail=str(_acr_exc))
+    # ── end asset-class gate ─────────────────────────────────────────────────
     trade_row = BotTrade(
         allocation_id=alloc.id,
         symbol="BTC/USD",

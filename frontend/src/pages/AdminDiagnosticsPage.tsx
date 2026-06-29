@@ -16,6 +16,7 @@ import {
   sweepStaleWatchlist, getCashFloorStatus,
   type DryRunResponse, type OpsAlertResponse,
 } from "@/api/adminDiagnostics";
+import { getCrossSleeveQuarantine } from "@/api/adminQuarantine";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -455,6 +456,43 @@ function QuarantineCard({ qcRefresh }: { qcRefresh: number }) {
   );
 }
 
+function CrossSleeveQuarantineCard({ qcRefresh }: { qcRefresh: number }) {
+  const q = useQuery({
+    queryKey: ["adm-cross-sleeve-quarantine", qcRefresh],
+    queryFn: () => getCrossSleeveQuarantine(10),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const rows = q.data?.rows ?? [];
+  const count = q.data?.unresolved_count ?? 0;
+  return (
+    <DiagnosticCard
+      title={`Cross-Sleeve Quarantine — ${count} unresolved`}
+      icon={AlertTriangle}
+      lastUpdated={q.data?.as_of}
+      isLoading={q.isLoading} isFetching={q.isFetching} error={q.error}
+      onRefetch={() => q.refetch()}
+      full
+    >
+      <Table headers={["bot", "declared", "actual", "symbol", "detected", "action"]}>
+        {rows.length === 0
+          ? <EmptyRow cols={6} text="No cross-sleeve violations." />
+          : rows.map((r) => (
+              <tr key={r.id} className="border-b border-t-dim/40">
+                <td className="py-1 px-1.5 text-t-hi font-semibold">{r.bot_id}</td>
+                <td className="py-1 px-1.5 text-t-mid2">{r.declared_asset_class}</td>
+                <td className="py-1 px-1.5 text-t-red font-bold">{r.actual_asset_class}</td>
+                <td className="py-1 px-1.5 text-t-mid2">{r.actual_symbol}</td>
+                <td className="py-1 px-1.5 text-t-mid2">{r.detected_at?.slice(0, 16).replace("T", " ")}</td>
+                <td className="py-1 px-1.5 text-t-mid2">{r.action}</td>
+              </tr>
+            ))
+        }
+      </Table>
+    </DiagnosticCard>
+  );
+}
+
 function DirectionalReconcileCard({ qcRefresh }: { qcRefresh: number }) {
   const q = useQuery({
     queryKey: ["adm-directional-reconcile", qcRefresh],
@@ -879,6 +917,7 @@ export default function AdminDiagnosticsPage() {
         <StopAsymmetryCard qcRefresh={qcRefresh} />
         <GateRateCard qcRefresh={qcRefresh} />
         <QuarantineCard qcRefresh={qcRefresh} />
+        <CrossSleeveQuarantineCard qcRefresh={qcRefresh} />
       </div>
 
       {/* Reconcile + Dry-run + Cash Floor */}

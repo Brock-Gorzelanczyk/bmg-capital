@@ -151,6 +151,22 @@ def rebalance(
         fill_cents = int(round(live_px * 100))
         friction_cents = model_friction_cents("stock", qty, live_px)
 
+        # ── SHIP 2 asset-class gate (path #11) — before both BotTrade inserts ──
+        try:
+            from app.services.asset_class_registry import validate_order_with_user
+            validate_order_with_user(
+                bot_id="cash_floor",
+                symbol=symbol,
+                user_id=getattr(current_user, "id", None),
+            )
+        except RuntimeError as _acr_exc:
+            logger.error(
+                "[asset_class_gate:cash_floor] rebalance endpoint BLOCKED %s: %s",
+                symbol, _acr_exc,
+            )
+            raise HTTPException(status_code=422, detail=str(_acr_exc))
+        # ── end asset-class gate ─────────────────────────────────────────────
+
         if side == "buy":
             # New position (or add — Cash Floor only holds one open position
             # per symbol; if one exists, this is a top-up to the SAME position).
