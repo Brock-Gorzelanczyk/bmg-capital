@@ -120,7 +120,7 @@ async def _call_claude(extracted_text: str) -> list:
     # Strip markdown code fences if present
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
-        return json.loads(raw)
+    return json.loads(raw)
 
 
 @router.post("/analyze")
