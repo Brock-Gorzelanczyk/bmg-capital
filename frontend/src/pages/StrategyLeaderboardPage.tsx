@@ -401,8 +401,11 @@ function BotLeaderboardTable({
                 </>
               ) : (
                 <>
-                  <span className={cn("font-mono-t text-sm font-bold tabular-nums self-center", isUp ? "text-t-green" : "text-t-red")}>
-                    {isUp ? "+" : ""}{row.all_time_pnl_pct.toFixed(2)}%
+                  <span
+                    className={cn("font-mono-t text-sm font-bold tabular-nums self-center", isUp ? "text-t-green" : "text-t-red")}
+                    title={row.is_post_reset ? `Track record reset ${row.reset_date ?? "2026-06-28"}. Performance tracking restarts from this date.` : undefined}
+                  >
+                    {isUp ? "+" : ""}{row.all_time_pnl_pct.toFixed(2)}%{row.is_post_reset ? " ⓘ" : ""}
                   </span>
                   <span className={cn("font-mono-t text-xs tabular-nums self-center", row.sharpe_30d == null ? "text-t-gdim" : row.sharpe_30d >= 0 ? "text-t-mid2" : "text-t-red")}>
                     {row.sharpe_30d != null ? row.sharpe_30d.toFixed(2) : "—"}

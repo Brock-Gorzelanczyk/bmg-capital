@@ -23,6 +23,7 @@ from app.db.models.bots import BotAllocation, BotProfile, BotDailyPnL, BotTrade,
 from app.db.models.allocation import BotPerformanceStats
 from app.db.models.users import User
 from app.core.canonical import compute_bot_snapshot
+from app.services.bot_performance import get_all_time_pct, get_all_time_pct_with_meta
 
 logger = logging.getLogger(__name__)
 
@@ -194,10 +195,11 @@ def get_strategy_leaderboard(
         current_value = snap.portfolio_value_cents if snap else starting
 
         current_equity_usd = round(current_value / 100, 2)
-        all_time_pnl_usd = round((current_value - starting) / 100, 2)
-        all_time_pnl_pct = (
-            round((current_value - starting) / starting * 100, 2) if starting else 0.0
-        )
+        # SHIP 3: use get_all_time_pct (SUM realized / inception) not (current-starting)/starting
+        _at_meta = get_all_time_pct_with_meta(alloc.id, db)
+        all_time_pnl_pct = _at_meta["pct"]
+        inception = _at_meta["inception_capital_cents"] or (alloc.starting_capital_cents or 0)
+        all_time_pnl_usd = round(all_time_pnl_pct / 100 * inception / 100, 2)
 
         stats = latest_stats.get(alloc.id)
         sharpe_30d: float | None = stats.sharpe_ratio if stats else None
@@ -228,6 +230,8 @@ def get_strategy_leaderboard(
             "current_equity": current_equity_usd,
             "all_time_pnl_usd": all_time_pnl_usd,
             "all_time_pnl_pct": all_time_pnl_pct,
+            "is_post_reset": _at_meta.get("is_post_reset", False),
+            "reset_date": _at_meta.get("reset_date"),
             "sharpe_30d": round(sharpe_30d, 3) if sharpe_30d is not None else None,
             "max_drawdown_pct": round(max_drawdown_pct, 4) if max_drawdown_pct is not None else None,
             "win_rate": round(win_rate, 3) if win_rate is not None else None,

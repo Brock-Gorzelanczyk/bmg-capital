@@ -1747,10 +1747,17 @@ def get_bot_cards(
             # fallback: use cumulative realized over 30d
             return_30d_pct = (cumulative_realized / capital_cents) if capital_cents else 0
 
-        # all-time return
-        return_all_time_pct = (
-            (portfolio_value_cents - starting_capital) / starting_capital
-        ) if starting_capital else 0
+        # all-time return — SHIP 3: use SUM(realized) / inception via get_all_time_pct
+        # so capital resets do not re-zero bot track records.
+        _at_meta_bot = None
+        if allocation:
+            from app.services.bot_performance import get_all_time_pct_with_meta as _get_at_meta
+            _at_meta_bot = _get_at_meta(allocation.id, db)
+            return_all_time_pct = _at_meta_bot["pct"] / 100
+        else:
+            return_all_time_pct = (
+                (portfolio_value_cents - starting_capital) / starting_capital
+            ) if starting_capital else 0
 
         # Sharpe 30d
         daily_returns = []
@@ -1889,7 +1896,9 @@ def get_bot_cards(
                 "return_all_time": {
                     "pct": return_all_time_pct,
                     "display": fmt_pct(return_all_time_pct),
-                    "tone": tone(return_all_time_pct)
+                    "tone": tone(return_all_time_pct),
+                    "is_post_reset": _at_meta_bot.get("is_post_reset", False) if _at_meta_bot else False,
+                    "reset_date": _at_meta_bot.get("reset_date") if _at_meta_bot else None,
                 },
                 "sharpe_30d": {
                     "value": sharpe_30d,

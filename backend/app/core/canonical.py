@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta, datetime, timezone
 from typing import Optional
 
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -348,14 +349,23 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
     # ── All-time return ───────────────────────────────────────────────────────
-    # Uses inception_capital_cents as the denominator so a clean-slate
-    # restart or capital adjustment doesn't silently rewrite the historical
-    # leaderboard %. Falls back to starting_capital_cents.
-    all_time_return_pct = 0.0
-    if inception_capital_cents:
+    # SHIP 3: Use SUM(bot_daily_pnl.realized_cents) / inception_capital_cents
+    # so capital resets (m027, etc.) do not silently re-zero track records.
+    # Delegates to get_all_time_pct which filters out track_reset_marker rows.
+    # Falls back to the (portfolio_value - inception) / inception formula only
+    # when the bot has zero bot_daily_pnl rows AND no marker yet (boot-of-deploy
+    # window before reconstruct_for_user has run).
+    from app.services.bot_performance import get_all_time_pct as _get_all_time_pct
+    _pnl_based_pct = _get_all_time_pct(alloc.id, db)
+    if _pnl_based_pct != 0.0:
+        all_time_return_pct = _pnl_based_pct
+    elif inception_capital_cents:
+        # Boot-of-deploy fallback: no daily_pnl rows yet
         all_time_return_pct = round(
             (portfolio_value_cents - inception_capital_cents) / inception_capital_cents * 100, 2
         )
+    else:
+        all_time_return_pct = 0.0
 
     # ── 30-day return (realized trades in last 30d / starting capital) ────────
     return_30d_pct = 0.0
@@ -530,17 +540,36 @@ def compute_portfolio_snapshot(
     yesterday_value = portfolio_value_cents - today_pnl_cents
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
-    # Sum bot-level inception capital (added in m023) for the all-time
-    # return denominator so portfolio-level returns also survive a
-    # clean-slate restart without rewriting history.
+    # SHIP 3: Portfolio all-time = SUM(realized) / SUM(inception) across child bots
+    # so capital resets do not re-zero portfolio-level history.
+    # Falls back to (portfolio_value - inception_denom) / inception_denom only
+    # when no bot has any bot_daily_pnl rows yet (boot-of-deploy window).
+    from app.services.bot_performance import get_all_time_pct as _get_all_time_pct
     bot_inception_sum = sum(
         int(getattr(alloc, "inception_capital_cents", None) or alloc.starting_capital_cents or 0)
         for alloc, _profile in allocs_with_profiles
     )
     inception_denom = bot_inception_sum or starting_capital_cents
-    all_time_return_pct = round(
-        (portfolio_value_cents - inception_denom) / inception_denom * 100, 2
-    ) if inception_denom else 0.0
+
+    # Sum per-bot realized PnL (via get_all_time_pct numerator: pct * inception / 100)
+    total_pnl_based_cents = 0
+    for alloc, _profile in allocs_with_profiles:
+        alloc_inception = int(
+            getattr(alloc, "inception_capital_cents", None) or alloc.starting_capital_cents or 0
+        )
+        alloc_pct = _get_all_time_pct(alloc.id, db)
+        if alloc_inception:
+            total_pnl_based_cents += int(alloc_pct / 100 * alloc_inception)
+
+    if inception_denom and total_pnl_based_cents != 0:
+        all_time_return_pct = round(total_pnl_based_cents / inception_denom * 100, 2)
+    elif inception_denom:
+        # Boot-of-deploy fallback: no daily_pnl rows yet
+        all_time_return_pct = round(
+            (portfolio_value_cents - inception_denom) / inception_denom * 100, 2
+        )
+    else:
+        all_time_return_pct = 0.0
 
     # 30d return: average across bots weighted by starting capital
     return_30d_pct = 0.0
@@ -672,7 +701,27 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             total_value - diag_total, len(all_allocs),
         )
 
-    all_time_pct = round((total_value - total_starting) / total_starting * 100, 2) if total_starting else 0.0
+    # SHIP 3: fleet all-time % = SUM(bot_daily_pnl.realized_cents) / SUM(inception_capital_cents)
+    # Replaces (total_value - total_starting) / total_starting which re-zeroed history
+    # whenever starting_capital_cents changed post-reset (known-issues #10).
+    _fleet_alloc_ids = [a.id for a in all_allocs]
+    if _fleet_alloc_ids:
+        _fleet_pnl_row = db.execute(
+            text(
+                "SELECT COALESCE(SUM(p.realized_cents), 0), "
+                "       COALESCE(SUM(COALESCE(a.inception_capital_cents, a.starting_capital_cents, 0)), 0) "
+                "FROM bot_allocations a "
+                "LEFT JOIN bot_daily_pnl p ON p.allocation_id = a.id "
+                "  AND (p.note IS NULL OR p.note != 'track_reset_marker') "
+                "WHERE a.id IN :ids"
+            ).bindparams(bindparam("ids", expanding=True)),
+            {"ids": _fleet_alloc_ids},
+        ).fetchone()
+        _fleet_realized = int(_fleet_pnl_row[0] or 0)
+        _fleet_inception = int(_fleet_pnl_row[1] or 0)
+        all_time_pct = round(_fleet_realized / _fleet_inception * 100, 2) if _fleet_inception else 0.0
+    else:
+        all_time_pct = 0.0
     yesterday_total = total_value - total_today_pnl
     today_pct = round(total_today_pnl / yesterday_total * 100, 2) if yesterday_total > 0 else 0.0
 
