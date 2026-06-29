@@ -177,3 +177,51 @@ class PaperStocksAdapter(BrokerAdapter):
             stop_price, target_price, data.get("id"),
         )
         return {"order_id": data.get("id"), "raw": data}
+
+    def get_activities(
+        self,
+        activity_type: str = "FILL",
+        after: Optional[str] = None,
+        until: Optional[str] = None,
+        page_size: int = 100,
+    ) -> list[dict]:
+        """GET /v2/account/activities/{activity_type}. Returns raw list.
+
+        Parameters after/until are ISO date strings (YYYY-MM-DD).
+        Empty list on non-200 / timeout / any error. Never raises.
+        """
+        try:
+            params: list[str] = [f"page_size={page_size}"]
+            if after:
+                params.append(f"after={after}")
+            if until:
+                params.append(f"until={until}")
+            query = "&".join(params)
+            path = f"/account/activities/{activity_type}"
+            if query:
+                path = f"{path}?{query}"
+            resp = requests.get(
+                f"{_PAPER_BASE}{path}",
+                headers=self._headers,
+                timeout=10,
+            )
+            if resp.status_code == 429:
+                logger.warning("[alpaca] get_activities rate-limited (429) for %s", activity_type)
+                return []
+            if not resp.ok:
+                logger.warning(
+                    "[alpaca] get_activities non-200 for %s: status=%d",
+                    activity_type, resp.status_code,
+                )
+                return []
+            data = resp.json()
+            if not isinstance(data, list):
+                logger.warning("[alpaca] get_activities unexpected shape: %r", type(data))
+                return []
+            return data
+        except requests.exceptions.RequestException as exc:
+            logger.warning("[alpaca] get_activities request error: %s", exc)
+            return []
+        except Exception as exc:
+            logger.warning("[alpaca] get_activities unexpected error: %s", exc)
+            return []

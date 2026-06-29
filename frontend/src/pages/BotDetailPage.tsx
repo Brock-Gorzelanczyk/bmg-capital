@@ -2679,6 +2679,11 @@ export default function BotDetailPage() {
     equity_curve?: EquityPoint[];
     all_time_return_pct?: number | null;
     portfolio_value_cents?: number | null;
+    return_all_time?: {
+      pct?: number | null;
+      is_post_reset?: boolean;
+      reset_date?: string | null;
+    };
   };
 
   // Local allocation state
@@ -3002,7 +3007,17 @@ export default function BotDetailPage() {
                 {[
                   { label: "Starting Capital", value: allocation?.starting_capital_cents ? `$${(allocation.starting_capital_cents / 100).toLocaleString()}` : "—" },
                   { label: "Current Value", value: allocation ? `$${((stats?.portfolio_value_cents ?? allocation?.starting_capital_cents ?? 0) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—" },
-                  { label: "All-Time Return", value: allocation ? `${(stats?.all_time_return_pct ?? 0) >= 0 ? "+" : ""}${(stats?.all_time_return_pct ?? 0).toFixed(2)}%` : "—", colored: true, positive: (stats?.all_time_return_pct ?? 0) >= 0 },
+                  {
+                    label: "All-Time Return",
+                    value: allocation
+                      ? `${(stats?.all_time_return_pct ?? 0) >= 0 ? "+" : ""}${(stats?.all_time_return_pct ?? 0).toFixed(2)}%${stats?.return_all_time?.is_post_reset ? " ⓘ" : ""}`
+                      : "—",
+                    colored: true,
+                    positive: (stats?.all_time_return_pct ?? 0) >= 0,
+                    title: stats?.return_all_time?.is_post_reset
+                      ? `Track record reset ${stats?.return_all_time?.reset_date ?? "2026-06-28"}. Performance tracking restarts from this date.`
+                      : undefined,
+                  },
                   {
                     label: "30d Return",
                     value: formatPct(stats?.return_30d_pct ?? 0),
@@ -3028,6 +3043,7 @@ export default function BotDetailPage() {
                         "text-sm font-bold font-mono-t tabular-nums",
                         s.colored ? (s.positive ? "text-t-green" : "text-t-red") : "text-t-hi"
                       )}
+                      title={(s as any).title}
                     >
                       {s.value}
                     </p>

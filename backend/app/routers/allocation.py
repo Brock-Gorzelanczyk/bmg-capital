@@ -12,6 +12,7 @@ from app.db.models.bots import BotAllocation, BotProfile
 from app.db.models.allocation import BotPerformanceStats, BotTierHistory
 from app.db.models.users import User
 from app.services.allocation_rules import TIERS, PROMOTION_RULES, evaluate_bot, BotMetrics
+from app.services.bot_performance import get_all_time_pct
 
 router = APIRouter(prefix="/api/bots", tags=["allocation"])
 
@@ -66,8 +67,10 @@ def get_allocation_overview(
         tier_info = TIERS.get(tier, TIERS["T0"])
         starting = alloc.starting_capital_cents or 0
         current_val = stats.current_value_cents if stats else starting
-        pnl_usd = round((current_val - starting) / 100, 2) if starting else 0.0
-        all_time_pct = round((current_val - starting) / starting * 100, 2) if starting else 0.0
+        # SHIP 3: use get_all_time_pct (SUM realized / inception) not (current-starting)/starting
+        all_time_pct = get_all_time_pct(alloc.id, db)
+        inception = int(getattr(alloc, "inception_capital_cents", None) or starting or 0)
+        pnl_usd = round(all_time_pct / 100 * inception / 100, 2)
         rows.append({
             "allocation_id": alloc.id,
             "bot_name": profile.name if profile else "",

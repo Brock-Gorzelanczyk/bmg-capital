@@ -500,6 +500,9 @@ function HeroCard({
   const activeBots = portfolio.bots.filter((b: any) => b.allocation?.enabled).length;
   const totalBots = portfolio.bots.length;
 
+  // Check if any bot in the portfolio is post-reset
+  const anyBotPostReset = portfolio.bots?.some((b: any) => b.is_post_reset ?? false) ?? false;
+
   const stats = [
     { label: "STARTING CAPITAL", value: `$${startingUsd.toLocaleString()}`, color: "#eafbe9" },
     {
@@ -508,7 +511,12 @@ function HeroCard({
       color: "#eafbe9",
     },
     { label: "ALL-TIME P&L", value: fmtUsd(portfolio.pnl_cents ?? 0), color: pnlColor(pnlUsd) },
-    { label: "ALL-TIME RETURN", value: fmtPct(portfolio.pnl_pct ?? 0), color: pnlColor(portfolio.pnl_pct ?? 0) },
+    {
+      label: "ALL-TIME RETURN",
+      value: `${fmtPct(portfolio.pnl_pct ?? 0)}${anyBotPostReset ? " ⓘ" : ""}`,
+      color: pnlColor(portfolio.pnl_pct ?? 0),
+      title: anyBotPostReset ? "Track record reset 2026-06-28. Performance tracking restarts from this date." : undefined,
+    },
     { label: "TODAY P&L", value: fmtUsd(portfolio.today_pnl_cents ?? 0), color: pnlColor(todayPnlUsd) },
     { label: "ACTIVE BOTS", value: `${activeBots} / ${totalBots}`, color: accent },
   ];
@@ -580,7 +588,11 @@ function HeroCard({
               <div className="font-mono text-[9px] tracking-[0.12em] mb-1.5" style={{ color: "#7e8e7e" }}>
                 {s.label}
               </div>
-              <div className="font-mono text-[20px] font-medium leading-none" style={{ color: s.color }}>
+              <div
+                className="font-mono text-[20px] font-medium leading-none"
+                style={{ color: s.color }}
+                title={(s as any).title}
+              >
                 {s.value}
               </div>
             </div>

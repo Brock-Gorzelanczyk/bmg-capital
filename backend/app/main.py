@@ -59,6 +59,7 @@ from app.routers.fund import router as fund_router
 from app.routers.proposals import router as proposals_router
 from app.routers.budget_router import router as budget_router
 from app.routers.research_feed import router as research_feed_router
+from app.routers.admin_reconstruct import router as admin_reconstruct_router
 from app.routers import notification_channels as notification_channels_router
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
 
@@ -371,6 +372,29 @@ async def lifespan(app: FastAPI):
         logger.warning("[startup] m028 OK: %s", _m028_result)
     except Exception as _m028_exc:
         logger.error("[startup] m028_quarantine_cross_sleeve FAILED: %s", _m028_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m030_inception_snapshot_on_daily_pnl import run as _run_m030
+        with engine.connect() as _m030_conn:
+            _m030_result = _run_m030(_m030_conn)
+        logger.warning("[startup] m030 OK: %s", _m030_result)
+    except Exception as _m030_exc:
+        logger.error("[startup] m030_inception_snapshot_on_daily_pnl FAILED: %s", _m030_exc, exc_info=True)
+
+    # Boot-time track-record reconstruction (SHIP 3): insert markers for any
+    # enabled allocation that has zero bot_daily_pnl rows post-m027 wipe.
+    # Runs ONCE per deploy, after m030, before first canonical read.
+    # DO NOT call reconstruct_for_user from any scheduler or per-request path.
+    try:
+        from app.services.track_record_reconstruction import reconstruct_for_user as _reconstruct_for_user
+        _recon_db = SessionLocal()
+        try:
+            _recon_result = _reconstruct_for_user(user_id=1, db=_recon_db)
+            logger.warning("[startup] track_record_reconstruction OK: %s", _recon_result)
+        finally:
+            _recon_db.close()
+    except Exception as _recon_exc:
+        logger.error("[startup] track_record_reconstruction FAILED (non-fatal): %s", _recon_exc, exc_info=True)
 
     # Register the capital audit ORM listener AFTER m027 runs so its initial
     # writes don't spam the audit log. Listener catches every subsequent
@@ -710,6 +734,7 @@ app.include_router(fund_router)
 app.include_router(proposals_router)
 app.include_router(budget_router)
 app.include_router(research_feed_router)
+app.include_router(admin_reconstruct_router)
 
 
 @app.get("/health", tags=["health"])
