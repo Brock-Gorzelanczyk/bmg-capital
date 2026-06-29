@@ -372,6 +372,14 @@ async def lifespan(app: FastAPI):
     except Exception as _m028_exc:
         logger.error("[startup] m028_quarantine_cross_sleeve FAILED: %s", _m028_exc, exc_info=True)
 
+    try:
+        from app.db.migrations.m038_bot_symbol_cooldown import run as _run_m038
+        with engine.connect() as _m038_conn:
+            _m038_result = _run_m038(_m038_conn)
+        logger.warning("[startup] m038 OK: %s", _m038_result)
+    except Exception as _m038_exc:
+        logger.error("[startup] m038_bot_symbol_cooldown FAILED: %s", _m038_exc, exc_info=True)
+
     # Register the capital audit ORM listener AFTER m027 runs so its initial
     # writes don't spam the audit log. Listener catches every subsequent
     # ORM-level write to bot_allocations capital fields, proving the
