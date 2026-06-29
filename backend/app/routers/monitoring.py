@@ -412,3 +412,122 @@ async def discord_test_post(
         "channel_id": channel_id,
         "discord_status": resp.status_code,
     }
+
+
+@router.get("/cio-meeting-card")
+def cio_meeting_card(
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """CIO Meeting diagnostics card data.
+
+    Returns:
+        last_meeting: {meeting_id, started_at, duration_seconds, model_cost_usd,
+                       status, vetoes_used, failure_reason} | null
+        pending_commitments_count: int
+        broken_commitments_count: int (strike_count >= 3)
+        broken_commitments: [{owner_agent, action_description, deadline, strike_count}]
+        recent_vetoes_count: int (last 5 meetings)
+        daily_budget_spent_usd: float
+        daily_budget_cap_usd: float  (always 3.00)
+        api_fallback_calls_today: int  (warn when >0)
+        as_of: ISO timestamp
+    """
+    from datetime import datetime, timezone
+    from sqlalchemy import text
+
+    # Last meeting
+    last_meeting = None
+    try:
+        row = db.execute(
+            text(
+                "SELECT meeting_id, started_at, duration_seconds, model_cost_usd, "
+                "       status, vetoes_used, failure_reason "
+                "FROM fund_meetings ORDER BY started_at DESC LIMIT 1"
+            )
+        ).fetchone()
+        if row:
+            last_meeting = dict(row._mapping)
+    except Exception:
+        pass
+
+    # Pending commitments (open, not past deadline)
+    pending_count = 0
+    try:
+        row2 = db.execute(
+            text(
+                "SELECT COUNT(*) FROM agent_commitments "
+                "WHERE status='open' AND deadline >= datetime('now')"
+            )
+        ).scalar()
+        pending_count = int(row2 or 0)
+    except Exception:
+        pass
+
+    # Broken commitments (strike_count >= 3)
+    broken_commitments = []
+    broken_count = 0
+    try:
+        rows3 = db.execute(
+            text(
+                "SELECT owner_agent, action_description, deadline, strike_count "
+                "FROM agent_commitments "
+                "WHERE status='open' AND strike_count >= 3 "
+                "ORDER BY strike_count DESC LIMIT 20"
+            )
+        ).fetchall()
+        broken_commitments = [dict(r._mapping) for r in rows3]
+        broken_count = len(broken_commitments)
+    except Exception:
+        pass
+
+    # Recent vetoes (last 5 meetings)
+    recent_vetoes_count = 0
+    try:
+        row4 = db.execute(
+            text(
+                "SELECT COALESCE(SUM(vetoes_used), 0) FROM fund_meetings "
+                "ORDER BY started_at DESC LIMIT 5"
+            )
+        ).scalar()
+        recent_vetoes_count = int(row4 or 0)
+    except Exception:
+        pass
+
+    # Daily budget spent from llm_call_log
+    daily_spent = 0.0
+    try:
+        row5 = db.execute(
+            text(
+                "SELECT COALESCE(SUM(estimated_cost_cents), 0) FROM llm_call_log "
+                "WHERE created_at >= datetime('now', 'start of day')"
+            )
+        ).scalar()
+        daily_spent = float(row5 or 0) / 100.0
+    except Exception:
+        pass
+
+    # API fallback calls today
+    api_fallback_today = 0
+    try:
+        row6 = db.execute(
+            text(
+                "SELECT COUNT(*) FROM llm_call_log "
+                "WHERE source='api_fallback' AND created_at >= datetime('now', 'start of day')"
+            )
+        ).scalar()
+        api_fallback_today = int(row6 or 0)
+    except Exception:
+        pass
+
+    return {
+        "last_meeting": last_meeting,
+        "pending_commitments_count": pending_count,
+        "broken_commitments_count": broken_count,
+        "broken_commitments": broken_commitments,
+        "recent_vetoes_count": recent_vetoes_count,
+        "daily_budget_spent_usd": daily_spent,
+        "daily_budget_cap_usd": 3.00,
+        "api_fallback_calls_today": api_fallback_today,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }

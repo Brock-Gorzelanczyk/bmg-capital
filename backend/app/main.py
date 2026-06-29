@@ -372,6 +372,46 @@ async def lifespan(app: FastAPI):
     except Exception as _m028_exc:
         logger.error("[startup] m028_quarantine_cross_sleeve FAILED: %s", _m028_exc, exc_info=True)
 
+    try:
+        from app.db.migrations.m033_fund_meetings import run as _run_m033
+        with engine.connect() as _m033_conn:
+            _m033_result = _run_m033(_m033_conn)
+        logger.warning("[startup] m033 OK: %s", _m033_result)
+    except Exception as _m033_exc:
+        logger.error("[startup] m033_fund_meetings FAILED: %s", _m033_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m034_fund_briefings import run as _run_m034
+        with engine.connect() as _m034_conn:
+            _m034_result = _run_m034(_m034_conn)
+        logger.warning("[startup] m034 OK: %s", _m034_result)
+    except Exception as _m034_exc:
+        logger.error("[startup] m034_fund_briefings FAILED: %s", _m034_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m035_agent_opening_reads import run as _run_m035
+        with engine.connect() as _m035_conn:
+            _m035_result = _run_m035(_m035_conn)
+        logger.warning("[startup] m035 OK: %s", _m035_result)
+    except Exception as _m035_exc:
+        logger.error("[startup] m035_agent_opening_reads FAILED: %s", _m035_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m036_agent_commitments import run as _run_m036
+        with engine.connect() as _m036_conn:
+            _m036_result = _run_m036(_m036_conn)
+        logger.warning("[startup] m036 OK: %s", _m036_result)
+    except Exception as _m036_exc:
+        logger.error("[startup] m036_agent_commitments FAILED: %s", _m036_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m037_veto_log import run as _run_m037
+        with engine.connect() as _m037_conn:
+            _m037_result = _run_m037(_m037_conn)
+        logger.warning("[startup] m037 OK: %s", _m037_result)
+    except Exception as _m037_exc:
+        logger.error("[startup] m037_veto_log FAILED: %s", _m037_exc, exc_info=True)
+
     # Register the capital audit ORM listener AFTER m027 runs so its initial
     # writes don't spam the audit log. Listener catches every subsequent
     # ORM-level write to bot_allocations capital fields, proving the
@@ -710,6 +750,12 @@ app.include_router(fund_router)
 app.include_router(proposals_router)
 app.include_router(budget_router)
 app.include_router(research_feed_router)
+from app.routers.agent_opening_reads import router as agent_opening_reads_router
+app.include_router(agent_opening_reads_router)
+from app.routers.cio_meeting import router as cio_meeting_router
+app.include_router(cio_meeting_router)
+from app.routers.fund_floor import router as fund_floor_router
+app.include_router(fund_floor_router)
 
 
 @app.get("/health", tags=["health"])

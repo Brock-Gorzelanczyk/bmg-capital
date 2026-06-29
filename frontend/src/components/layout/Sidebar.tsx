@@ -83,6 +83,7 @@ const NAV_INTEL = [
 
 const NAV_FUND = [
   { to: "/fund",          label: "Fund Team",     Icon: Building2  },
+  { to: "/fund-floor",    label: "Fund Floor",    Icon: Radar      },
   { to: "/research-feed", label: "Research Feed", Icon: BookMarked },
 ];
 
