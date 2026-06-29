@@ -13,6 +13,7 @@ import httpx
 from sentinel.db.session import SessionLocal
 from sentinel.orchestrator import insert_event, route_event, mark_resolved
 from sentinel.settings import settings
+from sentinel.agents.incident_classifier import classify_incident
 
 logger = logging.getLogger(__name__)
 
@@ -66,28 +67,7 @@ def _gql(query: str, variables: dict) -> dict:
     return resp.json()
 
 
-def _classify_error(error_block: str) -> dict:
-    """Use Haiku to classify a build error."""
-    import anthropic
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    msg = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=256,
-        system=(
-            "You classify Railway build errors for an automated fix system. "
-            "Output ONLY valid JSON with keys: category, file, line, suggested_fix_type. "
-            "category must be one of: typescript_missing_property, missing_npm_dependency, "
-            "missing_python_dependency, syntax_error_simple, eslint_warning, broken_image_url, "
-            "dead_link, css_class_typo, import_path_wrong, other. "
-            "file is the offending file path or empty string. line is int or 0."
-        ),
-        messages=[{"role": "user", "content": f"Build error:\n{error_block[:2000]}"}],
-    )
-    import json
-    try:
-        return json.loads(msg.content[0].text)
-    except Exception:
-        return {"category": "other", "file": "", "line": 0, "suggested_fix_type": "unknown"}
+# _classify_error replaced by classify_incident() from incident_classifier.py (R3 — SHIP 3)
 
 
 def _extract_error_block(logs: list[dict]) -> str:
@@ -146,7 +126,7 @@ class RailwayWatcher:
         first_line = error_block.split("\n")[0] if error_block else deploy_id
         fp = _fingerprint(deploy_id, first_line)
 
-        classification = _classify_error(error_block)
+        classification = classify_incident(error_block)
         category = classification.get("category", "other")
         file_path = classification.get("file", "")
 

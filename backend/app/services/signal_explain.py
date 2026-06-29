@@ -67,23 +67,20 @@ def _user_prompt(signal: dict) -> str:
 
 async def _call_haiku(signal: dict) -> str:
     prompt = _user_prompt(signal)
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": settings.anthropic_api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "max_tokens": MAX_TOKENS,
-                "system": SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-        )
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"]
+    from app.services.llm_client import call_llm_cached
+    import asyncio
+    return await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: call_llm_cached(
+            model=MODEL,
+            prompt=prompt,
+            system_prompt=SYSTEM_PROMPT,
+            max_tokens=MAX_TOKENS,
+            ttl_seconds=86400,
+            cache_key_extra=str(signal.get("id", "")),
+            agent_name="signal_explain",
+        ),
+    )
 
 
 def _get_cached(db: Session, source: str, signal_id: int) -> str | None:

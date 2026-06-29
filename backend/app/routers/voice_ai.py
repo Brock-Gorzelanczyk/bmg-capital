@@ -194,25 +194,23 @@ def _serialize_session(s: VoiceSession) -> Dict[str, Any]:
 
 
 async def _call_ai(system_prompt: str, user_message: str, context: str) -> tuple[str, list[str]]:
-    """Call Anthropic Claude Haiku and return (response_text, citations)."""
-    if not settings.anthropic_api_key:
-        return (
-            "Voice briefing temporarily unavailable. Try again in a moment.",
-            [],
-        )
+    """Call LLM via relay and return (response_text, citations).
+    SHIP 3: routes through call_llm.
+    """
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=400,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+        import asyncio
+        from app.services.llm_client import call_llm
+        response_text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm(
+                model="claude-haiku-4-5-20251001",
+                prompt=user_message,
+                system_prompt=system_prompt,
+                max_tokens=400,
+                agent_name="voice_ai",
+            ),
         )
-        response_text = message.content[0].text if message.content else ""
 
-        # Extract simple citations from the response (sentences that start with "According to" etc.)
         citations: list[str] = []
         for sentence in response_text.split(". "):
             if any(
@@ -223,7 +221,7 @@ async def _call_ai(system_prompt: str, user_message: str, context: str) -> tuple
 
         return response_text, citations
     except Exception as e:
-        logger.error(f"Anthropic call failed: {e}", exc_info=True)
+        logger.error(f"LLM call failed: {e}", exc_info=True)
         return "Voice briefing temporarily unavailable. Try again in a moment.", []
 
 

@@ -315,15 +315,7 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
 
     contributions_text = "\n".join(lines)
 
-    try:
-        from app.config import settings
-        api_key = settings.anthropic_api_key
-    except Exception:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-
-    if not api_key:
-        logger.warning("[standup] No Anthropic API key — using fallback plan")
-        return _fallback_plan(contributions)
+    api_key = True  # SHIP 3: always proceed — call_llm handles routing
 
     try:
         from agents.bus import is_budget_capped as _capped
@@ -384,57 +376,30 @@ def _synthesize_plan(contributions: list[dict], db: Session) -> dict:
     )
 
     try:
-        import httpx
-        response = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 1200,
-                "system": system_prompt,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Morning standup contributions:\n\n{contributions_text}\n\n"
-                            "Write today's trading plan as JSON."
-                        ),
-                    }
-                ],
-            },
-            timeout=30,
+        from app.services.llm_client import call_llm
+        raw_text = call_llm(
+            model="claude-haiku-4-5-20251001",
+            prompt=(
+                f"Morning standup contributions:\n\n{contributions_text}\n\n"
+                "Write today's trading plan as JSON."
+            ),
+            system_prompt=system_prompt,
+            max_tokens=1200,
+            agent_name="brick_standup",
         )
-
-        if response.is_success:
-            data = response.json()
-            raw_text = data["content"][0]["text"]
-            # Extract JSON from the response
+        raw_text = raw_text.strip()
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("```")[1]
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:]
             raw_text = raw_text.strip()
-            if raw_text.startswith("```"):
-                raw_text = raw_text.split("```")[1]
-                if raw_text.startswith("json"):
-                    raw_text = raw_text[4:]
-                raw_text = raw_text.strip()
-            plan = json.loads(raw_text)
-            # Ensure all expected keys exist
-            plan.setdefault("focus_areas", [])
-            plan.setdefault("bots_to_watch", [])
-            plan.setdefault("risks", [])
-            plan.setdefault("proposed_actions", [])
-            plan.setdefault("summary", "")
-            try:
-                from agents.bus import charge_api_usage as _charge
-                _charge(db, "queen", 0.002)
-            except Exception:
-                pass
-            return plan
-        else:
-            logger.warning("[standup] Claude API returned %d — using fallback", response.status_code)
-            return _fallback_plan(contributions)
+        plan = json.loads(raw_text)
+        plan.setdefault("focus_areas", [])
+        plan.setdefault("bots_to_watch", [])
+        plan.setdefault("risks", [])
+        plan.setdefault("proposed_actions", [])
+        plan.setdefault("summary", "")
+        return plan
 
     except Exception as exc:
         logger.warning("[standup] Claude synthesis failed: %s", exc)
@@ -560,12 +525,6 @@ def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Ses
     Single Claude call → brief reaction from each active agent to today's plan.
     Returns {agent_id: message_text}. Falls back to templates on failure.
     """
-    try:
-        from app.config import settings
-        api_key = settings.anthropic_api_key
-    except Exception:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-
     fallback = {
         "risk_sentinel":        "Dick (CRO): Risk metrics within bounds. Watching drawdown and concentration — no action needed yet.",
         "researcher":           "Nick (Equity Research): IC readings stable. Will flag any edge degradation as bots open positions today.",
@@ -576,17 +535,6 @@ def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Ses
         "operations":           "Wick (Operations): Books reconciled overnight. Watching position count vs allocated capital.",
         "sentinel_devops":      "Patrick (DevOps): Infrastructure nominal. Railway healthy, no alerts.",
     }
-
-    if not api_key:
-        return fallback
-
-    # Check budget cap
-    try:
-        from agents.bus import is_budget_capped as _capped
-        if _capped(db):
-            return fallback
-    except Exception:
-        pass
 
     plan_summary = plan.get("summary", "")
     proposed_actions = plan.get("proposed_actions", [])[:3]
@@ -608,56 +556,27 @@ def _generate_team_chat_reactions(plan: dict, contributions: list[dict], db: Ses
     )
 
     try:
-        import httpx
-        resp = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 600,
-                "system": (
-                    "You are generating brief in-character reactions from BMG Capital AI agents "
-                    "in #fund-team-chat. These are AI services, not humans. "
-                    "You are an AI agent. Dick, Nick, Mick, Vick, and other agents are also AI services "
-                    "running on schedules. You cannot 'query' them interactively. "
-                    "Do not write phrases like 'I will query X', 'pending my query to Y', or 'I'll check with Z'. "
-                    "If you need information from another agent, refer to its most recent posted output in its assigned channel. "
-                    "CHANNEL ROUTING: "
-                    "Dick (Risk) → #risk-alerts | "
-                    "Nick (Macro) → #macro-view | "
-                    "Researcher → #research-log | "
-                    "Vick (Data Quality) → #bmg-monitoring | "
-                    "Queen → #queen-briefings + #queen-proposals | "
-                    "Standup → #daily-plan + #fund-team-chat | "
-                    "Paste-readys → #fund-updates. "
-                    "Do not reference any other channel names. '#data-quality-channel' does not exist. "
-                    "Brick is decisive. Dick (CRO) cites numbers. Nick (Equity Research) mentions ICs. "
-                    "Rick (Macro Strategist) references regime. Mick (Quant Research) mentions pipeline. "
-                    "Vick (Data Quality) mentions feeds. Slick (Execution) mentions slippage. "
-                    "Wick (Operations) mentions positions. Patrick (DevOps) is brief. "
-                    "Reactions should be actionable observations — never suggest meetings, syncs, or calls."
-                ),
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=20,
+        from app.services.llm_client import call_llm
+        import re as _re
+        raw = call_llm(
+            model="claude-haiku-4-5-20251001",
+            prompt=prompt,
+            system_prompt=(
+                "You are generating brief in-character reactions from BMG Capital AI agents "
+                "in #fund-team-chat. These are AI services, not humans. "
+                "Do not write phrases like 'I will query X', 'pending my query to Y', or 'I'll check with Z'. "
+                "CHANNEL ROUTING: Dick (Risk) → #risk-alerts | Nick (Macro) → #macro-view | "
+                "Researcher → #research-log | Vick (Data Quality) → #bmg-monitoring. "
+                "Reactions should be actionable observations — never suggest meetings, syncs, or calls."
+            ),
+            max_tokens=600,
+            agent_name="brick_standup",
         )
-        if resp.is_success:
-            import json as _j, re as _re
-            raw = resp.json()["content"][0]["text"].strip()
-            # Claude sometimes prefixes JSON with prose — extract the JSON object
-            match = _re.search(r'\{[^{}]*"risk_sentinel"[^{}]*\}', raw, _re.DOTALL)
-            json_str = match.group(0) if match else raw
-            reactions = _j.loads(json_str)
-            try:
-                from agents.bus import charge_api_usage as _charge
-                _charge(db, "standup_discussion", 0.001)
-            except Exception:
-                pass
-            return reactions
+        raw = raw.strip()
+        match = _re.search(r'\{[^{}]*"risk_sentinel"[^{}]*\}', raw, _re.DOTALL)
+        json_str = match.group(0) if match else raw
+        reactions = json.loads(json_str)
+        return reactions
     except Exception as exc:
         logger.warning("[standup] team chat reactions generation failed: %s", exc)
     return fallback

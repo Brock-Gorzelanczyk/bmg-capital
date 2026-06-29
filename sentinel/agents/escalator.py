@@ -100,10 +100,10 @@ class EscalatorAgent:
             db.close()
 
     def _draft_paste_ready(self, event, payload: dict, reason: str) -> str:
-        """Use Sonnet to draft a paste-ready for Claude Code."""
+        """Draft paste-ready via relay with 24h cache (SHIP 3 — no direct Anthropic SDK)."""
+        import hashlib
         try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            from app.services.llm_client import call_llm_cached
             context = (
                 f"Event #{event.id}\n"
                 f"Agent: {event.agent_id}\n"
@@ -113,18 +113,21 @@ class EscalatorAgent:
                 f"Detected: {event.detected_at}\n"
                 f"Payload: {json.dumps(payload, indent=2)[:1500]}"
             )
-            response = client.messages.create(
+            stack_hash = hashlib.sha256(context.encode()).hexdigest()[:16]
+            return call_llm_cached(
                 model=SONNET,
-                max_tokens=600,
-                system=(
+                prompt=context,
+                system_prompt=(
                     "You are drafting a clear, actionable paste-ready for a developer to send to Claude Code. "
                     "Be specific about file, line number, and the exact fix approach. "
                     "Format: start with the file path and error, then context, then a precise fix instruction. "
                     "Under 500 words. No fluff."
                 ),
-                messages=[{"role": "user", "content": context}],
+                max_tokens=600,
+                ttl_seconds=86400,
+                cache_key_extra=f"{event.category}_{stack_hash}",
+                agent_name="escalator",
             )
-            return response.content[0].text.strip()
         except Exception as e:
             logger.warning("[escalator] LLM draft failed, using raw context: %s", e)
             return (

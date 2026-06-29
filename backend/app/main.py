@@ -380,6 +380,24 @@ async def lifespan(app: FastAPI):
     except Exception as _m030_exc:
         logger.error("[startup] m030_inception_snapshot_on_daily_pnl FAILED: %s", _m030_exc, exc_info=True)
 
+    # SHIP 4: m031 anthropic_call_cache (cost-tracking cache table).
+    try:
+        from app.db.migrations.m031_anthropic_call_cache import run as _run_m031
+        with engine.connect() as _m031_conn:
+            _m031_result = _run_m031(_m031_conn)
+        logger.warning("[startup] m031 OK: %s", _m031_result)
+    except Exception as _m031_exc:
+        logger.error("[startup] m031_anthropic_call_cache FAILED: %s", _m031_exc, exc_info=True)
+
+    # SHIP 4: m032 llm_call_log (per-callsite cost ledger).
+    try:
+        from app.db.migrations.m032_llm_call_log import run as _run_m032
+        with engine.connect() as _m032_conn:
+            _m032_result = _run_m032(_m032_conn)
+        logger.warning("[startup] m032 OK: %s", _m032_result)
+    except Exception as _m032_exc:
+        logger.error("[startup] m032_llm_call_log FAILED: %s", _m032_exc, exc_info=True)
+
     # PART 2 (Layer 1+3): close equity positions held by options bots and
     # PAUSE both options bots so they stop emitting equity signals until
     # their strategies are redesigned to emit OCC option symbols.

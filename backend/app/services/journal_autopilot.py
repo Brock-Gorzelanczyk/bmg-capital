@@ -51,31 +51,13 @@ async def auto_prompt_trade_reflection(user_id: int, db: Session) -> None:
             cost_basis = getattr(sell, "cost_basis", 0.0) or 0.0   # avg_cost at sell time
             fill_price = getattr(sell, "fill_price", 0.0) or 0.0   # exit price
 
-            rationale = ""
-            try:
-                import anthropic
-                client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-                msg = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=80,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": (
-                                f"Write a 2-sentence trade post-mortem: {symbol}, "
-                                f"entry ${cost_basis:.2f}, exit ${fill_price:.2f}, "
-                                f"P&L ${realized_pnl:+.2f}. Be specific and actionable."
-                            ),
-                        }
-                    ],
-                )
-                rationale = msg.content[0].text.strip()
-            except Exception:
-                direction = "profit" if realized_pnl > 0 else "loss"
-                rationale = (
-                    f"{symbol} closed with ${realized_pnl:+.2f} {direction}. "
-                    f"{'Entry timing was effective.' if realized_pnl > 0 else 'Review entry criteria for future trades.'}"
-                )
+            # SHIP 3 R6: deterministic template — no LLM
+            direction = "profit" if realized_pnl > 0 else "loss"
+            rationale = (
+                f"{symbol} closed with ${realized_pnl:+.2f} {direction}. "
+                f"Entry ${cost_basis:.2f} to exit ${fill_price:.2f} "
+                f"({'Entry timing was effective.' if realized_pnl > 0 else 'Review entry criteria for future trades.'})"
+            )
 
             log_autopilot_action(
                 user_id=user_id,
@@ -199,31 +181,12 @@ async def generate_quarterly_review(user_id: int, db: Session) -> None:
         total = len(sell_rows)
         win_rate = (wins / total * 100) if total > 0 else 0.0
 
-        rationale = ""
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-            msg = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=100,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Write a 2-sentence quarterly paper trading review: "
-                            f"{total} trades, {win_rate:.0f}% win rate, "
-                            f"total P&L ${total_pnl:+.2f}. Be honest and forward-looking."
-                        ),
-                    }
-                ],
-            )
-            rationale = msg.content[0].text.strip()
-        except Exception:
-            rationale = (
-                f"Quarterly review: {total} paper trades completed with "
-                f"{win_rate:.0f}% win rate and ${total_pnl:+.2f} total P&L. "
-                f"{'Strong performance — maintain current strategy.' if total_pnl > 0 else 'Review risk management and entry criteria for next quarter.'}"
-            )
+        # SHIP 3 R6: deterministic template — no LLM
+        rationale = (
+            f"Quarterly review: {total} paper trades completed with "
+            f"{win_rate:.0f}% win rate and ${total_pnl:+.2f} total P&L. "
+            f"{'Strong performance — maintain current strategy.' if total_pnl > 0 else 'Review risk management and entry criteria for next quarter.'}"
+        )
 
         log_autopilot_action(
             user_id=user_id,

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { LLMUsageCard } from "@/components/diagnostics/LLMUsageCard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -941,9 +942,14 @@ export default function AdminDiagnosticsPage() {
         <WatchlistSweepCard />
       </div>
 
+      {/* LLM Usage */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <LLMUsageCard />
+      </div>
+
       {/* Footer */}
       <div className="text-[10px] text-center italic text-t-muted py-3 font-mono-t">
-        17 endpoints · invariants, audits, controls — one console.
+        18 endpoints · invariants, audits, controls — one console.
       </div>
     </div>
   );

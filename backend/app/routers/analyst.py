@@ -203,25 +203,24 @@ def _has_earnings_soon(catalysts: list, days: int = 5) -> bool:
     return False
 
 
-def _call_claude(context: dict, model: str = "claude-haiku-4-5-20251001") -> tuple[str, float]:
-    """Call Claude and return (response_text, estimated_cost_usd)."""
-    api_key = getattr(settings, "anthropic_api_key", None) or os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY not set")
-
-    import anthropic
-    client = anthropic.Anthropic(api_key=api_key)
+def _call_claude(context: dict, model: str = "claude-haiku-4-5-20251001", cache_key_extra: str = "") -> tuple[str, float]:
+    """Call Claude via relay and return (response_text, estimated_cost_usd).
+    SHIP 3: routes through call_llm / call_llm_cached.
+    """
+    from app.services.llm_client import call_llm, call_llm_cached
     user_content = json.dumps(context, indent=2)
-    msg = client.messages.create(
-        model=model,
-        max_tokens=1024,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_content}],
-    )
-    text = msg.content[0].text
-    # Cost estimate (Haiku: $0.25/M input, $1.25/M output)
-    cost = (msg.usage.input_tokens * 0.00000025) + (msg.usage.output_tokens * 0.00000125)
-    return text, round(cost, 6)
+    symbol = context.get("symbol", "unknown")
+    profile_id = context.get("profile_id", "unknown")
+    ck = cache_key_extra or f"{symbol}_{profile_id}"
+    if model == "claude-sonnet-4-6":
+        # Forced Sonnet — no cache per spec
+        text = call_llm(model=model, prompt=user_content, system_prompt=_SYSTEM_PROMPT,
+                        max_tokens=1024, agent_name="analyst_forced")
+    else:
+        text = call_llm_cached(model=model, prompt=user_content, system_prompt=_SYSTEM_PROMPT,
+                               max_tokens=1024, ttl_seconds=21600,
+                               cache_key_extra=ck, agent_name="analyst")
+    return text, 0.0
 
 
 def _parse_claude_response(text: str) -> dict:
@@ -520,26 +519,23 @@ def get_thesis(
         _THESIS_CACHE[sym] = {"data": result, "cached_at": now}
         return result
 
-    # Generate fresh via Claude
-    api_key = getattr(settings, "anthropic_api_key", None) or os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise HTTPException(503, "Analysis unavailable — check API key")
-
+    # Generate fresh via relay
     try:
+        from app.services.llm_client import call_llm_cached
         system = "You are a quantitative analyst. Analyze the given stock symbol and provide a concise investment thesis. Be specific, factual, and balanced."
         user = (
             f'Provide an investment thesis for {sym}. Include: 3 bullish points, 3 bearish points, '
             f'and a one-sentence verdict. Format as JSON: {{"thesis": str, "bullish": [str], "bearish": [str], "verdict": str}}'
         )
-        import anthropic as _anthropic
-        _client = _anthropic.Anthropic(api_key=api_key)
-        msg = _client.messages.create(
+        raw = call_llm_cached(
             model="claude-haiku-4-5-20251001",
+            prompt=user,
+            system_prompt=system,
             max_tokens=800,
-            system=system,
-            messages=[{"role": "user", "content": user}],
+            ttl_seconds=21600,
+            cache_key_extra=f"{sym}_{profile_id}",
+            agent_name="analyst",
         )
-        raw = msg.content[0].text
         parsed = _parse_claude_response(raw)
 
         # Derive verdict from parsed response or default
