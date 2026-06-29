@@ -28,6 +28,7 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 TARGET_PER_BOT_CENTS = 20_000_000  # $200,000
+_MIGRATION_NAME = "m021_merge_and_resize_allocations_2026_06"
 
 
 def _table_exists(conn, table: str) -> bool:
@@ -35,7 +36,36 @@ def _table_exists(conn, table: str) -> bool:
     return bool(rows)
 
 
+def _migration_already_ran(conn, name: str) -> bool:
+    try:
+        return conn.execute(
+            text("SELECT 1 FROM schema_migrations WHERE migration_name = :n"),
+            {"n": name},
+        ).fetchone() is not None
+    except Exception:
+        return False
+
+
+def _record_migration(conn, name: str) -> None:
+    try:
+        conn.execute(
+            text("INSERT INTO schema_migrations (migration_name) VALUES (:n)"
+                 " ON CONFLICT (migration_name) DO NOTHING"),
+            {"n": name},
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.warning("[m021] _record_migration failed: %s", exc)
+
+
 def run(conn) -> dict:
+    # Idempotency gate (added 2026-06-28). m021 was a one-time corrective
+    # migration. Without this gate it re-ran on every boot and re-overwrote
+    # m027's spec amounts back to $200K, inflating the canonical sum to
+    # $2.6M (13 enabled bots × $200K). See .pipeline/01-spec.md root cause.
+    if _migration_already_ran(conn, _MIGRATION_NAME):
+        return {"skipped_reason": "already_applied", "executed": False}
+
     if not _table_exists(conn, "bot_allocations"):
         logger.info("[m021] bot_allocations missing — no-op")
         return {"skipped_reason": "table_missing"}
@@ -119,10 +149,12 @@ def run(conn) -> dict:
         "[m021] merged %d profiles · demoted %d rows · resized %d canonicals to $%d",
         merged_profiles, rows_demoted, rows_resized, TARGET_PER_BOT_CENTS // 100,
     )
+    _record_migration(conn, _MIGRATION_NAME)
     return {
         "merged_profiles": merged_profiles,
         "rows_demoted": rows_demoted,
         "rows_resized": rows_resized,
         "target_per_bot_cents": TARGET_PER_BOT_CENTS,
         "summary": summary,
+        "executed": True,
     }

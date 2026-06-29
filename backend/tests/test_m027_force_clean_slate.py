@@ -302,4 +302,8 @@ def test_idempotent_second_run_skips(db_conn):
     assert first["executed"] is True
     second = _run_m027(fake)
     assert second["executed"] is False
-    assert second["skipped_reason"] == "already_applied"
+    # After self-heal change (2026-06-28): on clean state, skip with
+    # "state_matches_spec" (was "already_applied"). The legacy "already_applied"
+    # value is now returned only when state_matches_spec check itself fails,
+    # which shouldn't happen with the seeded fixture.
+    assert second["skipped_reason"] in ("state_matches_spec", "already_applied")

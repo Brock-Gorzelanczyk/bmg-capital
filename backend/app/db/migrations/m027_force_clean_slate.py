@@ -123,14 +123,44 @@ def _audit_row(conn, ts: str, user_id, alloc_id, bot_name, field,
     })
 
 
+def _should_run(conn) -> tuple[bool, str]:
+    """Self-heal gate (added 2026-06-28).
+
+    Skip iff m027 has been recorded AND current state matches the spec.
+    If drift > $1 detected, RE-RUN to heal — protects against future
+    migrations that overwrite capital after m027 records itself.
+    """
+    if not _migration_already_ran(conn, _MIGRATION_NAME):
+        return True, "first_run"
+    try:
+        row = conn.execute(text(
+            "SELECT COALESCE(SUM(starting_capital_cents), 0)"
+            " FROM bot_allocations WHERE user_id = :uid AND enabled = 1"
+        ), {"uid": TARGET_USER_ID}).fetchone()
+        current_sum = int(row[0]) if row else 0
+    except Exception as exc:
+        logger.warning("[m027] drift check query failed (%s) — re-running", exc)
+        return True, "drift_check_failed"
+    drift = abs(current_sum - 100_000_000)
+    if drift > 100:  # $1 tolerance
+        logger.warning(
+            "[m027] re-running due to drift detected: current=$%.2f spec=$1,000,000.00 drift=$%.2f",
+            current_sum / 100.0, drift / 100.0,
+        )
+        return True, "drift_detected"
+    return False, "state_matches_spec"
+
+
 def run(conn) -> dict:
     migration_start_iso = datetime.now(timezone.utc).isoformat()
 
-    # Step 1: schema_migrations idempotency gate (fresh name, will run on
-    # first boot after this lands).
-    if _migration_already_ran(conn, _MIGRATION_NAME):
-        logger.info("[m027] already applied — skipping")
-        return {"skipped_reason": "already_applied", "executed": False}
+    # Step 1: idempotency + self-heal gate. Skip only if recorded AND
+    # state matches spec; re-run on drift to heal (e.g., if another
+    # migration overwrites capital after m027 records).
+    _should, _reason = _should_run(conn)
+    if not _should:
+        logger.info("[m027] %s — skipping", _reason)
+        return {"skipped_reason": _reason, "executed": False}
 
     # Guards.
     if not _table_exists(conn, "bot_allocations"):

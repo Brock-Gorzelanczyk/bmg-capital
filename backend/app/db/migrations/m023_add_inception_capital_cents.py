@@ -61,7 +61,14 @@ def _table_exists(conn, table: str) -> bool:
     return bool(rows)
 
 
+_GATE_NAME = "m023_add_inception_capital_cents_2026_06"
+
+
 def run(conn) -> dict:
+    from app.db.migrations._gate import already_ran as _gate_already_ran, record as _gate_record
+    if _gate_already_ran(conn, _GATE_NAME):
+        return {"skipped_reason": "already_applied", "executed": False}
+
     added: list[str] = []
 
     if not _table_exists(conn, "bot_allocations"):
@@ -115,9 +122,11 @@ def run(conn) -> dict:
         "[m023] added=%s · inception_backfilled=%d (fallback=%d) · current_backfilled=%d",
         added, inception_set, n_fallback, int(current_set or 0),
     )
+    _gate_record(conn, _GATE_NAME)
     return {
         "added": added,
         "inception_backfilled_rows": inception_set,
         "inception_fallback_rows": int(n_fallback or 0),
         "current_backfilled_rows": int(current_set or 0),
+        "executed": True,
     }

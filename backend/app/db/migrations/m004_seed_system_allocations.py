@@ -42,8 +42,14 @@ _PRODUCTION_PROFILES = [
 _DEFAULT_CAPITAL_CENTS = 10_000_000
 
 
+_GATE_NAME = "m004_seed_system_allocations_2026_06"
+
+
 def run(conn) -> None:
     """Create missing system paper allocations. Safe to run multiple times."""
+    from app.db.migrations._gate import already_ran as _gate_already_ran, record as _gate_record
+    if _gate_already_ran(conn, _GATE_NAME):
+        return
 
     # 1. Find the system user (admin preferred, fallback first user)
     try:
@@ -121,3 +127,4 @@ def run(conn) -> None:
         logger.warning("[m004] Seeded %d system bot allocations — bots should now fire", created)
     else:
         logger.info("[m004] All bot allocations already present — no action needed")
+    _gate_record(conn, _GATE_NAME)
