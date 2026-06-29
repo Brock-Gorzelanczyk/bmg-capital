@@ -373,7 +373,6 @@ async def lifespan(app: FastAPI):
     except Exception as _m028_exc:
         logger.error("[startup] m028_quarantine_cross_sleeve FAILED: %s", _m028_exc, exc_info=True)
 
-    try:
         from app.db.migrations.m030_inception_snapshot_on_daily_pnl import run as _run_m030
         with engine.connect() as _m030_conn:
             _m030_result = _run_m030(_m030_conn)
@@ -391,6 +390,15 @@ async def lifespan(app: FastAPI):
         logger.warning("[startup] m033 OK: %s", _m033_result)
     except Exception as _m033_exc:
         logger.error("[startup] m033_close_options_bot_equity_violations FAILED: %s", _m033_exc, exc_info=True)
+
+    # SHIP 6: m038 bot_symbol_cooldown table (24h clamp per bot+symbol).
+    try:
+        from app.db.migrations.m038_bot_symbol_cooldown import run as _run_m038
+        with engine.connect() as _m038_conn:
+            _m038_result = _run_m038(_m038_conn)
+        logger.warning("[startup] m038 OK: %s", _m038_result)
+    except Exception as _m038_exc:
+        logger.error("[startup] m038_bot_symbol_cooldown FAILED: %s", _m038_exc, exc_info=True)
 
     # Boot-time track-record reconstruction (SHIP 3): insert markers for any
     # enabled allocation that has zero bot_daily_pnl rows post-m027 wipe.

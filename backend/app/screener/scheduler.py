@@ -1098,3 +1098,14 @@ def setup_scheduler() -> None:
         max_instances=1,
         coalesce=True,
     )
+
+    # SHIP 6: hourly degraded-bot auto-pause (stop-hit asymmetry guard)
+    from app.jobs.auto_pause_degraded import run_auto_pause_degraded_job
+    scheduler.add_job(
+        run_auto_pause_degraded_job,
+        CronTrigger(minute=5),  # every hour at HH:05 — runs after market_scan
+        id="auto_pause_degraded",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )

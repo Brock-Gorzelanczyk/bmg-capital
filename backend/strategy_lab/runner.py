@@ -1705,12 +1705,14 @@ def _execute_options_signal(
     from datetime import datetime, timezone
     from app.db.models.bots import BotPosition, BotTrade
 
-    # ── SHIP 2 asset-class gate (path #1) — BEFORE notional cap ─────────────
-    # validate_order raises RuntimeError on class mismatch or allowlist violation.
-    # Defense in depth: options bots must trade OCC-format symbols only.
+    # ── SHIP 2 asset-class gate + SHIP 6 24h cooldown clamp (path #1) ──────────
+    # validate_order_with_cooldown_and_user raises RuntimeError on class mismatch,
+    # allowlist violation, OR active 24h cooldown. Defense in depth: options bots
+    # must trade OCC-format symbols only.
     try:
-        from app.services.asset_class_registry import validate_order_with_user
-        validate_order_with_user(
+        from app.services.asset_class_registry import validate_order_with_cooldown_and_user
+        validate_order_with_cooldown_and_user(
+            db=db,
             bot_id=profile_name,
             symbol=sig.symbol,
             user_id=int(alloc.user_id) if alloc.user_id else None,
@@ -1721,7 +1723,7 @@ def _execute_options_signal(
             profile_name, sig.symbol, _acr_exc,
         )
         return
-    # ── end asset-class gate ─────────────────────────────────────────────────
+    # ── end asset-class + cooldown gate ─────────────────────────────────────────
 
     now = datetime.now(timezone.utc)
     capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
@@ -1888,6 +1890,17 @@ def _execute_options_signal(
             contract_premium_cents=opt["contract_premium_cents"],
         )
         db.add(trade)
+
+        # SHIP 6: record 24h cooldown AFTER successful position insert, BEFORE commit.
+        try:
+            from app.services.cooldown_clamp import record_entry
+            record_entry(db, profile_name, sig.symbol)
+        except Exception as _cd_exc_opt:
+            logger.warning(
+                "[cooldown_clamp:%s] record_entry failed for %s: %s (non-fatal)",
+                profile_name, sig.symbol, _cd_exc_opt,
+            )
+
         db.commit()
         # PART 7: heartbeat from execution path (rate-limited 1/min/alloc)
         try:
@@ -1922,11 +1935,13 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     """
     import os
 
-    # ── SHIP 2 asset-class gate (path #2) — BEFORE bracket submit ───────────
-    # validate_order raises RuntimeError on class mismatch or allowlist violation.
+    # ── SHIP 2 asset-class gate + SHIP 6 24h cooldown clamp (path #2) ───────────
+    # validate_order_with_cooldown_and_user raises RuntimeError on class mismatch,
+    # allowlist violation, OR active 24h cooldown.
     try:
-        from app.services.asset_class_registry import validate_order_with_user
-        validate_order_with_user(
+        from app.services.asset_class_registry import validate_order_with_cooldown_and_user
+        validate_order_with_cooldown_and_user(
+            db=db,
             bot_id=profile_name,
             symbol=sig.symbol,
             user_id=int(alloc.user_id) if alloc.user_id else None,
@@ -1937,7 +1952,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             profile_name, sig.symbol, _acr_exc,
         )
         return
-    # ── end asset-class gate ─────────────────────────────────────────────────
+    # ── end asset-class + cooldown gate ─────────────────────────────────────────
 
     if sig.side not in ("buy", "sell"):
         logger.info(
@@ -2361,6 +2376,18 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             slippage_bps=_slip_bps,
         )
         db.add(trade)
+
+        # SHIP 6: record 24h cooldown AFTER successful position insert, BEFORE commit.
+        # UPSERT is atomic and idempotent — safe to call here inside the try block.
+        try:
+            from app.services.cooldown_clamp import record_entry
+            record_entry(db, profile_name, sig.symbol)
+        except Exception as _cd_exc:
+            logger.warning(
+                "[cooldown_clamp:%s] record_entry failed for %s: %s (non-fatal)",
+                profile_name, sig.symbol, _cd_exc,
+            )
+
         db.commit()
         # PART 7: heartbeat from execution path (rate-limited 1/min/alloc)
         try:

@@ -17,6 +17,7 @@ import {
   type DryRunResponse, type OpsAlertResponse,
 } from "@/api/adminDiagnostics";
 import { getCrossSleeveQuarantine } from "@/api/adminQuarantine";
+import { AutoPausedBotsCard } from "@/components/diagnostics/AutoPausedBotsCard";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -904,9 +905,10 @@ export default function AdminDiagnosticsPage() {
       </div>
 
       {/* Top row — health-at-a-glance */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <PortfolioHealthCard qcRefresh={qcRefresh} />
         <CooldownStormCard qcRefresh={qcRefresh} />
+        <AutoPausedBotsCard qcRefresh={qcRefresh} />
       </div>
 
       {/* Concentration + Heartbeats + Inventory */}

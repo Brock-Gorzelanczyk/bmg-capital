@@ -220,3 +220,33 @@ def validate_order_with_user(
             f"asset_class_violation bot={bot_id} symbol={symbol} "
             f"required={required} detected={detected}"
         )
+
+
+def validate_order_with_cooldown_and_user(
+    db,
+    bot_id: str,
+    symbol: str,
+    user_id: int | None = None,
+) -> None:
+    """SHIP 6: asset_class check + 24h cooldown check, in that order.
+
+    Raises RuntimeError with one of:
+      - asset_class_violation ...   (from validate_order_with_user)
+      - cooldown_clamp_violation bot=X symbol=Y blocked_until=Z
+
+    Cooldown is enforced AFTER asset-class so a mis-configured bot still
+    surfaces as the right error type.
+    """
+    validate_order_with_user(bot_id=bot_id, symbol=symbol, user_id=user_id)
+    from app.services.cooldown_clamp import check_cooldown, _maybe_send_violation_alert as _cd_alert
+    allowed, blocked_until = check_cooldown(db, bot_id, symbol)
+    if not allowed:
+        logger.warning(
+            "[cooldown_clamp_violation] bot=%s symbol=%s blocked_until=%s",
+            bot_id, symbol, blocked_until.isoformat() if blocked_until else "?",
+        )
+        _cd_alert(bot_id, symbol, blocked_until, user_id)
+        raise RuntimeError(
+            f"cooldown_clamp_violation bot={bot_id} symbol={symbol} "
+            f"blocked_until={blocked_until.isoformat() if blocked_until else '?'}"
+        )

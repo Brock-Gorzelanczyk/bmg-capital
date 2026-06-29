@@ -3024,3 +3024,41 @@ def reconcile_broker(
     """
     from app.ops.broker_reconciliation import reconcile_positions
     return reconcile_positions(db, user_id=user_id)
+
+
+# ── GET /api/admin/auto-pause/list ───────────────────────────────────────────
+# SHIP 6 — lists currently auto-paused bots (paused_reason LIKE 'degraded_auto_pause%').
+# READ-ONLY. Frontend reads rows[].bot_id exactly — shape contract per known-issues.md #4.
+@router.get("/auto-pause/list")
+def auto_pause_list(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """SHIP 6 — currently auto-paused bots, sourced from
+    BotAllocation.paused_reason LIKE 'degraded_auto_pause%'.
+    """
+    from sqlalchemy import text as _text
+    rows = db.execute(_text("""
+        SELECT p.name AS bot_id,
+               a.paused_reason,
+               a.updated_at AS paused_at,
+               a.user_id
+          FROM bot_allocations a
+          JOIN bot_profiles p ON p.id = a.profile_id
+         WHERE a.enabled = 0
+           AND a.paused_reason LIKE 'degraded_auto_pause%'
+         ORDER BY a.updated_at DESC
+    """)).fetchall()
+    return {
+        "ok": True,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "rows": [
+            {
+                "bot_id": r[0],
+                "paused_reason": r[1],
+                "paused_at": r[2].isoformat() if hasattr(r[2], "isoformat") else r[2],
+                "user_id": r[3],
+            }
+            for r in rows
+        ],
+    }
