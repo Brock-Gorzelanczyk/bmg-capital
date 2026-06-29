@@ -183,58 +183,13 @@ def _post_webhook(name: str, content: str) -> bool:
 
 def _generate_intro(agent: dict, live_data: dict, db=None) -> str:
     """Call Claude to generate one agent's intro. Falls back to hardcoded if no API key."""
-    try:
-        from app.config import settings
-        api_key = settings.anthropic_api_key
-    except Exception:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-
-    if not api_key:
-        return _fallback_intro(agent, live_data)
-
-    try:
-        from agents.bus import is_budget_capped as _capped
-        if db is not None and _capped(db):
-            logger.info("[intro] daily budget cap hit — skipping LLM call")
-            return _fallback_intro(agent, live_data)
-    except Exception:
-        pass
-
-    next_tag = f" {agent['next_agent']}, you're up." if agent["next_agent"] else ""
-    prev_tag = f"The previous speaker was {agent['mentions']}. " if agent["mentions"] else "You are opening the meeting. "
-
-    user_prompt = (
-        f"{prev_tag}Introduce yourself to the BMG Capital fund team in #fund-team-chat. "
-        f"Be brief (3-5 sentences). State your role, what you do daily, one concrete "
-        f"metric from the LIVE DATA below (use the exact numbers given — do NOT invent or "
-        f"change any figures), and acknowledge {agent['mentions'] or 'the team'} briefly.{next_tag}\n\n"
-        f"LIVE DATA (ground truth — use exactly as shown, do not paraphrase or round differently):\n"
-        f"{_format_live_data(live_data)}\n\n"
-        f"IMPORTANT: Only cite numbers that appear in the live data above. "
-        f"Do not invent bot counts, position counts, or P&L figures.\n\n"
-        f"Reply with ONLY the message text — no quotes, no formatting, no prefix."
-    )
-
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            system=agent["personality"],
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        result = (msg.content[0].text or "").strip()
-        try:
-            from agents.bus import charge_api_usage as _charge
-            if db is not None:
-                _charge(db, "intro", 0.001)
-        except Exception:
-            pass
-        return result
-    except Exception as exc:
-        logger.warning("[intro] Claude call failed for %s: %s", agent["id"], exc)
-        return _fallback_intro(agent, live_data)
+    # SHIP 3 R7: replaced with static intro templates — no LLM
+    from agents.intros import get_intro
+    agent_id = agent.get("id", "unknown")
+    intro = get_intro(agent_id)
+    if intro:
+        return intro
+    return _fallback_intro(agent, live_data)
 
 
 def _format_live_data(data: dict) -> str:
@@ -563,48 +518,10 @@ def run_reintro_conversation(db: Session) -> dict:
 
 
 def _generate_reintro_message(agent: dict, live_data: dict, db=None) -> str:
-    """Generate one agent's re-intro line. Falls back to hardcoded script."""
-    try:
-        from app.config import settings
-        api_key = settings.anthropic_api_key
-    except Exception:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-
-    if not api_key:
-        return agent["script"]
-
-    try:
-        from agents.bus import is_budget_capped as _capped
-        if db is not None and _capped(db):
-            return agent["script"]
-    except Exception:
-        pass
-
-    user_prompt = (
-        f"You're posting your name-badge re-intro in #fund-team-chat. "
-        f"Keep it to 2-4 sentences in character. State your new name, your role, "
-        f"one concrete stat from the LIVE DATA below if relevant, then pass to the next person naturally.\n\n"
-        f"LIVE DATA:\n{_format_live_data(live_data)}\n\n"
-        f"Reply with ONLY the message text — no quotes, no prefix."
-    )
-
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            system=agent["personality"],
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        result = (msg.content[0].text or "").strip()
-        try:
-            from agents.bus import charge_api_usage as _charge
-            if db is not None:
-                _charge(db, "reintro", 0.0005)
-        except Exception:
-            pass
-        return result or agent["script"]
-    except Exception as exc:
-        logger.warning("[reintro] Claude call failed for %s: %s", agent["id"], exc)
-        return agent["script"]
+    """Generate one agent's re-intro line using static intros (SHIP 3 R7 — no LLM)."""
+    from agents.intros import get_intro
+    agent_id = agent.get("id", "unknown")
+    intro = get_intro(agent_id)
+    if intro:
+        return intro
+    return agent.get("script", f"{agent_id} reporting in.")

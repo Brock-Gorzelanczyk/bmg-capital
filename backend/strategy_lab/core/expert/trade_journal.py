@@ -34,23 +34,8 @@ _MAX_TOKENS = 512
 
 
 def _has_anthropic_client() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
-
-
-def _call_claude(prompt: str) -> str | None:
-    """Call Claude API and return the text response."""
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        message = client.messages.create(
-            model=_MODEL,
-            max_tokens=_MAX_TOKENS,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return message.content[0].text if message.content else None
-    except Exception as exc:
-        logger.warning("[trade_journal] Claude API call failed: %s", exc)
-        return None
+    # SHIP 3 R8: always return False — LLM replaced by template
+    return False
 
 
 def write_entry_journal(

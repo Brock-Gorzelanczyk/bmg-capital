@@ -183,28 +183,28 @@ async def support_chat(
         (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
     )
 
-    # Try Anthropic first (fastest, most capable)
-    if settings.anthropic_api_key:
-        try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                resp = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": settings.anthropic_api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
-                    json={
-                        "model": "claude-haiku-4-5-20251001",
-                        "max_tokens": 500,
-                        "system": SYSTEM_PROMPT,
-                        "messages": messages,
-                    },
-                )
-                resp.raise_for_status()
-                return {"reply": resp.json()["content"][0]["text"]}
-        except Exception as e:
-            logger.warning(f"Support chat Anthropic error: {e}", exc_info=True)
+    # Route through relay (SHIP 3)
+    try:
+        import asyncio
+        from app.services.llm_client import call_llm
+        # Use last user message as prompt; prior history as system context
+        history_ctx = "\n".join(
+            f"{m['role'].upper()}: {m['content'][:300]}" for m in messages[:-1]
+        ) if len(messages) > 1 else ""
+        system_with_history = SYSTEM_PROMPT + (f"\n\nConversation history:\n{history_ctx}" if history_ctx else "")
+        reply = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm(
+                model="claude-haiku-4-5-20251001",
+                prompt=last_user,
+                system_prompt=system_with_history,
+                max_tokens=500,
+                agent_name="support",
+            ),
+        )
+        return {"reply": reply}
+    except Exception as e:
+        logger.warning(f"Support chat relay error: {e}", exc_info=True)
 
     # Try OpenAI fallback
     if settings.openai_api_key:

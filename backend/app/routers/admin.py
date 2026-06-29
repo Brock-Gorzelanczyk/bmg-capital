@@ -3062,3 +3062,118 @@ def auto_pause_list(
             for r in rows
         ],
     }
+
+# ── SHIP 3 — LLM USAGE diagnostics ───────────────────────────────────────────
+
+@router.get("/diagnostics/llm-usage")
+def get_llm_usage(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """SHIP 3 — LLM USAGE card data. Real numbers from llm_call_log."""
+    from sqlalchemy import text as _text
+    import os
+
+    # Today block (last 24h)
+    today_rows = db.execute(_text(
+        "SELECT source, COUNT(*) AS n, COALESCE(SUM(estimated_cost_cents),0) AS cents "
+        "FROM llm_call_log "
+        "WHERE created_at >= datetime('now','-24 hours') "
+        "GROUP BY source"
+    )).fetchall()
+    relay_calls = 0
+    api_fallback_calls = 0
+    cache_hits = 0
+    api_fallback_cost_cents = 0
+    for row in today_rows:
+        src, n, cents = row[0], int(row[1]), int(row[2])
+        if src == "relay":
+            relay_calls = n
+        elif src == "api_fallback":
+            api_fallback_calls = n
+            api_fallback_cost_cents = cents
+        elif src == "cache":
+            cache_hits = n
+
+    # Top callers (7d)
+    top_rows = db.execute(_text(
+        "SELECT agent_name, COUNT(*) AS calls, COALESCE(SUM(estimated_cost_cents),0) AS cents "
+        "FROM llm_call_log "
+        "WHERE created_at >= datetime('now','-7 days') "
+        "GROUP BY agent_name "
+        "ORDER BY calls DESC "
+        "LIMIT 10"
+    )).fetchall()
+    top_callers_7d = [
+        {"agent_name": r[0], "calls": int(r[1]), "estimated_cost_cents": int(r[2])}
+        for r in top_rows
+    ]
+
+    # Trend (7d per day per source)
+    trend_rows = db.execute(_text(
+        "SELECT DATE(created_at) AS d, source, COUNT(*) AS n, COALESCE(SUM(estimated_cost_cents),0) AS cents "
+        "FROM llm_call_log "
+        "WHERE created_at >= datetime('now','-7 days') "
+        "GROUP BY d, source "
+        "ORDER BY d"
+    )).fetchall()
+    trend_map: Dict[str, Dict] = {}
+    for r in trend_rows:
+        d, src, n, cents = r[0], r[1], int(r[2]), int(r[3])
+        if d not in trend_map:
+            trend_map[d] = {"date": d, "relay": 0, "api_fallback": 0, "cache": 0, "cents": 0}
+        trend_map[d][src] = n
+        trend_map[d]["cents"] += cents
+    trend_7d = sorted(trend_map.values(), key=lambda x: x["date"])
+
+    # Budget
+    cap_usd = float(os.getenv("LLM_DAILY_FALLBACK_BUDGET_USD", "5"))
+    budget_remaining_cents = max(0, int(cap_usd * 100) - api_fallback_cost_cents)
+
+    # Last timestamps
+    last_relay = db.execute(_text(
+        "SELECT MAX(created_at) FROM llm_call_log WHERE source='relay'"
+    )).scalar()
+    last_fallback = db.execute(_text(
+        "SELECT MAX(created_at) FROM llm_call_log WHERE source='api_fallback'"
+    )).scalar()
+
+    fallback_enabled = os.getenv("FALLBACK_TO_API", "false").strip().lower() == "true"
+
+    return {
+        "today": {
+            "relay_calls": relay_calls,
+            "api_fallback_calls": api_fallback_calls,
+            "cache_hits": cache_hits,
+            "api_fallback_cost_cents": api_fallback_cost_cents,
+        },
+        "top_callers_7d": top_callers_7d,
+        "trend_7d": trend_7d,
+        "fallback_enabled": fallback_enabled,
+        "budget_remaining_cents": budget_remaining_cents,
+        "last_relay_call_at": str(last_relay) if last_relay else None,
+        "last_fallback_call_at": str(last_fallback) if last_fallback else None,
+    }
+
+
+# ── SHIP 3 — Reset fallback budget ───────────────────────────────────────────
+
+@router.post("/llm/reset-fallback-budget")
+def reset_llm_fallback_budget(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Hard-reset by deleting api_fallback rows from last 24h. Logs ops alert."""
+    from app.services.llm_client import reset_fallback_budget
+    from app.services.discord import send_ops_alert
+    deleted = reset_fallback_budget(db)
+    try:
+        send_ops_alert(
+            severity="warn",
+            title="LLM fallback budget RESET",
+            message=f"Deleted {deleted} api_fallback rows. Budget window cleared.",
+            source="admin",
+        )
+    except Exception:
+        pass
+    return {"deleted": deleted, "ok": True}

@@ -90,25 +90,25 @@ async def generate_autonomous_digest(user_id: int, db: Session) -> None:
         full_narrative = f"{tldr} {' '.join(highlights[:2])} {tomorrow_preview}"
 
         try:
-            from app.config import settings
-            if settings.anthropic_api_key:
-                import anthropic
-                client_ai = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-                prompt = (
+            from app.services.llm_client import call_llm_cached
+            from datetime import date as _date
+            _date_str = str(today)
+            market_regime_note = call_llm_cached(
+                model="claude-haiku-4-5-20251001",
+                prompt=(
                     f"Generate a 2-sentence market regime note for a trading app daily digest. "
                     f"Today: {signals_fired} signals fired, {paper_buys} buys, {paper_sells} exits, "
                     f"net P&L {delta_str}. Be specific about regime (trending/ranging/volatile) and what it means for tomorrow. "
                     f"Do NOT use bullet points. Plain prose."
-                )
-                resp = client_ai.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=120,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                market_regime_note = resp.content[0].text.strip()
-
-                # Full narrative
-                narrative_prompt = (
+                ),
+                max_tokens=120,
+                ttl_seconds=86400,
+                cache_key_extra=f"{user_id}_{_date_str}_regime",
+                agent_name="autonomous_digest",
+            )
+            full_narrative = call_llm_cached(
+                model="claude-haiku-4-5-20251001",
+                prompt=(
                     f"You are a concise AI trading assistant. Write a 150-word daily digest for a paper trading app. "
                     f"Today's summary: {tldr}. "
                     f"Highlights: {'; '.join(highlights)}. "
@@ -116,13 +116,12 @@ async def generate_autonomous_digest(user_id: int, db: Session) -> None:
                     f"Market regime: {market_regime_note}. "
                     f"Write in second person ('BMG ran...', 'Your portfolio...'). "
                     f"Tone: calm, data-driven, not hype. No markdown."
-                )
-                narrative_resp = client_ai.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=300,
-                    messages=[{"role": "user", "content": narrative_prompt}],
-                )
-                full_narrative = narrative_resp.content[0].text.strip()
+                ),
+                max_tokens=300,
+                ttl_seconds=86400,
+                cache_key_extra=f"{user_id}_{_date_str}_narrative",
+                agent_name="autonomous_digest",
+            )
         except Exception as e:
             logger.warning(f"AI digest generation failed: {e}, using template fallback")
 

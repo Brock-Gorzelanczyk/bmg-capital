@@ -90,26 +90,20 @@ def _is_channel_enabled(db, channel_id: str) -> bool:
 
 
 def _call_haiku(technical_text: str) -> dict | None:
-    """Call Claude Haiku to generate translation. Returns {summary, action} or None."""
+    """Call LLM via relay to generate plain-English translation. Returns {summary, action} or None."""
+    import hashlib
     try:
-        from app.config import settings
-        api_key = settings.anthropic_api_key
-    except Exception:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-
-    if not api_key:
-        return None
-
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
+        from app.services.llm_client import call_llm_cached
+        content_hash = hashlib.sha256(technical_text.encode()).hexdigest()[:16]
+        raw = call_llm_cached(
             model="claude-haiku-4-5-20251001",
+            prompt=f"Translate this agent message:\n\n{technical_text[:1500]}",
+            system_prompt=_SYSTEM_PROMPT,
             max_tokens=200,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": f"Translate this agent message:\n\n{technical_text[:1500]}"}],
-        )
-        raw = (msg.content[0].text or "").strip()
+            ttl_seconds=86400,
+            cache_key_extra=content_hash,
+            agent_name="plain_english",
+        ).strip()
         # Parse SUMMARY: ... ACTION: ...
         summary, action = "", ""
         for line in raw.splitlines():

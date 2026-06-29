@@ -136,10 +136,9 @@ def _gather_context(bot_name: str, user_id: int, db) -> dict:
 
 
 def _call_claude_qa(question: str, context: dict, bot_name: str) -> dict:
-    """Call Claude API with strict grounding prompt."""
+    """Call LLM via relay with grounded audit prompt (SHIP 3)."""
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        from app.services.llm_client import call_llm
 
         context_json = json.dumps(context, default=str, indent=2)
         system_prompt = (
@@ -160,13 +159,13 @@ Question: {question}
 Respond with JSON: {{"answer": "...", "citations": [list of signal/trade/position IDs referenced], "confidence": 0.0-1.0}}
 Return ONLY valid JSON."""
 
-        message = client.messages.create(
+        raw = call_llm(
             model=_MODEL,
+            prompt=user_prompt,
+            system_prompt=system_prompt,
             max_tokens=_MAX_TOKENS,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            agent_name="lab_bot_qa",
         )
-        raw = message.content[0].text if message.content else ""
 
         try:
             parsed = json.loads(raw)

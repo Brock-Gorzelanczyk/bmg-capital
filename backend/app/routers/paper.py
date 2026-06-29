@@ -1277,13 +1277,10 @@ class AgentExecuteRequest(BaseModel):
 
 
 async def _parse_instruction_with_claude(instruction: str) -> dict:
-    """Call Claude to parse a natural language trade instruction into a structured order."""
-    import httpx
-
-    if not settings.anthropic_api_key:
-        # Fallback simple parser when no API key
-        return _fallback_parse(instruction)
-
+    """Call LLM via relay to parse a natural language trade instruction.
+    SHIP 3: routes through call_llm (no direct Anthropic API).
+    """
+    import asyncio, json as _json
     system = (
         "You are a paper trading assistant. Parse the user's instruction into a structured trade order. "
         "Return ONLY valid JSON with these fields: "
@@ -1291,38 +1288,28 @@ async def _parse_instruction_with_claude(instruction: str) -> dict:
         "If the instruction is ambiguous, make a reasonable assumption. "
         "action must be exactly 'buy' or 'sell'. symbol must be a valid US equity or crypto ticker (e.g. AAPL, BTC-USD). "
         "amount_dollars is the dollar amount to trade (required, positive number). "
-        "If the instruction mentions shares instead of dollars, estimate the dollar amount using a reasonable current price. "
         "Return ONLY the JSON object, no markdown, no explanation."
     )
-    messages = [{"role": "user", "content": instruction}]
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": settings.anthropic_api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 256,
-                "system": system,
-                "messages": messages,
-            },
+    try:
+        from app.services.llm_client import call_llm
+        text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm(
+                model="claude-haiku-4-5-20251001",
+                prompt=instruction,
+                system_prompt=system,
+                max_tokens=256,
+                agent_name="paper_assist",
+            ),
         )
-        resp.raise_for_status()
-        data = resp.json()
-        text = data["content"][0]["text"].strip()
-
-    import json as _json
-    # Strip markdown code fences if present
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    parsed = _json.loads(text)
-    return parsed
+        text = text.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return _json.loads(text)
+    except Exception:
+        return _fallback_parse(instruction)
 
 
 def _fallback_parse(instruction: str) -> dict:

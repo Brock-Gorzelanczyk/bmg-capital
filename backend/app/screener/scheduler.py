@@ -1109,3 +1109,28 @@ def setup_scheduler() -> None:
         max_instances=1,
         coalesce=True,
     )
+
+    # ── SHIP 4: LLM infra jobs ────────────────────────────────────────────────
+
+    # Relay health monitor — every 5 minutes, all days.
+    # Alerts after 30 min down (>= 6 consecutive failures); debounces at 60 min.
+    from app.jobs.relay_health_monitor import check_relay_health
+    scheduler.add_job(
+        check_relay_health,
+        CronTrigger(minute="*/5"),
+        id="relay_health_monitor",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # LLM log retention — 3:00 AM ET daily.
+    # Prunes llm_call_log rows older than 90 days.
+    from app.jobs.llm_log_retention import prune_old_llm_logs
+    scheduler.add_job(
+        prune_old_llm_logs,
+        CronTrigger(hour=3, minute=0, timezone=ET),
+        id="llm_log_retention",
+        replace_existing=True,
+        max_instances=1,
+    )

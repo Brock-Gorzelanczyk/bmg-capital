@@ -45,24 +45,21 @@ def _detailed_prompt(term: str, context: str) -> str:
 
 
 async def _call_anthropic(prompt: str, term: str) -> str:
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": settings.anthropic_api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 300,
-                "system": SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["content"][0]["text"]
+    """Call LLM via relay with 30d cache for term explanations (SHIP 3)."""
+    import asyncio
+    from app.services.llm_client import call_llm_cached
+    return await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: call_llm_cached(
+            model="claude-haiku-4-5-20251001",
+            prompt=prompt,
+            system_prompt=SYSTEM_PROMPT,
+            max_tokens=300,
+            ttl_seconds=86400 * 30,
+            cache_key_extra=term,
+            agent_name="explain",
+        ),
+    )
 
 
 async def _call_openai(prompt: str) -> str:
@@ -102,14 +99,13 @@ async def explain(
     mode = body.mode if body.mode in ("simple", "detailed") else "simple"
     context = (body.context or "").strip()
 
-    # Try AI first
-    if settings.anthropic_api_key:
-        prompt = _simple_prompt(term, context) if mode == "simple" else _detailed_prompt(term, context)
-        try:
-            text = await _call_anthropic(prompt, term)
-            return {"term": term, "explanation": text, "source": "ai", "mode": mode, "related": []}
-        except Exception as e:
-            logger.warning(f"Anthropic API failed for '{term}': {e}", exc_info=True)
+    # Try relay first (SHIP 3)
+    prompt = _simple_prompt(term, context) if mode == "simple" else _detailed_prompt(term, context)
+    try:
+        text = await _call_anthropic(prompt, term)
+        return {"term": term, "explanation": text, "source": "ai", "mode": mode, "related": []}
+    except Exception as e:
+        logger.warning(f"LLM relay failed for '{term}': {e}", exc_info=True)
 
     if settings.openai_api_key:
         prompt = _simple_prompt(term, context) if mode == "simple" else _detailed_prompt(term, context)

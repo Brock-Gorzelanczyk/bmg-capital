@@ -588,11 +588,6 @@ def agent_respond(
     if agent not in _VALID_AGENTS:
         raise HTTPException(status_code=404, detail=f"Unknown agent: {agent}")
 
-    from app.config import settings
-    if not settings.anthropic_api_key:
-        logger.warning("[agent-respond] ANTHROPIC_API_KEY not set — cannot generate response")
-        return {"reply": None, "agent": agent, "persona": _AGENT_PERSONA.get(agent, agent)}
-
     system_prompt = _load_system_prompt(agent)
     context = _build_context(agent, db)
 
@@ -601,19 +596,22 @@ def agent_respond(
         f"[Incoming message from {body.author_name}]\n{body.message}"
     )
 
+    from datetime import date as _date
+    _date_str = str(_date.today())
     reply_text: Optional[str] = None
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        msg = client.messages.create(
+        from app.services.llm_client import call_llm_cached
+        reply_text = call_llm_cached(
             model="claude-haiku-4-5-20251001",
+            prompt=user_content,
+            system_prompt=system_prompt,
             max_tokens=600,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_content}],
+            ttl_seconds=86400,
+            cache_key_extra=f"{agent}_{_date_str}",
+            agent_name=agent,
         )
-        reply_text = msg.content[0].text if msg.content else None
     except Exception as exc:
-        logger.warning("[agent-respond] Claude API call failed for %s: %s", agent, exc)
+        logger.warning("[agent-respond] LLM call failed for %s: %s", agent, exc)
 
     # Log conversation
     if reply_text:

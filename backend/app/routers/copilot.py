@@ -374,77 +374,67 @@ def _sse(data: dict) -> str:
 
 
 async def _stream_copilot(messages: list, page: str, token: str) -> AsyncGenerator[str, None]:
-    if not settings.anthropic_api_key:
-        yield _sse({"type": "error", "message": "AI features are not available right now. Check back soon."})
-        yield _sse({"type": "done"})
-        return
+    """Route copilot LLM calls through relay (SHIP 3). Fake-chunk full response client-side."""
+    sys_prompt = SYSTEM_PROMPT + (f"\n\nUser is on the **{page}** page." if page else "")
 
-    hdrs = {
-        "x-api-key": settings.anthropic_api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-    sys = SYSTEM_PROMPT + (f"\n\nUser is on the **{page}** page." if page else "")
+    # Build user prompt from messages list
+    # Phase 1: check for tool-use signals in last user message
+    last_user = next(
+        (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
+    )
+    if isinstance(last_user, list):
+        last_user = " ".join(
+            p.get("text", "") for p in last_user if isinstance(p, dict) and p.get("type") == "text"
+        )
 
-    # Phase 1 — non-streaming: detect tool calls
+    # Build conversation prompt for relay
+    history = ""
+    for m in messages[:-1]:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        if isinstance(content, list):
+            content = " ".join(p.get("text", "") for p in content if isinstance(p, dict))
+        history += f"{role.upper()}: {content[:500]}\n"
+    full_prompt = (history + f"USER: {last_user}").strip()
+
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=hdrs,
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1024, "system": sys, "tools": TOOLS, "messages": messages},
-            )
-            r.raise_for_status()
-            p1 = r.json()
-    except Exception as e:
-        yield _sse({"type": "error", "message": str(e)})
-        yield _sse({"type": "done"})
-        return
+        from app.services.llm_client import call_llm
 
-    tool_uses = [b for b in p1.get("content", []) if b.get("type") == "tool_use"]
+        # Check for tool-use keywords to decide if we need to call tools first
+        tool_keywords = [t.get("name", "") for t in TOOLS]
+        should_use_tools = any(kw.lower() in last_user.lower() for kw in
+                               ["portfolio", "position", "trade", "balance", "performance"])
 
-    if tool_uses:
-        tool_results = []
-        for tu in tool_uses:
-            yield _sse({"type": "tool_start", "tool": tu["name"], "input": tu["input"]})
-            result = await execute_tool(tu["name"], tu["input"], token)
-            yield _sse({"type": "tool_result", "tool": tu["name"], "result": result})
-            tool_results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": json.dumps(result)})
+        if should_use_tools:
+            # Simplified tool: call all relevant tools and inject results
+            tool_results_text = ""
+            for tool in TOOLS[:2]:  # limit to avoid prompt bloat
+                try:
+                    result = await execute_tool(tool["name"], {}, token)
+                    yield _sse({"type": "tool_result", "tool": tool["name"], "result": result})
+                    tool_results_text += f"\n[{tool['name']}]: {json.dumps(result)[:500]}"
+                except Exception:
+                    pass
+            full_prompt = full_prompt + "\n\nLIVE DATA:" + tool_results_text
 
-        final_msgs = messages + [
-            {"role": "assistant", "content": p1["content"]},
-            {"role": "user", "content": tool_results},
-        ]
+        text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm(
+                model="claude-haiku-4-5-20251001",
+                prompt=full_prompt,
+                system_prompt=sys_prompt,
+                max_tokens=1024,
+                agent_name="copilot",
+            ),
+        )
 
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                async with client.stream(
-                    "POST", "https://api.anthropic.com/v1/messages",
-                    headers=hdrs,
-                    json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1024, "system": sys, "messages": final_msgs, "stream": True},
-                ) as resp:
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        raw = line[5:].strip()
-                        if not raw:
-                            continue
-                        try:
-                            ev = json.loads(raw)
-                        except Exception:
-                            continue
-                        if ev.get("type") == "content_block_delta":
-                            delta = ev.get("delta", {})
-                            if delta.get("type") == "text_delta":
-                                yield _sse({"type": "text_delta", "delta": delta.get("text", "")})
-        except Exception as e:
-            yield _sse({"type": "error", "message": str(e)})
-    else:
-        # No tools — chunk-stream the text response
-        text = "".join(b.get("text", "") for b in p1.get("content", []) if b.get("type") == "text")
+        # Fake-chunk the full response (existing pattern from line 444-447)
         for i in range(0, len(text), 4):
             yield _sse({"type": "text_delta", "delta": text[i:i + 4]})
             await asyncio.sleep(0.008)
+
+    except Exception as e:
+        yield _sse({"type": "error", "message": str(e)})
 
     yield _sse({"type": "done"})
 
@@ -501,9 +491,6 @@ async def rewrite_level(
     body: RewriteRequest,
     current_user: User = Depends(get_current_user),
 ):
-    if not settings.anthropic_api_key:
-        return RewriteResponse(rewritten=body.content)
-
     # Truncate to 2000 chars
     content = body.content[:2000]
 
@@ -511,30 +498,19 @@ async def rewrite_level(
     if body.context:
         user_msg = f"Context: {body.context}\n\n{user_msg}"
 
-    hdrs = {
-        "x-api-key": settings.anthropic_api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=hdrs,
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 1024,
-                    "system": _REWRITE_SYSTEM,
-                    "messages": [{"role": "user", "content": user_msg}],
-                },
-            )
-            r.raise_for_status()
-            data = r.json()
-            rewritten = "".join(
-                b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
-            )
-            return RewriteResponse(rewritten=rewritten or body.content)
+        from app.services.llm_client import call_llm
+        rewritten = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm(
+                model="claude-haiku-4-5-20251001",
+                prompt=user_msg,
+                system_prompt=_REWRITE_SYSTEM,
+                max_tokens=1024,
+                agent_name="copilot",
+            ),
+        )
+        return RewriteResponse(rewritten=rewritten or body.content)
     except Exception as e:
         logger.warning(f"rewrite-level failed: {e}")
         return RewriteResponse(rewritten=body.content)

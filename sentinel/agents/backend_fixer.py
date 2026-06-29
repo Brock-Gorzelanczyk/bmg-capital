@@ -16,6 +16,7 @@ from sentinel.db.session import SessionLocal
 from sentinel.settings import settings
 from sentinel.guardrails import validate_fix_request
 from sentinel.cost_tracker import trip_file_loop_breaker
+from sentinel.agents.tier1_autofix import TIER1_CATEGORIES, apply_tier1_fix
 
 logger = logging.getLogger(__name__)
 
@@ -92,39 +93,17 @@ class BackendFixerAgent:
             raise ValueError(f"File not found: {file_path}")
         original_content = abs_path.read_text()
 
-        import anthropic
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        prompt = (
-            f"You are a precise code fixer for the BMG Capital Python backend.\n"
-            f"Error: {error_text[:1500]}\n\n"
-            f"File: {file_path}\n"
-            f"Content:\n{original_content[:4000]}\n\n"
-            "Produce the SMALLEST possible unified diff to fix this specific error.\n"
-            "Do NOT modify any trading, strategy, bot, or execution logic.\n"
-            "Do NOT touch files in strategy_lab/.\n"
-            "Output ONLY the unified diff, nothing else."
-        )
-        response = client.messages.create(
-            model=SONNET,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        diff_text = response.content[0].text.strip()
-        cost = (response.usage.input_tokens * 3e-6) + (response.usage.output_tokens * 15e-6)
-
-        if not diff_text or "---" not in diff_text:
-            raise ValueError("LLM produced no valid diff")
-
-        # Apply diff
-        diff_file = Path(workdir) / "sentinel.patch"
-        diff_file.write_text(diff_text)
-        result = subprocess.run(
-            ["patch", "-p1", "--dry-run", "-i", str(diff_file)],
-            cwd=workdir, capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            raise ValueError(f"Patch dry-run failed: {result.stderr[:300]}")
-        _sh(["patch", "-p1", "-i", str(diff_file)], cwd=workdir)
+        # Tier-1 deterministic fix (SHIP 3 — LLM path disabled for Tier 1)
+        category = payload.get("category", "")
+        if category in TIER1_CATEGORIES and int(os.getenv("SENTINEL_AUTOFIX_TIER", "1")) == 1:
+            fix_result = apply_tier1_fix(str(abs_path), category)
+            if not fix_result["success"]:
+                raise ValueError(f"Tier-1 autofix failed: {fix_result['stdout'][:300]}")
+            diff_text = f"# tier1_autofix: {fix_result['tool']} on {file_path}"
+            cost = 0.0
+        else:
+            # Tier-2+ path: DO NOT call LLM in this ship.
+            return {"success": False, "status": "needs_human", "reason": "tier2_llm_disabled"}
 
         # Python syntax check on touched file
         abs_patched = Path(workdir) / file_path

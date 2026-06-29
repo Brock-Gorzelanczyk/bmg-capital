@@ -117,38 +117,30 @@ async def generate_workspace(
     body: GenerateWorkspaceRequest,
     current_user: User = Depends(get_current_user),
 ):
-    if not settings.anthropic_api_key:
-        return _get_default(body.lab_id)
-
     system = _SYSTEM_PROMPT.format(lab_id=body.lab_id)
-    payload = {
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 1024,
-        "system": system,
-        "messages": [{"role": "user", "content": f"Build a workspace for: {body.prompt}"}],
-    }
-    hdrs = {
-        "x-api-key": settings.anthropic_api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
     try:
-        async with httpx.AsyncClient(timeout=20.0) as c:
-            r = await c.post("https://api.anthropic.com/v1/messages", json=payload, headers=hdrs)
-            r.raise_for_status()
-            data = r.json()
-            raw_text = data["content"][0]["text"]
-            # Strip possible markdown code fences
-            raw_text = raw_text.strip()
-            if raw_text.startswith("```"):
-                raw_text = raw_text.split("```")[1]
-                if raw_text.startswith("json"):
-                    raw_text = raw_text[4:]
-            parsed = json.loads(raw_text)
-            return GenerateWorkspaceResponse(
-                workspace_name=parsed["workspace_name"],
-                reasoning=parsed["reasoning"],
-                widgets=[GeneratedWidget(**w) for w in parsed["widgets"]],
+        import asyncio
+        from app.services.llm_client import call_llm
+        raw_text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm(
+                model="claude-haiku-4-5-20251001",
+                prompt=f"Build a workspace for: {body.prompt}",
+                system_prompt=system,
+                max_tokens=1024,
+                agent_name="workspace",
+            ),
+        )
+        raw_text = raw_text.strip()
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("```")[1]
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:]
+        parsed = json.loads(raw_text)
+        return GenerateWorkspaceResponse(
+            workspace_name=parsed["workspace_name"],
+            reasoning=parsed["reasoning"],
+            widgets=[GeneratedWidget(**w) for w in parsed["widgets"]],
             )
     except Exception as exc:
         logger.warning("Workspace generation failed, returning default: %s", exc)

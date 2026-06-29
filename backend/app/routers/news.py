@@ -57,42 +57,32 @@ async def analyze_article(
     current_user: User = Depends(get_current_user),
 ):
     """Analyze a news article for sentiment, TL;DR, and importance tier."""
-    if not settings.anthropic_api_key:
-        return AnalyzeResponse(sentiment="neutral", tldr=body.headline[:120], tier="standard")
-
     user_msg = f"Headline: {body.headline}\n\nSummary: {body.summary[:1000]}"
     if body.symbol:
         user_msg = f"Symbol: {body.symbol}\n\n{user_msg}"
 
-    hdrs = {
-        "x-api-key": settings.anthropic_api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=hdrs,
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 256,
-                    "system": _ANALYZE_SYSTEM,
-                    "messages": [{"role": "user", "content": user_msg}],
-                },
-            )
-            r.raise_for_status()
-            data = r.json()
-            text = "".join(
-                b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
-            )
-            parsed = json.loads(text)
-            return AnalyzeResponse(
-                sentiment=parsed.get("sentiment", "neutral"),
-                tldr=parsed.get("tldr", body.headline[:120]),
-                tier=parsed.get("tier", "standard"),
-            )
+        import asyncio, hashlib
+        from app.services.llm_client import call_llm_cached
+        url_hash = hashlib.sha256((body.headline + body.summary[:100]).encode()).hexdigest()[:16]
+        text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm_cached(
+                model="claude-haiku-4-5-20251001",
+                prompt=user_msg,
+                system_prompt=_ANALYZE_SYSTEM,
+                max_tokens=256,
+                ttl_seconds=86400 * 7,
+                cache_key_extra=url_hash,
+                agent_name="news",
+            ),
+        )
+        parsed = json.loads(text)
+        return AnalyzeResponse(
+            sentiment=parsed.get("sentiment", "neutral"),
+            tldr=parsed.get("tldr", body.headline[:120]),
+            tier=parsed.get("tier", "standard"),
+        )
     except Exception as e:
         logger.warning(f"analyze_article failed: {e}")
         return AnalyzeResponse(sentiment="neutral", tldr=body.headline[:120], tier="standard")

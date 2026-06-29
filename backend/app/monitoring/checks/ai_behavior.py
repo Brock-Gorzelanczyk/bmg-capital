@@ -13,28 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 async def check_ai_provider_health() -> dict:
-    """Send a minimal message to Anthropic, measure latency."""
-    from app.config import settings
-    if not settings.anthropic_api_key:
-        return {"passed": True, "detail": "Anthropic key not configured — skipping"}
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        t0 = time.monotonic()
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",  # cheapest + fastest for health check
-            max_tokens=10,
-            messages=[{"role": "user", "content": "Reply with OK"}],
-        )
-        latency_ms = int((time.monotonic() - t0) * 1000)
-        SLA_MS = 5000
-        passed = latency_ms < SLA_MS
-        return {
-            "passed": passed,
-            "detail": f"Anthropic responded in {latency_ms}ms ({'OK' if passed else f'SLOW — SLA is {SLA_MS}ms'})",
-        }
-    except Exception as exc:
-        return {"passed": False, "detail": f"Anthropic API error: {exc}"}
+    """Probe Anthropic availability via HTTP GET /v1/models (no tokens spent).
+
+    SHIP 3 R9: replaced messages.create probe with HTTP GET, reusing vendors.check_anthropic_up.
+    """
+    from app.monitoring.checks.vendors import check_anthropic_up
+    result = await check_anthropic_up()
+    detail = result.get("detail", "")
+    # Re-format detail to clarify no tokens were used
+    result["detail"] = f"latency probe (HTTP, no tokens) — {detail}"
+    return result
 
 
 async def check_prompt_drift() -> dict:

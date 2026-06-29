@@ -126,14 +126,23 @@ def _parse_nl_prompt_regex(nl_prompt: str) -> dict:
 
 
 def _call_anthropic_parse(nl_prompt: str) -> dict:
-    """Try to use Anthropic claude-haiku to parse NL prompt into structured JSON."""
+    """Parse NL prompt using deterministic classifier; LLM-cached fallback if low confidence.
+
+    SHIP 3 R4: primary path is now robo_prompt_parser (no LLM).
+    If confidence < 0.6, falls back to call_llm_cached.
+    """
+    from app.services.robo_prompt_parser import parse_robo_prompt
+    parsed = parse_robo_prompt(nl_prompt)
+    if parsed.get("confidence", 0) >= 0.6:
+        # High-confidence deterministic result — no LLM
+        return _parse_nl_prompt_regex(nl_prompt)  # keep existing shape for consumer
+    # Low-confidence: use cached LLM
     try:
-        import anthropic
-        client = anthropic.Anthropic()
-        response = client.messages.create(
+        from app.services.llm_client import call_llm_cached
+        raw = call_llm_cached(
             model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            system=(
+            prompt=nl_prompt,
+            system_prompt=(
                 "You are a financial portfolio configuration assistant. "
                 "Extract portfolio customization preferences from the user's message and respond ONLY with valid JSON "
                 "in this exact format: "
@@ -141,12 +150,13 @@ def _call_anthropic_parse(nl_prompt: str) -> dict:
                 "tilts keys can be: esg (bool), value (float 0-1), momentum (float 0-1), small_cap (float 0-1). "
                 "Do not include any explanation — only the JSON object."
             ),
-            messages=[{"role": "user", "content": nl_prompt}],
+            max_tokens=300,
+            ttl_seconds=86400,
+            agent_name="robo_parse",
         )
-        raw = response.content[0].text.strip()
         return json.loads(raw)
     except Exception as e:
-        logger.warning("Anthropic NL parse failed, falling back to regex: %s", e)
+        logger.warning("robo_parse LLM fallback failed, using regex: %s", e)
         return _parse_nl_prompt_regex(nl_prompt)
 
 
@@ -878,22 +888,17 @@ def ai_explain(
     )
     user_message = template.format(data=json.dumps(body.data))
 
+    # SHIP 3 R5: render explanation via template (no LLM)
     try:
-        import anthropic
-        client = anthropic.Anthropic()
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            system=(
-                "You are a calm, clear financial advisor. "
-                "Respond in exactly 2 sentences, plain English, no jargon. "
-                "Be reassuring but accurate."
-            ),
-            messages=[{"role": "user", "content": user_message}],
-        )
-        explanation = response.content[0].text.strip()
+        from app.services.robo_templates import render_robo_rationale
+        allocations_list = [
+            {"symbol": k, "weight": v}
+            for k, v in (body.data if isinstance(body.data, dict) else {}).items()
+        ] if hasattr(body, "data") and isinstance(body.data, dict) else []
+        risk = body.context if hasattr(body, "context") else "moderate"
+        explanation = render_robo_rationale(allocations_list, risk=risk, horizon=10)
     except Exception as e:
-        logger.warning("Anthropic AI explain failed: %s", e)
+        logger.warning("robo_templates render failed: %s", e)
         explanation = (
             "Your portfolio is being managed according to your risk profile and goals. "
             "Continue making regular contributions and your strategy will compound over time."
