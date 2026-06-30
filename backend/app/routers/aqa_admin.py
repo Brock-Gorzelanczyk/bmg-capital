@@ -189,6 +189,30 @@ def post_aqa_unfreeze(
     return {"frozen": False, "by": by}
 
 
+@router.post("/run-now")
+def post_aqa_run_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Manually trigger an AQA cycle. Bypasses the APScheduler interval.
+
+    Useful for:
+      - Debugging when scheduler not firing (e.g. interval mis-set,
+        next_run_time conflict)
+      - Smoke-testing AQA logic after deploy
+      - Brock-on-demand: when he wants to see a proposal now, not in 30 min
+    """
+    by = getattr(current_user, "email", str(getattr(current_user, "id", "unknown")))
+    logger.warning("[aqa-admin] run-now triggered by %s", by)
+    try:
+        from app.agents.aqa import run_aqa_cycle
+        outcome = run_aqa_cycle(db)
+        return {"ok": True, "triggered_by": by, "outcome": outcome}
+    except Exception as exc:
+        logger.error("[aqa-admin] run-now raised: %s", exc, exc_info=True)
+        return {"ok": False, "triggered_by": by, "error": str(exc)[:500]}
+
+
 @router.get("/proposals")
 def list_aqa_proposals(
     limit: int = 10,
