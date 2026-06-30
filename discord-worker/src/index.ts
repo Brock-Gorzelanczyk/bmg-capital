@@ -1,3 +1,5 @@
+import "./instrument";
+
 /**
  * BMG Capital Discord Worker
  *

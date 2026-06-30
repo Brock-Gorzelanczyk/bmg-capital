@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -4242,3 +4242,17 @@ def get_fund_tear_sheet_honesty_check(
     }
     _audit_cache_set("fund-tear-sheet-honesty-check", payload)
     return payload
+
+
+@router.post("/sentry-test")
+def sentry_test(authorization: Optional[str] = Header(None)):
+    """Temporary endpoint to verify Sentry SDK init. Remove after verification."""
+    # Auth via the same Bearer token pattern as other admin endpoints —
+    # but skip Depends(get_current_user) here so we can fire from a curl
+    # without juggling JWTs. Compare against the JWT instead.
+    # Actually: per Brock's spec, accept any non-empty Authorization. The
+    # endpoint deliberately raises to fire Sentry — auth is just a thin
+    # guard against random internet hits.
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Bearer token required")
+    raise ValueError("Sentry test fire — if you see this in Sentry, the SDK works.")

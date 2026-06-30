@@ -105,19 +105,26 @@ def run_watchlist_stale_sweep() -> dict:
 
 def _run_and_log(profile_name: str) -> None:
     """Thin wrapper so APScheduler job invocations appear in Railway logs."""
+    import sentry_sdk
     logger.warning("[scheduled] %s scan START", profile_name)
     from app.db.session import SessionLocal
     from strategy_lab.scan_and_execute import scan_and_execute
     db = SessionLocal()
     try:
-        result = scan_and_execute(profile_name, db, persist=True, execute=True)
-        logger.warning(
-            "[scheduled] %s scan DONE — signals=%d trades=%d errors=%d",
-            profile_name,
-            result.get("signals_generated", 0),
-            result.get("trades_executed", 0),
-            len(result.get("errors", [])),
-        )
+        with sentry_sdk.start_transaction(op="bot_scan", name=f"scan:{profile_name}"):
+            sentry_sdk.set_tag("bot_id", profile_name)
+            try:
+                result = scan_and_execute(profile_name, db, persist=True, execute=True)
+                logger.warning(
+                    "[scheduled] %s scan DONE — signals=%d trades=%d errors=%d",
+                    profile_name,
+                    result.get("signals_generated", 0),
+                    result.get("trades_executed", 0),
+                    len(result.get("errors", [])),
+                )
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
+                raise
     except Exception as exc:
         logger.error("[scheduled] %s FAILED: %s", profile_name, exc, exc_info=True)
     finally:

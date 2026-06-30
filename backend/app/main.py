@@ -1,5 +1,28 @@
 from __future__ import annotations
 
+import os
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+if os.environ.get("SENTRY_DSN_BACKEND"):
+    sentry_sdk.init(
+        dsn=os.environ["SENTRY_DSN_BACKEND"],
+        integrations=[
+            FastApiIntegration(),
+            StarletteIntegration(),
+            SqlalchemyIntegration(),
+        ],
+        traces_sample_rate=0.05,
+        environment=os.environ.get("RAILWAY_ENVIRONMENT", "production"),
+        release=os.environ.get("RAILWAY_GIT_COMMIT_SHA", "unknown"),
+        before_send=lambda event, hint: None if (
+            event.get("transaction", "").startswith("/api/admin/")
+            and event.get("contexts", {}).get("response", {}).get("status_code") == 401
+        ) else event,
+    )
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager
