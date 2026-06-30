@@ -106,8 +106,11 @@ DISPLAY_NAMES: dict[str, str] = {
     "crypto_quant_scalper":         "Quant Scalper",
     "crypto_quant_mean_reversion":  "Quant Mean Reversion",
     "crypto_meanrev_2163":          "Mean Rev 2163",
-    "options_income":               "Equity Income",
-    "options_directional":          "Equity Directional",
+    # 2026-06-30: was "Equity Income" / "Equity Directional" — caused user
+    # confusion on /strategy homepage where the dedicated leaderboard already
+    # showed "Options Income" / "Options Directional". Renamed for consistency.
+    "options_income":               "Options Income",
+    "options_directional":          "Options Directional",
 }
 
 
@@ -739,6 +742,10 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         )
 
     # Leaderboard: one entry per bot across all portfolios
+    # 2026-06-30: added all_time_return_pct, enabled, paused_reason, and
+    # unrealized_pnl_cents so the /strategy homepage shows the same numbers as
+    # the dedicated /strategy/leaderboard. Both surfaces now derive from the
+    # canonical snapshot. Sort by all_time_return_pct so the winner ranks first.
     leaderboard = []
     for port_snap in portfolio_snapshots:
         for bot in port_snap.bots:
@@ -746,11 +753,14 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "rank": 0,
                 "profile": bot.profile_name,
                 "name": bot.display_name,
+                "enabled": bot.enabled,
                 "return_30d_pct": bot.return_30d_pct,
+                "all_time_return_pct": bot.all_time_return_pct,
                 "today_pnl_cents": bot.today_pnl_cents,
                 "watchlist_count": bot.watchlist_count,
                 "portfolio_value_cents": bot.portfolio_value_cents,
                 "realized_pnl_cents": bot.realized_pnl_cents,
+                "unrealized_pnl_cents": bot.unrealized_pnl_cents,
                 # Capital deployed in open positions (entry-cost notional).
                 # Used by Strategy Lab + Dashboard to show "X% of $Y deployed".
                 "deployed_cents": bot.deployed_cents,
@@ -758,6 +768,7 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             })
     leaderboard.sort(
         key=lambda x: (
+            x["all_time_return_pct"],
             x["return_30d_pct"],
             x["realized_pnl_cents"],
             x["today_pnl_cents"],
@@ -812,8 +823,16 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         "total_watchlist_count": total_watchlist,
         "equity_curve": [],  # kept for compatibility
         "leaderboard": leaderboard,
-        "best_performer": {"profile": best["profile"], "return_30d_pct": best["return_30d_pct"]} if best else None,
-        "worst_performer": {"profile": worst["profile"], "return_30d_pct": worst["return_30d_pct"]} if worst else None,
+        "best_performer": {
+            "profile": best["profile"],
+            "return_30d_pct": best["return_30d_pct"],
+            "all_time_return_pct": best["all_time_return_pct"],
+        } if best else None,
+        "worst_performer": {
+            "profile": worst["profile"],
+            "return_30d_pct": worst["return_30d_pct"],
+            "all_time_return_pct": worst["all_time_return_pct"],
+        } if worst else None,
         "portfolios": [
             {
                 "id": s.portfolio_id,

@@ -853,8 +853,12 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
         </div>
         <div className="space-y-0">
           {entries.map((entry) => {
-            const ret30 = entry.return_30d_pct ?? null;
-            const ePos = (ret30 ?? 0) >= 0;
+            // 2026-06-30: column header reads "All-Time" so display
+            // all_time_return_pct (which includes unrealized P&L from open
+            // positions). Falls back to return_30d_pct only if the new field
+            // isn't present (older payload during deploy rollout).
+            const allTime = entry.all_time_return_pct ?? entry.return_30d_pct ?? null;
+            const ePos = (allTime ?? 0) >= 0;
             const tPnl = entry.today_pnl_cents / 100;
             const tPos = tPnl >= 0;
             const isCrypto = entry.profile.includes("crypto");
@@ -883,8 +887,8 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
                 <span className="text-[10px] font-bold text-t-gdim w-4 flex-shrink-0 font-mono-t">#{entry.rank}</span>
                 <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-t-amber" : entry.profile.includes("quant") ? "bg-violet-400" : "bg-t-cyan")} />
                 <span className="flex-1 text-xs font-semibold text-t-hi truncate font-ui-t">{entry.name}</span>
-                <span className={cn("text-xs font-bold w-20 text-right tabular-nums font-mono-t", ret30 != null ? (ePos ? "text-t-green" : "text-t-red") : "text-t-gdim")}>
-                  {ret30 != null ? `${ret30 >= 0 ? "+" : ""}${ret30.toFixed(2)}%` : "—"}
+                <span className={cn("text-xs font-bold w-20 text-right tabular-nums font-mono-t", allTime != null ? (ePos ? "text-t-green" : "text-t-red") : "text-t-gdim")}>
+                  {allTime != null ? `${allTime >= 0 ? "+" : ""}${allTime.toFixed(2)}%` : "—"}
                 </span>
                 <span className={cn("text-xs w-24 text-right tabular-nums font-mono-t", tPos ? "text-t-green" : "text-t-red")}>
                   {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today

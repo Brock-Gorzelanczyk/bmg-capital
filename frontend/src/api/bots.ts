@@ -489,10 +489,16 @@ export interface PortfolioLeaderboardEntry {
   rank: number;
   profile: string;
   name: string;
+  enabled?: boolean;
   return_30d_pct: number;
+  all_time_return_pct?: number;
   today_pnl_cents: number;
   watchlist_count: number;
   portfolio_value_cents: number;
+  realized_pnl_cents?: number;
+  unrealized_pnl_cents?: number;
+  deployed_cents?: number;
+  starting_capital_cents?: number;
 }
 
 export interface PortfolioData {
@@ -508,8 +514,8 @@ export interface PortfolioData {
   total_watchlist_count: number;
   equity_curve: Array<{ date: string; value_cents: number }>;
   leaderboard: PortfolioLeaderboardEntry[];
-  best_performer: { profile: string; return_30d_pct: number } | null;
-  worst_performer: { profile: string; return_30d_pct: number } | null;
+  best_performer: { profile: string; return_30d_pct: number; all_time_return_pct?: number } | null;
+  worst_performer: { profile: string; return_30d_pct: number; all_time_return_pct?: number } | null;
 }
 
 // ─── Dashboard-specific types + fetchers ─────────────────────────────────────
