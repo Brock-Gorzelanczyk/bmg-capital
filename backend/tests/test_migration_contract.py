@@ -72,6 +72,7 @@ _NATURALLY_IDEMPOTENT_WAIVER = {
     "m019_add_modeled_fees_cents",
     "m020_add_bot_threshold_dynamic",
     "m002_seed_bots_t2_v1",  # intentionally ungated per file header (idempotent UPDATEs preserving state)
+    "m046_force_kill_stuck_running_meetings",  # NO gate by design — runs every boot, idempotent via WHERE clause (kills 0 rows on clean DB). See spec section COMMIT 2.
 }
 
 

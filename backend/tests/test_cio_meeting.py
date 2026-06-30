@@ -1170,12 +1170,17 @@ def test_409_concurrent_meeting_guard(monkeypatch):
     engine = _make_test_engine()
     db = _make_session(engine)
 
-    # Seed a running meeting started moments ago
+    # Seed a running meeting started moments ago.
+    # Use Python isoformat() (T separator, +00:00 suffix) so the Python-bound
+    # :cutoff comparison in create_meeting_record works correctly.
+    from datetime import datetime, timezone
+    _now_iso = datetime.now(timezone.utc).isoformat()
     db.execute(
         text(
             "INSERT INTO fund_meetings (meeting_id, started_at, status) "
-            "VALUES ('mtg_running', datetime('now'), 'running')"
-        )
+            "VALUES ('mtg_running', :s, 'running')"
+        ),
+        {"s": _now_iso},
     )
     db.commit()
 

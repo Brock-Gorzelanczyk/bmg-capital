@@ -6,7 +6,7 @@ ALL LLM inference routed through call_llm via cio_chair.run_meeting.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import text
@@ -57,11 +57,13 @@ def create_meeting_record(db: Session, *, runner_label: str = "manual_api") -> s
     """
     from fastapi import HTTPException
 
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
     existing = db.execute(
         text(
             "SELECT meeting_id FROM fund_meetings "
-            "WHERE status='running' AND started_at > datetime('now', '-15 minutes') LIMIT 1"
-        )
+            "WHERE status='running' AND started_at > :cutoff LIMIT 1"
+        ),
+        {"cutoff": cutoff_iso},
     ).fetchone()
     if existing:
         raise HTTPException(409, f"meeting already in progress: {existing[0]}")

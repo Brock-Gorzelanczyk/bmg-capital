@@ -445,6 +445,21 @@ async def lifespan(app: FastAPI):
             exc_info=True,
         )
 
+    # m046: force-close fund_meetings rows stuck in status='running' for >30 minutes.
+    # NO _gate; runs every boot. Catches pre-PR-#25 sync-orphan rows that the
+    # asyncio watchdog in cio_meeting_runner cannot reach.
+    try:
+        from app.db.migrations.m046_force_kill_stuck_running_meetings import run as _run_m046
+        with engine.begin() as _m046_conn:
+            _m046_result = _run_m046(_m046_conn)
+        logger.warning("[startup] m046 OK: %s", _m046_result)
+    except Exception as _m046_exc:
+        logger.error(
+            "[startup] m046_force_kill_stuck_running_meetings FAILED: %s",
+            _m046_exc,
+            exc_info=True,
+        )
+
     # SHIP 5: CIO Morning Meeting tables (m039-m043).
     try:
         from app.db.migrations.m039_fund_meetings import run as _run_m039
