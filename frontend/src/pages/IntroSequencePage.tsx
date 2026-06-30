@@ -18,8 +18,10 @@ import { X } from "lucide-react";
  *   - Escape key closes the intro and navigates back to `from`.
  *   - Visible "× CLOSE" button top-right (above the iframe) provides an
  *     unmissable exit.
- *   - Writes localStorage.bmg_intro_seen on any exit path so the IntroGate
- *     doesn't re-trap users on the next /login visit.
+ *   - Writes sessionStorage.bmg_intro_seen on any exit path so the IntroGate
+ *     doesn't re-trap users on the next /login visit within the same session.
+ *     The flag clears on browser-tab close (session end) or explicit logout
+ *     so a fresh session replays the intro.
  */
 export default function IntroSequencePage() {
   const navigate = useNavigate();
@@ -33,7 +35,7 @@ export default function IntroSequencePage() {
 
   const exit = (markSeen: boolean) => {
     if (markSeen) {
-      try { localStorage.setItem("bmg_intro_seen", "1"); } catch { /* ignore */ }
+      try { sessionStorage.setItem("bmg_intro_seen", "1"); } catch { /* ignore */ }
     }
     navigate(returnTo, { replace: true });
   };

@@ -268,12 +268,14 @@ function AdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Login-page gate — first-time visitors see the cinematic intro before
- *  the login form renders. After the intro plays, localStorage.bmg_intro_seen
- *  is set so subsequent /login visits show the form immediately. */
+/** Login-page gate — first-time visitors in a session see the cinematic intro
+ *  before the login form renders. Uses sessionStorage so the flag clears when
+ *  the browser tab closes — a fresh session replays the intro. The auth store
+ *  also clears the flag on logout so the next /login visit replays. Refreshes
+ *  WITHIN a session see the form directly (no replay). */
 function IntroGate({ children }: { children: ReactNode }) {
   let seen = false;
-  try { seen = !!window.localStorage.getItem("bmg_intro_seen"); } catch { /* SSR safety */ }
+  try { seen = !!window.sessionStorage.getItem("bmg_intro_seen"); } catch { /* SSR safety */ }
   if (!seen) return <Navigate to="/intro" replace />;
   return <>{children}</>;
 }
