@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -3362,4 +3362,173 @@ def cio_last_meeting_agents(
         "agents_ok_count": agents_ok_count,
         "agents_failed_count": agents_failed_count,
         "failure_types": failure_types,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/admin/bots/diagnostics
+# Per-bot 24h (configurable) diagnostic endpoint: scan/signal/trade/position
+# counts + a one-word verdict per bot so triage collapses from hours of
+# log-grepping to one curl call.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_row_ts(value) -> "Optional[datetime]":
+    """Normalize a timestamp value from a SQLAlchemy row.
+
+    SQLite's MAX() returns naive strings like '2026-06-30 07:31:05.715974'.
+    Postgres returns proper datetime objects.  This helper normalises both
+    to a UTC-aware datetime (or None) so classify logic uses one code path.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except ValueError:
+            return None
+    return None
+
+
+def _classify_bot(row, stale_cutoff, trades_last_ts_dt) -> tuple[str, str]:
+    """Return (verdict, investigate_hint) for a single bot row.
+
+    Priority-ordered — first match wins:
+      profile_disabled > paused > no_signals > signals_no_trades > stale > trading
+
+    trades_last_ts_dt is the pre-parsed UTC datetime (or None) — avoids
+    SQLite string-vs-datetime comparison errors.
+    """
+    if not row.profile_enabled:
+        return "profile_disabled", "Check BotProfile.enabled flag in seed YAML"
+    if not row.allocation_enabled:
+        return "paused", "See allocation_paused_reason"
+    if row.signals_window == 0:
+        return "no_signals", "Check scheduler logs for [scan:<bot>] entries; verify bar fetch"
+    if row.trades_window == 0:
+        return "signals_no_trades", "Check discipline composite threshold; cooldown; position cap"
+    if trades_last_ts_dt is not None and trades_last_ts_dt < stale_cutoff:
+        return "stale", "Recent regression — check confidence threshold, bar source"
+    return "trading", "Healthy"
+
+
+@router.get("/bots/diagnostics")
+def get_bot_diagnostics(
+    hours: int = 24,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Per-bot diagnostic snapshot. Returns counts + verdict for each bot.
+
+    Query param:
+      hours  — lookback window for signals/trades counts (default 24, max 168)
+
+    Hard-codes user_id=1 (fund primary). Multi-user pivot would add a query
+    param here, but all BMG ops are single-tenant for now.
+
+    # Snapshot inconsistency possible across subqueries; acceptable for
+    # diagnostic surface.
+    """
+    if hours < 1 or hours > 168:
+        raise HTTPException(status_code=400, detail="hours must be 1..168")
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=hours)
+    stale_cutoff = now - timedelta(hours=48)
+
+    TARGET_USER_ID = 1  # fund primary; multi-user pivot would add a query param
+
+    sql = text("""
+        SELECT p.name             AS bot_name,
+               p.enabled          AS profile_enabled,
+               p.asset_class      AS asset_class,
+               a.id               AS allocation_id,
+               a.enabled          AS allocation_enabled,
+               a.paused_reason    AS allocation_paused_reason,
+               a.starting_capital_cents AS starting_capital_cents,
+               (SELECT COUNT(*) FROM bot_positions bp
+                 WHERE bp.allocation_id = a.id
+                   AND bp.closed_at IS NULL
+                   AND bp.quarantined_at IS NULL) AS open_positions_count,
+               (SELECT COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) FROM bot_positions bp
+                 WHERE bp.allocation_id = a.id
+                   AND bp.closed_at IS NULL
+                   AND bp.quarantined_at IS NULL) AS open_positions_notional_cents,
+               (SELECT COUNT(*) FROM bot_signals bs
+                 WHERE bs.allocation_id = a.id
+                   AND bs.ts >= :cutoff) AS signals_window,
+               (SELECT MAX(bs.ts) FROM bot_signals bs
+                 WHERE bs.allocation_id = a.id) AS signals_last_ts,
+               (SELECT COUNT(*) FROM bot_trades bt
+                 WHERE bt.allocation_id = a.id
+                   AND bt.ts >= :cutoff
+                   AND bt.quarantined_at IS NULL) AS trades_window,
+               (SELECT MAX(bt.ts) FROM bot_trades bt
+                 WHERE bt.allocation_id = a.id
+                   AND bt.quarantined_at IS NULL) AS trades_last_ts
+          FROM bot_profiles p
+          JOIN bot_allocations a ON a.profile_id = p.id
+         WHERE a.user_id = :user_id
+         ORDER BY p.name
+    """)
+
+    rows = db.execute(sql, {"cutoff": cutoff, "user_id": TARGET_USER_ID}).fetchall()
+
+    def _fmt_ts(dt) -> str | None:
+        if dt is None:
+            return None
+        if isinstance(dt, str):
+            # SQLite sometimes returns strings; parse and reformat.
+            try:
+                dt = datetime.fromisoformat(dt)
+            except ValueError:
+                return dt
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat().replace("+00:00", "Z")
+
+    summary = {
+        "total_bots": 0,
+        "trading": 0,
+        "stale": 0,
+        "signals_no_trades": 0,
+        "no_signals": 0,
+        "paused": 0,
+        "profile_disabled": 0,
+    }
+
+    bots = []
+    for row in rows:
+        trades_last_ts_dt = _parse_row_ts(row.trades_last_ts)
+        verdict, investigate = _classify_bot(row, stale_cutoff, trades_last_ts_dt)
+        summary["total_bots"] += 1
+        summary[verdict] += 1
+        bots.append({
+            "bot_name": row.bot_name,
+            "profile_enabled": bool(row.profile_enabled),
+            "allocation_enabled": bool(row.allocation_enabled),
+            "allocation_paused_reason": row.allocation_paused_reason,
+            "starting_capital_cents": row.starting_capital_cents,
+            "asset_class": row.asset_class,
+            "open_positions_count": int(row.open_positions_count),
+            "open_positions_notional_cents": int(row.open_positions_notional_cents),
+            "signals_window": int(row.signals_window),
+            "signals_last_ts": _fmt_ts(row.signals_last_ts),
+            "trades_window": int(row.trades_window),
+            "trades_last_ts": _fmt_ts(row.trades_last_ts),
+            "verdict": verdict,
+            "investigate": investigate,
+        })
+
+    return {
+        "as_of": now.isoformat().replace("+00:00", "Z"),
+        "window_hours": hours,
+        "bots": bots,
+        "summary": summary,
     }
