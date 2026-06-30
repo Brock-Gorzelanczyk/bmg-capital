@@ -79,7 +79,7 @@ export default function FundFloorIframePage() {
       <iframe
         ref={iframeRef}
         src="/fund-floor.html"
-        title="Fund Floor"
+        title="Trading Desk"
         loading="lazy"
         sandbox="allow-scripts allow-same-origin"
         style={{ width: "100%", height: "100%", border: "none", display: "block" }}
