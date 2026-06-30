@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bmg.vault-sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/brockgorzelanczyk/my-new-project/relay/vault_sync.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+        <key>BMG_USER_TOKEN</key>
+        <string>REPLACE_WITH_BMG_USER_TOKEN</string>
+        <key>BMG_API_BASE</key>
+        <string>https://disciplined-intuition-production-5207.up.railway.app</string>
+        <key>BMG_VAULT_ROOT</key>
+        <string>/Users/brockgorzelanczyk/Documents/BMG-Capital-Vault</string>
+        <key>VAULT_SYNC_INTERVAL_SECONDS</key>
+        <string>300</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/vault_sync.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/vault_sync.err</string>
+</dict>
+</plist>
