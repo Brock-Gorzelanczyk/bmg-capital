@@ -3026,6 +3026,69 @@ def reconcile_broker(
     return reconcile_positions(db, user_id=user_id)
 
 
+# ── GET /api/admin/migration-status ──────────────────────────────────────────
+# 2026-06-29 diagnostic: lists schema_migrations entries + open-position
+# counts per bot per symbol. Helps verify m033 (and other migrations) ran
+# without needing direct DB access. READ-ONLY.
+@router.get("/migration-status")
+def migration_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Returns:
+      - migrations: every row in schema_migrations (proves what ran)
+      - open_positions_by_bot_symbol: open BotPosition counts grouped by
+        bot_id + symbol (proves which bots hold what)
+    """
+    from sqlalchemy import text as _text
+    out: Dict[str, Any] = {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "migrations": [],
+        "open_positions_by_bot_symbol": [],
+    }
+    try:
+        mig_rows = db.execute(_text(
+            "SELECT migration_name, applied_at FROM schema_migrations "
+            "ORDER BY applied_at DESC"
+        )).fetchall()
+        out["migrations"] = [
+            {
+                "name": r[0],
+                "applied_at": r[1].isoformat() if hasattr(r[1], "isoformat") else r[1],
+            }
+            for r in mig_rows
+        ]
+    except Exception as exc:
+        out["migrations_error"] = str(exc)[:200]
+    try:
+        pos_rows = db.execute(_text("""
+            SELECT p.name AS bot_id,
+                   bp.symbol,
+                   COUNT(*) AS open_count,
+                   COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) AS notional_cents
+              FROM bot_positions bp
+              JOIN bot_allocations a ON a.id = bp.allocation_id
+              JOIN bot_profiles p ON p.id = a.profile_id
+             WHERE bp.closed_at IS NULL
+               AND bp.quarantined_at IS NULL
+             GROUP BY p.name, bp.symbol
+             ORDER BY notional_cents DESC
+             LIMIT 200
+        """)).fetchall()
+        out["open_positions_by_bot_symbol"] = [
+            {
+                "bot_id": r[0],
+                "symbol": r[1],
+                "open_count": int(r[2]),
+                "notional_cents": int(r[3] or 0),
+            }
+            for r in pos_rows
+        ]
+    except Exception as exc:
+        out["positions_error"] = str(exc)[:200]
+    return out
+
+
 # ── GET /api/admin/auto-pause/list ───────────────────────────────────────────
 # SHIP 6 — lists currently auto-paused bots (paused_reason LIKE 'degraded_auto_pause%').
 # READ-ONLY. Frontend reads rows[].bot_id exactly — shape contract per known-issues.md #4.
