@@ -54,6 +54,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     localStorage.removeItem("bmg_token");
+    // Clear the intro-seen flag so the next /login visit replays the intro.
+    // sessionStorage already clears on browser-tab close; this handles the
+    // logout-without-close path (user logs out, lands on /login in the same tab).
+    sessionStorage.removeItem("bmg_intro_seen");
     set({ token: null, user: null });
   },
 
