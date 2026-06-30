@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#05080a; overflow:hidden; }
+  * { box-sizing:border-box; }
+  #ff-canvas { image-rendering:pixelated; image-rendering:crisp-edges; }
+  @keyframes ff-blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  @keyframes ff-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
+  @media (pointer:fine) { #ff-touch { display:none !important; } }
+</style>
+</head>
+<body>
+
+<div id="ff-root" style="position:fixed; inset:0; background:radial-gradient(120% 80% at 50% 0%, #0a1410 0%, #05080a 60%); font-family:'Pixelify Sans',sans-serif; color:#dce8dc; display:flex; flex-direction:column; overflow:hidden;">
+
+  <!-- top bar -->
+  <div style="display:flex; align-items:center; gap:14px; padding:9px 18px; border-bottom:1px solid rgba(74,222,128,0.16); background:rgba(6,11,6,0.6);">
+    <a href="/dashboard" style="display:flex; align-items:center; gap:8px; text-decoration:none; flex:none;"><span style="width:12px; height:12px; background:#4ade80; box-shadow:0 0 8px rgba(74,222,128,0.8); transform:rotate(45deg);"></span><span style="font-family:'Silkscreen',monospace; font-size:13px; color:#eafbe9;">BMG CAPITAL</span></a>
+    <span style="font-family:'Silkscreen',monospace; font-size:10px; letter-spacing:0.08em; color:#4ade80;">// FUND FLOOR</span>
+    <div style="flex:1;"></div>
+    <button id="ff-meet" style="font-family:'Silkscreen',monospace; font-size:9px; letter-spacing:0.06em; color:#a78bfa; background:rgba(167,139,250,0.1); border:1px solid rgba(167,139,250,0.4); border-radius:3px; padding:5px 9px; cursor:pointer;">▶ MEETING</button>
+    <span style="font-family:'Silkscreen',monospace; font-size:9px; color:#7e8e7e; letter-spacing:0.04em;">◄►▲▼ MOVE · SPACE TALK</span>
+    <span style="display:flex; align-items:center; gap:6px; font-family:'Silkscreen',monospace; font-size:9px; color:#fbbf24; border:1px solid rgba(251,191,36,0.28); border-radius:3px; padding:4px 8px;"><span style="width:5px; height:5px; border-radius:50%; background:#fbbf24; box-shadow:0 0 6px rgba(251,191,36,0.8);"></span>PAPER MODE</span>
+  </div>
+
+  <!-- game stage -->
+  <div style="flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:14px;">
+    <div id="ff-wrap" style="position:relative; aspect-ratio:320/208; height:100%; max-height:100%; width:auto; max-width:100%; box-shadow:0 0 0 3px #0c1a12, 0 0 40px rgba(74,222,128,0.18), 0 18px 60px rgba(0,0,0,0.6); border-radius:4px; overflow:hidden;">
+      <canvas id="ff-canvas" width="320" height="208" style="position:absolute; inset:0; width:100%; height:100%; display:block; background:#0c1a10;"></canvas>
+      <div style="position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px); opacity:0.5; mix-blend-mode:multiply;"></div>
+      <div style="position:absolute; inset:0; pointer-events:none; background:radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(2,5,3,0.6) 100%);"></div>
+
+      <!-- API budget wall meter -->
+      <div id="ff-budget" style="position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:4px; background:rgba(6,17,11,0.9); border:2px solid rgba(74,222,128,0.4); border-radius:4px; padding:6px 11px; box-shadow:0 0 14px rgba(74,222,128,0.2); min-width:188px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;"><span style="font-family:'Silkscreen',monospace; font-size:8px; letter-spacing:0.08em; color:#7e8e7e;">DAILY API BUDGET</span><span id="ff-budget-val" style="font-family:'Silkscreen',monospace; font-size:9px; color:#4ade80;">$0.42 / $3.00</span></div>
+        <div style="height:5px; background:#0c1a10; border:1px solid rgba(74,222,128,0.2); border-radius:2px; overflow:hidden;"><div id="ff-budget-fill" style="height:100%; width:14%; background:linear-gradient(90deg,#4ade80,#9cffc4); box-shadow:0 0 6px rgba(74,222,128,0.6); transition:width .4s ease;"></div></div>
+      </div>
+
+      <!-- interaction hint -->
+      <div id="ff-hint" style="position:absolute; left:50%; bottom:14px; transform:translateX(-50%); display:none; align-items:center; gap:8px; font-family:'Silkscreen',monospace; font-size:10px; color:#04150b; background:#4ade80; border:2px solid #eafbe9; box-shadow:0 0 14px rgba(74,222,128,0.5); border-radius:3px; padding:6px 12px; white-space:nowrap; animation:ff-bob 1.4s ease-in-out infinite;"></div>
+
+      <!-- GBA dialog box (filled dynamically) -->
+      <div id="ff-dialog" style="position:absolute; left:10px; right:10px; bottom:10px; display:none; background:#0a1f14; border:3px solid #4ade80; border-radius:5px; box-shadow:0 0 0 2px #04120a, 0 0 22px rgba(74,222,128,0.35); padding:13px 15px 15px; max-height:62%; overflow-y:auto;"></div>
+
+      <!-- touch controls -->
+      <div id="ff-touch" style="position:absolute; inset:0; pointer-events:none;">
+        <div style="position:absolute; left:12px; bottom:12px; width:108px; height:108px; pointer-events:auto;">
+          <button data-dir="up" style="position:absolute; left:38px; top:0; width:32px; height:36px; background:rgba(10,31,20,0.85); border:2px solid #4ade80; border-radius:5px; color:#4ade80; font-size:14px; cursor:pointer;">▲</button>
+          <button data-dir="down" style="position:absolute; left:38px; bottom:0; width:32px; height:36px; background:rgba(10,31,20,0.85); border:2px solid #4ade80; border-radius:5px; color:#4ade80; font-size:14px; cursor:pointer;">▼</button>
+          <button data-dir="left" style="position:absolute; left:0; top:36px; width:36px; height:32px; background:rgba(10,31,20,0.85); border:2px solid #4ade80; border-radius:5px; color:#4ade80; font-size:14px; cursor:pointer;">◄</button>
+          <button data-dir="right" style="position:absolute; right:0; top:36px; width:36px; height:32px; background:rgba(10,31,20,0.85); border:2px solid #4ade80; border-radius:5px; color:#4ade80; font-size:14px; cursor:pointer;">►</button>
+        </div>
+        <button id="ff-a" style="position:absolute; right:16px; bottom:24px; width:60px; height:60px; border-radius:50%; background:rgba(74,222,128,0.18); border:3px solid #4ade80; color:#4ade80; font-family:'Silkscreen',monospace; font-size:18px; cursor:pointer; pointer-events:auto; box-shadow:0 0 16px rgba(74,222,128,0.4);">A</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- roster legend -->
+  <div style="display:flex; align-items:center; gap:14px; padding:8px 18px; border-top:1px solid rgba(74,222,128,0.16); background:rgba(6,11,6,0.6); overflow-x:auto;">
+    <span style="display:flex; align-items:center; gap:6px; white-space:nowrap;"><span style="width:9px; height:9px; background:#1f8a5b; border-radius:2px;"></span><span style="font-family:'Silkscreen',monospace; font-size:9px; color:#dce8dc;">BROCK · CIO (you)</span></span>
+    <span style="font-family:'Silkscreen',monospace; font-size:9px; color:#4ade80; white-space:nowrap;">LEADERSHIP:</span>
+    <span style="font-family:'Silkscreen',monospace; font-size:9px; color:#9fb0a0; white-space:nowrap;">Brick · Dick</span>
+    <span style="font-family:'Silkscreen',monospace; font-size:9px; color:#a78bfa; white-space:nowrap;">RESEARCH:</span>
+    <span style="font-family:'Silkscreen',monospace; font-size:9px; color:#9fb0a0; white-space:nowrap;">Nick · Mick · Rick</span>
+    <span style="font-family:'Silkscreen',monospace; font-size:9px; color:#38bdf8; white-space:nowrap;">OPS &amp; AUDIT:</span>
+    <span style="font-family:'Silkscreen',monospace; font-size:9px; color:#9fb0a0; white-space:nowrap;">Vick · Slick · Wick · Patrick</span>
+  </div>
+</div>
+<script>
+(function(){ if (document.readyState !== 'loading') { run(); } else { document.addEventListener('DOMContentLoaded', run); } function run(){
+    const cv = document.getElementById('ff-canvas');
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    const T = 16, MAPW = 30, MAPH = 28, VW = 320, VH = 208;
+
+    const PAL = {
+      brock:   { hair:'#3a2a18', skin:'#e8b890', shirt:'#1f8a5b', pants:'#161a16', cap:'#eafbe9' },
+      brick:   { hair:'#4a3420', skin:'#e8b890', shirt:'#2ea36b', pants:'#1a241a' },
+      dick:    { hair:'#6b4422', skin:'#f0c8a0', shirt:'#f87171', pants:'#2a1414' },
+      patrick: { hair:'#1a1a1a', skin:'#d8a878', shirt:'#38bdf8', pants:'#1a2430' },
+      nick:    { hair:'#c98a34', skin:'#f0c8a0', shirt:'#9fb0cf', pants:'#22303a' },
+      mick:    { hair:'#14110f', skin:'#d8a878', shirt:'#a78bfa', pants:'#201828' },
+      rick:    { hair:'#241712', skin:'#c89868', shirt:'#f0b35a', pants:'#2a2010' },
+      vick:    { hair:'#2a2a2a', skin:'#e0b088', shirt:'#5ec5d8', pants:'#16282c' },
+      slick:   { hair:'#3a2a18', skin:'#f0c8a0', shirt:'#e0a0c0', pants:'#2a1c26' },
+      wick:    { hair:'#46264f', skin:'#f0c8a0', shirt:'#8a9a8a', pants:'#1c241c' },
+    };
+
+    // ---- live data model (backend overrides via window.BMGFloor) ----
+    const M = {
+      brick:   { name:'BRICK',   role:'PORTFOLIO MANAGER',     pal:PAL.brick,   status:'active',   cost:'0.38', dept:'lead',
+                 line:"I size every position — book's 85.7% deployed. Heads up: Dick can veto any trade I push.",
+                 briefing:"Opened long bias into RISK-ON. Rotating into Crypto Onchain strength and trimming the lagging quant scalper sleeve.",
+                 decision:"Added 0.30 BTC to Crypto Day; held Options Income flat pending Dick's sign-off." },
+      dick:    { name:'DICK',    role:'CHIEF RISK OFFICER',    pal:PAL.dick,    status:'active',   cost:'0.31', dept:'lead',
+                 line:"Net exposure 85.7%, drawdown -2.1%. I hold veto over the PM and the kill switch is mine.",
+                 briefing:"Exposure within limits. Flagged BTC/ETH correlation at 0.88 — vetoed Brick's second crypto add this morning.",
+                 decision:"VETOED: 2nd BTC add (cluster risk). Approved: trim of Quant Scalper." },
+      nick:    { name:'NICK',    role:'EQUITY RESEARCHER',     pal:PAL.nick,    status:'active',   cost:'0.22', dept:'research',
+                 line:"Working the stock sleeve — NVDA, TSLA, SPY. Stock Swing's breakout just fired at 142.10.",
+                 briefing:"NVDA breakout confirmed on 2.1x volume; semis leading. Tagged TSLA as a fade candidate below 240.",
+                 decision:"Flagged NVDA long to Brick; recommended no chase on TSLA." },
+      mick:    { name:'MICK',    role:'QUANT RESEARCHER',      pal:PAL.mick,    status:'active',   cost:'0.44', dept:'research',
+                 line:"100 strategies backtested, 12 in production. Book Sharpe's 2.31. Numbers don't lie — people do.",
+                 briefing:"Three quant bots showing stale data — Crypto Onchain, Quant Aggressive, Quant Scalper need a refeed.",
+                 decision:"Quarantined Quant Scalper pending refeed; kept Aggressive live on degraded flag." },
+      rick:    { name:'RICK',    role:'MACRO STRATEGIST',      pal:PAL.rick,    status:'active',   cost:'0.19', dept:'research',
+                 line:"Regime's RISK-ON, VIX 13.4, BTC dominance 52%. I tell the bots what weather they're trading into.",
+                 briefing:"Regime holds RISK-ON. VIX subdued, breadth +0.62. No macro catalysts until Thursday CPI.",
+                 decision:"Kept risk dial at 1.0x; no regime override issued." },
+      vick:    { name:'VICK',    role:'DATA QUALITY WATCHER',  pal:PAL.vick,    status:'active',   cost:'0.12', dept:'ops',
+                 line:"I diff every feed — 65 assets, zero stale ticks today. Bad data is worse than no data.",
+                 briefing:"Feeds clean on equities. Crypto on-chain feed lagged 40s mid-morning; auto-recovered.",
+                 decision:"Raised a soft alert on the onchain feed; no halt required." },
+      slick:   { name:'SLICK',   role:'EXECUTION AUDITOR',     pal:PAL.slick,   status:'active',   cost:'0.17', dept:'ops',
+                 line:"218 fills today, slippage modeled, books tied to the cent. I audit every paper fill the engine makes.",
+                 briefing:"218 fills reconciled, median latency 142ms. No fills outside modeled slippage bands.",
+                 decision:"Signed off on today's execution; no exceptions logged." },
+      wick:    { name:'WICK',    role:'OPS / BACK OFFICE',     pal:PAL.wick,    status:'active',   cost:'0.09', dept:'ops',
+                 line:"Reconciliation's clean — NAV $997,822.69, high-water $125.94 a unit. Somebody keeps the lights on.",
+                 briefing:"NAV struck at $997,822.69. Three stale bots escalated to me from Mick — tracking remediation.",
+                 decision:"Opened ops tickets for 3 stale bots; ETA refeed by 11:00 ET." },
+      patrick: { name:'PATRICK', role:'SENTINEL DEVOPS',       pal:PAL.patrick, status:'degraded', cost:'0.26', dept:'ops',
+                 line:"Engine uptime 14 days, 142ms cycle latency. A bot misbehaves, I quarantine it before you're awake.",
+                 briefing:"Running degraded — one worker node recycling after the onchain feed hiccup. Failover held.",
+                 decision:"Restarted the onchain worker; throttled retries to protect the API budget." },
+    };
+    const DATA = { budgetSpent: 0.42, budgetCap: 3, stale: ['mick'], night: false, vetoFlash: -999,
+      cioBriefing: "# CIO MORNING BRIEFING\n8:00 AM ET\n\nRegime is RISK-ON; the book carries a momentum tilt at 85.7% deployed. Crypto Onchain leads (+3.44%); Quant Scalper is the laggard and has been trimmed.\n\nRisk flagged BTC/ETH correlation at 0.88 — Dick vetoed a second crypto add. Three bots are stale (Onchain, Quant Aggressive, Quant Scalper) and are with Ops for refeed.\n\nMandate for the day: hold discipline, no chase on TSLA, await CPI Thursday." };
+
+    // ---- map ----
+    const solid = Array.from({ length: MAPH }, () => Array(MAPW).fill(0));
+    const tile = Array.from({ length: MAPH }, () => Array(MAPW).fill(0));
+    for (let x = 0; x < MAPW; x++) { for (const y of [0, 1]) { solid[y][x] = 1; tile[y][x] = 1; } solid[MAPH-1][x] = 1; tile[MAPH-1][x] = 1; }
+    for (let y = 0; y < MAPH; y++) { solid[y][0] = 1; tile[y][0] = 1; solid[y][MAPW-1] = 1; tile[y][MAPW-1] = 1; }
+    solid[MAPH-1][14] = 0; solid[MAPH-1][15] = 0; tile[MAPH-1][14] = 0; tile[MAPH-1][15] = 0;
+    const set = (tx, ty, code, isSolid) => { if (ty<0||tx<0||ty>=MAPH||tx>=MAPW) return; tile[ty][tx] = code; if (isSolid != null) solid[ty][tx] = isSolid; };
+    for (let y = 3; y <= MAPH-2; y++) { if (tile[y][14]===0) set(14,y,11); if (tile[y][15]===0) set(15,y,11); }
+    set(14,10,13); set(15,10,13); set(14,11,13); set(15,11,13);
+
+    // cubicles: leadership(2), research(3), ops(4)
+    const cubicles = [
+      { dx:7,  dy:6,  who:'brick' }, { dx:19, dy:6,  who:'dick' },
+      { dx:4,  dy:14, who:'nick' },  { dx:13, dy:14, who:'mick' }, { dx:22, dy:14, who:'rick' },
+      { dx:2,  dy:22, who:'vick' },  { dx:9,  dy:22, who:'slick' }, { dx:16, dy:22, who:'wick' }, { dx:23, dy:22, who:'patrick' },
+    ];
+    const npcs = [];
+    cubicles.forEach(c => {
+      const { dx, dy } = c;
+      set(dx, dy, 14, 1); set(dx+1, dy, 15, 1);
+      for (let x = dx-1; x <= dx+2; x++) set(x, dy-1, 4, 1);
+      set(dx-1, dy, 4, 1); set(dx+2, dy, 4, 1);
+      set(dx-1, dy+1, 4, 1); set(dx+2, dy+1, 4, 1);
+      set(dx, dy+1, 10, 0);
+      const px = dx*T+8, py = (dy+1)*T+15;
+      npcs.push({ tx: dx, ty: dy+1, who: c.who, facing: 'down', px, py, hx: px, hy: py, walking: false });
+      solid[dy+1][dx] = 1;
+    });
+
+    // VETO barrier (solid) between Brick (dx7) and Dick (dx19) at row y7
+    const vetoTiles = [];
+    for (let x = 10; x <= 17; x++) { solid[7][x] = 1; tile[7][x] = 18; vetoTiles.push(x); }
+
+    // conference table (center) x12..17, y18..19
+    for (let x = 12; x <= 17; x++) for (let y = 18; y <= 19; y++) set(x, y, 9, 1);
+    const seats = [ [12,17],[16,17],[12,20],[14,20],[16,20],[11,18],[11,19],[18,18],[18,19] ];
+    npcs.forEach((n, i) => { const s = seats[i % seats.length]; n.seat = { x: s[0]*T+8, y: s[1]*T+15 }; });
+    const tableCx = 14.5*T, tableCy = 18.5*T;
+
+    // CIO seat (swivel chair) + briefing board (top center)
+    set(14,3,17,1); set(15,3,17,1); // CIO desk
+    const cioChair = { tx:14, ty:4 };
+    const board = { tx:17, ty:3 }; set(17,3,19,1);
+
+    // server nook + ambient terminal
+    set(24,2,5,1); set(25,2,5,1); set(26,2,5,1); set(26,3,6,1);
+    // meeting / plants / cooler
+    set(1,2,7,1); set(28,2,7,1); set(1,MAPH-2,7,1); set(28,MAPH-2,7,1);
+    set(10,MAPH-3,7,1); set(19,MAPH-3,7,1); set(9,MAPH-3,8,1);
+
+    // ---- player ----
+    const player = { x: 14*T+8, y: 11*T+12, facing: 'down', moving: false };
+    const keys = {};
+    const cam = { x: 0, y: 0 };
+    let dialogOpen = false, hintTarget = null, tick = 0, raf = null;
+    const coins = [];
+    let meetState = 'idle', meetTimer = 0;
+
+    const elDialog = document.getElementById('ff-dialog');
+    const elHint = document.getElementById('ff-hint');
+    const elBudgetVal = document.getElementById('ff-budget-val');
+    const elBudgetFill = document.getElementById('ff-budget-fill');
+
+    const updateBudget = () => {
+      elBudgetVal.textContent = '$' + Number(DATA.budgetSpent).toFixed(2) + ' / $' + Number(DATA.budgetCap).toFixed(2);
+      const pc = Math.max(0, Math.min(1, DATA.budgetSpent / DATA.budgetCap));
+      elBudgetFill.style.width = (pc*100).toFixed(0) + '%';
+      elBudgetFill.style.background = pc > 0.85 ? 'linear-gradient(90deg,#f87171,#fbbf24)' : (pc > 0.6 ? 'linear-gradient(90deg,#fbbf24,#9cffc4)' : 'linear-gradient(90deg,#4ade80,#9cffc4)');
+    };
+    updateBudget();
+
+    // ---- input ----
+    const KEYMAP = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', w:'up', s:'down', a:'left', d:'right', W:'up', S:'down', A:'left', D:'right' };
+    const onKeyDown = (e) => {
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'e' || e.key === 'E') { interact(); return; }
+      const d = KEYMAP[e.key]; if (d) keys[d] = true;
+    };
+    const onKeyUp = (e) => { const d = KEYMAP[e.key]; if (d) keys[d] = false; };
+    window.addEventListener('keydown', onKeyDown); window.addEventListener('keyup', onKeyUp);
+    const touch = document.getElementById('ff-touch');
+    const bindBtn = (el, dir) => { const on = (e)=>{e.preventDefault();keys[dir]=true;}; const off=(e)=>{e.preventDefault();keys[dir]=false;}; el.addEventListener('pointerdown',on); el.addEventListener('pointerup',off); el.addEventListener('pointerleave',off); el.addEventListener('pointercancel',off); };
+    touch.querySelectorAll('[data-dir]').forEach(b => bindBtn(b, b.getAttribute('data-dir')));
+    document.getElementById('ff-a').addEventListener('pointerdown', (e) => { e.preventDefault(); interact(); });
+    document.getElementById('ff-meet').addEventListener('click', () => { if (meetState === 'idle') startMeeting(); else endMeeting(); });
+
+    // ---- collision / interaction ----
+    const solidPx = (x, y) => { if (x<0||y<0||x>=MAPW*T||y>=MAPH*T) return true; return solid[Math.floor(y/T)][Math.floor(x/T)] === 1; };
+    const boxHits = (cx, cy) => { const L=cx-5,Rr=cx+5,TP=cy-9,BT=cy-1; return solidPx(L,TP)||solidPx(Rr,TP)||solidPx(L,BT)||solidPx(Rr,BT)||solidPx(cx,BT); };
+    const dirVec = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0] };
+    const facingTarget = () => {
+      const ptx = Math.floor(player.x / T), pty = Math.floor((player.y - 7) / T);
+      const [vx, vy] = dirVec[player.facing]; const fx = ptx+vx, fy = pty+vy;
+      if (board.tx === fx && board.ty === fy) return { board: true };
+      const n = npcs.find(n => n.tx === fx && n.ty === fy && meetState === 'idle');
+      if (n) return { npc: n };
+      if (meetState === 'meeting' && Math.hypot(player.x - tableCx, player.y - tableCy) < 30) return { meeting: true };
+      return null;
+    };
+    const interact = () => {
+      if (dialogOpen) { closeDialog(); return; }
+      const t = facingTarget(); if (!t) return;
+      if (t.board) openBoard(); else if (t.meeting) openTranscript(); else if (t.npc) openMember(t.npc);
+    };
+    const dotColor = (s) => s === 'down' ? '#f87171' : (s === 'degraded' ? '#fbbf24' : '#4ade80');
+    const statusLabel = (s) => s === 'down' ? 'DOWN' : (s === 'degraded' ? 'DEGRADED' : 'ACTIVE');
+    const lockMove = () => { keys.up = keys.down = keys.left = keys.right = false; };
+
+    const openMember = (n) => {
+      const m = M[n.who]; dialogOpen = true; lockMove();
+      const dc = dotColor(m.status);
+      elDialog.style.borderColor = dc;
+      elDialog.innerHTML =
+        '<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">'
+        + '<span style="font-family:Silkscreen,monospace;font-size:13px;color:#eafbe9;">' + m.name + '</span>'
+        + '<span style="font-family:Silkscreen,monospace;font-size:8px;color:#9fb0a0;letter-spacing:0.04em;">' + m.role + '</span>'
+        + '<span style="margin-left:auto;display:flex;align-items:center;gap:5px;font-family:Silkscreen,monospace;font-size:8px;color:' + dc + ';"><span style="width:6px;height:6px;border-radius:50%;background:' + dc + ';box-shadow:0 0 6px ' + dc + ';"></span>' + statusLabel(m.status) + '</span></div>'
+        + '<div style="font-family:Pixelify Sans,sans-serif;font-size:15px;line-height:1.4;color:#eafbe9;margin-top:9px;">' + m.line + '</div>'
+        + '<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;">'
+        + '<div style="flex:1;min-width:180px;background:rgba(6,17,11,0.6);border-left:2px solid ' + dc + ';border-radius:3px;padding:7px 9px;"><div style="font-family:Silkscreen,monospace;font-size:7px;color:#7e8e7e;">LAST BRIEFING READ</div><div style="font-family:Pixelify Sans,sans-serif;font-size:13px;color:#cdd8cd;margin-top:3px;line-height:1.35;">' + m.briefing + '</div></div>'
+        + '<div style="flex:1;min-width:180px;background:rgba(6,17,11,0.6);border-left:2px solid #38bdf8;border-radius:3px;padding:7px 9px;"><div style="font-family:Silkscreen,monospace;font-size:7px;color:#7e8e7e;">LAST DECISION</div><div style="font-family:Pixelify Sans,sans-serif;font-size:13px;color:#cdd8cd;margin-top:3px;line-height:1.35;">' + m.decision + '</div></div></div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;"><span style="font-family:Silkscreen,monospace;font-size:8px;color:#7e8e7e;">DAILY COST SO FAR <span style="color:#fbbf24;">$' + m.cost + '</span></span><span style="font-family:Silkscreen,monospace;font-size:9px;color:#4ade80;animation:ff-blink 0.9s steps(1) infinite;">▼ CLOSE</span></div>';
+      elDialog.style.display = 'block'; elHint.style.display = 'none';
+    };
+    const openBoard = () => {
+      dialogOpen = true; lockMove(); elDialog.style.borderColor = '#fbbf24';
+      const html = String(DATA.cioBriefing).split('\n').map(l => {
+        if (l.startsWith('# ')) return '<div style="font-family:Silkscreen,monospace;font-size:12px;color:#fbbf24;margin-bottom:4px;">' + l.slice(2) + '</div>';
+        if (!l.trim()) return '<div style="height:6px;"></div>';
+        return '<div style="font-family:Pixelify Sans,sans-serif;font-size:14px;line-height:1.4;color:#eafbe9;">' + l + '</div>';
+      }).join('');
+      elDialog.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="font-family:Silkscreen,monospace;font-size:11px;color:#fbbf24;">📋 CIO BRIEFING BOARD</span><span style="margin-left:auto;font-family:Silkscreen,monospace;font-size:9px;color:#fbbf24;animation:ff-blink 0.9s steps(1) infinite;">▼ CLOSE</span></div>' + html;
+      elDialog.style.display = 'block'; elHint.style.display = 'none';
+    };
+    const TRANSCRIPT = [
+      'BRICK: Pushing a second BTC add — momentum confirms.',
+      'DICK: Vetoed. BTC/ETH correlation is 0.88 - that is one bet, not two.',
+      'RICK: Macro backs risk-on, but no catalyst till CPI.',
+      'MICK: Three quant bots are stale - do not size into bad data.',
+      'WICK: Refeed ETA 11:00. Tickets open.',
+      'BROCK: Hold the line. Discipline is the edge.',
+    ];
+    const openTranscript = () => {
+      dialogOpen = true; lockMove(); elDialog.style.borderColor = '#a78bfa';
+      elDialog.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;"><span style="width:7px;height:7px;border-radius:50%;background:#a78bfa;box-shadow:0 0 6px #a78bfa;"></span><span style="font-family:Silkscreen,monospace;font-size:11px;color:#a78bfa;">CIO MEETING · LIVE DEBATE</span><span style="margin-left:auto;font-family:Silkscreen,monospace;font-size:9px;color:#a78bfa;animation:ff-blink 0.9s steps(1) infinite;">▼ CLOSE</span></div>'
+        + TRANSCRIPT.map(l => '<div style="font-family:Pixelify Sans,sans-serif;font-size:14px;line-height:1.5;color:#eafbe9;margin-bottom:2px;">' + l + '</div>').join('');
+      elDialog.style.display = 'block'; elHint.style.display = 'none';
+    };
+    const closeDialog = () => { dialogOpen = false; elDialog.style.display = 'none'; };
+
+    // ---- meeting ----
+    const startMeeting = () => { if (meetState !== 'idle') return; meetState = 'gathering'; DATA.budgetSpent = Math.min(DATA.budgetCap, DATA.budgetSpent); };
+    const endMeeting = () => { if (meetState === 'idle') return; meetState = 'returning'; };
+
+    // ---- helpers ----
+    const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x|0, y|0, w, h); };
+    const chartSeed = {};
+    const miniChart = (sx, sy, seed) => {
+      if (!chartSeed[seed]) { let s = seed*2654435761>>>0; const pts=[]; let yv=4; for (let i=0;i<9;i++){ s=(s*1664525+1013904223)>>>0; yv+=((s/4294967296)-0.5)*2.2; yv=Math.max(1,Math.min(6,yv)); pts.push(yv);} chartSeed[seed]=pts; }
+      const pts = chartSeed[seed]; R(sx, sy, 11, 8, '#06150c');
+      const col = ((Math.floor(tick/10)+seed)%7===0) ? '#9cffc4' : '#4ade80';
+      for (let i=0;i<pts.length-1;i++) R(sx+1+i*1.1, sy+7-pts[i], 1, 1, col);
+    };
+
+    const drawTile = (code, sx, sy, tx, ty) => {
+      if (code === 1) { R(sx,sy,T,T,'#16241a'); R(sx,sy,T,4,'#22382a'); R(sx,sy+T-2,T,2,'#0c160f'); R(sx,sy,1,T,'#0c160f'); R(sx+T-1,sy,1,T,'#0c160f'); return; }
+      if (code === 4) { R(sx+1,sy+3,T-2,T-3,'#243a32'); R(sx+1,sy+3,T-2,3,'#3a5a4c'); R(sx+1,sy+1,T-2,2,'#1a2c24'); return; }
+      if (code === 14 || code === 15) { R(sx,sy+6,T,T-6,'#3a2a1c'); R(sx,sy+6,T,2,'#523c28'); R(sx,sy+T-1,T,1,'#241810');
+        if (code===14){ R(sx+1,sy+1,14,8,'#15151a'); miniChart(sx+2,sy+1,tx*31+ty*7); R(sx+7,sy+9,2,2,'#15151a'); } else { R(sx+2,sy+8,9,3,'#1a1a1f'); R(sx+11,sy+8,3,4,'#cdd8cd'); } return; }
+      if (code === 17) { R(sx,sy+6,T,T-6,'#173a26'); R(sx,sy+6,T,2,'#2ea36b'); R(sx+1,sy+1,14,8,'#0a1f14'); R(sx+3,sy+3,8,4,'#4ade80'); R(sx,sy+T-1,T,1,'#0c2a1a'); return; }
+      if (code === 10) { R(sx+4,sy+5,8,7,'#15151a'); R(sx+3,sy+3,10,4,'#22222a'); R(sx+5,sy+12,6,3,'#101015'); return; }
+      if (code === 5) { R(sx+2,sy,12,T,'#0e1612'); R(sx+3,sy+1,10,T-2,'#16241c'); for (let i=0;i<5;i++){ const on=(Math.floor(tick/14)+i+tx)%3===0; R(sx+4,sy+2+i*3,2,1,on?'#4ade80':'#173824'); R(sx+9,sy+2+i*3,3,1,((tick/9|0)+i)%4===0?'#fbbf24':'#2a2410'); } return; }
+      if (code === 6) { R(sx+1,sy+T-3,T-2,3,'#2a2a30'); R(sx+1,sy-2,T-2,T,'#0a0a0c'); R(sx+2,sy-1,T-4,T-2,'#06160d'); R(sx+3,sy+1,8,1,'#38bdf8'); R(sx+3,sy+3,6,1,'#4ade80'); R(sx+3,sy+5,9,1,'#4ade80'); if (Math.floor(tick/16)%2===0) R(sx+8,sy+7,2,1,'#9cffc4'); return; }
+      if (code === 7) { R(sx+5,sy+10,6,5,'#5a3a22'); R(sx+5,sy+10,6,1,'#714a2c'); R(sx+3,sy+3,10,8,'#1f8a5b'); R(sx+5,sy+1,6,5,'#27a86e'); R(sx+2,sy+6,4,4,'#176844'); R(sx+10,sy+5,4,4,'#176844'); return; }
+      if (code === 8) { R(sx+4,sy+6,8,9,'#e8f0f6'); R(sx+5,sy+1,6,6,'#38bdf8'); R(sx+6,sy+2,4,4,'#7dd3fc'); R(sx+6,sy+10,4,2,'#9fb0cf'); return; }
+      if (code === 9) { R(sx,sy,T,T,'#3a2a1c'); R(sx,sy,T,3,'#4c3826'); R(sx+1,sy+4,T-2,1,'#241810'); return; }
+      if (code === 18) { // veto barrier rail
+        const flash = (tick - DATA.vetoFlash) < 30 && Math.floor(tick/4)%2===0;
+        R(sx, sy+6, T, 4, flash ? '#fbbf24' : '#7a5a12'); R(sx, sy+6, T, 1, flash ? '#ffe08a' : '#a8801c');
+        R(sx+2, sy+10, 2, 4, '#3a2c10'); R(sx+12, sy+10, 2, 4, '#3a2c10'); return; }
+      if (code === 19) { // CIO briefing board
+        R(sx+1,sy+1,T-2,T-3,'#2a1f0c'); R(sx+1,sy+1,T-2,2,'#4a3818'); R(sx+3,sy+4,4,1,'#fbbf24'); R(sx+3,sy+6,8,1,'#cdd8cd'); R(sx+3,sy+8,6,1,'#cdd8cd'); R(sx+3,sy+10,9,1,'#cdd8cd'); return; }
+    };
+
+    const drawFloor = (sx, sy, tx, ty, code) => {
+      const a = (tx+ty)%2===0; R(sx,sy,T,T, a ? '#0e1d13' : '#0c1a10');
+      if ((tx*7+ty*3)%5===0) R(sx+(tx%3)*4+2, sy+(ty%3)*4+2, 1, 1, '#13261a');
+      if (code === 11) { R(sx+1,sy,T-2,T,'#103a24'); R(sx+1,sy,T-2,1,'#175a36'); R(sx+2,sy+(ty%2?0:8),T-4,1,'#0c2a1a'); }
+      if (code === 13) R(sx,sy,T,T,'#0a1810');
+    };
+    const drawLogoOverlay = () => { const cx=15*T-cam.x, cy=11*T-cam.y; ctx.save(); ctx.globalAlpha=0.85; ctx.translate(cx,cy); ctx.rotate(Math.PI/4); R(-7,-7,14,14,'#0f2a1c'); ctx.fillStyle='#1f8a5b'; ctx.fillRect(-5,-5,10,10); ctx.fillStyle='#4ade80'; ctx.fillRect(-2,-2,4,4); ctx.restore(); };
+
+    const drawPerson = (cx, cy, pal, facing, frame, isPlayer) => {
+      const sx = Math.round(cx-cam.x), sy = Math.round(cy-cam.y); const ox = sx-6, oy = sy-16;
+      ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(ox+1, sy-2, 10, 3);
+      R(ox+2, oy+13, 3, 3+(frame?1:0), pal.pants); R(ox+7, oy+13, 3, 3+(frame?0:1), pal.pants);
+      R(ox+1, oy+8, 10, 6, pal.shirt); R(ox+1, oy+8, 10, 1, '#ffffff22');
+      R(ox+0, oy+8, 2, 5, pal.skin); R(ox+10, oy+8, 2, 5, pal.skin);
+      if (facing === 'up') R(ox+1,oy+0,10,8,pal.hair);
+      else if (facing === 'down') { R(ox+1,oy+0,10,4,pal.hair); R(ox+1,oy+4,1,3,pal.hair); R(ox+10,oy+4,1,3,pal.hair); R(ox+2,oy+4,8,4,pal.skin); R(ox+3,oy+5,2,2,'#1a1410'); R(ox+7,oy+5,2,2,'#1a1410'); }
+      else if (facing === 'left') { R(ox+1,oy+0,10,4,pal.hair); R(ox+8,oy+4,3,4,pal.hair); R(ox+2,oy+4,6,4,pal.skin); R(ox+3,oy+5,2,2,'#1a1410'); }
+      else { R(ox+1,oy+0,10,4,pal.hair); R(ox+1,oy+4,3,4,pal.hair); R(ox+4,oy+4,6,4,pal.skin); R(ox+7,oy+5,2,2,'#1a1410'); }
+      if (isPlayer) {
+        R(ox+1,oy-1,10,3,pal.cap); R(ox+1,oy-1,10,1,'#ffffff');
+        if (facing==='down') R(ox+2,oy+2,8,1,pal.cap); if (facing==='left') R(ox,oy+2,4,1,pal.cap); if (facing==='right') R(ox+8,oy+2,4,1,pal.cap);
+        const embFlick = Math.floor(tick/6)%2; const emb = embFlick?'#ff5a1e':'#ff8a3a'; let cgx,cgy,dirX;
+        if (facing==='left'){ R(ox-4,oy+6,5,2,'#3a2410'); R(ox-4,oy+6,5,1,'#6a4626'); R(ox-5,oy+6,1,2,emb); R(ox-5,oy+6,1,1,'#ffd27a'); cgx=ox-5;cgy=oy+5;dirX=-1; }
+        else if (facing==='right'||facing==='up'){ R(ox+11,oy+6,5,2,'#3a2410'); R(ox+11,oy+6,5,1,'#6a4626'); R(ox+16,oy+6,1,2,emb); R(ox+16,oy+6,1,1,'#ffd27a'); cgx=ox+16;cgy=oy+5;dirX=1; }
+        else { R(ox+10,oy+7,5,2,'#3a2410'); R(ox+10,oy+7,5,1,'#6a4626'); R(ox+15,oy+7,1,2,emb); R(ox+15,oy+7,1,1,'#ffd27a'); cgx=ox+15;cgy=oy+6;dirX=1; }
+        ctx.fillStyle = embFlick?'rgba(255,120,40,0.5)':'rgba(255,150,60,0.35)'; ctx.fillRect(cgx-1,cgy,3,2);
+        for (let p=0;p<7;p++){ const age=((tick*0.9+p*9)%63)/63; const up=age*17; const drift=dirX*(age*5)+Math.sin(age*6+p)*1.6; const size=age<0.5?1:2; ctx.fillStyle='rgba(208,216,208,'+(0.42*(1-age)).toFixed(2)+')'; ctx.fillRect((cgx+drift)|0,(cgy-up)|0,size,size); }
+      }
+    };
+
+    const update = () => {
+      tick++;
+      if (!dialogOpen) {
+        let vx=0,vy=0; if (keys.up) vy-=1; if (keys.down) vy+=1; if (keys.left) vx-=1; if (keys.right) vx+=1;
+        player.moving = (vx!==0||vy!==0);
+        if (vx!==0) player.facing = vx<0?'left':'right'; else if (vy!==0) player.facing = vy<0?'up':'down';
+        if (player.moving){ const sp=1.15, len=Math.hypot(vx,vy)||1, mx=vx/len*sp, my=vy/len*sp; if(!boxHits(player.x+mx,player.y)) player.x+=mx; if(!boxHits(player.x,player.y+my)) player.y+=my; }
+      }
+      // meeting movement
+      if (meetState !== 'idle') {
+        let allArrived = true;
+        npcs.forEach(n => {
+          const tgt = (meetState==='gathering'||meetState==='meeting') ? n.seat : { x:n.hx, y:n.hy };
+          const dx = tgt.x-n.px, dy = tgt.y-n.py, d = Math.hypot(dx,dy);
+          if (d > 1.4) { n.px += dx/d*1.0; n.py += dy/d*1.0; n.walking = true; allArrived = false; n.facing = Math.abs(dx)>Math.abs(dy)?(dx<0?'left':'right'):(dy<0?'up':'down'); }
+          else { n.px=tgt.x; n.py=tgt.y; n.walking=false;
+            if (meetState==='meeting'){ n.facing = n.py < tableCy ? 'down' : (n.py > tableCy+8 ? 'up' : (n.px < tableCx ? 'right' : 'left')); } }
+        });
+        if (meetState==='gathering' && allArrived) { meetState='meeting'; meetTimer = tick; }
+        else if (meetState==='meeting') { DATA.budgetSpent = Math.min(DATA.budgetCap, DATA.budgetSpent + 0.0008); updateBudget(); if (tick - meetTimer > 60*16) endMeeting(); }
+        else if (meetState==='returning' && allArrived) { meetState='idle'; }
+      }
+      // coins
+      for (let i=coins.length-1;i>=0;i--){ coins[i].t++; if (coins[i].t>52) coins.splice(i,1); }
+      // camera
+      cam.x = Math.round(Math.max(0, Math.min(player.x - VW/2, MAPW*T - VW)));
+      cam.y = Math.round(Math.max(0, Math.min(player.y - VH/2 - 4, MAPH*T - VH)));
+      // hint
+      if (!dialogOpen) {
+        const t = facingTarget(); const key = t ? (t.board?'board':(t.meeting?'meeting':t.npc.who)) : null;
+        if (key !== hintTarget) { hintTarget = key;
+          if (t && t.board) { elHint.textContent = '▸ SPACE — CIO BRIEFING BOARD'; elHint.style.display='flex'; }
+          else if (t && t.meeting) { elHint.textContent = '▸ SPACE — JOIN MEETING'; elHint.style.display='flex'; }
+          else if (t && t.npc) { elHint.textContent = '▸ SPACE — ' + M[t.npc.who].name + ' · ' + M[t.npc.who].role; elHint.style.display='flex'; }
+          else elHint.style.display='none';
+        }
+      }
+    };
+
+    const drawCharOverlay = (px, py, who) => {
+      const sx = Math.round(px-cam.x), sy = Math.round(py-cam.y);
+      const m = M[who];
+      // status dot
+      const dc = dotColor(m.status);
+      R(sx-1, sy-26, 3, 3, dc);
+      if (m.status !== 'active') { ctx.fillStyle = dc; ctx.globalAlpha = 0.4; ctx.fillRect(sx-2, sy-27, 5, 5); ctx.globalAlpha = 1; }
+      // stale alert
+      if (DATA.stale.includes(who) && Math.floor(tick/12)%2===0) { ctx.fillStyle='#f87171'; ctx.font='9px Silkscreen,monospace'; ctx.textAlign='center'; ctx.fillText('!', sx, sy-30); ctx.textAlign='left'; }
+    };
+
+    const render = () => {
+      ctx.clearRect(0,0,VW,VH);
+      const x0=Math.floor(cam.x/T), y0=Math.floor(cam.y/T), x1=Math.min(MAPW-1,x0+VW/T+1), y1=Math.min(MAPH-1,y0+VH/T+1);
+      for (let ty=y0;ty<=y1;ty++) for (let tx=x0;tx<=x1;tx++) drawFloor(tx*T-cam.x, ty*T-cam.y, tx, ty, tile[ty][tx]);
+      drawLogoOverlay();
+      // veto label
+      { const vy=7*T+8-cam.y, vx0=10*T-cam.x, vx1=18*T-cam.x; ctx.font='7px Silkscreen,monospace'; ctx.textAlign='center'; ctx.fillStyle=(tick-DATA.vetoFlash)<30?'#ffe08a':'#fbbf24'; ctx.fillText('VETO', (vx0+vx1)/2, vy-6); ctx.textAlign='left'; }
+      for (let ty=y0;ty<=y1;ty++) for (let tx=x0;tx<=x1;tx++){ const code=tile[ty][tx]; if (code===0||code===11||code===13) continue; drawTile(code, tx*T-cam.x, ty*T-cam.y, tx, ty); }
+      // swivel chair at CIO seat
+      { const cx=cioChair.tx*T-cam.x, cy=cioChair.ty*T-cam.y; R(cx+3,cy+4,10,7,'#1f8a5b'); R(cx+3,cy+2,10,4,'#27a86e'); R(cx+6,cy+11,4,3,'#15151a'); R(cx+4,cy+13,2,2,'#0c1a10'); R(cx+10,cy+13,2,2,'#0c1a10'); }
+      // BMG sign
+      const signX=9*T-cam.x, signY=0-cam.y;
+      if (signY>-20){ R(signX,signY+2,12*T,13,'#0a1f14'); R(signX,signY+2,12*T,1,'#4ade80'); R(signX,signY+14,12*T,1,'#072a18'); ctx.fillStyle='#4ade80'; ctx.font='8px Silkscreen,monospace'; ctx.textBaseline='middle'; ctx.shadowColor='rgba(74,222,128,0.7)'; ctx.shadowBlur=4; ctx.fillText('B M G   C A P I T A L', signX+18, signY+9); ctx.shadowBlur=0; ctx.fillStyle='#7e8e7e'; ctx.fillText('// FUND FLOOR', signX+150, signY+9); ctx.textBaseline='alphabetic'; }
+      // dept signs + CIO seat banner
+      { const deptSign=(label,dy,color)=>{ const sy=dy*T-cam.y, sx0=2*T-cam.x, w=25*T; if (sy<-16||sy>VH+16) return; ctx.fillStyle='rgba(6,17,11,0.72)'; ctx.fillRect(sx0,sy+4,w,10); ctx.fillStyle=color; ctx.fillRect(sx0,sy+4,2,10); ctx.fillRect(sx0+w-2,sy+4,2,10); ctx.font='7px Silkscreen,monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle=color; ctx.fillText(label, sx0+w/2, sy+9); ctx.textAlign='left'; ctx.textBaseline='alphabetic'; };
+        deptSign('// LEADERSHIP',4,'#4ade80'); deptSign('// RESEARCH',12,'#a78bfa'); deptSign('// OPS & AUDIT',20,'#38bdf8');
+        const cy3=2*T-cam.y, cx=14.5*T-cam.x; if (cy3>-16&&cy3<VH+16){ ctx.fillStyle='rgba(8,20,12,0.9)'; ctx.fillRect(cx-50,cy3,100,12); ctx.fillStyle='#4ade80'; ctx.fillRect(cx-50,cy3,100,1); ctx.fillRect(cx-50,cy3+11,100,1); ctx.font='7px Silkscreen,monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#4ade80'; ctx.shadowColor='rgba(74,222,128,0.6)'; ctx.shadowBlur=3; ctx.fillText('* BROCK CIO SEAT *', cx, cy3+6); ctx.shadowBlur=0; ctx.textAlign='left'; ctx.textBaseline='alphabetic'; } }
+      // characters
+      const draws = [];
+      npcs.forEach(n => draws.push({ y:n.py, fn:()=>{ drawPerson(n.px, n.py, M[n.who].pal, n.facing, n.walking?(Math.floor(tick/8)%2):0, false); drawCharOverlay(n.px, n.py, n.who); } }));
+      draws.push({ y:player.y, fn:()=>drawPerson(player.x, player.y, PAL.brock, player.facing, player.moving?(Math.floor(tick/8)%2):0, true) });
+      draws.sort((a,b)=>a.y-b.y).forEach(d=>d.fn());
+      // coins
+      coins.forEach(c => { const sx=Math.round(c.px-cam.x), sy=Math.round(c.py-cam.y-c.t*0.6); const al=Math.max(0,1-c.t/52); ctx.globalAlpha=al; R(sx-2,sy,4,4,'#fbbf24'); R(sx-1,sy+1,2,2,'#ffe08a'); ctx.globalAlpha=1; });
+      // nameplates (name + role)
+      ctx.textBaseline='alphabetic';
+      npcs.forEach(n => {
+        if (meetState!=='idle') return; // hide plates during meeting
+        const m=M[n.who]; const nx=n.px-cam.x, ny=n.ty*T-12-cam.y; if (nx<-30||nx>VW+30) return;
+        const w=Math.max(m.name.length*5+6, m.role.length*3.4+6);
+        ctx.fillStyle='rgba(6,17,11,0.9)'; ctx.fillRect(nx-w/2, ny-13, w, 17);
+        ctx.fillStyle=m.pal.shirt; ctx.fillRect(nx-w/2, ny-13, w, 1);
+        ctx.font='7px Silkscreen,monospace'; ctx.textAlign='center'; ctx.fillStyle='#eafbe9'; ctx.fillText(m.name, nx, ny-5);
+        ctx.font='5px Silkscreen,monospace'; ctx.fillStyle='#7e8e7e'; ctx.fillText(m.role, nx, ny+2);
+      });
+      // player nameplate
+      if (!dialogOpen) { const nx=player.x-cam.x, ny=player.y-19-cam.y, nm='BROCK - CIO', w=nm.length*5+6; ctx.fillStyle='rgba(6,17,11,0.9)'; ctx.fillRect(nx-w/2,ny-7,w,9); ctx.fillStyle='#4ade80'; ctx.fillRect(nx-w/2,ny-7,w,1); ctx.font='7px Silkscreen,monospace'; ctx.textAlign='center'; ctx.fillStyle='#eafbe9'; ctx.fillText(nm,nx,ny); }
+      ctx.textAlign='left';
+      // night tint
+      if (DATA.night) { ctx.fillStyle='rgba(10,20,48,0.32)'; ctx.fillRect(0,0,VW,VH); }
+    };
+
+    const loop = () => { update(); render(); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+
+    // ---- backend API ----
+    const spawnCoin = (who) => { const n=npcs.find(x=>x.who===who); if (n) coins.push({ px:n.px, py:n.py-18, t:0 }); };
+    window.BMGFloor = {
+      setStatus:(w,s)=>{ if(M[w]) M[w].status=s; },
+      setCost:(w,c)=>{ if(M[w]) M[w].cost=String(c); },
+      setBriefing:(w,t)=>{ if(M[w]) M[w].briefing=t; },
+      setDecision:(w,t)=>{ if(M[w]) M[w].decision=t; },
+      setLine:(w,t)=>{ if(M[w]) M[w].line=t; },
+      setBudget:(spent,cap)=>{ DATA.budgetSpent=+spent; if(cap!=null) DATA.budgetCap=+cap; updateBudget(); },
+      setStale:(list)=>{ DATA.stale = Array.isArray(list)?list:[]; },
+      fireSignal:(w)=>spawnCoin(w),
+      setCIOBriefing:(md)=>{ DATA.cioBriefing=md; },
+      vetoFlash:()=>{ DATA.vetoFlash=tick; },
+      setNight:(b)=>{ DATA.night=!!b; },
+      startMeeting, endMeeting,
+      members: M, data: DATA,
+    };
+
+    window.addEventListener('beforeunload', function(){ if (raf) cancelAnimationFrame(raf); window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); try { delete window.BMGFloor; } catch(e){} });
+} })();
+</script>
+<script>
+  // BMG bridge: pull live data from React parent via postMessage.
+  (function () {
+    var ORIGIN = window.location.origin;
+    // Backend agent_name -> M-map key in the inline JS (Brick, Dick, ...).
+    var AGENT_TO_KEY = {
+      portfolio_manager:    'brick',
+      chief_risk_officer:   'dick',
+      equity_researcher:    'nick',
+      quant_researcher:     'mick',
+      macro_strategist:     'rick',
+      data_quality_watcher: 'vick',
+      execution_auditor:    'slick',
+      operations:           'wick',
+      sentinel_devops:      'patrick'
+    };
+    function postReq(type, payload) {
+      var msg = { type: type };
+      if (payload) for (var k in payload) msg[k] = payload[k];
+      window.parent.postMessage(msg, ORIGIN);
+    }
+    window.addEventListener('message', function (e) {
+      if (e.origin !== ORIGIN) return;
+      var msg = e.data || {};
+      if (msg.type === 'ff_briefing' && msg.data && window.BMGFloor) {
+        var summary = msg.data.summary_one_liner || msg.data.markdown_body || '';
+        if (typeof window.BMGFloor.setCIOBriefing === 'function' && msg.data.markdown_body) {
+          window.BMGFloor.setCIOBriefing(msg.data.markdown_body);
+        }
+        if (typeof window.BMGFloor.setBriefing === 'function') {
+          // Paint summary onto all 9 agents as a baseline; ff_agent_overlay
+          // messages will overwrite per-agent immediately afterwards.
+          for (var key in AGENT_TO_KEY) {
+            window.BMGFloor.setBriefing(AGENT_TO_KEY[key], summary);
+          }
+        }
+      }
+      if (msg.type === 'ff_agent_overlay' && msg.data && window.BMGFloor) {
+        var k = AGENT_TO_KEY[msg.agent_name];
+        if (!k) return;
+        if (typeof window.BMGFloor.setLine === 'function' && msg.data.line) {
+          window.BMGFloor.setLine(k, msg.data.line);
+        }
+        if (typeof window.BMGFloor.setStatus === 'function' && msg.data.status) {
+          window.BMGFloor.setStatus(k, msg.data.status);
+        }
+        if (typeof window.BMGFloor.setCost === 'function' && msg.data.daily_cost_usd != null) {
+          window.BMGFloor.setCost(k, Number(msg.data.daily_cost_usd).toFixed(2));
+        }
+        if (msg.data.last_decision && typeof window.BMGFloor.setDecision === 'function') {
+          window.BMGFloor.setDecision(k, msg.data.last_decision.action || '');
+        }
+      }
+    });
+    function init() {
+      postReq('ff_request_briefing');
+      ['portfolio_manager','chief_risk_officer','equity_researcher','quant_researcher','macro_strategist','data_quality_watcher','execution_auditor','operations','sentinel_devops'].forEach(function (a) {
+        postReq('ff_request_agent_overlay', { agent_name: a });
+      });
+    }
+    // window.BMGFloor is created inside the inline IIFE on DOMContentLoaded;
+    // wait one tick past load to make sure it's defined.
+    if (document.readyState === 'complete') setTimeout(init, 50);
+    else window.addEventListener('load', function () { setTimeout(init, 50); });
+  })();
+</script>
+</body>
+</html>
