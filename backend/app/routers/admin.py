@@ -1336,6 +1336,21 @@ def synthetic_fill_test(
 
     now = datetime.now(timezone.utc)
     try:
+        # ── SHIP 2 asset-class gate (path #8) — BEFORE BotPosition insert ──
+        # 2026-06-29: moved BEFORE db.add. Previously this validate ran AFTER
+        # db.add+db.flush, requiring rollback to undo. Now it raises
+        # pre-INSERT so no rollback needed.
+        try:
+            from app.services.asset_class_registry import validate_order_with_user
+            validate_order_with_user(
+                bot_id=_OPTIONS_DIRECTIONAL_BOT,
+                symbol=_SYN_SYMBOL,
+                user_id=getattr(current_user, "id", None),
+            )
+        except RuntimeError as _acr_exc:
+            raise HTTPException(status_code=422, detail=str(_acr_exc))
+        # ── end asset-class gate ─────────────────────────────────────────────
+
         pos = BotPosition(
             allocation_id=alloc.id,
             symbol=_SYN_SYMBOL,
@@ -1356,19 +1371,6 @@ def synthetic_fill_test(
         )
         db.add(pos)
         db.flush()
-
-        # ── SHIP 2 asset-class gate (path #8) — before BotTrade insert ─────
-        try:
-            from app.services.asset_class_registry import validate_order_with_user
-            validate_order_with_user(
-                bot_id=_OPTIONS_DIRECTIONAL_BOT,
-                symbol=_SYN_SYMBOL,
-                user_id=getattr(current_user, "id", None),
-            )
-        except RuntimeError as _acr_exc:
-            db.rollback()
-            raise HTTPException(status_code=422, detail=str(_acr_exc))
-        # ── end asset-class gate ─────────────────────────────────────────────
 
         trade = BotTrade(
             allocation_id=alloc.id,
