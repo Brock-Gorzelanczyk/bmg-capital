@@ -3038,16 +3038,20 @@ def auto_pause_list(
     BotAllocation.paused_reason LIKE 'degraded_auto_pause%'.
     """
     from sqlalchemy import text as _text
+    # 2026-06-29 hotfix: GROUP BY p.name to dedupe. m021 dedup leftovers can
+    # leave 3+ allocation rows per profile; if auto-pause fires across all of
+    # them, the card showed crypto_quant_scalper 3x with same reason.
     rows = db.execute(_text("""
         SELECT p.name AS bot_id,
-               a.paused_reason,
-               a.updated_at AS paused_at,
-               a.user_id
+               MAX(a.paused_reason) AS paused_reason,
+               MAX(a.updated_at) AS paused_at,
+               MAX(a.user_id) AS user_id
           FROM bot_allocations a
           JOIN bot_profiles p ON p.id = a.profile_id
          WHERE a.enabled = 0
            AND a.paused_reason LIKE 'degraded_auto_pause%'
-         ORDER BY a.updated_at DESC
+         GROUP BY p.name
+         ORDER BY MAX(a.updated_at) DESC
     """)).fetchall()
     return {
         "ok": True,
