@@ -131,6 +131,7 @@ const HypothesesPage = lazy(() => import("@/pages/HypothesesPage"));
 const BrainGraphPage = lazy(() => import("@/pages/BrainGraphPage"));
 const TuningPage = lazy(() => import("@/pages/TuningPage"));
 const AdminDiagnosticsPage = lazy(() => import("@/pages/AdminDiagnosticsPage"));
+const AdminMigrationStatusPage = lazy(() => import("@/pages/AdminMigrationStatusPage"));
 const IntroSequencePage = lazy(() => import("@/pages/IntroSequencePage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
@@ -455,6 +456,7 @@ function AppInner() {
         <Route path="/admin/discipline-report"    element={<AdminRoute><DisciplineReportPage /></AdminRoute>} />
         <Route path="/admin/tuning"               element={<AdminRoute><TuningPage /></AdminRoute>} />
         <Route path="/admin/diagnostics"          element={<AdminRoute><AdminDiagnosticsPage /></AdminRoute>} />
+        <Route path="/admin/migrations"           element={<AdminRoute><AdminMigrationStatusPage /></AdminRoute>} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />
