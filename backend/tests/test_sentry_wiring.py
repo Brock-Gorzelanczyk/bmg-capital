@@ -78,43 +78,20 @@ def test_bot_scheduler_wraps_with_sentry_transaction():
         "sentry_sdk.capture_exception not inside _run_and_log"
 
 
-def test_sentry_test_endpoint_exists():
-    """admin.py must have @router.post('/sentry-test') and raise ValueError."""
-    tree = _parse("app/routers/admin.py")
+def test_sentry_test_endpoint_removed():
+    """admin.py must NOT contain the /sentry-test endpoint anymore.
 
-    sentry_test_func = None
+    The endpoint was a one-time verification tool shipped with PR #37
+    and removed after Sentry was confirmed live. Re-introducing it
+    would mean an unauth'd endpoint that anyone could DoS by spamming
+    ValueErrors into Sentry.
+    """
+    tree = _parse("app/routers/admin.py")
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
-        if node.name != "sentry_test":
-            continue
-        # Check for @router.post("/sentry-test") decorator
-        for deco in node.decorator_list:
-            if (
-                isinstance(deco, ast.Call)
-                and isinstance(deco.func, ast.Attribute)
-                and deco.func.attr == "post"
-                and deco.args
-                and isinstance(deco.args[0], ast.Constant)
-                and deco.args[0].value == "/sentry-test"
-            ):
-                sentry_test_func = node
-                break
-        if sentry_test_func:
-            break
-
-    assert sentry_test_func is not None, \
-        "@router.post('/sentry-test') decorated function not found in admin.py"
-
-    # Confirm the function body contains a raise ValueError
-    raises = [
-        node for node in ast.walk(sentry_test_func)
-        if isinstance(node, ast.Raise)
-        and node.exc is not None
-        and (
-            (isinstance(node.exc, ast.Call)
-             and isinstance(node.exc.func, ast.Name)
-             and node.exc.func.id == "ValueError")
-        )
-    ]
-    assert raises, "sentry_test endpoint must raise ValueError"
+        if node.name == "sentry_test":
+            raise AssertionError(
+                "sentry_test endpoint must be removed — "
+                "Sentry was verified live, the endpoint is no longer needed."
+            )
