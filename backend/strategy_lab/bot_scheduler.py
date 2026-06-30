@@ -1779,6 +1779,46 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job threshold_auto_promote_nightly (04:00 ET)")
 
+    # ── Phase 1 closed-loop learning: per-bot daily journal (04:00 UTC) ─────
+    # NOTE: threshold_auto_promote_nightly runs at 04:00 ET (~08:00-09:00 UTC
+    # depending on DST). This job runs at 04:00 UTC (midnight ET in EST) — no
+    # real collision, but two nightly jobs run close together. Flagged in PR.
+    def _run_daily_journal():
+        import sentry_sdk
+        from app.db.session import SessionLocal
+        from app.jobs.daily_journal import run_daily_journal
+        from datetime import datetime, timezone, timedelta
+        target = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+        db = SessionLocal()
+        try:
+            with sentry_sdk.start_transaction(
+                op="daily_journal", name=f"daily_journal:{target.isoformat()}"
+            ):
+                sentry_sdk.set_tag("target_date", target.isoformat())
+                result = run_daily_journal(db, target_date=target)
+                logger.warning(
+                    "[daily-journal] target=%s processed=%d written=%d errors=%d",
+                    target,
+                    result.get("bots_processed", 0),
+                    result.get("rows_written", 0),
+                    len(result.get("errors", [])),
+                )
+        except Exception as exc:
+            logger.error("[daily-journal] job failed: %s", exc, exc_info=True)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_daily_journal,
+        CronTrigger(hour=4, minute=0, timezone=UTC),   # 04:00 UTC = midnight ET (ish, DST drift OK)
+        id="daily_journal_nightly",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job daily_journal_nightly (04:00 UTC)")
+
     # ── Cash Floor passive rebalance ────────────────────────────────────────
     # Fires twice on RTH weekdays:
     #   09:35 ET — 5 min after market open, so first day's $100K deploys
