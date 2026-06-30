@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
-from app.db.migrations._gate import already_ran, record
+from app.db.migrations._gate import already_ran, record, verify_count
 
 logger = logging.getLogger(__name__)
 
@@ -231,19 +231,27 @@ def run(conn) -> dict:
     )
 
     # POST-LOOP VERIFY — the critical safety net m044 lacked.
-    # Re-run the same SELECT and filter in Python to count remaining
-    # open equity violations. Raise loudly so boot surfaces the failure.
-    still_all = _fetch_open_violations(conn, name_params)
-    still_open_equities = [r for r in still_all if _is_equity_symbol(r[1] or "")]
-    if still_open_equities:
-        logger.critical(
-            "[m045] VERIFY FAILED: %d crypto-bot equity violations still open: %s",
-            len(still_open_equities),
-            [(int(r[0]), r[5], r[1], int(r[6])) for r in still_open_equities[:10]],
-        )
-        raise RuntimeError(
-            f"[m045] post-run verify: {len(still_open_equities)} violations remain"
-        )
+    # Use verify_count with a SQL-side equity symbol filter so the check is
+    # independent of the Python _is_equity_symbol heuristic.
+    name_placeholders_verify = ", ".join(f":{k}" for k in name_params.keys())
+    verify_count(
+        conn,
+        name="m045",
+        sql=(
+            "SELECT bp.id, bp.symbol, p.name AS bot_id, a.user_id "
+            "  FROM bot_positions bp "
+            "  JOIN bot_allocations a ON a.id = bp.allocation_id "
+            "  JOIN bot_profiles p   ON p.id = a.profile_id "
+            f" WHERE p.name IN ({name_placeholders_verify}) "
+            "   AND bp.closed_at IS NULL "
+            "   AND length(bp.symbol) <= 6 "
+            "   AND bp.symbol NOT LIKE '%/%' "
+            "   AND bp.symbol GLOB '[A-Z]*' "
+            "   AND bp.symbol NOT GLOB '*[0-9]*'"
+        ),
+        params=name_params,
+        expected=0,
+    )
 
     record(conn, _GATE_NAME)
     return {
