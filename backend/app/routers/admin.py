@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
@@ -3532,3 +3533,712 @@ def get_bot_diagnostics(
         "bots": bots,
         "summary": summary,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDIT ENDPOINT HELPERS (shared by bot-diagnostic, trade-count-reconcile,
+# asset-class-audit, inert-bot-scan, fund-tear-sheet-honesty-check)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_AUDIT_CACHE: dict[str, tuple[float, dict]] = {}
+_AUDIT_CACHE_TTL_SECONDS = 30
+AUDIT_TARGET_USER_ID = 1  # fund primary; multi-user pivot would add a query param
+
+
+def _audit_cache_get(key: str) -> dict | None:
+    entry = _AUDIT_CACHE.get(key)
+    if entry is None:
+        return None
+    ts, payload = entry
+    if (time.time() - ts) > _AUDIT_CACHE_TTL_SECONDS:
+        _AUDIT_CACHE.pop(key, None)
+        return None
+    return payload
+
+
+def _audit_cache_set(key: str, payload: dict) -> None:
+    _AUDIT_CACHE[key] = (time.time(), payload)
+
+
+def _audit_log(endpoint_name: str, user_id: int) -> None:
+    logger.info("[admin-audit] %s called by user_id=%s", endpoint_name, user_id)
+
+
+def _iso_z(dt) -> str | None:
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except ValueError:
+            return dt
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _strategy_count_from_config(config_json) -> int:
+    """Return len(config_json['strategies']) if list, else 0. Never raises.
+
+    Handles both dict (Postgres/ORM) and JSON string (SQLite raw query) inputs.
+    """
+    try:
+        if not config_json:
+            return 0
+        cfg = config_json
+        if isinstance(cfg, str):
+            import json as _json
+            cfg = _json.loads(cfg)
+        strats = cfg.get("strategies") if isinstance(cfg, dict) else None
+        if isinstance(strats, list):
+            return len(strats)
+    except Exception:
+        pass
+    return 0
+
+
+# Equity-symbol heuristic mirrored from m045 (used by asset-class-audit)
+_OCC_RE = re.compile(r"^[A-Z]{1,6}\d{6}[CP]\d{8}$")
+
+
+def _looks_like_equity_symbol(symbol: str | None) -> bool:
+    if not symbol:
+        return False
+    s = symbol.strip().upper()
+    if "/" in s:
+        return False
+    if not (1 <= len(s) <= 6):
+        return False
+    if not s.isalpha():
+        return False
+    return True
+
+
+def _looks_like_occ_option(symbol: str | None) -> bool:
+    if not symbol:
+        return False
+    return bool(_OCC_RE.match(symbol.strip().upper()))
+
+
+def _looks_like_crypto_pair(symbol: str | None) -> bool:
+    if not symbol:
+        return False
+    return "/" in symbol
+
+
+CLEANUP_EXIT_REASONS = (
+    "m033_options_equity_violation",
+    "m044_cross_sleeve_violation",
+    "m045_cross_sleeve_violation",
+)
+
+
+def _cleanup_migration_tag(exit_reason: str | None) -> str | None:
+    if not exit_reason:
+        return None
+    if exit_reason.startswith("m033_"):
+        return "m033"
+    if exit_reason.startswith("m044_"):
+        return "m044"
+    if exit_reason.startswith("m045_"):
+        return "m045"
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Endpoint 1: GET /api/admin/bot-diagnostic
+# Brock-shape alias of /bots/diagnostics. 24h window, fixed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/bot-diagnostic")
+def get_bot_diagnostic_singular(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Brock-shape alias of /bots/diagnostics. 24h window, fixed.
+
+    Reuses the same SQL+classification helpers as /bots/diagnostics but
+    reshapes the response to match the audit-facing field names exactly:
+      bot_id, verdict, signals_24h, trades_24h, open_positions,
+      last_signal_at, last_trade_at, enabled, paused_reason,
+      asset_class_declared, strategy_count
+
+    Note: if a bot has multiple allocations for user_id=1 (known-issues #3),
+    multiple rows for the same bot_id may appear. Caller's responsibility.
+    """
+    _audit_log("bot-diagnostic", current_user.id)
+    cached = _audit_cache_get("bot-diagnostic")
+    if cached is not None:
+        return cached
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=24)
+    stale_cutoff = now - timedelta(hours=48)
+
+    sql = text("""
+        SELECT p.name             AS bot_name,
+               p.enabled          AS profile_enabled,
+               p.asset_class      AS asset_class,
+               p.config_json      AS config_json,
+               a.id               AS allocation_id,
+               a.enabled          AS allocation_enabled,
+               a.paused_reason    AS allocation_paused_reason,
+               a.starting_capital_cents AS starting_capital_cents,
+               (SELECT COUNT(*) FROM bot_positions bp
+                 WHERE bp.allocation_id = a.id
+                   AND bp.closed_at IS NULL
+                   AND bp.quarantined_at IS NULL) AS open_positions_count,
+               (SELECT COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) FROM bot_positions bp
+                 WHERE bp.allocation_id = a.id
+                   AND bp.closed_at IS NULL
+                   AND bp.quarantined_at IS NULL) AS open_positions_notional_cents,
+               (SELECT COUNT(*) FROM bot_signals bs
+                 WHERE bs.allocation_id = a.id
+                   AND bs.ts >= :cutoff) AS signals_window,
+               (SELECT MAX(bs.ts) FROM bot_signals bs
+                 WHERE bs.allocation_id = a.id) AS signals_last_ts,
+               (SELECT COUNT(*) FROM bot_trades bt
+                 WHERE bt.allocation_id = a.id
+                   AND bt.ts >= :cutoff
+                   AND bt.quarantined_at IS NULL) AS trades_window,
+               (SELECT MAX(bt.ts) FROM bot_trades bt
+                 WHERE bt.allocation_id = a.id
+                   AND bt.quarantined_at IS NULL) AS trades_last_ts
+          FROM bot_profiles p
+          JOIN bot_allocations a ON a.profile_id = p.id
+         WHERE a.user_id = :user_id
+         ORDER BY p.name
+    """)
+
+    rows = db.execute(sql, {"cutoff": cutoff, "user_id": AUDIT_TARGET_USER_ID}).fetchall()
+
+    summary = {
+        "total": 0,
+        "trading": 0,
+        "no_signals": 0,
+        "paused": 0,
+        "profile_disabled": 0,
+        "stale": 0,
+        "signals_no_trades": 0,
+    }
+
+    bots = []
+    for row in rows:
+        trades_last_ts_dt = _parse_row_ts(row.trades_last_ts)
+        verdict, _ = _classify_bot(row, stale_cutoff, trades_last_ts_dt)
+        summary["total"] += 1
+        summary[verdict] += 1
+        bots.append({
+            "bot_id": row.bot_name,
+            "verdict": verdict,
+            "signals_24h": int(row.signals_window),
+            "trades_24h": int(row.trades_window),
+            "open_positions": int(row.open_positions_count),
+            "last_signal_at": _iso_z(row.signals_last_ts),
+            "last_trade_at": _iso_z(row.trades_last_ts),
+            "enabled": bool(row.allocation_enabled),
+            "paused_reason": row.allocation_paused_reason,
+            "asset_class_declared": row.asset_class,
+            "strategy_count": _strategy_count_from_config(row.config_json),
+        })
+
+    payload = {
+        "as_of": now.isoformat().replace("+00:00", "Z"),
+        "summary": summary,
+        "bots": bots,
+    }
+    _audit_cache_set("bot-diagnostic", payload)
+    return payload
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Endpoint 2: GET /api/admin/trade-count-reconcile
+# Reconciles leaderboard vs Activity Feed trade counts.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/trade-count-reconcile")
+def get_trade_count_reconcile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Reconciles trade-count discrepancies between leaderboard and Activity Feed.
+
+    leaderboard_count: trades from currently-enabled allocations, excluding
+                       m033/m044/m045 cleanup exits. (Matches leaderboard math.)
+    activity_feed_count: all trades for user_id=1, no enable/cleanup filter.
+                         (Matches Activity Feed display count.)
+
+    Cleanup-exit detection: JOIN bot_trades.position_id -> bot_positions.exit_reason,
+    filter exit_reason starting with m033_/m044_/m045_.
+    """
+    _audit_log("trade-count-reconcile", current_user.id)
+    cached = _audit_cache_get("trade-count-reconcile")
+    if cached is not None:
+        return cached
+
+    now = datetime.now(timezone.utc)
+
+    sql_leaderboard = text("""
+        SELECT p.name AS bot_id,
+               COUNT(*) AS cnt
+          FROM bot_trades bt
+          JOIN bot_allocations a ON a.id = bt.allocation_id
+          JOIN bot_profiles    p ON p.id = a.profile_id
+          LEFT JOIN bot_positions bp ON bp.id = bt.position_id
+         WHERE a.user_id = :uid
+           AND a.enabled = 1
+           AND bt.quarantined_at IS NULL
+           AND (bp.exit_reason IS NULL
+                OR (bp.exit_reason NOT LIKE 'm033_%'
+                    AND bp.exit_reason NOT LIKE 'm044_%'
+                    AND bp.exit_reason NOT LIKE 'm045_%'))
+         GROUP BY p.name
+    """)
+
+    sql_activity = text("""
+        SELECT p.name AS bot_id,
+               COUNT(*) AS cnt
+          FROM bot_trades bt
+          JOIN bot_allocations a ON a.id = bt.allocation_id
+          JOIN bot_profiles    p ON p.id = a.profile_id
+         WHERE a.user_id = :uid
+         GROUP BY p.name
+    """)
+
+    lb_rows = db.execute(sql_leaderboard, {"uid": AUDIT_TARGET_USER_ID}).fetchall()
+    af_rows = db.execute(sql_activity, {"uid": AUDIT_TARGET_USER_ID}).fetchall()
+
+    lb_by_bot: dict[str, int] = {r.bot_id: int(r.cnt) for r in lb_rows}
+    af_by_bot: dict[str, int] = {r.bot_id: int(r.cnt) for r in af_rows}
+
+    all_bot_ids = set(lb_by_bot.keys()) | set(af_by_bot.keys())
+
+    by_bot = []
+    for bot_id in sorted(all_bot_ids):
+        lb = lb_by_bot.get(bot_id, 0)
+        af = af_by_bot.get(bot_id, 0)
+        if lb == 0 and af == 0:
+            continue
+        by_bot.append({
+            "bot_id": bot_id,
+            "leaderboard": lb,
+            "activity_feed": af,
+            "delta": af - lb,
+        })
+
+    by_bot.sort(key=lambda x: x["delta"], reverse=True)
+
+    leaderboard_count = sum(lb_by_bot.values())
+    activity_feed_count = sum(af_by_bot.values())
+
+    payload = {
+        "as_of": now.isoformat().replace("+00:00", "Z"),
+        "leaderboard_count": leaderboard_count,
+        "leaderboard_source": (
+            "SUM of bot_trades joined to user_id=1 enabled allocations, "
+            "excluding m033/m044/m045 cleanup-exit trades and quarantined trades"
+        ),
+        "activity_feed_count": activity_feed_count,
+        "activity_feed_source": (
+            "COUNT(*) FROM bot_trades joined to user_id=1 allocations, "
+            "ALL allocations (incl disabled), ALL trades (incl cleanup + quarantined)"
+        ),
+        "delta": activity_feed_count - leaderboard_count,
+        "delta_explanation": (
+            "activity_feed includes disabled-allocation history, quarantined trades, "
+            "AND m033/m044/m045 cleanup-exit trades. leaderboard filters to "
+            "currently-enabled allocations and excludes cleanup exits and quarantined trades."
+        ),
+        "by_bot": by_bot,
+    }
+    _audit_cache_set("trade-count-reconcile", payload)
+    return payload
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Endpoint 3: GET /api/admin/asset-class-audit
+# Live cross-sleeve violation check, excludes m033/m044/m045 cleanup exits.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/asset-class-audit")
+def get_asset_class_audit(
+    hours: int = 24,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Detects cross-asset-class trades, distinguishing live violations from
+    m033/m044/m045 cleanup exits.
+
+    Query param:
+      hours -- lookback window (1..168, default 24)
+    """
+    if hours < 1 or hours > 168:
+        raise HTTPException(status_code=400, detail="hours must be 1..168")
+
+    _audit_log("asset-class-audit", current_user.id)
+    cache_key = f"asset-class-audit:{hours}"
+    cached = _audit_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=hours)
+
+    sql = text("""
+        SELECT bt.id           AS trade_id,
+               p.name          AS bot_id,
+               p.asset_class   AS declared_asset_class,
+               bt.symbol       AS symbol,
+               bt.ts           AS trade_created_at,
+               bp.exit_reason  AS position_exit_reason
+          FROM bot_trades bt
+          JOIN bot_allocations a ON a.id = bt.allocation_id
+          JOIN bot_profiles    p ON p.id = a.profile_id
+          LEFT JOIN bot_positions bp ON bp.id = bt.position_id
+         WHERE a.user_id = :uid
+           AND bt.ts >= :cutoff
+    """)
+
+    rows = db.execute(sql, {"uid": AUDIT_TARGET_USER_ID, "cutoff": cutoff}).fetchall()
+
+    violations = []
+    real_violations_count = 0
+    cleanup_exits_excluded_count = 0
+
+    for row in rows:
+        symbol = row.symbol
+        declared = (row.declared_asset_class or "").lower()
+
+        # Classify executed asset class from symbol heuristic
+        if _looks_like_occ_option(symbol):
+            executed = "option"
+        elif _looks_like_crypto_pair(symbol):
+            executed = "crypto"
+        elif _looks_like_equity_symbol(symbol):
+            executed = "equity"
+        else:
+            continue  # unknown symbol format — skip
+
+        # Violation predicate
+        is_violation = False
+        if declared == "crypto" and executed == "equity":
+            is_violation = True
+        elif declared == "options" and executed != "option":
+            is_violation = True
+        elif declared in ("stock", "stocks") and executed == "crypto":
+            is_violation = True
+        elif declared in ("stock", "stocks") and executed == "option":
+            is_violation = True
+        # declared in (stock/stocks) and executed == equity -> MATCH, not a violation
+
+        if not is_violation:
+            continue
+
+        # Determine if this is a cleanup exit
+        exit_reason = row.position_exit_reason
+        migration_tag = _cleanup_migration_tag(exit_reason)
+        is_cleanup_exit = migration_tag is not None
+
+        if is_cleanup_exit:
+            cleanup_exits_excluded_count += 1
+        else:
+            real_violations_count += 1
+
+        if len(violations) < 500:
+            violations.append({
+                "bot_id": row.bot_id,
+                "declared_asset_class": row.declared_asset_class,
+                "trade_id": row.trade_id,
+                "symbol": symbol,
+                "executed_asset_class": executed,
+                "trade_created_at": _iso_z(row.trade_created_at),
+                "is_cleanup_exit": is_cleanup_exit,
+                "cleanup_migration": migration_tag,
+            })
+
+    truncated = (real_violations_count + cleanup_exits_excluded_count) > 500
+
+    payload = {
+        "as_of": now.isoformat().replace("+00:00", "Z"),
+        "window_hours": hours,
+        "violations_count": real_violations_count,
+        "real_violations_count": real_violations_count,
+        "cleanup_exits_excluded_count": cleanup_exits_excluded_count,
+        "violations": violations,
+    }
+    if truncated:
+        payload["truncated"] = True
+
+    _audit_cache_set(cache_key, payload)
+    return payload
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Endpoint 4: GET /api/admin/inert-bot-scan
+# Per-bot signal-pipeline walk with verdict + next_action.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/inert-bot-scan")
+def get_inert_bot_scan(
+    hours: int = 24,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """For each bot with 0 trades in the window, walk the signal pipeline
+    backwards to surface WHY: scanner ran? signals produced? signals gated?
+    orders rejected? Returns a tailored verdict + next_action per inert bot.
+    """
+    if hours < 1 or hours > 168:
+        raise HTTPException(status_code=400, detail="hours must be 1..168")
+
+    _audit_log("inert-bot-scan", current_user.id)
+    cache_key = f"inert-bot-scan:{hours}"
+    cached = _audit_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=hours)
+
+    # Pull all bots for user_id=1 (same join as Endpoint 1)
+    sql_bots = text("""
+        SELECT p.name          AS bot_name,
+               p.enabled       AS profile_enabled,
+               p.asset_class   AS asset_class,
+               p.config_json   AS config_json,
+               a.id            AS allocation_id,
+               a.enabled       AS allocation_enabled,
+               a.paused_reason AS allocation_paused_reason
+          FROM bot_profiles p
+          JOIN bot_allocations a ON a.profile_id = p.id
+         WHERE a.user_id = :user_id
+         ORDER BY p.name
+    """)
+    bot_rows = db.execute(sql_bots, {"user_id": AUDIT_TARGET_USER_ID}).fetchall()
+
+    inert_bots = []
+
+    for row in bot_rows:
+        try:
+            allocation_id = row.allocation_id
+            bot_name = row.bot_name
+            enabled = bool(row.allocation_enabled)
+
+            # Trades in window (proxy for order fills)
+            trades_in_window = db.execute(text("""
+                SELECT COUNT(*) FROM bot_trades
+                 WHERE allocation_id = :aid
+                   AND ts >= :cutoff
+                   AND quarantined_at IS NULL
+            """), {"aid": allocation_id, "cutoff": cutoff}).scalar() or 0
+            trades_in_window = int(trades_in_window)
+
+            # If bot is trading (has fills), skip — only disabled bots are always surfaced
+            if trades_in_window > 0 and enabled:
+                continue
+
+            # Disabled allocations always surface even if they had trades before
+            # If disabled and has trades, still surface with verdict=bot_disabled
+            strategies_attached = _strategy_count_from_config(row.config_json)
+
+            # Heartbeat
+            hb_row = db.execute(text("""
+                SELECT last_scan_at FROM bot_heartbeat WHERE bot_name = :bn
+            """), {"bn": bot_name}).fetchone()
+
+            scanner_last_run_at = None
+            scanner_ran_24h = False
+            if hb_row is not None and hb_row[0] is not None:
+                last_scan_dt = _parse_row_ts(hb_row[0])
+                scanner_last_run_at = _iso_z(hb_row[0])
+                if last_scan_dt is not None:
+                    scanner_ran_24h = last_scan_dt >= (now - timedelta(hours=24))
+
+            # Signals produced in window
+            signals_produced_24h = db.execute(text("""
+                SELECT COUNT(*) FROM bot_signals
+                 WHERE allocation_id = :aid
+                   AND ts >= :cutoff
+            """), {"aid": allocation_id, "cutoff": cutoff}).scalar() or 0
+            signals_produced_24h = int(signals_produced_24h)
+
+            # Signal gate metrics
+            signals_blocked_by_confidence = db.execute(text("""
+                SELECT COUNT(*) FROM signal_gates
+                 WHERE bot_name = :bn
+                   AND created_at >= :cutoff
+                   AND final_decision = 'filtered'
+                   AND filter_reason = 'score_below_threshold'
+            """), {"bn": bot_name, "cutoff": cutoff}).scalar() or 0
+            signals_blocked_by_confidence = int(signals_blocked_by_confidence)
+
+            signals_blocked_by_discipline_gate = db.execute(text("""
+                SELECT COUNT(*) FROM signal_gates
+                 WHERE bot_name = :bn
+                   AND created_at >= :cutoff
+                   AND final_decision = 'filtered'
+                   AND filter_reason IN ('regime_mismatch', 'insufficient_confluence', 'multiple')
+            """), {"bn": bot_name, "cutoff": cutoff}).scalar() or 0
+            signals_blocked_by_discipline_gate = int(signals_blocked_by_discipline_gate)
+
+            # Orders attempted = trades proxy; rejected = always 0 (no bot_orders table)
+            orders_attempted_24h = trades_in_window
+            orders_rejected_24h = 0
+
+            # Verdict (priority order, first match wins)
+            pipeline_data_gap = [
+                "cooldown_metric",
+                "sleeve_cap_metric",
+                "orders_rejection_metric",
+                "scanner_error_metric",
+            ]
+
+            if not enabled:
+                verdict = "bot_disabled"
+                next_action = "Re-enable BotAllocation via /admin/allocation/enable or check paused_reason field"
+            elif strategies_attached == 0:
+                verdict = "no_strategies_attached"
+                next_action = "Edit bot_profiles.config_json -- add at least one strategy"
+            elif not scanner_ran_24h and signals_produced_24h == 0:
+                verdict = "scanner_not_running"
+                next_action = "Check Railway logs for scheduler exceptions; verify bot is in bot_scheduler.py loop"
+            elif scanner_ran_24h and signals_produced_24h == 0:
+                verdict = "scanner_running_no_signals"
+                next_action = "Scanner alive but no signals -- check bar fetch (yfinance/alpaca rate limits)"
+            elif signals_blocked_by_confidence > 0 and signals_blocked_by_confidence >= signals_blocked_by_discipline_gate:
+                verdict = "signals_filtered_by_confidence"
+                next_action = "Lower composite_threshold in profile or wait for higher-confluence regime"
+            elif signals_blocked_by_discipline_gate > 0:
+                verdict = "signals_filtered_by_discipline"
+                next_action = "Check current regime vs profile regime_preference"
+            elif orders_attempted_24h > 0 and orders_rejected_24h > 0:
+                verdict = "orders_rejected"
+                next_action = "Check broker logs -- Alpaca/Kraken rejections"
+            else:
+                # Fallback — scanner not running (no heartbeat row case)
+                verdict = "scanner_not_running"
+                next_action = "Check Railway logs for scheduler exceptions; verify bot is in bot_scheduler.py loop"
+
+            inert_bots.append({
+                "bot_id": bot_name,
+                "scanner_ran_24h": scanner_ran_24h,
+                "scanner_last_run_at": scanner_last_run_at,
+                "scanner_last_error": None,
+                "signals_produced_24h": signals_produced_24h,
+                "signals_blocked_by_confidence": signals_blocked_by_confidence,
+                "signals_blocked_by_cooldown": 0,
+                "signals_blocked_by_discipline_gate": signals_blocked_by_discipline_gate,
+                "signals_blocked_by_sleeve_cap": 0,
+                "orders_attempted_24h": orders_attempted_24h,
+                "orders_rejected_24h": orders_rejected_24h,
+                "rejection_reasons": {},
+                "strategies_attached": strategies_attached,
+                "enabled": enabled,
+                "verdict": verdict,
+                "next_action": next_action,
+                "pipeline_data_gap": pipeline_data_gap,
+            })
+
+        except Exception as exc:
+            logger.warning("[admin-audit] inert-bot-scan: error processing bot %s: %s", row.bot_name, exc)
+            continue
+
+    payload = {
+        "as_of": now.isoformat().replace("+00:00", "Z"),
+        "window_hours": hours,
+        "inert_bots": inert_bots,
+    }
+    _audit_cache_set(cache_key, payload)
+    return payload
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Endpoint 5: GET /api/admin/fund-tear-sheet-honesty-check
+# Manifest of real vs fabricated fields on /fund/tear-sheet.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/fund-tear-sheet-honesty-check")
+def get_fund_tear_sheet_honesty_check(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Manifest of which /fund/tear-sheet fields are real vs fabricated.
+    MOCK_DATA banner was added in PR #35. This endpoint lets auditors verify
+    field-by-field without parsing the React render tree.
+    """
+    _audit_log("fund-tear-sheet-honesty-check", current_user.id)
+    cached = _audit_cache_get("fund-tear-sheet-honesty-check")
+    if cached is not None:
+        return cached
+
+    now = datetime.now(timezone.utc)
+
+    real_fields = [
+        "nav_total",
+        "today_pnl_30d",
+        "open_positions_count",
+        "sleeve_balances",
+        "bot_allocations",
+    ]
+
+    fabricated_fields = [
+        "inception_date",
+        "monthly_returns_2023",
+        "monthly_returns_2024",
+        "monthly_returns_2025",
+        "cagr_since_inception",
+        "sharpe_ratio",
+        "sortino_ratio",
+        "calmar_ratio",
+        "max_drawdown",
+        "win_rate",
+        "beta_vs_benchmark",
+        "alpha_annualized",
+        "high_water_mark",
+        "nav_per_unit",
+        "per_bot_sharpe",
+        "per_bot_max_dd",
+        "sleeve_correlation_matrix",
+        "recovery_factor",
+        "cio_note",
+    ]
+
+    # Compute earliest real data point from bot_trades for user_id=1
+    earliest_row = db.execute(text("""
+        SELECT MIN(bt.ts)
+          FROM bot_trades bt
+          JOIN bot_allocations a ON a.id = bt.allocation_id
+         WHERE a.user_id = 1
+           AND bt.quarantined_at IS NULL
+    """)).fetchone()
+
+    earliest_ts = earliest_row[0] if earliest_row else None
+
+    if earliest_ts is not None:
+        # Normalize to UTC datetime
+        earliest_dt = _parse_row_ts(earliest_ts)
+        if earliest_dt is None:
+            earliest_real_data_point = None
+            fund_history_days = 0
+        else:
+            earliest_real_data_point = _iso_z(earliest_dt)
+            fund_history_days = (now - earliest_dt).days
+    else:
+        earliest_real_data_point = None
+        fund_history_days = 0
+
+    payload = {
+        "as_of": now.isoformat().replace("+00:00", "Z"),
+        "real_fields": real_fields,
+        "fabricated_fields": fabricated_fields,
+        "earliest_real_data_point": earliest_real_data_point,
+        "fund_history_days": fund_history_days,
+        "banner_displayed": True,
+        "banner_added_in_pr": "#35",
+        "recommendation": (
+            "Once /api/fund/returns-history exists with >=21 days, replace "
+            "fabricated fields with real values + remove banner"
+        ),
+    }
+    _audit_cache_set("fund-tear-sheet-honesty-check", payload)
+    return payload
