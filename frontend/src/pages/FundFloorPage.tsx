@@ -16,7 +16,10 @@ import { useEffect, useRef } from 'react';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import client from '@/api/client';
 import { initFundFloor } from '@/components/FundFloorCanvas';
-import '@/types/bmg-floor';
+// Window.BMGFloor types live in src/types/bmg-floor.d.ts and are picked up
+// automatically via tsconfig.json's `include` glob. The previous runtime
+// side-effect import `import '@/types/bmg-floor'` failed Vite's rolldown
+// build because .d.ts files have no runtime code to emit.
 
 interface CIOBriefing {
   briefing_id: string;
