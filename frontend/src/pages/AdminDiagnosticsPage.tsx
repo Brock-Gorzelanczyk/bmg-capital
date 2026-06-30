@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   AlertTriangle, Cpu, Gauge, RefreshCw, ShieldAlert, Activity,
   Layers, Siren, Snowflake, ScanLine, GitCompareArrows, FlaskConical,
-  PlayCircle, BellRing, CheckSquare, Eraser,
+  PlayCircle, BellRing, CheckSquare, Eraser, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BracketFrame, SectionLabel } from "@/components/design";
@@ -905,6 +905,143 @@ function WatchlistSweepCard() {
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
+// ─── CIO Meeting Card ───────────────────────────────────────────────────────
+
+interface CIOMeetingCardData {
+  last_meeting: {
+    meeting_id: string;
+    started_at: string;
+    duration_seconds: number | null;
+    model_cost_usd: number;
+    status: string;
+    vetoes_used: number;
+    failure_reason: string | null;
+  } | null;
+  pending_commitments_count: number;
+  broken_commitments_count: number;
+  broken_commitments: Array<{ owner_agent: string; action_description: string; deadline: string; strike_count: number }>;
+  recent_vetoes_count: number;
+  daily_budget_spent_usd: number;
+  daily_budget_cap_usd: number;
+  api_fallback_calls_today: number;
+  as_of: string;
+}
+
+function CIOMeetingCard({ qcRefresh }: { qcRefresh: number }) {
+  const { data, isLoading, isFetching, error, dataUpdatedAt, refetch } =
+    useQuery<CIOMeetingCardData>({
+      queryKey: ["adm-cio-meeting", qcRefresh],
+      queryFn: async () => {
+        const res = await (await import("@/api/client")).default.get("/api/monitoring/cio-meeting-card");
+        return res.data;
+      },
+    });
+
+  const budgetPct = data ? (data.daily_budget_spent_usd / (data.daily_budget_cap_usd || 3)) * 100 : 0;
+  const hasWarn = data && (
+    (data.last_meeting && data.last_meeting.status !== "completed") ||
+    data.broken_commitments_count > 0 ||
+    budgetPct > 85 ||
+    data.api_fallback_calls_today > 0
+  );
+
+  return (
+    <DiagnosticCard
+      title="// CIO MEETING"
+      icon={Bot}
+      lastUpdated={dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : undefined}
+      isLoading={isLoading}
+      isFetching={isFetching}
+      error={error}
+      onRefetch={refetch}
+      full
+    >
+      {data && (
+        <div className="space-y-3">
+          {hasWarn && (
+            <div className="flex items-center gap-1.5 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+              <AlertTriangle size={11} /> WARN
+            </div>
+          )}
+          {data.last_meeting ? (
+            <div className="space-y-1 text-[11px] font-mono-t">
+              <div className="flex gap-3 flex-wrap">
+                <span className="text-t-muted">Meeting:</span>
+                <span className="text-t-hi">{data.last_meeting.meeting_id}</span>
+                <StatusBadge status={data.last_meeting.status === "completed" ? "ok" : "warn"} />
+              </div>
+              <div className="flex gap-3 flex-wrap text-t-muted">
+                <span>Started: <span className="text-t-mid2">{fmtTime(data.last_meeting.started_at)}</span></span>
+                <span>Duration: <span className="text-t-mid2">{data.last_meeting.duration_seconds ?? "—"}s</span></span>
+                <span>Cost: <span className="text-t-mid2">${(data.last_meeting.model_cost_usd || 0).toFixed(4)}</span></span>
+                <span>Vetoes: <span className="text-t-mid2">{data.last_meeting.vetoes_used}</span></span>
+              </div>
+              {data.last_meeting.failure_reason && (
+                <div className="text-amber-400">Reason: {data.last_meeting.failure_reason}</div>
+              )}
+            </div>
+          ) : (
+            <div className="text-[11px] text-t-muted font-mono-t">No meetings yet.</div>
+          )}
+
+          {/* Budget meter */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-[10px] font-mono-t text-t-muted">
+              <span>Daily API Budget</span>
+              <span className={budgetPct > 85 ? "text-amber-400 font-bold" : "text-t-mid2"}>
+                ${data.daily_budget_spent_usd.toFixed(4)} / ${data.daily_budget_cap_usd.toFixed(2)}
+              </span>
+            </div>
+            <div className="h-1.5 rounded bg-t-bg2 overflow-hidden">
+              <div
+                className={cn("h-full rounded transition-all", budgetPct > 85 ? "bg-amber-400" : "bg-emerald-400")}
+                style={{ width: `${Math.min(100, budgetPct).toFixed(0)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Commitment stats */}
+          <div className="grid grid-cols-3 gap-2 text-[11px] font-mono-t">
+            <div className="bg-t-bg2 rounded p-2">
+              <div className="text-t-muted text-[9px] uppercase">Pending</div>
+              <div className="text-t-hi font-bold">{data.pending_commitments_count}</div>
+            </div>
+            <div className={cn("rounded p-2", data.broken_commitments_count > 0 ? "bg-amber-900/20" : "bg-t-bg2")}>
+              <div className="text-t-muted text-[9px] uppercase">Broken (3+)</div>
+              <div className={cn("font-bold", data.broken_commitments_count > 0 ? "text-amber-300" : "text-t-hi")}>
+                {data.broken_commitments_count}
+              </div>
+            </div>
+            <div className="bg-t-bg2 rounded p-2">
+              <div className="text-t-muted text-[9px] uppercase">Recent Vetoes</div>
+              <div className="text-t-hi font-bold">{data.recent_vetoes_count}</div>
+            </div>
+          </div>
+
+          {data.api_fallback_calls_today > 0 && (
+            <div className="text-[10px] text-amber-400 font-mono-t font-bold">
+              API FALLBACK CALLS TODAY: {data.api_fallback_calls_today} (target 0)
+            </div>
+          )}
+
+          {data.broken_commitments.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] text-t-muted uppercase tracking-wider font-bold">Over-strike commitments</div>
+              {data.broken_commitments.slice(0, 5).map((c, i) => (
+                <div key={i} className="text-[10px] font-mono-t text-t-muted">
+                  <span className="text-amber-400">[{c.owner_agent}]</span> {c.action_description.slice(0, 80)} — due {fmtTime(c.deadline)} (strikes: {c.strike_count})
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="text-[9px] text-t-faint font-mono-t text-right">as of {fmtTime(data.as_of)}</div>
+        </div>
+      )}
+    </DiagnosticCard>
+  );
+}
+
 export default function AdminDiagnosticsPage() {
   const qc = useQueryClient();
   const [qcRefresh, setQcRefresh] = useState(0);
@@ -981,6 +1118,15 @@ export default function AdminDiagnosticsPage() {
       {/* LLM Usage */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <CardErrorBoundary name="LLM Usage"><LLMUsageCard /></CardErrorBoundary>
+      </div>
+
+      {/* CIO Meeting */}
+      <div className="flex items-center gap-2 pt-2">
+        <Bot size={12} className="text-t-muted" />
+        <span className="text-[10px] uppercase tracking-widest text-t-muted font-bold">// CIO MEETING</span>
+      </div>
+      <div className="grid grid-cols-1 gap-4">
+        <CIOMeetingCard qcRefresh={qcRefresh} />
       </div>
 
       {/* Footer */}
