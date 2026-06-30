@@ -334,6 +334,9 @@ def test_heuristics_detect_bot_silent_48h():
                 "paused_reason": None,
                 "trades_24h": 0,
                 "last_trade_at": last_trade,
+                # 2026-06-30: heuristic now requires starting_capital>0 to
+                # distinguish real bots from defunct allocations.
+                "starting_capital_cents": 10000000,
             }
         ],
         built_at=built_at,
@@ -341,6 +344,37 @@ def test_heuristics_detect_bot_silent_48h():
 
     tags = _aqa_heuristics.find_actionable_issues(context)
     assert "bot_silent_48h" in tags
+
+
+def test_heuristics_detect_bot_silent_never_traded():
+    """Bot with starting_capital>0 but last_trade_at=None must be flagged.
+
+    Real case: options_directional, options_income, stock_lt, crypto_onchain
+    all have NULL last_trade_at and are the most-broken bots in the fund.
+    Previous heuristic skipped them as 'never traded' — that was the bug
+    PR #50 fixed. This test locks in the new behavior.
+    """
+    now = datetime.now(timezone.utc)
+    built_at = now.isoformat().replace("+00:00", "Z")
+
+    context = _make_context(
+        bots=[
+            {
+                "bot_id": "options_income",
+                "enabled": True,
+                "paused_reason": None,
+                "trades_24h": 0,
+                "last_trade_at": None,
+                "starting_capital_cents": 5000000,
+            }
+        ],
+        built_at=built_at,
+    )
+
+    tags = _aqa_heuristics.find_actionable_issues(context)
+    assert "bot_silent_48h" in tags, (
+        f"Bot with starting_capital>0 + never-traded MUST flag silent. tags={tags}"
+    )
 
 
 # ---------------------------------------------------------------------------
