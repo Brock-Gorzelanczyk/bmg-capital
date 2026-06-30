@@ -1999,20 +1999,32 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     # ── SHIP 2 asset-class gate + SHIP 6 24h cooldown clamp (path #2) ───────────
     # validate_order_with_cooldown_and_user raises RuntimeError on class mismatch,
     # allowlist violation, OR active 24h cooldown.
-    try:
-        from app.services.asset_class_registry import validate_order_with_cooldown_and_user
-        validate_order_with_cooldown_and_user(
-            db=db,
-            bot_id=profile_name,
-            symbol=sig.symbol,
-            user_id=int(alloc.user_id) if alloc.user_id else None,
-        )
-    except RuntimeError as _acr_exc:
-        logger.error(
-            "[asset_class_gate:%s] _execute_signal BLOCKED %s: %s",
-            profile_name, sig.symbol, _acr_exc,
-        )
-        return
+    #
+    # 2026-06-30: SKIP this gate for options-class profiles. The underlying ticker
+    # (sig.symbol == "AAPL") is correctly equity, but bot_id "options_income" is
+    # registered as required asset_class "option" — mismatch was silently blocking
+    # every options signal before it could reach `_execute_options_signal` at the
+    # routing branch below. `_execute_options_signal` runs the same gate with the
+    # resolved OCC contract symbol, which is what should actually be checked.
+    # Same logic applies to the underlying-cooldown: options bots cool down on
+    # the OCC contract, not the equity ticker, so the underlying-cooldown check
+    # here is meaningless for them and is handled inside the options path.
+    _profile_ac_for_gate = profile.get("asset_class", "stock") if profile else "stock"
+    if _profile_ac_for_gate != "options":
+        try:
+            from app.services.asset_class_registry import validate_order_with_cooldown_and_user
+            validate_order_with_cooldown_and_user(
+                db=db,
+                bot_id=profile_name,
+                symbol=sig.symbol,
+                user_id=int(alloc.user_id) if alloc.user_id else None,
+            )
+        except RuntimeError as _acr_exc:
+            logger.error(
+                "[asset_class_gate:%s] _execute_signal BLOCKED %s: %s",
+                profile_name, sig.symbol, _acr_exc,
+            )
+            return
     # ── end asset-class + cooldown gate ─────────────────────────────────────────
 
     if sig.side not in ("buy", "sell"):
