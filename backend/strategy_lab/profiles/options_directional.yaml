@@ -42,8 +42,11 @@ ensemble: weighted_vote
 # Same Phase 1 discipline-gate compensation as options_income — these
 # strategies don't emit the new factor fields in their reason JSON so
 # their composite score lands ~57 against the default 60 threshold.
-# Lower to 50 until strategies are upgraded.
-composite_threshold: 50
+#
+# 2026-06-30: Lowered from 50 → 45 alongside options_income for same
+# reason (12+ days silent, paired with PR #42 OCC fix). Daily audit
+# will catch over-deployment.
+composite_threshold: 45
 position_cap: 8
 position_size_pct: 15.0
 stop_loss_pct: 100.0
