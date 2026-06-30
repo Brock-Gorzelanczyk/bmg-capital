@@ -576,10 +576,13 @@ def get_portfolio_snapshot(
             "options": "Options",
             "quant":   "Quant",
         }
-        # PART 5: fold canonical "Cash" (cash_floor allocations) into "stocks"
-        # sleeve since cash_floor is asset_class=equity per asset_class_registry.
+        # PART 5: fold canonical "Cash" (cash_floor allocations) into "stocks".
+        # 2026-06-29 v2 hotfix: drop the `> 0` gate. Cash Floor may be allocated
+        # $100K but not yet deployed in SPY/QQQ → canonical "Cash" sleeve = 0
+        # while cash_floor's snapshot still contributes $100K to total_value.
+        # Without folding even-when-Cash-is-0 we get a $100K by_sleeve undercount.
         _cash_floor_canonical_cents = int(_canonical_sleeve_cents.get("Cash", 0) or 0)
-        if _cash_floor_canonical_cents and "Stocks" in _canonical_sleeve_cents:
+        if "Stocks" in _canonical_sleeve_cents:
             _canonical_sleeve_cents["Stocks"] = int(
                 _canonical_sleeve_cents.get("Stocks", 0) or 0
             ) + _cash_floor_canonical_cents
@@ -590,9 +593,15 @@ def get_portfolio_snapshot(
             start = bucket["starting_capital_cents"]
             # CANONICAL is the source of truth for current_value_cents. Fall back
             # to local accumulation only if canonical lookup failed above.
+            # 2026-06-29 v2 hotfix: for "stocks", canonical (even with the Cash
+            # fold above) may still be lower than local if cash_floor's
+            # snapshot includes idle cash that canonical bucketed as Cash=0.
+            # Use max(canonical, local) for stocks to guarantee no undercount.
             canonical_value = _canonical_sleeve_cents.get(_RESPONSE_TO_CANONICAL[key])
             if canonical_value is not None:
                 value = int(canonical_value)
+                if key == "stocks" and bucket["current_value_cents"] > value:
+                    value = bucket["current_value_cents"]
             else:
                 value = bucket["current_value_cents"]
             ret_30d = round(bucket["return_30d_weighted"] / start, 2) if start else 0.0
