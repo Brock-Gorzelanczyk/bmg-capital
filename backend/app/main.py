@@ -52,6 +52,7 @@ from app.db.models.quant_analytics import LivePerformanceAlert, DecaySignal, Fac
 from app.db.models.ic_metrics import SignalIcMetric, SignalIcAlert  # noqa: F401
 from app.db.models.price_alert import PriceAlert  # noqa: F401
 from app.db.models.bot_daily_journal import BotDailyJournal  # noqa: F401
+from app.db.models.daily_audit import DailyAuditLog  # noqa: F401
 from app.routers.chart_layouts import ChartLayout  # noqa: F401
 from app.db.migration import run_migrations
 from app.alpaca.stream import stream_manager
@@ -522,6 +523,18 @@ async def lifespan(app: FastAPI):
         logger.warning("[startup] m049 OK: %s", _m049_result)
     except Exception as _m049_exc:
         logger.error("[startup] m049_regime_tagging FAILED: %s", _m049_exc, exc_info=True)
+
+    # m050: create daily_audit_log table (daily Strategy Lab audit job).
+    # Idempotent CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT EXISTS. Safe to run every boot.
+    try:
+        from app.db.migrations.m050_daily_audit_log import upgrade as m050_upgrade
+        _m050_db = SessionLocal()
+        try:
+            m050_upgrade(_m050_db)
+        finally:
+            _m050_db.close()
+    except Exception as _m050_exc:
+        logger.error("[startup] m050_daily_audit_log FAILED: %s", _m050_exc, exc_info=True)
 
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.

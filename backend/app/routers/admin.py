@@ -3123,6 +3123,47 @@ def migration_status(
     return out
 
 
+def compute_migration_status(db: Session) -> dict:
+    """Extract migration-status logic for in-process callers (e.g. daily audit).
+
+    Returns a dict with at minimum:
+      crypto_bot_equity_violations: list of dicts (empty if none)
+    """
+    from sqlalchemy import text as _text
+
+    out: Dict[str, Any] = {
+        "crypto_bot_equity_violations": [],
+    }
+    try:
+        viol_rows = db.execute(_text("""
+            SELECT bp.id, p.name AS bot_id, bp.symbol, bp.opened_at, bp.qty,
+                   bp.avg_cost_cents
+              FROM bot_positions bp
+              JOIN bot_allocations a ON a.id = bp.allocation_id
+              JOIN bot_profiles p ON p.id = a.profile_id
+             WHERE bp.closed_at IS NULL
+               AND bp.quarantined_at IS NULL
+               AND p.name LIKE 'crypto_%'
+               AND bp.symbol IN ('AAPL','MSFT','NVDA','AMZN','TSLA','GOOGL',
+                                 'META','QQQ','SPY','JPM','GLD','TLT')
+             ORDER BY bp.opened_at DESC
+        """)).fetchall()
+        out["crypto_bot_equity_violations"] = [
+            {
+                "position_id": int(r[0]),
+                "bot_id": r[1],
+                "symbol": r[2],
+                "opened_at": r[3].isoformat() if hasattr(r[3], "isoformat") else r[3],
+                "qty": float(r[4] or 0),
+                "avg_cost_cents": int(r[5] or 0),
+            }
+            for r in viol_rows
+        ]
+    except Exception as exc:
+        out["violations_error"] = str(exc)[:200]
+    return out
+
+
 # ── GET /api/admin/auto-pause/list ───────────────────────────────────────────
 # SHIP 6 — lists currently auto-paused bots (paused_reason LIKE 'degraded_auto_pause%').
 # READ-ONLY. Frontend reads rows[].bot_id exactly — shape contract per known-issues.md #4.
@@ -3254,6 +3295,50 @@ def get_llm_usage(
         "budget_remaining_cents": budget_remaining_cents,
         "last_relay_call_at": str(last_relay) if last_relay else None,
         "last_fallback_call_at": str(last_fallback) if last_fallback else None,
+    }
+
+
+def compute_llm_usage(db: Session) -> dict:
+    """Extract LLM usage logic for in-process callers (e.g. daily audit).
+
+    Returns the same dict as GET /api/admin/diagnostics/llm-usage.
+    """
+    from sqlalchemy import text as _text
+    import os as _os
+
+    today_rows = db.execute(_text(
+        "SELECT source, COUNT(*) AS n, COALESCE(SUM(estimated_cost_cents),0) AS cents "
+        "FROM llm_call_log "
+        "WHERE created_at >= datetime('now','-24 hours') "
+        "GROUP BY source"
+    )).fetchall()
+    relay_calls = 0
+    api_fallback_calls = 0
+    cache_hits = 0
+    api_fallback_cost_cents = 0
+    for row in today_rows:
+        src, n, cents = row[0], int(row[1]), int(row[2])
+        if src == "relay":
+            relay_calls = n
+        elif src == "api_fallback":
+            api_fallback_calls = n
+            api_fallback_cost_cents = cents
+        elif src == "cache":
+            cache_hits = n
+
+    cap_usd = float(_os.getenv("LLM_DAILY_FALLBACK_BUDGET_USD", "5"))
+    budget_remaining_cents = max(0, int(cap_usd * 100) - api_fallback_cost_cents)
+    fallback_enabled = _os.getenv("FALLBACK_TO_API", "false").strip().lower() == "true"
+
+    return {
+        "today": {
+            "relay_calls": relay_calls,
+            "api_fallback_calls": api_fallback_calls,
+            "cache_hits": cache_hits,
+            "api_fallback_cost_cents": api_fallback_cost_cents,
+        },
+        "fallback_enabled": fallback_enabled,
+        "budget_remaining_cents": budget_remaining_cents,
     }
 
 
@@ -3749,6 +3834,73 @@ def get_bot_diagnostic_singular(
     }
     _audit_cache_set("bot-diagnostic", payload)
     return payload
+
+
+def compute_bot_diagnostics(db: Session, user_id: int = 1) -> list[dict]:
+    """Extract the bot diagnostics logic for in-process callers (e.g. daily audit).
+
+    Returns the same list of bot dicts as GET /api/admin/bot-diagnostic but
+    scoped to the given user_id. Does NOT update the audit cache.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=24)
+    stale_cutoff = now - timedelta(hours=48)
+
+    sql = text("""
+        SELECT p.name             AS bot_name,
+               p.enabled          AS profile_enabled,
+               p.asset_class      AS asset_class,
+               p.config_json      AS config_json,
+               a.id               AS allocation_id,
+               a.enabled          AS allocation_enabled,
+               a.paused_reason    AS allocation_paused_reason,
+               a.starting_capital_cents AS starting_capital_cents,
+               (SELECT COUNT(*) FROM bot_positions bp
+                 WHERE bp.allocation_id = a.id
+                   AND bp.closed_at IS NULL
+                   AND bp.quarantined_at IS NULL) AS open_positions_count,
+               (SELECT COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) FROM bot_positions bp
+                 WHERE bp.allocation_id = a.id
+                   AND bp.closed_at IS NULL
+                   AND bp.quarantined_at IS NULL) AS open_positions_notional_cents,
+               (SELECT COUNT(*) FROM bot_signals bs
+                 WHERE bs.allocation_id = a.id
+                   AND bs.ts >= :cutoff) AS signals_window,
+               (SELECT MAX(bs.ts) FROM bot_signals bs
+                 WHERE bs.allocation_id = a.id) AS signals_last_ts,
+               (SELECT COUNT(*) FROM bot_trades bt
+                 WHERE bt.allocation_id = a.id
+                   AND bt.ts >= :cutoff
+                   AND bt.quarantined_at IS NULL) AS trades_window,
+               (SELECT MAX(bt.ts) FROM bot_trades bt
+                 WHERE bt.allocation_id = a.id
+                   AND bt.quarantined_at IS NULL) AS trades_last_ts
+          FROM bot_profiles p
+          JOIN bot_allocations a ON a.profile_id = p.id
+         WHERE a.user_id = :user_id
+         ORDER BY p.name
+    """)
+
+    rows = db.execute(sql, {"cutoff": cutoff, "user_id": user_id}).fetchall()
+
+    bots = []
+    for row in rows:
+        trades_last_ts_dt = _parse_row_ts(row.trades_last_ts)
+        verdict, _ = _classify_bot(row, stale_cutoff, trades_last_ts_dt)
+        bots.append({
+            "bot_id": row.bot_name,
+            "verdict": verdict,
+            "signals_24h": int(row.signals_window),
+            "trades_24h": int(row.trades_window),
+            "open_positions": int(row.open_positions_count),
+            "last_signal_at": _iso_z(row.signals_last_ts),
+            "last_trade_at": _iso_z(row.trades_last_ts),
+            "enabled": bool(row.allocation_enabled),
+            "paused_reason": row.allocation_paused_reason,
+            "asset_class_declared": row.asset_class,
+            "strategy_count": _strategy_count_from_config(row.config_json),
+        })
+    return bots
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4448,3 +4600,60 @@ def get_strategy_regime_matrix(
 
     _regime_matrix_cache_set(cache_key, payload)
     return payload
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Daily Strategy Lab Audit endpoints (m050)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/daily-audit/run-now")
+def post_daily_audit_run_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Manually trigger a daily Strategy Lab audit. Returns full audit result.
+
+    Does NOT wrap in sentry_sdk.start_transaction — FastAPI middleware already
+    creates a request-scoped transaction for this HTTP handler.
+
+    Auth: required (401 on unauthenticated).
+    """
+    from app.jobs.daily_strategy_lab_audit import run_daily_audit
+    import json as _json
+    return run_daily_audit(db)
+
+
+@router.get("/daily-audit/latest")
+def get_daily_audit_latest(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return the most recent daily audit row from daily_audit_log.
+
+    Returns 200 with as_of=null when no audits have been run yet.
+    Auth: required (401 on unauthenticated).
+    """
+    import json as _json
+    row = db.execute(text("""
+        SELECT id, run_at, overall_status, checks_json, alerts_json, summary_markdown
+        FROM daily_audit_log
+        ORDER BY run_at DESC, id DESC
+        LIMIT 1
+    """)).fetchone()
+    if row is None:
+        return {
+            "as_of": None,
+            "overall_status": None,
+            "checks": [],
+            "alerts": [],
+            "summary_markdown": "",
+            "note": "no audits yet",
+        }
+    return {
+        "id": row.id,
+        "as_of": row.run_at,
+        "overall_status": row.overall_status,
+        "checks": _json.loads(row.checks_json),
+        "alerts": _json.loads(row.alerts_json),
+        "summary_markdown": row.summary_markdown,
+    }

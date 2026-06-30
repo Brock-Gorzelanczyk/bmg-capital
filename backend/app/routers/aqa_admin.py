@@ -83,6 +83,30 @@ def _parse_proposal_row(row) -> dict:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+def compute_aqa_status(db: Session) -> dict:
+    """Extract AQA status logic for in-process callers (e.g. daily audit).
+
+    Returns a subset of the full AQA status dict:
+      enabled, frozen, deploys_today, llm_calls_today
+    Returns defaults if aqa_state table is missing or empty (non-fatal).
+    """
+    try:
+        state = _get_aqa_state_row(db)
+    except Exception:
+        return {
+            "aqa_enabled": False,
+            "frozen": False,
+            "deploys_today": 0,
+            "llm_calls_today": 0,
+        }
+    return {
+        "aqa_enabled": os.getenv("AQA_ENABLED", "false").strip().lower() == "true",
+        "frozen": bool(state.get("frozen", False)),
+        "deploys_today": int(state.get("deploys_today", 0)),
+        "llm_calls_today": int(state.get("llm_calls_today", 0)),
+    }
+
+
 @router.get("/status")
 def get_aqa_status(
     db: Session = Depends(get_db),
