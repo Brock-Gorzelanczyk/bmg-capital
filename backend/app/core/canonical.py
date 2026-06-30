@@ -349,21 +349,24 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
     # ── All-time return ───────────────────────────────────────────────────────
-    # SHIP 3: Use SUM(bot_daily_pnl.realized_cents) / inception_capital_cents
-    # so capital resets (m027, etc.) do not silently re-zero track records.
-    # Delegates to get_all_time_pct which filters out track_reset_marker rows.
-    # Falls back to the (portfolio_value - inception) / inception formula only
-    # when the bot has zero bot_daily_pnl rows AND no marker yet (boot-of-deploy
-    # window before reconstruct_for_user has run).
+    # 2026-06-30: SHIP 3 used SUM(bot_daily_pnl.realized_cents)/inception which
+    # silently dropped any unrealized P&L from open positions. Stock Swing showed
+    # 0.00% on the leaderboard while the detail page UI — which derived its number
+    # from current_value — showed +0.15% on a $161 unrealized AMD position.
+    # Source of truth = (portfolio_value - starting) / starting where
+    # portfolio_value already includes realized + unrealized (line 344 invariant).
+    # We still call get_all_time_pct so legacy callers / spec tests can read the
+    # historical realized-only metric, but the user-facing all_time_return_pct
+    # reflects what the user actually owns right now.
     from app.services.bot_performance import get_all_time_pct as _get_all_time_pct
-    _pnl_based_pct = _get_all_time_pct(alloc.id, db)
-    if _pnl_based_pct != 0.0:
-        all_time_return_pct = _pnl_based_pct
-    elif inception_capital_cents:
-        # Boot-of-deploy fallback: no daily_pnl rows yet
+    _pnl_based_pct = _get_all_time_pct(alloc.id, db)  # historical realized-only — kept for legacy callers
+    if starting_capital_cents:
         all_time_return_pct = round(
-            (portfolio_value_cents - inception_capital_cents) / inception_capital_cents * 100, 2
+            (portfolio_value_cents - starting_capital_cents) / starting_capital_cents * 100, 2
         )
+    elif _pnl_based_pct != 0.0:
+        # Fallback for the unusual case where starting is zero but a track record exists.
+        all_time_return_pct = _pnl_based_pct
     else:
         all_time_return_pct = 0.0
 
@@ -540,10 +543,13 @@ def compute_portfolio_snapshot(
     yesterday_value = portfolio_value_cents - today_pnl_cents
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
-    # SHIP 3: Portfolio all-time = SUM(realized) / SUM(inception) across child bots
-    # so capital resets do not re-zero portfolio-level history.
-    # Falls back to (portfolio_value - inception_denom) / inception_denom only
-    # when no bot has any bot_daily_pnl rows yet (boot-of-deploy window).
+    # Portfolio-level all-time.
+    # 2026-06-30: same SHIP 3 bug as compute_bot_snapshot — summing
+    # SUM(realized)/SUM(inception) silently dropped unrealized P&L from open
+    # positions. Source of truth = (portfolio_value - starting) / starting where
+    # portfolio_value rolls up each child bot's snapshot (which already includes
+    # realized + unrealized). The get_all_time_pct call is kept so legacy callers
+    # / spec tests can still read the realized-only historical metric.
     from app.services.bot_performance import get_all_time_pct as _get_all_time_pct
     bot_inception_sum = sum(
         int(getattr(alloc, "inception_capital_cents", None) or alloc.starting_capital_cents or 0)
@@ -551,7 +557,7 @@ def compute_portfolio_snapshot(
     )
     inception_denom = bot_inception_sum or starting_capital_cents
 
-    # Sum per-bot realized PnL (via get_all_time_pct numerator: pct * inception / 100)
+    # Sum per-bot realized PnL (historical only) — preserved for legacy callers.
     total_pnl_based_cents = 0
     for alloc, _profile in allocs_with_profiles:
         alloc_inception = int(
@@ -561,13 +567,13 @@ def compute_portfolio_snapshot(
         if alloc_inception:
             total_pnl_based_cents += int(alloc_pct / 100 * alloc_inception)
 
-    if inception_denom and total_pnl_based_cents != 0:
-        all_time_return_pct = round(total_pnl_based_cents / inception_denom * 100, 2)
-    elif inception_denom:
-        # Boot-of-deploy fallback: no daily_pnl rows yet
+    if starting_capital_cents:
         all_time_return_pct = round(
-            (portfolio_value_cents - inception_denom) / inception_denom * 100, 2
+            (portfolio_value_cents - starting_capital_cents) / starting_capital_cents * 100, 2
         )
+    elif inception_denom and total_pnl_based_cents != 0:
+        # Fallback for portfolios with zero starting but a track record from constituents.
+        all_time_return_pct = round(total_pnl_based_cents / inception_denom * 100, 2)
     else:
         all_time_return_pct = 0.0
 

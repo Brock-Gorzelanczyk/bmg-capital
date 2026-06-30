@@ -195,11 +195,27 @@ def get_strategy_leaderboard(
         current_value = snap.portfolio_value_cents if snap else starting
 
         current_equity_usd = round(current_value / 100, 2)
-        # SHIP 3: use get_all_time_pct (SUM realized / inception) not (current-starting)/starting
+        # Keep get_all_time_pct_with_meta for is_post_reset/reset_date tooltip metadata.
         _at_meta = get_all_time_pct_with_meta(alloc.id, db)
-        all_time_pnl_pct = _at_meta["pct"]
-        inception = _at_meta["inception_capital_cents"] or (alloc.starting_capital_cents or 0)
-        all_time_pnl_usd = round(all_time_pnl_pct / 100 * inception / 100, 2)
+        # 2026-06-30: the SHIP 3 realized-only formula silently hid unrealized P&L for
+        # any bot with open positions (Stock Swing showed 0.00% on the leaderboard while
+        # the detail page UI — which computes from current_value — showed +0.15% on a
+        # $161 unrealized AMD position). Source of truth = canonical snapshot's
+        # portfolio_value_cents (already includes realized + unrealized) over the
+        # starting capital base the user actually sees.
+        if snap and snap.starting_capital_cents:
+            all_time_pnl_pct = round(
+                (snap.portfolio_value_cents - snap.starting_capital_cents)
+                / snap.starting_capital_cents * 100,
+                2,
+            )
+            all_time_pnl_usd = round(
+                (snap.portfolio_value_cents - snap.starting_capital_cents) / 100, 2
+            )
+        else:
+            all_time_pnl_pct = _at_meta["pct"]
+            inception = _at_meta["inception_capital_cents"] or (alloc.starting_capital_cents or 0)
+            all_time_pnl_usd = round(all_time_pnl_pct / 100 * inception / 100, 2)
 
         stats = latest_stats.get(alloc.id)
         sharpe_30d: float | None = stats.sharpe_ratio if stats else None
