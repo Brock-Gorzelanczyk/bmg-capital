@@ -473,6 +473,48 @@ export default function FundTearSheet() {
         </span>
       </div>
 
+      {/* ── MOCK_DATA banner ──────────────────────────────────────────────────
+          Until /api/fund/returns-history exists, the inception date (Sep 2023),
+          monthly returns table, CAGR/Sharpe/Sortino/Calmar/MaxDD/Beta/Alpha,
+          NAV/unit, high-water mark, per-bot risk stats, and sleeve correlation
+          matrix on this page are SEEDED MOCK DATA shown for layout preview.
+          The fund actually has ~23 days of real history. Don't quote these
+          numbers anywhere. See TODO(backend) markers throughout this file. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+          background: "rgba(40,8,8,0.95)",
+          border: "1px solid rgba(248,113,113,0.55)",
+          borderRadius: 4,
+          padding: "9px 16px",
+          marginLeft: -26,
+          marginRight: -26,
+        }}
+      >
+        <span
+          className="fts-pulse"
+          style={{
+            width: 6, height: 6, borderRadius: "50%",
+            background: "#f87171", boxShadow: "0 0 8px rgba(248,113,113,0.9)",
+            animation: "ts-pulse 1.5s ease-in-out infinite",
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            fontFamily: FONT_MONO, fontSize: 10, letterSpacing: "0.14em",
+            color: "#fca5a5", textTransform: "uppercase", textAlign: "center",
+          }}
+        >
+          MOCK_DATA · Inception, monthly returns, CAGR/Sharpe/Sortino/MaxDD/Alpha/Beta,
+          NAV/unit, high-water mark, per-bot risk stats &amp; sleeve correlation
+          are synthetic for layout preview only. Real fund history: ~23 days. Do not quote.
+        </span>
+      </div>
+
       {/* ── Chrome row: breadcrumb + bot tear sheets link + print ─────────── */}
       <div
         className="no-print"
