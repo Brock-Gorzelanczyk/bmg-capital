@@ -1336,6 +1336,21 @@ def synthetic_fill_test(
 
     now = datetime.now(timezone.utc)
     try:
+        # ── SHIP 2 asset-class gate (path #8) — BEFORE BotPosition insert ──
+        # 2026-06-29: moved BEFORE db.add. Previously this validate ran AFTER
+        # db.add+db.flush, requiring rollback to undo. Now it raises
+        # pre-INSERT so no rollback needed.
+        try:
+            from app.services.asset_class_registry import validate_order_with_user
+            validate_order_with_user(
+                bot_id=_OPTIONS_DIRECTIONAL_BOT,
+                symbol=_SYN_SYMBOL,
+                user_id=getattr(current_user, "id", None),
+            )
+        except RuntimeError as _acr_exc:
+            raise HTTPException(status_code=422, detail=str(_acr_exc))
+        # ── end asset-class gate ─────────────────────────────────────────────
+
         pos = BotPosition(
             allocation_id=alloc.id,
             symbol=_SYN_SYMBOL,
@@ -1356,19 +1371,6 @@ def synthetic_fill_test(
         )
         db.add(pos)
         db.flush()
-
-        # ── SHIP 2 asset-class gate (path #8) — before BotTrade insert ─────
-        try:
-            from app.services.asset_class_registry import validate_order_with_user
-            validate_order_with_user(
-                bot_id=_OPTIONS_DIRECTIONAL_BOT,
-                symbol=_SYN_SYMBOL,
-                user_id=getattr(current_user, "id", None),
-            )
-        except RuntimeError as _acr_exc:
-            db.rollback()
-            raise HTTPException(status_code=422, detail=str(_acr_exc))
-        # ── end asset-class gate ─────────────────────────────────────────────
 
         trade = BotTrade(
             allocation_id=alloc.id,
@@ -3026,6 +3028,69 @@ def reconcile_broker(
     return reconcile_positions(db, user_id=user_id)
 
 
+# ── GET /api/admin/migration-status ──────────────────────────────────────────
+# 2026-06-29 diagnostic: lists schema_migrations entries + open-position
+# counts per bot per symbol. Helps verify m033 (and other migrations) ran
+# without needing direct DB access. READ-ONLY.
+@router.get("/migration-status")
+def migration_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Returns:
+      - migrations: every row in schema_migrations (proves what ran)
+      - open_positions_by_bot_symbol: open BotPosition counts grouped by
+        bot_id + symbol (proves which bots hold what)
+    """
+    from sqlalchemy import text as _text
+    out: Dict[str, Any] = {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "migrations": [],
+        "open_positions_by_bot_symbol": [],
+    }
+    try:
+        mig_rows = db.execute(_text(
+            "SELECT migration_name, applied_at FROM schema_migrations "
+            "ORDER BY applied_at DESC"
+        )).fetchall()
+        out["migrations"] = [
+            {
+                "name": r[0],
+                "applied_at": r[1].isoformat() if hasattr(r[1], "isoformat") else r[1],
+            }
+            for r in mig_rows
+        ]
+    except Exception as exc:
+        out["migrations_error"] = str(exc)[:200]
+    try:
+        pos_rows = db.execute(_text("""
+            SELECT p.name AS bot_id,
+                   bp.symbol,
+                   COUNT(*) AS open_count,
+                   COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) AS notional_cents
+              FROM bot_positions bp
+              JOIN bot_allocations a ON a.id = bp.allocation_id
+              JOIN bot_profiles p ON p.id = a.profile_id
+             WHERE bp.closed_at IS NULL
+               AND bp.quarantined_at IS NULL
+             GROUP BY p.name, bp.symbol
+             ORDER BY notional_cents DESC
+             LIMIT 200
+        """)).fetchall()
+        out["open_positions_by_bot_symbol"] = [
+            {
+                "bot_id": r[0],
+                "symbol": r[1],
+                "open_count": int(r[2]),
+                "notional_cents": int(r[3] or 0),
+            }
+            for r in pos_rows
+        ]
+    except Exception as exc:
+        out["positions_error"] = str(exc)[:200]
+    return out
+
+
 # ── GET /api/admin/auto-pause/list ───────────────────────────────────────────
 # SHIP 6 — lists currently auto-paused bots (paused_reason LIKE 'degraded_auto_pause%').
 # READ-ONLY. Frontend reads rows[].bot_id exactly — shape contract per known-issues.md #4.
@@ -3038,16 +3103,20 @@ def auto_pause_list(
     BotAllocation.paused_reason LIKE 'degraded_auto_pause%'.
     """
     from sqlalchemy import text as _text
+    # 2026-06-29 hotfix: GROUP BY p.name to dedupe. m021 dedup leftovers can
+    # leave 3+ allocation rows per profile; if auto-pause fires across all of
+    # them, the card showed crypto_quant_scalper 3x with same reason.
     rows = db.execute(_text("""
         SELECT p.name AS bot_id,
-               a.paused_reason,
-               a.updated_at AS paused_at,
-               a.user_id
+               MAX(a.paused_reason) AS paused_reason,
+               MAX(a.updated_at) AS paused_at,
+               MAX(a.user_id) AS user_id
           FROM bot_allocations a
           JOIN bot_profiles p ON p.id = a.profile_id
          WHERE a.enabled = 0
            AND a.paused_reason LIKE 'degraded_auto_pause%'
-         ORDER BY a.updated_at DESC
+         GROUP BY p.name
+         ORDER BY MAX(a.updated_at) DESC
     """)).fetchall()
     return {
         "ok": True,

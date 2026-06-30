@@ -110,7 +110,6 @@ const SignalsFeedPage = lazy(() => import("@/pages/SignalsFeedPage"));
 const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
 const FundPage = lazy(() => import("@/pages/FundPage"));
 const FundTearSheet = lazy(() => import("@/pages/FundTearSheet"));
-const FundFloorPage = lazy(() => import("@/pages/FundFloorPage"));
 const ResearchFeedPage = lazy(() => import("@/pages/ResearchFeedPage"));
 const PerformancePage = lazy(() => import("@/pages/PerformancePage"));
 const StrategyLeaderboardPage = lazy(() => import("@/pages/StrategyLeaderboardPage"));
@@ -132,6 +131,7 @@ const HypothesesPage = lazy(() => import("@/pages/HypothesesPage"));
 const BrainGraphPage = lazy(() => import("@/pages/BrainGraphPage"));
 const TuningPage = lazy(() => import("@/pages/TuningPage"));
 const AdminDiagnosticsPage = lazy(() => import("@/pages/AdminDiagnosticsPage"));
+const AdminMigrationStatusPage = lazy(() => import("@/pages/AdminMigrationStatusPage"));
 const IntroSequencePage = lazy(() => import("@/pages/IntroSequencePage"));
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useSignalToast } from "@/hooks/useSignalToast";
@@ -396,7 +396,6 @@ function AppInner() {
         <Route path="/strategy/forge" element={<ForgeBuilderPage />} />
         <Route path="/fund" element={<FundPage />} />
         <Route path="/fund/tear-sheet" element={<FundTearSheet />} />
-        <Route path="/fund-floor" element={<FundFloorPage />} />
         <Route path="/strategy/performance" element={<PerformancePage />} />
         <Route path="/strategy/leaderboard" element={<StrategyLeaderboardPage />} />
         <Route path="/markets" element={<MarketsPage />} />
@@ -457,6 +456,7 @@ function AppInner() {
         <Route path="/admin/discipline-report"    element={<AdminRoute><DisciplineReportPage /></AdminRoute>} />
         <Route path="/admin/tuning"               element={<AdminRoute><TuningPage /></AdminRoute>} />
         <Route path="/admin/diagnostics"          element={<AdminRoute><AdminDiagnosticsPage /></AdminRoute>} />
+        <Route path="/admin/migrations"           element={<AdminRoute><AdminMigrationStatusPage /></AdminRoute>} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
         <Route path="/settings" element={<SettingsPage />} />

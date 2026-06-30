@@ -418,8 +418,18 @@ async def lifespan(app: FastAPI):
     except Exception as _m038_exc:
         logger.error("[startup] m038_bot_symbol_cooldown FAILED: %s", _m038_exc, exc_info=True)
 
-    # SHIP 5: CIO Morning Meeting tables (m039-m043). Renamed from m033-m037
-    # to avoid collision with mega-ship m033 + SHIP 6 m038.
+    # m044: close LEGACY equity positions on crypto bots that survived
+    # m027 (no position close) and m033 (options-bot scope only). Companion
+    # to m033 — same close + quarantine + exit BotTrade pattern.
+    try:
+        from app.db.migrations.m044_close_crypto_bot_equity_violations import run as _run_m044
+        with engine.connect() as _m044_conn:
+            _m044_result = _run_m044(_m044_conn)
+        logger.warning("[startup] m044 OK: %s", _m044_result)
+    except Exception as _m044_exc:
+        logger.error("[startup] m044_close_crypto_bot_equity_violations FAILED: %s", _m044_exc, exc_info=True)
+
+    # SHIP 5: CIO Morning Meeting tables (m039-m043).
     try:
         from app.db.migrations.m039_fund_meetings import run as _run_m039
         with engine.connect() as _m039_conn:
@@ -427,7 +437,6 @@ async def lifespan(app: FastAPI):
         logger.warning("[startup] m039 OK: %s", _m039_result)
     except Exception as _m039_exc:
         logger.error("[startup] m039_fund_meetings FAILED: %s", _m039_exc, exc_info=True)
-
     try:
         from app.db.migrations.m040_fund_briefings import run as _run_m040
         with engine.connect() as _m040_conn:
@@ -435,7 +444,6 @@ async def lifespan(app: FastAPI):
         logger.warning("[startup] m040 OK: %s", _m040_result)
     except Exception as _m040_exc:
         logger.error("[startup] m040_fund_briefings FAILED: %s", _m040_exc, exc_info=True)
-
     try:
         from app.db.migrations.m041_agent_opening_reads import run as _run_m041
         with engine.connect() as _m041_conn:
@@ -443,7 +451,6 @@ async def lifespan(app: FastAPI):
         logger.warning("[startup] m041 OK: %s", _m041_result)
     except Exception as _m041_exc:
         logger.error("[startup] m041_agent_opening_reads FAILED: %s", _m041_exc, exc_info=True)
-
     try:
         from app.db.migrations.m042_agent_commitments import run as _run_m042
         with engine.connect() as _m042_conn:
@@ -451,7 +458,6 @@ async def lifespan(app: FastAPI):
         logger.warning("[startup] m042 OK: %s", _m042_result)
     except Exception as _m042_exc:
         logger.error("[startup] m042_agent_commitments FAILED: %s", _m042_exc, exc_info=True)
-
     try:
         from app.db.migrations.m043_veto_log import run as _run_m043
         with engine.connect() as _m043_conn:
