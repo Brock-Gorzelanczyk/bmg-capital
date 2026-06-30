@@ -494,10 +494,14 @@ def test_409_when_running_meeting_exists(monkeypatch):
 
     client = TestClient(app)
 
+    # Use Python isoformat() (T separator, +00:00 suffix) so the Python-bound
+    # :cutoff comparison in create_meeting_record works correctly.
+    from datetime import datetime, timedelta, timezone
+    _fresh_iso = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
     db.execute(text(
         "INSERT INTO fund_meetings (meeting_id, started_at, status) "
-        "VALUES ('mtg_inflight', datetime('now', '-2 minutes'), 'running')"
-    ))
+        "VALUES ('mtg_inflight', :s, 'running')"
+    ), {"s": _fresh_iso})
     db.commit()
 
     resp = client.post("/api/agents/cio/meeting/start", json={"runner_label": "test"})
