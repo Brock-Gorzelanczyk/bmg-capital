@@ -81,6 +81,11 @@ def generate_signals(
     profile_config: dict,
     regime: dict,
 ) -> list[Signal]:
+    # 2026-06-30 regime gate: mean reversion is structurally weak in trending
+    # regimes (bull/bear). Trade only in chop or when regime data is unavailable.
+    trend = (regime or {}).get("trend_regime", "").lower()
+    if trend in ("bull", "bear"):
+        return []
     signals: list[Signal] = []
     universe = profile_config.get("universe", {})
     symbols = universe.get("symbols", UNIVERSE) if isinstance(universe, dict) else UNIVERSE

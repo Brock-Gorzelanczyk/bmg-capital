@@ -113,12 +113,8 @@ risk:
 # Bypass anomaly/news/bot_coordinator execution guards so scheduled scans execute.
 skip_execution_guards: true
 
-# 7-day deployment push (Brock 2026-06-24): looser discipline for proven bots.
-# Scale 0-100; default 60. Lower = more signals pass.
-composite_threshold_override: 50
-
-# 7-day deployment push (Brock 2026-06-24): bump sizing for proven bots.
-position_size_pct_override: 25
-
-# 7-day deployment push (Brock 2026-06-24): concentrate capital into fewer, bigger positions.
-max_concurrent_positions: 5
+# 2026-06-30: reverted the 2026-06-24 "deployment push" overrides
+# (composite_threshold_override: 50, position_size_pct_override: 25,
+# max_concurrent_positions: 5). The push assumed proven edge that the 22-day
+# leaderboard does not support — looser threshold + bigger size + concentration
+# was the worst combination when edge isn't proven. Back to YAML/family defaults.
