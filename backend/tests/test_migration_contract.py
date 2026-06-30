@@ -76,6 +76,7 @@ _NATURALLY_IDEMPOTENT_WAIVER = {
     "m047_bot_daily_journals",  # Additive DDL only: CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT EXISTS. Phase 1 closed-loop journal table — no backfill, no date predicate, no UPDATE/DELETE. Safe to re-run on every boot.
     "m048_aqa_state",  # Additive DDL only: CREATE TABLE IF NOT EXISTS + seed row guarded by COUNT(*)==0 check. No UPDATE/DELETE of existing rows. Safe to re-run on every boot (idempotent by construction).
     "m049_regime_tagging",  # Additive DDL only: ALTER TABLE bot_trades ADD COLUMN (guarded by PRAGMA table_info check) + CREATE INDEX IF NOT EXISTS. No UPDATE/DELETE. Safe to re-run on every boot (Phase 2 closed-loop learning).
+    "m050_daily_audit_log",  # Additive DDL only: CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT EXISTS. daily_audit_log for Strategy Lab audit job. No UPDATE/DELETE of existing tables. Uses upgrade() not run() so not parsed by _registered_migrations, but listed here for completeness.
 }
 
 

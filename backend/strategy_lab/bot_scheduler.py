@@ -1819,6 +1819,34 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job daily_journal_nightly (04:00 UTC)")
 
+    # ── Daily Strategy Lab Audit (04:30 UTC) ─────────────────────────────────
+    # Runs 30 min after the journal job (04:00 UTC) so journal writes are
+    # complete before the audit reads them. Wraps in Sentry transaction for
+    # observability. READ-ONLY against bot_trades/positions/allocations.
+    def _daily_audit_job_wrapper():
+        import sentry_sdk
+        from datetime import datetime, timezone
+        from app.jobs.daily_strategy_lab_audit import run_daily_audit
+        from app.db.session import SessionLocal
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        with sentry_sdk.start_transaction(op="daily_audit", name=f"daily_audit:{date_str}"):
+            db = SessionLocal()
+            try:
+                run_daily_audit(db)
+            finally:
+                db.close()
+
+    scheduler.add_job(
+        _daily_audit_job_wrapper,
+        CronTrigger(hour=4, minute=30, timezone="UTC"),
+        id="daily_strategy_lab_audit",
+        name="daily_strategy_lab_audit",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job daily_strategy_lab_audit (04:30 UTC)")
+
     # ── Cash Floor passive rebalance ────────────────────────────────────────
     # Fires twice on RTH weekdays:
     #   09:35 ET — 5 min after market open, so first day's $100K deploys
