@@ -373,6 +373,7 @@ async def lifespan(app: FastAPI):
     except Exception as _m028_exc:
         logger.error("[startup] m028_quarantine_cross_sleeve FAILED: %s", _m028_exc, exc_info=True)
 
+    try:
         from app.db.migrations.m030_inception_snapshot_on_daily_pnl import run as _run_m030
         with engine.connect() as _m030_conn:
             _m030_result = _run_m030(_m030_conn)

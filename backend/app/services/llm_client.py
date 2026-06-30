@@ -178,16 +178,38 @@ def _post_to_relay(model, prompt, system_prompt, max_tokens, agent_name) -> str:
     token = os.getenv("RELAY_AUTH_TOKEN", "")
     if not url or not token:
         raise RuntimeError("RELAY_URL or RELAY_AUTH_TOKEN not configured")
-    with httpx.Client(timeout=60) as c:
-        r = c.post(
-            f"{url}/infer",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"model": model, "prompt": prompt, "system_prompt": system_prompt,
-                  "max_tokens": max_tokens, "agent_name": agent_name},
-        )
-    if r.status_code != 200:
-        raise RuntimeError(f"relay returned {r.status_code}: {r.text[:200]}")
-    return r.json()["response_text"]
+    backoffs = [0.5, 1.5]  # 2 retries, then give up (worst-case +2s)
+    last_exc: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=60) as c:
+                r = c.post(
+                    f"{url}/infer",
+                    headers={"Authorization": f"Bearer {token}",
+                             "Content-Type": "application/json"},
+                    json={"model": model, "prompt": prompt,
+                          "system_prompt": system_prompt,
+                          "max_tokens": max_tokens, "agent_name": agent_name},
+                )
+            if r.status_code == 200:
+                return r.json()["response_text"]
+            # 5xx is transient — retry. 4xx is deterministic (auth, malformed) — fail fast.
+            if 500 <= r.status_code < 600 and attempt < 2:
+                last_exc = RuntimeError(f"relay {r.status_code}: {r.text[:200]}")
+                logger.warning("[llm_client] relay 5xx attempt %d/3: %s",
+                               attempt + 1, last_exc)
+                time.sleep(backoffs[attempt])
+                continue
+            raise RuntimeError(f"relay returned {r.status_code}: {r.text[:200]}")
+        except httpx.HTTPError as exc:
+            last_exc = exc
+            if attempt < 2:
+                logger.warning("[llm_client] relay httpx attempt %d/3 failed: %s",
+                               attempt + 1, exc)
+                time.sleep(backoffs[attempt])
+                continue
+            raise RuntimeError(f"relay unreachable after 3 attempts: {exc}") from exc
+    raise RuntimeError(f"relay unreachable after 3 attempts: {last_exc}")
 
 
 def _fallback_to_api(model, prompt, system_prompt, max_tokens) -> str:
