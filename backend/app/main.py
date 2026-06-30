@@ -418,6 +418,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m038_exc:
         logger.error("[startup] m038_bot_symbol_cooldown FAILED: %s", _m038_exc, exc_info=True)
 
+    # m044: close LEGACY equity positions on crypto bots that survived
+    # m027 (no position close) and m033 (options-bot scope only). Companion
+    # to m033 — same close + quarantine + exit BotTrade pattern.
+    try:
+        from app.db.migrations.m044_close_crypto_bot_equity_violations import run as _run_m044
+        with engine.connect() as _m044_conn:
+            _m044_result = _run_m044(_m044_conn)
+        logger.warning("[startup] m044 OK: %s", _m044_result)
+    except Exception as _m044_exc:
+        logger.error("[startup] m044_close_crypto_bot_equity_violations FAILED: %s", _m044_exc, exc_info=True)
+
     # Boot-time track-record reconstruction (SHIP 3): insert markers for any
     # enabled allocation that has zero bot_daily_pnl rows post-m027 wipe.
     # Runs ONCE per deploy, after m030, before first canonical read.
