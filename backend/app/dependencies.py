@@ -39,9 +39,23 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
 
 
 def require_admin(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Authenticate + assert role='admin'. Blocks viewer accounts on all mutation routes."""
+    """Authenticate + assert admin. Blocks viewer accounts on mutation routes.
+
+    user_id=1 is the fund owner (Brock) and is always admin regardless of
+    the is_admin DB flag or role string. Without this hard-coded ownership
+    rule, every new admin endpoint requires a manual
+    `UPDATE users SET is_admin=true WHERE id=1` step from a Railway DB
+    shell — which Brock can't easily run from his browser session.
+    The owner-by-construction model is appropriate for a single-tenant
+    fund app; other users (if any) still must have is_admin=true or
+    role='admin' to access admin endpoints.
+    """
     user = get_current_user(token, db)
-    is_admin = user.is_admin or getattr(user, "role", "viewer") == "admin"
+    is_admin = (
+        user.is_admin
+        or getattr(user, "role", "viewer") == "admin"
+        or user.id == 1
+    )
     if not is_admin:
         raise HTTPException(
             status_code=403,
