@@ -40,6 +40,8 @@ export interface BotListItem {
     all_time_pnl_usd: number | null;
     starting_capital_usd: number | null;
     current_equity_usd: number | null;
+    is_post_reset?: boolean;
+    reset_date?: string | null;
   };
 }
 
@@ -322,6 +324,8 @@ function _rawBotToListItem(b: any): BotListItem {
       all_time_pnl_usd: b.all_time_pnl_usd ?? null,
       starting_capital_usd: b.starting_capital_usd ?? null,
       current_equity_usd: b.current_equity_usd ?? null,
+      is_post_reset: b.is_post_reset ?? false,
+      reset_date: b.reset_date ?? null,
     },
   };
 }

@@ -256,14 +256,13 @@ async def run_ai_sentinel(db: Session, anthropic_api_key: str) -> dict:
             "Return only the JSON object. Maximum 500 tokens."
         )
 
-        import anthropic
-        client = anthropic.Anthropic(api_key=anthropic_api_key)
-        message = client.messages.create(
+        from app.services.llm_client import call_llm
+        raw_text = call_llm(
             model="claude-sonnet-4-6",
+            prompt=prompt,
             max_tokens=500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw_text = message.content[0].text.strip()
+            agent_name="ai_sentinel",
+        ).strip()
 
         # Strip markdown fences if present
         if raw_text.startswith("```"):

@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from app.db.migrations._gate import already_ran, record
 
-_NAME = "m037_veto_log_2026_06"
+_NAME = "m043_veto_log_2026_06"
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS veto_log (

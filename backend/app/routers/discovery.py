@@ -42,34 +42,23 @@ async def generate_theme(
     body: GenerateThemeRequest,
     _user: User = Depends(get_current_user),
 ):
-    if not settings.anthropic_api_key:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=503, detail="AI theme generation requires API key configuration")
-
-    hdrs = {
-        "x-api-key": settings.anthropic_api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=hdrs,
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 512,
-                    "system": _THEME_SYSTEM,
-                    "messages": [{"role": "user", "content": body.prompt}],
-                },
-            )
-            r.raise_for_status()
-            data = r.json()
-            raw_text = "".join(
-                b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
-            )
-            parsed = json.loads(raw_text)
+        import asyncio
+        from app.services.llm_client import call_llm_cached
+        from fastapi import HTTPException
+        raw_text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm_cached(
+                model="claude-haiku-4-5-20251001",
+                prompt=body.prompt,
+                system_prompt=_THEME_SYSTEM,
+                max_tokens=512,
+                ttl_seconds=3600,
+                cache_key_extra=body.prompt,
+                agent_name="discovery",
+            ),
+        )
+        parsed = json.loads(raw_text)
     except json.JSONDecodeError as e:
         logger.warning(f"Theme generation JSON parse error: {e}")
         from fastapi import HTTPException

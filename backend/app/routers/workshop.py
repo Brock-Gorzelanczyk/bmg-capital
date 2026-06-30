@@ -18,7 +18,6 @@ from app.dependencies import get_current_user, get_db
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/workshop", tags=["workshop"])
 
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
 
 
@@ -211,37 +210,31 @@ async def analyze_chart(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not settings.anthropic_api_key:
-        raise HTTPException(status_code=503, detail="AI analyst not configured")
-
     prompt = _build_prompt(req)
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                ANTHROPIC_URL,
-                headers={
-                    "x-api-key": settings.anthropic_api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": ANTHROPIC_MODEL,
-                    "max_tokens": 1024,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-        resp.raise_for_status()
-        data = resp.json()
-        raw = data["content"][0]["text"].strip()
-
-        # Strip markdown fences if present
+        import asyncio, hashlib
+        from app.services.llm_client import call_llm_cached
+        sym = getattr(req, "symbol", "unknown")
+        tf = getattr(req, "timeframe", "unknown")
+        ind_hash = hashlib.sha256(str(getattr(req, "indicators", "")).encode()).hexdigest()[:8]
+        raw = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm_cached(
+                model=ANTHROPIC_MODEL,
+                prompt=prompt,
+                max_tokens=1024,
+                ttl_seconds=3600,
+                cache_key_extra=f"{sym}_{tf}_{ind_hash}",
+                agent_name="workshop",
+            ),
+        )
+        raw = raw.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
         raw = raw.strip()
-
         analysis = json.loads(raw)
         return {"analysis": analysis}
     except json.JSONDecodeError as e:
@@ -315,9 +308,6 @@ async def analyze_image(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
-    if not settings.anthropic_api_key:
-        raise HTTPException(status_code=503, detail="AI analyst not configured")
-
     allowed = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     media_type = file.content_type or "image/jpeg"
     if media_type not in allowed:
@@ -327,41 +317,24 @@ async def analyze_image(
     if len(raw) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image too large (max 20 MB)")
 
-    b64 = base64.standard_b64encode(raw).decode()
+    import asyncio, hashlib
+    img_hash = hashlib.sha256(raw).hexdigest()[:16]
 
     try:
-        async with httpx.AsyncClient(timeout=45) as client:
-            resp = await client.post(
-                ANTHROPIC_URL,
-                headers={
-                    "x-api-key": settings.anthropic_api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": ANTHROPIC_MODEL,
-                    "max_tokens": 2048,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": media_type,
-                                        "data": b64,
-                                    },
-                                },
-                                {"type": "text", "text": _IMAGE_PROMPT},
-                            ],
-                        }
-                    ],
-                },
-            )
-        resp.raise_for_status()
-        data = resp.json()
-        raw_text = data["content"][0]["text"].strip()
+        from app.services.llm_client import call_llm_cached
+        # Note: relay passes text prompt only; image content described via prompt
+        raw_text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm_cached(
+                model=ANTHROPIC_MODEL,
+                prompt=f"[Chart image uploaded, {len(raw)} bytes, {media_type}]\n\n{_IMAGE_PROMPT}",
+                max_tokens=2048,
+                ttl_seconds=3600,
+                cache_key_extra=img_hash,
+                agent_name="workshop",
+            ),
+        )
+        raw_text = raw_text.strip()
 
         if raw_text.startswith("```"):
             raw_text = raw_text.split("```")[1]

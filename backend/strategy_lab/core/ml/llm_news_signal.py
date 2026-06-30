@@ -14,6 +14,7 @@ result = await sig.score_async(symbol="AAPL", headlines=[...])
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -95,13 +96,11 @@ class LLMNewsSignal:
     # ── Claude inference ────────────────────────────────────────────────────
 
     async def _claude_score(self, symbol: str, headlines: list[str]) -> dict:
-        try:
-            import anthropic
-        except ImportError:
-            raise ImportError("anthropic package not installed")
-
-        client = anthropic.AsyncAnthropic(api_key=self._api_key)
+        """Route through relay via call_llm_cached (SHIP 3 — no direct Anthropic SDK)."""
+        import asyncio
+        from app.services.llm_client import call_llm_cached
         headlines_text = "\n".join(f"- {h}" for h in headlines)
+        article_key = hashlib.sha256(headlines_text.encode()).hexdigest()[:16]
 
         prompt = (
             f"You are a financial sentiment analyst. Analyze these news headlines for {symbol} "
@@ -114,13 +113,18 @@ class LLMNewsSignal:
             f"Return only valid JSON, no markdown."
         )
 
-        message = await client.messages.create(
-            model=self.model,
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
+        text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm_cached(
+                model=self.model,
+                prompt=prompt,
+                max_tokens=200,
+                ttl_seconds=86400 * 7,
+                cache_key_extra=article_key,
+                agent_name="lab_news_signal",
+            ),
         )
-
-        text = message.content[0].text.strip()
+        text = text.strip()
         parsed = json.loads(text)
         return {
             "symbol": symbol,

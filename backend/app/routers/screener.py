@@ -97,9 +97,6 @@ def _build_existing_filters_summary(existing_filters: List[FilterChip]) -> str:
 @router.post("/parse-natural-language", response_model=NLParseResponse)
 async def parse_natural_language(req: NLParseRequest):
     """Parse a natural language query into structured filter chips using Claude."""
-    if not settings.anthropic_api_key:
-        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured")
-
     is_followup = bool(req.existing_filters)
 
     if is_followup:
@@ -108,34 +105,21 @@ async def parse_natural_language(req: NLParseRequest):
     else:
         system_prompt = _NL_SYSTEM_BASE
 
-    hdrs = {
-        "x-api-key": settings.anthropic_api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=20.0) as c:
-            r = await c.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=hdrs,
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 512,
-                    "system": system_prompt,
-                    "messages": [{"role": "user", "content": req.query}],
-                },
-            )
-            r.raise_for_status()
-            data = r.json()
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Claude API error: {e}")
-
-    raw_text = "".join(
-        b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
-    )
-
-    try:
+        import asyncio
+        from app.services.llm_client import call_llm_cached
+        raw_text = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: call_llm_cached(
+                model="claude-haiku-4-5-20251001",
+                prompt=req.query,
+                system_prompt=system_prompt,
+                max_tokens=512,
+                ttl_seconds=86400,
+                cache_key_extra=req.query,
+                agent_name="screener_nl",
+            ),
+        )
         parsed = json.loads(raw_text)
         return NLParseResponse(
             filters=[FilterChip(**f) for f in parsed.get("filters", [])],
@@ -143,8 +127,8 @@ async def parse_natural_language(req: NLParseRequest):
             merge=is_followup,
         )
     except Exception as e:
-        logger.warning(f"NL parse failed to decode JSON: {e} — raw: {raw_text[:300]}")
-        raise HTTPException(status_code=422, detail="Could not parse Claude response as JSON")
+        logger.warning(f"NL parse failed: {e}")
+        raise HTTPException(status_code=422, detail="Could not parse AI response as JSON")
 
 
 @router.post("/run")

@@ -59,6 +59,7 @@ from app.routers.fund import router as fund_router
 from app.routers.proposals import router as proposals_router
 from app.routers.budget_router import router as budget_router
 from app.routers.research_feed import router as research_feed_router
+from app.routers.admin_reconstruct import router as admin_reconstruct_router
 from app.routers import notification_channels as notification_channels_router
 from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
 
@@ -372,45 +373,107 @@ async def lifespan(app: FastAPI):
     except Exception as _m028_exc:
         logger.error("[startup] m028_quarantine_cross_sleeve FAILED: %s", _m028_exc, exc_info=True)
 
+        from app.db.migrations.m030_inception_snapshot_on_daily_pnl import run as _run_m030
+        with engine.connect() as _m030_conn:
+            _m030_result = _run_m030(_m030_conn)
+        logger.warning("[startup] m030 OK: %s", _m030_result)
+    except Exception as _m030_exc:
+        logger.error("[startup] m030_inception_snapshot_on_daily_pnl FAILED: %s", _m030_exc, exc_info=True)
+
+    # SHIP 4: m031 anthropic_call_cache (cost-tracking cache table).
     try:
-        from app.db.migrations.m033_fund_meetings import run as _run_m033
+        from app.db.migrations.m031_anthropic_call_cache import run as _run_m031
+        with engine.connect() as _m031_conn:
+            _m031_result = _run_m031(_m031_conn)
+        logger.warning("[startup] m031 OK: %s", _m031_result)
+    except Exception as _m031_exc:
+        logger.error("[startup] m031_anthropic_call_cache FAILED: %s", _m031_exc, exc_info=True)
+
+    # SHIP 4: m032 llm_call_log (per-callsite cost ledger).
+    try:
+        from app.db.migrations.m032_llm_call_log import run as _run_m032
+        with engine.connect() as _m032_conn:
+            _m032_result = _run_m032(_m032_conn)
+        logger.warning("[startup] m032 OK: %s", _m032_result)
+    except Exception as _m032_exc:
+        logger.error("[startup] m032_llm_call_log FAILED: %s", _m032_exc, exc_info=True)
+
+    # PART 2 (Layer 1+3): close equity positions held by options bots and
+    # PAUSE both options bots so they stop emitting equity signals until
+    # their strategies are redesigned to emit OCC option symbols.
+    try:
+        from app.db.migrations.m033_close_options_bot_equity_violations import run as _run_m033
         with engine.connect() as _m033_conn:
             _m033_result = _run_m033(_m033_conn)
         logger.warning("[startup] m033 OK: %s", _m033_result)
     except Exception as _m033_exc:
-        logger.error("[startup] m033_fund_meetings FAILED: %s", _m033_exc, exc_info=True)
+        logger.error("[startup] m033_close_options_bot_equity_violations FAILED: %s", _m033_exc, exc_info=True)
+
+    # SHIP 6: m038 bot_symbol_cooldown table (24h clamp per bot+symbol).
+    try:
+        from app.db.migrations.m038_bot_symbol_cooldown import run as _run_m038
+        with engine.connect() as _m038_conn:
+            _m038_result = _run_m038(_m038_conn)
+        logger.warning("[startup] m038 OK: %s", _m038_result)
+    except Exception as _m038_exc:
+        logger.error("[startup] m038_bot_symbol_cooldown FAILED: %s", _m038_exc, exc_info=True)
+
+    # SHIP 5: CIO Morning Meeting tables (m039-m043). Renamed from m033-m037
+    # to avoid collision with mega-ship m033 + SHIP 6 m038.
+    try:
+        from app.db.migrations.m039_fund_meetings import run as _run_m039
+        with engine.connect() as _m039_conn:
+            _m039_result = _run_m039(_m039_conn)
+        logger.warning("[startup] m039 OK: %s", _m039_result)
+    except Exception as _m039_exc:
+        logger.error("[startup] m039_fund_meetings FAILED: %s", _m039_exc, exc_info=True)
 
     try:
-        from app.db.migrations.m034_fund_briefings import run as _run_m034
-        with engine.connect() as _m034_conn:
-            _m034_result = _run_m034(_m034_conn)
-        logger.warning("[startup] m034 OK: %s", _m034_result)
-    except Exception as _m034_exc:
-        logger.error("[startup] m034_fund_briefings FAILED: %s", _m034_exc, exc_info=True)
+        from app.db.migrations.m040_fund_briefings import run as _run_m040
+        with engine.connect() as _m040_conn:
+            _m040_result = _run_m040(_m040_conn)
+        logger.warning("[startup] m040 OK: %s", _m040_result)
+    except Exception as _m040_exc:
+        logger.error("[startup] m040_fund_briefings FAILED: %s", _m040_exc, exc_info=True)
 
     try:
-        from app.db.migrations.m035_agent_opening_reads import run as _run_m035
-        with engine.connect() as _m035_conn:
-            _m035_result = _run_m035(_m035_conn)
-        logger.warning("[startup] m035 OK: %s", _m035_result)
-    except Exception as _m035_exc:
-        logger.error("[startup] m035_agent_opening_reads FAILED: %s", _m035_exc, exc_info=True)
+        from app.db.migrations.m041_agent_opening_reads import run as _run_m041
+        with engine.connect() as _m041_conn:
+            _m041_result = _run_m041(_m041_conn)
+        logger.warning("[startup] m041 OK: %s", _m041_result)
+    except Exception as _m041_exc:
+        logger.error("[startup] m041_agent_opening_reads FAILED: %s", _m041_exc, exc_info=True)
 
     try:
-        from app.db.migrations.m036_agent_commitments import run as _run_m036
-        with engine.connect() as _m036_conn:
-            _m036_result = _run_m036(_m036_conn)
-        logger.warning("[startup] m036 OK: %s", _m036_result)
-    except Exception as _m036_exc:
-        logger.error("[startup] m036_agent_commitments FAILED: %s", _m036_exc, exc_info=True)
+        from app.db.migrations.m042_agent_commitments import run as _run_m042
+        with engine.connect() as _m042_conn:
+            _m042_result = _run_m042(_m042_conn)
+        logger.warning("[startup] m042 OK: %s", _m042_result)
+    except Exception as _m042_exc:
+        logger.error("[startup] m042_agent_commitments FAILED: %s", _m042_exc, exc_info=True)
 
     try:
-        from app.db.migrations.m037_veto_log import run as _run_m037
-        with engine.connect() as _m037_conn:
-            _m037_result = _run_m037(_m037_conn)
-        logger.warning("[startup] m037 OK: %s", _m037_result)
-    except Exception as _m037_exc:
-        logger.error("[startup] m037_veto_log FAILED: %s", _m037_exc, exc_info=True)
+        from app.db.migrations.m043_veto_log import run as _run_m043
+        with engine.connect() as _m043_conn:
+            _m043_result = _run_m043(_m043_conn)
+        logger.warning("[startup] m043 OK: %s", _m043_result)
+    except Exception as _m043_exc:
+        logger.error("[startup] m043_veto_log FAILED: %s", _m043_exc, exc_info=True)
+
+    # Boot-time track-record reconstruction (SHIP 3): insert markers for any
+    # enabled allocation that has zero bot_daily_pnl rows post-m027 wipe.
+    # Runs ONCE per deploy, after m030, before first canonical read.
+    # DO NOT call reconstruct_for_user from any scheduler or per-request path.
+    try:
+        from app.services.track_record_reconstruction import reconstruct_for_user as _reconstruct_for_user
+        _recon_db = SessionLocal()
+        try:
+            _recon_result = _reconstruct_for_user(user_id=1, db=_recon_db)
+            logger.warning("[startup] track_record_reconstruction OK: %s", _recon_result)
+        finally:
+            _recon_db.close()
+    except Exception as _recon_exc:
+        logger.error("[startup] track_record_reconstruction FAILED (non-fatal): %s", _recon_exc, exc_info=True)
 
     # Register the capital audit ORM listener AFTER m027 runs so its initial
     # writes don't spam the audit log. Listener catches every subsequent
@@ -750,6 +813,7 @@ app.include_router(fund_router)
 app.include_router(proposals_router)
 app.include_router(budget_router)
 app.include_router(research_feed_router)
+app.include_router(admin_reconstruct_router)
 from app.routers.agent_opening_reads import router as agent_opening_reads_router
 app.include_router(agent_opening_reads_router)
 from app.routers.cio_meeting import router as cio_meeting_router

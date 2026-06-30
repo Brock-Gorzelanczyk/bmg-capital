@@ -19,6 +19,8 @@ export interface BotLeaderboardRow {
   current_equity: number;
   all_time_pnl_usd: number;
   all_time_pnl_pct: number;
+  is_post_reset?: boolean;
+  reset_date?: string | null;
   sharpe_30d: number | null;
   max_drawdown_pct: number | null;
   win_rate: number | null;

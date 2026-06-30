@@ -101,33 +101,26 @@ async def _call_claude(extracted_text: str) -> list:
         "{opportunity, action, estimated_savings_dollars, priority: \"high\"|\"medium\"|\"low\"}."
     )
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": settings.anthropic_api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 1500,
-                "system": system_prompt,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": f"Here is the extracted 1040 tax return data:\n\n{extracted_text}\n\nPlease identify 3-5 specific tax planning opportunities. Return ONLY the JSON array, no other text.",
-                    }
-                ],
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        raw = data["content"][0]["text"].strip()
-        # Strip markdown code fences if present
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-        return json.loads(raw)
+    import hashlib, asyncio
+    from app.services.llm_client import call_llm_cached
+    harvest_hash = hashlib.sha256(extracted_text.encode()).hexdigest()[:16]
+    raw = await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: call_llm_cached(
+            model="claude-sonnet-4-6",
+            prompt=f"Here is the extracted 1040 tax return data:\n\n{extracted_text}\n\nPlease identify 3-5 specific tax planning opportunities. Return ONLY the JSON array, no other text.",
+            system_prompt=system_prompt,
+            max_tokens=1500,
+            ttl_seconds=86400,
+            cache_key_extra=harvest_hash,
+            agent_name="tax_tlh",
+        ),
+    )
+    raw = raw.strip()
+    # Strip markdown code fences if present
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+    return json.loads(raw)
 
 
 @router.post("/analyze")

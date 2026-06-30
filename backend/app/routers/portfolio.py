@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
@@ -442,9 +442,27 @@ def get_portfolio_snapshot(
         total_starting = sum(int(a.starting_capital_cents or 0) for a in all_allocs)
         total_alltime_pnl = total_value - total_starting
 
-        return_alltime_pct = round(
-            (total_value - total_starting) / total_starting * 100, 2
-        ) if total_starting else 0.0
+        # SHIP 3: all-time % = SUM(realized_cents from bot_daily_pnl) / SUM(inception_capital_cents)
+        # Replaces the broken (total_value - total_starting) / total_starting formula which
+        # re-zeroed history whenever starting_capital_cents changed (known-issues #10).
+        _alloc_ids = [a.id for a in all_allocs]
+        if _alloc_ids:
+            _fleet_row = db.execute(
+                text(
+                    "SELECT COALESCE(SUM(p.realized_cents), 0), "
+                    "       COALESCE(SUM(COALESCE(a.inception_capital_cents, a.starting_capital_cents, 0)), 0) "
+                    "FROM bot_allocations a "
+                    "LEFT JOIN bot_daily_pnl p ON p.allocation_id = a.id "
+                    "  AND (p.note IS NULL OR p.note != 'track_reset_marker') "
+                    "WHERE a.id IN :ids"
+                ).bindparams(bindparam("ids", expanding=True)),
+                {"ids": _alloc_ids},
+            ).fetchone()
+            _fleet_realized = int(_fleet_row[0] or 0)
+            _fleet_inception = int(_fleet_row[1] or 0)
+            return_alltime_pct = round(_fleet_realized / _fleet_inception * 100, 2) if _fleet_inception else 0.0
+        else:
+            return_alltime_pct = 0.0
 
         return_30d_pct = round(starting_weighted_ret30 / total_starting, 2) if total_starting else 0.0
 
@@ -471,6 +489,8 @@ def get_portfolio_snapshot(
                 "total_bots":             0,
                 "bot_ids":                [],
                 "return_30d_weighted":    0.0,
+                # SHIP 3: accumulate per-bot realized and inception for correct all-time %
+                "_alloc_ids":             [],
             } for k in sleeve_keys
         }
         for alloc in all_allocs:
@@ -499,6 +519,7 @@ def get_portfolio_snapshot(
                 sleeve_buckets[sleeve]["active_bots"] += 1
             if prof.name not in sleeve_buckets[sleeve]["bot_ids"]:
                 sleeve_buckets[sleeve]["bot_ids"].append(prof.name)
+            sleeve_buckets[sleeve]["_alloc_ids"].append(alloc.id)
 
         # Compute each sleeve's numerator (deployed + reserved). Use the SUM
         # of numerators as the denominator — guarantees sum(sleeve_pct) == 100%
@@ -544,14 +565,24 @@ def get_portfolio_snapshot(
             _canonical_sleeve_cents = {}
 
         # Map response keys (lowercase) -> canonical Title Case labels.
-        # Cash isn't a sleeve bucket here (it's a separate row in capital_allocation)
-        # so we don't propagate canonical's "Cash" value.
+        # Cash Floor's canonical bucket is "Cash"; we ROLL IT INTO the stocks
+        # sleeve so by_sleeve.sum equals total_value (no $1+ divergence WARN).
+        # PART 5 fix: previously cash_floor's value was orphaned (not in any
+        # of the 4 sleeve_keys + not in capital_allocation), causing a
+        # ~10% divergence between by_sleeve and total_value.
         _RESPONSE_TO_CANONICAL = {
             "stocks":  "Stocks",
             "crypto":  "Crypto",
             "options": "Options",
             "quant":   "Quant",
         }
+        # PART 5: fold canonical "Cash" (cash_floor allocations) into "stocks"
+        # sleeve since cash_floor is asset_class=equity per asset_class_registry.
+        _cash_floor_canonical_cents = int(_canonical_sleeve_cents.get("Cash", 0) or 0)
+        if _cash_floor_canonical_cents and "Stocks" in _canonical_sleeve_cents:
+            _canonical_sleeve_cents["Stocks"] = int(
+                _canonical_sleeve_cents.get("Stocks", 0) or 0
+            ) + _cash_floor_canonical_cents
 
         by_sleeve: dict = {}
         for key in sleeve_keys:
@@ -565,7 +596,26 @@ def get_portfolio_snapshot(
             else:
                 value = bucket["current_value_cents"]
             ret_30d = round(bucket["return_30d_weighted"] / start, 2) if start else 0.0
-            ret_alltime = round((value - start) / start * 100, 2) if start else 0.0
+            # SHIP 3: all-time % = SUM(realized_cents from bot_daily_pnl) / SUM(inception_capital_cents)
+            # Replaces (value - start) / start which re-zeroed history on capital resets.
+            _sleeve_alloc_ids = bucket["_alloc_ids"]
+            if _sleeve_alloc_ids:
+                _sleeve_row = db.execute(
+                    text(
+                        "SELECT COALESCE(SUM(p.realized_cents), 0), "
+                        "       COALESCE(SUM(COALESCE(a.inception_capital_cents, a.starting_capital_cents, 0)), 0) "
+                        "FROM bot_allocations a "
+                        "LEFT JOIN bot_daily_pnl p ON p.allocation_id = a.id "
+                        "  AND (p.note IS NULL OR p.note != 'track_reset_marker') "
+                        "WHERE a.id IN :ids"
+                    ).bindparams(bindparam("ids", expanding=True)),
+                    {"ids": _sleeve_alloc_ids},
+                ).fetchone()
+                _sleeve_realized = int(_sleeve_row[0] or 0)
+                _sleeve_inception = int(_sleeve_row[1] or 0)
+                ret_alltime = round(_sleeve_realized / _sleeve_inception * 100, 2) if _sleeve_inception else 0.0
+            else:
+                ret_alltime = 0.0
             by_sleeve[key] = {
                 "starting_capital_cents": start,
                 "current_value_cents":    value,

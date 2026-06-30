@@ -159,11 +159,11 @@ def _ensure_app_db_migrations():
 
     # SHIP-5 migrations
     for _mn, _rp in [
-        ("app.db.migrations.m033_fund_meetings",    "app/db/migrations/m033_fund_meetings.py"),
-        ("app.db.migrations.m034_fund_briefings",   "app/db/migrations/m034_fund_briefings.py"),
-        ("app.db.migrations.m035_agent_opening_reads","app/db/migrations/m035_agent_opening_reads.py"),
-        ("app.db.migrations.m036_agent_commitments","app/db/migrations/m036_agent_commitments.py"),
-        ("app.db.migrations.m037_veto_log",         "app/db/migrations/m037_veto_log.py"),
+        ("app.db.migrations.m039_fund_meetings",    "app/db/migrations/m039_fund_meetings.py"),
+        ("app.db.migrations.m040_fund_briefings",   "app/db/migrations/m040_fund_briefings.py"),
+        ("app.db.migrations.m041_agent_opening_reads","app/db/migrations/m041_agent_opening_reads.py"),
+        ("app.db.migrations.m042_agent_commitments","app/db/migrations/m042_agent_commitments.py"),
+        ("app.db.migrations.m043_veto_log",         "app/db/migrations/m043_veto_log.py"),
     ]:
         if _mn not in sys.modules:
             _load_real(_mn, _rp)
@@ -219,11 +219,11 @@ def _make_test_engine():
             " source TEXT DEFAULT 'relay', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
         ))
         # SHIP-5 tables via migrations
-        _run_migration("m033_fund_meetings", conn)
-        _run_migration("m034_fund_briefings", conn)
-        _run_migration("m035_agent_opening_reads", conn)
-        _run_migration("m036_agent_commitments", conn)
-        _run_migration("m037_veto_log", conn)
+        _run_migration("m039_fund_meetings", conn)
+        _run_migration("m040_fund_briefings", conn)
+        _run_migration("m041_agent_opening_reads", conn)
+        _run_migration("m042_agent_commitments", conn)
+        _run_migration("m043_veto_log", conn)
         # bot_allocations stub (for canonical snapshot)
         conn.execute(text(
             "CREATE TABLE IF NOT EXISTS bot_allocations "
@@ -250,7 +250,7 @@ def _make_test_engine():
 def _run_migration(name: str, conn) -> None:
     """Import and run a single migration against the test connection."""
     from sqlalchemy import text
-    if name == "m033_fund_meetings":
+    if name == "m039_fund_meetings":
         conn.execute(text(
             "CREATE TABLE IF NOT EXISTS fund_meetings "
             "(meeting_id TEXT PRIMARY KEY, started_at TIMESTAMP NOT NULL, "
@@ -258,7 +258,7 @@ def _run_migration(name: str, conn) -> None:
             " briefing_id TEXT, vetoes_used INTEGER NOT NULL DEFAULT 0, "
             " status TEXT NOT NULL DEFAULT 'running', failure_reason TEXT, created_by_runner TEXT)"
         ))
-    elif name == "m034_fund_briefings":
+    elif name == "m040_fund_briefings":
         conn.execute(text(
             "CREATE TABLE IF NOT EXISTS fund_briefings "
             "(briefing_id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL, "
@@ -266,7 +266,7 @@ def _run_migration(name: str, conn) -> None:
             " needs_brock INTEGER NOT NULL DEFAULT 0, posted_at TIMESTAMP, "
             " discord_message_id TEXT, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
         ))
-    elif name == "m035_agent_opening_reads":
+    elif name == "m041_agent_opening_reads":
         conn.execute(text(
             "CREATE TABLE IF NOT EXISTS agent_opening_reads "
             "(id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_id TEXT NOT NULL, "
@@ -276,7 +276,7 @@ def _run_migration(name: str, conn) -> None:
             " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
             " UNIQUE(meeting_id, agent_name))"
         ))
-    elif name == "m036_agent_commitments":
+    elif name == "m042_agent_commitments":
         conn.execute(text(
             "CREATE TABLE IF NOT EXISTS agent_commitments "
             "(id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_id TEXT NOT NULL, "
@@ -286,7 +286,7 @@ def _run_migration(name: str, conn) -> None:
             " strike_count INTEGER NOT NULL DEFAULT 0, "
             " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP)"
         ))
-    elif name == "m037_veto_log":
+    elif name == "m043_veto_log":
         conn.execute(text(
             "CREATE TABLE IF NOT EXISTS veto_log "
             "(id INTEGER PRIMARY KEY AUTOINCREMENT, meeting_id TEXT NOT NULL, "
@@ -1048,11 +1048,11 @@ def test_ship5_does_not_mutate_capital_on_deploy():
         )).scalar()
 
         # Run all 5 SHIP-5 migrations
-        from app.db.migrations.m033_fund_meetings import run as run_m033
-        from app.db.migrations.m034_fund_briefings import run as run_m034
-        from app.db.migrations.m035_agent_opening_reads import run as run_m035
-        from app.db.migrations.m036_agent_commitments import run as run_m036
-        from app.db.migrations.m037_veto_log import run as run_m037
+        from app.db.migrations.m039_fund_meetings import run as run_m033
+        from app.db.migrations.m040_fund_briefings import run as run_m034
+        from app.db.migrations.m041_agent_opening_reads import run as run_m035
+        from app.db.migrations.m042_agent_commitments import run as run_m036
+        from app.db.migrations.m043_veto_log import run as run_m037
 
         for run_fn in [run_m033, run_m034, run_m035, run_m036, run_m037]:
             run_fn(conn)

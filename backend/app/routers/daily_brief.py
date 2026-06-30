@@ -193,30 +193,28 @@ For each section, write a 2-4 sentence commentary in the style requested. Return
 Each value should be a string (the section prose).
 """
 
-    if settings.anthropic_api_key:
-        try:
-            import anthropic
-            import json as _json
-
-            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-            msg = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=1000,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            raw = msg.content[0].text if msg.content else "{}"
-            # Extract JSON from the response (handle markdown code fences)
-            raw = raw.strip()
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-            parsed = _json.loads(raw.strip())
-        except Exception as e:
-            logger.error(f"Daily brief AI call failed: {e}", exc_info=True)
-            parsed = {}
-    else:
+    try:
+        from app.services.llm_client import call_llm_cached
+        import json as _json
+        from datetime import date as _date
+        _date_str = str(_date.today())
+        raw = call_llm_cached(
+            model="claude-haiku-4-5-20251001",
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=1000,
+            ttl_seconds=86400,
+            cache_key_extra=_date_str,
+            agent_name="daily_brief",
+        )
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        parsed = _json.loads(raw.strip())
+    except Exception as e:
+        logger.error(f"Daily brief AI call failed: {e}", exc_info=True)
         parsed = {}
 
     # Build structured sections with sources

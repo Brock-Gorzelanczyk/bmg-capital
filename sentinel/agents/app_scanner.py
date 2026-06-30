@@ -11,6 +11,7 @@ from typing import Any
 from sentinel.db.session import SessionLocal
 from sentinel.orchestrator import insert_event, route_event
 from sentinel.settings import settings
+from sentinel.agents.error_classifier import classify_error
 
 logger = logging.getLogger(__name__)
 
@@ -28,27 +29,7 @@ def _fp(page_name: str, error_summary: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:64]
 
 
-def _classify_error(console_error: str, stack: str) -> dict:
-    """Use Haiku to classify a browser error."""
-    import anthropic
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    msg = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=200,
-        system=(
-            "You classify browser console errors for an automated fix system. "
-            "Output ONLY valid JSON with keys: category, frontend_or_backend, suggested_file. "
-            "category must be one of: typescript_missing_property, import_path_wrong, "
-            "syntax_error_simple, broken_image_url, css_class_typo, missing_npm_dependency, "
-            "missing_python_dependency, import_path_error, other. "
-            "frontend_or_backend: 'frontend' | 'backend' | 'unknown'."
-        ),
-        messages=[{"role": "user", "content": f"Console error:\n{console_error[:800]}\n\nStack:\n{stack[:400]}"}],
-    )
-    try:
-        return json.loads(msg.content[0].text)
-    except Exception:
-        return {"category": "other", "frontend_or_backend": "unknown", "suggested_file": ""}
+# _classify_error replaced by classify_error() from error_classifier.py (R1 — SHIP 3)
 
 
 class AppScannerAgent:
@@ -116,7 +97,7 @@ class AppScannerAgent:
                 )
 
             for err in console_errors:
-                classification = _classify_error(err["text"], err.get("location", ""))
+                classification = classify_error(err["text"], err.get("location", ""))
                 category = classification.get("category", "other")
                 suggested_file = classification.get("suggested_file", "")
                 side = classification.get("frontend_or_backend", "unknown")

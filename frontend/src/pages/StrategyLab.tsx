@@ -1118,11 +1118,14 @@ function BotCard({ item, onNavigate, isViewer, tier }: BotCardProps) {
             : "bg-t-red/5 border-t-red/20"
         )}>
           <span className="text-xs font-medium text-t-dim font-ui-t">ALL-TIME</span>
-          <span className={cn(
-            "text-sm font-bold tabular-nums font-mono-t",
-            stats.all_time_pnl_pct >= 0 ? "text-t-green" : "text-t-red"
-          )}>
-            {stats.all_time_pnl_pct >= 0 ? "+" : ""}{stats.all_time_pnl_pct.toFixed(2)}%
+          <span
+            className={cn(
+              "text-sm font-bold tabular-nums font-mono-t",
+              stats.all_time_pnl_pct >= 0 ? "text-t-green" : "text-t-red"
+            )}
+            title={stats.is_post_reset ? `Track record reset ${stats.reset_date ?? "2026-06-28"}. Performance tracking restarts from this date.` : undefined}
+          >
+            {stats.all_time_pnl_pct >= 0 ? "+" : ""}{stats.all_time_pnl_pct.toFixed(2)}%{stats.is_post_reset ? " ⓘ" : ""}
           </span>
           {stats.all_time_pnl_usd != null && (
             <span className={cn(
