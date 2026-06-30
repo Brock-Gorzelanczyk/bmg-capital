@@ -206,6 +206,8 @@ def rebalance(
                 )
                 db.add(pos)
                 db.flush()
+            from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+            _rt_cf_buy = _regime_tag_dict(db, source="cash_floor.buy")
             db.add(BotTrade(
                 allocation_id=cf_alloc.id,
                 symbol=symbol,
@@ -219,6 +221,7 @@ def rebalance(
                 expected_fill_cents=fill_cents,
                 slippage_bps=3.0,
                 strategy="cash_floor",
+                **_rt_cf_buy,
             ))
             written_trades.append({
                 "symbol": symbol, "side": "buy", "qty": qty,
@@ -248,6 +251,8 @@ def rebalance(
                 existing.exit_reason = "cash_floor_rebalance"
             else:
                 existing.qty = float(existing.qty) - trim_qty
+            from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+            _rt_cf_sell = _regime_tag_dict(db, source="cash_floor.sell")
             db.add(BotTrade(
                 allocation_id=cf_alloc.id,
                 symbol=symbol,
@@ -261,6 +266,7 @@ def rebalance(
                 expected_fill_cents=fill_cents,
                 slippage_bps=3.0,
                 strategy="cash_floor",
+                **_rt_cf_sell,
             ))
             written_trades.append({
                 "symbol": symbol, "side": "sell", "qty": trim_qty,

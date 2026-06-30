@@ -287,7 +287,10 @@ CREATE TABLE IF NOT EXISTS bot_trades (
     expiration_date TEXT,
     underlying_symbol TEXT,
     contract_count INTEGER,
-    contract_premium_cents REAL
+    contract_premium_cents REAL,
+    regime_vix TEXT,
+    regime_trend TEXT,
+    regime_btc_dom_band TEXT
 );
 
 CREATE TABLE IF NOT EXISTS regime_snapshots (

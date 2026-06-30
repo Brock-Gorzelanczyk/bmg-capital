@@ -3787,6 +3787,8 @@ def debug_force_trade(
     except RuntimeError as _acr_exc:
         raise HTTPException(status_code=422, detail=str(_acr_exc))
     # ── end asset-class gate ─────────────────────────────────────────────────
+    from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+    _rt_btc = _regime_tag_dict(db, source="bots.manual_crypto_swing_btc")
     trade_row = BotTrade(
         allocation_id=alloc.id,
         symbol="BTC/USD",
@@ -3800,6 +3802,7 @@ def debug_force_trade(
         alpaca_order_id=alpaca_order_id,
         expected_fill_cents=fill_price_cents,
         slippage_bps=0.0,
+        **_rt_btc,
     )
     db.add(trade_row)
     db.commit()

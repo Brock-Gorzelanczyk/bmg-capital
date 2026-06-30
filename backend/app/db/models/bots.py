@@ -128,6 +128,10 @@ class BotTrade(Base):
     underlying_symbol: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     contract_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     contract_premium_cents: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # per-contract × 100
+    # Phase 2 regime tagging (m049). NULL = row created before m049; UNKNOWN = tried but no snapshot.
+    regime_vix: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    regime_trend: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    regime_btc_dom_band: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
 
 class BotDailyPnL(Base):

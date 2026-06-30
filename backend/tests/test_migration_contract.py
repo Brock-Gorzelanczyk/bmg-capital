@@ -75,6 +75,7 @@ _NATURALLY_IDEMPOTENT_WAIVER = {
     "m046_force_kill_stuck_running_meetings",  # NO gate by design — runs every boot, idempotent via WHERE clause (kills 0 rows on clean DB). See spec section COMMIT 2.
     "m047_bot_daily_journals",  # Additive DDL only: CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT EXISTS. Phase 1 closed-loop journal table — no backfill, no date predicate, no UPDATE/DELETE. Safe to re-run on every boot.
     "m048_aqa_state",  # Additive DDL only: CREATE TABLE IF NOT EXISTS + seed row guarded by COUNT(*)==0 check. No UPDATE/DELETE of existing rows. Safe to re-run on every boot (idempotent by construction).
+    "m049_regime_tagging",  # Additive DDL only: ALTER TABLE bot_trades ADD COLUMN (guarded by PRAGMA table_info check) + CREATE INDEX IF NOT EXISTS. No UPDATE/DELETE. Safe to re-run on every boot (Phase 2 closed-loop learning).
 }
 
 

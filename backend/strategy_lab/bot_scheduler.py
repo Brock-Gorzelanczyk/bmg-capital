@@ -1899,12 +1899,15 @@ def setup_bot_scheduler(scheduler) -> None:
                                     trailing_stop_activated=False,
                                 )
                                 _db.add(pos); _db.flush()
+                            from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+                            _rt_sched = _regime_tag_dict(_db, source="bot_scheduler.cash_floor_rebalance")
                             _db.add(BotTrade(
                                 allocation_id=alloc.id, symbol=symbol, side="buy",
                                 qty=qty, fill_price_cents=fill_cents,
                                 fees_cents=friction, ts=now, position_id=pos.id,
                                 is_paper=True, expected_fill_cents=fill_cents,
                                 slippage_bps=3.0, strategy="cash_floor",
+                                **_rt_sched,
                             ))
                 _db.commit()
                 logger.warning("[cash-floor:%s] rebalance committed", tag)

@@ -4256,3 +4256,209 @@ def sentry_test(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Bearer token required")
     raise ValueError("Sentry test fire — if you see this in Sentry, the SDK works.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/admin/strategy-regime-matrix
+# Phase 2 closed-loop learning: strategy × regime performance matrix.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Cache keyed by (bot_id, window_days, user_id) → (expires_at_epoch, response).
+_REGIME_MATRIX_CACHE: dict[tuple, tuple[float, dict]] = {}
+_REGIME_MATRIX_CACHE_TTL = 30  # seconds
+
+
+def _regime_matrix_cache_get(key: tuple) -> dict | None:
+    entry = _REGIME_MATRIX_CACHE.get(key)
+    if entry is None:
+        return None
+    expires_at, payload = entry
+    if time.time() > expires_at:
+        _REGIME_MATRIX_CACHE.pop(key, None)
+        return None
+    return payload
+
+
+def _regime_matrix_cache_set(key: tuple, payload: dict) -> None:
+    _REGIME_MATRIX_CACHE[key] = (time.time() + _REGIME_MATRIX_CACHE_TTL, payload)
+
+
+@router.get("/strategy-regime-matrix")
+def get_strategy_regime_matrix(
+    bot_id: str = Query(..., description="bot_profiles.name, e.g. crypto_quant_aggressive"),
+    window_days: int = Query(30, ge=1, le=365),
+    min_trades_for_sharpe: int = Query(5, ge=2, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Strategy × regime performance matrix for one bot over window_days.
+
+    Groups bot_trades by (regime_vix, regime_trend, regime_btc_dom_band) and
+    computes trades / winners / losers / win_rate / total_pnl_cents / sharpe
+    per cell.
+
+    Auth: Depends(get_current_user). Multi-user safe — scoped by current_user.id
+    via JOIN on bot_allocations.user_id.
+
+    Cache: 30s TTL keyed by (bot_id, window_days, user_id).
+    """
+    import math
+    from collections import defaultdict
+
+    _audit_log("strategy-regime-matrix", current_user.id)
+
+    cache_key = (bot_id, window_days, current_user.id)
+    cached = _regime_matrix_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    # ── Validate bot_id resolves to a bot_profiles.name ──────────────────────
+    from app.db.models.bots import BotProfile, BotAllocation, BotTrade
+
+    profile = (
+        db.query(BotProfile)
+        .filter(BotProfile.name == bot_id)
+        .first()
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="unknown bot_id")
+
+    # ── Build query cutoff ────────────────────────────────────────────────────
+    now_utc = datetime.now(timezone.utc)
+    cutoff = now_utc - timedelta(days=window_days)
+
+    # ── Fetch trades via JOIN bot_trades → bot_allocations → bot_profiles ─────
+    # Scoped by current_user.id (multi-user safe per known-issue #6).
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                t.regime_vix,
+                t.regime_trend,
+                t.regime_btc_dom_band,
+                t.id,
+                t.ts,
+                t.side,
+                t.qty,
+                t.fill_price_cents,
+                t.fees_cents,
+                t.position_id
+            FROM bot_trades t
+            JOIN bot_allocations a ON a.id = t.allocation_id
+            JOIN bot_profiles p ON p.id = a.profile_id
+            WHERE p.name = :bot_id
+              AND a.user_id = :uid
+              AND t.ts >= :cutoff
+            ORDER BY t.regime_vix, t.regime_trend, t.regime_btc_dom_band, t.ts ASC
+            """
+        ),
+        {"bot_id": bot_id, "uid": current_user.id, "cutoff": cutoff.isoformat()},
+    ).fetchall()
+
+    total_trades_in_window = len(rows)
+    untagged_trades_in_window = sum(1 for r in rows if r[0] is None)
+
+    # ── Group by regime cell ──────────────────────────────────────────────────
+    cell_rows: dict[tuple, list] = defaultdict(list)
+    for r in rows:
+        cell_key = (r[0] or "UNKNOWN", r[1] or "UNKNOWN", r[2] or "UNKNOWN")
+        cell_rows[cell_key].append(r)
+
+    # ── Compute per-cell metrics ──────────────────────────────────────────────
+    matrix = []
+    for cell_key, cell_trades in cell_rows.items():
+        regime_vix, regime_trend, regime_btc_dom_band = cell_key
+        trades = len(cell_trades)
+
+        # Group by position_id for PnL pairing (entry + exit)
+        by_position: dict[int | None, list] = defaultdict(list)
+        for r in cell_trades:
+            by_position[r[9]].append(r)
+
+        # Realized PnL: pair entry (buy/short) with exit (sell/cover) per position
+        winners = 0
+        losers = 0
+        total_pnl_cents = 0
+        closed_pnl_list: list[int] = []  # one entry per closed position, for sharpe
+
+        for pos_id, pos_trades in by_position.items():
+            if pos_id is None:
+                # Orphan trades without position link — count but skip PnL pairing
+                continue
+
+            entries = [t for t in pos_trades if t[5] in ("buy", "short")]
+            exits = [t for t in pos_trades if t[5] in ("sell", "cover")]
+
+            if not entries or not exits:
+                # Unrealized (no exit in this window) — skip from PnL tally
+                continue
+
+            # Simple pairing: sum(exit cash flows) - sum(entry cash flows) - fees
+            # sign: sell/cover = +1 (cash in), buy/short = -1 (cash out)
+            exit_flow = sum(t[7] * t[6] for t in exits)   # fill_price_cents * qty
+            entry_flow = sum(t[7] * t[6] for t in entries)
+            fees = sum(t[8] for t in pos_trades)
+            pnl_cents = int(exit_flow - entry_flow - fees)
+
+            closed_pnl_list.append(pnl_cents)
+            total_pnl_cents += pnl_cents
+            if pnl_cents > 0:
+                winners += 1
+            elif pnl_cents < 0:
+                losers += 1
+
+        # win_rate
+        denom = winners + losers
+        win_rate = round(winners / denom, 3) if denom > 0 else None
+
+        # Sharpe (annualized, from daily returns)
+        sharpe = None
+        if trades >= min_trades_for_sharpe and len(closed_pnl_list) >= 2:
+            # Build daily returns series by grouping closed_pnl by date
+            daily_pnl: dict[str, int] = defaultdict(int)
+            for r, pnl_c in zip(
+                [t for t in cell_trades if t[9] is not None and t[5] in ("sell", "cover")],
+                closed_pnl_list,
+            ):
+                # r[4] = ts
+                ts_val = r[4]
+                if isinstance(ts_val, str):
+                    day_key = ts_val[:10]
+                elif hasattr(ts_val, "date"):
+                    day_key = str(ts_val.date())
+                else:
+                    day_key = str(ts_val)[:10]
+                daily_pnl[day_key] += pnl_c
+
+            daily_returns = list(daily_pnl.values())
+            if len(daily_returns) >= 2:
+                n = len(daily_returns)
+                mean_r = sum(daily_returns) / n
+                variance = sum((x - mean_r) ** 2 for x in daily_returns) / (n - 1)
+                std_r = math.sqrt(variance) if variance > 0 else 0.0
+                if std_r > 0:
+                    sharpe = round((mean_r / std_r) * math.sqrt(252), 4)
+
+        matrix.append({
+            "regime_vix": regime_vix,
+            "regime_trend": regime_trend,
+            "regime_btc_dom_band": regime_btc_dom_band,
+            "trades": trades,
+            "winners": winners,
+            "losers": losers,
+            "win_rate": win_rate,
+            "total_pnl_cents": total_pnl_cents,
+            "sharpe": sharpe,
+        })
+
+    payload = {
+        "as_of": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "bot_id": bot_id,
+        "window_days": window_days,
+        "matrix": matrix,
+        "total_trades_in_window": total_trades_in_window,
+        "untagged_trades_in_window": untagged_trades_in_window,
+    }
+
+    _regime_matrix_cache_set(cache_key, payload)
+    return payload

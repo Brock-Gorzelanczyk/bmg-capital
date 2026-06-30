@@ -39,10 +39,11 @@ _TREND_MAP = {
 }
 
 
-def _btc_dom_band(btc: float) -> str:
+def btc_dom_band(btc: float) -> str:
     """Map btc_dominance float to a band string.
 
     Accepts either 0-1 (proportion) or 0-100 (percent) — coerces to 0-1.
+    Public alias promoted from _btc_dom_band for Phase 2 backfill import.
     """
     if btc > 1.0:
         btc = btc / 100.0
@@ -112,16 +113,16 @@ def snapshot(db: Session) -> dict:
     # Map btc_dom_band
     btc_raw = row.btc_dominance
     if btc_raw is None:
-        btc_dom_band = "UNKNOWN"
+        _btc_dom_band_result = "UNKNOWN"
     else:
         try:
-            btc_dom_band = _btc_dom_band(float(btc_raw))
+            _btc_dom_band_result = btc_dom_band(float(btc_raw))
         except (TypeError, ValueError):
             logger.warning("[regime_snapshot] invalid btc_dominance=%r", btc_raw)
-            btc_dom_band = "UNKNOWN"
+            _btc_dom_band_result = "UNKNOWN"
 
     return {
         "vix_band": vix_band,
         "trend": trend,
-        "btc_dom_band": btc_dom_band,
+        "btc_dom_band": _btc_dom_band_result,
     }

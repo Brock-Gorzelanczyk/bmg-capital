@@ -513,6 +513,46 @@ async def lifespan(app: FastAPI):
             exc_info=True,
         )
 
+    # m049: add regime tagging columns to bot_trades (Phase 2 closed-loop learning).
+    # Idempotent ALTER + CREATE INDEX. Safe to run every boot.
+    try:
+        from app.db.migrations.m049_regime_tagging import run as _run_m049
+        with engine.begin() as _m049_conn:
+            _m049_result = _run_m049(_m049_conn)
+        logger.warning("[startup] m049 OK: %s", _m049_result)
+    except Exception as _m049_exc:
+        logger.error("[startup] m049_regime_tagging FAILED: %s", _m049_exc, exc_info=True)
+
+    # Phase 2: one-shot backfill of historical bot_trades regime tags.
+    # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
+    try:
+        from app.db.migrations._gate import already_ran, record
+        from app.jobs.backfill_regime_tags import run_backfill as _run_backfill
+        from app.db.session import SessionLocal as _SessionLocal
+        _BACKFILL_NAME = "backfill_regime_tags_2026_06"
+        with engine.connect() as _gate_conn:
+            _ran = already_ran(_gate_conn, _BACKFILL_NAME)
+        if not _ran:
+            _bf_db = _SessionLocal()
+            try:
+                _bf_result = _run_backfill(_bf_db, batch_size=500, dry_run=False)
+                logger.warning("[startup] regime backfill OK: %s", _bf_result)
+                if _bf_result.get("verify_null_after", 0) == 0:
+                    with engine.begin() as _gate_conn2:
+                        record(_gate_conn2, _BACKFILL_NAME)
+                    logger.warning("[startup] regime backfill gate recorded")
+                else:
+                    logger.critical(
+                        "[startup] regime backfill left %d NULL rows — NOT recording gate, will retry next boot",
+                        _bf_result["verify_null_after"],
+                    )
+            finally:
+                _bf_db.close()
+        else:
+            logger.info("[startup] regime backfill already applied, skipping")
+    except Exception as _bf_exc:
+        logger.error("[startup] regime backfill FAILED: %s", _bf_exc, exc_info=True)
+
     # SHIP 5: CIO Morning Meeting tables (m039-m043).
     try:
         from app.db.migrations.m039_fund_meetings import run as _run_m039
