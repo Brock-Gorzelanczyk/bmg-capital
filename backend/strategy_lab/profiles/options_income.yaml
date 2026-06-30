@@ -45,10 +45,15 @@ ensemble: weighted_vote
 # Options strategies pre-date Phase 1's discipline filter and don't yet
 # emit volume_agreement / mtf_alignment / cross_asset_agree in their reason
 # JSON. With those at default 0.5, signals score ~57 and get filtered by
-# the default 60-point score gate (168 signals → 0 trades pattern reported
-# in the audit). Lowering to 50 unblocks options trades until the strategies
-# are upgraded to emit factor fields like the Phase 3 strategies do.
-composite_threshold: 50
+# the default 60-point score gate.
+#
+# 2026-06-30: Lowered from 50 → 45 because /api/admin/inert-bot-scan still
+# showed 169 signals blocked by confidence in last 24h at the 50 threshold.
+# Paired with PR #42 (OCC symbol fix) so passing signals can now actually
+# become real options trades. Daily audit will alert if signal volume floods
+# the sleeve. Re-tune upward (or upgrade strategies to emit factor fields)
+# once we have trade-history Sharpe to evaluate.
+composite_threshold: 45
 position_cap: 5
 position_size_pct: 20.0
 stop_loss_pct: 50.0
