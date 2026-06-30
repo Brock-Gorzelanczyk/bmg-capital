@@ -499,6 +499,20 @@ async def lifespan(app: FastAPI):
             exc_info=True,
         )
 
+    # m048: create aqa_state + aqa_proposals tables (Phase A autonomous quant agent).
+    # Idempotent CREATE TABLE IF NOT EXISTS — safe to run every boot.
+    try:
+        from app.db.migrations.m048_aqa_state import run as _run_m048
+        with engine.begin() as _m048_conn:
+            _m048_result = _run_m048(_m048_conn)
+        logger.warning("[startup] m048 OK: %s", _m048_result)
+    except Exception as _m048_exc:
+        logger.error(
+            "[startup] m048_aqa_state FAILED: %s",
+            _m048_exc,
+            exc_info=True,
+        )
+
     # SHIP 5: CIO Morning Meeting tables (m039-m043).
     try:
         from app.db.migrations.m039_fund_meetings import run as _run_m039
@@ -624,6 +638,8 @@ async def lifespan(app: FastAPI):
     logger.warning("[startup-trace] setup_bot_scheduler returned")
     from app.services.onchain_ingest import setup_onchain_scheduler
     setup_onchain_scheduler(scheduler)
+    from app.jobs.aqa_loop import register_aqa_jobs
+    register_aqa_jobs(scheduler)
     scheduler.start()
 
     # Kick off strategy scan in background — won't block server startup
@@ -898,6 +914,8 @@ from app.routers.fund_floor import router as fund_floor_router
 app.include_router(fund_floor_router)
 from app.routers.strategy_journal import router as strategy_journal_router
 app.include_router(strategy_journal_router)
+from app.routers import aqa_admin
+app.include_router(aqa_admin.router)
 
 
 @app.get("/health", tags=["health"])
