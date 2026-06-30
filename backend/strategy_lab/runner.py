@@ -1414,6 +1414,40 @@ def _maybe_announce_first_live_signal(db, bot_name: str, strategy: str, symbol: 
 
 # ── Options signal execution ──────────────────────────────────────────────────
 
+def _build_occ_symbol(
+    underlying: str,
+    expiration_date,
+    option_type: str,
+    strike_price: float,
+) -> str:
+    """Build OCC-compliant option contract symbol (tight format, no spaces).
+
+    Format: <UNDERLYING><YYMMDD><C|P><STRIKE*1000 zero-padded 8 digits>
+    Example: NVDA250117C00150000 = NVDA Jan 17 2025 Call @ $150.00.
+
+    `expiration_date` accepts: ISO string "YYYY-MM-DD", datetime.date,
+    datetime.datetime, or "YYYY-MM-DD HH:MM:SS" prefix.
+    `option_type`: anything starting with 'c' (case-insensitive) → C, else P.
+    Multi-leg setups (iron condor, calendar) MUST resolve at the short-leg
+    level upstream — this helper builds ONE OCC string.
+    """
+    from datetime import date as _date, datetime as _dt
+    if isinstance(expiration_date, _dt):
+        dt = expiration_date
+    elif isinstance(expiration_date, _date):
+        dt = _dt(expiration_date.year, expiration_date.month, expiration_date.day)
+    else:
+        s = str(expiration_date)[:10]
+        dt = _dt.strptime(s, "%Y-%m-%d")
+    dte_str = dt.strftime("%y%m%d")
+    opt_code = "C" if str(option_type).strip().lower().startswith("c") else "P"
+    strike_milli = int(round(float(strike_price) * 1000))
+    if strike_milli < 0:
+        raise ValueError(f"_build_occ_symbol: negative strike {strike_price}")
+    strike_str = str(strike_milli).zfill(8)
+    return f"{underlying.upper()}{dte_str}{opt_code}{strike_str}"
+
+
 def _resolve_option_details(sig, position_dollars: float) -> dict:
     """Extract/estimate option contract details from signal reason JSON.
 
@@ -1545,6 +1579,7 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
                     "contract_premium_cents": 0,
                     "display_premium": 0.0,
                     "reject_reason": f"no_expiry_in_{DTE_MIN}_{DTE_MAX}_dte",
+                    "occ_symbol": None,
                 }
             # Pick the expiry closest to 45 DTE
             best_exp, best_dte = min(eligible, key=lambda x: abs(x[1] - DTE_TARGET))
@@ -1563,6 +1598,7 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
                     "contract_premium_cents": 0,
                     "display_premium": 0.0,
                     "reject_reason": f"dte_{best_dte}_exceeds_hard_{DTE_HARD_REJECT}",
+                    "occ_symbol": None,
                 }
             expiration_date = best_exp
             selected_dte = best_dte
@@ -1675,6 +1711,18 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
 
     contract_premium_cents = round(contract_premium * 100, 2)
 
+    # Build OCC symbol from resolved strike+expiry+type (post all early-reject paths).
+    # Reject paths above return contract_count=0; this branch never runs for them.
+    if contract_count > 0:
+        occ_symbol = _build_occ_symbol(
+            underlying=underlying,
+            expiration_date=expiration_date,
+            option_type=option_type,
+            strike_price=strike_price,
+        )
+    else:
+        occ_symbol = None
+
     return {
         "option_type": option_type,
         "strike_price": strike_price,
@@ -1685,6 +1733,7 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
         "display_premium": contract_premium,
         "selected_dte": selected_dte,
         "intent": intent,
+        "occ_symbol": occ_symbol,
     }
 
 
@@ -1704,26 +1753,6 @@ def _execute_options_signal(
     import json
     from datetime import datetime, timezone
     from app.db.models.bots import BotPosition, BotTrade
-
-    # ── SHIP 2 asset-class gate + SHIP 6 24h cooldown clamp (path #1) ──────────
-    # validate_order_with_cooldown_and_user raises RuntimeError on class mismatch,
-    # allowlist violation, OR active 24h cooldown. Defense in depth: options bots
-    # must trade OCC-format symbols only.
-    try:
-        from app.services.asset_class_registry import validate_order_with_cooldown_and_user
-        validate_order_with_cooldown_and_user(
-            db=db,
-            bot_id=profile_name,
-            symbol=sig.symbol,
-            user_id=int(alloc.user_id) if alloc.user_id else None,
-        )
-    except RuntimeError as _acr_exc:
-        logger.error(
-            "[asset_class_gate:%s] _execute_options_signal BLOCKED %s: %s",
-            profile_name, sig.symbol, _acr_exc,
-        )
-        return
-    # ── end asset-class + cooldown gate ─────────────────────────────────────────
 
     now = datetime.now(timezone.utc)
     capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
@@ -1804,6 +1833,32 @@ def _execute_options_signal(
         )
         return
 
+    # ── Asset-class + 24h cooldown gate on the OCC CONTRACT symbol ──────────
+    # Equity ticker `sig.symbol` would fail required=option/detected=equity.
+    # OCC symbol passes (classify_instrument → 'option'). This is the gap
+    # that kept options bots silent post-m033.
+    occ_symbol = opt["occ_symbol"]
+    if not occ_symbol:
+        logger.error(
+            "[options:%s] _resolve_option_details returned contract_count=%d but no occ_symbol — skipping",
+            profile_name, contract_count,
+        )
+        return
+    try:
+        from app.services.asset_class_registry import validate_order_with_cooldown_and_user
+        validate_order_with_cooldown_and_user(
+            db=db,
+            bot_id=profile_name,
+            symbol=occ_symbol,
+            user_id=int(alloc.user_id) if alloc.user_id else None,
+        )
+    except RuntimeError as _acr_exc:
+        logger.error(
+            "[asset_class_gate:%s] _execute_options_signal BLOCKED %s (occ=%s underlying=%s): %s",
+            profile_name, sig.symbol, occ_symbol, opt.get("underlying_symbol"), _acr_exc,
+        )
+        return
+
     # fill_price_cents = total premium paid per contract (in cents)
     fill_cents = premium * 100
 
@@ -1817,23 +1872,23 @@ def _execute_options_signal(
         logger.warning("[options:%s] slippage haircut skipped for %s: %s", profile_name, sig.symbol, _slip_exc)
 
     logger.warning(
-        "[options:%s] %s %s %s strike=%.2f exp=%s contracts=%d premium=%.2f total=$%.0f",
-        profile_name, sig.side, sig.symbol, opt["option_type"],
+        "[options:%s] %s %s occ=%s %s strike=%.2f exp=%s contracts=%d premium=%.2f total=$%.0f",
+        profile_name, sig.side, sig.symbol, occ_symbol, opt["option_type"],
         opt["strike_price"] or 0, opt["expiration_date"] or "?",
         contract_count, premium, premium * 100 * contract_count,
     )
 
     logger.warning(
-        "[OPTIONS-EXEC:%s] CONFIRMED OPTIONS PATH — %s %s opt_type=%s contracts=%d "
+        "[OPTIONS-EXEC:%s] CONFIRMED OPTIONS PATH — %s underlying=%s occ=%s opt_type=%s contracts=%d "
         "strike=%.2f exp=%s premium=%.2f total=$%.0f",
-        profile_name, sig.side, sig.symbol, opt["option_type"],
+        profile_name, sig.side, sig.symbol, occ_symbol, opt["option_type"],
         contract_count, opt["strike_price"] or 0, opt["expiration_date"] or "?",
         premium, premium * 100 * contract_count,
     )
     try:
         pos = BotPosition(
             allocation_id=alloc.id,
-            symbol=sig.symbol,
+            symbol=occ_symbol,
             qty=float(contract_count),
             avg_cost_cents=fill_cents,
             side="long" if sig.side == "buy" else "short",
@@ -1872,7 +1927,7 @@ def _execute_options_signal(
         _rt_options = _regime_tag_dict(db, source="runner._execute_signal_options")
         trade = BotTrade(
             allocation_id=alloc.id,
-            symbol=sig.symbol,
+            symbol=occ_symbol,
             side=sig.side,
             qty=float(contract_count),
             fill_price_cents=fill_cents,
@@ -1895,13 +1950,16 @@ def _execute_options_signal(
         db.add(trade)
 
         # SHIP 6: record 24h cooldown AFTER successful position insert, BEFORE commit.
+        # NOTE: cooldown key is now the OCC contract (not the underlying).
+        # Different contracts on the same underlying (e.g. different strikes/expiries)
+        # do NOT cool each other down — intentional per Planner (m050 spec).
         try:
             from app.services.cooldown_clamp import record_entry
-            record_entry(db, profile_name, sig.symbol)
+            record_entry(db, profile_name, occ_symbol)
         except Exception as _cd_exc_opt:
             logger.warning(
                 "[cooldown_clamp:%s] record_entry failed for %s: %s (non-fatal)",
-                profile_name, sig.symbol, _cd_exc_opt,
+                profile_name, occ_symbol, _cd_exc_opt,
             )
 
         db.commit()
@@ -1912,8 +1970,8 @@ def _execute_options_signal(
         except Exception:
             pass  # heartbeat is best-effort; never blocks order flow
         logger.info(
-            "[options:%s] Opened %s × %d contracts %s @ $%.2f/contract (pos=%d trade=%d)",
-            profile_name, sig.symbol, contract_count, opt["option_type"], premium, pos.id, trade.id,
+            "[options:%s] Opened %s (occ=%s) × %d contracts %s @ $%.2f/contract (pos=%d trade=%d)",
+            profile_name, sig.symbol, occ_symbol, contract_count, opt["option_type"], premium, pos.id, trade.id,
         )
     except Exception as exc:
         logger.error("[options:%s] DB write failed for %s: %s", profile_name, sig.symbol, exc)
