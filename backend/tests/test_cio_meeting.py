@@ -843,8 +843,11 @@ def test_briefing_posts_to_cio_channel_not_signal(monkeypatch):
 
     assert result == "test_msg_123"
     assert len(posted_urls) == 1, f"Expected 1 post, got {len(posted_urls)}: {posted_urls}"
-    assert posted_urls[0] == cio_wh_url, f"Posted to wrong URL: {posted_urls[0]}"
-    assert signal_wh_url not in posted_urls
+    # cio_discord appends ?wait=true so the webhook returns the message JSON
+    # (default 204 No Content body would otherwise break json parsing).
+    assert posted_urls[0].startswith(cio_wh_url), f"Posted to wrong base URL: {posted_urls[0]}"
+    assert "wait=true" in posted_urls[0]
+    assert not any(p.startswith(signal_wh_url) for p in posted_urls)
     db.close()
 
 

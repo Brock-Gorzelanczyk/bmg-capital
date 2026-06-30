@@ -90,15 +90,32 @@ def post_cio_briefing(
         payload["content"] = content
 
     try:
+        # Discord webhooks return 204 No Content unless ?wait=true is appended,
+        # in which case the response is JSON with the created message metadata
+        # (id, channel_id, etc.). We want message_id so we can stamp it onto
+        # fund_briefings.discord_message_id and link Brock straight to the post.
+        post_url = url if "wait=true" in url else (
+            url + ("&" if "?" in url else "?") + "wait=true"
+        )
         resp = httpx.post(
-            url,
+            post_url,
             content=json.dumps(payload),
             headers={"Content-Type": "application/json"},
             timeout=15,
         )
         resp.raise_for_status()
-        data = resp.json()
-        message_id = str(data.get("id", "")) or None
+        # Tolerate 204 (no body) even when wait=true is somehow ignored —
+        # the post succeeded, we just won't have message_id.
+        message_id = None
+        if resp.status_code != 204 and resp.content:
+            try:
+                data = resp.json()
+                message_id = str(data.get("id", "")) or None
+            except Exception as parse_exc:
+                logger.warning(
+                    "[cio_discord] could not parse Discord response body: %s",
+                    parse_exc,
+                )
 
         # Update fund_briefings
         if message_id:
