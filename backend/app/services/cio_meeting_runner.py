@@ -21,6 +21,24 @@ logger = logging.getLogger(__name__)
 BG_WATCHDOG_SECONDS = 900
 
 
+def _send_meeting_alert(meeting_id: str, *, severity: str, title: str, reason: str) -> None:
+    """Fire-and-forget alert. Never raises (alerts must not break the meeting flow)."""
+    try:
+        from app.services.discord import send_ops_alert
+        send_ops_alert(
+            title=title,
+            message=f"meeting_id={meeting_id}\nreason={reason}",
+            severity=severity,
+            source="cio_meeting_runner",
+            fields=[
+                {"name": "meeting_id", "value": meeting_id, "inline": True},
+                {"name": "reason", "value": reason[:1000], "inline": False},
+            ],
+        )
+    except Exception as exc:
+        logger.warning("[cio_meeting_runner] send_ops_alert failed: %s", exc)
+
+
 async def run_meeting_background(
     meeting_id: str,
     *,
@@ -37,9 +55,10 @@ async def run_meeting_background(
     Always closes the session in finally.
     """
     db = SessionLocal()
+    result = None
     try:
         try:
-            await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 _run_meeting_inner(
                     db, meeting_id,
                     runner_label=runner_label,
@@ -52,9 +71,32 @@ async def run_meeting_background(
         except asyncio.TimeoutError:
             logger.error("[cio_meeting_runner] watchdog fired for meeting %s", meeting_id)
             _mark_failed(db, meeting_id, "failed_timeout", "bg_watchdog_15min")
+            _send_meeting_alert(
+                meeting_id,
+                severity="critical",
+                title="CIO meeting watchdog timeout (15 min)",
+                reason="bg_watchdog_15min",
+            )
         except Exception as exc:
             logger.exception("[cio_meeting_runner] meeting %s crashed: %s", meeting_id, exc)
             _mark_failed(db, meeting_id, "failed_partial", f"bg_exception: {str(exc)[:480]}")
+            _send_meeting_alert(
+                meeting_id,
+                severity="critical",
+                title="CIO meeting bg-task crashed",
+                reason=f"bg_exception: {type(exc).__name__}",
+            )
+        else:
+            # Inner completed without raising. Check result-level failure.
+            if result is not None and getattr(result, "status", None) in (
+                "failed_partial", "failed_budget", "failed_timeout"
+            ):
+                _send_meeting_alert(
+                    meeting_id,
+                    severity="warn",
+                    title=f"CIO meeting finalized with status={result.status}",
+                    reason=str(getattr(result, "failure_reason", "") or "unknown")[:480],
+                )
     finally:
         db.close()
 
@@ -62,7 +104,7 @@ async def run_meeting_background(
 async def _run_meeting_inner(
     db, meeting_id: str, *, runner_label: str, budget_cap_usd: float,
     daily_cap_usd: float, wall_clock_cap_seconds: int,
-) -> None:
+):
     """Calls the (now async) chair runner, then renders briefing, posts Discord, finalizes."""
     # Imported here to avoid circular import (orchestrator imports runner conditionally)
     from app.services.cio_chair import (
@@ -155,6 +197,8 @@ async def _run_meeting_inner(
     except Exception as exc:
         logger.error("[cio_meeting_runner] Discord post failed: %s", exc)
         # Do NOT mark the whole meeting failed for a Discord error — briefing row is still saved.
+
+    return result
 
 
 def _mark_failed(db, meeting_id: str, status: str, reason: str) -> None:

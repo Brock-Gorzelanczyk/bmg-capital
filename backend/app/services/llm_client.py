@@ -204,12 +204,18 @@ def _post_to_relay(model, prompt, system_prompt, max_tokens, agent_name) -> str:
         except httpx.HTTPError as exc:
             last_exc = exc
             if attempt < 2:
-                logger.warning("[llm_client] relay httpx attempt %d/3 failed: %s",
-                               attempt + 1, exc)
+                logger.warning("[llm_client] relay httpx attempt %d/3 failed: %s: %s",
+                               attempt + 1, type(exc).__name__, str(exc)[:200])
                 time.sleep(backoffs[attempt])
                 continue
-            raise RuntimeError(f"relay unreachable after 3 attempts: {exc}") from exc
-    raise RuntimeError(f"relay unreachable after 3 attempts: {last_exc}")
+            raise RuntimeError(
+                f"relay unreachable after 3 attempts: {type(exc).__name__}: {str(exc)[:300]}"
+            ) from exc
+    raise RuntimeError(
+        f"relay unreachable after 3 attempts: "
+        f"{type(last_exc).__name__ if last_exc else 'Unknown'}: "
+        f"{str(last_exc)[:300]}"
+    )
 
 
 def _fallback_to_api(model, prompt, system_prompt, max_tokens) -> str:

@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -3276,3 +3277,89 @@ def reset_llm_fallback_budget(
     except Exception:
         pass
     return {"deleted": deleted, "ok": True}
+
+
+# ---------------------------------------------------------------------------
+# CIO observability — last-meeting-agents diagnostic endpoint
+# ---------------------------------------------------------------------------
+
+_FAILURE_TYPE_REGEX = re.compile(r'(\w+Error|\w+Timeout):')
+
+
+@router.get("/cio/last-meeting-agents")
+def cio_last_meeting_agents(
+    meeting_id: Optional[str] = Query(None, description="If omitted, returns latest meeting by started_at"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return per-agent opening-read breakdown for a CIO meeting.
+
+    If meeting_id is omitted, returns the most recent meeting by started_at.
+    Includes a parsed failure_types histogram from error_text fields.
+    fund_meetings is fleet-level (no user_id column) — do NOT filter by user.
+    """
+    from sqlalchemy import text
+
+    if meeting_id is None:
+        row = db.execute(
+            text(
+                "SELECT meeting_id, status, started_at, ended_at, failure_reason "
+                "FROM fund_meetings ORDER BY started_at DESC LIMIT 1"
+            )
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="no meetings found")
+    else:
+        row = db.execute(
+            text(
+                "SELECT meeting_id, status, started_at, ended_at, failure_reason "
+                "FROM fund_meetings WHERE meeting_id = :mid"
+            ),
+            {"mid": meeting_id},
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="meeting not found")
+
+    mid = row[0]
+    agent_rows = db.execute(
+        text(
+            "SELECT agent_name, status, response_time_ms, error_text, cost_usd "
+            "FROM agent_opening_reads WHERE meeting_id = :mid ORDER BY agent_name"
+        ),
+        {"mid": mid},
+    ).fetchall()
+
+    agents = [
+        {
+            "agent_name": ar[0],
+            "status": ar[1],
+            "duration_ms": int(ar[2]) if ar[2] is not None else 0,
+            "error_text": ar[3],
+            "cost_usd": float(ar[4]) if ar[4] is not None else 0.0,
+        }
+        for ar in agent_rows
+    ]
+
+    agents_ok_count = sum(1 for a in agents if a["status"] == "ok")
+    agents_failed_count = len(agents) - agents_ok_count
+
+    failure_types: Dict[str, int] = {}
+    if agents_failed_count > 0:
+        for a in agents:
+            if a["status"] != "ok":
+                error_text = a["error_text"] or ""
+                m = _FAILURE_TYPE_REGEX.search(error_text)
+                key = m.group(1) if m else "Other"
+                failure_types[key] = failure_types.get(key, 0) + 1
+
+    return {
+        "meeting_id": mid,
+        "meeting_status": row[1],
+        "meeting_started_at": row[2],
+        "meeting_ended_at": row[3],
+        "failure_reason": row[4],
+        "agents": agents,
+        "agents_ok_count": agents_ok_count,
+        "agents_failed_count": agents_failed_count,
+        "failure_types": failure_types,
+    }
