@@ -1,1 +1,0 @@
-# BMG Capital agent modules

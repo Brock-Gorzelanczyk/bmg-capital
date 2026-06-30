@@ -418,48 +418,6 @@ async def lifespan(app: FastAPI):
     except Exception as _m038_exc:
         logger.error("[startup] m038_bot_symbol_cooldown FAILED: %s", _m038_exc, exc_info=True)
 
-    # SHIP 5: CIO Morning Meeting tables (m039-m043). Renamed from m033-m037
-    # to avoid collision with mega-ship m033 + SHIP 6 m038.
-    try:
-        from app.db.migrations.m039_fund_meetings import run as _run_m039
-        with engine.connect() as _m039_conn:
-            _m039_result = _run_m039(_m039_conn)
-        logger.warning("[startup] m039 OK: %s", _m039_result)
-    except Exception as _m039_exc:
-        logger.error("[startup] m039_fund_meetings FAILED: %s", _m039_exc, exc_info=True)
-
-    try:
-        from app.db.migrations.m040_fund_briefings import run as _run_m040
-        with engine.connect() as _m040_conn:
-            _m040_result = _run_m040(_m040_conn)
-        logger.warning("[startup] m040 OK: %s", _m040_result)
-    except Exception as _m040_exc:
-        logger.error("[startup] m040_fund_briefings FAILED: %s", _m040_exc, exc_info=True)
-
-    try:
-        from app.db.migrations.m041_agent_opening_reads import run as _run_m041
-        with engine.connect() as _m041_conn:
-            _m041_result = _run_m041(_m041_conn)
-        logger.warning("[startup] m041 OK: %s", _m041_result)
-    except Exception as _m041_exc:
-        logger.error("[startup] m041_agent_opening_reads FAILED: %s", _m041_exc, exc_info=True)
-
-    try:
-        from app.db.migrations.m042_agent_commitments import run as _run_m042
-        with engine.connect() as _m042_conn:
-            _m042_result = _run_m042(_m042_conn)
-        logger.warning("[startup] m042 OK: %s", _m042_result)
-    except Exception as _m042_exc:
-        logger.error("[startup] m042_agent_commitments FAILED: %s", _m042_exc, exc_info=True)
-
-    try:
-        from app.db.migrations.m043_veto_log import run as _run_m043
-        with engine.connect() as _m043_conn:
-            _m043_result = _run_m043(_m043_conn)
-        logger.warning("[startup] m043 OK: %s", _m043_result)
-    except Exception as _m043_exc:
-        logger.error("[startup] m043_veto_log FAILED: %s", _m043_exc, exc_info=True)
-
     # Boot-time track-record reconstruction (SHIP 3): insert markers for any
     # enabled allocation that has zero bot_daily_pnl rows post-m027 wipe.
     # Runs ONCE per deploy, after m030, before first canonical read.
@@ -814,12 +772,6 @@ app.include_router(proposals_router)
 app.include_router(budget_router)
 app.include_router(research_feed_router)
 app.include_router(admin_reconstruct_router)
-from app.routers.agent_opening_reads import router as agent_opening_reads_router
-app.include_router(agent_opening_reads_router)
-from app.routers.cio_meeting import router as cio_meeting_router
-app.include_router(cio_meeting_router)
-from app.routers.fund_floor import router as fund_floor_router
-app.include_router(fund_floor_router)
 
 
 @app.get("/health", tags=["health"])
