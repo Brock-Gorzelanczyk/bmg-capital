@@ -8,6 +8,7 @@ import {
   GraduationCap, Award,
   Search, LogOut, HelpCircle, ChevronUp, Inbox, Settings, Crown,
   Building2,
+  Gamepad2,
   Zap, Globe, Eye, Cpu, Beaker,
   Radar, Hammer, ShieldAlert, ClipboardPen,
   Gauge,
@@ -83,6 +84,7 @@ const NAV_INTEL = [
 
 const NAV_FUND = [
   { to: "/fund",          label: "Fund Team",     Icon: Building2  },
+  { to: "/fund/floor",    label: "Fund Floor",    Icon: Gamepad2   },
   { to: "/research-feed", label: "Research Feed", Icon: BookMarked },
 ];
 
