@@ -7,7 +7,7 @@ State machine:
   Phase 0 — daily-cap pre-check
   Phase 1 — INSERT fund_meetings (status='running')
   Phase 2 — build canonical snapshot + load memory
-  Phase 3 — 9 agent opening reads (sequential, budget-gated)
+  Phase 3 — 9 agent opening reads (parallel via asyncio.gather + asyncio.to_thread)
   Phase 4 — chair pick top-3 items
   Phase 5 — 2 debate rounds + chair resolution per item
   Phase 6 — Dick veto poll (capital/risk items only)
@@ -18,6 +18,7 @@ State machine:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -532,27 +533,69 @@ def run_meeting(
     wall_clock_cap_seconds: int = 600,
     poll_dick_veto: bool = True,
     dry_run: bool = False,
+    skip_row_insert: bool = False,
+    _session_factory=None,
 ) -> MeetingResult:
-    """Run the full CIO morning meeting.
-
-    Phase 0: daily-cap pre-check.
-    Phase 1: INSERT fund_meetings.
-    Phase 2: build canonical snapshot + load memory.
-    Phase 3: 9 agent opening reads (sequential, budget-gated).
-    Phase 4: chair pick top-3 items.
-    Phase 5: debate + resolution per item.
-    Phase 6: Dick veto poll (capital/risk items only).
-    Phase 7: persist agent_commitments.
-    Phase 8: carry-forward strike increment.
-    Phase 9: budget/time enforcement.
-    Phase 10: UPDATE fund_meetings (final status).
+    """Sync wrapper around run_meeting_async. For callers not already in an event loop.
 
     If dry_run=True: skip all DB INSERTs to fund_meetings/agent_opening_reads/
     agent_commitments/veto_log; return result for inspection.
 
-    Commitment status transitions: open → done | broken | cancelled.
-    Done/cancelled set via future POST endpoint (not in v1 scope).
+    If skip_row_insert=True: skip Phase 1 INSERT (caller already inserted the row).
+
+    _session_factory: optional callable that returns a new SQLAlchemy Session for worker
+    threads. If None, resolves to the real SessionLocal at call time. Pass a test factory
+    to ensure worker threads use the same in-memory DB as the test session.
     """
+    try:
+        loop = asyncio.get_running_loop()
+        # If a loop is already running, the caller MUST use run_meeting_async.
+        raise RuntimeError(
+            "run_meeting() called inside a running event loop — use run_meeting_async() instead"
+        )
+    except RuntimeError as exc:
+        # No running loop → fine to asyncio.run
+        if "no running event loop" not in str(exc):
+            raise
+    return asyncio.run(run_meeting_async(
+        db, meeting_id=meeting_id,
+        budget_cap_usd=budget_cap_usd, daily_cap_usd=daily_cap_usd,
+        wall_clock_cap_seconds=wall_clock_cap_seconds,
+        poll_dick_veto=poll_dick_veto, dry_run=dry_run,
+        skip_row_insert=skip_row_insert,
+        _session_factory=_session_factory,
+    ))
+
+
+async def run_meeting_async(
+    db: Session,
+    *,
+    meeting_id: str,
+    budget_cap_usd: float = 1.50,
+    daily_cap_usd: float = 3.00,
+    wall_clock_cap_seconds: int = 600,
+    poll_dick_veto: bool = True,
+    dry_run: bool = False,
+    skip_row_insert: bool = False,
+    _session_factory=None,
+) -> MeetingResult:
+    """Async-capable variant of run_meeting.
+
+    Phases 0, 1, 2 run identically (sync calls, fast).
+    Phase 3 fans out the 9 opening reads via asyncio.gather + asyncio.to_thread.
+    Phases 4-10 run sequentially as today (they depend on opening_reads).
+
+    If skip_row_insert=True: skip Phase 1 INSERT (caller already inserted the row).
+
+    _session_factory: optional callable returning a new SQLAlchemy Session for worker
+    threads. Resolved once here (not inside worker closure) so test fixtures can inject
+    the in-memory test DB factory without hitting the module-level SessionLocal mock.
+    """
+    # Resolve session factory at function-entry scope so workers close over the local,
+    # not the module-level name (which may be a MagicMock in test environments).
+    if _session_factory is None:
+        from app.db.session import SessionLocal as _session_factory
+
     started_at = datetime.now(timezone.utc)
     started_at_iso = started_at.isoformat()
     t_start = time.monotonic()
@@ -599,7 +642,7 @@ def run_meeting(
         )
 
     # Phase 1 — INSERT fund_meetings (status='running')
-    if not dry_run:
+    if not dry_run and not skip_row_insert:
         try:
             db.execute(
                 text(
@@ -622,38 +665,29 @@ def run_meeting(
     if not dry_run:
         _increment_overdue_strikes(db)
 
-    # Phase 3 — 9 agent opening reads (sequential)
+    # Phase 3 — 9 agent opening reads (parallel via asyncio.gather + asyncio.to_thread)
     opening_reads: list[OpeningReadResult] = []
     dick_available = True
 
-    for agent in _AGENT_ORDER:
-        # Budget check before each agent
-        current_spend = _meeting_window_spend_usd(db, started_at_iso)
-        elapsed = time.monotonic() - t_start
-
-        if current_spend > 0.6 * budget_cap_usd:
-            logger.warning(
-                "[cio_chair] budget pre-skip for %s (%.2f > 60%% of %.2f)",
-                agent, current_spend, budget_cap_usd,
-            )
-            # Build a budget_skip result
-            from dataclasses import fields as _fields
-            skip_result = OpeningReadResult(
-                agent_name=agent,
-                meeting_id=meeting_id,
-                what_im_seeing="",
-                whats_working="",
-                whats_broken="",
-                asks="",
-                metrics_i_track={},
-                confidence_in_book="",
-                cost_usd=0.0,
-                response_time_ms=0,
-                raw_text="",
+    # Budget pre-check (single check before fan-out — concurrent calls cannot
+    # enforce per-agent budget gates, so we pre-allocate by total cap and post-check.)
+    current_spend = _meeting_window_spend_usd(db, started_at_iso)
+    elapsed = time.monotonic() - t_start
+    if current_spend > 0.6 * budget_cap_usd or elapsed > wall_clock_cap_seconds:
+        # All-skip — same shape as serial path's per-agent budget_skip
+        opening_reads = [
+            OpeningReadResult(
+                agent_name=agent, meeting_id=meeting_id,
+                what_im_seeing="", whats_working="", whats_broken="", asks="",
+                metrics_i_track={}, confidence_in_book="",
+                cost_usd=0.0, response_time_ms=0, raw_text="",
                 status="budget_skip",
-                error_text=None,
+                error_text="pre_fanout_budget_or_time_exceeded",
             )
-            if not dry_run:
+            for agent in _AGENT_ORDER
+        ]
+        if not dry_run:
+            for r in opening_reads:
                 try:
                     db.execute(
                         text(
@@ -662,59 +696,91 @@ def run_meeting(
                             " response_time_ms, cost_usd, status) "
                             "VALUES (:mid, :an, '{}', 0, 0.0, 'budget_skip')"
                         ),
-                        {"mid": meeting_id, "an": agent},
+                        {"mid": meeting_id, "an": r.agent_name},
                     )
-                    db.commit()
                 except Exception as exc:
                     logger.warning("[cio_chair] budget_skip persist failed: %s", exc)
-            opening_reads.append(skip_result)
-            if agent == "chief_risk_officer":
-                dick_available = False
-            continue
+            db.commit()
+        dick_available = False
+    else:
+        # Fan out — each agent gets its own thread-bound DB session (cannot share
+        # the request db across threads safely with SQLite).
+        async def _one(agent_name: str) -> OpeningReadResult:
+            # SQLAlchemy Session is NOT thread-safe. Create a fresh session in the worker thread.
+            # _session_factory is closed over from the enclosing function scope (resolved above),
+            # NOT imported inside the closure, so test fixtures can inject a real test DB factory.
+            def _run_with_own_session():
+                worker_db = _session_factory()
+                try:
+                    return run_opening_read(
+                        agent_name=agent_name,
+                        meeting_id=meeting_id,
+                        canonical_snapshot=snapshot,
+                        recent_activity=[],
+                        open_commitments=[c for c in open_commitments if c.get("owner_agent") == agent_name],
+                        db=worker_db,
+                        started_at_iso=started_at_iso,
+                    )
+                finally:
+                    worker_db.close()
+            return await asyncio.to_thread(_run_with_own_session)
 
-        if elapsed > wall_clock_cap_seconds:
-            logger.warning("[cio_chair] wall clock exceeded before agent %s", agent)
-            skip_result = OpeningReadResult(
-                agent_name=agent,
-                meeting_id=meeting_id,
-                what_im_seeing="",
-                whats_working="",
-                whats_broken="",
-                asks="",
-                metrics_i_track={},
-                confidence_in_book="",
-                cost_usd=0.0,
-                response_time_ms=0,
-                raw_text="",
-                status="budget_skip",
-                error_text="wall_clock_exceeded",
-            )
-            opening_reads.append(skip_result)
-            if agent == "chief_risk_officer":
-                dick_available = False
-            continue
-
-        # Run the read
-        result = run_opening_read(
-            agent_name=agent,
-            meeting_id=meeting_id,
-            canonical_snapshot=snapshot,
-            recent_activity=[],  # TODO v2: per-agent activity query
-            open_commitments=[c for c in open_commitments if c.get("owner_agent") == agent],
-            db=db,
-            started_at_iso=started_at_iso,
+        gather_results = await asyncio.gather(
+            *[_one(agent) for agent in _AGENT_ORDER],
+            return_exceptions=True,
         )
-        if dry_run:
-            # Replace with dummy (don't re-persist)
-            pass
-        opening_reads.append(result)
 
-        if agent == "chief_risk_officer" and result.status != "ok":
-            dick_available = False
-            logger.warning(
-                "[cio_chair] Dick opening read failed (status=%s) — "
-                "veto polls disabled for this meeting",
-                result.status,
+        opening_reads = []
+        for agent, res in zip(_AGENT_ORDER, gather_results):
+            if isinstance(res, Exception):
+                logger.error("[cio_chair] agent %s raised in gather: %s", agent, res)
+                opening_reads.append(OpeningReadResult(
+                    agent_name=agent, meeting_id=meeting_id,
+                    what_im_seeing="", whats_working="", whats_broken="", asks="",
+                    metrics_i_track={}, confidence_in_book="",
+                    cost_usd=0.0, response_time_ms=0, raw_text="",
+                    status="relay_down",
+                    error_text=f"gather_exception: {str(res)[:400]}",
+                ))
+                # Persist failure row so the meeting record reflects all 9 agents
+                if not dry_run:
+                    try:
+                        db.execute(
+                            text(
+                                "INSERT OR IGNORE INTO agent_opening_reads "
+                                "(meeting_id, agent_name, structured_read_json, "
+                                " response_time_ms, cost_usd, status, error_text) "
+                                "VALUES (:mid, :an, '{}', 0, 0.0, 'relay_down', :et)"
+                            ),
+                            {"mid": meeting_id, "an": agent, "et": str(res)[:500]},
+                        )
+                        db.commit()
+                    except Exception as exc:
+                        logger.warning("[cio_chair] gather-exception persist failed: %s", exc)
+            else:
+                opening_reads.append(res)
+
+        # Dick availability — same check as serial path
+        dick_result = next((r for r in opening_reads if r.agent_name == "chief_risk_officer"), None)
+        dick_available = bool(dick_result and dick_result.status == "ok")
+        if not dick_available:
+            logger.warning("[cio_chair] Dick opening read failed — veto polls disabled")
+
+        # POST-FANOUT budget enforcement (concurrent calls can blow past cap;
+        # if we did, mark failed_budget instead of continuing into chair phase)
+        post_spend = _meeting_window_spend_usd(db, started_at_iso)
+        if post_spend > budget_cap_usd:
+            ended_at = datetime.now(timezone.utc)
+            duration = int((ended_at - started_at).total_seconds())
+            if not dry_run:
+                _finalize_meeting(db, meeting_id, ended_at, duration, post_spend,
+                                  "failed_budget", "post_fanout_budget_exceeded", 0)
+            return MeetingResult(
+                meeting_id=meeting_id, started_at=started_at, ended_at=ended_at,
+                duration_seconds=duration, total_cost_usd=post_spend,
+                opening_reads=opening_reads, top_items=[], deferred_items=[],
+                decisions_made=[], vetoes_used=0,
+                status="failed_budget", failure_reason="post_fanout_budget_exceeded",
             )
 
     # Check relay-down threshold (≥5 agents relay_down → failed_partial)
