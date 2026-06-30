@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
@@ -37,6 +38,12 @@ from app.services.agent_opening_read import (
     SYSTEM_ANCHOR,
 )
 from app.core.canonical import compute_strategy_lab_aggregate
+
+# Throttle for the 9-agent opening-read fanout (Phase 3). Capped to avoid
+# burst-failure against the claude relay / CLI under concurrent load. Override
+# at deploy time without redeploying code.
+CIO_RELAY_CONCURRENCY = int(os.environ.get("CIO_RELAY_CONCURRENCY", "3"))
+CIO_RELAY_STAGGER_MS = int(os.environ.get("CIO_RELAY_STAGGER_MS", "250"))
 
 logger = logging.getLogger(__name__)
 
@@ -704,29 +711,36 @@ async def run_meeting_async(
         dick_available = False
     else:
         # Fan out — each agent gets its own thread-bound DB session (cannot share
-        # the request db across threads safely with SQLite).
-        async def _one(agent_name: str) -> OpeningReadResult:
-            # SQLAlchemy Session is NOT thread-safe. Create a fresh session in the worker thread.
-            # _session_factory is closed over from the enclosing function scope (resolved above),
-            # NOT imported inside the closure, so test fixtures can inject a real test DB factory.
-            def _run_with_own_session():
-                worker_db = _session_factory()
-                try:
-                    return run_opening_read(
-                        agent_name=agent_name,
-                        meeting_id=meeting_id,
-                        canonical_snapshot=snapshot,
-                        recent_activity=[],
-                        open_commitments=[c for c in open_commitments if c.get("owner_agent") == agent_name],
-                        db=worker_db,
-                        started_at_iso=started_at_iso,
-                    )
-                finally:
-                    worker_db.close()
-            return await asyncio.to_thread(_run_with_own_session)
+        # the request db across threads safely with SQLite). Semaphore caps in-flight
+        # to CIO_RELAY_CONCURRENCY and idx-based stagger spreads launches by
+        # CIO_RELAY_STAGGER_MS to avoid burst-failure on cold relay / CLI.
+        sem = asyncio.Semaphore(CIO_RELAY_CONCURRENCY)
+
+        async def _one(idx: int, agent_name: str) -> OpeningReadResult:
+            # Stagger launch by idx * STAGGER_MS to avoid burst on cold tunnel/CLI.
+            await asyncio.sleep((idx * CIO_RELAY_STAGGER_MS) / 1000.0)
+            async with sem:
+                # SQLAlchemy Session is NOT thread-safe. Create a fresh session in the worker thread.
+                # _session_factory is closed over from the enclosing function scope (resolved above),
+                # NOT imported inside the closure, so test fixtures can inject a real test DB factory.
+                def _run_with_own_session():
+                    worker_db = _session_factory()
+                    try:
+                        return run_opening_read(
+                            agent_name=agent_name,
+                            meeting_id=meeting_id,
+                            canonical_snapshot=snapshot,
+                            recent_activity=[],
+                            open_commitments=[c for c in open_commitments if c.get("owner_agent") == agent_name],
+                            db=worker_db,
+                            started_at_iso=started_at_iso,
+                        )
+                    finally:
+                        worker_db.close()
+                return await asyncio.to_thread(_run_with_own_session)
 
         gather_results = await asyncio.gather(
-            *[_one(agent) for agent in _AGENT_ORDER],
+            *[_one(i, agent) for i, agent in enumerate(_AGENT_ORDER)],
             return_exceptions=True,
         )
 
