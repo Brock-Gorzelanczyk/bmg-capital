@@ -58,13 +58,24 @@ def register_aqa_jobs(scheduler) -> None:
     from apscheduler.triggers.interval import IntervalTrigger
 
     interval_min = int(os.getenv("AQA_LOOP_INTERVAL_MINUTES", "30"))
+
+    # Fire 60s after registration so AQA actually gets a cycle in even when
+    # deploys are frequent. Without this, IntervalTrigger waits the full
+    # interval before first fire — if deploys happen every <30min, AQA's
+    # timer resets every redeploy and the cycle never runs.
+    # 2026-06-30: shipped after observing 0 AQA cycles across ~2h of
+    # AQA_ENABLED=true because we were deploying PRs every 5-15 min today.
+    from datetime import datetime, timedelta, timezone
+    first_run = datetime.now(timezone.utc) + timedelta(seconds=60)
+
     scheduler.add_job(
         run_aqa_scheduled,
-        IntervalTrigger(minutes=interval_min),
+        IntervalTrigger(minutes=interval_min, start_date=first_run),
         id="aqa_loop",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        next_run_time=first_run,
     )
     logger.warning(
         "[aqa-loop] registered aqa_loop job (interval=%d min, AQA_ENABLED=%s)",
