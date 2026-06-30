@@ -1868,6 +1868,8 @@ def _execute_options_signal(
             _opt_friction_cents = 0
             _opt_slip_bps = 0.0
 
+        from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+        _rt_options = _regime_tag_dict(db, source="runner._execute_signal_options")
         trade = BotTrade(
             allocation_id=alloc.id,
             symbol=sig.symbol,
@@ -1888,6 +1890,7 @@ def _execute_options_signal(
             underlying_symbol=opt["underlying_symbol"],
             contract_count=contract_count,
             contract_premium_cents=opt["contract_premium_cents"],
+            **_rt_options,
         )
         db.add(trade)
 
@@ -2360,6 +2363,8 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             raise  # re-raise so outer except catches and does rollback
         # ── end asset-class gate ─────────────────────────────────────────────
 
+        from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+        _rt_equity = _regime_tag_dict(db, source="runner._execute_signal_equity")
         trade = BotTrade(
             allocation_id=alloc.id,
             symbol=sig.symbol,
@@ -2374,6 +2379,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             alpaca_order_id=order_id,
             expected_fill_cents=fill_cents,
             slippage_bps=_slip_bps,
+            **_rt_equity,
         )
         db.add(trade)
 

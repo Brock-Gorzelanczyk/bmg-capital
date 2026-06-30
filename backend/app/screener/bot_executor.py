@@ -235,6 +235,8 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 pos.closed_at = None  # revert the close mark set above
                 continue
             # ── end asset-class gate ─────────────────────────────────────────
+            from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+            _rt_exit = _regime_tag_dict(db, source="bot_executor.exit")
             db.add(BotTrade(
                 allocation_id=alloc.id,
                 symbol=pos.symbol,
@@ -247,6 +249,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 is_paper=True,
                 expected_fill_cents=int(exit_price * 100),
                 slippage_bps=rng.uniform(-2, 2),
+                **_rt_exit,
             ))
             realized_cents += pnl_cents
 
@@ -315,6 +318,8 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
             db.add(pos)
             db.flush()  # get pos.id
 
+            from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+            _rt_entry = _regime_tag_dict(db, source="bot_executor.entry")
             db.add(BotTrade(
                 allocation_id=alloc.id,
                 symbol=sym,
@@ -327,6 +332,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 is_paper=True,
                 expected_fill_cents=int(entry_price * 100),
                 slippage_bps=rng.uniform(0, 3),
+                **_rt_entry,
             ))
 
     # ── 3. Record daily P&L snapshot ─────────────────────────────────────────

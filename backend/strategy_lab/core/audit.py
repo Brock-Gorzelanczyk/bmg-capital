@@ -381,6 +381,8 @@ def log_fill(
             return
     # ── end asset-class gate ─────────────────────────────────────────────────
 
+    from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+    _rt_fill = _regime_tag_dict(db, source="audit.log_fill")
     row = BotTrade(
         allocation_id=allocation_id,
         symbol=symbol,
@@ -392,6 +394,7 @@ def log_fill(
         alpaca_order_id=alpaca_order_id,
         position_id=position_id,
         is_paper=is_paper,
+        **_rt_fill,
     )
     db.add(row)
     try:

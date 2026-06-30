@@ -129,6 +129,8 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     except Exception as _sig_exc:
         logger.warning("[monitor] exit signal log failed for %s: %s", pos.symbol, _sig_exc)
 
+    from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+    _rt_exit = _regime_tag_dict(db, source="position_monitor.exit_trade")
     exit_trade = BotTrade(
         allocation_id=alloc.id,
         symbol=pos.symbol,
@@ -142,6 +144,7 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
         is_paper=True,
         expected_fill_cents=fill_cents,
         slippage_bps=0.0,
+        **_rt_exit,
     )
     db.add(exit_trade)
 
