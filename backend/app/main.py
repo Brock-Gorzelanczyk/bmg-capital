@@ -51,6 +51,7 @@ from app.db.models.pipeline import StrategyCandidate, BacktestRun, WfaRun, Candi
 from app.db.models.quant_analytics import LivePerformanceAlert, DecaySignal, FactorAttribution, HrpRecommendedWeight  # noqa: F401
 from app.db.models.ic_metrics import SignalIcMetric, SignalIcAlert  # noqa: F401
 from app.db.models.price_alert import PriceAlert  # noqa: F401
+from app.db.models.bot_daily_journal import BotDailyJournal  # noqa: F401
 from app.routers.chart_layouts import ChartLayout  # noqa: F401
 from app.db.migration import run_migrations
 from app.alpaca.stream import stream_manager
@@ -484,6 +485,20 @@ async def lifespan(app: FastAPI):
             exc_info=True,
         )
 
+    # m047: create bot_daily_journals table (Phase 1 closed-loop learning system).
+    # Idempotent CREATE TABLE IF NOT EXISTS — safe to run every boot.
+    try:
+        from app.db.migrations.m047_bot_daily_journals import run as _run_m047
+        with engine.begin() as _m047_conn:
+            _m047_result = _run_m047(_m047_conn)
+        logger.warning("[startup] m047 OK: %s", _m047_result)
+    except Exception as _m047_exc:
+        logger.error(
+            "[startup] m047_bot_daily_journals FAILED: %s",
+            _m047_exc,
+            exc_info=True,
+        )
+
     # SHIP 5: CIO Morning Meeting tables (m039-m043).
     try:
         from app.db.migrations.m039_fund_meetings import run as _run_m039
@@ -881,6 +896,8 @@ from app.routers.cio_meeting import router as cio_meeting_router
 app.include_router(cio_meeting_router)
 from app.routers.fund_floor import router as fund_floor_router
 app.include_router(fund_floor_router)
+from app.routers.strategy_journal import router as strategy_journal_router
+app.include_router(strategy_journal_router)
 
 
 @app.get("/health", tags=["health"])
