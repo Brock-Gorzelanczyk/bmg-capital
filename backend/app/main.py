@@ -536,6 +536,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m050_exc:
         logger.error("[startup] m050_daily_audit_log FAILED: %s", _m050_exc, exc_info=True)
 
+    # m051: halt scanners for confirmed-loser Quant bots (Mean Rev + Scalper).
+    # Gated via _gate.already_ran so operators can re-enable later without
+    # this migration silently re-disabling them on the next boot.
+    try:
+        from app.db.migrations.m051_halt_quant_losers import run as _run_m051
+        with engine.begin() as _m051_conn:
+            _m051_result = _run_m051(_m051_conn)
+        logger.warning("[startup] m051 OK: %s", _m051_result)
+    except Exception as _m051_exc:
+        logger.error("[startup] m051_halt_quant_losers FAILED: %s", _m051_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

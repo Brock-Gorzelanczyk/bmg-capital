@@ -63,8 +63,8 @@ risk:
 # Bypass anomaly/news/bot_coordinator execution guards so scheduled scans execute.
 skip_execution_guards: true
 
-# 7-day deployment push (Brock 2026-06-24): bump sizing for active newer bots.
-position_size_pct_override: 15
-
-# 7-day deployment push (Brock 2026-06-24): concentrate capital into fewer, bigger positions.
-max_concurrent_positions: 3
+# 2026-06-30: bot HALTED via m051 (enabled=false, paused_reason="halt_2026_06_30_underperformance").
+# Reverted the 2026-06-24 deployment push overrides. 1-min crypto scalping on
+# Alpaca paper feed suffers structural latency disadvantage vs HFT; tuning
+# sizing/concentration cannot fix physics. Replacement strategy (basis trade)
+# planned per Brock's Path B roadmap.
