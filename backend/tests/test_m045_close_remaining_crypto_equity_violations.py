@@ -393,7 +393,7 @@ def test_verify_fail_raises_runtime_error():
         conn.execute = no_op_update
         return original_run(conn)
 
-    with pytest.raises(RuntimeError, match="post-run verify"):
+    with pytest.raises(RuntimeError, match="verify_count m045"):
         with eng.begin() as conn:
             patched_run(conn)
 

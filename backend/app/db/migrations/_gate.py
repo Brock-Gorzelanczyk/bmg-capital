@@ -47,3 +47,56 @@ def record(conn, name: str) -> None:
         conn.commit()
     except Exception as exc:
         logger.warning("[gate] record(%s) failed: %s", name, exc)
+
+
+def verify_count(
+    conn,
+    *,
+    name: str,
+    sql: str,
+    params: dict | None = None,
+    expected: int = 0,
+    on_mismatch: str = "raise",
+) -> int:
+    """Run *sql* and assert the row count equals *expected*.
+
+    Args:
+        conn:        SQLAlchemy connection.
+        name:        Migration name used in log/error messages (e.g. "m045").
+        sql:         SQL query whose row count is asserted.
+        params:      Optional bind parameters for the query.
+        expected:    Expected row count (default 0 — use to assert zero leftovers).
+        on_mismatch: "raise" (default) → log CRITICAL then raise RuntimeError.
+                     "log_critical" → log CRITICAL only, do not raise.
+
+    Returns:
+        The actual row count returned by the query.
+
+    Logs INFO when the count matches; CRITICAL when it does not.
+    """
+    rows = conn.execute(text(sql), params or {}).fetchall()
+    actual = len(rows)
+
+    if actual == expected:
+        logger.info(
+            "[gate] verify_count %s OK — expected=%d actual=%d",
+            name,
+            expected,
+            actual,
+        )
+        return actual
+
+    logger.critical(
+        "[gate] verify_count %s FAILED — expected=%d actual=%d rows=%s",
+        name,
+        expected,
+        actual,
+        [(list(r)) for r in rows[:10]],
+    )
+
+    if on_mismatch != "log_critical":
+        raise RuntimeError(
+            f"verify_count {name}: expected {expected} rows, got {actual}"
+        )
+
+    return actual

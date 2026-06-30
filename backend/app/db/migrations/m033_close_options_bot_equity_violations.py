@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
-from app.db.migrations._gate import already_ran, record
+from app.db.migrations._gate import already_ran, record, verify_count
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +183,29 @@ def run(conn) -> dict:
         closed_per_bot.get("options_directional", 0),
         quarantined,
         paused_alloc_ids,
+    )
+
+    # POST-RUN VERIFY — confirm no non-OCC equity symbols remain open for
+    # options_income or options_directional (user_id=1 only, matching m033's scope).
+    # SQL-side equity heuristic: length <= 6, no slash, starts uppercase, no digit.
+    verify_count(
+        conn,
+        name="m033",
+        sql=(
+            "SELECT bp.id, bp.symbol, p.name AS bot_id "
+            "  FROM bot_positions bp "
+            "  JOIN bot_allocations a ON a.id = bp.allocation_id "
+            "  JOIN bot_profiles p   ON p.id = a.profile_id "
+            " WHERE a.user_id = :uid "
+            "   AND p.name IN ('options_income', 'options_directional') "
+            "   AND bp.closed_at IS NULL "
+            "   AND length(bp.symbol) <= 6 "
+            "   AND bp.symbol NOT LIKE '%/%' "
+            "   AND bp.symbol GLOB '[A-Z]*' "
+            "   AND bp.symbol NOT GLOB '*[0-9]*'"
+        ),
+        params={"uid": TARGET_USER_ID},
+        expected=0,
     )
 
     record(conn, _GATE_NAME)
