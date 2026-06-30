@@ -284,9 +284,12 @@ def test_bot_diagnostic_shape():
         )
         assert result["summary"]["total"] == 3
 
-        # Each bot has exact 11 keys
+        # Each bot has exact 13 keys (added open_positions_notional_cents
+        # + starting_capital_cents 2026-06-30 so AQA heuristics can compute
+        # deployment_pct without a separate endpoint round-trip).
         expected_bot_keys = {
             "bot_id", "verdict", "signals_24h", "trades_24h", "open_positions",
+            "open_positions_notional_cents", "starting_capital_cents",
             "last_signal_at", "last_trade_at", "enabled", "paused_reason",
             "asset_class_declared", "strategy_count",
         }
