@@ -3819,6 +3819,8 @@ def get_bot_diagnostic_singular(
             "signals_24h": int(row.signals_window),
             "trades_24h": int(row.trades_window),
             "open_positions": int(row.open_positions_count),
+            "open_positions_notional_cents": int(row.open_positions_notional_cents or 0),
+            "starting_capital_cents": int(row.starting_capital_cents or 0),
             "last_signal_at": _iso_z(row.signals_last_ts),
             "last_trade_at": _iso_z(row.trades_last_ts),
             "enabled": bool(row.allocation_enabled),
