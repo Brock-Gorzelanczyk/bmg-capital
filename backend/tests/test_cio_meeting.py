@@ -185,6 +185,7 @@ _cio_orch        = _load_real("app.agents.cio_orchestrator",   "app/agents/cio_o
 _app_config  = _load_real("app.config",       "app/config.py")
 _app_deps    = _load_real("app.dependencies", "app/dependencies.py")
 
+_cio_runner      = _load_real("app.services.cio_meeting_runner","app/services/cio_meeting_runner.py")
 _ff_router       = _load_real("app.routers.fund_floor",        "app/routers/fund_floor.py")
 _cio_mtg_router  = _load_real("app.routers.cio_meeting",       "app/routers/cio_meeting.py")
 
@@ -471,6 +472,48 @@ def _run_meeting_with_mocks(
         )
 
     from app.services.cio_chair import run_meeting, build_canonical_snapshot, _load_memory, render_briefing_markdown
+    import threading
+
+    # Pass a session factory that returns a thread-safe proxy around the test
+    # db session.  Worker threads spawned by run_meeting_async each call
+    # _session_factory() and receive a proxy that serialises all DB operations
+    # via a shared threading.Lock, so concurrent workers never touch the
+    # underlying StaticPool SQLite connection simultaneously (which would
+    # segfault).  close() is a no-op on the proxy — the caller (test) closes
+    # the real db when it is done.
+    _db_lock = threading.Lock()
+
+    class _LockedSessionProxy:
+        """Thread-safe proxy around a SQLAlchemy Session backed by StaticPool.
+
+        All operations are serialised with _db_lock.  close() is intentionally
+        a no-op: the underlying session is owned by the test harness.
+        """
+        def __init__(self, session):
+            self._s = session
+
+        def execute(self, *args, **kwargs):
+            with _db_lock:
+                return self._s.execute(*args, **kwargs)
+
+        def commit(self):
+            with _db_lock:
+                return self._s.commit()
+
+        def rollback(self):
+            with _db_lock:
+                return self._s.rollback()
+
+        def close(self):
+            # No-op: the real session is closed by the test harness.
+            pass
+
+        def __getattr__(self, name):
+            # Delegate any other attribute access to the real session.
+            return getattr(self._s, name)
+
+    def _test_session_factory():
+        return _LockedSessionProxy(db)
 
     meeting_id = f"mtg_test_{datetime.now(timezone.utc).strftime('%H%M%S%f')}"
     result = run_meeting(
@@ -481,6 +524,7 @@ def _run_meeting_with_mocks(
         wall_clock_cap_seconds=600,
         poll_dick_veto=True,
         dry_run=False,
+        _session_factory=_test_session_factory,
     )
     return result, db, engine
 

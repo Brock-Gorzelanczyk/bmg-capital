@@ -45,6 +45,41 @@ def _summarize_one_liner(result, snapshot: dict) -> str:
     return f"Meeting completed — PV ${pv:,.0f}, no items surfaced, cost ${result.total_cost_usd:.4f}"
 
 
+def create_meeting_record(db: Session, *, runner_label: str = "manual_api") -> str:
+    """Insert fund_meetings row with status='running' and return the meeting_id.
+
+    Returns the new meeting_id. Commits the INSERT. Caller (router) will spawn
+    run_meeting_background(meeting_id) into FastAPI BackgroundTasks.
+
+    Raises HTTPException(409) if an in-progress meeting exists started within last 15 min.
+    The 409 check + INSERT happen in the SAME transaction (SELECT then INSERT) — SQLite's
+    default isolation is sufficient for this rare-write path.
+    """
+    from fastapi import HTTPException
+
+    existing = db.execute(
+        text(
+            "SELECT meeting_id FROM fund_meetings "
+            "WHERE status='running' AND started_at > datetime('now', '-15 minutes') LIMIT 1"
+        )
+    ).fetchone()
+    if existing:
+        raise HTTPException(409, f"meeting already in progress: {existing[0]}")
+
+    meeting_id = _new_meeting_id()
+    started_at_iso = datetime.now(timezone.utc).isoformat()
+    db.execute(
+        text(
+            "INSERT INTO fund_meetings "
+            "(meeting_id, started_at, status, created_by_runner) "
+            "VALUES (:mid, :sa, 'running', :rl)"
+        ),
+        {"mid": meeting_id, "sa": started_at_iso, "rl": runner_label},
+    )
+    db.commit()
+    return meeting_id
+
+
 def kick_off_cio_meeting(
     db: Session,
     *,
@@ -54,20 +89,25 @@ def kick_off_cio_meeting(
     wall_clock_cap_seconds: int = 600,
     dry_run: bool = False,
 ) -> dict:
-    """Entry point for CIO Morning Meeting.
+    """Synchronous full-meeting kick-off. Used by tests + future cron.
+
+    For HTTP callers, prefer the background-task pattern in the router
+    (create_meeting_record + run_meeting_background) so requests return in <2s.
 
     Returns:
         {meeting_id, briefing_id, cost_usd, duration_s, status, vetoes_used,
          discord_message_id, summary_one_liner, needs_brock, markdown_body (dry_run only)}
     """
-    meeting_id = _new_meeting_id()
+    if dry_run:
+        # Dry run: skip row insert, run inline, return result
+        meeting_id = _new_meeting_id()
+    else:
+        meeting_id = create_meeting_record(db, runner_label=runner_label)
 
-    # Mark the meeting with the runner label before run_meeting inserts the row
-    # run_meeting handles the INSERT itself; we pass runner_label for update after
     snapshot = build_canonical_snapshot(db)
     memory = _load_memory(db)
 
-    result = run_meeting(
+    result = run_meeting(  # sync wrapper from cio_chair
         db,
         meeting_id=meeting_id,
         budget_cap_usd=budget_cap_usd,
@@ -75,18 +115,8 @@ def kick_off_cio_meeting(
         wall_clock_cap_seconds=wall_clock_cap_seconds,
         poll_dick_veto=True,
         dry_run=dry_run,
+        skip_row_insert=not dry_run,  # row created above for non-dry runs
     )
-
-    # Update runner label (run_meeting may have created the row)
-    if not dry_run:
-        try:
-            db.execute(
-                text("UPDATE fund_meetings SET created_by_runner=:r WHERE meeting_id=:m"),
-                {"r": runner_label, "m": meeting_id},
-            )
-            db.commit()
-        except Exception as exc:
-            logger.warning("[cio_orchestrator] runner_label update failed: %s", exc)
 
     md = render_briefing_markdown(result, snapshot, memory)
     summary = _summarize_one_liner(result, snapshot)
