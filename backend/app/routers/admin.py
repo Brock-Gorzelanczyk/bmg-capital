@@ -3088,6 +3088,36 @@ def migration_status(
         ]
     except Exception as exc:
         out["positions_error"] = str(exc)[:200]
+    try:
+        # Determine whether the 12 remaining crypto-bot equity violations
+        # are legacy leftovers m044 missed, or NEW positions created after
+        # m044 ran — i.e. an active SHIP 2 hole.
+        viol_rows = db.execute(_text("""
+            SELECT bp.id, p.name AS bot_id, bp.symbol, bp.opened_at, bp.qty,
+                   bp.avg_cost_cents
+              FROM bot_positions bp
+              JOIN bot_allocations a ON a.id = bp.allocation_id
+              JOIN bot_profiles p ON p.id = a.profile_id
+             WHERE bp.closed_at IS NULL
+               AND bp.quarantined_at IS NULL
+               AND p.name LIKE 'crypto_%'
+               AND bp.symbol IN ('AAPL','MSFT','NVDA','AMZN','TSLA','GOOGL',
+                                 'META','QQQ','SPY','JPM','GLD','TLT')
+             ORDER BY bp.opened_at DESC
+        """)).fetchall()
+        out["crypto_bot_equity_violations"] = [
+            {
+                "position_id": int(r[0]),
+                "bot_id": r[1],
+                "symbol": r[2],
+                "opened_at": r[3].isoformat() if hasattr(r[3], "isoformat") else r[3],
+                "qty": float(r[4] or 0),
+                "avg_cost_cents": int(r[5] or 0),
+            }
+            for r in viol_rows
+        ]
+    except Exception as exc:
+        out["violations_error"] = str(exc)[:200]
     return out
 
 
