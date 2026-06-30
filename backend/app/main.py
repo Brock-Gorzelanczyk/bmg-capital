@@ -429,6 +429,22 @@ async def lifespan(app: FastAPI):
     except Exception as _m044_exc:
         logger.error("[startup] m044_close_crypto_bot_equity_violations FAILED: %s", _m044_exc, exc_info=True)
 
+    # m045: close LEGACY crypto-bot equity violations that m044 left behind
+    # (m044's WHERE a.user_id = :uid filter missed positions owned by
+    # user_id != 1). Uses engine.begin() for explicit transaction semantics
+    # and verifies post-run that zero violations remain.
+    try:
+        from app.db.migrations.m045_close_remaining_crypto_equity_violations import run as _run_m045
+        with engine.begin() as _m045_conn:
+            _m045_result = _run_m045(_m045_conn)
+        logger.warning("[startup] m045 OK: %s", _m045_result)
+    except Exception as _m045_exc:
+        logger.error(
+            "[startup] m045_close_remaining_crypto_equity_violations FAILED: %s",
+            _m045_exc,
+            exc_info=True,
+        )
+
     # SHIP 5: CIO Morning Meeting tables (m039-m043).
     try:
         from app.db.migrations.m039_fund_meetings import run as _run_m039
