@@ -846,8 +846,8 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
           <span className="w-4 flex-shrink-0" />
           <span className="w-1.5 h-1.5 flex-shrink-0" />
           <span className="flex-1" />
-          <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-20 text-right">All-Time</span>
-          <span className="w-24" />
+          <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-24 text-right">All-Time</span>
+          <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-24 text-right">Today</span>
           <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-28 text-right">Deployed</span>
           <span className="w-14" />
         </div>
@@ -872,6 +872,11 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
             const deployedCents = ext.deployed_cents ?? 0;
             const startingCents = ext.starting_capital_cents ?? 0;
             const deployedPct = startingCents > 0 ? (deployedCents / startingCents) * 100 : 0;
+            // All-time $ and today % — Brock 2026-06-30 ask: surface dollars alongside
+            // percentages so the scoreboard is scannable at a glance. portfolio_value_cents
+            // already includes realized + unrealized so this matches what the user owns now.
+            const allTimeUsd = (entry.portfolio_value_cents - startingCents) / 100;
+            const todayPct = startingCents > 0 ? (entry.today_pnl_cents / startingCents) * 100 : 0;
             const startingUsd = startingCents / 100;
             const startingLabel = startingUsd >= 1_000_000
               ? `$${(startingUsd / 1_000_000).toFixed(2)}M`
@@ -887,12 +892,33 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
                 <span className="text-[10px] font-bold text-t-gdim w-4 flex-shrink-0 font-mono-t">#{entry.rank}</span>
                 <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isOptions ? "bg-purple-400" : isCrypto ? "bg-t-amber" : entry.profile.includes("quant") ? "bg-violet-400" : "bg-t-cyan")} />
                 <span className="flex-1 text-xs font-semibold text-t-hi truncate font-ui-t">{entry.name}</span>
-                <span className={cn("text-xs font-bold w-20 text-right tabular-nums font-mono-t", allTime != null ? (ePos ? "text-t-green" : "text-t-red") : "text-t-gdim")}>
-                  {allTime != null ? `${allTime >= 0 ? "+" : ""}${allTime.toFixed(2)}%` : "—"}
-                </span>
-                <span className={cn("text-xs w-24 text-right tabular-nums font-mono-t", tPos ? "text-t-green" : "text-t-red")}>
-                  {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(2)} today
-                </span>
+                {/* All-Time cell: % on top, $ on bottom (dimmed). Brock 2026-06-30
+                    request — scan dollars at a glance alongside the percent. */}
+                <div className="w-24 flex flex-col items-end font-mono-t">
+                  <span className={cn("text-xs font-bold tabular-nums", allTime != null ? (ePos ? "text-t-green" : "text-t-red") : "text-t-gdim")}>
+                    {allTime != null ? `${allTime >= 0 ? "+" : ""}${allTime.toFixed(2)}%` : "—"}
+                  </span>
+                  {startingCents > 0 ? (
+                    <span className={cn("text-[10px] tabular-nums opacity-70", ePos ? "text-t-green" : "text-t-red")}>
+                      {allTimeUsd >= 0 ? "+" : "−"}${Math.abs(allTimeUsd).toFixed(0)}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-t-gdim">—</span>
+                  )}
+                </div>
+                {/* Today cell: $ on top, % on bottom (dimmed). */}
+                <div className="w-24 flex flex-col items-end font-mono-t">
+                  <span className={cn("text-xs font-bold tabular-nums", tPos ? "text-t-green" : "text-t-red")}>
+                    {tPos ? "+" : "−"}${Math.abs(tPnl).toFixed(0)}
+                  </span>
+                  {startingCents > 0 ? (
+                    <span className={cn("text-[10px] tabular-nums opacity-70", tPos ? "text-t-green" : "text-t-red")}>
+                      {todayPct >= 0 ? "+" : ""}{todayPct.toFixed(2)}%
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-t-gdim">—</span>
+                  )}
+                </div>
                 <span className="text-[10px] w-28 text-right tabular-nums font-mono-t text-t-mid2">
                   {startingCents > 0
                     ? `${deployedPct.toFixed(0)}% of ${startingLabel}`

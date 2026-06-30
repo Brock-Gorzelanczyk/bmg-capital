@@ -401,12 +401,19 @@ function BotLeaderboardTable({
                 </>
               ) : (
                 <>
-                  <span
-                    className={cn("font-mono-t text-sm font-bold tabular-nums self-center", isUp ? "text-t-green" : "text-t-red")}
-                    title={row.is_post_reset ? `Track record reset ${row.reset_date ?? "2026-06-28"}. Performance tracking restarts from this date.` : undefined}
-                  >
-                    {isUp ? "+" : ""}{row.all_time_pnl_pct.toFixed(2)}%{row.is_post_reset ? " ⓘ" : ""}
-                  </span>
+                  {/* All-Time %: large + tiny $ below (Brock 2026-06-30) so the
+                      magnitude is scannable next to the percent. */}
+                  <div className="flex flex-col self-center">
+                    <span
+                      className={cn("font-mono-t text-sm font-bold tabular-nums leading-tight", isUp ? "text-t-green" : "text-t-red")}
+                      title={row.is_post_reset ? `Track record reset ${row.reset_date ?? "2026-06-28"}. Performance tracking restarts from this date.` : undefined}
+                    >
+                      {isUp ? "+" : ""}{row.all_time_pnl_pct.toFixed(2)}%{row.is_post_reset ? " ⓘ" : ""}
+                    </span>
+                    <span className={cn("font-mono-t text-[10px] tabular-nums opacity-70 leading-tight", isUp ? "text-t-green" : "text-t-red")}>
+                      {row.all_time_pnl_usd >= 0 ? "+" : "−"}${Math.abs(row.all_time_pnl_usd).toFixed(0)}
+                    </span>
+                  </div>
                   <span className={cn("font-mono-t text-xs tabular-nums self-center", row.sharpe_30d == null ? "text-t-gdim" : row.sharpe_30d >= 0 ? "text-t-mid2" : "text-t-red")}>
                     {row.sharpe_30d != null ? row.sharpe_30d.toFixed(2) : "—"}
                   </span>
