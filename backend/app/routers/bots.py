@@ -1747,17 +1747,21 @@ def get_bot_cards(
             # fallback: use cumulative realized over 30d
             return_30d_pct = (cumulative_realized / capital_cents) if capital_cents else 0
 
-        # all-time return — SHIP 3: use SUM(realized) / inception via get_all_time_pct
-        # so capital resets do not re-zero bot track records.
+        # all-time return.
+        # 2026-06-30: SHIP 3 used SUM(realized)/inception which silently dropped any
+        # unrealized P&L from open positions (Stock Swing leaderboard 0.00% vs detail
+        # page +0.15% on a $161 unrealized AMD position — frontend was bypassing the
+        # buggy backend field). Source of truth = (portfolio_value - starting) /
+        # starting where portfolio_value already includes realized + unrealized.
+        # Keep get_all_time_pct_with_meta call for is_post_reset / reset_date metadata.
         _at_meta_bot = None
         if allocation:
             from app.services.bot_performance import get_all_time_pct_with_meta as _get_at_meta
             _at_meta_bot = _get_at_meta(allocation.id, db)
-            return_all_time_pct = _at_meta_bot["pct"] / 100
+        if starting_capital:
+            return_all_time_pct = (portfolio_value_cents - starting_capital) / starting_capital
         else:
-            return_all_time_pct = (
-                (portfolio_value_cents - starting_capital) / starting_capital
-            ) if starting_capital else 0
+            return_all_time_pct = 0
 
         # Sharpe 30d
         daily_returns = []

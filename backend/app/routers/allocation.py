@@ -13,6 +13,7 @@ from app.db.models.allocation import BotPerformanceStats, BotTierHistory
 from app.db.models.users import User
 from app.services.allocation_rules import TIERS, PROMOTION_RULES, evaluate_bot, BotMetrics
 from app.services.bot_performance import get_all_time_pct
+from app.core.canonical import compute_bot_snapshot
 
 router = APIRouter(prefix="/api/bots", tags=["allocation"])
 
@@ -66,11 +67,30 @@ def get_allocation_overview(
         tier = alloc.tier or "T0"
         tier_info = TIERS.get(tier, TIERS["T0"])
         starting = alloc.starting_capital_cents or 0
-        current_val = stats.current_value_cents if stats else starting
-        # SHIP 3: use get_all_time_pct (SUM realized / inception) not (current-starting)/starting
-        all_time_pct = get_all_time_pct(alloc.id, db)
-        inception = int(getattr(alloc, "inception_capital_cents", None) or starting or 0)
-        pnl_usd = round(all_time_pct / 100 * inception / 100, 2)
+        # 2026-06-30: prefer canonical snapshot so current_val and all_time_pct
+        # include unrealized P&L from open positions. The nightly BotPerformanceStats
+        # rollup lags real-time and the prior SHIP 3 SUM(realized)/inception formula
+        # silently dropped unrealized — both made the leaderboard misreport bots with
+        # open positions as 0.00%. Fallback to stats if snapshot fails.
+        snap = None
+        if profile is not None:
+            try:
+                snap = compute_bot_snapshot(alloc, profile, db)
+            except Exception:
+                snap = None
+        if snap and snap.starting_capital_cents:
+            current_val = snap.portfolio_value_cents
+            all_time_pct = round(
+                (snap.portfolio_value_cents - snap.starting_capital_cents)
+                / snap.starting_capital_cents * 100,
+                2,
+            )
+            pnl_usd = round((snap.portfolio_value_cents - snap.starting_capital_cents) / 100, 2)
+        else:
+            current_val = stats.current_value_cents if stats else starting
+            all_time_pct = get_all_time_pct(alloc.id, db)
+            inception = int(getattr(alloc, "inception_capital_cents", None) or starting or 0)
+            pnl_usd = round(all_time_pct / 100 * inception / 100, 2)
         rows.append({
             "allocation_id": alloc.id,
             "bot_name": profile.name if profile else "",
