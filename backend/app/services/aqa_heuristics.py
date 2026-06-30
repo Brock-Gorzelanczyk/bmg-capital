@@ -56,27 +56,38 @@ def _find_issues_inner(context: dict) -> list[str]:
 
         # -------------------------------------------------------------------
         # Tag: bot_silent_48h
-        # Fires if trades_24h == 0 AND last_trade_at is more than 48h before built_at.
-        # Edge case: last_trade_at is None (bot has never traded) -- conservative skip in Phase A.
-        # TODO: re-evaluate for Phase A+ once allocation age is available.
+        # Fires if trades_24h == 0 AND (last_trade_at is None OR > 48h ago).
+        #
+        # 2026-06-30 fix: previously skipped bots with last_trade_at=None
+        # as "never traded" / conservative. But options_directional,
+        # options_income, stock_lt, crypto_onchain, cash_floor all have
+        # NULL last_trade_at AND are real broken-silent bots. The
+        # never-traded case IS the worst case to flag for AQA review.
+        # Skip only if the bot has no real allocation (starting_capital==0)
+        # which means it's not actually in the fund.
         # -------------------------------------------------------------------
         trades_24h = bot.get("trades_24h", 0)
         last_trade_at_str = bot.get("last_trade_at")
+        starting_capital = bot.get("starting_capital_cents", 0)
 
-        if trades_24h == 0 and last_trade_at_str is not None:
-            try:
-                last_trade_at = datetime.fromisoformat(
-                    last_trade_at_str.replace("Z", "+00:00")
-                )
-                silence_duration = built_at - last_trade_at
-                if silence_duration > timedelta(hours=48):
-                    tags.add("bot_silent_48h")
-            except (ValueError, AttributeError):
-                logger.warning(
-                    "[aqa-heuristics] cannot parse last_trade_at=%r for bot=%r",
-                    last_trade_at_str,
-                    bot.get("bot_id"),
-                )
+        if trades_24h == 0 and starting_capital > 0:
+            if last_trade_at_str is None:
+                # Never traded with real allocation — flag for AQA review.
+                tags.add("bot_silent_48h")
+            else:
+                try:
+                    last_trade_at = datetime.fromisoformat(
+                        last_trade_at_str.replace("Z", "+00:00")
+                    )
+                    silence_duration = built_at - last_trade_at
+                    if silence_duration > timedelta(hours=48):
+                        tags.add("bot_silent_48h")
+                except (ValueError, AttributeError):
+                    logger.warning(
+                        "[aqa-heuristics] cannot parse last_trade_at=%r for bot=%r",
+                        last_trade_at_str,
+                        bot.get("bot_id"),
+                    )
 
         # -------------------------------------------------------------------
         # Tag: deployment_low
