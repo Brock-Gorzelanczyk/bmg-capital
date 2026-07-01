@@ -1175,18 +1175,37 @@ export default function TradeDetailPage() {
           <span style={{ color: TD_COLORS.textDim }}>
             {trade.symbol} #{trade.trade_id}
           </span>
-          {trade.discord_message_url && (
-            <a
-              href={trade.discord_message_url}
-              target="_blank" rel="noopener noreferrer"
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+            {/* Trading Desk deep-link — open the cinematic view focused on
+                this bot + symbol so the toasts + chart are filtered to
+                just what the user came here to watch. */}
+            <Link
+              to={`/fund/desk?symbol=${encodeURIComponent(trade.symbol)}${trade.bot_profile ? `&bot=${encodeURIComponent(trade.bot_profile)}` : ""}&tf=5m`}
               style={{
-                marginLeft: "auto", display: "flex", alignItems: "center", gap: 6,
-                color: "#8fa8d8", textDecoration: "none",
+                display: "flex", alignItems: "center", gap: 6,
+                color: TD_COLORS.current, textDecoration: "none",
+                borderRadius: 20, padding: "5px 12px",
+                background: "rgba(34,211,238,0.08)",
+                border: "1px solid rgba(34,211,238,0.28)",
+                fontSize: 11, letterSpacing: "0.06em",
               }}
+              title="Open Trading Desk focused on this bot + symbol"
             >
-              <ExternalLink size={11} /> Discord Signal
-            </a>
-          )}
+              <Zap size={11} /> WATCH ON DESK
+            </Link>
+            {trade.discord_message_url && (
+              <a
+                href={trade.discord_message_url}
+                target="_blank" rel="noopener noreferrer"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  color: "#8fa8d8", textDecoration: "none",
+                }}
+              >
+                <ExternalLink size={11} /> Discord Signal
+              </a>
+            )}
+          </div>
         </div>
 
         <SkinnedTradeHeader
