@@ -340,6 +340,87 @@ document.addEventListener('DOMContentLoaded', function () {
   };
   var _timer = setInterval(tick, 33);
 
+  // ── BMG LIVE BRIDGE (2026-06-30) ─────────────────────────────────────────
+  // The scripted trade loop above still drives the chart's price walk +
+  // BUY/SELL cursor animations (Phase 3 will replace with real candles).
+  // For now we overlay REAL bot activity: when the parent posts a signal
+  // or fill, we flash the corresponding button and drop a toast with the
+  // ACTUAL bot_id + symbol + price + confidence — matching the same visual
+  // language as the scripted demo so the real events feel native to the UI.
+  var lastLiveTs = 0;
+  var liveFillCount = 0;
+  var sessionPnlUsd = 0;
+  var __colorForSide = function (s) {
+    var side = String(s || '').toLowerCase();
+    if (side === 'buy' || side === 'cover' || side === 'long') return '#4ade80';
+    return '#f87171';
+  };
+  var __btnForSide = function (s) {
+    var side = String(s || '').toLowerCase();
+    return (side === 'buy' || side === 'cover' || side === 'long') ? 'td-buy' : 'td-sell';
+  };
+  var __handleLiveSignal = function (sig) {
+    var color = __colorForSide(sig.side);
+    var conf = Math.round(Number(sig.confidence || 0) * 100);
+    flashBtn(__btnForSide(sig.side), color);
+    toast(
+      '<b style="color:' + color + '">' + String(sig.side || '?').toUpperCase() + '</b> ' +
+      String(sig.symbol || '?').replace(/</g,'') +
+      ' <span style="opacity:0.65">' + String(sig.bot_display_name || sig.bot_id || 'bot') + '</span>' +
+      ' &nbsp;·&nbsp; conf ' + conf + '%',
+      color
+    );
+    if (soundOn) tickSnd();
+  };
+  var __handleLiveFill = function (fill) {
+    liveFillCount++;
+    var color = __colorForSide(fill.side);
+    var price = Number(fill.fill_price_usd || 0);
+    flashBtn(__btnForSide(fill.side), color);
+    toast(
+      '<b style="color:' + color + '">' + String(fill.side || '?').toUpperCase() + '</b> ' +
+      String(fill.symbol || '?').replace(/</g,'') +
+      ' @ ' + price.toFixed(price >= 100 ? 2 : 4) +
+      ' &nbsp;·&nbsp; <span style="opacity:0.7">' + String(fill.bot_display_name || fill.bot_id || 'bot') + '</span>',
+      color
+    );
+    if (soundOn) fillSnd();
+    // Bump the FILLS counter with the real live count.
+    var fEl = document.getElementById('td-fills');
+    if (fEl) fEl.innerHTML = 'FILLS <span style="color:#dce8dc;">' + liveFillCount + '</span>';
+  };
+  var __handleLiveSummary = function (s) {
+    if (s && typeof s.session_pnl_usd === 'number') {
+      sessionPnlUsd = s.session_pnl_usd;
+      var pnlEl = document.getElementById('td-pnl');
+      if (pnlEl) {
+        var sign = sessionPnlUsd >= 0 ? '+' : '-';
+        var abs = Math.abs(sessionPnlUsd);
+        pnlEl.textContent = sign + '$' + abs.toFixed(2);
+        pnlEl.style.color = sessionPnlUsd >= 0 ? '#4ade80' : '#f87171';
+      }
+      var subEl = document.getElementById('td-pnlsub');
+      if (subEl && typeof s.trades_last_hour === 'number' && typeof s.signals_last_hour === 'number') {
+        subEl.textContent = s.trades_last_hour + ' trades · ' + s.signals_last_hour + ' signals · ' +
+                            (s.active_bot_count || 0) + ' bots active';
+      }
+    }
+  };
+  window.addEventListener('message', function (e) {
+    // Same-origin check — iframe wrapper posts from window.location.origin.
+    if (e.origin !== window.location.origin) return;
+    var msg = e.data;
+    if (!msg || typeof msg !== 'object') return;
+    try {
+      if (msg.type === 'td:signal' && msg.data) __handleLiveSignal(msg.data);
+      else if (msg.type === 'td:fill' && msg.data) __handleLiveFill(msg.data);
+      else if (msg.type === 'td:summary' && msg.data) __handleLiveSummary(msg.data);
+    } catch (err) {
+      // Never let a bad payload break the animation loop.
+    }
+  });
+  // ── end BMG LIVE BRIDGE ──────────────────────────────────────────────────
+
   window.addEventListener('beforeunload', function () { if (_timer) clearInterval(_timer); try { ro.disconnect(); } catch(e){} });
 });
 </script>
