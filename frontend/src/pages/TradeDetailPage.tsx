@@ -259,125 +259,102 @@ function SkinnedTradeHeader({
   );
 }
 
-/** Green-glow rounded PnL card — big amount left, entry + status pill right. */
-function SkinnedPnlCard({
-  displayPnl, pnlPct, isClosed, entryPrice, livePrice, groupDec,
+/** Compact meta strip — replaces the big P&L card (v2). P&L moves onto the
+ *  chart header itself. This strip just shows ENTRY + status pill. */
+function SkinnedMetaStrip({
+  entryPrice, isClosed, livePrice, groupDec,
 }: {
-  displayPnl: number | null; pnlPct: number | null;
-  isClosed: boolean; entryPrice: number;
+  entryPrice: number; isClosed: boolean;
   livePrice: number | null; groupDec: number;
 }) {
-  const positive = displayPnl != null && displayPnl >= 0;
-  const pnlColorHex = displayPnl == null ? TD_COLORS.textMuted
-    : positive ? TD_COLORS.posGreen : TD_COLORS.negRed;
-  const borderCol = displayPnl == null ? TD_COLORS.panelBorder
-    : positive ? TD_COLORS.cardBorder : "rgba(248,113,113,0.28)";
-  const glowBox = displayPnl == null ? "none"
-    : positive
-      ? "0 0 40px rgba(74,222,128,0.06), inset 0 0 40px rgba(74,222,128,0.03)"
-      : "0 0 40px rgba(248,113,113,0.06), inset 0 0 40px rgba(248,113,113,0.03)";
-  const pnlLabel = isClosed ? "REALIZED P&L" : "UNREALIZED P&L";
-  const pnlNumber = displayPnl != null
-    ? `${displayPnl >= 0 ? "+" : "-"}${Math.abs(displayPnl).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : isClosed ? "—" : "…";
-  const pnlPctStr = pnlPct != null
-    ? `(${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%)`
-    : "";
   const statusText = isClosed ? "CLOSED" : "OPEN";
   const statusBg = isClosed ? "rgba(126,142,126,0.14)" : "rgba(61,220,132,0.14)";
   const statusColor = isClosed ? TD_COLORS.textDim : TD_COLORS.posGreen;
-
   return (
     <div
       style={{
-        position: "relative", border: `1px solid ${borderCol}`, borderRadius: 22,
-        background: TD_COLORS.bgCard, padding: "30px 36px", marginTop: 26,
-        boxShadow: glowBox,
-        display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-        gap: 24, flexWrap: "wrap",
+        display: "flex", alignItems: "center", gap: 14, marginTop: 20,
+        flexWrap: "wrap",
       }}
     >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontFamily: "'JetBrains Mono', monospace", fontSize: 14,
-            letterSpacing: "0.16em", color: TD_COLORS.textMuted,
-          }}
-        >
-          {pnlLabel}
-        </div>
-        <div
-          style={{
-            display: "flex", alignItems: "baseline", gap: 16,
-            marginTop: 14, flexWrap: "wrap",
-          }}
-        >
+      <span
+        style={{
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 13,
+          letterSpacing: "0.16em", color: TD_COLORS.textMuted,
+        }}
+      >
+        ENTRY{" "}
+        <span style={{ color: TD_COLORS.textPrimary, fontVariantNumeric: "tabular-nums" }}>
+          {fmt$(entryPrice, groupDec)}
+        </span>
+      </span>
+      {!isClosed && livePrice != null && (
+        <>
+          <span style={{ width: 1, height: 16, background: "rgba(74,222,128,0.16)" }} />
           <span
             style={{
-              fontSize: 76, fontWeight: 700, letterSpacing: "-0.03em",
-              color: pnlColorHex, lineHeight: 0.9,
-              textShadow: `0 0 34px ${displayPnl != null && positive ? "rgba(61,220,132,0.4)" : displayPnl != null ? "rgba(248,113,113,0.4)" : "transparent"}`,
-              fontFamily: "'JetBrains Mono', monospace", fontVariantNumeric: "tabular-nums",
+              fontFamily: "'JetBrains Mono', monospace", fontSize: 13,
+              letterSpacing: "0.16em", color: TD_COLORS.textMuted,
             }}
           >
-            {pnlNumber}
-          </span>
-          {pnlPctStr && (
-            <span
-              style={{
-                fontSize: 30, fontWeight: 600, color: pnlColorHex,
-                fontFamily: "'JetBrains Mono', monospace", fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {pnlPctStr}
+            LIVE{" "}
+            <span style={{ color: TD_COLORS.textPrimary, fontVariantNumeric: "tabular-nums" }}>
+              {fmt$(livePrice, groupDec)}
             </span>
-          )}
-        </div>
-      </div>
-      <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div
-          style={{
-            fontFamily: "'JetBrains Mono', monospace", fontSize: 13,
-            letterSpacing: "0.16em", color: TD_COLORS.textMuted,
-          }}
-        >
-          ENTRY
-        </div>
-        <div
-          style={{
-            fontFamily: "'JetBrains Mono', monospace", fontSize: 26,
-            fontWeight: 600, color: TD_COLORS.textPrimary, marginTop: 10,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {fmt$(entryPrice, groupDec)}
-        </div>
-        {!isClosed && livePrice != null && (
-          <div
-            style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: 12,
-              color: TD_COLORS.textDim, marginTop: 6,
-            }}
-          >
-            LIVE {fmt$(livePrice, groupDec)}
-          </div>
-        )}
-        <div
-          style={{
-            display: "inline-block", marginTop: 14,
-            fontFamily: "'JetBrains Mono', monospace", fontSize: 12,
-            letterSpacing: "0.14em", color: statusColor,
-            background: statusBg, borderRadius: 20, padding: "6px 16px",
-          }}
-        >
-          {statusText}
-        </div>
-      </div>
+          </span>
+        </>
+      )}
+      <span style={{ width: 1, height: 16, background: "rgba(74,222,128,0.16)" }} />
+      <span
+        style={{
+          display: "inline-block",
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 12,
+          letterSpacing: "0.14em", color: statusColor,
+          background: statusBg, borderRadius: 20, padding: "5px 15px",
+        }}
+      >
+        {statusText}
+      </span>
     </div>
   );
 }
 
-/** Skinned floating legend — top-right of chart, matches reference tooltip. */
+/** Chart-header P&L pill — v2 moves P&L from a big card onto the chart title row. */
+function SkinnedPnlPill({
+  displayPnl, pnlPct, isClosed,
+}: {
+  displayPnl: number | null; pnlPct: number | null; isClosed: boolean;
+}) {
+  if (displayPnl == null) return null;
+  const positive = displayPnl >= 0;
+  const dotColor = positive ? TD_COLORS.posGreen : TD_COLORS.negRed;
+  const bg = positive ? "rgba(61,220,132,0.1)" : "rgba(248,113,113,0.1)";
+  const border = positive ? "rgba(61,220,132,0.34)" : "rgba(248,113,113,0.34)";
+  const label = isClosed ? "P&L" : "UNREAL";
+  const pnlStr = `${positive ? "+$" : "-$"}${Math.abs(displayPnl).toFixed(2)}`;
+  const pctStr = pnlPct != null ? ` · ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%` : "";
+  return (
+    <span
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontWeight: 600,
+        color: dotColor, background: bg, border: `1px solid ${border}`,
+        borderRadius: 20, padding: "4px 12px",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      <span
+        style={{
+          width: 6, height: 6, borderRadius: "50%",
+          background: dotColor, boxShadow: `0 0 6px ${dotColor}`,
+        }}
+      />
+      {label} {pnlStr}{pctStr}
+    </span>
+  );
+}
+
+/** Compact top-LEFT legend (v2 — Trading Desk style, small font, tighter). */
 function SkinnedChartLegend({
   entry, stop, target, exit, current,
 }: {
@@ -395,15 +372,14 @@ function SkinnedChartLegend({
   return (
     <div
       style={{
-        position: "absolute", top: 12, right: 12, width: 280,
-        border: `1px solid ${TD_COLORS.panelBorder}`, borderRadius: 16,
-        background: "rgba(8,14,10,0.92)",
-        boxShadow: "0 20px 50px rgba(0,0,0,0.55)",
-        padding: "14px 16px", backdropFilter: "blur(4px)",
+        position: "absolute", top: 12, left: 12,
+        border: `1px solid ${TD_COLORS.panelBorder}`, borderRadius: 8,
+        background: "rgba(6,11,8,0.82)",
+        padding: "9px 11px", backdropFilter: "blur(3px)",
         zIndex: 10, pointerEvents: "none",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {rows.map((r) => {
           const deltaPct = r.label === "Entry" || !entry
             ? null
@@ -414,22 +390,20 @@ function SkinnedChartLegend({
             <div
               key={r.label}
               style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 14,
+                display: "flex", alignItems: "center", gap: 8,
+                fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", gap: 10, color: TD_COLORS.textDim }}>
-                <span style={{ width: 9, height: 9, borderRadius: "50%", background: r.color, flexShrink: 0 }} />
-                {r.label}
-              </span>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: r.color, flexShrink: 0 }} />
+              <span style={{ color: TD_COLORS.textMuted, width: 54 }}>{r.label}</span>
               <span style={{ color: TD_COLORS.textPrimary, fontVariantNumeric: "tabular-nums" }}>
                 {fmt$(r.price, gd)}
-                {deltaPct != null && (
-                  <span style={{ color: deltaColor ?? undefined, marginLeft: 6 }}>
-                    {deltaPct >= 0 ? "+" : ""}{deltaPct.toFixed(2)}%
-                  </span>
-                )}
               </span>
+              {deltaPct != null && (
+                <span style={{ color: deltaColor ?? undefined, fontVariantNumeric: "tabular-nums" }}>
+                  {deltaPct >= 0 ? "+" : ""}{deltaPct.toFixed(2)}%
+                </span>
+              )}
             </div>
           );
         })}
@@ -442,11 +416,13 @@ function SkinnedChartLegend({
 function SkinnedChartSection({
   symbol, entryPrice, entryTime, side, qty, stopLoss, takeProfit,
   exitPrice, exitTime, livePrice, status, timeframeLabel,
+  displayPnl, pnlPct,
 }: {
   symbol: string; entryPrice: number; entryTime: string | null;
   side: string; qty: number; stopLoss: number | null; takeProfit: number | null;
   exitPrice: number | null; exitTime: string | null; livePrice: number | null;
   status: "open" | "closed"; timeframeLabel?: string;
+  displayPnl: number | null; pnlPct: number | null;
 }) {
   const barsSymbol = symbol.replace("/", "-");
   const { data: barsData, isLoading } = useQuery({
@@ -473,14 +449,17 @@ function SkinnedChartSection({
           marginBottom: 10, gap: 16, flexWrap: "wrap",
         }}
       >
-        <span
-          style={{
-            fontSize: 22, fontWeight: 700, color: TD_COLORS.textPrimary,
-            fontFamily: "'Space Grotesk', sans-serif",
-          }}
-        >
-          {symbol}{" "}
-          <span style={{ color: TD_COLORS.textFaint, fontWeight: 500 }}>— {tfLabel}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span
+            style={{
+              fontSize: 22, fontWeight: 700, color: TD_COLORS.textPrimary,
+              fontFamily: "'Space Grotesk', sans-serif",
+            }}
+          >
+            {symbol}{" "}
+            <span style={{ color: TD_COLORS.textFaint, fontWeight: 500 }}>— {tfLabel}</span>
+          </span>
+          <SkinnedPnlPill displayPnl={displayPnl} pnlPct={pnlPct} isClosed={status === "closed"} />
         </span>
         <div
           style={{
@@ -1218,11 +1197,9 @@ export default function TradeDetailPage() {
           isCrypto={isCrypto}
         />
 
-        <SkinnedPnlCard
-          displayPnl={_displayPnl}
-          pnlPct={_pnlPct}
-          isClosed={trade.status === "closed"}
+        <SkinnedMetaStrip
           entryPrice={trade.entry_price_usd}
+          isClosed={trade.status === "closed"}
           livePrice={livePrice}
           groupDec={tradeDec}
         />
@@ -1239,6 +1216,8 @@ export default function TradeDetailPage() {
           exitTime={trade.close_time}
           livePrice={livePrice}
           status={trade.status}
+          displayPnl={_displayPnl}
+          pnlPct={_pnlPct}
         />
 
         <div
