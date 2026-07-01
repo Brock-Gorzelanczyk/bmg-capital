@@ -64,6 +64,57 @@ def test_live_activity_bounds_result_sizes():
         )
 
 
+def test_live_activity_cold_start_returns_most_recent_not_oldest():
+    """Cold-start (since_id=0) must return the LATEST N items, not the
+    oldest — otherwise the poller has to churn through weeks of historical
+    data before reaching real-time.
+
+    Verified via grep for the 'ORDER BY ... DESC LIMIT ... ORDER BY id ASC'
+    pattern (double-sort trick to get last N chronologically).
+    """
+    src = (BACKEND / "app" / "routers" / "live_activity.py").read_text()
+    # Signals cold-start pattern
+    signal_cold = re.search(
+        r"since_signal_id\s*==\s*0.*?ORDER BY s\.id DESC LIMIT.*?ORDER BY id ASC",
+        src,
+        re.DOTALL,
+    )
+    assert signal_cold is not None, (
+        "signals cold-start (since_signal_id=0) must use ORDER BY id DESC "
+        "LIMIT + outer ORDER BY id ASC so client seeds watermark from the "
+        "true tail, not from signal id 1"
+    )
+    # Trades cold-start pattern
+    trade_cold = re.search(
+        r"since_trade_id\s*==\s*0.*?ORDER BY t\.id DESC LIMIT.*?ORDER BY id ASC",
+        src,
+        re.DOTALL,
+    )
+    assert trade_cold is not None, (
+        "trades cold-start (since_trade_id=0) must return most-recent N, "
+        "not oldest N"
+    )
+
+
+def test_trading_desk_wrapper_silently_seeds_watermark_on_first_poll():
+    """The frontend must NOT spam the desk with 50 historical toasts on
+    cold-start. First poll silently advances the watermark; subsequent
+    polls display new events as toasts.
+    """
+    src = (BACKEND.parent / "frontend" / "src" / "pages" / "TradingDeskIframePage.tsx").read_text()
+    assert "seededRef" in src or "isSeeding" in src, (
+        "TradingDeskIframePage must gate the first-poll postMessage so 50 "
+        "historical events don't all render as toasts simultaneously"
+    )
+    # Summary should NOT be gated — it drives session P&L and should update
+    # immediately on first load.
+    assert re.search(
+        r"summary.*postMessage.*td:summary",
+        src,
+        re.DOTALL,
+    ), "summary postMessage must fire on every poll (including seed)"
+
+
 def test_live_activity_returns_expected_shape():
     """Response dict must include the keys the Trading Desk iframe expects:
     signals, trades, summary (with session_pnl_usd, active_bot_count, etc).

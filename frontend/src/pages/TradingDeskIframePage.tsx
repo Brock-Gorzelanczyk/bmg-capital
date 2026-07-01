@@ -23,6 +23,8 @@ export default function TradingDeskIframePage() {
   const lastSignalIdRef = useRef<number>(0);
   const lastTradeIdRef = useRef<number>(0);
 
+  const seededRef = useRef<boolean>(false);
+
   useEffect(() => {
     let stopped = false;
     let timerId: ReturnType<typeof setTimeout> | null = null;
@@ -39,20 +41,35 @@ export default function TradingDeskIframePage() {
         const iframe = iframeRef.current;
         const win = iframe?.contentWindow;
         if (win && res.data) {
+          // First-poll behavior: silently seed watermarks so the client
+          // doesn't spam the desk with 50 historical toasts on load. The
+          // backend's cold-start returns the last N recent items (not the
+          // oldest N) so we advance to the true tail. Real events start
+          // firing as toasts from the NEXT poll onwards.
+          const isSeeding = !seededRef.current;
+
           for (const sig of res.data.signals ?? []) {
             if (sig.id > lastSignalIdRef.current) lastSignalIdRef.current = sig.id;
-            win.postMessage({ type: "td:signal", data: sig }, window.location.origin);
+            if (!isSeeding) {
+              win.postMessage({ type: "td:signal", data: sig }, window.location.origin);
+            }
           }
           for (const trade of res.data.trades ?? []) {
             if (trade.id > lastTradeIdRef.current) lastTradeIdRef.current = trade.id;
-            win.postMessage({ type: "td:fill", data: trade }, window.location.origin);
+            if (!isSeeding) {
+              win.postMessage({ type: "td:fill", data: trade }, window.location.origin);
+            }
           }
+          // Summary always flows — even on seed poll — so session P&L + bot
+          // count populate immediately instead of showing +$0.00 for 6s.
           if (res.data.summary) {
             win.postMessage(
               { type: "td:summary", data: res.data.summary },
               window.location.origin,
             );
           }
+
+          seededRef.current = true;
         }
       } catch (err) {
         // Silent — never break the app if the endpoint is unavailable.

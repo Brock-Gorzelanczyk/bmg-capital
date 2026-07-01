@@ -137,18 +137,40 @@ def get_bot_activity(
 
     try:
         # ── Signals since watermark, scoped to current user's allocations ──
-        signal_rows = db.execute(
-            text(
-                "SELECT s.id, s.ts, s.symbol, s.side, s.confidence, s.strategy, "
-                "       bp.name AS bot_id "
-                "FROM bot_signals s "
-                "JOIN bot_allocations a ON a.id = s.allocation_id "
-                "JOIN bot_profiles bp ON bp.id = a.profile_id "
-                "WHERE a.user_id = :uid AND s.id > :since "
-                "ORDER BY s.id ASC LIMIT :lim"
-            ),
-            {"uid": current_user.id, "since": since_signal_id, "lim": MAX_SIGNALS_PER_CALL},
-        ).fetchall()
+        # Cold-start (since=0): return the MOST RECENT N ordered DESC then
+        # reversed so client's watermark advances to the true tail. Otherwise
+        # the poller would churn through weeks of historical signals before
+        # reaching real-time — first observed 2026-06-30 evening: cold client
+        # got signals #1-50 all from 2026-06-08 test rows.
+        # Warm poll (since>0): return anything newer, ascending, capped.
+        if since_signal_id == 0:
+            signal_rows = db.execute(
+                text(
+                    "SELECT * FROM ("
+                    "  SELECT s.id, s.ts, s.symbol, s.side, s.confidence, s.strategy, "
+                    "         bp.name AS bot_id "
+                    "  FROM bot_signals s "
+                    "  JOIN bot_allocations a ON a.id = s.allocation_id "
+                    "  JOIN bot_profiles bp ON bp.id = a.profile_id "
+                    "  WHERE a.user_id = :uid "
+                    "  ORDER BY s.id DESC LIMIT :lim"
+                    ") AS recent ORDER BY id ASC"
+                ),
+                {"uid": current_user.id, "lim": MAX_SIGNALS_PER_CALL},
+            ).fetchall()
+        else:
+            signal_rows = db.execute(
+                text(
+                    "SELECT s.id, s.ts, s.symbol, s.side, s.confidence, s.strategy, "
+                    "       bp.name AS bot_id "
+                    "FROM bot_signals s "
+                    "JOIN bot_allocations a ON a.id = s.allocation_id "
+                    "JOIN bot_profiles bp ON bp.id = a.profile_id "
+                    "WHERE a.user_id = :uid AND s.id > :since "
+                    "ORDER BY s.id ASC LIMIT :lim"
+                ),
+                {"uid": current_user.id, "since": since_signal_id, "lim": MAX_SIGNALS_PER_CALL},
+            ).fetchall()
         for r in signal_rows:
             result["signals"].append({
                 "id": int(r[0]),
@@ -165,19 +187,38 @@ def get_bot_activity(
 
     try:
         # ── Trades since watermark (exclude quarantined) ──
-        trade_rows = db.execute(
-            text(
-                "SELECT t.id, t.ts, t.symbol, t.side, t.qty, t.fill_price_cents, "
-                "       bp.name AS bot_id "
-                "FROM bot_trades t "
-                "JOIN bot_allocations a ON a.id = t.allocation_id "
-                "JOIN bot_profiles bp ON bp.id = a.profile_id "
-                "WHERE a.user_id = :uid AND t.id > :since "
-                "  AND t.quarantined_at IS NULL "
-                "ORDER BY t.id ASC LIMIT :lim"
-            ),
-            {"uid": current_user.id, "since": since_trade_id, "lim": MAX_TRADES_PER_CALL},
-        ).fetchall()
+        # Same cold-start semantics as signals — return most-recent N so the
+        # client's watermark advances to the true tail instead of dredging
+        # historical trades.
+        if since_trade_id == 0:
+            trade_rows = db.execute(
+                text(
+                    "SELECT * FROM ("
+                    "  SELECT t.id, t.ts, t.symbol, t.side, t.qty, t.fill_price_cents, "
+                    "         bp.name AS bot_id "
+                    "  FROM bot_trades t "
+                    "  JOIN bot_allocations a ON a.id = t.allocation_id "
+                    "  JOIN bot_profiles bp ON bp.id = a.profile_id "
+                    "  WHERE a.user_id = :uid AND t.quarantined_at IS NULL "
+                    "  ORDER BY t.id DESC LIMIT :lim"
+                    ") AS recent ORDER BY id ASC"
+                ),
+                {"uid": current_user.id, "lim": MAX_TRADES_PER_CALL},
+            ).fetchall()
+        else:
+            trade_rows = db.execute(
+                text(
+                    "SELECT t.id, t.ts, t.symbol, t.side, t.qty, t.fill_price_cents, "
+                    "       bp.name AS bot_id "
+                    "FROM bot_trades t "
+                    "JOIN bot_allocations a ON a.id = t.allocation_id "
+                    "JOIN bot_profiles bp ON bp.id = a.profile_id "
+                    "WHERE a.user_id = :uid AND t.id > :since "
+                    "  AND t.quarantined_at IS NULL "
+                    "ORDER BY t.id ASC LIMIT :lim"
+                ),
+                {"uid": current_user.id, "since": since_trade_id, "lim": MAX_TRADES_PER_CALL},
+            ).fetchall()
         for r in trade_rows:
             result["trades"].append({
                 "id": int(r[0]),
