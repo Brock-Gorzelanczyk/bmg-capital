@@ -3248,7 +3248,7 @@ export default function BotDetailPage() {
                         <td className="py-2.5 text-t-muted text-xs font-mono-t">{formatTime(sig.ts)}</td>
                         <td className="py-2.5 font-semibold text-t-hi font-mono-t">{sig.symbol}</td>
                         <td className="py-2.5"><SideBadge side={sig.side} /></td>
-                        <td className="py-2.5 text-right text-t-mid2 font-mono-t tabular-nums">{sig.confidence.toFixed(0)}%</td>
+                        <td className="py-2.5 text-right text-t-mid2 font-mono-t tabular-nums">{Math.round(sig.confidence * 100)}%</td>
                         <td className="py-2.5 text-t-muted text-xs font-ui-t">{sig.strategy}</td>
                         <td className="py-2.5 text-t-muted text-xs max-w-xs truncate font-ui-t">{sig.reason}</td>
                         <td className="py-2.5 text-right">
