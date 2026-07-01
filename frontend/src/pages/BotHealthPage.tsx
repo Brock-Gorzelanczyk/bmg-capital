@@ -48,7 +48,6 @@ const BOT_LABELS: Record<string, string> = {
   crypto_quant_mean_reversion:  "Quant Mean Rev",
   options_income:               "Options Income",
   options_directional:          "Options Directional",
-  crypto_meanrev_2163:          "MeanRev 2163",
   tsmom_multi_asset:            "TSMOM Multi-Asset",
   quality_factor:               "Quality Factor",
   value_quality:                "Value Quality",

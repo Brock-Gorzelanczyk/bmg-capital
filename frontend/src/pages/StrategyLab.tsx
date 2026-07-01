@@ -203,11 +203,6 @@ const BOT_META: Record<
     description: "High-frequency scalper on BTC/ETH/SOL with 15-min cooldown",
     assetClass: "quant",
   },
-  crypto_meanrev_2163: {
-    displayName: "Mean Rev 2163",
-    description: "Experimental mean-reversion variant, paper-only deployment",
-    assetClass: "quant",
-  },
   crypto_onchain: {
     displayName: "Crypto Onchain",
     description: "On-chain flow analysis — large wallet movements, DEX volume anomalies, L2 bridge activity",
@@ -236,7 +231,6 @@ const BOT_ORDER = [
   "crypto_quant_aggressive",
   "crypto_quant_mean_reversion",
   "crypto_quant_scalper",
-  "crypto_meanrev_2163",
   "options_income",
   "options_directional",
 ];
