@@ -122,41 +122,48 @@ def _run_and_log(profile_name: str) -> None:
                     result.get("trades_executed", 0),
                     len(result.get("errors", [])),
                 )
-                # Always-on scan heartbeat — write last_scan_at regardless of
-                # whether signals fired. Without this, inert-bot-scan's verdict
-                # logic conflates "scanner didn't run" with "scanner ran but
-                # produced zero signals" (both look identical because the
-                # periodic _run_bot_heartbeat_check derives last_scan_at from
-                # MAX(bot_signals.ts) only).
-                # 2026-06-30: shipped after observing crypto_onchain/stock_day/
-                # stock_lt/stock_swing all reported scanner_not_running when
-                # they were actually scheduled and likely running fine.
-                try:
-                    from sqlalchemy import text as _hb_text
-                    from datetime import datetime as _hb_dt, timezone as _hb_tz
-                    _now_iso = _hb_dt.now(_hb_tz.utc).isoformat()
-                    db.execute(
-                        _hb_text(
-                            "INSERT INTO bot_heartbeat (bot_name, expected_cadence_minutes, "
-                            "last_scan_at, updated_at) VALUES (:n, NULL, :t, :t) "
-                            "ON CONFLICT(bot_name) DO UPDATE SET "
-                            "last_scan_at = :t, updated_at = :t"
-                        ),
-                        {"n": profile_name, "t": _now_iso},
-                    )
-                    db.commit()
-                except Exception as _hb_exc:
-                    logger.warning(
-                        "[heartbeat:%s] write failed (non-fatal): %s",
-                        profile_name, _hb_exc,
-                    )
             except Exception as e:
                 sentry_sdk.capture_exception(e)
                 raise
     except Exception as exc:
         logger.error("[scheduled] %s FAILED: %s", profile_name, exc, exc_info=True)
     finally:
-        db.close()
+        # 2026-06-30 (evening): write heartbeat in finally so it fires whether
+        # scan_and_execute succeeds OR crashes. Previously PR #48 moved the
+        # write out of the signal-fired conditional but kept it inside the
+        # outer try block, meaning any scan crash silently prevented the
+        # heartbeat update. crypto_onchain has shown last_scan_at =
+        # 2026-06-08T21:33 for 22 days despite the scheduler job being
+        # registered (bot_scheduler.py:370) — best hypothesis is that
+        # scan_and_execute crashes for that bot every fire, and the missing
+        # heartbeat hides the fact that the scheduler IS firing. With this
+        # change, next deploy's heartbeat behavior distinguishes:
+        #   heartbeat updates → scheduler fires (scan crashes; grep Railway
+        #                       logs for "[scheduled] X FAILED" to find why)
+        #   heartbeat stays stale → scheduler doesn't fire (job never registered
+        #                           OR APScheduler dropped it; grep for
+        #                           "[startup-trace] registered job bot_X")
+        try:
+            from sqlalchemy import text as _hb_text
+            from datetime import datetime as _hb_dt, timezone as _hb_tz
+            _now_iso = _hb_dt.now(_hb_tz.utc).isoformat()
+            db.execute(
+                _hb_text(
+                    "INSERT INTO bot_heartbeat (bot_name, expected_cadence_minutes, "
+                    "last_scan_at, updated_at) VALUES (:n, NULL, :t, :t) "
+                    "ON CONFLICT(bot_name) DO UPDATE SET "
+                    "last_scan_at = :t, updated_at = :t"
+                ),
+                {"n": profile_name, "t": _now_iso},
+            )
+            db.commit()
+        except Exception as _hb_exc:
+            logger.warning(
+                "[heartbeat:%s] write failed (non-fatal): %s",
+                profile_name, _hb_exc,
+            )
+        finally:
+            db.close()
 
 
 def setup_bot_scheduler(scheduler) -> None:
