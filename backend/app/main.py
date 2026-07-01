@@ -980,6 +980,8 @@ from app.routers.strategy_journal import router as strategy_journal_router
 app.include_router(strategy_journal_router)
 from app.routers import aqa_admin
 app.include_router(aqa_admin.router)
+from app.routers.live_activity import router as live_activity_router
+app.include_router(live_activity_router)
 
 
 @app.get("/health", tags=["health"])

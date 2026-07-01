@@ -111,6 +111,7 @@ const ActivityPage = lazy(() => import("@/pages/ActivityPage"));
 const FundPage = lazy(() => import("@/pages/FundPage"));
 const FundTearSheet = lazy(() => import("@/pages/FundTearSheet"));
 const FundFloorIframePage = lazy(() => import("@/pages/FundFloorIframePage"));
+const TradingDeskIframePage = lazy(() => import("@/pages/TradingDeskIframePage"));
 const ResearchFeedPage = lazy(() => import("@/pages/ResearchFeedPage"));
 const PerformancePage = lazy(() => import("@/pages/PerformancePage"));
 const StrategyLeaderboardPage = lazy(() => import("@/pages/StrategyLeaderboardPage"));
@@ -400,6 +401,7 @@ function AppInner() {
         <Route path="/fund" element={<FundPage />} />
         <Route path="/fund/tear-sheet" element={<FundTearSheet />} />
         <Route path="/fund/floor" element={<Page component={FundFloorIframePage} />} />
+        <Route path="/fund/desk" element={<Page component={TradingDeskIframePage} />} />
         <Route path="/strategy/performance" element={<PerformancePage />} />
         <Route path="/strategy/leaderboard" element={<StrategyLeaderboardPage />} />
         <Route path="/markets" element={<MarketsPage />} />
