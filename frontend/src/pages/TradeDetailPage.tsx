@@ -165,6 +165,378 @@ function TradeChartSection({ symbol, entryPrice, entryTime, side, qty, stopLoss,
   );
 }
 
+// ─── Skinned components (2026-06-30) ─────────────────────────────────────────
+// Visual restyle only. Every prop below flows from the same data source /
+// P&L math / level calculations as the original components — nothing here
+// computes or fetches; it's presentation. Ref: Trade Detail.dc.html.
+
+const TD_COLORS = {
+  entry:   "#5b8def",  // blue
+  stop:    "#f87171",  // red
+  target:  "#3ddc84",  // green
+  exit:    "#f0a63c",  // orange
+  current: "#22d3ee",  // cyan
+  posGreen: "#3ddc84",
+  negRed:   "#f87171",
+  bgCard: "linear-gradient(180deg, rgba(14,32,20,0.7), rgba(8,16,10,0.55))",
+  cardBorder: "rgba(74,222,128,0.28)",
+  panelBorder: "rgba(74,222,128,0.14)",
+  panelBg: "rgba(6,11,8,0.6)",
+  textPrimary: "#f4f8f4",
+  textMuted:   "#7e8e7e",
+  textDim:     "#9fb0a0",
+  textFaint:   "#50604f",
+} as const;
+
+/** Big instrument icon tile — orange ↘ for SELL, green ↗ for BUY. */
+function SkinnedInstrumentIcon({ side }: { side: string }) {
+  const isSell = side === "sell";
+  const iconColor = isSell ? "#f0a63c" : "#3ddc84";
+  const bg = isSell
+    ? "linear-gradient(180deg,#2a1e0e,#1a1206)"
+    : "linear-gradient(180deg,#0e2a1c,#062012)";
+  const borderColor = isSell ? "rgba(240,166,60,0.28)" : "rgba(61,220,132,0.28)";
+  const shadow = isSell ? "0 0 22px rgba(240,166,60,0.12)" : "0 0 22px rgba(61,220,132,0.12)";
+  const glyph = isSell ? "↘" : "↗";
+  return (
+    <div
+      style={{
+        width: 66, height: 66, borderRadius: 16, background: bg,
+        border: `1px solid ${borderColor}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: shadow, flexShrink: 0,
+      }}
+    >
+      <span style={{ fontSize: 30, color: iconColor }}>{glyph}</span>
+    </div>
+  );
+}
+
+/** Header row: icon tile + ticker + side/qty/notional/via bot subline. */
+function SkinnedTradeHeader({
+  symbol, side, qty, entryPrice, botDisplayName, unitLabel, isCrypto,
+}: {
+  symbol: string; side: string; qty: number; entryPrice: number;
+  botDisplayName: string | null; unitLabel: string; isCrypto: boolean;
+}) {
+  const sideColor = side === "sell" ? "#f0a63c" : "#3ddc84";
+  const qtyLabel = `${qty?.toFixed(isCrypto ? 6 : 4)} ${unitLabel}`;
+  const notional = qty && entryPrice
+    ? `($${(qty * entryPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+    : "";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+      <SkinnedInstrumentIcon side={side} />
+      <div>
+        <div
+          style={{
+            fontSize: 40, fontWeight: 700, letterSpacing: "-0.02em",
+            color: TD_COLORS.textPrimary, lineHeight: 1,
+            fontFamily: "'Space Grotesk', sans-serif",
+          }}
+        >
+          {symbol}
+        </div>
+        <div
+          style={{
+            fontSize: 17, color: TD_COLORS.textMuted, marginTop: 9,
+            fontFamily: "'Space Grotesk', sans-serif",
+          }}
+        >
+          <span style={{ color: sideColor, fontWeight: 600 }}>{side?.toUpperCase()}</span>
+          {" "}·{" "}
+          {qtyLabel}{" "}
+          <span style={{ color: TD_COLORS.textDim }}>{notional}</span>
+          {botDisplayName && (
+            <>
+              {" "}
+              <span style={{ color: TD_COLORS.textFaint }}>via</span> {botDisplayName}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Green-glow rounded PnL card — big amount left, entry + status pill right. */
+function SkinnedPnlCard({
+  displayPnl, pnlPct, isClosed, entryPrice, livePrice, groupDec,
+}: {
+  displayPnl: number | null; pnlPct: number | null;
+  isClosed: boolean; entryPrice: number;
+  livePrice: number | null; groupDec: number;
+}) {
+  const positive = displayPnl != null && displayPnl >= 0;
+  const pnlColorHex = displayPnl == null ? TD_COLORS.textMuted
+    : positive ? TD_COLORS.posGreen : TD_COLORS.negRed;
+  const borderCol = displayPnl == null ? TD_COLORS.panelBorder
+    : positive ? TD_COLORS.cardBorder : "rgba(248,113,113,0.28)";
+  const glowBox = displayPnl == null ? "none"
+    : positive
+      ? "0 0 40px rgba(74,222,128,0.06), inset 0 0 40px rgba(74,222,128,0.03)"
+      : "0 0 40px rgba(248,113,113,0.06), inset 0 0 40px rgba(248,113,113,0.03)";
+  const pnlLabel = isClosed ? "REALIZED P&L" : "UNREALIZED P&L";
+  const pnlNumber = displayPnl != null
+    ? `${displayPnl >= 0 ? "+" : "-"}${Math.abs(displayPnl).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : isClosed ? "—" : "…";
+  const pnlPctStr = pnlPct != null
+    ? `(${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%)`
+    : "";
+  const statusText = isClosed ? "CLOSED" : "OPEN";
+  const statusBg = isClosed ? "rgba(126,142,126,0.14)" : "rgba(61,220,132,0.14)";
+  const statusColor = isClosed ? TD_COLORS.textDim : TD_COLORS.posGreen;
+
+  return (
+    <div
+      style={{
+        position: "relative", border: `1px solid ${borderCol}`, borderRadius: 22,
+        background: TD_COLORS.bgCard, padding: "30px 36px", marginTop: 26,
+        boxShadow: glowBox,
+        display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+        gap: 24, flexWrap: "wrap",
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 14,
+            letterSpacing: "0.16em", color: TD_COLORS.textMuted,
+          }}
+        >
+          {pnlLabel}
+        </div>
+        <div
+          style={{
+            display: "flex", alignItems: "baseline", gap: 16,
+            marginTop: 14, flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 76, fontWeight: 700, letterSpacing: "-0.03em",
+              color: pnlColorHex, lineHeight: 0.9,
+              textShadow: `0 0 34px ${displayPnl != null && positive ? "rgba(61,220,132,0.4)" : displayPnl != null ? "rgba(248,113,113,0.4)" : "transparent"}`,
+              fontFamily: "'JetBrains Mono', monospace", fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {pnlNumber}
+          </span>
+          {pnlPctStr && (
+            <span
+              style={{
+                fontSize: 30, fontWeight: 600, color: pnlColorHex,
+                fontFamily: "'JetBrains Mono', monospace", fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {pnlPctStr}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div
+          style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 13,
+            letterSpacing: "0.16em", color: TD_COLORS.textMuted,
+          }}
+        >
+          ENTRY
+        </div>
+        <div
+          style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 26,
+            fontWeight: 600, color: TD_COLORS.textPrimary, marginTop: 10,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {fmt$(entryPrice, groupDec)}
+        </div>
+        {!isClosed && livePrice != null && (
+          <div
+            style={{
+              fontFamily: "'JetBrains Mono', monospace", fontSize: 12,
+              color: TD_COLORS.textDim, marginTop: 6,
+            }}
+          >
+            LIVE {fmt$(livePrice, groupDec)}
+          </div>
+        )}
+        <div
+          style={{
+            display: "inline-block", marginTop: 14,
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 12,
+            letterSpacing: "0.14em", color: statusColor,
+            background: statusBg, borderRadius: 20, padding: "6px 16px",
+          }}
+        >
+          {statusText}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Skinned floating legend — top-right of chart, matches reference tooltip. */
+function SkinnedChartLegend({
+  entry, stop, target, exit, current,
+}: {
+  entry: number; stop: number | null; target: number | null;
+  exit: number | null; current: number | null;
+}) {
+  const gd = groupDecimals(entry, stop, target, exit, current);
+  const rows: { color: string; label: string; price: number }[] = [
+    { color: TD_COLORS.entry, label: "Entry", price: entry },
+  ];
+  if (stop != null) rows.push({ color: TD_COLORS.stop, label: "Stop", price: stop });
+  if (target != null) rows.push({ color: TD_COLORS.target, label: "Target", price: target });
+  if (exit != null) rows.push({ color: TD_COLORS.exit, label: "Exit", price: exit });
+  if (current != null) rows.push({ color: TD_COLORS.current, label: "Current", price: current });
+  return (
+    <div
+      style={{
+        position: "absolute", top: 12, right: 12, width: 280,
+        border: `1px solid ${TD_COLORS.panelBorder}`, borderRadius: 16,
+        background: "rgba(8,14,10,0.92)",
+        boxShadow: "0 20px 50px rgba(0,0,0,0.55)",
+        padding: "14px 16px", backdropFilter: "blur(4px)",
+        zIndex: 10, pointerEvents: "none",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+        {rows.map((r) => {
+          const deltaPct = r.label === "Entry" || !entry
+            ? null
+            : ((r.price - entry) / entry) * 100;
+          const deltaColor = deltaPct == null ? null
+            : deltaPct >= 0 ? TD_COLORS.posGreen : TD_COLORS.negRed;
+          return (
+            <div
+              key={r.label}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                fontFamily: "'JetBrains Mono', monospace", fontSize: 14,
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: 10, color: TD_COLORS.textDim }}>
+                <span style={{ width: 9, height: 9, borderRadius: "50%", background: r.color, flexShrink: 0 }} />
+                {r.label}
+              </span>
+              <span style={{ color: TD_COLORS.textPrimary, fontVariantNumeric: "tabular-nums" }}>
+                {fmt$(r.price, gd)}
+                {deltaPct != null && (
+                  <span style={{ color: deltaColor ?? undefined, marginLeft: 6 }}>
+                    {deltaPct >= 0 ? "+" : ""}{deltaPct.toFixed(2)}%
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Skinned chart panel — rounded dark container wrapping TradePriceChart. */
+function SkinnedChartSection({
+  symbol, entryPrice, entryTime, side, qty, stopLoss, takeProfit,
+  exitPrice, exitTime, livePrice, status, timeframeLabel,
+}: {
+  symbol: string; entryPrice: number; entryTime: string | null;
+  side: string; qty: number; stopLoss: number | null; takeProfit: number | null;
+  exitPrice: number | null; exitTime: string | null; livePrice: number | null;
+  status: "open" | "closed"; timeframeLabel?: string;
+}) {
+  const barsSymbol = symbol.replace("/", "-");
+  const { data: barsData, isLoading } = useQuery({
+    queryKey: ["trade-price-bars", barsSymbol],
+    queryFn: () => fetchBars(barsSymbol, "1Day"),
+    staleTime: 300_000,
+  });
+  const bars = barsData?.bars ?? [];
+  const gd = groupDecimals(entryPrice, stopLoss, takeProfit, exitPrice, livePrice);
+  const tfLabel = timeframeLabel ?? "Daily";
+  const nowDeltaPct = livePrice != null && entryPrice
+    ? ((livePrice - entryPrice) / entryPrice) * 100 : null;
+  return (
+    <div
+      style={{
+        position: "relative", border: `1px solid ${TD_COLORS.panelBorder}`,
+        borderRadius: 22, background: TD_COLORS.panelBg,
+        padding: "22px 24px 16px", marginTop: 20,
+      }}
+    >
+      <div
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: 10, gap: 16, flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 22, fontWeight: 700, color: TD_COLORS.textPrimary,
+            fontFamily: "'Space Grotesk', sans-serif",
+          }}
+        >
+          {symbol}{" "}
+          <span style={{ color: TD_COLORS.textFaint, fontWeight: 500 }}>— {tfLabel}</span>
+        </span>
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 22,
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 14,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 8, color: "#8fa8d8" }}>
+            <span style={{ width: 16, height: 3, background: TD_COLORS.entry, borderRadius: 2 }} />
+            Entry {fmt$(entryPrice, gd)}
+          </span>
+          {livePrice != null && (
+            <span style={{ display: "flex", alignItems: "center", gap: 8, color: "#5ec5d8" }}>
+              <span style={{ width: 16, height: 3, background: TD_COLORS.current, borderRadius: 2 }} />
+              NOW {fmt$(livePrice, gd)}
+              {nowDeltaPct != null && (
+                <span style={{ color: nowDeltaPct >= 0 ? TD_COLORS.posGreen : TD_COLORS.negRed, marginLeft: 4 }}>
+                  ({nowDeltaPct >= 0 ? "+" : ""}{nowDeltaPct.toFixed(2)}%)
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{ position: "relative", width: "100%", height: 600 }}>
+        {isLoading ? (
+          <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm">
+            Loading chart…
+          </div>
+        ) : bars.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm">
+            No chart data
+          </div>
+        ) : (
+          <>
+            <TradePriceChart
+              bars={bars} entryPrice={entryPrice} entryTime={entryTime}
+              side={side} qty={qty} symbol={symbol}
+              stopLoss={stopLoss} takeProfit={takeProfit}
+              exitPrice={exitPrice} exitTime={exitTime} livePrice={livePrice}
+            />
+            <SkinnedChartLegend
+              entry={entryPrice}
+              stop={stopLoss}
+              target={takeProfit}
+              exit={status === "closed" ? exitPrice : null}
+              current={livePrice}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Equity P&L hero ──────────────────────────────────────────────────────────
 
 function PnlHero({ symbol, qty, entryPrice, status, realizedPnl, livePrice, groupDec,
@@ -747,120 +1119,211 @@ export default function TradeDetailPage() {
   const unitLabel = isCrypto ? trade.symbol.split("/")[0] : isLegacyShare ? "shares (legacy)" : "shares";
   const tradeDec = groupDecimals(trade.entry_price_usd, trade.stop_loss_usd, trade.take_profit_usd, trade.exit_price_usd, livePrice);
 
+  // ── P&L math for skinned card (same formulas as PnlHero, no calc changes) ──
+  const _costBasis = trade.qty * trade.entry_price_usd;
+  const _unrealizedPnl = trade.status !== "open" ? null
+    : livePrice != null ? (livePrice - trade.entry_price_usd) * trade.qty : null;
+  const _displayPnl = trade.status === "closed" ? trade.realized_pnl_usd : _unrealizedPnl;
+  const _pnlPct = (_displayPnl != null && _costBasis > 0) ? (_displayPnl / _costBasis) * 100 : null;
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-5 pb-20">
-      {isLegacyShare && (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-start gap-2">
-          <AlertTriangle size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-amber-400 text-xs font-semibold">Legacy Position — Pre-Options Fix</p>
-            <p className="text-zinc-500 text-xs mt-0.5 leading-relaxed">
-              This trade was created before the options fix (commit 17aa7f3). It is a share position, not an options contract. P&L and quantity are shown in share terms.
-            </p>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "radial-gradient(120% 80% at 50% -10%, #071009 0%, #040705 55%)",
+        fontFamily: "'Space Grotesk', sans-serif",
+        color: TD_COLORS.textPrimary,
+        padding: "34px 40px 60px",
+      }}
+    >
+      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
+        {isLegacyShare && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-start gap-2 mb-4">
+            <AlertTriangle size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-amber-400 text-xs font-semibold">Legacy Position — Pre-Options Fix</p>
+              <p className="text-zinc-500 text-xs mt-0.5 leading-relaxed">
+                This trade was created before the options fix (commit 17aa7f3). It is a share position, not an options contract. P&L and quantity are shown in share terms.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 text-xs text-zinc-500">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1 hover:text-zinc-300 transition-colors">
-          <ArrowLeft size={12} /> Back
-        </button>
-        <span>/</span>
-        {trade.bot_display_name && (
-          <><Link to={backTo} className="hover:text-zinc-300 transition-colors">{trade.bot_display_name}</Link><span>/</span></>
         )}
-        <span className="text-zinc-400 font-medium">{trade.symbol} #{trade.trade_id}</span>
-      </div>
 
-      <div className="flex items-start gap-3">
-        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-          trade.side === "buy" ? "bg-lime-500/15" : "bg-orange-500/15")}>
-          {trade.side === "buy"
-            ? <TrendingUp size={18} className="text-lime-400" />
-            : <TrendingDown size={18} className="text-orange-400" />}
+        {/* Breadcrumb — kept compact so it doesn't compete with the header */}
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            fontSize: 12, color: TD_COLORS.textFaint, marginBottom: 18,
+            fontFamily: "'JetBrains Mono', monospace",
+          }}
+        >
+          <button
+            onClick={() => navigate(-1)}
+            style={{ display: "flex", alignItems: "center", gap: 4, color: "inherit", background: "none", border: "none", cursor: "pointer" }}
+          >
+            <ArrowLeft size={12} /> Back
+          </button>
+          <span>/</span>
+          {trade.bot_display_name && (
+            <>
+              <Link to={backTo} style={{ color: TD_COLORS.textMuted, textDecoration: "none" }}>
+                {trade.bot_display_name}
+              </Link>
+              <span>/</span>
+            </>
+          )}
+          <span style={{ color: TD_COLORS.textDim }}>
+            {trade.symbol} #{trade.trade_id}
+          </span>
+          {trade.discord_message_url && (
+            <a
+              href={trade.discord_message_url}
+              target="_blank" rel="noopener noreferrer"
+              style={{
+                marginLeft: "auto", display: "flex", alignItems: "center", gap: 6,
+                color: "#8fa8d8", textDecoration: "none",
+              }}
+            >
+              <ExternalLink size={11} /> Discord Signal
+            </a>
+          )}
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-white">{trade.symbol}</h1>
-          <p className="text-sm text-zinc-500">
-            {trade.side?.toUpperCase()} · {trade.qty?.toFixed(isCrypto ? 6 : 4)} {unitLabel}{" "}
-            <span className="text-zinc-600">{formatNotional(trade.qty, trade.entry_price_usd)}</span>
-            {trade.bot_display_name && <span className="ml-2 text-zinc-600">via {trade.bot_display_name}</span>}
+
+        <SkinnedTradeHeader
+          symbol={trade.symbol}
+          side={trade.side}
+          qty={trade.qty}
+          entryPrice={trade.entry_price_usd}
+          botDisplayName={trade.bot_display_name ?? null}
+          unitLabel={unitLabel}
+          isCrypto={isCrypto}
+        />
+
+        <SkinnedPnlCard
+          displayPnl={_displayPnl}
+          pnlPct={_pnlPct}
+          isClosed={trade.status === "closed"}
+          entryPrice={trade.entry_price_usd}
+          livePrice={livePrice}
+          groupDec={tradeDec}
+        />
+
+        <SkinnedChartSection
+          symbol={chartSymbol}
+          entryPrice={trade.entry_price_usd}
+          entryTime={trade.entry_time}
+          side={trade.side}
+          qty={trade.qty}
+          stopLoss={trade.stop_loss_usd}
+          takeProfit={trade.take_profit_usd}
+          exitPrice={trade.exit_price_usd}
+          exitTime={trade.close_time}
+          livePrice={livePrice}
+          status={trade.status}
+        />
+
+        <div
+          className="rounded-2xl px-5 py-1 mt-5"
+          style={{
+            background: "rgba(6,11,8,0.6)",
+            border: `1px solid ${TD_COLORS.panelBorder}`,
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-wide py-3 border-b"
+            style={{ color: TD_COLORS.textDim, borderColor: TD_COLORS.panelBorder, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.14em" }}
+          >
+            TRADE DETAILS
           </p>
-        </div>
-        {trade.discord_message_url && (
-          <a href={trade.discord_message_url} target="_blank" rel="noopener noreferrer"
-            className="ml-auto flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 bg-indigo-500/10 px-3 py-1.5 rounded-lg transition-colors">
-            <ExternalLink size={12} /> Discord Signal
-          </a>
-        )}
-      </div>
-
-      <PnlHero symbol={trade.symbol} qty={trade.qty} entryPrice={trade.entry_price_usd}
-        status={trade.status} realizedPnl={trade.realized_pnl_usd} livePrice={livePrice}
-        groupDec={tradeDec} />
-
-      <TradeChartSection symbol={chartSymbol} entryPrice={trade.entry_price_usd}
-        entryTime={trade.entry_time} side={trade.side} qty={trade.qty}
-        stopLoss={trade.stop_loss_usd} takeProfit={trade.take_profit_usd}
-        exitPrice={trade.exit_price_usd} exitTime={trade.close_time}
-        livePrice={livePrice} status={trade.status} />
-
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-1">
-        <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide py-3 border-b border-zinc-800">Trade Details</p>
-        <MetaRow label="Entry Price" value={fmt$(trade.entry_price_usd, tradeDec)} />
-        <MetaRow label="Entry Time" value={fmtDate(trade.entry_time)} />
-        <MetaRow label="Quantity" value={
-          <span>{trade.qty?.toFixed(isCrypto ? 6 : 4)} {unitLabel}{" "}
-            <span className="text-zinc-500">{formatNotional(trade.qty, trade.entry_price_usd)}</span>
-          </span>
-        } />
-        <MetaRow label="Status" value={
-          <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full",
-            trade.status === "open" ? "bg-lime-500/15 text-lime-400" : "bg-zinc-700 text-zinc-400")}>
-            {trade.status.toUpperCase()}
-          </span>
-        } />
-        {trade.stop_loss_usd != null && (
-          <MetaRow label="Stop Loss" value={<span className="text-red-400 flex items-center gap-1"><Shield size={11} /> {fmt$(trade.stop_loss_usd, tradeDec)}</span>} />
-        )}
-        {trade.take_profit_usd != null && (
-          <MetaRow label="Take Profit" value={<span className="text-emerald-400 flex items-center gap-1"><Target size={11} /> {fmt$(trade.take_profit_usd, tradeDec)}</span>} />
-        )}
-        {trade.exit_price_usd != null && (
-          <MetaRow label="Exit Price" value={
-            <span>{fmt$(trade.exit_price_usd, tradeDec)}{" "}
-              {trade.qty && <span className="text-zinc-500">(${(trade.qty * trade.exit_price_usd).toFixed(2)})</span>}
+          <MetaRow label="Entry Price" value={fmt$(trade.entry_price_usd, tradeDec)} />
+          <MetaRow label="Entry Time" value={fmtDate(trade.entry_time)} />
+          <MetaRow label="Quantity" value={
+            <span>{trade.qty?.toFixed(isCrypto ? 6 : 4)} {unitLabel}{" "}
+              <span style={{ color: TD_COLORS.textFaint }}>{formatNotional(trade.qty, trade.entry_price_usd)}</span>
             </span>
           } />
-        )}
-        {trade.close_time && <MetaRow label="Close Time" value={fmtDate(trade.close_time)} />}
-        {trade.alpaca_order_id && (
-          <MetaRow label="Order ID" value={<span className="text-zinc-400 font-mono text-[11px]">{trade.alpaca_order_id}</span>} />
-        )}
-      </div>
-
-      {(trade.strategy || trade.reason || trade.confidence != null) && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-1">
-          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide py-3 border-b border-zinc-800">Strategy Signal</p>
-          {trade.strategy && <MetaRow label="Strategy" value={trade.strategy.replace(/_/g, " ")} />}
-          {trade.confidence != null && (
-            <MetaRow label="Confidence" value={
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, Math.round(trade.confidence * 100))}%` }} />
-                </div>
-                <span>{Math.round(trade.confidence * 100)}%</span>
-              </div>
+          <MetaRow label="Status" value={
+            <span
+              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{
+                background: trade.status === "open" ? "rgba(61,220,132,0.14)" : "rgba(126,142,126,0.14)",
+                color: trade.status === "open" ? TD_COLORS.posGreen : TD_COLORS.textDim,
+              }}
+            >
+              {trade.status.toUpperCase()}
+            </span>
+          } />
+          {trade.stop_loss_usd != null && (
+            <MetaRow label="Stop Loss" value={
+              <span style={{ color: TD_COLORS.stop }} className="flex items-center gap-1">
+                <Shield size={11} /> {fmt$(trade.stop_loss_usd, tradeDec)}
+              </span>
             } />
           )}
-          {trade.reason && (
-            <div className="py-3 border-t border-zinc-800">
-              <p className="text-xs text-zinc-500 mb-1">Signal Reason</p>
-              <p className="text-sm text-zinc-300 leading-relaxed">{trade.reason}</p>
-            </div>
+          {trade.take_profit_usd != null && (
+            <MetaRow label="Take Profit" value={
+              <span style={{ color: TD_COLORS.target }} className="flex items-center gap-1">
+                <Target size={11} /> {fmt$(trade.take_profit_usd, tradeDec)}
+              </span>
+            } />
+          )}
+          {trade.exit_price_usd != null && (
+            <MetaRow label="Exit Price" value={
+              <span>{fmt$(trade.exit_price_usd, tradeDec)}{" "}
+                {trade.qty && <span style={{ color: TD_COLORS.textFaint }}>(${(trade.qty * trade.exit_price_usd).toFixed(2)})</span>}
+              </span>
+            } />
+          )}
+          {trade.close_time && <MetaRow label="Close Time" value={fmtDate(trade.close_time)} />}
+          {trade.alpaca_order_id && (
+            <MetaRow label="Order ID" value={
+              <span className="font-mono text-[11px]" style={{ color: TD_COLORS.textDim }}>
+                {trade.alpaca_order_id}
+              </span>
+            } />
           )}
         </div>
-      )}
+
+        {(trade.strategy || trade.reason || trade.confidence != null) && (
+          <div
+            className="rounded-2xl px-5 py-1 mt-5"
+            style={{
+              background: "rgba(6,11,8,0.6)",
+              border: `1px solid ${TD_COLORS.panelBorder}`,
+            }}
+          >
+            <p
+              className="text-xs font-semibold uppercase tracking-wide py-3 border-b"
+              style={{ color: TD_COLORS.textDim, borderColor: TD_COLORS.panelBorder, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.14em" }}
+            >
+              STRATEGY SIGNAL
+            </p>
+            {trade.strategy && <MetaRow label="Strategy" value={trade.strategy.replace(/_/g, " ")} />}
+            {trade.confidence != null && (
+              <MetaRow label="Confidence" value={
+                <div className="flex items-center gap-2">
+                  <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(126,142,126,0.2)" }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(100, Math.round(trade.confidence * 100))}%`,
+                        background: TD_COLORS.entry,
+                      }}
+                    />
+                  </div>
+                  <span>{Math.round(trade.confidence * 100)}%</span>
+                </div>
+              } />
+            )}
+            {trade.reason && (
+              <div className="py-3 border-t" style={{ borderColor: TD_COLORS.panelBorder }}>
+                <p className="text-xs mb-1" style={{ color: TD_COLORS.textFaint }}>Signal Reason</p>
+                <p className="text-sm leading-relaxed" style={{ color: TD_COLORS.textDim }}>{trade.reason}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
