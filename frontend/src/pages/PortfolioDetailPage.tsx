@@ -71,7 +71,6 @@ const BOT_META: Record<string, { displayName: string; description: string }> = {
   crypto_quant_aggressive:      { displayName: "Quant Aggressive",      description: "Multi-factor, high turnover · cross-asset" },
   crypto_quant_scalper:         { displayName: "Quant Scalper",         description: "0DTE micro-cycle · ultra short hold" },
   crypto_quant_mean_reversion:  { displayName: "Quant Mean Reversion",  description: "Bollinger fade on 1h bands" },
-  crypto_meanrev_2163:          { displayName: "Mean Rev 2163",         description: "Experimental mean-reversion variant, paper-only" },
 };
 
 function resolveName(name: string, fromApi?: string): string {

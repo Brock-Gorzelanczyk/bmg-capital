@@ -20,7 +20,6 @@ const BOT_LABELS: Record<string, string> = {
   crypto_quant_scalper:        "Quant Scalper",
   options_income:              "Options Income",
   options_directional:         "Options Directional",
-  crypto_meanrev_2163:         "Mean Rev 2163",
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
