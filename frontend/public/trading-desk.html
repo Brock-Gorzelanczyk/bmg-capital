@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; background:#020402; overflow:hidden; }
+  * { box-sizing:border-box; }
+  ::selection { background:rgba(74,222,128,0.25); color:#eafbe9; }
+  @keyframes td-blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  @keyframes td-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes td-ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+  @keyframes td-rowin { from{opacity:0; transform:translateX(10px)} to{opacity:1; transform:translateX(0)} }
+  @keyframes td-fillpop { 0%{opacity:0; transform:translateY(8px) scale(0.9)} 12%{opacity:1; transform:translateY(0) scale(1)} 80%{opacity:1} 100%{opacity:0; transform:translateY(-6px)} }
+  @media (prefers-reduced-motion: reduce){ *{ animation-duration:0.001s !important } }
+</style>
+</head>
+<body>
+
+<div id="td-root" style="position:fixed; inset:0; background:radial-gradient(120% 80% at 50% 0%, #0a1410 0%, #04080a 60%); font-family:'Space Grotesk',sans-serif; color:#dce8dc; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+
+  <!-- cinematic letterbox stage 16:9 -->
+  <div id="td-stage" style="position:relative; aspect-ratio:16/9; width:min(100vw, 177.7vh); height:auto; max-height:100vh; background:#04080a; overflow:hidden; box-shadow:0 0 60px rgba(74,222,128,0.12);">
+
+    <!-- desk ambient: glow + bokeh -->
+    <div style="position:absolute; inset:0; background:radial-gradient(70% 120% at 18% 120%, rgba(74,222,128,0.10), transparent 60%), radial-gradient(60% 100% at 90% 0%, rgba(56,189,248,0.07), transparent 55%); pointer-events:none;"></div>
+
+    <!-- ===== TERMINAL UI ===== -->
+    <div style="position:absolute; inset:0; display:flex; flex-direction:column; transform:perspective(1600px) rotateX(1.4deg); transform-origin:center 60%;">
+
+      <!-- top bar -->
+      <div style="display:flex; align-items:center; gap:14px; height:6.2%; min-height:26px; padding:0 16px; background:rgba(6,11,6,0.92); border-bottom:1px solid rgba(74,222,128,0.16);">
+        <span style="display:flex; align-items:center; gap:7px;"><span style="width:11px; height:11px; background:#4ade80; box-shadow:0 0 8px rgba(74,222,128,0.8); transform:rotate(45deg);"></span><span style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(11px,1.2vw,15px); color:#eafbe9;">BMG Capital</span></span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.85vw,11px); color:#4ade80; letter-spacing:0.1em;">// TERMINAL</span>
+        <span id="td-clock" style="font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.85vw,11px); color:#50604f;">09:32:07 EDT</span>
+        <div style="flex:1;"></div>
+        <span style="display:flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.8vw,10px); color:#4ade80; border:1px solid rgba(74,222,128,0.3); border-radius:3px; padding:3px 8px;"><span style="width:5px; height:5px; border-radius:50%; background:#4ade80; box-shadow:0 0 6px rgba(74,222,128,0.9); animation:td-pulse 1.5s ease-in-out infinite;"></span>ENGINE LIVE</span>
+        <span style="display:flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.8vw,10px); color:#fbbf24; border:1px solid rgba(251,191,36,0.28); border-radius:3px; padding:3px 8px;"><span style="width:5px; height:5px; border-radius:50%; background:#fbbf24;"></span>PAPER</span>
+      </div>
+
+      <!-- ticker tape -->
+      <div style="height:4.6%; min-height:18px; display:flex; align-items:center; overflow:hidden; background:rgba(4,8,5,0.9); border-bottom:1px solid rgba(74,222,128,0.1); -webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent); mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent);">
+        <div style="display:flex; white-space:nowrap; width:max-content; animation:td-ticker 32s linear infinite; font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.9vw,12px);">
+          <span style="padding:0 16px; color:#9fb0a0;">NVDA <span style="color:#4ade80;">142.18 ▲1.29%</span></span><span style="padding:0 16px; color:#9fb0a0;">BTC/USD <span style="color:#4ade80;">63,047 ▲0.84%</span></span><span style="padding:0 16px; color:#9fb0a0;">TSLA <span style="color:#f87171;">238.90 ▼1.01%</span></span><span style="padding:0 16px; color:#9fb0a0;">ETH/USD <span style="color:#f87171;">3,388 ▼0.42%</span></span><span style="padding:0 16px; color:#9fb0a0;">SOL/USD <span style="color:#4ade80;">147.20 ▲2.10%</span></span><span style="padding:0 16px; color:#9fb0a0;">SPY <span style="color:#4ade80;">541.30 ▲0.21%</span></span><span style="padding:0 16px; color:#9fb0a0;">QQQ <span style="color:#4ade80;">468.10 ▲0.34%</span></span><span style="padding:0 16px; color:#9fb0a0;">AAPL <span style="color:#4ade80;">229.80 ▲0.55%</span></span>
+          <span style="padding:0 16px; color:#9fb0a0;">NVDA <span style="color:#4ade80;">142.18 ▲1.29%</span></span><span style="padding:0 16px; color:#9fb0a0;">BTC/USD <span style="color:#4ade80;">63,047 ▲0.84%</span></span><span style="padding:0 16px; color:#9fb0a0;">TSLA <span style="color:#f87171;">238.90 ▼1.01%</span></span><span style="padding:0 16px; color:#9fb0a0;">ETH/USD <span style="color:#f87171;">3,388 ▼0.42%</span></span><span style="padding:0 16px; color:#9fb0a0;">SOL/USD <span style="color:#4ade80;">147.20 ▲2.10%</span></span><span style="padding:0 16px; color:#9fb0a0;">SPY <span style="color:#4ade80;">541.30 ▲0.21%</span></span><span style="padding:0 16px; color:#9fb0a0;">QQQ <span style="color:#4ade80;">468.10 ▲0.34%</span></span><span style="padding:0 16px; color:#9fb0a0;">AAPL <span style="color:#4ade80;">229.80 ▲0.55%</span></span>
+        </div>
+      </div>
+
+      <!-- main work area -->
+      <div style="flex:1; min-height:0; display:flex;">
+
+        <!-- left rail -->
+        <div style="width:8%; min-width:34px; background:rgba(6,11,6,0.85); border-right:1px solid rgba(74,222,128,0.1); display:flex; flex-direction:column; align-items:center; gap:10%; padding:14px 0;">
+          <span style="width:60%; aspect-ratio:1; border-radius:3px; background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.4); box-shadow:0 0 10px rgba(74,222,128,0.3);"></span>
+          <span style="width:60%; aspect-ratio:1; border-radius:3px; border:1px solid rgba(74,222,128,0.16);"></span>
+          <span style="width:60%; aspect-ratio:1; border-radius:3px; border:1px solid rgba(74,222,128,0.16);"></span>
+          <span style="width:60%; aspect-ratio:1; border-radius:3px; border:1px solid rgba(74,222,128,0.16);"></span>
+          <span style="width:60%; aspect-ratio:1; border-radius:3px; border:1px solid rgba(74,222,128,0.16);"></span>
+        </div>
+
+        <!-- chart column -->
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+          <!-- chart header -->
+          <div style="display:flex; align-items:baseline; gap:14px; padding:8px 14px 6px;">
+            <span style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(13px,1.5vw,20px); color:#eafbe9;">NVDA</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.85vw,11px); color:#50604f;">NASDAQ · 1m</span>
+            <span id="td-last" style="font-family:'JetBrains Mono',monospace; font-size:clamp(13px,1.5vw,20px); color:#4ade80; font-weight:600;">142.18</span>
+            <span id="td-chg" style="font-family:'JetBrains Mono',monospace; font-size:clamp(9px,1vw,13px); color:#4ade80;">+1.29%</span>
+            <div style="flex:1;"></div>
+            <span id="td-bot" style="font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.85vw,11px); color:#7e8e7e;">bot: <span style="color:#4ade80;">Stock Swing</span> · momentum breakout</span>
+          </div>
+          <!-- canvas chart -->
+          <div style="flex:1; min-height:0; position:relative; margin:0 8px 8px 12px;">
+            <canvas id="td-chart" style="position:absolute; inset:0; width:100%; height:100%; display:block;"></canvas>
+          </div>
+        </div>
+
+        <!-- right order panel -->
+        <div style="width:21%; min-width:120px; background:rgba(6,11,6,0.85); border-left:1px solid rgba(74,222,128,0.1); display:flex; flex-direction:column; padding:10px 11px; gap:10px;">
+          <!-- P&L -->
+          <div style="border:1px solid rgba(74,222,128,0.18); border-radius:4px; background:#0a120a; padding:9px 11px;">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:clamp(7px,0.75vw,9px); letter-spacing:0.1em; color:#7e8e7e;">SESSION P&amp;L · PAPER</div>
+            <div id="td-pnl" style="font-family:'JetBrains Mono',monospace; font-size:clamp(15px,1.9vw,26px); font-weight:600; color:#4ade80; margin-top:3px; text-shadow:0 0 16px rgba(74,222,128,0.4);">+$0.00</div>
+            <div id="td-pnlsub" style="font-family:'JetBrains Mono',monospace; font-size:clamp(7px,0.8vw,10px); color:#7e8e7e; margin-top:2px;">0 trades · 0 wins</div>
+          </div>
+          <!-- order book ladder -->
+          <div style="flex:1; min-height:0; border:1px solid rgba(74,222,128,0.12); border-radius:4px; background:#080d08; display:flex; flex-direction:column; overflow:hidden;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 9px; border-bottom:1px solid rgba(74,222,128,0.1);"><span style="font-family:'JetBrains Mono',monospace; font-size:clamp(7px,0.75vw,9px); letter-spacing:0.08em; color:#7e8e7e;">ORDER BOOK</span><span style="font-family:'JetBrains Mono',monospace; font-size:clamp(7px,0.7vw,9px); color:#50604f;">DEPTH</span></div>
+            <div id="td-book" style="flex:1; min-height:0; display:flex; flex-direction:column; font-family:'JetBrains Mono',monospace; font-size:clamp(7px,0.8vw,10px);"></div>
+          </div>
+          <!-- buy/sell -->
+          <div style="display:flex; gap:7px;">
+            <div id="td-buy" style="flex:1; text-align:center; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:clamp(9px,1vw,13px); color:#4ade80; background:rgba(74,222,128,0.08); border:1px solid #4ade80; border-radius:4px; padding:8px 0; transition:all .12s ease;">BUY</div>
+            <div id="td-sell" style="flex:1; text-align:center; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:clamp(9px,1vw,13px); color:#f87171; background:rgba(248,113,113,0.06); border:1px solid rgba(248,113,113,0.5); border-radius:4px; padding:8px 0; transition:all .12s ease;">SELL</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- bottom status -->
+      <div style="height:5.4%; min-height:22px; display:flex; align-items:center; gap:18px; padding:0 16px; background:rgba(6,11,6,0.92); border-top:1px solid rgba(74,222,128,0.12); font-family:'JetBrains Mono',monospace; font-size:clamp(7px,0.8vw,10px); color:#7e8e7e;">
+        <span>EXPOSURE <span style="color:#dce8dc;">85.7%</span></span>
+        <span>SHARPE <span style="color:#dce8dc;">2.31</span></span>
+        <span>LATENCY <span style="color:#4ade80;">142ms</span></span>
+        <span id="td-fills">FILLS <span style="color:#dce8dc;">0</span></span>
+        <div style="flex:1;"></div>
+        <span style="color:#4ade80;">// DISCIPLINE IS THE EDGE</span>
+      </div>
+    </div>
+
+    <!-- floating fill toasts layer -->
+    <div id="td-toasts" style="position:absolute; left:0; right:21%; top:0; bottom:0; pointer-events:none;"></div>
+
+    <!-- trader cursor -->
+    <div id="td-cursor" style="position:absolute; left:50%; top:50%; width:18px; height:18px; pointer-events:none; z-index:40; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.6)); transition:none;">
+      <svg viewBox="0 0 18 18" style="width:100%; height:100%;"><path d="M2,1 L2,15 L6,11 L9,17 L11,16 L8,10 L14,10 Z" fill="#eafbe9" stroke="#04080a" stroke-width="1"/></svg>
+    </div>
+
+    <!-- scanlines + vignette -->
+    <div style="position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px); opacity:0.4; mix-blend-mode:multiply;"></div>
+    <div style="position:absolute; inset:0; pointer-events:none; background:radial-gradient(120% 90% at 50% 45%, transparent 58%, rgba(2,5,3,0.66) 100%);"></div>
+
+    <!-- chrome -->
+    <div style="position:absolute; top:10px; right:14px; z-index:60; display:flex; gap:8px;">
+      <button id="td-sound" style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:0.08em; color:#4ade80; background:rgba(8,13,8,0.8); border:1px solid rgba(74,222,128,0.3); border-radius:4px; padding:5px 9px; cursor:pointer;">♪ SOUND</button>
+    </div>
+    <!-- OPENING: BMG brand reveal -->
+    <div id="td-open" style="position:absolute; inset:0; z-index:72; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(circle at 50% 44%, #07140c 0%, #020402 70%); transition:opacity .8s ease;">
+      <div style="position:relative; display:flex; align-items:center; gap:16px;">
+        <span style="width:28px; height:28px; background:#4ade80; box-shadow:0 0 26px rgba(74,222,128,0.8), inset 0 0 8px rgba(255,255,255,0.4); transform:rotate(45deg);"></span>
+        <span style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(34px,6vw,68px); letter-spacing:-0.02em; color:#eafbe9; text-shadow:0 0 30px rgba(74,222,128,0.5);">BMG&nbsp;Capital</span>
+        <span style="display:inline-block; width:11px; height:clamp(34px,5.4vw,58px); background:#4ade80; box-shadow:0 0 16px rgba(74,222,128,0.7); animation:td-blink 1.05s steps(1) infinite;"></span>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:clamp(9px,1.2vw,13px); letter-spacing:0.32em; color:#4ade80; opacity:0.8; margin-top:20px;">QUANTITATIVE TRADING SYSTEM</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:clamp(8px,1vw,11px); letter-spacing:0.18em; color:#50604f; margin-top:26px;">// INITIALIZING TERMINAL<span style="animation:td-blink 0.8s steps(1) infinite;"> ▮</span></div>
+    </div>
+
+    <!-- CLOSING: welcome handoff -->
+    <div id="td-welcome" style="position:absolute; inset:0; z-index:72; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(circle at 50% 46%, rgba(7,20,12,0.92) 0%, rgba(2,4,2,0.95) 70%); opacity:0; pointer-events:none; transition:opacity .7s ease;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:clamp(20px,3.4vw,40px); color:#eafbe9;"><span style="color:#4ade80;">›</span> <span id="td-welcometxt"></span><span style="display:inline-block; width:11px; height:1em; background:#4ade80; box-shadow:0 0 12px rgba(74,222,128,0.7); vertical-align:-3px; animation:td-blink 1.05s steps(1) infinite;"></span></div>
+      <div id="td-welcomesub" style="font-family:'JetBrains Mono',monospace; font-size:clamp(9px,1.1vw,13px); color:#7e8e7e; margin-top:16px; opacity:0; transition:opacity .5s ease;">session complete · <span style="color:#4ade80;">+$4,433.28</span> realized · 9 bots firing</div>
+      <a href="/dashboard" style="display:flex; align-items:center; gap:8px; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:clamp(12px,1.4vw,15px); letter-spacing:0.08em; color:#040804; background:#4ade80; border:2px solid #eafbe9; border-radius:5px; padding:11px 24px; text-decoration:none; box-shadow:0 0 22px rgba(74,222,128,0.5); margin-top:30px;">ENTER TERMINAL →</a>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var cv = $('td-chart'), ctx = cv.getContext('2d');
+  var W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+  var resize = function () { var r = cv.getBoundingClientRect(); W = r.width; H = r.height; cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); };
+  var ro = new ResizeObserver(resize); ro.observe(cv); resize();
+
+  // ---------- audio (crisp, short tails — no echo) ----------
+  var actx = null, master = null, soundOn = false;
+  var initAudio = function () { if (actx) return; try { actx = new (window.AudioContext||window.webkitAudioContext)(); master = actx.createGain(); master.gain.value = 0.8; master.connect(actx.destination); } catch(e){ actx=null; } };
+  var blip = function (f, dur, type, vol) { if (!actx||!soundOn) return; var t=actx.currentTime, o=actx.createOscillator(), g=actx.createGain(); o.type=type||'square'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol||0.12,t+0.008); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g); g.connect(master); o.start(t); o.stop(t+dur+0.02); };
+  var click = function () { blip(880, 0.05, 'square', 0.1); };
+  var fillSnd = function () { blip(523,0.05,'square',0.1); setTimeout(function(){ blip(784,0.08,'square',0.09); },55); };
+  var winSnd = function () { blip(659,0.06,'triangle',0.12); setTimeout(function(){ blip(988,0.07,'triangle',0.11); },60); setTimeout(function(){ blip(1318,0.10,'triangle',0.08); },120); };
+  var tickSnd = function () { blip(1150 + Math.random()*240, 0.02, 'square', 0.035); };
+  var whoosh = function () { if(!actx||!soundOn) return; var t=actx.currentTime, n=Math.floor(actx.sampleRate*0.16), b=actx.createBuffer(1,n,actx.sampleRate), d=b.getChannelData(0); for(var i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n); var s=actx.createBufferSource(); s.buffer=b; var f=actx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1500; var g=actx.createGain(); g.gain.value=0.05; s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t+0.18); };
+  var padOn=false; var startPad = function () { if(!actx||padOn) return; padOn=true; var mk = function (fr,v) { var o=actx.createOscillator(),g=actx.createGain(),lp=actx.createBiquadFilter(); o.type='sine'; o.frequency.value=fr; lp.type='lowpass'; lp.frequency.value=400; g.gain.setValueAtTime(0.0001,actx.currentTime); g.gain.exponentialRampToValueAtTime(v,actx.currentTime+1.4); o.connect(g); g.connect(lp); lp.connect(master); o.start(); }; mk(55,0.045); mk(82.4,0.028); };
+  $('td-sound').addEventListener('click', function () { initAudio(); if (actx && actx.state==='suspended') actx.resume(); soundOn = !soundOn; if (soundOn) startPad(); $('td-sound').style.opacity = soundOn ? '1' : '0.5'; $('td-sound').textContent = soundOn ? '♪ SOUND ON' : '♪ MUTED'; });
+
+  // ---------- chart model ----------
+  var PAD = { l: 8, r: 56, t: 10, b: 30 };
+  var MAXC = 64;
+  var candles = [];
+  var price = 138.0, vol9 = 1;
+  var rnd = function () { return Math.random(); };
+  var newCandle = function (open) { return { o: open, h: open, l: open, c: open, v: 0.4 + rnd()*0.8 }; };
+  // seed history
+  (function seed(){ var p = 134; for (var i=0;i<MAXC;i++){ var o=p; var c=o; var steps=6; for(var s=0;s<steps;s++){ c += (rnd()-0.49)*0.5; } c = Math.max(120, c); var hi=Math.max(o,c)+rnd()*0.4, lo=Math.min(o,c)-rnd()*0.4; candles.push({o:o,h:hi,l:lo,c:c,v:0.4+rnd()*0.9}); p=c; } price=p; })();
+  var cur = newCandle(price);
+  var candleAge = 0, CANDLE_FRAMES = 13;
+
+  // EMA
+  var ema = function (arr, n) { var k=2/(n+1); var e=arr[0].c; var out=[]; arr.forEach(function(c,i){ e = i? c.c*k + e*(1-k) : c.c; out.push(e); }); return out; };
+
+  // ---------- trades ----------
+  var trades = []; // {entryIdx, entryPx, side, exitIdx, exitPx, pnl}
+  var openTrade = null, pnl = 0, fills = 0, wins = 0, tradeCount = 0;
+  var fmt = function (n) { return (n>=0?'+':'-') + '$' + Math.abs(n).toFixed(2); };
+
+  var toast = function (html, color) {
+    var el = document.createElement('div');
+    el.style.cssText = 'position:absolute; left:50%; top:34%; transform:translateX(-50%); font-family:JetBrains Mono,monospace; font-size:clamp(10px,1.3vw,16px); color:'+color+'; background:rgba(6,13,8,0.92); border:1px solid '+color+'; border-radius:5px; padding:7px 14px; box-shadow:0 0 20px '+color+'66; animation:td-fillpop 2.4s ease-out forwards; white-space:nowrap;';
+    el.innerHTML = html; $('td-toasts').appendChild(el); setTimeout(function(){ el.remove(); }, 2400);
+  };
+
+  var flashBtn = function (id, color) { var b=$(id); b.style.background=color; b.style.color='#04080a'; b.style.boxShadow='0 0 16px '+color; setTimeout(function(){ b.style.background=''; b.style.color=''; b.style.boxShadow=''; }, 260); };
+
+  var doEntry = function () {
+    var side = rnd() > 0.28 ? 'LONG' : 'SHORT';
+    openTrade = { entryIdx: candles.length, entryPx: price, side: side };
+    tradeCount++; fills++; click(); fillSnd();
+    flashBtn(side==='LONG'?'td-buy':'td-sell', side==='LONG'?'#4ade80':'#f87171');
+    var conf = 72 + Math.floor(rnd()*24);
+    toast('<b style="color:'+(side==='LONG'?'#4ade80':'#f87171')+'">'+side+'</b> NVDA @ '+price.toFixed(2)+' &nbsp;·&nbsp; conf '+conf+'%', side==='LONG'?'#4ade80':'#f87171');
+    $('td-fills').innerHTML = 'FILLS <span style="color:#dce8dc;">'+fills+'</span>';
+  };
+  var doExit = function () {
+    if (!openTrade) return;
+    var dir = openTrade.side==='LONG' ? 1 : -1;
+    var move = (price - openTrade.entryPx) * dir;
+    var qty = 120;
+    var tp = move * qty;
+    openTrade.exitIdx = candles.length; openTrade.exitPx = price; openTrade.pnl = tp;
+    trades.push(openTrade);
+    pnl += tp; fills++;
+    var win = tp >= 0; if (win) { wins++; winSnd(); } else { click(); }
+    flashBtn(openTrade.side==='LONG'?'td-sell':'td-buy', '#7e8e7e');
+    toast('CLOSE @ '+price.toFixed(2)+' &nbsp;·&nbsp; <b style="color:'+(win?'#4ade80':'#f87171')+'">'+fmt(tp)+'</b>', win?'#4ade80':'#f87171');
+    $('td-fills').innerHTML = 'FILLS <span style="color:#dce8dc;">'+fills+'</span>';
+    openTrade = null;
+  };
+
+  // ---------- cursor ----------
+  var cursor = $('td-cursor');
+  var stage = $('td-stage');
+  var curX = 0.5, curY = 0.5, tgtX = 0.5, tgtY = 0.5; // fractions of stage
+  var moveCursorTo = function (fx, fy) { tgtX = fx; tgtY = fy; };
+  var rectOf = function (el) { var s = stage.getBoundingClientRect(), r = el.getBoundingClientRect(); return { fx: (r.left + r.width/2 - s.left)/s.width, fy: (r.top + r.height/2 - s.top)/s.height }; };
+
+  // ---------- scripted session ----------
+  var frame = 0, pnlShown = 0, ended = false, welF = 0;
+  // schedule: cursor to a button, then act; entries/exits paced by candles
+  var phase = 'idle', phaseT = 0, sinceTrade = 0;
+  var phaseLong = true;
+  var scheduleAction = function () {
+    whoosh();
+    // decide entry or exit
+    if (openTrade) { // aim to exit
+      var btn = openTrade.side==='LONG' ? 'td-sell' : 'td-buy';
+      var p = rectOf($(btn)); moveCursorTo(p.fx, p.fy); phase='toExit'; phaseT=0;
+    } else {
+      var long = rnd() > 0.28; var p2 = rectOf($(long?'td-buy':'td-sell')); moveCursorTo(p2.fx, p2.fy); phase='toEntry'; phaseT=0; phaseLong = long;
+    }
+  };
+
+  // wander cursor over chart between trades
+  var wanderT = 0;
+
+  var clock0 = Date.now();
+  var updateClock = function () { var s = 9*3600 + 32*60 + 7 + Math.floor((Date.now()-clock0)/1000); var hh=String(Math.floor(s/3600)%24).padStart(2,'0'), mm=String(Math.floor(s/60)%60).padStart(2,'0'), ss=String(s%60).padStart(2,'0'); $('td-clock').textContent = hh+':'+mm+':'+ss+' EDT'; };
+
+  // order book render
+  var renderBook = function () {
+    var book = $('td-book'); var mid = price; var html='';
+    // asks (top, red) descending to mid
+    for (var i=5;i>=1;i--){ var px=mid + i*0.04 + rnd()*0.01; var sz=Math.floor(40+rnd()*900); var w=Math.min(100, sz/9); html += '<div style="position:relative; display:flex; justify-content:space-between; padding:1px 9px;"><div style="position:absolute; right:0; top:0; bottom:0; width:'+w+'%; background:rgba(248,113,113,0.10);"></div><span style="position:relative; color:#f87171;">'+px.toFixed(2)+'</span><span style="position:relative; color:#7e8e7e;">'+sz+'</span></div>'; }
+    html += '<div style="display:flex; justify-content:space-between; padding:2px 9px; border-top:1px solid rgba(74,222,128,0.12); border-bottom:1px solid rgba(74,222,128,0.12); background:rgba(74,222,128,0.05);"><span style="color:#eafbe9; font-weight:600;">'+mid.toFixed(2)+'</span><span style="color:#4ade80;">mid</span></div>';
+    for (var j=1;j<=5;j++){ var pxb=mid - j*0.04 - rnd()*0.01; var szb=Math.floor(40+rnd()*900); var wb=Math.min(100, szb/9); html += '<div style="position:relative; display:flex; justify-content:space-between; padding:1px 9px;"><div style="position:absolute; left:0; top:0; bottom:0; width:'+wb+'%; background:rgba(74,222,128,0.10);"></div><span style="position:relative; color:#4ade80;">'+pxb.toFixed(2)+'</span><span style="position:relative; color:#7e8e7e;">'+szb+'</span></div>'; }
+    book.innerHTML = html;
+  };
+  var bookT = 0;
+
+  // ---------- draw ----------
+  var draw = function () {
+    ctx.clearRect(0,0,W,H);
+    var cw = (W - PAD.l - PAD.r) / MAXC;
+    var view = candles.slice(-MAXC+1).concat([cur]);
+    var mn=1e9, mx=-1e9; view.forEach(function(c){ mn=Math.min(mn,c.l); mx=Math.max(mx,c.h); });
+    var padv=(mx-mn)*0.12+0.01; mn-=padv; mx+=padv;
+    var Y = function (p) { return PAD.t + (1-(p-mn)/(mx-mn))*(H-PAD.t-PAD.b); };
+    var volMax = Math.max.apply(null, view.map(function(c){ return c.v; }));
+    // grid
+    ctx.strokeStyle='rgba(74,222,128,0.05)'; ctx.lineWidth=1; ctx.font='9px JetBrains Mono, monospace'; ctx.fillStyle='#3a4a3a'; ctx.textAlign='left';
+    for (var g=0; g<=4; g++){ var py=PAD.t+g/4*(H-PAD.t-PAD.b); ctx.beginPath(); ctx.moveTo(PAD.l,py); ctx.lineTo(W-PAD.r,py); ctx.stroke(); var pv=mx-(g/4)*(mx-mn); ctx.fillText(pv.toFixed(1), W-PAD.r+5, py+3); }
+    // volume
+    view.forEach(function(c,i){ var x=PAD.l+i*cw; var vh=(c.v/volMax)*(H*0.16); var up=c.c>=c.o; ctx.fillStyle= up?'rgba(74,222,128,0.16)':'rgba(248,113,113,0.16)'; ctx.fillRect(x+cw*0.18, H-PAD.b-vh, cw*0.64, vh); });
+    // EMA
+    var allc = candles.concat([cur]); var e9 = ema(allc, 9), e21 = ema(allc, 21);
+    var drawEMA = function (eArr, col) { ctx.strokeStyle=col; ctx.lineWidth=1.4; ctx.beginPath(); var off=allc.length-view.length; view.forEach(function(c,i){ var x=PAD.l+i*cw+cw/2; var y=Y(eArr[off+i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke(); };
+    drawEMA(e21, 'rgba(56,189,248,0.55)'); drawEMA(e9, 'rgba(251,191,36,0.6)');
+    // candles
+    view.forEach(function(c,i){ var x=PAD.l+i*cw+cw/2; var up=c.c>=c.o; var col=up?'#4ade80':'#f87171'; ctx.strokeStyle=col; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,Y(c.h)); ctx.lineTo(x,Y(c.l)); ctx.stroke(); var yo=Y(c.o), yc=Y(c.c); ctx.fillStyle=col; var bw=Math.max(1.5,cw*0.62); ctx.fillRect(x-bw/2, Math.min(yo,yc), bw, Math.max(1.4,Math.abs(yc-yo))); });
+    // trade markers
+    var off = allc.length - view.length;
+    trades.concat(openTrade?[openTrade]:[]).forEach(function(tr){
+      var ei = tr.entryIdx - off; if (ei>=0 && ei<view.length){ var x=PAD.l+ei*cw+cw/2; var y=Y(tr.entryPx); ctx.fillStyle=tr.side==='LONG'?'#4ade80':'#f87171'; ctx.beginPath(); if(tr.side==='LONG'){ctx.moveTo(x,y+11);ctx.lineTo(x-4,y+18);ctx.lineTo(x+4,y+18);}else{ctx.moveTo(x,y-11);ctx.lineTo(x-4,y-18);ctx.lineTo(x+4,y-18);} ctx.fill(); }
+      if (tr.exitIdx!=null){ var xi=tr.exitIdx-off; if(xi>=0&&xi<view.length){ var x2=PAD.l+xi*cw+cw/2; var y2=Y(tr.exitPx); ctx.strokeStyle='rgba(220,232,220,0.5)'; ctx.setLineDash([2,2]); ctx.beginPath(); var ex=PAD.l+(tr.entryIdx-off)*cw+cw/2; ctx.moveTo(ex,Y(tr.entryPx)); ctx.lineTo(x2,y2); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle=tr.pnl>=0?'#4ade80':'#f87171'; ctx.beginPath(); ctx.arc(x2,y2,2.5,0,6.28); ctx.fill(); } }
+    });
+    // last price line + tag
+    var yl=Y(price); ctx.strokeStyle='rgba(74,222,128,0.4)'; ctx.setLineDash([4,3]); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(PAD.l,yl); ctx.lineTo(W-PAD.r,yl); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='#4ade80'; ctx.fillRect(W-PAD.r, yl-7, PAD.r, 14); ctx.fillStyle='#04080a'; ctx.font='bold 10px JetBrains Mono, monospace'; ctx.textAlign='center'; ctx.fillText(price.toFixed(2), W-PAD.r/2, yl+3);
+  };
+
+  // ---------- main loop ----------
+  var _warned = false;
+  var tick = function () { try {
+    frame++;
+    // price walk within forming candle
+    var drift = openTrade ? (openTrade.side==='LONG'?0.022:-0.022) : 0;
+    price += (rnd()-0.5)*0.14 + drift; price = Math.max(118, price);
+    cur.c = price; cur.h = Math.max(cur.h, price); cur.l = Math.min(cur.l, price); cur.v += 0.02;
+    candleAge++;
+    if (candleAge >= CANDLE_FRAMES) { candles.push(cur); if (candles.length>140) candles.shift(); cur = newCandle(price); candleAge=0; sinceTrade++; tickSnd(); }
+
+    // header price
+    var base=140.4; var chg=((price-base)/base*100);
+    $('td-last').textContent = price.toFixed(2);
+    var cu = price>=base; $('td-last').style.color = cu?'#4ade80':'#f87171';
+    $('td-chg').textContent = (chg>=0?'+':'')+chg.toFixed(2)+'%'; $('td-chg').style.color = cu?'#4ade80':'#f87171';
+
+    // P&L ticking (jump, not smooth)
+    var liveP = pnl; if (openTrade){ var dir=openTrade.side==='LONG'?1:-1; liveP += (price-openTrade.entryPx)*dir*120; }
+    if (frame % 3 === 0) { pnlShown = liveP; var el=$('td-pnl'); el.textContent = fmt(pnlShown); el.style.color = pnlShown>=0?'#4ade80':'#f87171'; $('td-pnlsub').textContent = tradeCount+' trades · '+wins+' wins'; }
+
+    // order book + clock
+    if (frame % 6 === 0){ renderBook(); }
+    if (frame % 30 === 0) updateClock();
+
+    // cursor logic
+    if (phase==='idle'){ phaseT++; // wander gently over chart
+      if (frame % 90 === 0){ tgtX = 0.34 + rnd()*0.3; tgtY = 0.4 + rnd()*0.25; }
+      var readyEntry = !openTrade && sinceTrade >= 1 && frame > 24;
+      var readyExit = openTrade && sinceTrade >= 1;
+      if ((readyEntry || readyExit)) { scheduleAction(); sinceTrade = 0; }
+    } else { phaseT++;
+      var near = Math.hypot(tgtX-curX, tgtY-curY) < 0.012;
+      if (near && phaseT > 14){ if (phase==='toEntry') doEntry(); else if (phase==='toExit') doExit(); phase='idle'; phaseT=0; }
+    }
+    // cursor lerp
+    curX += (tgtX-curX)*0.22; curY += (tgtY-curY)*0.22;
+    cursor.style.left = (curX*100)+'%'; cursor.style.top = (curY*100)+'%';
+
+    draw();
+
+    // opening brand card → fade into the live desk (~2.8s)
+    if (frame === 84){ var o=$('td-open'); if(o){ o.style.opacity='0'; setTimeout(function(){ if(o) o.style.display='none'; }, 820); } }
+    // closing → WELCOME, BROCK handoff (~16s)
+    if (!ended && frame > 16*30){ ended = true; var w=$('td-welcome'); if(w){ w.style.opacity='1'; w.style.pointerEvents='auto'; } winSnd(); }
+    if (ended){ welF++; var ws='WELCOME, BROCK.'; var n=Math.min(ws.length, Math.floor(welF/2)); var wel=$('td-welcometxt'); if(wel && wel.textContent.length < ws.length){ if(soundOn && n>wel.textContent.length && ws[n-1]!==' ') blip(1300,0.02,'square',0.05); wel.textContent = ws.slice(0,n); } if(welF===40){ var sb=$('td-welcomesub'); if(sb) sb.style.opacity='1'; } }
+    } catch(err){ if(!_warned){ _warned=true; console.error('TD tick error:', err); } }
+  };
+  var _timer = setInterval(tick, 33);
+
+  window.addEventListener('beforeunload', function () { if (_timer) clearInterval(_timer); try { ro.disconnect(); } catch(e){} });
+});
+</script>
+</body>
+</html>
