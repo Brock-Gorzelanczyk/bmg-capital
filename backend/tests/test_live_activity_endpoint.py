@@ -152,3 +152,82 @@ def test_trading_desk_iframe_wrapper_polls_endpoint():
     )
     for msg_type in ('"td:signal"', '"td:fill"', '"td:summary"'):
         assert msg_type in src, f"wrapper must postMessage {msg_type} to iframe"
+
+
+def test_candles_endpoint_exists_and_validated():
+    """Phase 3: /api/live/candles must exist, require symbol, cap limit at
+    128, and reject option OCC symbols (chart doesn't make sense for a
+    specific options contract).
+    """
+    src = (BACKEND / "app" / "routers" / "live_activity.py").read_text()
+    assert '@router.get("/candles")' in src, (
+        "candles endpoint must be registered at /api/live/candles"
+    )
+    assert "MAX_CANDLES" in src and "le=MAX_CANDLES" in src, (
+        "candles endpoint must cap `limit` at MAX_CANDLES to bound response size"
+    )
+    assert 'kind == "option"' in src, (
+        "candles endpoint must reject OCC options with a clear error path"
+    )
+    # Timeframe must be validated against a fixed enum, not free-form user input.
+    assert re.search(r'pattern=.+1m.+5m.+1d', src) is not None, (
+        "candles endpoint must validate timeframe against a fixed enum"
+    )
+
+
+def test_candles_endpoint_scopes_and_caches_correctly():
+    """Candles endpoint must require auth (per-user cache invalidation is
+    less critical since candles are market-wide, but auth is required so
+    unauth users don't hammer yfinance/kraken via our infra).
+    """
+    src = (BACKEND / "app" / "routers" / "live_activity.py").read_text()
+    # find the candles handler and verify the get_current_user dependency
+    handler_start = src.find('@router.get("/candles")')
+    handler_end = src.find("\n\n", handler_start)
+    handler = src[handler_start:handler_end]
+    assert "get_current_user" in handler, (
+        "candles endpoint must require authentication"
+    )
+    assert "_candles_cache" in src, (
+        "candles endpoint must be cached to protect upstream data sources"
+    )
+
+
+def test_trading_desk_html_handles_candle_and_symbol_events():
+    """HTML must handle td:candles + td:symbol postMessages so Phase 3 chart
+    swap-in and header update work.
+    """
+    src = (BACKEND.parent / "frontend" / "public" / "trading-desk.html").read_text()
+    assert "td:candles" in src, "HTML must handle td:candles message"
+    assert "td:symbol" in src, "HTML must handle td:symbol message"
+    assert 'id="td-symbol"' in src, (
+        "HTML header must have id='td-symbol' so the symbol name is dynamically updatable"
+    )
+    # Replacing the candles array (not merely appending) is the correct
+    # semantic when historical bars arrive from the API.
+    assert "candles.length = 0" in src, (
+        "td:candles handler must replace the candles array, not append"
+    )
+
+
+def test_trading_desk_wrapper_supports_deep_link():
+    """The wrapper must parse ?bot=X&symbol=Y from the URL and poll candles
+    when a symbol is specified.
+    """
+    src = (BACKEND.parent / "frontend" / "src" / "pages" / "TradingDeskIframePage.tsx").read_text()
+    assert "useSearchParams" in src, (
+        "wrapper must use useSearchParams to read deep-link query params"
+    )
+    assert '"symbol"' in src and '"bot"' in src, (
+        "wrapper must read ?symbol= and ?bot= query params"
+    )
+    assert "/api/live/candles" in src, (
+        "wrapper must poll /api/live/candles when focus symbol is set"
+    )
+    assert '"td:candles"' in src, "wrapper must postMessage td:candles to iframe"
+    assert '"td:symbol"' in src, "wrapper must postMessage td:symbol to iframe"
+    # Focus-bot filter — if a bot is specified, only its events flow to the iframe
+    assert "focusBot" in src, (
+        "wrapper must filter signals/trades to focus_bot when specified so the "
+        "desk shows only the bot the user came to watch"
+    )
