@@ -274,9 +274,9 @@ def get_bot_activity(
     except Exception as exc:
         logger.warning("[live-activity] session_pnl query failed: %s", exc)
 
-    # Ticker tape: unique symbols the fund is holding right now, priced live.
-    # Falls back to a curated default set when no open positions (so the tape
-    # never looks empty). Max 12 symbols so the marquee stays readable.
+    # Ticker tape: unique symbols the fund is holding right now, priced live
+    # + change_pct computed from prior close. Falls back to a curated default
+    # set when no open positions. Max 12 symbols so the marquee stays readable.
     try:
         held_rows = db.execute(
             text(
@@ -303,7 +303,7 @@ def get_bot_activity(
         ]
         seed = list(dict.fromkeys(held_symbols + DEFAULT_TAPE))[:12]
 
-        # Price + change% via the shared live_prices service (cached, batched).
+        # Price via the shared live_prices service (cached, batched).
         try:
             from app.services.live_prices import fetch_live_prices
             live_map = fetch_live_prices(seed) or {}
@@ -311,19 +311,24 @@ def get_bot_activity(
             logger.debug("[live-activity] ticker live_prices failed: %s", _lp_exc)
             live_map = {}
 
-        # For change_pct, pull the most recent BotDailyPnL portfolio_value swing
-        # per bot for indicators — for the tape we don't have per-symbol daily
-        # baselines cheaply, so we surface price only and let the tape show 0%
-        # rather than fake a percentage. Frontend can render "—" if change is 0.
+        # Prior close for change_pct — module-level 5min TTL cache so we're
+        # not hammering Alpaca on every bot-activity poll. prev_close only
+        # changes at market close so 5min is generous.
+        prev_map = _get_ticker_prev_closes(tuple(sorted(seed)))
+
         ticker = []
         for sym in seed:
             px = live_map.get(sym)
             if px is None or not isinstance(px, (int, float)) or px <= 0:
                 continue
+            prev = prev_map.get(sym)
+            change_pct = 0.0
+            if prev is not None and prev > 0:
+                change_pct = round((float(px) - prev) / prev * 100.0, 2)
             ticker.append({
                 "symbol": sym,
                 "price": round(float(px), 4 if float(px) < 10 else 2),
-                "change_pct": 0.0,  # Phase 5: wire prior-close to fill this.
+                "change_pct": change_pct,
             })
         result["summary"]["ticker"] = ticker
     except Exception as exc:
@@ -364,6 +369,40 @@ def _candles_cache_set(key: tuple, value: dict) -> None:
         pairs = sorted(_candles_cache.items(), key=lambda kv: kv[1][0])
         for k, _ in pairs[:50]:
             _candles_cache.pop(k, None)
+
+
+# ── Ticker prior-close cache (5min TTL) ─────────────────────────────────────
+# prev_close is anchored to the previous session's close and doesn't change
+# intraday, so a long TTL is safe. Keyed by the sorted symbol tuple so
+# multi-tab / multi-user polls converge on one Alpaca call per ~5min.
+_TICKER_PREV_TTL_SECONDS = 300
+_ticker_prev_cache: dict = {}
+
+
+def _get_ticker_prev_closes(symbols: tuple) -> dict:
+    """Return {symbol: prior_close_price}. Cached 5min. Fail-safe (empty on error)."""
+    if not symbols:
+        return {}
+    entry = _ticker_prev_cache.get(symbols)
+    if entry is not None:
+        ts, value = entry
+        if (time.monotonic() - ts) < _TICKER_PREV_TTL_SECONDS:
+            return value
+        _ticker_prev_cache.pop(symbols, None)
+    try:
+        from app.screener.daily_runner import _get_prev_closes_sync
+        result = _get_prev_closes_sync(list(symbols)) or {}
+    except Exception as exc:
+        logger.debug("[live-activity] prev-close fetch failed: %s", exc)
+        result = {}
+    _ticker_prev_cache[symbols] = (time.monotonic(), result)
+    # Bound cache growth — trading desk typically hits ~5-10 unique seed
+    # tuples, but be defensive.
+    if len(_ticker_prev_cache) > 50:
+        pairs = sorted(_ticker_prev_cache.items(), key=lambda kv: kv[1][0])
+        for k, _ in pairs[:25]:
+            _ticker_prev_cache.pop(k, None)
+    return result
 
 
 @router.get("/candles")
