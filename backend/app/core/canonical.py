@@ -746,7 +746,14 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     # unrealized_pnl_cents so the /strategy homepage shows the same numbers as
     # the dedicated /strategy/leaderboard. Both surfaces now derive from the
     # canonical snapshot. Sort by all_time_return_pct so the winner ranks first.
+    # 2026-06-30 (evening): ALSO include orphan allocations (bots not bound to
+    # any StrategyPortfolio row — e.g. cash_floor) so the homepage leaderboard
+    # matches the dedicated /api/leaderboard/strategies which iterates every
+    # user allocation. Without this, cash_floor's $100k silently disappeared
+    # from the homepage sleeve-sum + leaderboard total, making the fund
+    # appear $100k lighter than it actually is.
     leaderboard = []
+    seen_alloc_ids: set[int] = set()
     for port_snap in portfolio_snapshots:
         for bot in port_snap.bots:
             leaderboard.append({
@@ -765,6 +772,54 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 # Used by Strategy Lab + Dashboard to show "X% of $Y deployed".
                 "deployed_cents": bot.deployed_cents,
                 "starting_capital_cents": bot.starting_capital_cents,
+            })
+            seen_alloc_ids.add(bot.allocation_id)
+
+    # Append orphan allocations that were counted in total_value above but
+    # weren't in any portfolio_snapshot.bots list. This is where cash_floor
+    # lives (its allocation has no portfolio_id binding). Use the snapshot
+    # if we computed one; fall back to a minimal stub built from the alloc
+    # + profile so the row still appears with the correct starting capital.
+    for a in all_allocs:
+        if a.id in seen_alloc_ids:
+            continue
+        snap = bot_snap_by_alloc.get(a.id)
+        prof = profile_map.get(a.profile_id)
+        profile_name = prof.name if prof else f"alloc_{a.id}"
+        # Fall back to title-cased slug so the leaderboard never shows alloc_N.
+        display = DISPLAY_NAMES.get(profile_name) or profile_name.replace("_", " ").title()
+        if snap:
+            leaderboard.append({
+                "rank": 0,
+                "profile": profile_name,
+                "name": snap.display_name or display,
+                "enabled": snap.enabled,
+                "return_30d_pct": snap.return_30d_pct,
+                "all_time_return_pct": snap.all_time_return_pct,
+                "today_pnl_cents": snap.today_pnl_cents,
+                "watchlist_count": snap.watchlist_count,
+                "portfolio_value_cents": snap.portfolio_value_cents,
+                "realized_pnl_cents": snap.realized_pnl_cents,
+                "unrealized_pnl_cents": snap.unrealized_pnl_cents,
+                "deployed_cents": snap.deployed_cents,
+                "starting_capital_cents": snap.starting_capital_cents,
+            })
+        else:
+            starting_c = int(a.starting_capital_cents or 0)
+            leaderboard.append({
+                "rank": 0,
+                "profile": profile_name,
+                "name": display,
+                "enabled": bool(a.enabled),
+                "return_30d_pct": 0.0,
+                "all_time_return_pct": 0.0,
+                "today_pnl_cents": 0,
+                "watchlist_count": 0,
+                "portfolio_value_cents": starting_c,
+                "realized_pnl_cents": 0,
+                "unrealized_pnl_cents": 0,
+                "deployed_cents": 0,
+                "starting_capital_cents": starting_c,
             })
     leaderboard.sort(
         key=lambda x: (
