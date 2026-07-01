@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import client from "@/api/client";
 
 /**
@@ -10,21 +11,35 @@ import client from "@/api/client";
  * reflect real signals/fills instead of a scripted demo.
  *
  * Data plumbing:
- *   - Poll /api/live/bot-activity every 6s
- *   - Diff against last-seen event ids; postMessage new events into iframe
- *   - Iframe listens for `td:signal` / `td:fill` / `td:position` messages
- *     and drives its scripted animations from them
+ *   - Poll /api/live/bot-activity every 6s → td:signal / td:fill / td:summary
+ *   - Poll /api/live/candles every 30s     → td:candles (when symbol is set)
+ *   - Deep-link:  /fund/desk?bot=X&symbol=Y  → focus one bot+symbol on load
  *
- * The chart itself is still driven by the iframe's internal price walk
- * (Phase 3 will wire real candles). Trades/toasts/session P&L are live.
+ * Query params:
+ *   ?symbol=AMD      — focuses chart on this symbol (candles + header)
+ *   ?bot=stock_day   — labels the header with the bot's name
+ *   ?tf=5m           — candle timeframe (default 5m; 1m|5m|15m|30m|1h|1d)
  */
 export default function TradingDeskIframePage() {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const lastSignalIdRef = useRef<number>(0);
   const lastTradeIdRef = useRef<number>(0);
-
   const seededRef = useRef<boolean>(false);
+  const [searchParams] = useSearchParams();
 
+  const focusSymbol = searchParams.get("symbol")?.trim().toUpperCase() || "";
+  const focusBot = searchParams.get("bot")?.trim() || "";
+  const timeframe = (searchParams.get("tf")?.trim() || "5m") as
+    | "1m" | "5m" | "15m" | "30m" | "1h" | "1d";
+
+  // Human-friendly bot display name — the backend serves canonical slugs,
+  // but the deep-link URL param uses the slug directly, so we prettify.
+  const focusBotDisplay = useMemo(() => {
+    if (!focusBot) return "";
+    return focusBot.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }, [focusBot]);
+
+  // ── Signal + fill + summary poller ─────────────────────────────────────────
   useEffect(() => {
     let stopped = false;
     let timerId: ReturnType<typeof setTimeout> | null = null;
@@ -41,54 +56,96 @@ export default function TradingDeskIframePage() {
         const iframe = iframeRef.current;
         const win = iframe?.contentWindow;
         if (win && res.data) {
-          // First-poll behavior: silently seed watermarks so the client
-          // doesn't spam the desk with 50 historical toasts on load. The
-          // backend's cold-start returns the last N recent items (not the
-          // oldest N) so we advance to the true tail. Real events start
-          // firing as toasts from the NEXT poll onwards.
           const isSeeding = !seededRef.current;
-
           for (const sig of res.data.signals ?? []) {
             if (sig.id > lastSignalIdRef.current) lastSignalIdRef.current = sig.id;
-            if (!isSeeding) {
-              win.postMessage({ type: "td:signal", data: sig }, window.location.origin);
-            }
+            if (isSeeding) continue;
+            // If focused on a specific bot, drop signals from other bots so
+            // the desk stays coherent to what the user came to watch.
+            if (focusBot && sig.bot_id !== focusBot) continue;
+            win.postMessage({ type: "td:signal", data: sig }, window.location.origin);
           }
           for (const trade of res.data.trades ?? []) {
             if (trade.id > lastTradeIdRef.current) lastTradeIdRef.current = trade.id;
-            if (!isSeeding) {
-              win.postMessage({ type: "td:fill", data: trade }, window.location.origin);
-            }
+            if (isSeeding) continue;
+            if (focusBot && trade.bot_id !== focusBot) continue;
+            win.postMessage({ type: "td:fill", data: trade }, window.location.origin);
           }
-          // Summary always flows — even on seed poll — so session P&L + bot
-          // count populate immediately instead of showing +$0.00 for 6s.
           if (res.data.summary) {
             win.postMessage(
               { type: "td:summary", data: res.data.summary },
               window.location.origin,
             );
           }
-
           seededRef.current = true;
         }
-      } catch (err) {
-        // Silent — never break the app if the endpoint is unavailable.
-        // The scripted fallback in the iframe keeps things looking alive.
+      } catch {
+        // Silent — scripted fallback in iframe stays alive.
       } finally {
         if (!stopped) timerId = setTimeout(poll, 6000);
       }
     }
 
-    // First poll fires ~500ms after iframe mounts to give it time to boot
-    // its animation loop before we start injecting events.
     const startId = setTimeout(poll, 500);
-
     return () => {
       stopped = true;
       clearTimeout(startId);
       if (timerId) clearTimeout(timerId);
     };
-  }, []);
+  }, [focusBot]);
+
+  // ── Candles poller (only when ?symbol=X is set) ────────────────────────────
+  useEffect(() => {
+    if (!focusSymbol) return;
+    let stopped = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    // Push symbol/bot label to iframe on mount (so header updates immediately
+    // even before the first candle response lands).
+    const pushSymbolHeader = () => {
+      const win = iframeRef.current?.contentWindow;
+      if (!win) return;
+      win.postMessage(
+        {
+          type: "td:symbol",
+          data: {
+            symbol: focusSymbol,
+            venue: focusSymbol.includes("/") ? "Crypto · " + timeframe : "Live · " + timeframe,
+            bot_display_name: focusBotDisplay || undefined,
+          },
+        },
+        window.location.origin,
+      );
+    };
+    // Give the iframe a moment to boot before pushing.
+    const headerId = setTimeout(pushSymbolHeader, 800);
+
+    async function pollCandles() {
+      if (stopped) return;
+      try {
+        const res = await client.get("/api/live/candles", {
+          params: { symbol: focusSymbol, timeframe, limit: 64 },
+        });
+        const win = iframeRef.current?.contentWindow;
+        if (win && res.data && Array.isArray(res.data.candles) && res.data.candles.length > 0) {
+          win.postMessage({ type: "td:candles", data: res.data }, window.location.origin);
+        }
+      } catch {
+        // Silent — chart keeps its internal walk if fetch fails.
+      } finally {
+        if (!stopped) timerId = setTimeout(pollCandles, 30_000);
+      }
+    }
+    // Small delay so the iframe boots before first candle push.
+    const startId = setTimeout(pollCandles, 1200);
+
+    return () => {
+      stopped = true;
+      clearTimeout(headerId);
+      clearTimeout(startId);
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [focusSymbol, timeframe, focusBotDisplay]);
 
   return (
     <div style={{ position: "absolute", inset: 0, background: "#04080a" }}>

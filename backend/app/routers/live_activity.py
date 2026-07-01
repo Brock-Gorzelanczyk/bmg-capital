@@ -277,3 +277,120 @@ def get_bot_activity(
 
     _cache_set(cache_key, result)
     return result
+
+
+# ── Candles endpoint (Trading Desk Phase 3) ─────────────────────────────────
+# Serves recent OHLC bars for a single symbol so the desk's chart can render
+# actual price action instead of the scripted price walk. Deliberately
+# lightweight — one symbol, capped bar count, 60s cache. Equity + crypto
+# only; OCC option symbols return 400 (chart doesn't make sense for a
+# specific contract, and yfinance option-chain calls are too slow).
+
+MAX_CANDLES = 128
+CANDLES_CACHE_TTL_SECONDS = 60
+
+_candles_cache: dict = {}
+
+
+def _candles_cache_get(key: tuple) -> dict | None:
+    entry = _candles_cache.get(key)
+    if entry is None:
+        return None
+    ts, value = entry
+    if (time.monotonic() - ts) > CANDLES_CACHE_TTL_SECONDS:
+        _candles_cache.pop(key, None)
+        return None
+    return value
+
+
+def _candles_cache_set(key: tuple, value: dict) -> None:
+    _candles_cache[key] = (time.monotonic(), value)
+    if len(_candles_cache) > 100:
+        pairs = sorted(_candles_cache.items(), key=lambda kv: kv[1][0])
+        for k, _ in pairs[:50]:
+            _candles_cache.pop(k, None)
+
+
+@router.get("/candles")
+def get_candles(
+    symbol: str = Query(..., min_length=1, max_length=20),
+    limit: int = Query(64, ge=1, le=MAX_CANDLES),
+    timeframe: str = Query("5m", pattern="^(1m|5m|15m|30m|1h|1d)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return recent OHLC bars for a single symbol.
+
+    Args:
+        symbol:    Equity ticker (AMD, SPY) or crypto pair (BTC/USD).
+        limit:     Number of most-recent bars (default 64, max 128).
+        timeframe: Bar interval; "5m" default matches most bot cadences.
+
+    Returns:
+        {
+            "symbol": "AMD",
+            "timeframe": "5m",
+            "candles": [{"ts": "...", "o": 142.1, "h": 142.5, "l": 141.9, "c": 142.4, "v": 12345}, ...]
+        }
+    """
+    sym = symbol.strip().upper()
+    # Reject empties and obvious garbage; classify_instrument handles the rest.
+    if not sym:
+        return {"symbol": symbol, "timeframe": timeframe, "candles": [], "error": "empty_symbol"}
+
+    try:
+        from app.services.asset_class_registry import classify_instrument
+        kind = classify_instrument(sym)
+    except Exception:
+        return {"symbol": sym, "timeframe": timeframe, "candles": [], "error": "unclassifiable_symbol"}
+
+    if kind == "option":
+        # OCC contracts have their own quote feed; use option_marks endpoint instead.
+        return {"symbol": sym, "timeframe": timeframe, "candles": [], "error": "options_not_supported"}
+
+    cache_key = (sym, timeframe, limit)
+    cached = _candles_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    candles: list[dict] = []
+    try:
+        if kind == "crypto":
+            from app.screener.crypto_runner import _fetch_crypto_bars
+            raw = _fetch_crypto_bars([sym], timeframe=timeframe, limit=limit)
+        else:
+            from app.screener.runner import _fetch_bars_sync
+            # Map our TF to yfinance-compatible interval/period.
+            if timeframe in ("1m", "5m", "15m", "30m"):
+                period = "1d" if timeframe in ("1m", "5m") else "5d"
+                interval = timeframe
+            elif timeframe == "1h":
+                period, interval = "1mo", "60m"
+            else:  # 1d
+                period, interval = "6mo", "1d"
+            raw = _fetch_bars_sync([sym], period=period, interval=interval)
+
+        df = raw.get(sym)
+        if df is not None and not df.empty:
+            # Take the tail so we don't ship 5000 daily bars for a 1d ask.
+            tail = df.tail(limit)
+            for idx, r in tail.iterrows():
+                ts = idx.isoformat() if hasattr(idx, "isoformat") else str(idx)
+                candles.append({
+                    "ts": ts,
+                    "o": round(float(r["open"]), 6),
+                    "h": round(float(r["high"]), 6),
+                    "l": round(float(r["low"]), 6),
+                    "c": round(float(r["close"]), 6),
+                    "v": round(float(r.get("volume", 0) or 0), 4),
+                })
+    except Exception as exc:
+        logger.warning("[live-candles] fetch failed for %s (%s): %s", sym, timeframe, exc)
+        result_err = {"symbol": sym, "timeframe": timeframe, "candles": [], "error": "fetch_failed"}
+        _candles_cache_set(cache_key, result_err)
+        return result_err
+
+    result = {"symbol": sym, "timeframe": timeframe, "candles": candles}
+    _candles_cache_set(cache_key, result)
+    return result
+

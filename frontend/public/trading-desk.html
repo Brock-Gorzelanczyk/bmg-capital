@@ -65,8 +65,8 @@
         <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
           <!-- chart header -->
           <div style="display:flex; align-items:baseline; gap:14px; padding:8px 14px 6px;">
-            <span style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(13px,1.5vw,20px); color:#eafbe9;">NVDA</span>
-            <span style="font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.85vw,11px); color:#50604f;">NASDAQ · 1m</span>
+            <span id="td-symbol" style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(13px,1.5vw,20px); color:#eafbe9;">NVDA</span>
+            <span id="td-venue" style="font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.85vw,11px); color:#50604f;">NASDAQ · 1m</span>
             <span id="td-last" style="font-family:'JetBrains Mono',monospace; font-size:clamp(13px,1.5vw,20px); color:#4ade80; font-weight:600;">142.18</span>
             <span id="td-chg" style="font-family:'JetBrains Mono',monospace; font-size:clamp(9px,1vw,13px); color:#4ade80;">+1.29%</span>
             <div style="flex:1;"></div>
@@ -406,6 +406,46 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
   };
+  // Phase 3 (2026-06-30): swap the scripted candle seed for real OHLC when
+  // the parent supplies bars. The internal tick() loop keeps walking the
+  // current candle for visual life between polls, but the historical bars
+  // get replaced with actual price action.
+  var __handleLiveCandles = function (payload) {
+    if (!payload || !Array.isArray(payload.candles) || payload.candles.length === 0) return;
+    var incoming = payload.candles.slice(-MAXC);
+    candles.length = 0;
+    var lastClose = 0;
+    for (var i = 0; i < incoming.length; i++) {
+      var c = incoming[i];
+      var oNum = Number(c.o), hNum = Number(c.h), lNum = Number(c.l), cNum = Number(c.c);
+      var vNum = Number(c.v || 0);
+      if (!isFinite(oNum) || !isFinite(cNum)) continue;
+      candles.push({ o: oNum, h: hNum, l: lNum, c: cNum, v: vNum });
+      lastClose = cNum;
+    }
+    if (lastClose > 0) {
+      price = lastClose;
+      cur = newCandle(price);
+    }
+  };
+  var __handleLiveSymbol = function (payload) {
+    if (!payload || !payload.symbol) return;
+    var symEl = document.getElementById('td-symbol');
+    if (symEl) symEl.textContent = String(payload.symbol);
+    if (payload.venue) {
+      var vEl = document.getElementById('td-venue');
+      if (vEl) vEl.textContent = String(payload.venue);
+    }
+    if (payload.bot_display_name) {
+      var botWrap = document.getElementById('td-bot');
+      if (botWrap) {
+        botWrap.innerHTML = 'bot: <span style="color:#4ade80;">' +
+          String(payload.bot_display_name).replace(/</g,'') + '</span>' +
+          (payload.strategy ? ' · ' + String(payload.strategy).replace(/</g,'') : '');
+      }
+    }
+  };
+
   window.addEventListener('message', function (e) {
     // Same-origin check — iframe wrapper posts from window.location.origin.
     if (e.origin !== window.location.origin) return;
@@ -415,6 +455,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (msg.type === 'td:signal' && msg.data) __handleLiveSignal(msg.data);
       else if (msg.type === 'td:fill' && msg.data) __handleLiveFill(msg.data);
       else if (msg.type === 'td:summary' && msg.data) __handleLiveSummary(msg.data);
+      else if (msg.type === 'td:candles' && msg.data) __handleLiveCandles(msg.data);
+      else if (msg.type === 'td:symbol' && msg.data) __handleLiveSymbol(msg.data);
     } catch (err) {
       // Never let a bad payload break the animation loop.
     }
