@@ -41,11 +41,13 @@
         <span style="display:flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.8vw,10px); color:#fbbf24; border:1px solid rgba(251,191,36,0.28); border-radius:3px; padding:3px 8px;"><span style="width:5px; height:5px; border-radius:50%; background:#fbbf24;"></span>PAPER</span>
       </div>
 
-      <!-- ticker tape -->
+      <!-- ticker tape (id=td-tape-inner is rewritten with real fund holdings
+           whenever a td:summary message arrives; falls back to seeded content
+           on first paint so the marquee never looks empty) -->
       <div style="height:4.6%; min-height:18px; display:flex; align-items:center; overflow:hidden; background:rgba(4,8,5,0.9); border-bottom:1px solid rgba(74,222,128,0.1); -webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent); mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent);">
-        <div style="display:flex; white-space:nowrap; width:max-content; animation:td-ticker 32s linear infinite; font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.9vw,12px);">
-          <span style="padding:0 16px; color:#9fb0a0;">NVDA <span style="color:#4ade80;">142.18 ▲1.29%</span></span><span style="padding:0 16px; color:#9fb0a0;">BTC/USD <span style="color:#4ade80;">63,047 ▲0.84%</span></span><span style="padding:0 16px; color:#9fb0a0;">TSLA <span style="color:#f87171;">238.90 ▼1.01%</span></span><span style="padding:0 16px; color:#9fb0a0;">ETH/USD <span style="color:#f87171;">3,388 ▼0.42%</span></span><span style="padding:0 16px; color:#9fb0a0;">SOL/USD <span style="color:#4ade80;">147.20 ▲2.10%</span></span><span style="padding:0 16px; color:#9fb0a0;">SPY <span style="color:#4ade80;">541.30 ▲0.21%</span></span><span style="padding:0 16px; color:#9fb0a0;">QQQ <span style="color:#4ade80;">468.10 ▲0.34%</span></span><span style="padding:0 16px; color:#9fb0a0;">AAPL <span style="color:#4ade80;">229.80 ▲0.55%</span></span>
-          <span style="padding:0 16px; color:#9fb0a0;">NVDA <span style="color:#4ade80;">142.18 ▲1.29%</span></span><span style="padding:0 16px; color:#9fb0a0;">BTC/USD <span style="color:#4ade80;">63,047 ▲0.84%</span></span><span style="padding:0 16px; color:#9fb0a0;">TSLA <span style="color:#f87171;">238.90 ▼1.01%</span></span><span style="padding:0 16px; color:#9fb0a0;">ETH/USD <span style="color:#f87171;">3,388 ▼0.42%</span></span><span style="padding:0 16px; color:#9fb0a0;">SOL/USD <span style="color:#4ade80;">147.20 ▲2.10%</span></span><span style="padding:0 16px; color:#9fb0a0;">SPY <span style="color:#4ade80;">541.30 ▲0.21%</span></span><span style="padding:0 16px; color:#9fb0a0;">QQQ <span style="color:#4ade80;">468.10 ▲0.34%</span></span><span style="padding:0 16px; color:#9fb0a0;">AAPL <span style="color:#4ade80;">229.80 ▲0.55%</span></span>
+        <div id="td-tape-inner" style="display:flex; white-space:nowrap; width:max-content; animation:td-ticker 32s linear infinite; font-family:'JetBrains Mono',monospace; font-size:clamp(8px,0.9vw,12px);">
+          <span style="padding:0 16px; color:#9fb0a0;">SPY <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">QQQ <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">AAPL <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">NVDA <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">BTC/USD <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">ETH/USD <span style="color:#4ade80;">— .—%</span></span>
+          <span style="padding:0 16px; color:#9fb0a0;">SPY <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">QQQ <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">AAPL <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">NVDA <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">BTC/USD <span style="color:#4ade80;">— .—%</span></span><span style="padding:0 16px; color:#9fb0a0;">ETH/USD <span style="color:#4ade80;">— .—%</span></span>
         </div>
       </div>
 
@@ -389,6 +391,31 @@ document.addEventListener('DOMContentLoaded', function () {
     var fEl = document.getElementById('td-fills');
     if (fEl) fEl.innerHTML = 'FILLS <span style="color:#dce8dc;">' + liveFillCount + '</span>';
   };
+  var __escSym = function (s) { return String(s || '').replace(/[<>&"']/g, ''); };
+  var __rebuildTape = function (ticker) {
+    if (!Array.isArray(ticker) || ticker.length === 0) return;
+    var tape = document.getElementById('td-tape-inner');
+    if (!tape) return;
+    // Marquee needs the content duplicated so the -50% CSS keyframe loops
+    // seamlessly. Render once, then join with itself.
+    var renderOne = function (t) {
+      var sym = __escSym(t.symbol);
+      var px = Number(t.price || 0);
+      var pxStr = px >= 1000 ? px.toLocaleString('en-US', { maximumFractionDigits: 2 })
+                : px >= 1 ? px.toFixed(2)
+                : px.toFixed(4);
+      var pct = Number(t.change_pct || 0);
+      var pctStr = pct > 0 ? '▲' + pct.toFixed(2) + '%'
+                 : pct < 0 ? '▼' + Math.abs(pct).toFixed(2) + '%'
+                 : '·';
+      var pctColor = pct > 0 ? '#4ade80' : pct < 0 ? '#f87171' : '#9fb0a0';
+      return '<span style="padding:0 16px; color:#9fb0a0;">' + sym +
+             ' <span style="color:' + pctColor + ';">' + pxStr + ' ' + pctStr + '</span></span>';
+    };
+    var one = ticker.map(renderOne).join('');
+    tape.innerHTML = one + one;  // duplicated for the CSS marquee loop
+  };
+
   var __handleLiveSummary = function (s) {
     if (s && typeof s.session_pnl_usd === 'number') {
       sessionPnlUsd = s.session_pnl_usd;
@@ -405,6 +432,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             (s.active_bot_count || 0) + ' bots active';
       }
     }
+    if (s && Array.isArray(s.ticker)) __rebuildTape(s.ticker);
   };
   // Phase 3 (2026-06-30): swap the scripted candle seed for real OHLC when
   // the parent supplies bars. The internal tick() loop keeps walking the

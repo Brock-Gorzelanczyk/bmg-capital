@@ -260,7 +260,6 @@ def get_bot_activity(
 
     # session_pnl derives from today's realized fills across the user's bots.
     try:
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
         pnl_row = db.execute(
             text(
                 "SELECT COALESCE(SUM(realized_cents), 0) "
@@ -274,6 +273,62 @@ def get_bot_activity(
             result["summary"]["session_pnl_usd"] = round(int(pnl_row[0]) / 100.0, 2)
     except Exception as exc:
         logger.warning("[live-activity] session_pnl query failed: %s", exc)
+
+    # Ticker tape: unique symbols the fund is holding right now, priced live.
+    # Falls back to a curated default set when no open positions (so the tape
+    # never looks empty). Max 12 symbols so the marquee stays readable.
+    try:
+        held_rows = db.execute(
+            text(
+                "SELECT DISTINCT p.symbol "
+                "FROM bot_positions p "
+                "JOIN bot_allocations a ON a.id = p.allocation_id "
+                "WHERE a.user_id = :uid "
+                "  AND p.closed_at IS NULL "
+                "  AND p.quarantined_at IS NULL "
+                # Skip OCC contracts on the tape — retail tape only knows
+                # underlyings; users can't read 'AAPL250816P00184000' at a glance.
+                "  AND p.option_type IS NULL "
+                "LIMIT 20"
+            ),
+            {"uid": current_user.id},
+        ).fetchall()
+        held_symbols = [r[0] for r in held_rows if r[0]]
+
+        # Curated default when nothing held — big-liquidity names by asset class
+        # so the tape is always populated for the desk's visual continuity.
+        DEFAULT_TAPE = [
+            "SPY", "QQQ", "AAPL", "NVDA",
+            "BTC/USD", "ETH/USD", "SOL/USD",
+        ]
+        seed = list(dict.fromkeys(held_symbols + DEFAULT_TAPE))[:12]
+
+        # Price + change% via the shared live_prices service (cached, batched).
+        try:
+            from app.services.live_prices import fetch_live_prices
+            live_map = fetch_live_prices(seed) or {}
+        except Exception as _lp_exc:
+            logger.debug("[live-activity] ticker live_prices failed: %s", _lp_exc)
+            live_map = {}
+
+        # For change_pct, pull the most recent BotDailyPnL portfolio_value swing
+        # per bot for indicators — for the tape we don't have per-symbol daily
+        # baselines cheaply, so we surface price only and let the tape show 0%
+        # rather than fake a percentage. Frontend can render "—" if change is 0.
+        ticker = []
+        for sym in seed:
+            px = live_map.get(sym)
+            if px is None or not isinstance(px, (int, float)) or px <= 0:
+                continue
+            ticker.append({
+                "symbol": sym,
+                "price": round(float(px), 4 if float(px) < 10 else 2),
+                "change_pct": 0.0,  # Phase 5: wire prior-close to fill this.
+            })
+        result["summary"]["ticker"] = ticker
+    except Exception as exc:
+        logger.warning("[live-activity] ticker query failed: %s", exc)
+        result["summary"]["ticker"] = []
 
     _cache_set(cache_key, result)
     return result
