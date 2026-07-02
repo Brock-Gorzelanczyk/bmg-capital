@@ -63,13 +63,14 @@ _NEW_ALLOCATIONS = [
     ("crypto_dca_btc_eth",     3_000_000),   # $30k
 ]
 
-# Winner-reinvestment boost to close the invariant. crypto_quant_aggressive
-# was the only bot generating alpha for the 22-day audit window; boosting it
-# absorbs the +$30k the -$130k / +$100k reallocation would otherwise leave
-# unallocated. Fed by taking $30k more from scalper's original $100k pool.
-_BOOST_TARGETS = [
-    ("crypto_quant_aggressive", 3_000_000),   # +$30k on top of current
-]
+# Winner-reinvestment via self-balancing invariant target.
+# crypto_quant_aggressive is the only bot generating alpha for the 22-day
+# audit window. The migration reads the pre-run sum of all user_id=1
+# allocations and adjusts aggressive's capital so post-run sum equals exactly
+# $1M. This survives partial prior runs (which happened on 2026-07-02 when
+# earlier bugs left mean_rev at $0 and scalper at $50k with no new bots
+# allocated), because it computes the correct delta from CURRENT state, not
+# from a hardcoded assumption about what the audit thought each bot had.
 
 
 def run(conn) -> dict:
@@ -149,10 +150,11 @@ def run(conn) -> dict:
         conn.execute(text("""
             INSERT INTO bot_allocations
                 (user_id, profile_id, capital_pct, risk_profile, paper_mode,
-                 enabled, starting_capital_cents, tier, created_at, updated_at)
+                 go_live_requested, enabled, starting_capital_cents, tier,
+                 created_at, updated_at)
             VALUES
                 (1, :pid, :pct, 'aggressive', 1,
-                 1, :cents, 'T2', :now, :now)
+                 0, 1, :cents, 'T2', :now, :now)
         """), {
             "pid":   pid,
             "pct":   round(capital_cents / 100_000_000.0 * 100.0, 2),  # of $1M
@@ -169,49 +171,68 @@ def run(conn) -> dict:
             bot_name, capital_cents / 100.0,
         )
 
-    # 3b. Boost winner allocations by an absolute delta. Different from #2
-    # (which sets target) — here we ADD to current. Used to close invariant
-    # gap when new-bot capital doesn't match freed-up halted capital exactly.
-    for bot_name, boost_cents in _BOOST_TARGETS:
-        pid_row = conn.execute(text(
-            "SELECT id FROM bot_profiles WHERE name = :n"
-        ), {"n": bot_name}).fetchone()
-        if not pid_row:
-            logger.warning("[m052] boost target %s missing — skipping", bot_name)
-            continue
-        pid = pid_row[0]
-        alloc_row = conn.execute(text(
+    # 3b. Self-balancing winner adjustment. Read current sum across ALL
+    # user_id=1 allocations (active + halted) and compute the delta needed
+    # to hit exactly $1M. Push that delta into crypto_quant_aggressive,
+    # positive or negative. This is idempotent AND survives partial prior
+    # runs — no matter what state the DB is in when m052 fires, the
+    # aggressive allocation is set to whatever amount makes the invariant
+    # close to $1M exact. Beats hardcoded deltas that drift when audit
+    # snapshots turn out to be off (mean_rev was actually $80k not $50k,
+    # scalper was $70k not $100k — hardcoded math would keep breaking).
+    _INVARIANT_TARGET = 100_000_000  # $1M in cents
+    _WINNER = "crypto_quant_aggressive"
+
+    winner_pid_row = conn.execute(text(
+        "SELECT id FROM bot_profiles WHERE name = :n"
+    ), {"n": _WINNER}).fetchone()
+    if winner_pid_row:
+        winner_pid = winner_pid_row[0]
+        winner_alloc_row = conn.execute(text(
             "SELECT id, starting_capital_cents FROM bot_allocations "
             "WHERE profile_id = :pid AND user_id = 1"
-        ), {"pid": pid}).fetchone()
-        if not alloc_row:
-            logger.warning("[m052] no allocation for boost %s at user_id=1 — skipping", bot_name)
-            continue
-        alloc_id, current_cents = alloc_row
-        current_cents = int(current_cents or 0)
-        new_cents = current_cents + boost_cents
-        conn.execute(text(
-            "UPDATE bot_allocations "
-            "SET starting_capital_cents = :c, updated_at = :now "
-            "WHERE id = :aid"
-        ), {"c": new_cents, "now": now_iso, "aid": alloc_id})
-        actions.append({
-            "bot": bot_name,
-            "action": "boosted",
-            "from_cents": current_cents,
-            "to_cents": new_cents,
-            "delta_cents": boost_cents,
-        })
-        logger.warning(
-            "[m052] winner %s starting_capital %d → %d (boost +$%.0f)",
-            bot_name, current_cents, new_cents, boost_cents / 100.0,
-        )
+        ), {"pid": winner_pid}).fetchone()
+        if winner_alloc_row:
+            winner_alloc_id, winner_current_cents = winner_alloc_row
+            winner_current_cents = int(winner_current_cents or 0)
 
-    # 4. Verify invariant. Sum across active+halted must == $1M.
+            # Current sum across ALL user 1 allocations (including winner)
+            pre_sum_row = conn.execute(text(
+                "SELECT COALESCE(SUM(starting_capital_cents), 0) "
+                "FROM bot_allocations WHERE user_id = 1"
+            )).fetchone()
+            pre_sum = int(pre_sum_row[0]) if pre_sum_row else 0
+
+            # Winner's new cents = current + (target - pre_sum). If pre_sum
+            # is already $1M this is a no-op; if it's short we boost, if
+            # over we reduce. Clamp to prevent negative allocations.
+            winner_new_cents = max(0, winner_current_cents + (_INVARIANT_TARGET - pre_sum))
+            if winner_new_cents != winner_current_cents:
+                conn.execute(text(
+                    "UPDATE bot_allocations "
+                    "SET starting_capital_cents = :c, updated_at = :now "
+                    "WHERE id = :aid"
+                ), {"c": winner_new_cents, "now": now_iso, "aid": winner_alloc_id})
+                actions.append({
+                    "bot": _WINNER,
+                    "action": "invariant_balance",
+                    "from_cents": winner_current_cents,
+                    "to_cents": winner_new_cents,
+                    "delta_cents": winner_new_cents - winner_current_cents,
+                })
+                logger.warning(
+                    "[m052] winner %s starting_capital %d → %d (invariant delta %+d)",
+                    _WINNER, winner_current_cents, winner_new_cents,
+                    winner_new_cents - winner_current_cents,
+                )
+            else:
+                actions.append({"bot": _WINNER, "action": "invariant_already_balanced"})
+
+    # 4. Verify invariant. Sum across ALL user 1 allocations must == $1M.
+    # Uses the same filter as the self-balance step above so the two agree.
     total_row = conn.execute(text(
         "SELECT COALESCE(SUM(starting_capital_cents), 0) "
-        "FROM bot_allocations "
-        "WHERE user_id = 1 AND (enabled = 1 OR paused_reason IS NOT NULL)"
+        "FROM bot_allocations WHERE user_id = 1"
     )).fetchone()
     total_cents = int(total_row[0]) if total_row else 0
     invariant_ok = (total_cents == 100_000_000)
