@@ -147,14 +147,28 @@ def _run_and_log(profile_name: str) -> None:
             from sqlalchemy import text as _hb_text
             from datetime import datetime as _hb_dt, timezone as _hb_tz
             _now_iso = _hb_dt.now(_hb_tz.utc).isoformat()
+            # Default cadence for the initial INSERT only — existing rows keep
+            # whatever cadence was seeded by the stale-check upserter (which
+            # writes real values from bot_profiles.asset_class). The NOT NULL
+            # constraint on expected_cadence_minutes was silently rejecting
+            # every new-row heartbeat write and hiding scanner activity from
+            # /admin/inert-bot-scan. Heuristic: crypto → 240, options → 30,
+            # everything else → 90; overwritten on next stale-sweep.
+            _pn = profile_name.lower()
+            if _pn.startswith("options_"):
+                _default_cadence = 30
+            elif _pn.startswith("crypto_"):
+                _default_cadence = 240
+            else:
+                _default_cadence = 90
             db.execute(
                 _hb_text(
                     "INSERT INTO bot_heartbeat (bot_name, expected_cadence_minutes, "
-                    "last_scan_at, updated_at) VALUES (:n, NULL, :t, :t) "
+                    "last_scan_at, updated_at) VALUES (:n, :c, :t, :t) "
                     "ON CONFLICT(bot_name) DO UPDATE SET "
                     "last_scan_at = :t, updated_at = :t"
                 ),
-                {"n": profile_name, "t": _now_iso},
+                {"n": profile_name, "c": _default_cadence, "t": _now_iso},
             )
             db.commit()
         except Exception as _hb_exc:
