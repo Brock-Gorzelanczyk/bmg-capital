@@ -33,6 +33,17 @@ ASSET_CLASS_REGISTRY: dict[str, dict] = {
     "crypto_quant_aggressive":      {"asset_class": "crypto",  "ticker_allowlist": None},
     "crypto_quant_mean_reversion":  {"asset_class": "crypto",  "ticker_allowlist": None},
     "crypto_quant_scalper":         {"asset_class": "crypto",  "ticker_allowlist": None},
+    # 2026-07-02 new bots (m052 reallocation from halted mean_rev + scalper)
+    "crypto_quant_alt_focus":       {"asset_class": "crypto",  "ticker_allowlist": None},
+    "crypto_quant_scalp_1m":        {"asset_class": "crypto",  "ticker_allowlist": None},
+    "crypto_dca_btc_eth":           {"asset_class": "crypto",  "ticker_allowlist": None},
+    # 2026-07-02 second batch (m053) — 5 more quant bots per Brock's
+    # "more quant bots at same volume as aggressive" directive
+    "crypto_quant_universe_top6":   {"asset_class": "crypto",  "ticker_allowlist": None},
+    "crypto_quant_defi_l2":         {"asset_class": "crypto",  "ticker_allowlist": None},
+    "crypto_quant_meme_tier":       {"asset_class": "crypto",  "ticker_allowlist": None},
+    "crypto_quant_10m":             {"asset_class": "crypto",  "ticker_allowlist": None},
+    "crypto_quant_15m":             {"asset_class": "crypto",  "ticker_allowlist": None},
     "cash_floor":                   {"asset_class": "equity",  "ticker_allowlist": ["SPY", "QQQ"]},
 }
 

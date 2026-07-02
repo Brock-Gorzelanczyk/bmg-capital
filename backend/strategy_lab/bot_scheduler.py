@@ -568,6 +568,77 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job bot_crypto_dca_btc_eth (mon 10:00 UTC, weekly)")
 
+    # ------------------------------------------------------------------
+    # 2026-07-02 SECOND BATCH — 5 more quant bots (m053 reallocation)
+    # Brock directive: same-volume-as-aggressive quant bots. Different
+    # universes + timeframes; same 8-strategy stack. $20k each.
+    # ------------------------------------------------------------------
+
+    # top6 majors — concentrated liquidity, 5m
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_quant_universe_top6"),
+        CronTrigger(minute="*/5"),
+        id="bot_crypto_quant_universe_top6",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_universe_top6 (*/5 min, fires immediately)")
+
+    # defi + L2 basket
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_quant_defi_l2"),
+        CronTrigger(minute="*/5"),
+        id="bot_crypto_quant_defi_l2",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_defi_l2 (*/5 min, fires immediately)")
+
+    # meme + high-beta tier
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_quant_meme_tier"),
+        CronTrigger(minute="*/5"),
+        id="bot_crypto_quant_meme_tier",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_meme_tier (*/5 min, fires immediately)")
+
+    # 10-minute timeframe variant
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_quant_10m"),
+        CronTrigger(minute="*/10"),
+        id="bot_crypto_quant_10m",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_10m (*/10 min, fires immediately)")
+
+    # 15-minute timeframe variant
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_quant_15m"),
+        CronTrigger(minute="*/15"),
+        id="bot_crypto_quant_15m",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_15m (*/15 min, fires immediately)")
+
     # One-time startup log: emit cooldown_minutes for each quant bot so Railway
     # logs confirm the YAML setting is in effect on this deploy.
     try:

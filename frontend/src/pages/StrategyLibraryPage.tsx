@@ -23,6 +23,11 @@ const BOT_STYLE: Record<string, string> = {
   crypto_quant_alt_focus:      "Momentum",
   crypto_quant_scalp_1m:       "Momentum",
   crypto_dca_btc_eth:          "Trend",
+  crypto_quant_universe_top6:  "Momentum",
+  crypto_quant_defi_l2:        "Momentum",
+  crypto_quant_meme_tier:      "Momentum",
+  crypto_quant_10m:            "Momentum",
+  crypto_quant_15m:            "Momentum",
   options_income:              "Carry",
   options_directional:         "Volatility",
 };
@@ -35,6 +40,8 @@ const BOT_DIFFICULTY: Record<string, string> = {
   crypto_quant_mean_reversion: "Advanced", crypto_quant_scalper: "Advanced",
   crypto_quant_alt_focus: "Advanced", crypto_quant_scalp_1m: "Advanced",
   crypto_dca_btc_eth: "Beginner",
+  crypto_quant_universe_top6: "Advanced", crypto_quant_defi_l2: "Advanced",
+  crypto_quant_meme_tier: "Advanced", crypto_quant_10m: "Advanced", crypto_quant_15m: "Advanced",
   options_income: "Intermediate", options_directional: "Advanced",
 };
 

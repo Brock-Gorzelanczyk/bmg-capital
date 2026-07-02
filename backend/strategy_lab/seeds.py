@@ -35,6 +35,11 @@ _PROFILE_DESCRIPTIONS = {
     "crypto_quant_alt_focus": "Alt-focused variant of Quant Aggressive. 8-strategy stack on Tier B/C/D coins (AVAX/DOT/LINK/ARB/OP/SUI/DOGE etc). 5m bars, tighter position sizing than aggressive. $40k, funded from halted mean-reversion.",
     "crypto_quant_scalp_1m": "1-minute scalper on BTC/ETH/SOL/BNB/XRP. 4 quant strategies, 2min cadence, 30min max hold, 0.4% stops, 0.8% targets. $30k, funded from halted scalper.",
     "crypto_dca_btc_eth": "Weekly DCA into BTC + ETH. No strategy alpha claimed — 'stayed-invested' baseline for benchmarking discretionary bots. $30k, weekly Monday 10 UTC.",
+    "crypto_quant_universe_top6": "Concentrated liquidity variant of Aggressive. Same 8-strategy stack, universe scoped to BTC/ETH/SOL/BNB/XRP/ADA only. 5m cadence. $20k.",
+    "crypto_quant_defi_l2": "DeFi + L2 basket (ARB/OP/INJ/SUI/APT/LINK/NEAR/DOT). Full 8-strategy stack. Alpha comes from universe diversification vs Aggressive. 5m. $20k.",
+    "crypto_quant_meme_tier": "Meme/high-beta tier (DOGE/SHIB/PEPE/AVAX/POL). 8-strategy stack, wider stops (3%), smaller size (1.5%). Bounded meme exposure. $20k.",
+    "crypto_quant_10m": "10-minute timeframe variant of Aggressive. Same 8-strategy stack, full 20-coin universe. Tests whether 5m edge holds at 10m. $20k.",
+    "crypto_quant_15m": "15-minute timeframe variant of Aggressive. Same stack, longer holds (up to 24h). Tests scaling of Aggressive's edge with holding period. $20k.",
 }
 
 

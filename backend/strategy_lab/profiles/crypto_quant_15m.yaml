@@ -1,0 +1,94 @@
+name: crypto_quant_15m
+asset_class: quant
+broker: alpaca_paper_crypto
+
+# 15-minute timeframe variant of Aggressive. Same 8-strategy stack, full
+# 20-coin universe, but bars are 3x longer than 5m. Reduces trade turnover
+# by ~2/3 vs Aggressive but should catch bigger moves per trade. Tests
+# whether the aggressive edge scales with holding period or decays.
+universe:
+  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, ADA/USD,
+            AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD,
+            ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD,
+            DOGE/USD, SHIB/USD]
+
+scan_timeframe: "15m"
+scan_lookback_bars: 200
+cadence: "*/15 * * * *"
+
+watchlist:
+  rebuild_at: "0 */6 * * *"
+  size: 20
+  top_n_for_signals: 15
+
+strategies:
+  - crypto_quant_vwap_fade
+  - crypto_quant_bb_breakout
+  - crypto_quant_momentum_trigger
+  - crypto_quant_volume_zscore_spike
+  - crypto_quant_range_break_retest
+  - crypto_quant_orderflow_imbalance
+  - crypto_quant_funding_rate_arb
+  - crypto_quant_donchian_breakout_5m
+
+ensemble: any_above_threshold
+confidence_threshold: 0.45
+
+anti_overfit_multi_signal_conf: 0.65
+anti_correlation_top_n: 3
+
+size_bands:
+  - min: 0.45
+    max: 0.55
+    multiplier: 0.4
+  - min: 0.55
+    max: 0.65
+    multiplier: 0.7
+  - min: 0.65
+    max: 0.75
+    multiplier: 1.0
+  - min: 0.75
+    max: 1.0
+    multiplier: 1.5
+
+position_cap: 12
+position_size_pct: 3.0
+stop_loss_pct: 2.5
+take_profit_pct: 5.0
+trailing_stop_activate_at_pct: 2.5
+trailing_stop_distance_pct: 1.25
+hold_max_hours: 24
+
+cooldown_minutes: 45
+
+risk_overlay:
+  daily_loss_limit_pct: 3.0
+  max_position_size_pct: 25.0
+  max_gross_exposure_pct: 60.0
+  consecutive_loss_halve_at: 4
+  consecutive_loss_halt_hours: 4
+  consecutive_loss_halt_at: 8
+  portfolio_drawdown_circuit_pct: 5.0
+  pdt_enforce: false
+
+execution:
+  order_type: market
+  limit_offset_bps: 10
+  reprice_after_seconds: 45
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
+
+discord:
+  channel: quant-signals
+
+paper_only: true
+starting_capital_cents: 2000000   # $20k
+
+risk:
+  deployment_target_pct: 0.70
+  target_position_count: 10
+  max_position_pct: 0.15
+  max_total_deployed_pct: 0.85
+
+skip_execution_guards: true

@@ -188,6 +188,66 @@ const BOT_META: Record<
     ensemble: "any_above_threshold",
     strategies: ["crypto_dca_weekly"],
   },
+  crypto_quant_universe_top6: {
+    displayName: "Quant Top 6",
+    description: "Concentrated liquidity variant · BTC/ETH/SOL/BNB/XRP/ADA · 8-strategy stack · 5m · $20k",
+    assetClass: "quant",
+    ensemble: "any_above_threshold",
+    strategies: [
+      "crypto_quant_vwap_fade", "crypto_quant_bb_breakout",
+      "crypto_quant_momentum_trigger", "crypto_quant_volume_zscore_spike",
+      "crypto_quant_range_break_retest", "crypto_quant_orderflow_imbalance",
+      "crypto_quant_funding_rate_arb", "crypto_quant_donchian_breakout_5m",
+    ],
+  },
+  crypto_quant_defi_l2: {
+    displayName: "Quant DeFi/L2",
+    description: "ARB/OP/INJ/SUI/APT/LINK/NEAR/DOT · 8-strategy stack · 5m · $20k",
+    assetClass: "quant",
+    ensemble: "any_above_threshold",
+    strategies: [
+      "crypto_quant_vwap_fade", "crypto_quant_bb_breakout",
+      "crypto_quant_momentum_trigger", "crypto_quant_volume_zscore_spike",
+      "crypto_quant_range_break_retest", "crypto_quant_orderflow_imbalance",
+      "crypto_quant_funding_rate_arb", "crypto_quant_donchian_breakout_5m",
+    ],
+  },
+  crypto_quant_meme_tier: {
+    displayName: "Quant Meme",
+    description: "DOGE/SHIB/PEPE/AVAX/POL · 8-strategy stack, wider stops · 5m · $20k",
+    assetClass: "quant",
+    ensemble: "any_above_threshold",
+    strategies: [
+      "crypto_quant_vwap_fade", "crypto_quant_bb_breakout",
+      "crypto_quant_momentum_trigger", "crypto_quant_volume_zscore_spike",
+      "crypto_quant_range_break_retest", "crypto_quant_orderflow_imbalance",
+      "crypto_quant_funding_rate_arb", "crypto_quant_donchian_breakout_5m",
+    ],
+  },
+  crypto_quant_10m: {
+    displayName: "Quant 10m",
+    description: "10m timeframe variant of Aggressive · same 8-strategy stack, full 20-coin universe · $20k",
+    assetClass: "quant",
+    ensemble: "any_above_threshold",
+    strategies: [
+      "crypto_quant_vwap_fade", "crypto_quant_bb_breakout",
+      "crypto_quant_momentum_trigger", "crypto_quant_volume_zscore_spike",
+      "crypto_quant_range_break_retest", "crypto_quant_orderflow_imbalance",
+      "crypto_quant_funding_rate_arb", "crypto_quant_donchian_breakout_5m",
+    ],
+  },
+  crypto_quant_15m: {
+    displayName: "Quant 15m",
+    description: "15m timeframe variant · longer holds up to 24h · same 8-strategy stack · $20k",
+    assetClass: "quant",
+    ensemble: "any_above_threshold",
+    strategies: [
+      "crypto_quant_vwap_fade", "crypto_quant_bb_breakout",
+      "crypto_quant_momentum_trigger", "crypto_quant_volume_zscore_spike",
+      "crypto_quant_range_break_retest", "crypto_quant_orderflow_imbalance",
+      "crypto_quant_funding_rate_arb", "crypto_quant_donchian_breakout_5m",
+    ],
+  },
 };
 
 // ─── Hardcoded upcoming FOMC dates as fallback catalysts ─────────────────────

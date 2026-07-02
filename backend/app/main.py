@@ -559,6 +559,18 @@ async def lifespan(app: FastAPI):
     except Exception as _m052_exc:
         logger.error("[startup] m052_reallocate_to_new_quant_bots FAILED: %s", _m052_exc, exc_info=True)
 
+    # m053: allocate 5 more quant bots (universe_top6, defi_l2, meme_tier,
+    # 10m, 15m). Same self-balancing pattern as m052 — invariant pulled from
+    # crypto_quant_aggressive so total stays at $1M exactly. Runs AFTER m052
+    # so the aggregate has the latest state.
+    try:
+        from app.db.migrations.m053_seed_five_more_quant_bots import run as _run_m053
+        with engine.begin() as _m053_conn:
+            _m053_result = _run_m053(_m053_conn)
+        logger.warning("[startup] m053 OK: %s", _m053_result)
+    except Exception as _m053_exc:
+        logger.error("[startup] m053_seed_five_more_quant_bots FAILED: %s", _m053_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

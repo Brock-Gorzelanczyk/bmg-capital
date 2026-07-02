@@ -74,6 +74,11 @@ const BOT_META: Record<string, { displayName: string; description: string }> = {
   crypto_quant_alt_focus:       { displayName: "Quant Alt Focus",       description: "8-strategy stack on Tier B/C/D alts · 5m bars · smaller size than Aggressive" },
   crypto_quant_scalp_1m:        { displayName: "Quant Scalp 1m",        description: "1min bars · BTC/ETH/SOL/BNB/XRP · 30min max hold · 0.4% stops" },
   crypto_dca_btc_eth:           { displayName: "DCA BTC/ETH",           description: "Weekly dumb-DCA baseline · no signals, no stops · benchmark" },
+  crypto_quant_universe_top6:   { displayName: "Quant Top 6",           description: "Same stack as Aggressive · BTC/ETH/SOL/BNB/XRP/ADA only · concentrated liquidity" },
+  crypto_quant_defi_l2:         { displayName: "Quant DeFi/L2",         description: "8-strategy stack on ARB/OP/INJ/SUI/APT/LINK/NEAR/DOT · alt-correlated flow" },
+  crypto_quant_meme_tier:       { displayName: "Quant Meme",            description: "DOGE/SHIB/PEPE/AVAX/POL · wider stops · bounded meme exposure" },
+  crypto_quant_10m:             { displayName: "Quant 10m",             description: "10m timeframe variant of Aggressive · same stack, less noise" },
+  crypto_quant_15m:             { displayName: "Quant 15m",             description: "15m timeframe variant · longer holds up to 24h" },
 };
 
 function resolveName(name: string, fromApi?: string): string {
