@@ -46,15 +46,9 @@ ensemble: weighted_vote
 # 2026-06-30: Lowered from 50 → 45 alongside options_income for same
 # reason (12+ days silent, paired with PR #42 OCC fix). Daily audit
 # will catch over-deployment.
-# 2026-07-01 (Brock override): more aggressive, less cash per position.
-# Same rationale as options_income — see that YAML for details. LEAPS at
-# ~$36/share × 100 = $3,600/contract will still be rejected by the tighter
-# $1,500 budget; that's fine, LEAPS are inherently big-position bets that
-# don't fit the "many small trades" pattern. Credit spreads + debit spreads
-# should fire much more frequently.
-composite_threshold: 30
-position_cap: 15
-position_size_pct: 8.0
+composite_threshold: 45
+position_cap: 8
+position_size_pct: 15.0
 stop_loss_pct: 100.0
 take_profit_pct: 50.0
 hold_max_days: 45
@@ -85,5 +79,5 @@ risk:
   max_position_pct: 0.07
   max_total_deployed_pct: 0.65
 
-# 2026-07-01: max_concurrent_positions removed — same rationale as
-# options_income. position_cap (15) is the concurrency governor now.
+# 7-day deployment push (Brock 2026-06-24): concentrate capital into fewer, bigger positions.
+max_concurrent_positions: 4

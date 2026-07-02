@@ -1758,14 +1758,11 @@ def _execute_options_signal(
     capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
     position_dollars = capital_usd * (final_size_pct / 100.0)
 
-    # Hard sleeve-level notional cap: never risk more than 3% of sleeve capital
+    # Hard sleeve-level notional cap: never risk more than 5% of sleeve capital
     # on a single options contract (regardless of profile.position_size_pct).
-    # 2026-07-01 (Brock override): dropped 5% → 3% to enforce "less cash per
-    # position, more trades" directive. On a $50k options sleeve this is
-    # $1,500/trade max. Bounded downside if a signal is bad: worst-case single
-    # trade loss ≈ $1,500. Combined with position_cap=15 in the YAML the
-    # sleeve's total exposure caps at ~$22.5k = 45% of allocation.
-    OPTIONS_MAX_NOTIONAL_PCT = 0.03
+    # This is the third leg of the AMD-LEAPS fix — even if the profile says
+    # 15% and the smart-sizer agrees, options notional gets clamped here.
+    OPTIONS_MAX_NOTIONAL_PCT = 0.05
     notional_cap = capital_usd * OPTIONS_MAX_NOTIONAL_PCT
     if position_dollars > notional_cap:
         logger.info(
