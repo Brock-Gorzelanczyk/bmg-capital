@@ -583,6 +583,20 @@ async def lifespan(app: FastAPI):
     except Exception as _m054_exc:
         logger.error("[startup] m054_restore_aggressive_from_cash_floor FAILED: %s", _m054_exc, exc_info=True)
 
+    # m055: undo m026's damage to the m052/m053 batches. m026 disabled all 8
+    # new bots because they weren't in SPEC_BOT_NAMES; m055 flips them back
+    # on. Must run AFTER m026 (which is called from run_migrations line 140
+    # above) so m055 sees the damage and undoes it. Not gated — m026 keeps
+    # trying to re-disable so m055 keeps flipping back on. Idempotent no-op
+    # once m026's spec list is updated (same commit).
+    try:
+        from app.db.migrations.m055_reenable_new_quant_bots import run as _run_m055
+        with engine.begin() as _m055_conn:
+            _m055_result = _run_m055(_m055_conn)
+        logger.warning("[startup] m055 OK: %s", _m055_result)
+    except Exception as _m055_exc:
+        logger.error("[startup] m055_reenable_new_quant_bots FAILED: %s", _m055_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

@@ -35,12 +35,24 @@ TARGET_USER_ID = 1
 # Must mirror the m025 SPEC name set exactly. Do NOT import from m025 to
 # keep this migration self-contained at boot.
 SPEC_BOT_NAMES = frozenset({
+    # Original m025 clean-slate 13 bots
     "stock_swing", "stock_lt", "stock_day",
     "crypto_day", "crypto_swing", "crypto_lt", "crypto_onchain",
     "options_income", "options_directional",
     "crypto_quant_aggressive", "crypto_quant_mean_reversion", "crypto_quant_scalper",
     "cash_floor",
+    # 2026-07-01 m052 batch (3 new quant bots)
+    "crypto_quant_alt_focus", "crypto_quant_scalp_1m", "crypto_dca_btc_eth",
+    # 2026-07-02 m053 batch (5 more quant bots)
+    "crypto_quant_universe_top6", "crypto_quant_defi_l2",
+    "crypto_quant_meme_tier", "crypto_quant_10m", "crypto_quant_15m",
 })
+# NOTE: this frozenset is the "known-good bot names" for the fund's
+# user_id=1 allocations. m026 runs EVERY boot (not just once) — it disables
+# any allocation whose profile name isn't in this set. Adding a new
+# production bot? Add its name here first or m026 will silently disable it
+# on the next deploy (which is exactly what happened to m052/m053 batches
+# on 2026-07-02).
 
 _MIGRATION_NAME = "m026_disable_non_spec_allocations"
 
