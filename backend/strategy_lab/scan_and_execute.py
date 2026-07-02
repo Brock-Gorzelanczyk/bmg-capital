@@ -110,7 +110,25 @@ def scan_and_execute(
     allocations = alloc_q.all()
 
     if not allocations:
-        logger.warning("[scan:%s] no allocations (user_id=%s)", profile_name, user_id)
+        # Diagnostic: dump every row for this profile_id so we can see WHY
+        # nothing matched (paper_mode=0? enabled=0? wrong profile_id?).
+        # Runs only on the empty-result path so it's cheap.
+        try:
+            _all_rows = db.query(_BA).filter(_BA.profile_id == bp.id).all()
+            _dump = [
+                (a.id, a.user_id, a.enabled, a.paper_mode, a.starting_capital_cents, a.paused_reason)
+                for a in _all_rows
+            ]
+            logger.warning(
+                "[scan:%s] no allocations pass filter (user_id=%s). "
+                "profile_id=%s dump=%s",
+                profile_name, user_id, bp.id, _dump,
+            )
+        except Exception as _dexc:
+            logger.warning(
+                "[scan:%s] no allocations (user_id=%s) — dump failed: %s",
+                profile_name, user_id, _dexc,
+            )
         return _empty_result(profile_name, f"No allocations found (user_id={user_id})")
 
     # ── 4. Fetch OHLCV bars ───────────────────────────────────────────────────
