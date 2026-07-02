@@ -126,5 +126,3 @@ composite_threshold_override: 50
 # 7-day deployment push (Brock 2026-06-24): bump sizing for proven bots.
 position_size_pct_override: 25
 
-# 7-day deployment push (Brock 2026-06-24): concentrate capital into fewer, bigger positions.
-max_concurrent_positions: 4

@@ -82,5 +82,3 @@ risk:
 # 7-day deployment push (Brock 2026-06-24): bump sizing for active newer bots.
 position_size_pct_override: 15
 
-# 7-day deployment push (Brock 2026-06-24): concentrate capital into fewer, bigger positions.
-max_concurrent_positions: 6
