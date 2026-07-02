@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 STRATEGY_NAME = "iron_condor_45dte"
 
 # Thresholds
-MARKET_IVR_MIN  = 40    # vol_pctile from regime (market-level IVR proxy)
-SYMBOL_IVR_MIN  = 35    # per-symbol realized vol percentile
-MAX_RANGE_PCT   = 0.12  # 20d price range / spot must be < 12% (range-bound)
-VIX_MIN         = 13.0  # too cheap to sell premium
-VIX_MAX         = 35.0  # undefined-risk territory for spreads
-BASE_SIZE       = 0.05  # 5% of allocation capital per position
+MARKET_IVR_MIN  = 10    # 2026-07-01 Brock aggressive: 40 → 10
+SYMBOL_IVR_MIN  = 10    # 35 → 10
+MAX_RANGE_PCT   = 0.25  # 0.12 → 0.25 — tolerate wider intra-month range
+VIX_MIN         = 10.0  # 13 → 10 (sell condors even in low IV)
+VIX_MAX         = 40.0  # 35 → 40
+BASE_SIZE       = 0.05
 
 
 def _entry_conditions(

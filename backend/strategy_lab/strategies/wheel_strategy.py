@@ -26,10 +26,10 @@ from strategy_lab.strategies._options_helpers import realized_vol_pctile, sma
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "wheel_strategy"
 
-MARKET_IVR_MIN = 25
-SYMBOL_IVR_MIN = 25
-PULLBACK_MIN   = 0.02   # minimum 2% pullback from SMA20
-PULLBACK_MAX   = 0.08   # max 8% pullback (beyond = potentially broken stock)
+MARKET_IVR_MIN = 10     # 2026-07-01 Brock aggressive: 25 → 10
+SYMBOL_IVR_MIN = 10     # 25 → 10
+PULLBACK_MIN   = 0.002  # 2026-07-01: 0.02 → 0.002 fire on tiny dip too
+PULLBACK_MAX   = 0.15   # 2026-07-01: 0.08 → 0.15 tolerate deeper dips
 BASE_SIZE      = 0.06
 
 

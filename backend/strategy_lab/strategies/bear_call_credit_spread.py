@@ -26,9 +26,9 @@ from strategy_lab.strategies._options_helpers import rsi, sma
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "bear_call_credit_spread"
 
-MARKET_IVR_MIN = 25
-RSI_MAX        = 55.0
-MAX_2W_RETURN  = 0.02
+MARKET_IVR_MIN = 10    # 2026-07-01 Brock aggressive: 25 → 10
+RSI_MAX        = 80.0  # 55 → 80 — allow entry even when uptrend cooling
+MAX_2W_RETURN  = 0.12  # 0.02 → 0.12
 BASE_SIZE      = 0.04
 
 

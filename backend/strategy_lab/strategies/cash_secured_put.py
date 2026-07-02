@@ -23,12 +23,12 @@ from strategy_lab.strategies._options_helpers import realized_vol_pctile, sma
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "cash_secured_put"
 
-MARKET_IVR_MIN = 30
-SYMBOL_IVR_MIN = 25
+MARKET_IVR_MIN = 10   # 2026-07-01 (Brock aggressive): 30 → 10, fire in low-vol
+SYMBOL_IVR_MIN = 10   # 30 → 10
 VIX_MAX        = 40.0
 BASE_SIZE      = 0.05
-PULLBACK_MIN   = 0.01  # min 1% below SMA20 or recent high
-PULLBACK_MAX   = 0.09  # max 9% (beyond this the stock is likely broken)
+PULLBACK_MIN   = 0.001  # 2026-07-01: 0.01 → 0.001 fire on tiny pullbacks too
+PULLBACK_MAX   = 0.15   # 2026-07-01: 0.09 → 0.15 tolerate deeper dips
 
 
 def _entry_conditions(

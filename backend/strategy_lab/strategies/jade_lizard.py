@@ -27,12 +27,12 @@ from strategy_lab.strategies._options_helpers import realized_vol_pctile, rsi, s
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "jade_lizard"
 
-MARKET_IVR_MIN = 35
-SYMBOL_IVR_MIN = 30
-RSI_MIN        = 45.0
-RSI_MAX        = 65.0
-MAX_5D_RETURN  = 0.05
-MAX_DEVIATION  = 0.03
+MARKET_IVR_MIN = 10    # 2026-07-01 Brock aggressive: 35 → 10
+SYMBOL_IVR_MIN = 10    # 30 → 10
+RSI_MIN        = 25.0  # 45 → 25 — allow more oversold entries
+RSI_MAX        = 80.0  # 65 → 80 — allow more overbought entries
+MAX_5D_RETURN  = 0.15  # 0.05 → 0.15
+MAX_DEVIATION  = 0.15  # 0.03 → 0.15
 BASE_SIZE      = 0.04
 
 

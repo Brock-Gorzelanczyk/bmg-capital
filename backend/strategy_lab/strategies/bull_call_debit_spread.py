@@ -26,12 +26,12 @@ from strategy_lab.strategies._options_helpers import rsi, sma
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "bull_call_debit_spread"
 
-VIX_MAX         = 22.0  # buy spreads cheap in low-IV
-VIX_MIN         = 12.0
-RSI_MIN         = 50.0
-RSI_MAX         = 75.0
-MIN_SMA_PREMIUM = 0.03  # price must be 3%+ above SMA20
-MIN_5D_MOM      = 0.01
+VIX_MAX         = 35.0  # 2026-07-01 Brock aggressive: 22 → 35
+VIX_MIN         = 8.0   # 12 → 8
+RSI_MIN         = 30.0  # 50 → 30 — allow entry deeper in pullback too
+RSI_MAX         = 85.0  # 75 → 85
+MIN_SMA_PREMIUM = 0.001 # 0.03 → 0.001 — near-SMA entries OK
+MIN_5D_MOM      = -0.02 # 0.01 → -0.02 — allow slight recent chop
 BASE_SIZE       = 0.04
 
 

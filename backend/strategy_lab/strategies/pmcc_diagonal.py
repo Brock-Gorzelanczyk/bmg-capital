@@ -26,10 +26,10 @@ from strategy_lab.strategies._options_helpers import rsi, sma
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "pmcc_diagonal"
 
-VIX_MIN        = 12.0
-VIX_MAX        = 30.0
-MARKET_IVR_MIN = 20
-MAX_EXTENSION  = 0.08  # price max 8% above SMA20
+VIX_MIN        = 10.0  # 2026-07-01 Brock aggressive: 12 → 10
+VIX_MAX        = 35.0  # 30 → 35
+MARKET_IVR_MIN = 5     # 20 → 5
+MAX_EXTENSION  = 0.20  # 0.08 → 0.20 — 20% band above SMA20
 BASE_SIZE      = 0.05
 
 

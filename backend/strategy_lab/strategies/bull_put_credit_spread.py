@@ -23,10 +23,10 @@ from strategy_lab.strategies._options_helpers import rsi, sma
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "bull_put_credit_spread"
 
-MARKET_IVR_MIN  = 25
-RSI_MIN         = 35.0
-RSI_MAX         = 70.0
-MIN_10D_RETURN  = -0.04   # stock can't be in freefall
+MARKET_IVR_MIN  = 10      # 2026-07-01 Brock aggressive: 25 → 10
+RSI_MIN         = 20.0    # 35 → 20 — allow deeper oversold
+RSI_MAX         = 85.0    # 70 → 85
+MIN_10D_RETURN  = -0.12   # -0.04 → -0.12 tolerate bigger dips
 BASE_SIZE       = 0.04
 
 

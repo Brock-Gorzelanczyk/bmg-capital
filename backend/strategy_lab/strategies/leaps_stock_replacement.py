@@ -27,10 +27,10 @@ from strategy_lab.strategies._options_helpers import rsi, sma
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "leaps_stock_replacement"
 
-VIX_MAX        = 28.0
-RSI_MIN        = 45.0
-RSI_MAX        = 70.0
-MAX_EXTENSION  = 0.10  # price not more than 10% above SMA20
+VIX_MAX        = 40.0  # 2026-07-01 Brock aggressive: 28 → 40
+RSI_MIN        = 25.0  # 45 → 25
+RSI_MAX        = 85.0  # 70 → 85
+MAX_EXTENSION  = 0.30  # 0.10 → 0.30 — 30% above SMA20 still OK
 BASE_SIZE      = 0.05
 
 

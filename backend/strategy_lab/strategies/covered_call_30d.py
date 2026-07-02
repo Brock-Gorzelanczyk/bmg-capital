@@ -23,9 +23,9 @@ from strategy_lab.strategies._options_helpers import realized_vol_pctile, sma
 logger = logging.getLogger(__name__)
 STRATEGY_NAME = "covered_call_30d"
 
-MARKET_IVR_MIN   = 30
-SYMBOL_IVR_MIN   = 25
-MAX_DEVIATION    = 0.05    # price within 5% of SMA20
+MARKET_IVR_MIN   = 10      # 2026-07-01 Brock aggressive: 30 → 10
+SYMBOL_IVR_MIN   = 10      # 25 → 10
+MAX_DEVIATION    = 0.12    # 2026-07-01: 0.05 → 0.12 — 12% band around SMA20
 BASE_SIZE        = 0.04
 
 
