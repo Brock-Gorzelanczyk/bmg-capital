@@ -571,6 +571,18 @@ async def lifespan(app: FastAPI):
     except Exception as _m053_exc:
         logger.error("[startup] m053_seed_five_more_quant_bots FAILED: %s", _m053_exc, exc_info=True)
 
+    # m054: rescue crypto_quant_aggressive from the $10k m053 left it at.
+    # Drains $90k from idle cash_floor (which needs CAPITAL_EXECUTE_ENABLED
+    # env var Brock hasn't set) and pushes it into the only profitable bot.
+    # Gated + safety-checked so it can't run if someone manually rebalanced.
+    try:
+        from app.db.migrations.m054_restore_aggressive_from_cash_floor import run as _run_m054
+        with engine.begin() as _m054_conn:
+            _m054_result = _run_m054(_m054_conn)
+        logger.warning("[startup] m054 OK: %s", _m054_result)
+    except Exception as _m054_exc:
+        logger.error("[startup] m054_restore_aggressive_from_cash_floor FAILED: %s", _m054_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

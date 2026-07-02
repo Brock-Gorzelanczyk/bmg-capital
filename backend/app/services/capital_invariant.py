@@ -48,12 +48,22 @@ class CapitalInvariantStatus:
 
 
 _EXPECTED_NAMES = (
+    # Original 13-bot spec (m027 baseline)
     "stock_swing", "stock_lt", "stock_day",
     "crypto_day", "crypto_swing", "crypto_lt", "crypto_onchain",
     "options_income", "options_directional",
     "crypto_quant_aggressive", "crypto_quant_mean_reversion",
     "crypto_quant_scalper", "cash_floor",
+    # 2026-07-01 m052 batch (3 new quant bots)
+    "crypto_quant_alt_focus", "crypto_quant_scalp_1m", "crypto_dca_btc_eth",
+    # 2026-07-02 m053 batch (5 more quant bots)
+    "crypto_quant_universe_top6", "crypto_quant_defi_l2",
+    "crypto_quant_meme_tier", "crypto_quant_10m", "crypto_quant_15m",
 )
+# NOTE: Adding a new production bot? Also add its name here — otherwise the
+# capital_invariant watchdog will false-trigger CRIT because the new bot's
+# capital won't be counted in the sum. Consistent with m052/m053/m054
+# migrations which use `WHERE user_id = 1` without a name filter.
 
 
 def check_capital_invariant(db, user_id: int = 1) -> CapitalInvariantStatus:
