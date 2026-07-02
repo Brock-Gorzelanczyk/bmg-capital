@@ -10,14 +10,24 @@ Rationale:
   bots, reallocate capital from halted bots, ensure they show in the app.
 
 Reallocation:
-  crypto_quant_mean_reversion: $50k → $0        (fully returned to pool)
-  crypto_quant_scalper:        $100k → $50k     (halved; keep $50k reserve
-                                                 for possible future restart)
+  crypto_quant_mean_reversion: $80k → $0        (fully drained)
+  crypto_quant_scalper:        $100k → $50k     (halved; $50k reserve for
+                                                 possible future restart)
+  crypto_quant_aggressive:     $110k → $140k    (winner reinvestment: +$30k)
   crypto_quant_alt_focus:      NEW $40k
   crypto_quant_scalp_1m:       NEW $30k
   crypto_dca_btc_eth:          NEW $30k
 
-Net delta: -$50k -$50k +$40k +$30k +$30k = $0 → $1M invariant preserved.
+Net delta: -$80k -$50k +$30k +$40k +$30k +$30k = $0
+$1M invariant preserved.
+
+Note on 2026-07-02 fix: first attempt shipped with an unnecessary
+`conn.commit()` inside an `engine.begin()` context, which closed the
+transaction after the first UPDATE (mean_rev → $0). Removed the extra
+commits (engine.begin auto-commits at block exit). Also confirmed mean_rev's
+current allocation is $80k not $50k (audit was rounded), so scalper reduction
+alone doesn't balance; added a +$30k boost to crypto_quant_aggressive (the
+only genuinely profitable bot) to close the invariant.
 
 The new bots' YAML files ship in this same commit; seed_bot_profiles() runs
 before this migration on every boot and creates their BotProfile rows. This
@@ -42,8 +52,8 @@ _MIGRATION_NAME = "m052_reallocate_to_new_quant_bots_2026_07"
 
 # Halted → return-to-pool amounts (in cents)
 _HALTED_TARGETS = {
-    "crypto_quant_mean_reversion": 0,           # $50k → $0
-    "crypto_quant_scalper":        5_000_000,   # $100k → $50k
+    "crypto_quant_mean_reversion": 0,           # was $80k → $0
+    "crypto_quant_scalper":        5_000_000,   # was $100k → $50k
 }
 
 # New allocations (in cents)
@@ -51,6 +61,14 @@ _NEW_ALLOCATIONS = [
     ("crypto_quant_alt_focus", 4_000_000),   # $40k
     ("crypto_quant_scalp_1m",  3_000_000),   # $30k
     ("crypto_dca_btc_eth",     3_000_000),   # $30k
+]
+
+# Winner-reinvestment boost to close the invariant. crypto_quant_aggressive
+# was the only bot generating alpha for the 22-day audit window; boosting it
+# absorbs the +$30k the -$130k / +$100k reallocation would otherwise leave
+# unallocated. Fed by taking $30k more from scalper's original $100k pool.
+_BOOST_TARGETS = [
+    ("crypto_quant_aggressive", 3_000_000),   # +$30k on top of current
 ]
 
 
@@ -96,7 +114,6 @@ def run(conn) -> dict:
             "SET starting_capital_cents = :c, updated_at = :now "
             "WHERE id = :aid"
         ), {"c": target_cents, "now": now_iso, "aid": alloc_id})
-        conn.commit()
         actions.append({
             "bot": bot_name,
             "action": "reduced",
@@ -142,7 +159,6 @@ def run(conn) -> dict:
             "cents": capital_cents,
             "now":   now_iso,
         })
-        conn.commit()
         actions.append({
             "bot": bot_name,
             "action": "allocated",
@@ -151,6 +167,44 @@ def run(conn) -> dict:
         logger.warning(
             "[m052] new bot %s allocated $%.0f (user_id=1, enabled=1, paper=1)",
             bot_name, capital_cents / 100.0,
+        )
+
+    # 3b. Boost winner allocations by an absolute delta. Different from #2
+    # (which sets target) — here we ADD to current. Used to close invariant
+    # gap when new-bot capital doesn't match freed-up halted capital exactly.
+    for bot_name, boost_cents in _BOOST_TARGETS:
+        pid_row = conn.execute(text(
+            "SELECT id FROM bot_profiles WHERE name = :n"
+        ), {"n": bot_name}).fetchone()
+        if not pid_row:
+            logger.warning("[m052] boost target %s missing — skipping", bot_name)
+            continue
+        pid = pid_row[0]
+        alloc_row = conn.execute(text(
+            "SELECT id, starting_capital_cents FROM bot_allocations "
+            "WHERE profile_id = :pid AND user_id = 1"
+        ), {"pid": pid}).fetchone()
+        if not alloc_row:
+            logger.warning("[m052] no allocation for boost %s at user_id=1 — skipping", bot_name)
+            continue
+        alloc_id, current_cents = alloc_row
+        current_cents = int(current_cents or 0)
+        new_cents = current_cents + boost_cents
+        conn.execute(text(
+            "UPDATE bot_allocations "
+            "SET starting_capital_cents = :c, updated_at = :now "
+            "WHERE id = :aid"
+        ), {"c": new_cents, "now": now_iso, "aid": alloc_id})
+        actions.append({
+            "bot": bot_name,
+            "action": "boosted",
+            "from_cents": current_cents,
+            "to_cents": new_cents,
+            "delta_cents": boost_cents,
+        })
+        logger.warning(
+            "[m052] winner %s starting_capital %d → %d (boost +$%.0f)",
+            bot_name, current_cents, new_cents, boost_cents / 100.0,
         )
 
     # 4. Verify invariant. Sum across active+halted must == $1M.
