@@ -100,6 +100,28 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     # Uses begin_nested() (savepoint) so a flush failure never corrupts the outer transaction.
     _exit_signal_id: int | None = None
     _exit_signal_dict: dict | None = None
+    # Look up the strategy that OPENED this position so the exit signal inherits
+    # it. Without this the crypto_day / crypto_swing / stock_* exit signals were
+    # persisted with strategy=NULL, which broke per-strategy attribution in
+    # /api/bots/*/signals and made the audit see "signals with strategy=None".
+    # Trace: position → entry BotTrade (via position_id FK) → BotSignal (via
+    # signal_id FK) → .strategy.
+    _entry_strategy: str | None = None
+    try:
+        from app.db.models.bots import BotTrade as _BotTrade_lookup
+        _entry_trade = (
+            db.query(_BotTrade_lookup)
+            .filter(_BotTrade_lookup.position_id == pos.id)
+            .filter(_BotTrade_lookup.side.in_(("buy", "short")))
+            .order_by(_BotTrade_lookup.id.asc())
+            .first()
+        )
+        if _entry_trade and _entry_trade.signal_id:
+            _entry_sig = db.get(BotSignal, _entry_trade.signal_id)
+            if _entry_sig:
+                _entry_strategy = _entry_sig.strategy
+    except Exception as _strat_exc:
+        logger.debug("[monitor] entry-strategy lookup failed for %s: %s", pos.symbol, _strat_exc)
     try:
         with db.begin_nested():
             _exit_sig = BotSignal(
@@ -110,6 +132,7 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
                 confidence=1.0,
                 reason=reason,
                 entry_price=price_usd,
+                strategy=_entry_strategy,
             )
             db.add(_exit_sig)
             db.flush()

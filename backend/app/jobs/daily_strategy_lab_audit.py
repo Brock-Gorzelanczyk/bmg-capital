@@ -117,11 +117,18 @@ def _check_per_bot_verdicts(db: Session) -> tuple[dict, list[str]]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _check_capital_invariant(db: Session) -> dict:
-    """Verify sum of starting_capital_cents == $1M for enabled bots."""
+    """Verify sum of starting_capital_cents == $1M across ALL Brock allocations.
+
+    Must include halted bots (enabled=0 with paused_reason set) because their
+    capital is still part of the $1M fleet — it's earmarked for the halted
+    bot, not returned to the pool. Filtering by enabled=1 alone produced a
+    false-positive "-$150k drift" alert every time a bot was halted via Path B.
+    """
     try:
         row = db.execute(text(
             "SELECT COALESCE(SUM(starting_capital_cents), 0) "
-            "FROM bot_allocations WHERE enabled=1 AND user_id=1"
+            "FROM bot_allocations "
+            "WHERE user_id=1 AND (enabled=1 OR paused_reason IS NOT NULL)"
         )).fetchone()
         total_cents = int(row[0]) if row else 0
         if total_cents == 100_000_000:

@@ -182,6 +182,24 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
         )
         return
 
+    # ── HARD GATE #2 (2026-07-01): stock/crypto bots ALSO execute via
+    # strategy_lab.scan_and_execute. This simulator's random-price entries
+    # + simulated exits were creating BotTrade rows for user_id=1 (the fund)
+    # WITHOUT corresponding BotSignal rows — surfacing as "trades exist,
+    # 0 signals ever" for stock_day/stock_swing/stock_lt in the 2026-07-01
+    # audit. The real scanner is registered by strategy_lab.bot_scheduler
+    # and writes both a signal AND the trade. Skipping here does not stop
+    # anything real from happening.
+    if (
+        profile.asset_class in ("stock", "equity", "crypto")
+        or bot_name.startswith(("stock_", "crypto_"))
+    ):
+        logger.debug(
+            "bot_executor: skipping %s profile %s — strategy_lab/scan_and_execute owns this path",
+            profile.asset_class, bot_name,
+        )
+        return
+
     config = profile.config_json or {}
     position_cap = config.get("position_cap", _DEFAULT_POSITION_CAP)
     hold_min, hold_max = _HOLD_DAYS.get(bot_name, (3, 21))
