@@ -77,11 +77,22 @@ def update_railway_relay_url(new_url: str, railway_token: str) -> bool:
             "value": new_url,
         }
     }
+    # Support both account tokens (Bearer) and Project Access Tokens
+    # (Project-Access-Token header). Project tokens can only write to their
+    # bound project + environment, which is exactly what we need here.
+    # Account tokens look like JWTs (contain '.'); project tokens are plain
+    # UUIDs. Use presence of '.' as a cheap classifier.
+    is_project_token = "." not in railway_token
+    auth_header = (
+        {"Project-Access-Token": railway_token}
+        if is_project_token
+        else {"Authorization": f"Bearer {railway_token}"}
+    )
     req = urllib.request.Request(
         RAILWAY_API,
         data=json.dumps({"query": query, "variables": variables}).encode(),
         headers={
-            "Authorization": f"Bearer {railway_token}",
+            **auth_header,
             "Content-Type": "application/json",
             # Cloudflare blocks default urllib UA with error 1010.
             "User-Agent": "bmg-tunnel-watchdog/1.0",
@@ -91,7 +102,19 @@ def update_railway_relay_url(new_url: str, railway_token: str) -> bool:
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             body = json.loads(resp.read())
-        return body.get("data", {}).get("variableUpsert") is True
+        # body.get("data") can be None when GraphQL returns only errors —
+        # the previous body.get("data", {}) still returned None (default only
+        # applies to missing keys, not null values), so .get on it raised
+        # AttributeError. Coalesce None → {}.
+        data = body.get("data") or {}
+        if data.get("variableUpsert") is True:
+            return True
+        errs = body.get("errors") or []
+        if errs:
+            sys.stderr.write(
+                f"[watchdog] Railway upsert rejected: {errs[0].get('message', 'unknown')}\n"
+            )
+        return False
     except Exception as exc:
         sys.stderr.write(f"[watchdog] Railway upsert failed: {exc}\n")
         return False
