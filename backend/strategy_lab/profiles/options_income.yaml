@@ -53,9 +53,16 @@ ensemble: weighted_vote
 # become real options trades. Daily audit will alert if signal volume floods
 # the sleeve. Re-tune upward (or upgrade strategies to emit factor fields)
 # once we have trade-history Sharpe to evaluate.
-composite_threshold: 45
-position_cap: 5
-position_size_pct: 20.0
+# 2026-07-01 (Brock override): more aggressive, less cash per position.
+# Lowered composite_threshold 45 → 30 to unblock more signals (169 were
+# filtered on 2026-06-30 alone). Position size 20% → 8% so each trade is
+# smaller. position_cap 5 → 15 so we can hold many small positions in
+# parallel. Combined with OPTIONS_MAX_NOTIONAL_PCT 5% → 3% in runner.py,
+# per-trade budget lands at min($4k, $1.5k) = $1.5k on a $50k sleeve.
+# Worst-case: 15 positions × $1.5k = $22.5k risk (45% of sleeve).
+composite_threshold: 30
+position_cap: 15
+position_size_pct: 8.0
 stop_loss_pct: 50.0
 take_profit_pct: 50.0
 hold_max_days: 45
@@ -86,5 +93,7 @@ risk:
   max_position_pct: 0.07
   max_total_deployed_pct: 0.70
 
-# 7-day deployment push (Brock 2026-06-24): concentrate capital into fewer, bigger positions.
-max_concurrent_positions: 4
+# 2026-07-01: max_concurrent_positions removed. The 2026-06-24 push forced
+# concentration (4 positions) which is the OPPOSITE of what we want now.
+# position_cap (15) governs concurrency; more, smaller positions per Brock's
+# "more aggressive + less cash per position" directive.
