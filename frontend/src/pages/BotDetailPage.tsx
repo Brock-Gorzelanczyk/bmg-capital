@@ -153,6 +153,41 @@ const BOT_META: Record<
       "bull_call_debit_spread", "leaps_stock_replacement", "long_call_directional",
     ],
   },
+  crypto_quant_alt_focus: {
+    displayName: "Quant Alt Focus",
+    description: "Alt-focused variant of Quant Aggressive — 8-strategy stack on Tier B/C/D coins · $40k",
+    assetClass: "quant",
+    ensemble: "any_above_threshold",
+    strategies: [
+      "crypto_quant_vwap_fade",
+      "crypto_quant_bb_breakout",
+      "crypto_quant_momentum_trigger",
+      "crypto_quant_volume_zscore_spike",
+      "crypto_quant_range_break_retest",
+      "crypto_quant_orderflow_imbalance",
+      "crypto_quant_funding_rate_arb",
+      "crypto_quant_donchian_breakout_5m",
+    ],
+  },
+  crypto_quant_scalp_1m: {
+    displayName: "Quant Scalp 1m",
+    description: "1-minute scalper on BTC/ETH/SOL/BNB/XRP · 4 quant strategies · 30min max hold · $30k",
+    assetClass: "quant",
+    ensemble: "any_above_threshold",
+    strategies: [
+      "crypto_quant_donchian_breakout_5m",
+      "crypto_quant_orderflow_imbalance",
+      "crypto_quant_volume_zscore_spike",
+      "crypto_quant_range_break_retest",
+    ],
+  },
+  crypto_dca_btc_eth: {
+    displayName: "DCA BTC/ETH",
+    description: "Weekly DCA into BTC + ETH — no signals, no stops · benchmark baseline · $30k",
+    assetClass: "crypto",
+    ensemble: "any_above_threshold",
+    strategies: ["crypto_dca_weekly"],
+  },
 };
 
 // ─── Hardcoded upcoming FOMC dates as fallback catalysts ─────────────────────

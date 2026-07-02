@@ -525,6 +525,49 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job bot_crypto_quant_mean_reversion (*/3 min, fires immediately)")
 
+    # ------------------------------------------------------------------
+    # 2026-07-01 NEW BOTS (funded by m052 reallocation from halted bots)
+    # ------------------------------------------------------------------
+
+    # crypto_quant_alt_focus: every 5 min, 24/7. Same strategy stack as
+    # crypto_quant_aggressive but universe is Tier B/C/D only (skips BTC/ETH).
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_quant_alt_focus"),
+        CronTrigger(minute="*/5"),
+        id="bot_crypto_quant_alt_focus",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_alt_focus (*/5 min, fires immediately)")
+
+    # crypto_quant_scalp_1m: every 2 min, 24/7. 1m bars, tight R/R, majors only.
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_quant_scalp_1m"),
+        CronTrigger(minute="*/2"),
+        id="bot_crypto_quant_scalp_1m",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=120,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_crypto_quant_scalp_1m (*/2 min, fires immediately)")
+
+    # crypto_dca_btc_eth: Monday 10:00 UTC, weekly. Boring DCA baseline.
+    scheduler.add_job(
+        lambda: _run_and_log("crypto_dca_btc_eth"),
+        CronTrigger(day_of_week="mon", hour=10, minute=0),
+        id="bot_crypto_dca_btc_eth",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_crypto_dca_btc_eth (mon 10:00 UTC, weekly)")
+
     # One-time startup log: emit cooldown_minutes for each quant bot so Railway
     # logs confirm the YAML setting is in effect on this deploy.
     try:

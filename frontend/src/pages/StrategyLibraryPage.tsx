@@ -20,6 +20,9 @@ const BOT_STYLE: Record<string, string> = {
   crypto_quant_aggressive:     "Momentum",
   crypto_quant_mean_reversion: "Mean Reversion",
   crypto_quant_scalper:        "Mean Reversion",
+  crypto_quant_alt_focus:      "Momentum",
+  crypto_quant_scalp_1m:       "Momentum",
+  crypto_dca_btc_eth:          "Trend",
   options_income:              "Carry",
   options_directional:         "Volatility",
 };
@@ -30,6 +33,8 @@ const BOT_DIFFICULTY: Record<string, string> = {
   crypto_day: "Advanced",      crypto_lt: "Beginner",
   crypto_onchain: "Advanced",  crypto_quant_aggressive: "Advanced",
   crypto_quant_mean_reversion: "Advanced", crypto_quant_scalper: "Advanced",
+  crypto_quant_alt_focus: "Advanced", crypto_quant_scalp_1m: "Advanced",
+  crypto_dca_btc_eth: "Beginner",
   options_income: "Intermediate", options_directional: "Advanced",
 };
 

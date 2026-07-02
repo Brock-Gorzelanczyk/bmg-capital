@@ -1,0 +1,108 @@
+name: crypto_quant_alt_focus
+asset_class: quant
+broker: alpaca_paper_crypto
+
+# Alt-focused variant of crypto_quant_aggressive. Same 8-strategy stack,
+# but universe skips BTC/ETH (dominated by tier-A whales) and concentrates
+# on tier B/C/D names where retail flow + funding-rate arbitrage produce
+# more actionable signals per bar. Sized 40% of aggressive to bound risk
+# during the "does alt-tier arbitrage actually work paper-wise" test window.
+universe:
+  tier_b: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD]
+  tier_c: [ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD]
+  tier_d: [DOGE/USD, SHIB/USD, PEPE/USD]
+  symbols: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD,
+            ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD,
+            DOGE/USD, SHIB/USD, PEPE/USD]
+
+scan_timeframe: "5m"
+scan_lookback_bars: 200
+cadence: "*/5 * * * *"
+
+watchlist:
+  rebuild_at: "0 */4 * * *"
+  size: 15
+  top_n_for_signals: 12
+  scoring:
+    intraday_momentum: 0.35
+    volume_ratio: 0.35
+    btc_correlation: 0.30
+
+strategies:
+  - crypto_quant_vwap_fade
+  - crypto_quant_bb_breakout
+  - crypto_quant_momentum_trigger
+  - crypto_quant_volume_zscore_spike
+  - crypto_quant_range_break_retest
+  - crypto_quant_orderflow_imbalance
+  - crypto_quant_funding_rate_arb
+  - crypto_quant_donchian_breakout_5m
+
+ensemble: any_above_threshold
+confidence_threshold: 0.45
+
+anti_overfit_multi_signal_conf: 0.65
+anti_correlation_top_n: 3
+
+size_bands:
+  - min: 0.45
+    max: 0.55
+    multiplier: 0.4
+  - min: 0.55
+    max: 0.65
+    multiplier: 0.7
+  - min: 0.65
+    max: 0.75
+    multiplier: 1.0
+  - min: 0.75
+    max: 1.0
+    multiplier: 1.3
+
+position_cap: 10
+position_size_pct: 2.0         # smaller size than aggressive (alt-tier is more volatile)
+stop_loss_pct: 2.0
+take_profit_pct: 4.0
+trailing_stop_activate_at_pct: 2.0
+trailing_stop_distance_pct: 1.0
+hold_max_hours: 8
+
+cooldown_minutes: 45
+
+tier_limits:
+  tier_b_max_pct: 15
+  tier_c_max_pct: 10
+  tier_d_max_pct: 5
+
+risk_overlay:
+  daily_loss_limit_pct: 3.0
+  max_position_size_pct: 15.0
+  max_gross_exposure_pct: 55.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_hours: 4
+  consecutive_loss_halt_at: 6
+  portfolio_drawdown_circuit_pct: 4.5
+  pdt_enforce: false
+  weekend_confidence_boost: 0.05
+
+execution:
+  order_type: market
+  limit_offset_bps: 15
+  reprice_after_seconds: 30
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
+
+discord:
+  channel: quant-signals
+  eod_summary_cron: "55 23 * * *"
+
+paper_only: true
+starting_capital_cents: 4000000   # $40k — funded from halted crypto_quant_mean_reversion
+
+risk:
+  deployment_target_pct: 0.65
+  target_position_count: 6
+  max_position_pct: 0.15
+  max_total_deployed_pct: 0.75
+
+skip_execution_guards: true

@@ -547,6 +547,18 @@ async def lifespan(app: FastAPI):
     except Exception as _m051_exc:
         logger.error("[startup] m051_halt_quant_losers FAILED: %s", _m051_exc, exc_info=True)
 
+    # m052: reallocate $100k from halted quant bots to 3 new bots (alt_focus,
+    # scalp_1m, dca_btc_eth). Must run AFTER seed_bot_profiles (line 154 above)
+    # so the new BotProfile rows exist before we allocate against them.
+    # Gated via _gate — one-shot per DB.
+    try:
+        from app.db.migrations.m052_reallocate_to_new_quant_bots import run as _run_m052
+        with engine.begin() as _m052_conn:
+            _m052_result = _run_m052(_m052_conn)
+        logger.warning("[startup] m052 OK: %s", _m052_result)
+    except Exception as _m052_exc:
+        logger.error("[startup] m052_reallocate_to_new_quant_bots FAILED: %s", _m052_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

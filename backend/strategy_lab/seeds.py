@@ -32,6 +32,9 @@ _PROFILE_DESCRIPTIONS = {
     "value_quality": "Cheap-and-good combo (value z + quality z). AQR QMJ-style. Top decile, 20 names, quarterly. ~0.9 expected Sharpe after 30% haircut.",
     "crypto_meanrev_2163": "21-63 day crypto mean reversion on top-20 coins. 30d z-score entry, falling-knife filter, 5-day time stop. Complements intraday MR bots at weekly horizon.",
     "earnings_nlp": "BLOCKED: earnings call tone delta (LM sentiment). Long top-decile tone improvement, hold 1-3 days. Needs transcript API feed.",
+    "crypto_quant_alt_focus": "Alt-focused variant of Quant Aggressive. 8-strategy stack on Tier B/C/D coins (AVAX/DOT/LINK/ARB/OP/SUI/DOGE etc). 5m bars, tighter position sizing than aggressive. $40k, funded from halted mean-reversion.",
+    "crypto_quant_scalp_1m": "1-minute scalper on BTC/ETH/SOL/BNB/XRP. 4 quant strategies, 2min cadence, 30min max hold, 0.4% stops, 0.8% targets. $30k, funded from halted scalper.",
+    "crypto_dca_btc_eth": "Weekly DCA into BTC + ETH. No strategy alpha claimed — 'stayed-invested' baseline for benchmarking discretionary bots. $30k, weekly Monday 10 UTC.",
 }
 
 

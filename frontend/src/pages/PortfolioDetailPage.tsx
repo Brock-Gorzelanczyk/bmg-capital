@@ -71,6 +71,9 @@ const BOT_META: Record<string, { displayName: string; description: string }> = {
   crypto_quant_aggressive:      { displayName: "Quant Aggressive",      description: "Multi-factor, high turnover · cross-asset" },
   crypto_quant_scalper:         { displayName: "Quant Scalper",         description: "0DTE micro-cycle · ultra short hold" },
   crypto_quant_mean_reversion:  { displayName: "Quant Mean Reversion",  description: "Bollinger fade on 1h bands" },
+  crypto_quant_alt_focus:       { displayName: "Quant Alt Focus",       description: "8-strategy stack on Tier B/C/D alts · 5m bars · smaller size than Aggressive" },
+  crypto_quant_scalp_1m:        { displayName: "Quant Scalp 1m",        description: "1min bars · BTC/ETH/SOL/BNB/XRP · 30min max hold · 0.4% stops" },
+  crypto_dca_btc_eth:           { displayName: "DCA BTC/ETH",           description: "Weekly dumb-DCA baseline · no signals, no stops · benchmark" },
 };
 
 function resolveName(name: string, fromApi?: string): string {

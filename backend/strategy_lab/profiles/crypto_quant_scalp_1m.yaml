@@ -1,0 +1,88 @@
+name: crypto_quant_scalp_1m
+asset_class: quant
+broker: alpaca_paper_crypto
+
+# Ultra-fast 1-minute scalper. Tight stops (0.4%), tight targets (0.8%),
+# 30-minute max hold. Fires every 2 min against BTC/ETH/SOL/BNB with high
+# turnover. Sized at $30k to bound micro-loss accumulation risk while we
+# see whether 1m bar noise actually contains actionable alpha in paper.
+universe:
+  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD]
+
+scan_timeframe: "1m"
+scan_lookback_bars: 240
+cadence: "*/2 * * * *"
+
+watchlist:
+  rebuild_at: "0 */2 * * *"
+  size: 5
+  top_n_for_signals: 5
+  scoring:
+    intraday_momentum: 0.5
+    volume_ratio: 0.5
+
+strategies:
+  - crypto_quant_donchian_breakout_5m
+  - crypto_quant_orderflow_imbalance
+  - crypto_quant_volume_zscore_spike
+  - crypto_quant_range_break_retest
+
+ensemble: any_above_threshold
+confidence_threshold: 0.50   # slightly stricter than aggressive to filter 1m noise
+
+anti_overfit_multi_signal_conf: 0.70
+anti_correlation_top_n: 2
+
+size_bands:
+  - min: 0.50
+    max: 0.60
+    multiplier: 0.3
+  - min: 0.60
+    max: 0.75
+    multiplier: 0.6
+  - min: 0.75
+    max: 1.0
+    multiplier: 1.0
+
+position_cap: 6
+position_size_pct: 1.5         # micro-size per trade — 1.5% × $30k = $450/trade
+stop_loss_pct: 0.4             # tight scalp stop
+take_profit_pct: 0.8           # 2:1 reward-to-risk
+trailing_stop_activate_at_pct: 0.4
+trailing_stop_distance_pct: 0.2
+hold_max_hours: 0.5            # 30-min max — real scalp
+
+cooldown_minutes: 5            # allow rapid re-entry
+
+risk_overlay:
+  daily_loss_limit_pct: 2.0
+  max_position_size_pct: 10.0
+  max_gross_exposure_pct: 40.0
+  consecutive_loss_halve_at: 5
+  consecutive_loss_halt_hours: 2
+  consecutive_loss_halt_at: 10
+  portfolio_drawdown_circuit_pct: 3.0
+  pdt_enforce: false
+
+execution:
+  order_type: market
+  limit_offset_bps: 5
+  reprice_after_seconds: 15
+  reprice_attempts: 2
+  fallback_to_market: true
+  use_brackets: true
+
+discord:
+  channel: quant-signals
+  eod_summary_cron: "55 23 * * *"
+
+paper_only: true
+starting_capital_cents: 3000000   # $30k — funded from halted crypto_quant_scalper
+
+risk:
+  deployment_target_pct: 0.50
+  target_position_count: 4
+  max_position_pct: 0.10
+  max_total_deployed_pct: 0.65
+
+skip_execution_guards: true

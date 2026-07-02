@@ -59,13 +59,18 @@ const BOT_LABELS: Record<string, string> = {
   crypto_quant_aggressive:      "Quant Aggressive",
   crypto_quant_scalper:         "Quant Scalper",
   crypto_quant_mean_reversion:  "Quant Mean Rev",
+  crypto_quant_alt_focus:       "Quant Alt Focus",
+  crypto_quant_scalp_1m:        "Quant Scalp 1m",
+  crypto_dca_btc_eth:           "DCA BTC/ETH",
 };
 
 const BOT_SLEEVE: Record<string, string> = {
   stock_swing: "stocks", stock_day: "stocks", stock_lt: "stocks",
   options_income: "options", options_directional: "options",
   crypto_swing: "crypto", crypto_day: "crypto", crypto_lt: "crypto", crypto_onchain: "crypto",
+  crypto_dca_btc_eth: "crypto",
   crypto_quant_aggressive: "quant", crypto_quant_scalper: "quant", crypto_quant_mean_reversion: "quant",
+  crypto_quant_alt_focus: "quant", crypto_quant_scalp_1m: "quant",
 };
 
 const SLEEVE_DOT: Record<string, string> = {
