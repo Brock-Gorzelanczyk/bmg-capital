@@ -866,6 +866,21 @@ async def lifespan(app: FastAPI):
             logger.warning("[startup] one-shot pre-market book failed: %s", _exc)
     asyncio.create_task(_maybe_fire_premarket_now())
 
+    # One-shot: or-fallback audit results post per Brock's ask.
+    async def _maybe_post_or_audit():
+        import asyncio as _aio
+        import os as _os
+        if _os.environ.get("BMG_POST_OR_AUDIT", "").strip().lower() not in ("true", "1", "yes"):
+            return
+        await _aio.sleep(30)
+        try:
+            from app.jobs.or_fallback_audit_post import post_audit
+            await _aio.to_thread(post_audit)
+            logger.warning("[startup] one-shot or-audit fired")
+        except Exception as _exc:
+            logger.warning("[startup] or-audit failed: %s", _exc)
+    asyncio.create_task(_maybe_post_or_audit())
+
     # Post-deploy synthetic pipeline check — fires 60s after startup so scheduler is warm
     async def _post_deploy_synthetic_check():
         import asyncio as _aio
