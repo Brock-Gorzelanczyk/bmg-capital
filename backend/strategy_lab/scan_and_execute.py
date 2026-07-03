@@ -468,7 +468,13 @@ def scan_and_execute(
                         strategy=r["strategy"],
                         ts=datetime.now(timezone.utc),
                     )
-                    _execute_signal(
+                    # _execute_signal now returns True only when a BotTrade
+                    # was actually committed to the DB. Every early-return
+                    # path (asset_class BLOCK, fund_halt, no equity, no price,
+                    # qty<=0, DB write exception) returns False. Fixes the
+                    # 2026-07-02 "30 trades" reporting bug where the counter
+                    # incremented on every attempt regardless of fill.
+                    _trade_ok = _execute_signal(
                         db=db,
                         alloc=alloc,
                         sig=sig2,
@@ -478,17 +484,22 @@ def scan_and_execute(
                         bars=bars,
                         signal_id=signal_id,
                     )
-                    alloc_executed += 1
-                    trades_executed += 1
-                    if is_buy:
-                        slots_remaining -= 1
-                        alloc_open += 1
-                    # Mark signal as executed — Discord worker requires executed_at IS NOT NULL
-                    if signal_id is not None:
-                        _sig_row = db.get(_BSig, signal_id)
-                        if _sig_row is not None:
-                            _sig_row.executed_at = datetime.now(timezone.utc)
-                            db.commit()
+                    if _trade_ok:
+                        alloc_executed += 1
+                        trades_executed += 1
+                        if is_buy:
+                            slots_remaining -= 1
+                            alloc_open += 1
+                        # Mark signal as executed — Discord worker requires
+                        # executed_at IS NOT NULL. Only set it when the trade
+                        # actually landed; if the signal was blocked at the
+                        # execute path, Discord shouldn't post an "executed"
+                        # embed for a trade that never happened.
+                        if signal_id is not None:
+                            _sig_row = db.get(_BSig, signal_id)
+                            if _sig_row is not None:
+                                _sig_row.executed_at = datetime.now(timezone.utc)
+                                db.commit()
                 except Exception as _ee:
                     execute_errors.append({
                         "symbol": r["symbol"],

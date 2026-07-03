@@ -1747,8 +1747,14 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
 def _execute_options_signal(
     db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str,
     signal_id: int | None = None,
-) -> None:
-    """Execute an options signal — creates BotPosition + BotTrade with options fields."""
+) -> bool:
+    """Execute an options signal — creates BotPosition + BotTrade with options fields.
+
+    Returns True if a BotTrade was actually committed to the DB. Returns False
+    on any early-return path (concentration blocked, contract count 0, asset-
+    class gate BLOCK, occ symbol missing, DB write failed) so the caller can
+    accurately count fills vs attempts.
+    """
     import os
     import json
     from datetime import datetime, timezone
@@ -1811,7 +1817,7 @@ def _execute_options_signal(
                     db.rollback()
                 except Exception:
                     pass
-            return
+            return False
     except Exception as _conc_exc:
         logger.warning("[concentration] gate raised, continuing: %s", _conc_exc)
 
@@ -1834,7 +1840,7 @@ def _execute_options_signal(
             reject_reason, opt.get("strike_price"), opt.get("expiration_date"),
             premium, position_dollars,
         )
-        return
+        return False
 
     # ── Asset-class + 24h cooldown gate on the OCC CONTRACT symbol ──────────
     # Equity ticker `sig.symbol` would fail required=option/detected=equity.
@@ -1846,7 +1852,7 @@ def _execute_options_signal(
             "[options:%s] _resolve_option_details returned contract_count=%d but no occ_symbol — skipping",
             profile_name, contract_count,
         )
-        return
+        return False
     try:
         from app.services.asset_class_registry import validate_order_with_cooldown_and_user
         validate_order_with_cooldown_and_user(
@@ -1860,7 +1866,7 @@ def _execute_options_signal(
             "[asset_class_gate:%s] _execute_options_signal BLOCKED %s (occ=%s underlying=%s): %s",
             profile_name, sig.symbol, occ_symbol, opt.get("underlying_symbol"), _acr_exc,
         )
-        return
+        return False
 
     # fill_price_cents = total premium paid per contract (in cents)
     fill_cents = premium * 100
@@ -1976,17 +1982,25 @@ def _execute_options_signal(
             "[options:%s] Opened %s (occ=%s) × %d contracts %s @ $%.2f/contract (pos=%d trade=%d)",
             profile_name, sig.symbol, occ_symbol, contract_count, opt["option_type"], premium, pos.id, trade.id,
         )
+        # NEW 2026-07-02: explicit trade-inserted marker + True return so the
+        # scan_and_execute counter reflects actual fills, not "reached execute".
+        logger.warning(
+            "[trade-inserted] bot=%s side=%s symbol=%s occ=%s contracts=%d pos_id=%d trade_id=%d",
+            profile_name, sig.side, sig.symbol, occ_symbol, contract_count, pos.id, trade.id,
+        )
+        return True
     except Exception as exc:
         logger.error("[options:%s] DB write failed for %s: %s", profile_name, sig.symbol, exc)
         try:
             db.rollback()
         except Exception:
             pass
+        return False
 
 
 # ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────
 
-def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str, bars: dict | None = None, signal_id: int | None = None) -> None:
+def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profile_name: str, bars: dict | None = None, signal_id: int | None = None) -> bool:
     """Place a simulated paper trade and persist BotPosition + BotTrade.
 
     Steps:
@@ -2027,7 +2041,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                 "[asset_class_gate:%s] _execute_signal BLOCKED %s: %s",
                 profile_name, sig.symbol, _acr_exc,
             )
-            return
+            return False
     # ── end asset-class + cooldown gate ─────────────────────────────────────────
 
     if sig.side not in ("buy", "sell"):
@@ -2035,7 +2049,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             "[exec] SKIP side=%s symbol=%s profile=%s — only buy/sell handled",
             sig.side, sig.symbol, profile_name,
         )
-        return
+        return False
 
     from datetime import datetime, timezone
     from app.db.models.bots import BotPosition, BotTrade
@@ -2085,11 +2099,12 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                 db.rollback()
             except Exception:
                 pass
-        return
+        return False
 
     if asset_class == "options":
-        _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name, signal_id=signal_id)
-        return
+        # Propagate the options function's actual return so equity counter
+        # reflects real fills, not "reached the router."
+        return _execute_options_signal(db, alloc, sig, final_size_pct, profile, profile_name, signal_id=signal_id)
     now = datetime.now(timezone.utc)
 
     # 1. Resolve equity — skip Alpaca call when paper creds are absent to avoid
@@ -2115,7 +2130,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     if equity <= 0:
         logger.warning("[execute:%s] no equity source for %s — skipping", profile_name, sig.symbol)
-        return
+        return False
 
     # Fetch live price from bar cache first (already in memory); broker positions as last resort
     entry_price = 0.0
@@ -2155,7 +2170,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     if entry_price <= 0:
         logger.warning("[execute:%s] no price for %s — skipping order (live=0, broker=0, bars_fallback=0)", profile_name, sig.symbol)
-        return
+        return False
 
     # Staleness guard: refuse the bar-close fallback if the bar is more than a
     # trading-session-worth old. 2h was too strict for options bots running pre-
@@ -2259,13 +2274,13 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                     db.rollback()
                 except Exception:
                     pass
-            return
+            return False
     except Exception as _conc_exc:
         logger.warning("[concentration] gate raised, continuing: %s", _conc_exc)
 
     qty = round(position_dollars / entry_price, 6)
     if qty <= 0:
-        return
+        return False
 
     is_short = sig.side == "sell"
 
@@ -2480,7 +2495,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             db.rollback()
         except Exception:
             pass
-        return
+        return False
 
     # For institutional bots: ensure stop is set using risk_management config
     if profile_name in ("stock_day", "stock_swing"):
@@ -2498,6 +2513,15 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         profile_name, sig.symbol, qty, entry_price, stop_price, target_price,
         order_id or "sim", pos.id, trade.id,
     )
+    # NEW 2026-07-02: explicit trade-inserted marker + True return so the
+    # scan_and_execute counter reflects actual fills. Before this fix, the
+    # counter incremented on every _execute_signal call regardless of whether
+    # a BotTrade was committed — inflating "trades=" in scan DONE log lines.
+    logger.warning(
+        "[trade-inserted] bot=%s side=%s symbol=%s qty=%.6f entry=%.4f pos_id=%d trade_id=%d",
+        profile_name, sig.side, sig.symbol, qty, entry_price, pos.id, trade.id,
+    )
+    return True
 
 
 # ── Regime filter evaluator ───────────────────────────────────────────────────
