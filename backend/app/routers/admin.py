@@ -4660,3 +4660,87 @@ def get_daily_audit_latest(
         "alerts": _json.loads(row.alerts_json),
         "summary_markdown": row.summary_markdown,
     }
+
+
+# ─── PUBLIC diagnostic — no auth. Used to hunt phantom PV. ────────────────────
+# Gated by BMG_DIAGNOSTIC_PV_ENABLED=true env var so we can turn it off after
+# the tonight-session investigation.
+@router.get("/pv-breakdown-diagnostic")
+def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
+    """Public per-bot PV composition — starting / realized / unrealized / pv.
+
+    No auth. Gate this off after debugging by unsetting the env var.
+    Purpose: find why the fleet PV totals $178K over the $1M starting
+    invariant when the fund is essentially flat all-time.
+    """
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true", "1", "yes"):
+        return {"error": "diagnostic disabled — set BMG_DIAGNOSTIC_PV_ENABLED=true"}
+
+    from app.core.canonical import compute_bot_snapshot
+    from app.db.models.bots import BotAllocation, BotProfile
+
+    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()
+    profile_map = {p.id: p for p in db.query(BotProfile).all()}
+
+    rows = []
+    for a in allocs:
+        prof = profile_map.get(a.profile_id)
+        if prof is None:
+            rows.append({
+                "bot": f"alloc_{a.id}",
+                "enabled": bool(a.enabled),
+                "starting_cents": int(a.starting_capital_cents or 0),
+                "within_portfolio_cents": int(a.capital_cents_within_portfolio or 0),
+                "current_capital_cents": int(getattr(a, "current_capital_cents", 0) or 0),
+                "error": "no profile",
+            })
+            continue
+        try:
+            snap = compute_bot_snapshot(a, prof, db)
+            rows.append({
+                "bot": prof.name,
+                "profile_enabled": bool(prof.enabled),
+                "alloc_enabled": bool(a.enabled),
+                "starting_cents": int(snap.starting_capital_cents or 0),
+                "within_portfolio_cents": int(a.capital_cents_within_portfolio or 0),
+                "current_capital_cents": int(getattr(a, "current_capital_cents", 0) or 0),
+                "realized_cents": int(snap.realized_pnl_cents or 0),
+                "unrealized_cents": int(snap.unrealized_pnl_cents or 0),
+                "pv_cents": int(snap.portfolio_value_cents or 0),
+                "delta_from_starting_cents": int(snap.portfolio_value_cents or 0) - int(snap.starting_capital_cents or 0),
+                "open_positions_count": int(snap.open_positions_count or 0),
+            })
+        except Exception as exc:
+            rows.append({
+                "bot": prof.name,
+                "profile_enabled": bool(prof.enabled),
+                "alloc_enabled": bool(a.enabled),
+                "starting_cents": int(a.starting_capital_cents or 0),
+                "within_portfolio_cents": int(a.capital_cents_within_portfolio or 0),
+                "error": str(exc)[:200],
+            })
+
+    rows.sort(key=lambda r: -(r.get("delta_from_starting_cents") or 0))
+    totals = {
+        "sum_starting_cents": sum((r.get("starting_cents") or 0) for r in rows),
+        "sum_realized_cents": sum((r.get("realized_cents") or 0) for r in rows),
+        "sum_unrealized_cents": sum((r.get("unrealized_cents") or 0) for r in rows),
+        "sum_pv_cents": sum((r.get("pv_cents") or 0) for r in rows),
+    }
+
+    # Show top phantoms — bots whose delta is unusually large positive
+    phantoms = [r for r in rows if (r.get("delta_from_starting_cents") or 0) > 500_000]  # > $5k delta
+
+    return {
+        "user_id": 1,
+        "row_count": len(rows),
+        "totals": totals,
+        "invariant_check": {
+            "sum_starting_$": totals["sum_starting_cents"] / 100,
+            "sum_pv_$": totals["sum_pv_cents"] / 100,
+            "delta_$": (totals["sum_pv_cents"] - totals["sum_starting_cents"]) / 100,
+        },
+        "phantom_candidates": phantoms,
+        "all_bots": rows,
+    }
