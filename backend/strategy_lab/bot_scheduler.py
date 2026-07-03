@@ -639,6 +639,60 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job bot_crypto_quant_15m (*/15 min, fires immediately)")
 
+    # ------------------------------------------------------------------
+    # 2026-07-02 STOCK QUANT BATCH — 4 new bots (funded by m056)
+    # 2 day traders + 2 swing traders. Complementary strategy families —
+    # momentum vs mean-rev intraday, growth vs value on swing.
+    # ------------------------------------------------------------------
+
+    # stock_quant_day_momentum: */5 min during market hours Mon-Fri
+    scheduler.add_job(
+        lambda: _run_and_log("stock_quant_day_momentum"),
+        CronTrigger(day_of_week="mon-fri", minute="*/5", hour="9-15", timezone=ET),
+        id="bot_stock_quant_day_momentum",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_stock_quant_day_momentum (*/5 9-15 ET Mon-Fri)")
+
+    # stock_quant_day_meanrev: */5 min during market hours Mon-Fri
+    scheduler.add_job(
+        lambda: _run_and_log("stock_quant_day_meanrev"),
+        CronTrigger(day_of_week="mon-fri", minute="*/5", hour="9-15", timezone=ET),
+        id="bot_stock_quant_day_meanrev",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_stock_quant_day_meanrev (*/5 9-15 ET Mon-Fri)")
+
+    # stock_quant_swing_growth: 3:30 PM ET Mon-Fri (30 min before close)
+    scheduler.add_job(
+        lambda: _run_and_log("stock_quant_swing_growth"),
+        CronTrigger(day_of_week="mon-fri", hour=15, minute=30, timezone=ET),
+        id="bot_stock_quant_swing_growth",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_stock_quant_swing_growth (15:30 ET Mon-Fri)")
+
+    # stock_quant_swing_value: 4:00 PM ET Mon-Fri (right after close)
+    scheduler.add_job(
+        lambda: _run_and_log("stock_quant_swing_value"),
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=0, timezone=ET),
+        id="bot_stock_quant_swing_value",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_stock_quant_swing_value (16:00 ET Mon-Fri)")
+
     # One-time startup log: emit cooldown_minutes for each quant bot so Railway
     # logs confirm the YAML setting is in effect on this deploy.
     try:

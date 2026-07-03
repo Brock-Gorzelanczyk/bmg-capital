@@ -1,0 +1,120 @@
+name: stock_quant_swing_value
+asset_class: stock
+broker: alpaca_paper_stocks
+
+# 2026-07-02 Brock ask: value / dividend / defensive swing bot.
+# Counterparty to stock_quant_swing_growth. Focuses on quality-value
+# names — dividend aristocrats, energy, financials, healthcare, staples.
+# Wider stops, longer holds (up to 45 days), because these names swing
+# slowly. Emphasis on factor + factor_blend + value/momentum strategies.
+universe:
+  source: quality_value_dividend_leaders
+  symbols:
+    - JPM
+    - BAC
+    - GS
+    - MS
+    - WFC
+    - V
+    - MA
+    - JNJ
+    - PFE
+    - MRK
+    - ABBV
+    - LLY
+    - XOM
+    - CVX
+    - COP
+    - KO
+    - PEP
+    - PG
+    - WMT
+    - COST
+    - HD
+    - MCD
+    - DIS
+    - CAT
+    - GE
+    - BA
+    - HON
+    - UNH
+    - IBM
+    - VZ
+  filters:
+    - price_gte: 30
+    - adv_gte: 2000000
+scan_lookback_period: "1y"
+scan_timeframe: "1d"
+cadence: "0 16 * * 1-5"        # 4 PM ET Mon-Fri, right after close
+watchlist:
+  rebuild_at: "0 15 * * 1-5"
+  size: 30
+  top_n_for_signals: 20
+
+strategies:
+  - factor_blend
+  - factor_momentum_value
+  - dividend_growth
+  - quality_score
+  - relative_strength_leaders
+  - golden_cross
+  - momentum_12_1
+  - shareholder_yield
+
+ensemble: factor_rank
+confidence_threshold: 0.50
+
+anti_overfit_multi_signal_conf: 0.60
+
+size_bands:
+  - min: 0.50
+    max: 0.65
+    multiplier: 0.5
+  - min: 0.65
+    max: 0.80
+    multiplier: 0.85
+  - min: 0.80
+    max: 1.0
+    multiplier: 1.2
+
+position_cap: 8
+position_size_pct: 4.5
+stop_loss_pct: 8.0            # wide — value names slow-moving
+take_profit_pct: 20.0
+trailing_stop_activate_at_pct: 8.0
+trailing_stop_distance_pct: 4.0
+hold_max_days: 45
+
+cooldown_minutes: 2880         # 48h — value names slower rotation
+
+risk_overlay:
+  daily_loss_limit_pct: 2.5
+  max_position_size_pct: 20.0
+  max_gross_exposure_pct: 75.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_hours: 24
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 5.0
+  pdt_enforce: false
+
+execution:
+  order_type: market
+  limit_offset_bps: 4
+  reprice_after_seconds: 60
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
+
+paper_only: true
+starting_capital_cents: 1500000   # $15k
+
+risk:
+  deployment_target_pct: 0.75
+  target_position_count: 6
+  max_position_pct: 0.18
+  max_total_deployed_pct: 0.85
+
+discord:
+  channel: stocks-signals
+
+skip_execution_guards: true

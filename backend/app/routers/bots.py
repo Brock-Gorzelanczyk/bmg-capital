@@ -105,8 +105,19 @@ _BOT_CAPITAL = 10_000_000  # $100,000 per bot in cents
 
 _PORTFOLIO_DEFS = [
     {"asset_class": "stocks",  "name": "Stocks",  "emoji": "📈", "color_hex": "#A3E635",
-     "starting_capital_cents": 30_000_000,  # 3 bots × $100k
-     "bots": {"stock_swing": _BOT_CAPITAL, "stock_day": _BOT_CAPITAL, "stock_lt": _BOT_CAPITAL}},
+     "starting_capital_cents": 30_000_000,  # 3 bots × $100k (pre-m056)
+     # 2026-07-02: added 4 quant stock bots (m056 batch). Capital numbers in
+     # the dict are LEGACY per the m027 fix — this loop never overwrites
+     # capital fields on existing allocation rows; migrations own that.
+     "bots": {
+         "stock_swing":              _BOT_CAPITAL,
+         "stock_day":                _BOT_CAPITAL,
+         "stock_lt":                 _BOT_CAPITAL,
+         "stock_quant_day_momentum": 1_500_000,   # $15k
+         "stock_quant_day_meanrev":  1_500_000,   # $15k
+         "stock_quant_swing_growth": 1_500_000,   # $15k
+         "stock_quant_swing_value":  1_500_000,   # $15k
+     }},
     {"asset_class": "crypto",  "name": "Crypto",  "emoji": "🪙", "color_hex": "#F59E0B",
      "starting_capital_cents": 40_000_000,
      # 2026-07-02: added the 8 m052+m053 batch bots to the Crypto portfolio.

@@ -1,0 +1,114 @@
+name: stock_quant_swing_growth
+asset_class: stock
+broker: alpaca_paper_stocks
+
+# 2026-07-02 Brock ask: swing trader focused on growth/momentum names.
+# Different from stock_swing (which trades a broader Russell 1000 with
+# mean-rev + factor mix) — this one concentrates on tech growth + AI
+# infrastructure + momentum leaders. Daily bars, multi-day hold, larger
+# per-trade size to compensate for lower trade frequency.
+universe:
+  source: growth_momentum_leaders
+  symbols:
+    - NVDA
+    - AAPL
+    - MSFT
+    - AMZN
+    - GOOGL
+    - META
+    - TSLA
+    - AMD
+    - AVGO
+    - SMCI
+    - CRWD
+    - PANW
+    - PLTR
+    - SNOW
+    - DDOG
+    - NET
+    - SHOP
+    - MELI
+    - LLY
+    - COST
+    - ORCL
+    - CRM
+    - ADBE
+    - NFLX
+  filters:
+    - price_gte: 30
+    - adv_gte: 3000000
+scan_lookback_period: "6mo"
+scan_timeframe: "1d"
+cadence: "30 15 * * 1-5"        # 15:30 ET Mon-Fri, right before close for tomorrow's entry
+watchlist:
+  rebuild_at: "0 15 * * 1-5"
+  size: 24
+  top_n_for_signals: 18
+
+strategies:
+  - momentum_breakout
+  - bull_flag_continuation
+  - fifty_two_week_high_momentum
+  - cup_and_handle
+  - relative_strength_leaders
+  - golden_cross
+  - macd_crossover
+  - frog_in_the_pan_momentum
+
+ensemble: any_above_threshold
+confidence_threshold: 0.55
+
+anti_overfit_multi_signal_conf: 0.65
+
+size_bands:
+  - min: 0.55
+    max: 0.65
+    multiplier: 0.6
+  - min: 0.65
+    max: 0.80
+    multiplier: 1.0
+  - min: 0.80
+    max: 1.0
+    multiplier: 1.4
+
+position_cap: 5
+position_size_pct: 6.0        # larger — fewer trades, bigger conviction
+stop_loss_pct: 6.0            # wider — swings need room
+take_profit_pct: 15.0
+trailing_stop_activate_at_pct: 6.0
+trailing_stop_distance_pct: 3.0
+hold_max_days: 21
+
+cooldown_minutes: 1440         # 24h — one entry per name per day
+
+risk_overlay:
+  daily_loss_limit_pct: 3.0
+  max_position_size_pct: 25.0
+  max_gross_exposure_pct: 70.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_hours: 24
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 6.0
+  pdt_enforce: false
+
+execution:
+  order_type: market
+  limit_offset_bps: 6
+  reprice_after_seconds: 60
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: true
+
+paper_only: true
+starting_capital_cents: 1500000   # $15k
+
+risk:
+  deployment_target_pct: 0.75
+  target_position_count: 5
+  max_position_pct: 0.25
+  max_total_deployed_pct: 0.85
+
+discord:
+  channel: stocks-signals
+
+skip_execution_guards: true

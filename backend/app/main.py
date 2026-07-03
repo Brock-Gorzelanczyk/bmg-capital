@@ -597,6 +597,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m055_exc:
         logger.error("[startup] m055_reenable_new_quant_bots FAILED: %s", _m055_exc, exc_info=True)
 
+    # m056: seed 4 new quant stock bots (day_momentum, day_meanrev,
+    # swing_growth, swing_value) + reallocate $60k from halted scalper +
+    # trim dca_btc_eth. Same self-balancing pattern as m052/m053.
+    try:
+        from app.db.migrations.m056_seed_stock_quant_bots import run as _run_m056
+        with engine.begin() as _m056_conn:
+            _m056_result = _run_m056(_m056_conn)
+        logger.warning("[startup] m056 OK: %s", _m056_result)
+    except Exception as _m056_exc:
+        logger.error("[startup] m056_seed_stock_quant_bots FAILED: %s", _m056_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

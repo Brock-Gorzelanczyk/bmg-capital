@@ -40,6 +40,10 @@ _PROFILE_DESCRIPTIONS = {
     "crypto_quant_meme_tier": "Meme/high-beta tier (DOGE/SHIB/PEPE/AVAX/POL). 8-strategy stack, wider stops (3%), smaller size (1.5%). Bounded meme exposure. $20k.",
     "crypto_quant_10m": "10-minute timeframe variant of Aggressive. Same 8-strategy stack, full 20-coin universe. Tests whether 5m edge holds at 10m. $20k.",
     "crypto_quant_15m": "15-minute timeframe variant of Aggressive. Same stack, longer holds (up to 24h). Tests scaling of Aggressive's edge with holding period. $20k.",
+    "stock_quant_day_momentum": "Intraday momentum day-trader on 19 mega-cap tech + momentum leaders. 5m cadence 9-15 ET. Pure momentum + breakout family. $15k.",
+    "stock_quant_day_meanrev": "Intraday mean-reversion day-trader on 20 liquid large-caps. Wider mix — mean_reversion / rsi / vwap / camarilla / bollinger / gex_pin. $15k.",
+    "stock_quant_swing_growth": "Growth + momentum swing on 24 tech / AI infra names. Daily bars, 3:30 PM ET fire, up to 21-day hold. $15k.",
+    "stock_quant_swing_value": "Value / dividend / defensive swing on 30 quality names. Factor + factor_blend + momentum_12_1 mix. 4 PM ET fire, up to 45-day hold. $15k.",
 }
 
 

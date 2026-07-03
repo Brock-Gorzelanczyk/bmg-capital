@@ -1,0 +1,108 @@
+name: stock_quant_day_momentum
+asset_class: stock
+broker: alpaca_paper_stocks
+
+# 2026-07-02 Brock ask: build a quant day-trader focused on momentum.
+# Runs intraday during market hours, 5-min bars, on liquid mega-cap tech +
+# high-momentum names. Complements stock_day (which uses the ORB / heston
+# / half-hour continuation family) by focusing on pure momentum + breakout
+# strategies without the intraday reversion mix.
+universe:
+  source: mag7_momentum_leaders
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - AAPL
+    - MSFT
+    - NVDA
+    - GOOGL
+    - AMZN
+    - META
+    - TSLA
+    - AMD
+    - AVGO
+    - NFLX
+    - SMCI
+    - COST
+    - CRM
+    - ORCL
+    - LLY
+    - JPM
+  filters:
+    - price_gte: 30
+    - adv_gte: 5000000
+scan_lookback_period: "60d"
+scan_timeframe: "5m"
+cadence: "*/5 9-15 * * 1-5"        # every 5 min, 9 AM–3:55 PM ET, Mon-Fri
+watchlist:
+  rebuild_at: "0 9 * * 1-5"
+  size: 20
+  top_n_for_signals: 15
+
+strategies:
+  - momentum_breakout
+  - bull_flag_continuation
+  - orb_stocks_in_play
+  - intraday_momentum_noise_band
+  - crabel_orb
+  - cup_handle_breakout
+  - darvas_box_breakout
+
+ensemble: any_above_threshold
+confidence_threshold: 0.50   # slightly stricter than crypto quants — equity spreads narrower
+
+anti_overfit_multi_signal_conf: 0.65
+
+size_bands:
+  - min: 0.50
+    max: 0.60
+    multiplier: 0.5
+  - min: 0.60
+    max: 0.75
+    multiplier: 0.85
+  - min: 0.75
+    max: 1.0
+    multiplier: 1.2
+
+position_cap: 6
+position_size_pct: 3.5
+stop_loss_pct: 1.5
+take_profit_pct: 3.0
+trailing_stop_activate_at_pct: 1.5
+trailing_stop_distance_pct: 0.75
+hold_max_hours: 6
+
+cooldown_minutes: 15
+
+risk_overlay:
+  daily_loss_limit_pct: 2.5
+  max_position_size_pct: 20.0
+  max_gross_exposure_pct: 60.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_hours: 4
+  consecutive_loss_halt_at: 6
+  portfolio_drawdown_circuit_pct: 4.0
+  pdt_enforce: false
+
+execution:
+  order_type: market
+  limit_offset_bps: 4
+  reprice_after_seconds: 30
+  reprice_attempts: 2
+  fallback_to_market: true
+  use_brackets: true
+
+paper_only: true
+starting_capital_cents: 1500000   # $15k
+
+risk:
+  deployment_target_pct: 0.70
+  target_position_count: 5
+  max_position_pct: 0.20
+  max_total_deployed_pct: 0.80
+
+discord:
+  channel: stocks-signals
+
+skip_execution_guards: true

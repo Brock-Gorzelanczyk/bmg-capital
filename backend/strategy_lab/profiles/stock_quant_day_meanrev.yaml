@@ -1,0 +1,107 @@
+name: stock_quant_day_meanrev
+asset_class: stock
+broker: alpaca_paper_stocks
+
+# 2026-07-02 Brock ask: quant day-trader focused on mean reversion.
+# The counterparty to stock_quant_day_momentum — captures intraday fades,
+# oversold bounces, VWAP reversion. Uses same market-hours cadence but
+# smaller position size (mean-rev has lower win-rate expectation per trade).
+universe:
+  source: liquid_mid_large_cap
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+    - META
+    - AVGO
+    - JPM
+    - BAC
+    - GS
+    - XOM
+    - CVX
+    - JNJ
+    - PFE
+    - KO
+    - WMT
+    - MCD
+    - HD
+  filters:
+    - price_gte: 20
+    - adv_gte: 3000000
+scan_lookback_period: "60d"
+scan_timeframe: "5m"
+cadence: "*/5 9-15 * * 1-5"
+watchlist:
+  rebuild_at: "0 9 * * 1-5"
+  size: 20
+  top_n_for_signals: 15
+
+strategies:
+  - mean_reversion
+  - rsi_bands
+  - vwap_reversion_chop
+  - camarilla_pivot_reversion
+  - bollinger_squeeze
+  - gex_pin_reversion
+
+ensemble: any_above_threshold
+confidence_threshold: 0.55   # stricter — mean-rev is lower base rate
+
+anti_overfit_multi_signal_conf: 0.70
+
+size_bands:
+  - min: 0.55
+    max: 0.65
+    multiplier: 0.4
+  - min: 0.65
+    max: 0.75
+    multiplier: 0.75
+  - min: 0.75
+    max: 1.0
+    multiplier: 1.0
+
+position_cap: 5
+position_size_pct: 2.5
+stop_loss_pct: 1.0            # tighter than momentum — mean-rev fails fast
+take_profit_pct: 2.0
+trailing_stop_activate_at_pct: 1.0
+trailing_stop_distance_pct: 0.5
+hold_max_hours: 4
+
+cooldown_minutes: 30
+
+risk_overlay:
+  daily_loss_limit_pct: 2.0
+  max_position_size_pct: 12.0
+  max_gross_exposure_pct: 50.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_hours: 4
+  consecutive_loss_halt_at: 6
+  portfolio_drawdown_circuit_pct: 3.5
+  pdt_enforce: false
+
+execution:
+  order_type: market
+  limit_offset_bps: 4
+  reprice_after_seconds: 30
+  reprice_attempts: 2
+  fallback_to_market: true
+  use_brackets: true
+
+paper_only: true
+starting_capital_cents: 1500000   # $15k
+
+risk:
+  deployment_target_pct: 0.60
+  target_position_count: 4
+  max_position_pct: 0.15
+  max_total_deployed_pct: 0.70
+
+discord:
+  channel: stocks-signals
+
+skip_execution_guards: true

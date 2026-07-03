@@ -44,6 +44,11 @@ ASSET_CLASS_REGISTRY: dict[str, dict] = {
     "crypto_quant_meme_tier":       {"asset_class": "crypto",  "ticker_allowlist": None},
     "crypto_quant_10m":             {"asset_class": "crypto",  "ticker_allowlist": None},
     "crypto_quant_15m":             {"asset_class": "crypto",  "ticker_allowlist": None},
+    # 2026-07-02 stock quant batch (m056) — 2 day + 2 swing traders
+    "stock_quant_day_momentum":     {"asset_class": "equity",  "ticker_allowlist": None},
+    "stock_quant_day_meanrev":      {"asset_class": "equity",  "ticker_allowlist": None},
+    "stock_quant_swing_growth":     {"asset_class": "equity",  "ticker_allowlist": None},
+    "stock_quant_swing_value":      {"asset_class": "equity",  "ticker_allowlist": None},
     "cash_floor":                   {"asset_class": "equity",  "ticker_allowlist": ["SPY", "QQQ"]},
 }
 

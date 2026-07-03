@@ -46,6 +46,9 @@ SPEC_BOT_NAMES = frozenset({
     # 2026-07-02 m053 batch (5 more quant bots)
     "crypto_quant_universe_top6", "crypto_quant_defi_l2",
     "crypto_quant_meme_tier", "crypto_quant_10m", "crypto_quant_15m",
+    # 2026-07-02 m056 batch (4 quant stock bots)
+    "stock_quant_day_momentum", "stock_quant_day_meanrev",
+    "stock_quant_swing_growth", "stock_quant_swing_value",
 })
 # NOTE: this frozenset is the "known-good bot names" for the fund's
 # user_id=1 allocations. m026 runs EVERY boot (not just once) — it disables
