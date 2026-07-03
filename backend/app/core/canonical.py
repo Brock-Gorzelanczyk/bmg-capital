@@ -329,6 +329,31 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     # open_pos_rows is used for ALL counts so portfolio matches bot-health.
     open_pos_rows = [p for p in open_pos_display if not p.quarantined_at]
 
+    # 2026-07-02: defensive filter for phantom equity-style positions on
+    # options bots. options_income was showing +$76k unrealized fund gain
+    # despite zero realized trades and no legitimate open contracts. Root
+    # cause: legacy BotPosition rows exist with option_type=NULL but a
+    # non-OCC symbol (residue from m033_close_options_bot_equity_violations
+    # that missed a subset). canonical's equity_positions filter picks them
+    # up and multiplies avg_cost_cents (per-share OPTION premium in cents,
+    # ~350 for a $3.50 strike) by live equity price (~$300/share × 100 =
+    # 30000 cents), producing tens of thousands in phantom unrealized.
+    #
+    # Fix: on options-class bots, exclude any position without a proper
+    # option_type. Log the count so we can clean up the underlying rows
+    # in a follow-up migration.
+    _asset_class = (getattr(profile, "asset_class", "") or "").lower() if profile else ""
+    if _asset_class == "options":
+        _pre = len(open_pos_rows)
+        open_pos_rows = [p for p in open_pos_rows if p.option_type is not None]
+        _dropped = _pre - len(open_pos_rows)
+        if _dropped:
+            logger.warning(
+                "[canonical] filtered %d phantom equity-style positions on "
+                "options bot %s (option_type=NULL, likely legacy pre-m033 rows)",
+                _dropped, getattr(profile, "name", "?"),
+            )
+
     # ── Deployed capital (entry-cost notional) ────────────────────────────────
     # Sum of qty × avg_cost across open positions. Equities: dollars-at-cost.
     # Options: premium × contracts × 100 (per-share entry × contract multiplier).
