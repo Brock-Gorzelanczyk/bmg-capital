@@ -862,13 +862,20 @@ def _compute_pnl_windows(
     all_time_cents = total_value_cents - _FUND_INCEPTION_CENTS
     all_time_pct = round(all_time_cents / _FUND_INCEPTION_CENTS, 6) if _FUND_INCEPTION_CENTS else 0.0
 
+    # MTD: anchor to last biz-day of prior month. Fallback to earliest
+    # snapshot in current month (bots are ~30 days old — we may lack a
+    # June-30 snapshot but have July-1 rollup). Fallback to inception.
     mtd_anchor = _last_biz_day_of_prior_month(today)
     mtd_baseline = _sum_eod_snapshot_on(db, alloc_ids, mtd_anchor)
+    if mtd_baseline is None or mtd_baseline <= 0:
+        month_start = today.replace(day=1)
+        mtd_baseline = _earliest_eod_snapshot_between(db, alloc_ids, month_start, today)
     if mtd_baseline is None or mtd_baseline <= 0:
         mtd_baseline = _FUND_INCEPTION_CENTS
     mtd_cents = total_value_cents - mtd_baseline
     mtd_pct = round(mtd_cents / mtd_baseline, 6) if mtd_baseline else 0.0
 
+    # WTD: anchor to last Sunday. Fallback to earliest snapshot this week.
     wtd_anchor = _last_sunday_before(today)
     wtd_baseline = _sum_eod_snapshot_on(db, alloc_ids, wtd_anchor)
     if wtd_baseline is None or wtd_baseline <= 0:

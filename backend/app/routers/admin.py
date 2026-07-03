@@ -4732,6 +4732,14 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
     # Show top phantoms — bots whose delta is unusually large positive
     phantoms = [r for r in rows if (r.get("delta_from_starting_cents") or 0) > 500_000]  # > $5k delta
 
+    # 5-col header P&L windows — verify MTD/WTD baselines
+    try:
+        from app.core.canonical import compute_strategy_lab_aggregate
+        agg = compute_strategy_lab_aggregate(1, db)
+        pnl_block = agg.get("pnl", {}) if agg else {}
+    except Exception as _exc:
+        pnl_block = {"error": str(_exc)[:200]}
+
     return {
         "user_id": 1,
         "row_count": len(rows),
@@ -4741,6 +4749,7 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
             "sum_pv_$": totals["sum_pv_cents"] / 100,
             "delta_$": (totals["sum_pv_cents"] - totals["sum_starting_cents"]) / 100,
         },
+        "pnl_windows": pnl_block,
         "phantom_candidates": phantoms,
         "all_bots": rows,
     }
