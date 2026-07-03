@@ -30,6 +30,41 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta, datetime, timezone
 from typing import Optional
 
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+ stdlib
+    _FUND_TZ = ZoneInfo("America/Chicago")
+except Exception:
+    # Extremely defensive — if zoneinfo is unavailable, fall back to UTC.
+    # Every deployment target (Railway Python 3.11) has zoneinfo natively.
+    _FUND_TZ = timezone.utc
+
+
+def _fund_today() -> date:
+    """Return today's date anchored to America/Chicago midnight.
+
+    2026-07-02 Brock ask: "today" on the leaderboard was rolling over at UTC
+    midnight (= 7 PM CDT the prior day). For a Milwaukee user looking at
+    positions moved during the workday, everything before UTC midnight got
+    counted as "yesterday's P&L" — showing "+$0 today" for bots that had
+    actually earned all day.
+    """
+    return datetime.now(_FUND_TZ).date()
+
+
+def _fund_date(dt) -> Optional[date]:
+    """Convert a naive-UTC or aware datetime to America/Chicago calendar date.
+
+    Trade / signal timestamps are stored as naive UTC in the DB. Comparing
+    `t.ts.date()` against `_fund_today()` would slice at UTC midnight, not
+    Milwaukee midnight — same bug that made the leaderboard TODAY column
+    show +$0 for most bots. Convert to fund tz before extracting the date.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_FUND_TZ).date()
+
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
@@ -202,7 +237,11 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     """
     from app.db.models.bots import BotTrade, BotPosition, BotWatchlist
 
-    today = date.today()
+    # America/Chicago-anchored day boundary. The prior version used
+    # `date.today()` which on Railway resolves to UTC and would slice at
+    # UTC midnight (= 7 PM Milwaukee the prior day), incorrectly attributing
+    # afternoon-Milwaukee P&L to "yesterday."
+    today = _fund_today()
     thirty_days_ago = today - timedelta(days=30)
 
     # ── Starting capital ──────────────────────────────────────────────────────
@@ -271,7 +310,11 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         elif fill_pnl < 0:
             loss_count += 1
         # fill_pnl == 0 is a scratch — neither win nor loss
-        trade_date = t.ts.date() if hasattr(t.ts, "date") else t.ts
+        # Convert trade timestamp (naive UTC) → America/Chicago date so a
+        # trade at 22:00 UTC (5 PM CDT) buckets to the correct Milwaukee day
+        # instead of getting split across "yesterday" (UTC-early) and "today"
+        # (UTC-late).
+        trade_date = _fund_date(t.ts) if hasattr(t.ts, "date") else t.ts
         if trade_date == today:
             today_realized_cents += fill_pnl
         if trade_date >= thirty_days_ago:
