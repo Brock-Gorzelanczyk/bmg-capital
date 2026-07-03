@@ -99,7 +99,13 @@ def get_vol_target_multiplier(
         # Reconstruct equity curve from cumulative pnl (realized + unrealized cents)
         # Rows are desc; reverse for chronological order
         pnl_rows_asc = list(reversed(pnl_rows))
-        starting_capital = alloc.starting_capital_cents or 10_000_000
+        # is-not-None: treat 0 (zeroed / halted bot) as authoritative, not
+        # a signal to fall back to $100k default (which was inflating equity
+        # curves for halted bots).
+        starting_capital = (
+            alloc.starting_capital_cents if alloc.starting_capital_cents is not None
+            else 10_000_000
+        )
 
         equity_values: list[float] = [float(starting_capital)]
         for row in pnl_rows_asc:

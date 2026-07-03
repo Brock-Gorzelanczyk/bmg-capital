@@ -605,7 +605,10 @@ def run_bot_profile(profile_name: str) -> dict:
                 try:
                     risk_overlay_cfg = profile.get("risk_overlay", {})
                     max_gross_pct = float(risk_overlay_cfg.get("max_gross_exposure_pct", 100.0))
-                    cap_cents = alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 0
+                    cap_cents = (
+                        alloc.starting_capital_cents if alloc.starting_capital_cents is not None
+                        else (alloc.capital_cents_within_portfolio or 0)
+                    )
                     if cap_cents > 0 and open_pos_rows:
                         open_notional_cents = sum(
                             int(p.qty * p.avg_cost_cents) for p in open_pos_rows
@@ -689,7 +692,7 @@ def run_bot_profile(profile_name: str) -> dict:
                     # ── Compute notional before log_signal so the audit.py background
                     # Discord post (which fires immediately from log_signal) shows the
                     # deployment-sizer amount rather than position_size_pct × capital.
-                    _log_capital = (alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000) / 100.0
+                    _log_capital = (alloc.starting_capital_cents if alloc.starting_capital_cents is not None else (alloc.capital_cents_within_portfolio if alloc.capital_cents_within_portfolio is not None else 5_000_000)) / 100.0
                     _pre_size_pct = (sig.size_hint or 0.05) * 100
                     if os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true":
                         try:
@@ -1355,7 +1358,10 @@ def trace_bot_profile(profile_name: str, confidence_threshold_override: float | 
                 # Exposure cap
                 risk_overlay_cfg = profile.get("risk_overlay", {})
                 max_gross_pct = float(risk_overlay_cfg.get("max_gross_exposure_pct", 100.0))
-                cap_cents = alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 0
+                cap_cents = (
+                        alloc.starting_capital_cents if alloc.starting_capital_cents is not None
+                        else (alloc.capital_cents_within_portfolio or 0)
+                    )
                 blocked_by_exposure = False
                 if cap_cents > 0 and open_pos_rows:
                     open_notional_cents = sum(int(p.qty * p.avg_cost_cents) for p in open_pos_rows)
@@ -1761,7 +1767,7 @@ def _execute_options_signal(
     from app.db.models.bots import BotPosition, BotTrade
 
     now = datetime.now(timezone.utc)
-    capital_usd = (alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000) / 100.0
+    capital_usd = (alloc.starting_capital_cents if alloc.starting_capital_cents is not None else (alloc.capital_cents_within_portfolio if alloc.capital_cents_within_portfolio is not None else 5_000_000)) / 100.0
     position_dollars = capital_usd * (final_size_pct / 100.0)
 
     # Hard sleeve-level notional cap: never risk more than 3% of sleeve capital
@@ -2126,7 +2132,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     if equity <= 0:
         # Fallback: use the allocation's configured paper capital
-        equity = (alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000) / 100.0
+        equity = (alloc.starting_capital_cents if alloc.starting_capital_cents is not None else (alloc.capital_cents_within_portfolio if alloc.capital_cents_within_portfolio is not None else 5_000_000)) / 100.0
 
     if equity <= 0:
         logger.warning("[execute:%s] no equity source for %s — skipping", profile_name, sig.symbol)
@@ -2222,7 +2228,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
     # m057 + m058 update starting_capital_cents; the "within_portfolio" field
     # holds stale small values from clean_slate / earlier migrations that made
     # crypto_quant_15m size trades at $170 instead of $17,000 (85% of $20k).
-    capital_usd = (alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000) / 100.0
+    capital_usd = (alloc.starting_capital_cents if alloc.starting_capital_cents is not None else (alloc.capital_cents_within_portfolio if alloc.capital_cents_within_portfolio is not None else 5_000_000)) / 100.0
     _raw_flag = os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower()
     _use_deployment_sizer = _raw_flag == "true"
     if _use_deployment_sizer:
