@@ -413,6 +413,8 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     # Final fallback: today_realized_cents (very rare — only if the query
     # itself fails).
     today_pnl_cents = today_realized_cents  # last-resort fallback
+    _today_case = "fallback_realized_only"
+    _yday_snap_debug = None
     try:
         _yday_snap = (
             db.query(BotDailyPnL)
@@ -426,15 +428,39 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         if _yday_snap is None:
             # Case (c): brand-new bot with no prior snapshot. All-time = today.
             today_pnl_cents = realized_pnl_cents + unrealized_pnl_cents
+            _today_case = "c_new_bot"
         elif _yday_snap.portfolio_value_eod_cents is not None:
             # Case (a): full snapshot available.
             today_pnl_cents = portfolio_value_cents - int(_yday_snap.portfolio_value_eod_cents)
+            _today_case = "a_pv_snapshot"
+            _yday_snap_debug = (str(_yday_snap.date), int(_yday_snap.portfolio_value_eod_cents))
         else:
             # Case (b): partial snapshot, use unrealized delta.
             _yday_unreal = int(_yday_snap.unrealized_cents or 0)
             today_pnl_cents = today_realized_cents + (unrealized_pnl_cents - _yday_unreal)
+            _today_case = "b_unreal_delta"
+            _yday_snap_debug = (str(_yday_snap.date), _yday_unreal)
     except Exception:
         pass  # keep the today_realized_cents fallback
+
+    # 2026-07-02 diagnostic: Brock reported today vs all_time inconsistency
+    # on the m052/m053 batch bots created ~05:04 UTC Jul 2. If case (c)
+    # fires, today should equal all_time. If (a) or (b), a legit prior
+    # snapshot exists — dump it so we can see what's driving the delta.
+    if alloc.profile_id and today_pnl_cents != (realized_pnl_cents + unrealized_pnl_cents):
+        try:
+            _prof_name = getattr(_profile_lookup, "name", None) if (
+                _profile_lookup := db.get(__import__("app.db.models.bots", fromlist=["BotProfile"]).BotProfile, alloc.profile_id)
+            ) else "unknown"
+        except Exception:
+            _prof_name = "unknown"
+        logger.warning(
+            "[today-pnl-diag] bot=%s case=%s today=%d all_time=%d (r=%d u=%d) yday=%s today_date=%s",
+            _prof_name, _today_case, today_pnl_cents,
+            realized_pnl_cents + unrealized_pnl_cents,
+            realized_pnl_cents, unrealized_pnl_cents,
+            _yday_snap_debug, today,
+        )
     yesterday_value = portfolio_value_cents - today_pnl_cents
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
