@@ -53,7 +53,7 @@ def _deployment_ratio(db: Session, user_id: int = 1) -> dict:
     """Sum of open position entry-cost / total starting_capital."""
     row = db.execute(text(
         "SELECT "
-        "  COALESCE(SUM(p.qty * p.entry_price_usd * 100), 0), "
+        "  COALESCE(SUM(p.qty * p.avg_cost_cents), 0), "
         "  COUNT(*) "
         "FROM bot_positions p "
         "JOIN bot_allocations a ON a.id = p.allocation_id "
