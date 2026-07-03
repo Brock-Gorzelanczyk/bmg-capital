@@ -1,9 +1,19 @@
 """m057 — Brock's spec allocation table (2026-07-02 late-night ask).
 
-Brock's directive: "start from 1 mill plus the profits that we have."
-He supplied a specific per-bot allocation table (see _TABLE below) that
-sums to $1,010,000 — representing $1M initial + $10k accumulated real
-profits.
+Brock's directive (final, 2026-07-03 correction):
+  "the capital to only be 1 million plus whatever we are up or down"
+
+Meaning: sum(starting_capital_cents) across all user_id=1 bots MUST equal
+exactly $1,000,000. Fund PV floats around $1M ± net P&L as position values
+move. The $1M is the anchor; P&L is separate.
+
+## Table correction
+
+Brock's earlier table summed to $1,010,000 — a math error he caught. His
+correction: cut Quant Mean Rev (HALTED) from $80k → $70k. Rationale:
+Mean Rev is halted, capital sitting there is inert until a restart
+decision; reducing it has zero real-world impact. Do NOT cut from any
+active bot.
 
 ## Full allocation reset
 
@@ -56,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 _MIGRATION_NAME = "m057_brock_reallocation_table_2026_07"
 _APPROVE_ENV = "BMG_APPROVE_M057"
-_INVARIANT_TARGET = 101_000_000  # $1,010,000 — Brock's table sum
+_INVARIANT_TARGET = 100_000_000  # $1,000,000 exact — Brock's final directive
 
 # Brock's spec allocation (bot_name → cents). Bots not in this dict get $0.
 _TABLE = {
@@ -86,7 +96,9 @@ _TABLE = {
     "options_income":               5_000_000,   # $50k
     # Quant sleeve (asset-agnostic original 3)
     "crypto_quant_aggressive":     10_000_000,   # $100k
-    "crypto_quant_mean_reversion":  8_000_000,   # $80k (HALTED — funded per Brock)
+    "crypto_quant_mean_reversion":  7_000_000,   # $70k (HALTED — trimmed $10k
+                                                 # 2026-07-03 correction to
+                                                 # bring total to $1M exact)
     "crypto_quant_scalper":         5_000_000,   # $50k (HALTED — funded per Brock)
     # Cash
     "cash_floor":                   1_000_000,   # $10k
