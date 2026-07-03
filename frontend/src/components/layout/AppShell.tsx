@@ -5,6 +5,7 @@ import { useIsAdmin, useIsViewer } from "@/store/authStore";
 import { House, BarChart2, Bot, Newspaper, User } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import LegalFooter from "@/components/LegalFooter";
 import CommandPalette from "@/components/ui/CommandPalette";
 import CopilotModal from "@/components/ui/CopilotModal";
 import ExplainPanel from "@/components/explain/ExplainPanel";
@@ -157,6 +158,7 @@ export default function AppShell() {
             <Outlet />
           </Suspense>
         </main>
+        {!isChart && <LegalFooter />}
       </div>
 
       {/* Bottom navigation — mobile only */}

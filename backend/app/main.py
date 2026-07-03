@@ -990,6 +990,20 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        # Content-Security-Policy — allows same-origin JS/CSS, inline styles
+        # (Tailwind + shadcn use them), data: URIs for images, and websocket
+        # + https connections for the API. Blocks arbitrary third-party JS.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' data:; "
+            "connect-src 'self' wss: https:; "
+            "frame-ancestors 'self'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
         if request.url.path.startswith("/assets/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
@@ -1136,6 +1150,10 @@ from app.routers import aqa_admin
 app.include_router(aqa_admin.router)
 from app.routers.live_activity import router as live_activity_router
 app.include_router(live_activity_router)
+from app.routers.risk_console import router as risk_console_router
+app.include_router(risk_console_router)
+from app.routers.trades_journal import router as trades_journal_router
+app.include_router(trades_journal_router)
 
 
 @app.get("/health", tags=["health"])
