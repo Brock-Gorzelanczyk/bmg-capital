@@ -693,6 +693,61 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job bot_stock_quant_swing_value (16:00 ET Mon-Fri)")
 
+    # ------------------------------------------------------------------
+    # 2026-07-02 BROCK TABLE BATCH — 4 new stock traders per spec
+    # Ships as enabled=false in the YAML profiles. Scheduler still
+    # registers so that once m057 enables the bots (post-approval), the
+    # cron fires without a redeploy.
+    # ------------------------------------------------------------------
+
+    # stock_gap_fade: 9:00-10:59 ET Mon-Fri, */5 min
+    scheduler.add_job(
+        lambda: _run_and_log("stock_gap_fade"),
+        CronTrigger(day_of_week="mon-fri", minute="*/5", hour="9-10", timezone=ET),
+        id="bot_stock_gap_fade",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_stock_gap_fade (*/5 9-10 ET Mon-Fri)")
+
+    # stock_orb_breakout: 10-15 ET Mon-Fri, */5 min (ORB window ends 10 AM)
+    scheduler.add_job(
+        lambda: _run_and_log("stock_orb_breakout"),
+        CronTrigger(day_of_week="mon-fri", minute="*/5", hour="10-15", timezone=ET),
+        id="bot_stock_orb_breakout",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_stock_orb_breakout (*/5 10-15 ET Mon-Fri)")
+
+    # stock_momentum_breakout: 3:30 PM ET Mon-Fri
+    scheduler.add_job(
+        lambda: _run_and_log("stock_momentum_breakout"),
+        CronTrigger(day_of_week="mon-fri", hour=15, minute=30, timezone=ET),
+        id="bot_stock_momentum_breakout",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_stock_momentum_breakout (15:30 ET Mon-Fri)")
+
+    # stock_pead: 4:00 PM ET Mon-Fri
+    scheduler.add_job(
+        lambda: _run_and_log("stock_pead"),
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=0, timezone=ET),
+        id="bot_stock_pead",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_stock_pead (16:00 ET Mon-Fri)")
+
     # One-time startup log: emit cooldown_minutes for each quant bot so Railway
     # logs confirm the YAML setting is in effect on this deploy.
     try:

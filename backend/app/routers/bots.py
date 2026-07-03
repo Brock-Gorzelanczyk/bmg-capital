@@ -117,6 +117,11 @@ _PORTFOLIO_DEFS = [
          "stock_quant_day_meanrev":  1_500_000,   # $15k
          "stock_quant_swing_growth": 1_500_000,   # $15k
          "stock_quant_swing_value":  1_500_000,   # $15k
+         # 2026-07-02 m057 batch (Brock's spec table)
+         "stock_gap_fade":           2_000_000,   # $20k
+         "stock_orb_breakout":       2_000_000,   # $20k
+         "stock_momentum_breakout":  2_000_000,   # $20k
+         "stock_pead":               2_000_000,   # $20k
      }},
     {"asset_class": "crypto",  "name": "Crypto",  "emoji": "🪙", "color_hex": "#F59E0B",
      "starting_capital_cents": 40_000_000,

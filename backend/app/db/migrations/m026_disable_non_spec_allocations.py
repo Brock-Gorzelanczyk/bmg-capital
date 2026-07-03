@@ -49,6 +49,9 @@ SPEC_BOT_NAMES = frozenset({
     # 2026-07-02 m056 batch (4 quant stock bots)
     "stock_quant_day_momentum", "stock_quant_day_meanrev",
     "stock_quant_swing_growth", "stock_quant_swing_value",
+    # 2026-07-02 Brock table (m057)
+    "stock_gap_fade", "stock_orb_breakout",
+    "stock_momentum_breakout", "stock_pead",
 })
 # NOTE: this frozenset is the "known-good bot names" for the fund's
 # user_id=1 allocations. m026 runs EVERY boot (not just once) — it disables

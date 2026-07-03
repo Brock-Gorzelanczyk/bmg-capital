@@ -62,6 +62,9 @@ _EXPECTED_NAMES = (
     # 2026-07-02 m056 batch (4 quant stock bots)
     "stock_quant_day_momentum", "stock_quant_day_meanrev",
     "stock_quant_swing_growth", "stock_quant_swing_value",
+    # 2026-07-02 Brock table (m057)
+    "stock_gap_fade", "stock_orb_breakout",
+    "stock_momentum_breakout", "stock_pead",
 )
 # NOTE: Adding a new production bot? Also add its name here — otherwise the
 # capital_invariant watchdog will false-trigger CRIT because the new bot's

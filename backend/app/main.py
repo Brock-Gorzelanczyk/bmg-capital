@@ -608,6 +608,18 @@ async def lifespan(app: FastAPI):
     except Exception as _m056_exc:
         logger.error("[startup] m056_seed_stock_quant_bots FAILED: %s", _m056_exc, exc_info=True)
 
+    # m057: Brock's spec reallocation table ($1M + $10k real profits).
+    # GATED behind env var BMG_APPROVE_M057=true per Brock's autonomy rule
+    # about explicit approval for capital moves. If not set, this is a
+    # no-op that returns awaiting_approval — safe to leave in main.py.
+    try:
+        from app.db.migrations.m057_brock_reallocation_table import run as _run_m057
+        with engine.begin() as _m057_conn:
+            _m057_result = _run_m057(_m057_conn)
+        logger.warning("[startup] m057 status: %s", _m057_result)
+    except Exception as _m057_exc:
+        logger.error("[startup] m057_brock_reallocation_table FAILED: %s", _m057_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

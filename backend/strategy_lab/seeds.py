@@ -44,6 +44,10 @@ _PROFILE_DESCRIPTIONS = {
     "stock_quant_day_meanrev": "Intraday mean-reversion day-trader on 20 liquid large-caps. Wider mix — mean_reversion / rsi / vwap / camarilla / bollinger / gex_pin. $15k.",
     "stock_quant_swing_growth": "Growth + momentum swing on 24 tech / AI infra names. Daily bars, 3:30 PM ET fire, up to 21-day hold. $15k.",
     "stock_quant_swing_value": "Value / dividend / defensive swing on 30 quality names. Factor + factor_blend + momentum_12_1 mix. 4 PM ET fire, up to 45-day hold. $15k.",
+    "stock_gap_fade": "Opening gap fade (day trader). Fades >2% opening gaps on 30 large-caps. Entry 9:35-10 ET, EOD flat. $20k.",
+    "stock_orb_breakout": "Opening Range Breakout (day trader). Buys break of 9:30-10 AM high with volume confirm on top-100 Russell names. EOD flat. $20k.",
+    "stock_momentum_breakout": "Momentum breakout swing trader. Close above 20-day high + volume 1.5x + RSI>60. 5-15 day hold. $20k.",
+    "stock_pead": "Post-Earnings Announcement Drift. T+1 entry on earnings beats >5%, 30-45 day hold, -8% hard stop. $20k.",
 }
 
 

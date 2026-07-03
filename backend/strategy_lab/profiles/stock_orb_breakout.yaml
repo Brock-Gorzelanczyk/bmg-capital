@@ -1,0 +1,98 @@
+name: stock_orb_breakout
+asset_class: stock
+broker: alpaca_paper_stocks
+# 2026-07-02 Brock table: Opening Range Breakout day trader, $20k.
+# Ships disabled=true until m057 reallocation approved.
+enabled: false
+
+universe:
+  source: russell_1000_top_100_volume
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - AAPL
+    - MSFT
+    - NVDA
+    - GOOGL
+    - AMZN
+    - META
+    - TSLA
+    - AMD
+    - AVGO
+    - NFLX
+    - SMCI
+    - PLTR
+    - CRWD
+    - PANW
+    - COIN
+    - MSTR
+    - MU
+    - ANET
+    - DELL
+    - LLY
+    - JPM
+    - BAC
+    - GS
+    - COST
+    - ORCL
+    - CRM
+    - ADBE
+  filters:
+    - price_gte: 25
+    - adv_gte: 5000000
+scan_lookback_period: "60d"
+scan_timeframe: "5m"                   # 5-min bars for the ORB range
+cadence: "*/5 10-15 * * 1-5"           # ORB window closes 10:00 ET; scan every 5m after
+watchlist:
+  rebuild_at: "0 9 * * 1-5"
+  size: 30
+  top_n_for_signals: 20
+
+strategies:
+  - orb_stocks_in_play
+  - crabel_orb
+
+ensemble: any_above_threshold
+confidence_threshold: 0.55
+
+position_cap: 4
+position_size_pct: 4.0
+stop_loss_pct: 1.5
+take_profit_pct: 3.0
+trailing_stop_activate_at_pct: 1.5
+trailing_stop_distance_pct: 0.75
+hold_max_hours: 6                      # EOD flat
+
+cooldown_minutes: 30
+
+risk_overlay:
+  daily_loss_limit_pct: 2.5
+  max_position_size_pct: 12.0
+  max_gross_exposure_pct: 55.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 4.0
+  pdt_enforce: false
+
+execution:
+  order_type: market
+  limit_offset_bps: 4
+  reprice_after_seconds: 30
+  reprice_attempts: 2
+  fallback_to_market: true
+  use_brackets: true
+
+paper_only: true
+starting_capital_cents: 2000000        # $20k
+
+risk:
+  deployment_target_pct: 0.70
+  target_position_count: 3
+  max_position_pct: 0.15
+  max_total_deployed_pct: 0.80
+
+discord:
+  channel: stocks-signals
+
+skip_execution_guards: true

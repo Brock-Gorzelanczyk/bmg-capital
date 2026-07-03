@@ -1,0 +1,98 @@
+name: stock_gap_fade
+asset_class: stock
+broker: alpaca_paper_stocks
+# 2026-07-02 Brock table: gap-fade day trader, $20k allocation.
+# Ships as disabled=true; m057 migration (gated) flips enabled after
+# Brock approves the full reallocation table.
+enabled: false
+
+universe:
+  source: sp500_large_caps
+  symbols:
+    - SPY
+    - QQQ
+    - IWM
+    - AAPL
+    - MSFT
+    - NVDA
+    - GOOGL
+    - AMZN
+    - META
+    - TSLA
+    - AMD
+    - AVGO
+    - NFLX
+    - JPM
+    - BAC
+    - WFC
+    - XOM
+    - CVX
+    - JNJ
+    - PFE
+    - KO
+    - PEP
+    - WMT
+    - COST
+    - HD
+    - MCD
+    - DIS
+    - BA
+    - CAT
+    - GE
+  filters:
+    - price_gte: 25
+    - adv_gte: 3000000
+scan_lookback_period: "60d"
+scan_timeframe: "1d"                   # daily bars — need prior close vs today open
+cadence: "*/5 9-10 * * 1-5"            # 9:00-10:59 ET Mon-Fri — captures the 9:35-10:00 fade window
+watchlist:
+  rebuild_at: "0 9 * * 1-5"
+  size: 30
+  top_n_for_signals: 20
+
+strategies:
+  - gap_fade_intraday
+
+ensemble: any_above_threshold
+confidence_threshold: 0.55
+
+position_cap: 4
+position_size_pct: 5.0
+stop_loss_pct: 2.0                     # 1× gap magnitude proxy
+take_profit_pct: 4.0                   # 2R
+trailing_stop_activate_at_pct: 2.0
+trailing_stop_distance_pct: 1.0
+hold_max_hours: 6                      # EOD flat by design
+
+cooldown_minutes: 60                   # one gap-fade per name per day
+
+risk_overlay:
+  daily_loss_limit_pct: 2.5
+  max_position_size_pct: 12.0
+  max_gross_exposure_pct: 60.0
+  consecutive_loss_halve_at: 3
+  consecutive_loss_halt_at: 5
+  portfolio_drawdown_circuit_pct: 4.0
+  pdt_enforce: false
+
+execution:
+  order_type: market
+  limit_offset_bps: 4
+  reprice_after_seconds: 30
+  reprice_attempts: 2
+  fallback_to_market: true
+  use_brackets: true
+
+paper_only: true
+starting_capital_cents: 2000000        # $20k per Brock table
+
+risk:
+  deployment_target_pct: 0.70
+  target_position_count: 3
+  max_position_pct: 0.15
+  max_total_deployed_pct: 0.80
+
+discord:
+  channel: stocks-signals
+
+skip_execution_guards: true
