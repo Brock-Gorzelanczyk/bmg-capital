@@ -631,6 +631,18 @@ async def lifespan(app: FastAPI):
     except Exception as _m058_exc:
         logger.error("[startup] m058_brock_greenlight_reallocation FAILED: %s", _m058_exc, exc_info=True)
 
+    # m059: fix m058's phantom — halted bots had duplicate rows the .fetchone()
+    # in m058 missed. Zeros ALL rows for crypto_quant_mean_reversion + scalper.
+    # No env-var gate — this only zeros capital that Brock already zeroed via
+    # m058 approval; it's a bug-fix on m058, not a new capital move.
+    try:
+        from app.db.migrations.m059_zero_all_halted_rows import run as _run_m059
+        with engine.begin() as _m059_conn:
+            _m059_result = _run_m059(_m059_conn)
+        logger.warning("[startup] m059 status: %s", _m059_result)
+    except Exception as _m059_exc:
+        logger.error("[startup] m059_zero_all_halted_rows FAILED: %s", _m059_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

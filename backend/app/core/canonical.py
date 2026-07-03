@@ -1121,6 +1121,17 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "signals_24h": signals_24h_by_alloc.get(a.id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
             })
+    # 2026-07-03 Brock: hide zero-capital allocations from the leaderboard.
+    # Halted bots (mean_rev, scalper) and mystery bots (stock_quant_*) all
+    # sit at $0 starting_capital and were cluttering the board. If capital
+    # is $0 AND there's zero portfolio value AND zero trades, drop the row.
+    leaderboard = [
+        e for e in leaderboard
+        if (e.get("starting_capital_cents", 0) > 0)
+        or (e.get("portfolio_value_cents", 0) > 0)
+        or (e.get("realized_pnl_cents", 0) != 0)
+        or (e.get("today_pnl_cents", 0) != 0)
+    ]
     leaderboard.sort(
         key=lambda x: (
             x["all_time_return_pct"],
