@@ -689,7 +689,7 @@ def run_bot_profile(profile_name: str) -> dict:
                     # ── Compute notional before log_signal so the audit.py background
                     # Discord post (which fires immediately from log_signal) shows the
                     # deployment-sizer amount rather than position_size_pct × capital.
-                    _log_capital = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+                    _log_capital = (alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000) / 100.0
                     _pre_size_pct = (sig.size_hint or 0.05) * 100
                     if os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true":
                         try:
@@ -1761,7 +1761,7 @@ def _execute_options_signal(
     from app.db.models.bots import BotPosition, BotTrade
 
     now = datetime.now(timezone.utc)
-    capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+    capital_usd = (alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000) / 100.0
     position_dollars = capital_usd * (final_size_pct / 100.0)
 
     # Hard sleeve-level notional cap: never risk more than 3% of sleeve capital
@@ -2126,7 +2126,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     if equity <= 0:
         # Fallback: use the allocation's configured paper capital
-        equity = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+        equity = (alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000) / 100.0
 
     if equity <= 0:
         logger.warning("[execute:%s] no equity source for %s — skipping", profile_name, sig.symbol)
@@ -2217,8 +2217,12 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
 
     logger.info("[execute:%s] entry_price=%s=%.4f equity=%.2f", profile_name, sig.symbol, entry_price, equity)
 
-    # 2. Size: pct of bot capital (capital_cents_within_portfolio or starting capital)
-    capital_usd = (alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000) / 100.0
+    # 2. Size: pct of bot capital (starting_capital_cents is authoritative).
+    # 2026-07-03: prefer starting_capital_cents over capital_cents_within_portfolio.
+    # m057 + m058 update starting_capital_cents; the "within_portfolio" field
+    # holds stale small values from clean_slate / earlier migrations that made
+    # crypto_quant_15m size trades at $170 instead of $17,000 (85% of $20k).
+    capital_usd = (alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000) / 100.0
     _raw_flag = os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower()
     _use_deployment_sizer = _raw_flag == "true"
     if _use_deployment_sizer:

@@ -760,7 +760,7 @@ def get_bot_risk_status(
 
     profile = load_profile(bot_id)
     capital_usd = (
-        alloc.capital_cents_within_portfolio or alloc.starting_capital_cents or 5_000_000
+        alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 5_000_000
     ) / 100.0
 
     flag_enabled = os.getenv("ENABLE_DEPLOYMENT_TARGET_SIZING", "false").strip().lower() == "true"

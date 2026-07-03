@@ -73,7 +73,7 @@ execution:
   reprice_after_seconds: 30
   reprice_attempts: 3
   fallback_to_market: true
-  use_brackets: true
+  use_brackets: false  # 2026-07-02 Alpaca crypto rejects otoco order_class — rely on internal stop/target monitor
 
 discord:
   channel: quant-signals

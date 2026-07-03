@@ -29,7 +29,7 @@ execution:
   limit_offset_bps: 10
   reprice_after_seconds: 60
   fallback_to_market: true
-  use_brackets: true
+  use_brackets: false  # 2026-07-02 Alpaca crypto rejects otoco order_class — rely on internal stop/target monitor
 paper_only: true
 discord:
   channel: crypto-signals

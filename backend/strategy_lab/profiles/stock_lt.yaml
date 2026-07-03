@@ -1,5 +1,5 @@
 name: stock_lt
-asset_class: equities
+asset_class: stock
 broker: alpaca_paper_stocks
 universe:
   source: sp500

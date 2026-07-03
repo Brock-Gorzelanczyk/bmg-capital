@@ -1,5 +1,5 @@
 name: stock_day
-asset_class: equities
+asset_class: stock
 broker: alpaca_paper_stocks
 universe:
   source: russell_1000
