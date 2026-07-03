@@ -2,9 +2,8 @@ name: stock_gap_fade
 asset_class: stock
 broker: alpaca_paper_stocks
 # 2026-07-02 Brock table: gap-fade day trader, $20k allocation.
-# Ships as disabled=true; m057 migration (gated) flips enabled after
-# Brock approves the full reallocation table.
-enabled: false
+# m057 approved + executed; bot now enabled for market open 2026-07-03.
+enabled: true
 
 universe:
   source: sp500_large_caps

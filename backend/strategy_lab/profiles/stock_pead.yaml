@@ -3,8 +3,8 @@ asset_class: stock
 broker: alpaca_paper_stocks
 # 2026-07-02 Brock table: Post-Earnings Announcement Drift, $20k.
 # Enters on T+1 open after an earnings beat > 5%; 30-45 day hold.
-# Ships disabled=true until m057 reallocation approved.
-enabled: false
+# m057 approved + executed; bot now enabled for market open 2026-07-03.
+enabled: true
 
 universe:
   source: sp500_earnings_leaders

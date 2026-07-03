@@ -2,8 +2,8 @@ name: stock_momentum_breakout
 asset_class: stock
 broker: alpaca_paper_stocks
 # 2026-07-02 Brock table: 20-day-high momentum breakout swing trader, $20k.
-# Ships disabled=true until m057 reallocation approved.
-enabled: false
+# m057 approved + executed; bot now enabled for market open 2026-07-03.
+enabled: true
 
 universe:
   source: russell_1000_top_100_volume
