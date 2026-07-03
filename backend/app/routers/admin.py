@@ -4664,19 +4664,23 @@ def get_daily_audit_latest(
 
 # ─── PUBLIC diagnostic — manual scan trigger for options investigation ────────
 @router.get("/scan-trigger-diagnostic/{bot_name}")
-def trigger_scan_diagnostic(bot_name: str, db: Session = Depends(get_db)) -> dict:
+def trigger_scan_diagnostic(bot_name: str, persist: bool = False, execute: bool = False,
+                            db: Session = Depends(get_db)) -> dict:
     """Force-run scan_and_execute for a bot and return the result.
 
     Public + gated by BMG_DIAGNOSTIC_PV_ENABLED. Use for hunting silent
     scan failures (options bots produced 0 signals in 24h).
+
+    Query params:
+      persist=true — write signals to bot_signals (matches cron behavior)
+      execute=true — attempt actual order execution (DANGER — use carefully)
     """
     import os as _os
     if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
         return {"error": "diagnostic disabled"}
     try:
         from strategy_lab.scan_and_execute import scan_and_execute
-        # execute=False so we don't accidentally trade
-        result = scan_and_execute(bot_name, db, persist=False, execute=False)
+        result = scan_and_execute(bot_name, db, persist=persist, execute=execute)
         # Truncate results for readability
         if isinstance(result, dict) and "results" in result:
             result["results_count"] = len(result.get("results") or [])
