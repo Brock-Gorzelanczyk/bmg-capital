@@ -13,6 +13,7 @@ from app.alpaca.client import get_historical_client
 from app.db.models.users import User
 from app.db.models.watchlist import Watchlist, WatchlistItem
 from app.dependencies import get_db, get_current_user, require_admin
+from app.core.tz import iso_utc
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/watchlists", tags=["watchlists"])
@@ -30,14 +31,14 @@ def _watchlist_to_dict(wl: Watchlist, include_items: bool = False) -> Dict[str, 
     d: Dict[str, Any] = {
         "id": wl.id,
         "name": wl.name,
-        "created_at": wl.created_at.isoformat() if wl.created_at else None,
+        "created_at": iso_utc(wl.created_at),
     }
     if include_items:
         d["items"] = [
             {
                 "id": item.id,
                 "symbol": item.symbol,
-                "added_at": item.added_at.isoformat() if item.added_at else None,
+                "added_at": iso_utc(item.added_at),
             }
             for item in wl.items
         ]
@@ -123,7 +124,7 @@ def add_symbol(
         "id": item.id,
         "watchlist_id": item.watchlist_id,
         "symbol": item.symbol,
-        "added_at": item.added_at.isoformat() if item.added_at else None,
+        "added_at": iso_utc(item.added_at),
     }
 
 

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user, require_admin
 from app.db.models.autopilot import AutopilotAction, AutopilotGuardrail, AutopilotPolicy
+from app.core.tz import iso_utc
 from app.services.autopilot_policy import (
     CATEGORIES,
     get_or_create_autopilot_guardrail,
@@ -51,7 +52,7 @@ def _action_to_dict(a: AutopilotAction) -> dict:
         "ai_rationale": a.ai_rationale,
         "result": a.result,
         "outcome_value": a.outcome_value,
-        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "created_at": iso_utc(a.created_at),
     }
 
 
@@ -62,8 +63,8 @@ def _policy_to_dict(p: AutopilotPolicy) -> dict:
         "category": p.category,
         "enabled": p.enabled,
         "config": p.config if isinstance(p.config, dict) else {},
-        "created_at": p.created_at.isoformat() if p.created_at else None,
-        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        "created_at": iso_utc(p.created_at),
+        "updated_at": iso_utc(p.updated_at),
     }
 
 
@@ -78,8 +79,8 @@ def _guardrail_to_dict(g: AutopilotGuardrail) -> dict:
         "max_position_concentration_pct": g.max_position_concentration_pct,
         "max_subscriptions_cancel_per_week": g.max_subscriptions_cancel_per_week,
         "global_paused": g.global_paused,
-        "paused_at": g.paused_at.isoformat() if g.paused_at else None,
-        "updated_at": g.updated_at.isoformat() if g.updated_at else None,
+        "paused_at": iso_utc(g.paused_at),
+        "updated_at": iso_utc(g.updated_at),
     }
 
 
@@ -515,7 +516,7 @@ def get_summary_today(
                     "asset": a.asset,
                     "ai_rationale": a.ai_rationale,
                     "result": a.result,
-                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                    "created_at": iso_utc(a.created_at),
                 })
                 seen_cats.add(a.category)
 

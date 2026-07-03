@@ -843,6 +843,10 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
           <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-24 text-right">All-Time</span>
           <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-24 text-right">Today</span>
           <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-28 text-right">Deployed</span>
+          {/* 2026-07-02 (Brock ask via Claude 3 audit): SIGNALS 24H + TRADES 24H
+              so signal→fill conversion is visible at a glance. Bots below
+              ~30% conversion are candidates for execution investigation. */}
+          <span className="text-[10px] uppercase tracking-widest text-t-gdim font-mono-t w-20 text-right">Sig/Trd 24h</span>
           <span className="w-14" />
         </div>
         <div className="space-y-0">
@@ -862,10 +866,17 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
             const ext = entry as unknown as {
               deployed_cents?: number;
               starting_capital_cents?: number;
+              signals_24h?: number;
+              trades_24h?: number;
             };
             const deployedCents = ext.deployed_cents ?? 0;
             const startingCents = ext.starting_capital_cents ?? 0;
             const deployedPct = startingCents > 0 ? (deployedCents / startingCents) * 100 : 0;
+            // 24h signal + trade counts — surfaced 2026-07-02 to make
+            // signal→fill conversion visible per bot at a glance.
+            const signals24h = ext.signals_24h ?? 0;
+            const trades24h  = ext.trades_24h ?? 0;
+            const convPct = signals24h > 0 ? (trades24h / signals24h) * 100 : null;
             // All-time $ and today % — Brock 2026-06-30 ask: surface dollars alongside
             // percentages so the scoreboard is scannable at a glance. portfolio_value_cents
             // already includes realized + unrealized so this matches what the user owns now.
@@ -913,11 +924,40 @@ function BotLeaderboardSection({ onNavigateBot }: { onNavigateBot: (name: string
                     <span className="text-[10px] text-t-gdim">—</span>
                   )}
                 </div>
-                <span className="text-[10px] w-28 text-right tabular-nums font-mono-t text-t-mid2">
-                  {startingCents > 0
-                    ? `${deployedPct.toFixed(0)}% of ${startingLabel}`
-                    : "—"}
-                </span>
+                {/* Deployed cell: % on top, $ on bottom (dimmed) — Brock
+                    2026-07-02 ask: show the dollar amount alongside the %. */}
+                <div className="w-28 flex flex-col items-end font-mono-t">
+                  <span className="text-[10px] tabular-nums text-t-mid2">
+                    {startingCents > 0
+                      ? `${deployedPct.toFixed(0)}% of ${startingLabel}`
+                      : "—"}
+                  </span>
+                  {deployedCents > 0 ? (
+                    <span className="text-[10px] tabular-nums opacity-60 text-t-mid2">
+                      ${(deployedCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-t-gdim">—</span>
+                  )}
+                </div>
+                {/* Signal / Trade 24h: X/Y count on top, conversion% on bottom
+                    (dimmed). Bots below 30% conversion are candidates for
+                    execution investigation. */}
+                <div className="w-20 flex flex-col items-end font-mono-t">
+                  <span className="text-[10px] tabular-nums text-t-mid2">
+                    {signals24h}/{trades24h}
+                  </span>
+                  {convPct != null ? (
+                    <span className={cn(
+                      "text-[10px] tabular-nums opacity-70",
+                      convPct >= 30 ? "text-t-green" : convPct >= 10 ? "text-yellow-400" : "text-t-red",
+                    )}>
+                      {convPct.toFixed(0)}%
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-t-gdim">—</span>
+                  )}
+                </div>
                 <span className="text-[10px] text-t-gdim w-14 text-right flex-shrink-0 font-ui-t">
                   {entry.watchlist_count > 0 ? `${entry.watchlist_count} names` : "—"}
                 </span>

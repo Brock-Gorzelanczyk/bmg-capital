@@ -11,6 +11,7 @@ from app.db.models.alert import AlertConfig, AlertTrigger
 from app.db.models.users import User
 from app.dependencies import get_db, get_current_user
 from app.ws.manager import connection_manager
+from app.core.tz import iso_utc
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
@@ -44,7 +45,7 @@ def _alert_to_dict(a: AlertConfig) -> Dict[str, Any]:
         "signal_type": a.signal_type,
         "threshold": a.threshold,
         "enabled": a.enabled,
-        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "created_at": iso_utc(a.created_at),
     }
 
 
@@ -56,7 +57,7 @@ def _trigger_to_dict(t: AlertTrigger) -> Dict[str, Any]:
         "symbol": t.symbol,
         "value": t.value,
         "message": t.message,
-        "triggered_at": t.triggered_at.isoformat() if t.triggered_at else None,
+        "triggered_at": iso_utc(t.triggered_at),
     }
 
 

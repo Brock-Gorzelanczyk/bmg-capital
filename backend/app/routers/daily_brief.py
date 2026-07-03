@@ -14,6 +14,7 @@ from app.db.models.daily_brief import DailyBrief
 from app.db.models.users import User
 from app.db.session import get_db
 from app.dependencies import get_current_user
+from app.core.tz import iso_utc
 
 logger = logging.getLogger(__name__)
 
@@ -277,10 +278,10 @@ def _serialize_brief(brief: DailyBrief) -> Dict[str, Any]:
     return {
         "id": brief.id,
         "user_id": brief.user_id,
-        "brief_date": brief.brief_date.isoformat() if brief.brief_date else None,
+        "brief_date": iso_utc(brief.brief_date),
         "sections": (brief.content_json or {}).get("sections", []),
         "reading_level": brief.reading_level,
-        "generated_at": brief.generated_at.isoformat() if brief.generated_at else None,
+        "generated_at": iso_utc(brief.generated_at),
     }
 
 
@@ -371,7 +372,7 @@ async def get_latest_brief(
     else:
         result = {
             "sections": (brief.content_json or {}).get("sections", []),
-            "generated_at": brief.generated_at.isoformat() if brief.generated_at else None,
+            "generated_at": iso_utc(brief.generated_at),
             "reading_level": brief.reading_level,
         }
 

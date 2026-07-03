@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
+from app.core.tz import iso_utc
 
 logger = logging.getLogger(__name__)
 from app.db.models.bots import (
@@ -354,7 +355,7 @@ def get_dashboard_v2(
         bot_name = profile.name if profile else ""
         recent_signals.append({
             "id": s.id,
-            "ts": s.ts.isoformat() if s.ts else None,
+            "ts": iso_utc(s.ts),
             "bot_name": bot_name,
             "display_name": _DISPLAY_NAMES.get(bot_name, ""),
             "symbol": s.symbol,

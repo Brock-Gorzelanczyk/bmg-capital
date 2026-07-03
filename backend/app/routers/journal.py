@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user, require_admin
 from app.db.models.users import User
 from app.db.models.journal import JournalEntry
+from app.core.tz import iso_utc
 
 router = APIRouter(prefix="/api/journal", tags=["journal"])
 
@@ -33,7 +34,7 @@ def _ser(e: JournalEntry) -> dict:
         "lessons": e.lessons,
         "rating": e.rating,
         "entry_type": getattr(e, "entry_type", None),
-        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "created_at": iso_utc(e.created_at),
     }
 
 

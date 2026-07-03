@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies import get_current_user, require_admin
 from app.db.models.users import User
+from app.core.tz import iso_utc
 
 logger = logging.getLogger(__name__)
 
@@ -580,7 +581,7 @@ def system_health(
                 for p in db.query(BotProfile).all()
             }
             last_scan = {
-                prof_map.get(r.profile_id, str(r.profile_id)): r.last_ts.isoformat() if r.last_ts else None
+                prof_map.get(r.profile_id, str(r.profile_id)): iso_utc(r.last_ts)
                 for r in rows
             }
 
@@ -839,12 +840,12 @@ def get_bot_health_detail(
         signals = [
             {
                 "id":               s.id,
-                "ts":               s.ts.isoformat() if s.ts else None,
+                "ts":               iso_utc(s.ts),
                 "symbol":           s.symbol,
                 "side":             s.side,
                 "confidence":       s.confidence,
                 "price":            s.price,
-                "discord_posted_at": s.discord_posted_at.isoformat() if s.discord_posted_at else None,
+                "discord_posted_at": iso_utc(s.discord_posted_at),
                 "is_test":          bool(s.is_test),
             }
             for s in sig_rows
@@ -862,13 +863,13 @@ def get_bot_health_detail(
         trades = [
             {
                 "id":            t.id,
-                "ts":            t.ts.isoformat() if t.ts else None,
+                "ts":            iso_utc(t.ts),
                 "symbol":        t.symbol,
                 "side":          t.side,
                 "qty":           t.qty,
                 "price":         t.price,
                 "pnl_cents":     t.pnl_cents,
-                "quarantined_at": t.quarantined_at.isoformat() if t.quarantined_at else None,
+                "quarantined_at": iso_utc(t.quarantined_at),
             }
             for t in trade_rows
         ]
@@ -888,7 +889,7 @@ def get_bot_health_detail(
         discord_posts = [
             {
                 "id":        s.id,
-                "ts":        s.discord_posted_at.isoformat() if s.discord_posted_at else None,
+                "ts":        iso_utc(s.discord_posted_at),
                 "symbol":    s.symbol,
                 "side":      s.side,
                 "confidence": s.confidence,
@@ -1176,7 +1177,7 @@ def options_position_audit(
                 "strike_price": p.strike_price,
                 "expiration_date": p.expiration_date,
                 "contract_count": p.contract_count,
-                "opened_at": p.opened_at.isoformat() if p.opened_at else None,
+                "opened_at": iso_utc(p.opened_at),
             }
             if p.option_type is None:
                 shares_misclassified.append(row)

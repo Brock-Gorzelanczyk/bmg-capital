@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user, require_admin
 from app.db.models.users import User
 from app.db.models.notifications import Notification, NotificationPrefs
+from app.core.tz import iso_utc
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -189,7 +190,7 @@ def _serialize(n: Notification) -> dict:
         "body": n.body,
         "is_read": n.is_read,
         "meta": n.meta or {},
-        "created_at": n.created_at.isoformat() if n.created_at else None,
+        "created_at": iso_utc(n.created_at),
     }
 
 

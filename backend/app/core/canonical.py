@@ -781,6 +781,35 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     # user allocation. Without this, cash_floor's $100k silently disappeared
     # from the homepage sleeve-sum + leaderboard total, making the fund
     # appear $100k lighter than it actually is.
+    # 2026-07-02: bulk-count signals + trades in last 24h per allocation.
+    # Two grouped queries (not per-bot loops) so this scales to 30+ bots
+    # without turning the leaderboard endpoint into an N+1.
+    from datetime import timedelta as _td
+    from app.db.models.bots import BotSignal as _BSig, BotTrade as _BTrd
+    _cut_24h = datetime.now(timezone.utc) - _td(hours=24)
+    signals_24h_by_alloc: dict[int, int] = {}
+    trades_24h_by_alloc: dict[int, int] = {}
+    try:
+        for aid, cnt in db.execute(
+            text(
+                "SELECT allocation_id, COUNT(*) FROM bot_signals "
+                "WHERE ts >= :cut GROUP BY allocation_id"
+            ),
+            {"cut": _cut_24h.isoformat()},
+        ).fetchall():
+            signals_24h_by_alloc[int(aid)] = int(cnt)
+        for aid, cnt in db.execute(
+            text(
+                "SELECT allocation_id, COUNT(*) FROM bot_trades "
+                "WHERE ts >= :cut AND quarantined_at IS NULL "
+                "GROUP BY allocation_id"
+            ),
+            {"cut": _cut_24h.isoformat()},
+        ).fetchall():
+            trades_24h_by_alloc[int(aid)] = int(cnt)
+    except Exception as _cnt_exc:
+        logger.warning("[leaderboard] 24h signal/trade count query failed: %s", _cnt_exc)
+
     leaderboard = []
     seen_alloc_ids: set[int] = set()
     for port_snap in portfolio_snapshots:
@@ -801,6 +830,11 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 # Used by Strategy Lab + Dashboard to show "X% of $Y deployed".
                 "deployed_cents": bot.deployed_cents,
                 "starting_capital_cents": bot.starting_capital_cents,
+                # 24h activity — surfaces signal→fill conversion on leaderboard.
+                # Bots below ~30% conversion are candidates for execution
+                # investigation (asset-class gate, cooldowns, missing prices).
+                "signals_24h": signals_24h_by_alloc.get(bot.allocation_id, 0),
+                "trades_24h":  trades_24h_by_alloc.get(bot.allocation_id, 0),
             })
             seen_alloc_ids.add(bot.allocation_id)
 
@@ -832,6 +866,8 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "unrealized_pnl_cents": snap.unrealized_pnl_cents,
                 "deployed_cents": snap.deployed_cents,
                 "starting_capital_cents": snap.starting_capital_cents,
+                "signals_24h": signals_24h_by_alloc.get(a.id, 0),
+                "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
             })
         else:
             starting_c = int(a.starting_capital_cents or 0)
@@ -849,6 +885,8 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "unrealized_pnl_cents": 0,
                 "deployed_cents": 0,
                 "starting_capital_cents": starting_c,
+                "signals_24h": signals_24h_by_alloc.get(a.id, 0),
+                "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
             })
     leaderboard.sort(
         key=lambda x: (
