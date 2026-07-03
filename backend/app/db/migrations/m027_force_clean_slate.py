@@ -124,14 +124,15 @@ def _audit_row(conn, ts: str, user_id, alloc_id, bot_name, field,
 
 
 def _should_run(conn) -> tuple[bool, str]:
-    """Self-heal gate (added 2026-06-28).
+    """Self-heal gate.
 
-    Skip iff m027 has been recorded AND current state matches the spec.
-    If drift > $1 detected, RE-RUN to heal — protects against future
-    migrations that overwrite capital after m027 records itself.
+    2026-06-28: skip iff recorded AND state==spec; re-run on drift.
+    2026-07-02: check invariant FIRST. m057 supersedes m027's 13-bot table
+    with a 25-bot $1M distribution. If sum==$1M within tolerance, m027's
+    job is done regardless of prior recording — record and skip. Prevents
+    a permanent boot-time FAILED log line whenever bots halted since m027
+    was written are disabled (crypto_quant_mean_reversion / scalper).
     """
-    if not _migration_already_ran(conn, _MIGRATION_NAME):
-        return True, "first_run"
     try:
         row = conn.execute(text(
             "SELECT COALESCE(SUM(starting_capital_cents), 0)"
@@ -139,16 +140,26 @@ def _should_run(conn) -> tuple[bool, str]:
         ), {"uid": TARGET_USER_ID}).fetchone()
         current_sum = int(row[0]) if row else 0
     except Exception as exc:
-        logger.warning("[m027] drift check query failed (%s) — re-running", exc)
-        return True, "drift_check_failed"
-    drift = abs(current_sum - 100_000_000)
-    if drift > 100:  # $1 tolerance
-        logger.warning(
-            "[m027] re-running due to drift detected: current=$%.2f spec=$1,000,000.00 drift=$%.2f",
-            current_sum / 100.0, drift / 100.0,
-        )
-        return True, "drift_detected"
-    return False, "state_matches_spec"
+        logger.warning("[m027] invariant check failed (%s) — deferring to legacy gate", exc)
+        current_sum = -1
+
+    if current_sum >= 0 and abs(current_sum - 100_000_000) <= 100:  # $1 tolerance
+        if not _migration_already_ran(conn, _MIGRATION_NAME):
+            logger.warning(
+                "[m027] invariant satisfied (sum=$%.2f) — recording gate without executing",
+                current_sum / 100.0,
+            )
+            _record_migration(conn, _MIGRATION_NAME)
+        return False, "invariant_satisfied"
+
+    if not _migration_already_ran(conn, _MIGRATION_NAME):
+        return True, "first_run"
+
+    logger.warning(
+        "[m027] re-running due to drift detected: current=$%.2f spec=$1,000,000.00 drift=$%.2f",
+        current_sum / 100.0, abs(current_sum - 100_000_000) / 100.0,
+    )
+    return True, "drift_detected"
 
 
 def run(conn) -> dict:
