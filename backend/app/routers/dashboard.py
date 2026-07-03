@@ -78,6 +78,18 @@ _QUANT_PROFILE_NAMES = frozenset({
     "crypto_quant_aggressive",
     "crypto_quant_scalper",
     "crypto_quant_mean_reversion",
+    # 2026-07-02 m052 + m053 batches — same "asset_class=crypto but route
+    # to quant sleeve" fix as the original 3. Without this, Dashboard renders
+    # them as crypto and the quant-sleeve card misses $200k of allocations.
+    "crypto_quant_alt_focus",
+    "crypto_quant_scalp_1m",
+    "crypto_quant_universe_top6",
+    "crypto_quant_defi_l2",
+    "crypto_quant_meme_tier",
+    "crypto_quant_10m",
+    "crypto_quant_15m",
+    # crypto_dca_btc_eth intentionally NOT here — plain-crypto DCA, no
+    # quant strategies. Stays in the crypto sleeve.
 })
 
 

@@ -100,6 +100,16 @@ _PROFILE_TO_SLEEVE = {
     "crypto_meanrev_2163":        "quant",
     "options_income":             "options",
     "options_directional":        "options",
+    # 2026-07-02 m052 + m053 batches (fixes homepage split-brain flagged in audit)
+    "crypto_quant_alt_focus":     "quant",
+    "crypto_quant_scalp_1m":      "quant",
+    "crypto_dca_btc_eth":         "crypto",
+    "crypto_quant_universe_top6": "quant",
+    "crypto_quant_defi_l2":       "quant",
+    "crypto_quant_meme_tier":     "quant",
+    "crypto_quant_10m":           "quant",
+    "crypto_quant_15m":           "quant",
+    "cash_floor":                 "cash",
 }
 
 

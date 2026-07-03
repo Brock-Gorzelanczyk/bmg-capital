@@ -3,22 +3,90 @@ asset_class: options
 broker: alpaca_paper_stocks
 universe:
   source: sp500_high_iv_rank
+  # 2026-07-02 Brock override: expanded from 15 → 62 symbols. Options bots
+  # still had zero trades after IVR floor + threshold cuts, so the next lever
+  # is more shots on goal. Prioritized:
+  #   - broad-market + sector ETFs (SPY/QQQ/IWM/DIA + XLK/XLF/XLE/XLV/XLY/etc)
+  #     — high liquidity, tight bid-ask, always tradable
+  #   - mega-cap tech that consistently has IV to sell (MAG-7 + tier-2)
+  #   - financials + energy + healthcare classic wheel candidates
+  #   - commodity ETFs (GLD/SLV/USO/UNG)
+  #   - a few crypto-adjacent (COIN/MSTR) that have persistent elevated IV
   symbols:
+    # Broad-market ETFs
     - SPY
     - QQQ
     - IWM
+    - DIA
+    # Sector ETFs
+    - XLK
+    - XLF
+    - XLE
+    - XLV
+    - XLY
+    - XLI
+    - XLP
+    - XLU
+    - XLB
+    - SMH
+    # Mega-cap tech
     - AAPL
     - MSFT
     - GOOGL
     - NVDA
     - AMZN
-    - JPM
-    - XOM
-    - GLD
-    - TLT
-    - SMCI
+    - META
+    - TSLA
     - AVGO
+    - SMCI
+    - AMD
+    - NFLX
+    - ORCL
+    - CRM
+    - ADBE
+    - INTC
+    - IBM
+    - QCOM
+    # Financials — reliable IV, wheel candidates
+    - JPM
+    - BAC
     - GS
+    - MS
+    - WFC
+    - C
+    - V
+    - MA
+    - AXP
+    # Energy — cyclical IV
+    - XOM
+    - CVX
+    - COP
+    - EOG
+    # Consumer + industrials
+    - WMT
+    - COST
+    - HD
+    - MCD
+    - KO
+    - PEP
+    - PG
+    - JNJ
+    - PFE
+    - LLY
+    - MRK
+    - BA
+    - GE
+    - DIS
+    # Commodity ETFs
+    - GLD
+    - SLV
+    - USO
+    - UNG
+    # Bond ETFs
+    - TLT
+    # Crypto-adjacent (persistent elevated IV)
+    - COIN
+    - MSTR
   filters:
     - price_gte: 20
     - adv_gte: 1000000

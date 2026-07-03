@@ -24,6 +24,15 @@ _BOT_SLEEVE_MAP: dict[str, str] = {
     "crypto_quant_aggressive":    "quant",
     "crypto_quant_mean_reversion": "quant",
     "crypto_meanrev_2163":        "quant",
+    # 2026-07-02 m052 + m053 batches
+    "crypto_quant_alt_focus":     "quant",
+    "crypto_quant_scalp_1m":      "quant",
+    "crypto_quant_universe_top6": "quant",
+    "crypto_quant_defi_l2":       "quant",
+    "crypto_quant_meme_tier":     "quant",
+    "crypto_quant_10m":           "quant",
+    "crypto_quant_15m":           "quant",
+    "crypto_dca_btc_eth":         "crypto",  # plain-crypto DCA, not quant
     "crypto_day":                 "crypto",
     "crypto_swing":               "crypto",
     "crypto_lt":                  "crypto",

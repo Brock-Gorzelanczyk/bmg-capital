@@ -3,9 +3,23 @@ asset_class: options
 broker: alpaca_paper_stocks
 universe:
   source: russell_1000_momentum
+  # 2026-07-02 Brock override: expanded from 15 → 55 symbols. Options
+  # directional needs high-momentum names with active weekly options.
+  # Added:
+  #   - remaining MAG-7 gaps + tier-2 tech growth (PLTR/SNOW/DDOG/NET/PANW etc)
+  #   - AI infrastructure winners (MU/ANET/DELL/HPE)
+  #   - EV + auto (TSLA already, added RIVN/LCID)
+  #   - crypto proxies (COIN/MSTR/HOOD/RIOT/MARA/CLSK)
+  #   - consumer momentum (LULU/DECK/CROX/ONON)
+  #   - biotech that trends (LLY/NVO)
+  #   - premium growth (SHOP/MELI/PDD/BABA)
   symbols:
+    # Broad-market ETFs
     - SPY
     - QQQ
+    - SMH
+    - IBIT
+    # Mega-cap tech
     - AAPL
     - NVDA
     - TSLA
@@ -19,6 +33,53 @@ universe:
     - AVGO
     - ARM
     - CRM
+    - MU
+    - ANET
+    - DELL
+    - HPE
+    # Tier-2 growth
+    - PLTR
+    - SNOW
+    - DDOG
+    - NET
+    - CRWD
+    - PANW
+    - ZS
+    - SHOP
+    - ORCL
+    - ADBE
+    # Consumer momentum
+    - LULU
+    - DECK
+    - CROX
+    - ONON
+    - COST
+    - WMT
+    # EV / auto
+    - RIVN
+    - LCID
+    # Crypto proxies
+    - COIN
+    - MSTR
+    - HOOD
+    - RIOT
+    - MARA
+    - CLSK
+    # Biotech
+    - LLY
+    - NVO
+    # Premium int'l growth
+    - MELI
+    - PDD
+    - BABA
+    - JD
+    - TSM
+    - ASML
+    # Fintech / other momentum
+    - SQ
+    - PYPL
+    - UBER
+    - ABNB
   filters:
     - price_gte: 20
     - adv_gte: 5000000
