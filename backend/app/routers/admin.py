@@ -4663,6 +4663,43 @@ def get_daily_audit_latest(
 
 
 # ─── PUBLIC diagnostic — manual scan trigger for options investigation ────────
+@router.get("/open-positions-diagnostic/{bot_name}")
+def open_positions_diagnostic(bot_name: str, db: Session = Depends(get_db)) -> dict:
+    """Show open positions for a bot — hunting phantom blockers."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    rows = db.execute(text(
+        "SELECT p.id, p.symbol, p.qty, p.avg_cost_cents, p.side, p.opened_at, "
+        "  p.option_type, p.strike_price, p.expiration_date, p.underlying_symbol, "
+        "  p.contract_count, p.exit_reason, p.quarantined_at, p.allocation_id "
+        "FROM bot_positions p "
+        "JOIN bot_allocations a ON a.id = p.allocation_id "
+        "JOIN bot_profiles bp ON bp.id = a.profile_id "
+        "WHERE bp.name = :name AND p.closed_at IS NULL "
+        "ORDER BY p.opened_at DESC"
+    ), {"name": bot_name}).fetchall()
+    positions = []
+    for r in rows:
+        positions.append({
+            "id": int(r[0]),
+            "symbol": r[1],
+            "qty": float(r[2] or 0),
+            "avg_cost_cents": int(r[3] or 0),
+            "side": r[4],
+            "opened_at": str(r[5]),
+            "option_type": r[6],
+            "strike_price": float(r[7]) if r[7] else None,
+            "expiration_date": r[8],
+            "underlying_symbol": r[9],
+            "contract_count": r[10],
+            "exit_reason": r[11],
+            "quarantined_at": str(r[12]) if r[12] else None,
+            "allocation_id": int(r[13]),
+        })
+    return {"bot": bot_name, "open_positions_count": len(positions), "positions": positions}
+
+
 @router.get("/scan-trigger-diagnostic/{bot_name}")
 def trigger_scan_diagnostic(bot_name: str, persist: bool = False, execute: bool = False,
                             db: Session = Depends(get_db)) -> dict:
