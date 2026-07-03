@@ -620,6 +620,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m057_exc:
         logger.error("[startup] m057_brock_reallocation_table FAILED: %s", _m057_exc, exc_info=True)
 
+    # m058: Brock's 2026-07-02 green-light redistribution — halted $120k
+    # spread across 4 new stock bots (doubled to $40k each) + 4 crypto quant
+    # bots (+$10k each). Gated by BMG_APPROVE_M058=true.
+    try:
+        from app.db.migrations.m058_brock_greenlight_reallocation import run as _run_m058
+        with engine.begin() as _m058_conn:
+            _m058_result = _run_m058(_m058_conn)
+        logger.warning("[startup] m058 status: %s", _m058_result)
+    except Exception as _m058_exc:
+        logger.error("[startup] m058_brock_greenlight_reallocation FAILED: %s", _m058_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
