@@ -831,6 +831,29 @@ async def lifespan(app: FastAPI):
             logger.warning("[startup] intro conversation failed (non-fatal): %s", _exc)
     asyncio.create_task(_maybe_run_intro())
 
+    # One-shot pre-market book post — fires 90s after boot when
+    # BMG_FIRE_PREMARKET_NOW=true. Used to verify the format overnight
+    # without waiting for the 8:00 AM CT cron. Unset the env var after
+    # to prevent double-posts on subsequent deploys.
+    async def _maybe_fire_premarket_now():
+        import asyncio as _aio
+        import os as _os
+        if _os.environ.get("BMG_FIRE_PREMARKET_NOW", "").strip().lower() not in ("true", "1", "yes"):
+            return
+        await _aio.sleep(90)
+        try:
+            from app.db.session import SessionLocal as _SL
+            from app.jobs.pre_market_book import post_pre_market_book as _post
+            _db = _SL()
+            try:
+                await _aio.to_thread(_post, _db)
+                logger.warning("[startup] one-shot pre-market book fired")
+            finally:
+                _db.close()
+        except Exception as _exc:
+            logger.warning("[startup] one-shot pre-market book failed: %s", _exc)
+    asyncio.create_task(_maybe_fire_premarket_now())
+
     # Post-deploy synthetic pipeline check — fires 60s after startup so scheduler is warm
     async def _post_deploy_synthetic_check():
         import asyncio as _aio

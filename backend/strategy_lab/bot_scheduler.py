@@ -1322,6 +1322,34 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job queen_morning (weekdays 6:30 AM ET)")
 
     # ------------------------------------------------------------------
+    # Pre-market book — weekdays 8:00 AM CT (9:00 AM ET).
+    # Brock's 2026-07-02 aggressive-paper directive: post "here's the book,
+    # here's what fired overnight, here's what's armed" every morning so
+    # he sees the fleet state before market open without opening a page.
+    # ------------------------------------------------------------------
+    def _run_pre_market_book():
+        from app.db.session import SessionLocal
+        from app.jobs.pre_market_book import post_pre_market_book
+        db = SessionLocal()
+        try:
+            post_pre_market_book(db)
+        except Exception as exc:
+            logger.error("[pre-market-book] job failed: %s", exc, exc_info=True)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_pre_market_book,
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=0, timezone=ET),  # 8:00 AM CT = 9:00 AM ET
+        id="pre_market_book",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job pre_market_book (weekdays 8:00 AM CT / 9:00 AM ET)")
+
+    # ------------------------------------------------------------------
     # Regime snapshot refresh — hourly, keeps regime_snapshots table fresh
     # so DQW, researcher, and queen always have current market regime data.
     # Fires immediately on startup to seed the table.
