@@ -1350,6 +1350,33 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job pre_market_book (weekdays 8:00 AM CT / 9:00 AM ET)")
 
     # ------------------------------------------------------------------
+    # Pre-open readiness — weekdays 8:15 AM CT (9:15 AM ET). 15 minutes
+    # after the pre-market book, so both post before market open. This one
+    # is the operational readiness summary Brock explicitly asked for.
+    # ------------------------------------------------------------------
+    def _run_pre_open_readiness():
+        from app.db.session import SessionLocal
+        from app.jobs.pre_open_readiness import post_readiness
+        db = SessionLocal()
+        try:
+            post_readiness(db)
+        except Exception as exc:
+            logger.error("[pre-open-readiness] job failed: %s", exc, exc_info=True)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_pre_open_readiness,
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=15, timezone=ET),  # 8:15 AM CT = 9:15 AM ET
+        id="pre_open_readiness",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=900,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job pre_open_readiness (weekdays 8:15 AM CT / 9:15 AM ET)")
+
+    # ------------------------------------------------------------------
     # Regime snapshot refresh — hourly, keeps regime_snapshots table fresh
     # so DQW, researcher, and queen always have current market regime data.
     # Fires immediately on startup to seed the table.

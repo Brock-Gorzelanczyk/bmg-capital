@@ -881,6 +881,26 @@ async def lifespan(app: FastAPI):
             logger.warning("[startup] or-audit failed: %s", _exc)
     asyncio.create_task(_maybe_post_or_audit())
 
+    # One-shot: pre-open readiness post (for the pre-market check tonight).
+    async def _maybe_fire_readiness_now():
+        import asyncio as _aio
+        import os as _os
+        if _os.environ.get("BMG_FIRE_READINESS_NOW", "").strip().lower() not in ("true", "1", "yes"):
+            return
+        await _aio.sleep(45)
+        try:
+            from app.db.session import SessionLocal as _SL
+            from app.jobs.pre_open_readiness import post_readiness as _post
+            _db = _SL()
+            try:
+                await _aio.to_thread(_post, _db)
+                logger.warning("[startup] one-shot pre-open readiness fired")
+            finally:
+                _db.close()
+        except Exception as _exc:
+            logger.warning("[startup] one-shot readiness failed: %s", _exc)
+    asyncio.create_task(_maybe_fire_readiness_now())
+
     # Post-deploy synthetic pipeline check — fires 60s after startup so scheduler is warm
     async def _post_deploy_synthetic_check():
         import asyncio as _aio
