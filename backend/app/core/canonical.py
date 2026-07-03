@@ -1131,16 +1131,18 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "signals_24h": signals_24h_by_alloc.get(a.id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
             })
-    # 2026-07-03 Brock: hide zero-capital allocations from the leaderboard.
-    # Halted bots (mean_rev, scalper) and mystery bots (stock_quant_*) all
-    # sit at $0 starting_capital and were cluttering the board. If capital
-    # is $0 AND there's zero portfolio value AND zero trades, drop the row.
+    # 2026-07-03 Brock: hide zero-capital + inactive allocations. Rule:
+    # - Show if starting_capital > 0 (allocated bot, real fleet member)
+    # - Also show if enabled AND has today's activity (rare edge — enabled
+    #   bot at $0 with a fresh fill)
+    # Halted bots (mean_rev, scalper) have starting=0 AND enabled=False even
+    # though they carry historical negative realized — historical P&L alone
+    # does NOT keep them on the board (Brock: "halted bots polluting").
+    # Mystery bots (stock_quant_*) have starting=0 AND zero activity → dropped.
     leaderboard = [
         e for e in leaderboard
         if (e.get("starting_capital_cents", 0) > 0)
-        or (e.get("portfolio_value_cents", 0) > 0)
-        or (e.get("realized_pnl_cents", 0) != 0)
-        or (e.get("today_pnl_cents", 0) != 0)
+        or (e.get("enabled", False) and (e.get("today_pnl_cents", 0) != 0))
     ]
     leaderboard.sort(
         key=lambda x: (
