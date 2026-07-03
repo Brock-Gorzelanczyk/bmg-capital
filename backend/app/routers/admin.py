@@ -4662,6 +4662,32 @@ def get_daily_audit_latest(
     }
 
 
+# ─── PUBLIC diagnostic — manual scan trigger for options investigation ────────
+@router.get("/scan-trigger-diagnostic/{bot_name}")
+def trigger_scan_diagnostic(bot_name: str, db: Session = Depends(get_db)) -> dict:
+    """Force-run scan_and_execute for a bot and return the result.
+
+    Public + gated by BMG_DIAGNOSTIC_PV_ENABLED. Use for hunting silent
+    scan failures (options bots produced 0 signals in 24h).
+    """
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    try:
+        from strategy_lab.scan_and_execute import scan_and_execute
+        # execute=False so we don't accidentally trade
+        result = scan_and_execute(bot_name, db, persist=False, execute=False)
+        # Truncate results for readability
+        if isinstance(result, dict) and "results" in result:
+            result["results_count"] = len(result.get("results") or [])
+            result["results_sample"] = (result.get("results") or [])[:5]
+            result.pop("results", None)
+        return result
+    except Exception as exc:
+        import traceback
+        return {"error": str(exc)[:400], "traceback": traceback.format_exc()[:2000]}
+
+
 # ─── PUBLIC diagnostic — 24h fleet conversion ─────────────────────────────────
 @router.get("/conversion-24h-diagnostic")
 def get_conversion_24h(db: Session = Depends(get_db)) -> dict:
