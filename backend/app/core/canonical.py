@@ -460,10 +460,50 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     else:
         all_time_return_pct = 0.0
 
-    # ── 30-day return (realized trades in last 30d / starting capital) ────────
+    # ── 30-day return ─────────────────────────────────────────────────────────
+    # 2026-07-02 (Brock feedback): the old formula was
+    #   return_30d_pct = realized_30d_cents / starting_capital
+    # which silently dropped unrealized P&L. For a bot created today with
+    # a +$329 unrealized gain and no closed trades, the 30-day return
+    # showed 0% — divergent from an all-time return that showed the same
+    # +1.64%. Same defect Claude Code flagged for today_pnl_cents.
+    #
+    # New formula: 30d = (pv_now - pv_30_days_ago) / capital_30_days_ago
+    # Case (a) — BotDailyPnL row at cutoff with portfolio_value_eod_cents:
+    #             use that as the baseline
+    # Case (b) — row exists, eod_pv NULL but unrealized_cents populated:
+    #             return_30d = realized_since_cutoff + unrealized_delta
+    # Case (c) — no snapshot at cutoff (bot is newer than 30 days OR
+    #             rollup gap): 30d ≡ all_time (there was no yesterday)
     return_30d_pct = 0.0
     if starting_capital_cents:
-        return_30d_pct = round(realized_30d_cents / starting_capital_cents * 100, 2)
+        return_30d_baseline_cents: Optional[int] = None
+        try:
+            _cutoff_snap = (
+                db.query(BotDailyPnL)
+                .filter(
+                    BotDailyPnL.allocation_id == alloc.id,
+                    BotDailyPnL.date <= thirty_days_ago,
+                )
+                .order_by(BotDailyPnL.date.desc())
+                .first()
+            )
+            if _cutoff_snap is None:
+                # Case (c): bot younger than 30 days → 30d = all_time
+                return_30d_pct = all_time_return_pct
+            elif _cutoff_snap.portfolio_value_eod_cents is not None:
+                # Case (a): full snapshot
+                return_30d_baseline_cents = int(_cutoff_snap.portfolio_value_eod_cents)
+                _delta = portfolio_value_cents - return_30d_baseline_cents
+                return_30d_pct = round(_delta / return_30d_baseline_cents * 100, 2) if return_30d_baseline_cents > 0 else 0.0
+            else:
+                # Case (b): partial snapshot — infer via unrealized delta
+                _cutoff_unreal = int(_cutoff_snap.unrealized_cents or 0)
+                _30d_pnl = realized_30d_cents + (unrealized_pnl_cents - _cutoff_unreal)
+                return_30d_pct = round(_30d_pnl / starting_capital_cents * 100, 2)
+        except Exception:
+            # Very last-resort fallback — legacy realized-only.
+            return_30d_pct = round(realized_30d_cents / starting_capital_cents * 100, 2)
 
     # ── Sharpe: not computable without daily return series ───────────────────
     sharpe_30d: Optional[float] = None
