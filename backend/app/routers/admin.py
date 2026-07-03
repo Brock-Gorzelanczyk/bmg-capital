@@ -4662,6 +4662,47 @@ def get_daily_audit_latest(
     }
 
 
+# ─── PUBLIC diagnostic — 24h fleet conversion ─────────────────────────────────
+@router.get("/conversion-24h-diagnostic")
+def get_conversion_24h(db: Session = Depends(get_db)) -> dict:
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    cut = (_dt.now(_tz.utc) - _td(hours=24)).isoformat()
+    sig_row = db.execute(text(
+        "SELECT COUNT(*) FROM bot_signals s "
+        "JOIN bot_allocations a ON a.id = s.allocation_id "
+        "WHERE a.user_id = 1 AND s.ts >= :cut"
+    ), {"cut": cut}).fetchone()
+    trd_row = db.execute(text(
+        "SELECT COUNT(*) FROM bot_trades t "
+        "JOIN bot_allocations a ON a.id = t.allocation_id "
+        "WHERE a.user_id = 1 AND t.ts >= :cut AND t.quarantined_at IS NULL"
+    ), {"cut": cut}).fetchone()
+    sigs = int(sig_row[0] or 0)
+    trds = int(trd_row[0] or 0)
+    per_bot = db.execute(text(
+        "SELECT p.name, "
+        "  (SELECT COUNT(*) FROM bot_signals s WHERE s.allocation_id = a.id AND s.ts >= :cut) AS sigs, "
+        "  (SELECT COUNT(*) FROM bot_trades t WHERE t.allocation_id = a.id AND t.ts >= :cut AND t.quarantined_at IS NULL) AS trds "
+        "FROM bot_allocations a JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id = 1 AND a.starting_capital_cents > 0"
+    ), {"cut": cut}).fetchall()
+    per_bot_rows = [
+        {"bot": r[0], "sigs_24h": int(r[1] or 0), "trades_24h": int(r[2] or 0),
+         "conv_pct": round((int(r[2] or 0) / int(r[1])) * 100, 2) if int(r[1] or 0) else 0.0}
+        for r in per_bot
+    ]
+    return {
+        "window": "24h",
+        "fleet_signals_24h": sigs,
+        "fleet_trades_24h": trds,
+        "fleet_conversion_pct": round((trds / sigs) * 100, 2) if sigs else 0.0,
+        "per_bot": sorted(per_bot_rows, key=lambda r: -r["sigs_24h"]),
+    }
+
+
 # ─── PUBLIC diagnostic — no auth. Used to hunt phantom PV. ────────────────────
 # Gated by BMG_DIAGNOSTIC_PV_ENABLED=true env var so we can turn it off after
 # the tonight-session investigation.
