@@ -245,7 +245,17 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     thirty_days_ago = today - timedelta(days=30)
 
     # ── Starting capital ──────────────────────────────────────────────────────
-    starting_capital_cents = int(alloc.starting_capital_cents or alloc.capital_cents_within_portfolio or 0)
+    # 2026-07-03 phantom fix: use `is not None` instead of `or` so that a
+    # legitimately-zeroed value (halted bots after m058/m059) does not
+    # silently fall back to the stale capital_cents_within_portfolio field
+    # (which still holds \$110k / \$70k for the halted bots and caused the
+    # +\$178K phantom on the /strategy header).
+    if alloc.starting_capital_cents is not None:
+        starting_capital_cents = int(alloc.starting_capital_cents)
+    elif alloc.capital_cents_within_portfolio is not None:
+        starting_capital_cents = int(alloc.capital_cents_within_portfolio)
+    else:
+        starting_capital_cents = 0
     # inception_capital_cents (added in m023) is the ORIGINAL seed capital
     # for this bot, preserved across capital adjustments. Used as the
     # denominator for all_time_return so leaderboard P&L history doesn't
