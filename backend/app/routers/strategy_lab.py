@@ -410,6 +410,12 @@ def get_portfolio(
             "return_30d_value_cents": 0,
             "return_all_time_pct": 0.0,
             "sharpe_30d": 0.0,
+            "pnl": {
+                "all_time": {"cents": 0, "pct": 0.0},
+                "mtd":      {"cents": 0, "pct": 0.0},
+                "wtd":      {"cents": 0, "pct": 0.0},
+                "today":    {"cents": 0, "pct": 0.0},
+            },
             "total_open_positions": 0,
             "total_watchlist_count": 0,
             "equity_curve": [],

@@ -2156,23 +2156,66 @@ export default function StrategyLab() {
             </div>
           </div>
 
-          {/* 1. Portfolio value header — canonical total from
-              compute_strategy_lab_aggregate (matches Dashboard + Portfolio). */}
+          {/* 1. Portfolio value header — 5-col grid with P&L windows.
+              Canonical total + All-Time/MTD/WTD/Today $ and %. Data flows
+              from compute_strategy_lab_aggregate → _compute_pnl_windows. */}
           {!portfoliosLoading && portfolios.length > 0 && (() => {
-            // Prefer canonical aggregate; fall back to per-sleeve sum only if
-            // the aggregate hasn't loaded yet (avoids a 0 flash on first paint).
             const aggregateUsd = (labAggregate?.total_value_cents ?? 0) / 100;
             const fallbackUsd = portfolios.reduce((s, p) => s + (p.current_value_cents || 0), 0) / 100;
             const totalUsd = aggregateUsd > 0 ? aggregateUsd : fallbackUsd;
+            const pnl = labAggregate?.pnl;
+
+            const fmtDollar = (cents: number) => {
+              const usd = cents / 100;
+              const sign = usd >= 0 ? "+" : "-";
+              return `${sign}$${Math.abs(usd).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+            };
+            const fmtPct = (pct: number) => {
+              const shown = pct * 100;
+              const sign = shown >= 0 ? "+" : "";
+              return `${sign}${shown.toFixed(shown === 0 ? 2 : Math.abs(shown) < 0.01 ? 4 : Math.abs(shown) < 1 ? 3 : 2)}%`;
+            };
+            const colorFor = (cents: number) =>
+              cents > 0 ? "text-[#4ade80]" : cents < 0 ? "text-[#f87171]" : "text-t-hi";
+
+            const columns = pnl
+              ? [
+                  { label: "ALL-TIME", data: pnl.all_time },
+                  { label: "MONTHLY", data: pnl.mtd },
+                  { label: "WEEKLY",  data: pnl.wtd },
+                  { label: "DAILY",   data: pnl.today },
+                ]
+              : [];
+
             return (
-              <div className="bg-t-bg0 border border-t-dim rounded-xl px-5 py-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="panel-header mb-1">// PORTFOLIO VALUE</p>
-                  <p className="text-4xl font-bold text-t-hi tabular-nums font-mono-t">
-                    ${totalUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                  </p>
-                  <p className="text-xs text-t-muted mt-1 font-ui-t">Canonical aggregate · updates every 60s</p>
+              <div className="bg-t-bg0 border border-t-dim rounded-xl px-5 py-4">
+                <p className="panel-header mb-3">// PORTFOLIO VALUE</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
+                  {/* Column 1: Portfolio Value */}
+                  <div className="min-w-[120px]">
+                    <p className="text-3xl lg:text-4xl font-bold text-t-hi tabular-nums font-mono-t leading-tight">
+                      ${totalUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </p>
+                    <p className="text-[10px] tracking-widest text-t-muted mt-1 font-ui-t uppercase">
+                      Portfolio Value
+                    </p>
+                  </div>
+                  {/* Columns 2-5: P&L windows */}
+                  {columns.map((col) => (
+                    <div key={col.label} className="min-w-[120px]">
+                      <p className={`text-2xl lg:text-3xl font-bold tabular-nums font-mono-t leading-tight ${colorFor(col.data.cents)}`}>
+                        {fmtDollar(col.data.cents)}
+                      </p>
+                      <p className="text-[10px] tracking-widest text-t-muted mt-1 font-ui-t uppercase">
+                        {col.label}
+                      </p>
+                      <p className={`text-xs mt-0.5 tabular-nums font-mono-t ${colorFor(col.data.cents)}`}>
+                        {fmtPct(col.data.pct)}
+                      </p>
+                    </div>
+                  ))}
                 </div>
+                <p className="text-xs text-t-muted mt-3 font-ui-t">Canonical aggregate · updates every 60s</p>
               </div>
             );
           })()}

@@ -769,6 +769,116 @@ def compute_portfolio_snapshot(
 
 # ── Aggregate (whole Strategy Lab) ───────────────────────────────────────────
 
+# ── P&L window helper (2026-07-02) ─────────────────────────────────────────────
+# Powers the 5-col header on /strategy: All-Time / MTD / WTD / Today $ + %.
+# Baselines: fund inception fixed at $1M ($100M cents). MTD/WTD baselines come
+# from SUM(bot_daily_pnl.portfolio_value_eod_cents) on the anchor date across
+# all user_1 allocations. If the anchor snapshot is missing, we fall back per
+# the spec (MTD → $1M inception, WTD → earliest snapshot in window).
+
+_FUND_INCEPTION_CENTS = 100_000_000  # $1,000,000 exact — Brock's directive
+
+
+def _last_biz_day_of_prior_month(anchor: date) -> date:
+    """Return the last weekday of the month prior to `anchor`."""
+    first_of_this = anchor.replace(day=1)
+    last_prior = first_of_this - timedelta(days=1)
+    while last_prior.weekday() >= 5:  # Sat/Sun
+        last_prior -= timedelta(days=1)
+    return last_prior
+
+
+def _last_sunday_before(anchor: date) -> date:
+    """Return the most recent Sunday strictly before `anchor` (ISO week reset)."""
+    # weekday(): Mon=0..Sun=6. Sunday before anchor = anchor - (anchor.weekday()+1)
+    offset = anchor.weekday() + 1
+    return anchor - timedelta(days=offset)
+
+
+def _sum_eod_snapshot_on(db: Session, alloc_ids: list[int], on_date: date) -> Optional[int]:
+    """Sum portfolio_value_eod_cents across allocation_ids for on_date.
+    Returns None if no rows exist for that date.
+    """
+    if not alloc_ids:
+        return None
+    row = db.execute(
+        text(
+            "SELECT SUM(portfolio_value_eod_cents) FROM bot_daily_pnl "
+            "WHERE allocation_id IN :ids AND date = :d "
+            "AND portfolio_value_eod_cents IS NOT NULL"
+        ).bindparams(bindparam("ids", expanding=True)),
+        {"ids": alloc_ids, "d": on_date.isoformat()},
+    ).fetchone()
+    total = row[0] if row else None
+    return int(total) if total is not None else None
+
+
+def _earliest_eod_snapshot_between(
+    db: Session, alloc_ids: list[int], start: date, end: date
+) -> Optional[int]:
+    """For WTD fallback: sum snapshot on the earliest date in [start, end)."""
+    if not alloc_ids or start >= end:
+        return None
+    row = db.execute(
+        text(
+            "SELECT date FROM bot_daily_pnl "
+            "WHERE allocation_id IN :ids AND date >= :s AND date < :e "
+            "AND portfolio_value_eod_cents IS NOT NULL "
+            "ORDER BY date ASC LIMIT 1"
+        ).bindparams(bindparam("ids", expanding=True)),
+        {"ids": alloc_ids, "s": start.isoformat(), "e": end.isoformat()},
+    ).fetchone()
+    if not row:
+        return None
+    earliest = row[0]
+    if isinstance(earliest, str):
+        earliest = date.fromisoformat(earliest)
+    return _sum_eod_snapshot_on(db, alloc_ids, earliest)
+
+
+def _compute_pnl_windows(
+    db: Session,
+    alloc_ids: list[int],
+    total_value_cents: int,
+    today_pnl_cents: int,
+) -> dict:
+    """Return the 5-col header P&L dict: all_time / mtd / wtd / today.
+
+    Each entry: {"cents": int, "pct": float}. Percentage is signed, expressed
+    as a decimal fraction (0.011 = +1.1%). Frontend multiplies by 100 for display.
+    """
+    today = _fund_today()
+
+    all_time_cents = total_value_cents - _FUND_INCEPTION_CENTS
+    all_time_pct = round(all_time_cents / _FUND_INCEPTION_CENTS, 6) if _FUND_INCEPTION_CENTS else 0.0
+
+    mtd_anchor = _last_biz_day_of_prior_month(today)
+    mtd_baseline = _sum_eod_snapshot_on(db, alloc_ids, mtd_anchor)
+    if mtd_baseline is None or mtd_baseline <= 0:
+        mtd_baseline = _FUND_INCEPTION_CENTS
+    mtd_cents = total_value_cents - mtd_baseline
+    mtd_pct = round(mtd_cents / mtd_baseline, 6) if mtd_baseline else 0.0
+
+    wtd_anchor = _last_sunday_before(today)
+    wtd_baseline = _sum_eod_snapshot_on(db, alloc_ids, wtd_anchor)
+    if wtd_baseline is None or wtd_baseline <= 0:
+        wtd_baseline = _earliest_eod_snapshot_between(db, alloc_ids, wtd_anchor, today)
+    if wtd_baseline is None or wtd_baseline <= 0:
+        wtd_baseline = _FUND_INCEPTION_CENTS
+    wtd_cents = total_value_cents - wtd_baseline
+    wtd_pct = round(wtd_cents / wtd_baseline, 6) if wtd_baseline else 0.0
+
+    today_baseline = total_value_cents - today_pnl_cents
+    today_pct = round(today_pnl_cents / today_baseline, 6) if today_baseline > 0 else 0.0
+
+    return {
+        "all_time": {"cents": all_time_cents, "pct": all_time_pct},
+        "mtd":      {"cents": mtd_cents,      "pct": mtd_pct},
+        "wtd":      {"cents": wtd_cents,      "pct": wtd_pct},
+        "today":    {"cents": today_pnl_cents, "pct": today_pct},
+    }
+
+
 def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     """
     Aggregate across all 3 portfolios. Used by /api/strategy-lab/portfolio.
@@ -1053,6 +1163,20 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             fleet_total, sleeve_sum_cents, total_cash_cents,
         )
 
+    # 5-col header windows: All-Time / MTD / WTD / Today $ + %.
+    try:
+        pnl_windows = _compute_pnl_windows(
+            db, _fleet_alloc_ids, total_value, total_today_pnl,
+        )
+    except Exception as _pnl_exc:
+        logger.warning("[canonical] pnl windows failed: %s", _pnl_exc)
+        pnl_windows = {
+            "all_time": {"cents": 0, "pct": 0.0},
+            "mtd":      {"cents": 0, "pct": 0.0},
+            "wtd":      {"cents": 0, "pct": 0.0},
+            "today":    {"cents": total_today_pnl, "pct": 0.0},
+        }
+
     return {
         "total_value_cents": total_value,
         # Alias for callers that read portfolio_value_cents at the aggregate
@@ -1064,6 +1188,8 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         "return_30d_pct": return_30d_pct,
         "return_30d_value_cents": total_value - total_starting,
         "return_all_time_pct": all_time_pct,
+        # 5-col header P&L windows — Brock's 2026-07-02 header expansion.
+        "pnl": pnl_windows,
         "total_open_positions": total_open_positions,
         "total_watchlist_count": total_watchlist,
         "equity_curve": [],  # kept for compatibility

@@ -501,6 +501,18 @@ export interface PortfolioLeaderboardEntry {
   starting_capital_cents?: number;
 }
 
+export interface PnlWindow {
+  cents: number;
+  pct: number;  // fractional (0.011 = +1.1%). Frontend multiplies by 100 for display.
+}
+
+export interface PnlWindows {
+  all_time: PnlWindow;
+  mtd: PnlWindow;
+  wtd: PnlWindow;
+  today: PnlWindow;
+}
+
 export interface PortfolioData {
   total_value_cents: number;
   yesterday_value_cents: number;
@@ -510,6 +522,7 @@ export interface PortfolioData {
   return_30d_value_cents: number;
   return_all_time_pct: number;
   sharpe_30d: number;
+  pnl?: PnlWindows;
   total_open_positions: number;
   total_watchlist_count: number;
   equity_curve: Array<{ date: string; value_cents: number }>;
