@@ -61,6 +61,23 @@ class CustomBotAllocateBody(BaseModel):
     capitalPct: float = 10.0
 
 
+# ── Timestamp serialization helper ────────────────────────────────────────────
+# BotTrade.ts / BotSignal.ts / BotPosition.opened_at are stored in a timezone-
+# NAIVE `DateTime` column but populated from `datetime.now(timezone.utc)`.
+# Calling `.isoformat()` on a naive datetime produces "2026-07-03T01:22:15"
+# with no timezone marker — JS `new Date()` then treats it as LOCAL browser
+# time. For a Milwaukee (CDT / UTC-5) user viewing a 01:22 UTC trade, the
+# browser reads it as "01:22 local" → renders the date as "Jul 3" instead
+# of "Jul 2 evening." This helper marks naive datetimes as UTC before
+# isoformat so the string carries "+00:00" and JS parses it correctly.
+def _iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 # ── Demo data helpers ─────────────────────────────────────────────────────────
 
 _DISPLAY_NAMES: dict[str, str] = {
@@ -259,7 +276,7 @@ def _demo_positions(profile_name: str, asset_class: str) -> list[dict]:
             "current_price": current,
             "unrealized_pnl": round((current - entry) * qty, 2),
             "unrealized_pnl_pct": round(change_pct, 2),
-            "opened_at": opened_at.isoformat(),
+            "opened_at": _iso_utc(opened_at),
             "closed_at": None,
             "exit_reason": None,
             "is_paper": True,
@@ -321,7 +338,7 @@ def _allocation_to_dict(a: BotAllocation, sleeve_pct: float | None = None) -> di
 def _signal_to_dict(s: BotSignal) -> dict:
     return {
         "id": s.id,
-        "ts": s.ts.isoformat() if s.ts else None,
+        "ts": _iso_utc(s.ts),
         "symbol": s.symbol,
         "side": s.side,
         "confidence": s.confidence,
@@ -342,8 +359,8 @@ def _position_to_dict(p: BotPosition) -> dict:
         "qty": p.qty,
         "avg_cost_cents": p.avg_cost_cents,
         "avg_cost": round(p.avg_cost_cents / 100, 2),
-        "opened_at": p.opened_at.isoformat() if p.opened_at else None,
-        "closed_at": p.closed_at.isoformat() if p.closed_at else None,
+        "opened_at": _iso_utc(p.opened_at),
+        "closed_at": _iso_utc(p.closed_at),
         "exit_reason": p.exit_reason,
         "is_paper": p.is_paper,
         # Options-specific columns (null for stock/crypto positions)
@@ -398,7 +415,7 @@ def _trade_to_dict(t: BotTrade) -> dict:
         "fill_price_cents": t.fill_price_cents,
         "fill_price": round(t.fill_price_cents / 100, 2),
         "fees_cents": t.fees_cents,
-        "ts": t.ts.isoformat() if t.ts else None,
+        "ts": _iso_utc(t.ts),
         "alpaca_order_id": t.alpaca_order_id,
         "is_paper": t.is_paper,
         # Options-specific columns (null for stock/crypto trades)
@@ -523,7 +540,7 @@ def get_regime(
         }
     return {
         "id": snap.id,
-        "ts": snap.ts.isoformat() if snap.ts else None,
+        "ts": _iso_utc(snap.ts),
         "vix_regime": snap.vix_regime,
         "trend_regime": snap.trend_regime,
         "vol_pctile": snap.vol_pctile,
@@ -1118,7 +1135,7 @@ def get_portfolio_activity(
 
         result.append({
             "id":              t.id,
-            "ts":              t.ts.isoformat() if t.ts else None,
+            "ts":              _iso_utc(t.ts),
             "bot_name":        bot_name,
             "bot_display_name": display,
             "symbol":          t.symbol,
@@ -1280,7 +1297,7 @@ def get_signals_recent(
                 "confidence": round(float(s.confidence), 4) if s.confidence else 0.0,
                 "reason": s.reason or "",
                 "entry_price": s.entry_price,
-                "ts": s.ts.isoformat() if hasattr(s.ts, "isoformat") else str(s.ts) if s.ts else None,
+                "ts": _iso_utc(s.ts),
             }
             for s in sigs
         ]
@@ -1416,7 +1433,7 @@ def get_bot_activity(
         for s in signals:
             items.append({
                 "id": f"sig-{s.id}",
-                "ts": s.ts.isoformat() if s.ts else None,
+                "ts": _iso_utc(s.ts),
                 "category": "signal",
                 "symbol": s.symbol,
                 "side": s.side,
@@ -1455,7 +1472,7 @@ def get_bot_activity(
                     pnl_usd = round((t.fill_price_cents - avg) * t.qty / 100, 2)
             items.append({
                 "id": f"fill-{t.id}",
-                "ts": t.ts.isoformat() if t.ts else None,
+                "ts": _iso_utc(t.ts),
                 "category": "fill",
                 "symbol": t.symbol,
                 "side": t.side,
@@ -2170,7 +2187,7 @@ def get_pending_reviews(
             "id": s.id,
             "bot_name": alloc_profile_name.get(s.allocation_id, "unknown"),
             "symbol": s.symbol,
-            "ts": s.ts.isoformat() if s.ts else None,
+            "ts": _iso_utc(s.ts),
             "confidence": s.confidence,
             "side": s.side,
             "reason": s.reason or "",
@@ -3533,7 +3550,7 @@ def get_recent_signals(
         display = _DISPLAY_NAMES.get(bot_name, bot_name.replace("_", " ").title())
         result.append({
             "id": s.id,
-            "ts": s.ts.isoformat() if s.ts else None,
+            "ts": _iso_utc(s.ts),
             "bot_name": bot_name,
             "display_name": display,
             "symbol": s.symbol,
@@ -4108,7 +4125,7 @@ def get_trade_detail(
     # If the requested trade is a sell/close, the fill_price is the EXIT price.
     # Look up the corresponding buy trade for the real entry data.
     entry_price = trade.fill_price_cents / 100
-    entry_time = trade.ts.isoformat() if trade.ts else None
+    entry_time = _iso_utc(trade.ts)
 
     is_close_trade = trade.side in ("sell", "close")
     if is_close_trade and trade.position_id:
@@ -4123,10 +4140,10 @@ def get_trade_detail(
         )
         if entry_trade:
             entry_price = entry_trade.fill_price_cents / 100
-            entry_time = entry_trade.ts.isoformat() if entry_trade.ts else None
+            entry_time = _iso_utc(entry_trade.ts)
         elif position:
             entry_price = position.avg_cost_cents / 100
-            entry_time = position.opened_at.isoformat() if position.opened_at else None
+            entry_time = _iso_utc(position.opened_at)
 
     # Find the signal closest to the entry time (within ±10 min)
     signal = None
@@ -4156,10 +4173,10 @@ def get_trade_detail(
     if is_close_trade:
         # This trade IS the exit — use it directly
         exit_price = trade.fill_price_cents / 100
-        close_time = trade.ts.isoformat() if trade.ts else None
+        close_time = _iso_utc(trade.ts)
         realized_pnl = round((exit_price - entry_price) * trade.qty, 2)
     elif position and position.closed_at:
-        close_time = position.closed_at.isoformat()
+        close_time = _iso_utc(position.closed_at)
         exit_trade = (
             db.query(BotTrade)
             .filter(
