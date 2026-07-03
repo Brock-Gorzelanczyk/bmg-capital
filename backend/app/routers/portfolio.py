@@ -94,21 +94,26 @@ _PROFILE_TO_SLEEVE = {
     "crypto_day":                 "crypto",
     "crypto_lt":                  "crypto",
     "crypto_onchain":             "crypto",
+    # ORIGINAL 3 quant bots — historic asset-agnostic bucket, get the
+    # standalone "Quant" sleeve card.
     "crypto_quant_aggressive":    "quant",
     "crypto_quant_scalper":       "quant",
     "crypto_quant_mean_reversion":"quant",
     "crypto_meanrev_2163":        "quant",
     "options_income":             "options",
     "options_directional":        "options",
-    # 2026-07-02 m052 + m053 batches (fixes homepage split-brain flagged in audit)
-    "crypto_quant_alt_focus":     "quant",
-    "crypto_quant_scalp_1m":      "quant",
+    # 2026-07-02 batch bots — route to CRYPTO sleeve, not quant. All 8 trade
+    # crypto pairs; "quant" in the name is a strategy family, not an asset
+    # class. Brock explicitly directive: fold into Crypto card so it goes
+    # from 4 bots ($270k) to 12 bots (~$490k).
+    "crypto_quant_alt_focus":     "crypto",
+    "crypto_quant_scalp_1m":      "crypto",
     "crypto_dca_btc_eth":         "crypto",
-    "crypto_quant_universe_top6": "quant",
-    "crypto_quant_defi_l2":       "quant",
-    "crypto_quant_meme_tier":     "quant",
-    "crypto_quant_10m":           "quant",
-    "crypto_quant_15m":           "quant",
+    "crypto_quant_universe_top6": "crypto",
+    "crypto_quant_defi_l2":       "crypto",
+    "crypto_quant_meme_tier":     "crypto",
+    "crypto_quant_10m":           "crypto",
+    "crypto_quant_15m":           "crypto",
     "cash_floor":                 "cash",
 }
 

@@ -66,8 +66,17 @@ _DISPLAY_NAMES: dict[str, str] = {
 _AC_TO_SLEEVE: dict[str, str] = {
     "stock": "stocks",
     "crypto": "crypto",
-    "quant": "quant",
+    # 2026-07-02: asset_class='quant' now routes to the Crypto sleeve by
+    # default. The 8 new bots (alt_focus / scalp_1m / universe_top6 /
+    # defi_l2 / meme_tier / 10m / 15m / dca_btc_eth) all trade crypto pairs
+    # directly — "quant" is the strategy family, not an asset class. Only
+    # the original 3 quant bots (Aggressive, Mean Rev, Scalper) still get
+    # routed to the standalone Quant sleeve, via the _QUANT_PROFILE_NAMES
+    # override in _profile_sleeve() below.
+    "quant": "crypto",
     "options": "options",
+    "equity": "stocks",  # some profiles use "equity" instead of "stock"
+    "option":  "options",  # ditto for singular
 }
 
 # Quant bots have asset_class=crypto in m027 SPEC. Route them to the
@@ -75,21 +84,18 @@ _AC_TO_SLEEVE: dict[str, str] = {
 # PART 6 fix: previously asset_class=crypto routed them to "crypto" bucket
 # and the Dashboard rendered only 3 sleeves with "sleeve missing from payload".
 _QUANT_PROFILE_NAMES = frozenset({
+    # ORIGINAL 3 quant bots. These predate the "sleeve" concept and were
+    # designed as an asset-agnostic bucket — they use the same 8-strategy
+    # quant stack but their sleeve is the historical "quant" card.
     "crypto_quant_aggressive",
     "crypto_quant_scalper",
     "crypto_quant_mean_reversion",
-    # 2026-07-02 m052 + m053 batches — same "asset_class=crypto but route
-    # to quant sleeve" fix as the original 3. Without this, Dashboard renders
-    # them as crypto and the quant-sleeve card misses $200k of allocations.
-    "crypto_quant_alt_focus",
-    "crypto_quant_scalp_1m",
-    "crypto_quant_universe_top6",
-    "crypto_quant_defi_l2",
-    "crypto_quant_meme_tier",
-    "crypto_quant_10m",
-    "crypto_quant_15m",
-    # crypto_dca_btc_eth intentionally NOT here — plain-crypto DCA, no
-    # quant strategies. Stays in the crypto sleeve.
+    # 2026-07-02 reversal: the m052/m053 batch bots (alt_focus/scalp_1m/
+    # universe_top6/defi_l2/meme_tier/10m/15m/dca_btc_eth) are NOT in this
+    # set. They trade crypto pairs directly (BTC/ETH/SOL/POL/DOGE etc), so
+    # their sleeve is "crypto" — same as crypto_day/swing/lt/onchain. The
+    # word "quant" in their names is a strategy family, not an asset class.
+    # This routes their capital to the Crypto sleeve card on the dashboard.
 })
 
 

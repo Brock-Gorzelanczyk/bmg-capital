@@ -347,7 +347,36 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
 
     # ── Today P&L ────────────────────────────────────────────────────────────
-    today_pnl_cents = today_realized_cents
+    # 2026-07-02 fix: previous version was `today_pnl = today_realized_cents`
+    # which ONLY counted P&L from trades that CLOSED today. It missed the
+    # entire unrealized-P&L change on open positions during the day. Effect:
+    # a bot with a $26 unrealized gain on an open GOOGL position and no
+    # closed trades today would show "+$0.00 today" — the exact bug Claude 3's
+    # audit flagged as "+$0.00 today across ALL sleeve cards but fund moved
+    # -$93.71."
+    #
+    # New formula:
+    #   today_pnl = portfolio_value_now - portfolio_value_eod_yesterday
+    #
+    # Uses BotDailyPnL.portfolio_value_eod_cents snapshot as the baseline.
+    # Falls back to today_realized_cents when no prior-day snapshot exists
+    # (first day of an allocation) — same as the old behavior.
+    today_pnl_cents = today_realized_cents  # fallback
+    try:
+        _yday_snap = (
+            db.query(BotDailyPnL)
+            .filter(
+                BotDailyPnL.allocation_id == alloc.id,
+                BotDailyPnL.date < today,
+                BotDailyPnL.portfolio_value_eod_cents.isnot(None),
+            )
+            .order_by(BotDailyPnL.date.desc())
+            .first()
+        )
+        if _yday_snap and _yday_snap.portfolio_value_eod_cents is not None:
+            today_pnl_cents = portfolio_value_cents - int(_yday_snap.portfolio_value_eod_cents)
+    except Exception:
+        pass  # fall back to realized-only
     yesterday_value = portfolio_value_cents - today_pnl_cents
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
