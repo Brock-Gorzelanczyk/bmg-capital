@@ -440,8 +440,12 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
             today_pnl_cents = today_realized_cents + (unrealized_pnl_cents - _yday_unreal)
             _today_case = "b_unreal_delta"
             _yday_snap_debug = (str(_yday_snap.date), _yday_unreal)
-    except Exception:
-        pass  # keep the today_realized_cents fallback
+    except Exception as _tpe:
+        # 2026-07-02 diag: every bot is hitting fallback_realized_only which
+        # means this except is being triggered on every call. Log the actual
+        # exception so we can see what's blowing up (probably a session /
+        # query problem, not the tz comparison itself).
+        _today_case = f"fallback_exc:{type(_tpe).__name__}:{str(_tpe)[:80]}"
 
     # 2026-07-02 diagnostic: Brock reported today vs all_time inconsistency
     # on the m052/m053 batch bots created ~05:04 UTC Jul 2. If case (c)
