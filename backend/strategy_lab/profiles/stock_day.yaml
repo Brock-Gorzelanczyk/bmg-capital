@@ -62,7 +62,7 @@ strategies:
 strategy_thresholds:
   ofi_institutional_flow: 70
 ensemble: any_above_threshold
-position_cap: 3
+position_cap: 10                # 2026-07-02 Brock: more concurrent day trades ($70k allocation)
 position_size_pct: 5
 stop_loss_pct: 1.5
 take_profit_pct: 2.5

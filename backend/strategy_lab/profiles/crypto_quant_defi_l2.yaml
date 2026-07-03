@@ -47,8 +47,8 @@ size_bands:
     max: 1.0
     multiplier: 1.3
 
-position_cap: 8
-position_size_pct: 2.0
+position_cap: 15                # 2026-07-02 Brock: spread the +$10k across more names
+position_size_pct: 2.5         # 2026-07-02 Brock: modest bump 2.0 → 2.5
 stop_loss_pct: 2.0
 take_profit_pct: 4.0
 trailing_stop_activate_at_pct: 2.0

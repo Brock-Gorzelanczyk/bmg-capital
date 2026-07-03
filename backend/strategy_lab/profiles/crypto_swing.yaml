@@ -23,7 +23,7 @@ strategies:
 ensemble: weighted_vote
 confidence_threshold: 0.55
 cooldown_minutes: 240
-position_cap: 6
+position_cap: 12                # 2026-07-02 Brock: more concurrent swing positions
 position_size_pct: 4.0
 stop_loss_pct: 8.0
 take_profit_pct: 18.0

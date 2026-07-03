@@ -44,8 +44,8 @@ size_bands:
     max: 1.0
     multiplier: 1.0
 
-position_cap: 6
-position_size_pct: 1.5         # micro-size per trade — 1.5% × $30k = $450/trade
+position_cap: 15                # 2026-07-02 Brock: high signal volume → needs room to open more concurrent
+position_size_pct: 3.0         # 2026-07-02 Brock: bumped 1.5% → 3% (fill capacity + new $20k allocation)
 stop_loss_pct: 0.4             # tight scalp stop
 take_profit_pct: 0.8           # 2:1 reward-to-risk
 trailing_stop_activate_at_pct: 0.4

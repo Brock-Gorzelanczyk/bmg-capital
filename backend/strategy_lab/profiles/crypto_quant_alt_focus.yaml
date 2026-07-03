@@ -58,8 +58,8 @@ size_bands:
     max: 1.0
     multiplier: 1.3
 
-position_cap: 10
-position_size_pct: 2.0         # smaller size than aggressive (alt-tier is more volatile)
+position_cap: 15                # 2026-07-02 Brock: spread over more names, keep size small (negative-P&L bot)
+position_size_pct: 2.0         # 2026-07-02 Brock: keep small — alt-tier volatility + negative P&L history
 stop_loss_pct: 2.0
 take_profit_pct: 4.0
 trailing_stop_activate_at_pct: 2.0

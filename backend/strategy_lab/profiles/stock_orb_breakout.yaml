@@ -56,7 +56,7 @@ strategies:
 ensemble: any_above_threshold
 confidence_threshold: 0.55
 
-position_cap: 4
+position_cap: 10                       # 2026-07-02 Brock: more concurrent ORB breakouts ($40k allocation)
 position_size_pct: 4.0
 stop_loss_pct: 1.5
 take_profit_pct: 3.0

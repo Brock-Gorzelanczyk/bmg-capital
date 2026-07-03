@@ -57,7 +57,7 @@ strategies:
 ensemble: any_above_threshold
 confidence_threshold: 0.55
 
-position_cap: 8
+position_cap: 12                       # 2026-07-02 Brock: more earnings-drift positions ($40k allocation)
 position_size_pct: 5.0
 stop_loss_pct: 8.0                     # close < entry - 8% per spec
 take_profit_pct: 25.0

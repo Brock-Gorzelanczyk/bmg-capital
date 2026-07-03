@@ -55,7 +55,7 @@ strategies:
 ensemble: any_above_threshold
 confidence_threshold: 0.55
 
-position_cap: 4
+position_cap: 10                       # 2026-07-02 Brock: more concurrent gap fades ($40k allocation)
 position_size_pct: 5.0
 stop_loss_pct: 2.0                     # 1× gap magnitude proxy
 take_profit_pct: 4.0                   # 2R
