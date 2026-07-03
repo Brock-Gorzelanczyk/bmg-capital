@@ -133,10 +133,14 @@ def _should_run(conn) -> tuple[bool, str]:
     a permanent boot-time FAILED log line whenever bots halted since m027
     was written are disabled (crypto_quant_mean_reversion / scalper).
     """
+    # 2026-07-02: sum ALL user_1 allocations (not just enabled). Brock's
+    # m057 table allocates $70k+$50k to two intentionally-halted bots
+    # (crypto_quant_mean_reversion + crypto_quant_scalper). Filtering by
+    # enabled=1 misses that $120k and always trips drift.
     try:
         row = conn.execute(text(
             "SELECT COALESCE(SUM(starting_capital_cents), 0)"
-            " FROM bot_allocations WHERE user_id = :uid AND enabled = 1"
+            " FROM bot_allocations WHERE user_id = :uid"
         ), {"uid": TARGET_USER_ID}).fetchone()
         current_sum = int(row[0]) if row else 0
     except Exception as exc:
