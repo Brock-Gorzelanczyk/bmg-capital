@@ -347,36 +347,51 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     portfolio_value_cents = starting_capital_cents + realized_pnl_cents + unrealized_pnl_cents
 
     # ── Today P&L ────────────────────────────────────────────────────────────
-    # 2026-07-02 fix: previous version was `today_pnl = today_realized_cents`
-    # which ONLY counted P&L from trades that CLOSED today. It missed the
-    # entire unrealized-P&L change on open positions during the day. Effect:
-    # a bot with a $26 unrealized gain on an open GOOGL position and no
-    # closed trades today would show "+$0.00 today" — the exact bug Claude 3's
-    # audit flagged as "+$0.00 today across ALL sleeve cards but fund moved
-    # -$93.71."
+    # 2026-07-02 v2 (Brock feedback): the v1 fix (portfolio_value_eod_cents
+    # baseline) worked when a yesterday snapshot existed, but silently fell
+    # back to `today_realized_cents` for two big classes of bots:
     #
-    # New formula:
-    #   today_pnl = portfolio_value_now - portfolio_value_eod_yesterday
+    #   1. New bots seeded today (m052/m053 batch — all 8 new bots): no prior
+    #      BotDailyPnL row exists yet, so fallback fires → shows +$0 today
+    #      even when the bot earned +$329 all-time (all of which IS today).
+    #   2. Older bots where the nightly rollup skipped a day, or where the
+    #      `portfolio_value_eod_cents` column wasn't populated: same +$0.
     #
-    # Uses BotDailyPnL.portfolio_value_eod_cents snapshot as the baseline.
-    # Falls back to today_realized_cents when no prior-day snapshot exists
-    # (first day of an allocation) — same as the old behavior.
-    today_pnl_cents = today_realized_cents  # fallback
+    # New three-tier logic:
+    #   (a) yesterday_snapshot has portfolio_value_eod_cents:
+    #         today_pnl = pv_now - pv_eod_yesterday   (best — includes unrealized)
+    #   (b) yesterday_snapshot exists but eod_pv missing:
+    #         today_pnl = today_realized + (unrealized_now - unrealized_yesterday)
+    #         (uses BotDailyPnL.unrealized_cents column that IS populated)
+    #   (c) no prior BotDailyPnL row at all (brand-new bot):
+    #         today_pnl = realized_pnl_cents + unrealized_pnl_cents
+    #         (all-time == today because there was no yesterday)
+    #
+    # Final fallback: today_realized_cents (very rare — only if the query
+    # itself fails).
+    today_pnl_cents = today_realized_cents  # last-resort fallback
     try:
         _yday_snap = (
             db.query(BotDailyPnL)
             .filter(
                 BotDailyPnL.allocation_id == alloc.id,
                 BotDailyPnL.date < today,
-                BotDailyPnL.portfolio_value_eod_cents.isnot(None),
             )
             .order_by(BotDailyPnL.date.desc())
             .first()
         )
-        if _yday_snap and _yday_snap.portfolio_value_eod_cents is not None:
+        if _yday_snap is None:
+            # Case (c): brand-new bot with no prior snapshot. All-time = today.
+            today_pnl_cents = realized_pnl_cents + unrealized_pnl_cents
+        elif _yday_snap.portfolio_value_eod_cents is not None:
+            # Case (a): full snapshot available.
             today_pnl_cents = portfolio_value_cents - int(_yday_snap.portfolio_value_eod_cents)
+        else:
+            # Case (b): partial snapshot, use unrealized delta.
+            _yday_unreal = int(_yday_snap.unrealized_cents or 0)
+            today_pnl_cents = today_realized_cents + (unrealized_pnl_cents - _yday_unreal)
     except Exception:
-        pass  # fall back to realized-only
+        pass  # keep the today_realized_cents fallback
     yesterday_value = portfolio_value_cents - today_pnl_cents
     today_pnl_pct = round(today_pnl_cents / yesterday_value * 100, 2) if yesterday_value > 0 else 0.0
 
