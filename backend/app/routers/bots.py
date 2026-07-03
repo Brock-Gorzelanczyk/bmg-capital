@@ -92,7 +92,31 @@ _PORTFOLIO_DEFS = [
      "bots": {"stock_swing": _BOT_CAPITAL, "stock_day": _BOT_CAPITAL, "stock_lt": _BOT_CAPITAL}},
     {"asset_class": "crypto",  "name": "Crypto",  "emoji": "🪙", "color_hex": "#F59E0B",
      "starting_capital_cents": 40_000_000,
-     "bots": {"crypto_swing": _BOT_CAPITAL, "crypto_day": _BOT_CAPITAL, "crypto_lt": _BOT_CAPITAL, "crypto_onchain": _BOT_CAPITAL}},
+     # 2026-07-02: added the 8 m052+m053 batch bots to the Crypto portfolio.
+     # They trade crypto pairs; "quant" in the names is a strategy family, not
+     # an asset class. Without them here, _ensure_portfolios_for_user never
+     # bound their BotAllocation.portfolio_id → they were invisible on
+     # /api/bots/portfolios → homepage sleeve cards missed $200k.
+     #
+     # NB: the per-bot capital numbers below are LEGACY. Per the m027 PART 1
+     # fix (see comments in _ensure_portfolios_for_user around line 169), this
+     # loop NEVER overwrites BotAllocation capital fields — migrations own
+     # those. These values match m052/m053 allocations for readability but
+     # aren't load-bearing.
+     "bots": {
+         "crypto_swing":                _BOT_CAPITAL,
+         "crypto_day":                  _BOT_CAPITAL,
+         "crypto_lt":                   _BOT_CAPITAL,
+         "crypto_onchain":              _BOT_CAPITAL,
+         "crypto_quant_alt_focus":       4_000_000,
+         "crypto_quant_scalp_1m":        3_000_000,
+         "crypto_dca_btc_eth":           3_000_000,
+         "crypto_quant_universe_top6":   2_000_000,
+         "crypto_quant_defi_l2":         2_000_000,
+         "crypto_quant_meme_tier":       2_000_000,
+         "crypto_quant_10m":             2_000_000,
+         "crypto_quant_15m":             2_000_000,
+     }},
     {"asset_class": "options", "name": "Options", "emoji": "⚡", "color_hex": "#8B5CF6",
      "starting_capital_cents": 20_000_000,  # 2 bots × $100k — independent risk capping
      "bots": {"options_income": _BOT_CAPITAL, "options_directional": _BOT_CAPITAL}},
