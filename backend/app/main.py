@@ -901,6 +901,20 @@ async def lifespan(app: FastAPI):
             logger.warning("[startup] one-shot readiness failed: %s", _exc)
     asyncio.create_task(_maybe_fire_readiness_now())
 
+    async def _maybe_post_4q():
+        import asyncio as _aio
+        import os as _os
+        if _os.environ.get("BMG_POST_4Q", "").strip().lower() not in ("true", "1", "yes"):
+            return
+        await _aio.sleep(20)
+        try:
+            from app.jobs.four_clarifications_post import post_4q
+            await _aio.to_thread(post_4q)
+            logger.warning("[startup] 4Q post fired")
+        except Exception as _exc:
+            logger.warning("[startup] 4Q post failed: %s", _exc)
+    asyncio.create_task(_maybe_post_4q())
+
     # Post-deploy synthetic pipeline check — fires 60s after startup so scheduler is warm
     async def _post_deploy_synthetic_check():
         import asyncio as _aio
