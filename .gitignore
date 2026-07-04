@@ -19,3 +19,4 @@ frontend/dist/
 .env
 /tmp/
 .claude/worktrees/
+graphify-out/

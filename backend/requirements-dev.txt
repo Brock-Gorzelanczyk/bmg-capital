@@ -1,0 +1,16 @@
+# Dev-only dependencies. Not installed on Railway.
+#
+# NOTE: graphifyy requires Python 3.10+ and cannot be installed into the
+# backend .venv which runs Python 3.9. Install it globally via uv or pipx
+# instead — see scripts/graphify_bmg.sh for the exact commands.
+#
+# This file exists so contributors can see what dev tools BMG expects,
+# not for automated install.
+
+# graphify — knowledge-graph tool that turns the BMG codebase into a
+# queryable graph.json + interactive graph.html. Run via
+# `scripts/graphify_bmg.sh`. MIT licensed.
+# Repo: https://github.com/Graphify-Labs/graphify
+# Install (global): `uv tool install "graphifyy[claude]"` or
+#                    `pipx install "graphifyy[claude]"`
+graphifyy>=0.9.6
