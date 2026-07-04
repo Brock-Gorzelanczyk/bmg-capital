@@ -93,7 +93,40 @@ def run(conn) -> dict:
     now_iso = datetime.now(timezone.utc).isoformat()
     actions: list[dict] = []
 
-    # Fetch every Perk allocation with its current capital + profile name.
+    # 1. INSERT any missing allocations for target bots that Perk doesn't have.
+    # (Perk was missing cash_floor entirely — caused first m062 run to land
+    # at $990K instead of $1M.)
+    existing_names = {r[0] for r in conn.execute(text(
+        "SELECT p.name FROM bot_allocations a "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id = :uid"
+    ), {"uid": _PERK_USER_ID}).fetchall()}
+
+    for bot_name, target_cents in _TABLE.items():
+        if bot_name in existing_names or target_cents == 0:
+            continue
+        # Look up profile_id
+        prof_row = conn.execute(text(
+            "SELECT id FROM bot_profiles WHERE name = :n"
+        ), {"n": bot_name}).fetchone()
+        if not prof_row:
+            actions.append({"bot": bot_name, "action": "profile_not_found_skipped"})
+            continue
+        conn.execute(text(
+            "INSERT INTO bot_allocations "
+            "(user_id, profile_id, capital_pct, risk_profile, paper_mode, "
+            " enabled, starting_capital_cents, created_at, updated_at) "
+            "VALUES (:uid, :pid, 10.0, 'standard', 1, 1, :c, :now, :now)"
+        ), {"uid": _PERK_USER_ID, "pid": int(prof_row[0]),
+            "c": target_cents, "now": now_iso})
+        actions.append({
+            "bot": bot_name,
+            "action": "inserted_missing",
+            "cents": target_cents,
+        })
+        logger.warning("[m062] Perk INSERTED missing allocation for %s @ %d", bot_name, target_cents)
+
+    # 2. UPDATE existing allocations to their target values.
     rows = conn.execute(text(
         "SELECT a.id, a.starting_capital_cents, p.name "
         "FROM bot_allocations a "
