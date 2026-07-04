@@ -664,6 +664,15 @@ async def lifespan(app: FastAPI):
     except Exception as _m061_exc:
         logger.error("[startup] m061_kill_onchain_reallocate FAILED: %s", _m061_exc, exc_info=True)
 
+    # m062: normalize Perk (user_id=7) to Brock's same $1M spec. Approved 2026-07-03.
+    try:
+        from app.db.migrations.m062_normalize_perk_to_spec import run as _run_m062
+        with engine.begin() as _m062_conn:
+            _m062_result = _run_m062(_m062_conn)
+        logger.warning("[startup] m062 status: %s", _m062_result)
+    except Exception as _m062_exc:
+        logger.error("[startup] m062_normalize_perk_to_spec FAILED: %s", _m062_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
