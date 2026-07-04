@@ -354,10 +354,14 @@ function ExposureBySymbol({ rows: rawRows }: { rows: ExpRow[] }) {
   const rows = useMemo(() => {
     let r = [...rawRows];
     if (filter !== "ALL") {
-      r = r.filter((x) =>
-        x.assetClass.toLowerCase() === filter.toLowerCase()
-        || (filter === "Option" && (x.assetClass === "option" || x.assetClass === "options"))
-      );
+      const FILTER_CLASS: Record<string, string[]> = {
+        Stocks: ["stock", "stocks"],
+        Crypto: ["crypto"],
+        Options: ["option", "options"],
+        Quant: ["quant"],
+      };
+      const allowed = FILTER_CLASS[filter] ?? [filter.toLowerCase()];
+      r = r.filter((x) => allowed.includes(x.assetClass.toLowerCase()));
     }
     if (sort === "sym") {
       r.sort((a, b) => dir * a.symbol.localeCompare(b.symbol));
@@ -370,7 +374,7 @@ function ExposureBySymbol({ rows: rawRows }: { rows: ExpRow[] }) {
   }, [rawRows, sort, dir, filter]);
 
   const maxExp = Math.max(1, ...rows.map((r) => r.exposureUsd));
-  const FILT = ["ALL", "Stock", "Crypto", "Option", "Quant"];
+  const FILT = ["ALL", "Stocks", "Crypto", "Options", "Quant"];
 
   function toggleSort(key: "sym" | "pnl") {
     if (sort === key) setDir((d) => (d === 1 ? -1 : 1));

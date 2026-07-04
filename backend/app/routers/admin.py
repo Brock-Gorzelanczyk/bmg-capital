@@ -4863,7 +4863,7 @@ def audit13(db: Session = Depends(get_db)) -> dict:
         "quarantined_positions": sum(1 for r in orb_positions if r[7] is not None),
         "total_trades_ever": int(orb_trades),
         "computed_deployed_cents": orb_open_notional_cents,
-        "computed_deployed_usd": orb_open_notional_cents / 100.0 / 100.0,  # cents*cents already, need /100 twice
+        "computed_deployed_usd": orb_open_notional_cents / 100.0,
         "sample_positions": [
             {"id": r[0], "symbol": r[1], "qty": float(r[2] or 0),
              "avg_cost_cents": int(r[3] or 0),
