@@ -926,6 +926,20 @@ async def lifespan(app: FastAPI):
             logger.warning("[startup] 4Q post failed: %s", _exc)
     asyncio.create_task(_maybe_post_4q())
 
+    async def _maybe_post_options_fix():
+        import asyncio as _aio
+        import os as _os
+        if _os.environ.get("BMG_POST_OPTIONS_FIX", "").strip().lower() not in ("true", "1", "yes"):
+            return
+        await _aio.sleep(25)
+        try:
+            from app.jobs.options_fix_post import post_options_fix
+            await _aio.to_thread(post_options_fix)
+            logger.warning("[startup] options fix post fired")
+        except Exception as _exc:
+            logger.warning("[startup] options fix post failed: %s", _exc)
+    asyncio.create_task(_maybe_post_options_fix())
+
     # Post-deploy synthetic pipeline check — fires 60s after startup so scheduler is warm
     async def _post_deploy_synthetic_check():
         import asyncio as _aio
