@@ -959,6 +959,20 @@ async def lifespan(app: FastAPI):
             logger.warning("[startup] options fix post failed: %s", _exc)
     asyncio.create_task(_maybe_post_options_fix())
 
+    async def _maybe_post_audit_10block():
+        import asyncio as _aio
+        import os as _os
+        if _os.environ.get("BMG_POST_10BLOCK", "").strip().lower() not in ("true", "1", "yes"):
+            return
+        await _aio.sleep(25)
+        try:
+            from app.jobs.audit_10block_post import post_audit
+            await _aio.to_thread(post_audit)
+            logger.warning("[startup] 10-block audit post fired")
+        except Exception as _exc:
+            logger.warning("[startup] 10-block audit post failed: %s", _exc)
+    asyncio.create_task(_maybe_post_audit_10block())
+
     # Post-deploy synthetic pipeline check — fires 60s after startup so scheduler is warm
     async def _post_deploy_synthetic_check():
         import asyncio as _aio

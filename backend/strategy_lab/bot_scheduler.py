@@ -1376,6 +1376,28 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job pre_open_readiness (weekdays 8:15 AM CT / 9:15 AM ET)")
 
+    def _run_market_open_check():
+        from app.db.session import SessionLocal
+        from scripts.market_open_check import post_market_open_check
+        db = SessionLocal()
+        try:
+            post_market_open_check(db)
+        except Exception as exc:
+            logger.error("[market_open_check] job failed: %s", exc, exc_info=True)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _run_market_open_check,
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=55, timezone=ET),  # 8:55 CT / 9:55 ET
+        id="market_open_check",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job market_open_check (weekdays 8:55 AM CT / 9:55 AM ET)")
+
     # ------------------------------------------------------------------
     # Regime snapshot refresh — hourly, keeps regime_snapshots table fresh
     # so DQW, researcher, and queen always have current market regime data.
