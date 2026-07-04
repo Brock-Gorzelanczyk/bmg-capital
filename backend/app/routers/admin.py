@@ -4730,6 +4730,60 @@ def trigger_scan_diagnostic(bot_name: str, persist: bool = False, execute: bool 
 
 
 # ─── PUBLIC diagnostic — all-users summary ────────────────────────────────────
+@router.get("/dashboard-v2-noauth-diagnostic/{user_id}")
+def dashboard_v2_noauth(user_id: int, db: Session = Depends(get_db)) -> dict:
+    """Run dashboard/v2 code path with fake current_user. Diagnose BLOCK 0."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    try:
+        from app.db.models.users import User as _User
+        u = db.query(_User).filter(_User.id == user_id).first()
+        if not u:
+            return {"error": f"user {user_id} not found"}
+        from app.routers.dashboard import get_dashboard_v2 as _gdv2
+        result = _gdv2(db=db, current_user=u)
+        # Return just the shape summary
+        return {
+            "ok": True,
+            "top_keys": list(result.keys()),
+            "portfolio_keys": list(result.get("portfolio", {}).keys()) if isinstance(result.get("portfolio"), dict) else "not_dict",
+            "portfolio_total_value_cents": result.get("portfolio", {}).get("total_value_cents") if isinstance(result.get("portfolio"), dict) else None,
+            "sleeves_count": len(result.get("sleeves", [])) if "sleeves" in result else 0,
+            "leaderboard_count": len(result.get("portfolio", {}).get("leaderboard", [])) if isinstance(result.get("portfolio"), dict) else 0,
+        }
+    except Exception as exc:
+        import traceback
+        return {"error": str(exc)[:500], "traceback": traceback.format_exc()[:3000]}
+
+
+@router.get("/risk-console-noauth-diagnostic/{user_id}")
+def risk_console_noauth(user_id: int, db: Session = Depends(get_db)) -> dict:
+    """Run risk/console code path with fake current_user."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    try:
+        from app.db.models.users import User as _User
+        u = db.query(_User).filter(_User.id == user_id).first()
+        if not u:
+            return {"error": f"user {user_id} not found"}
+        from app.routers.risk_console import get_risk_console as _gr
+        result = _gr(db=db, current_user=u)
+        return {
+            "ok": True,
+            "top_keys": list(result.keys()),
+            "fund_pv_cents": result.get("fund", {}).get("pv_cents"),
+            "deployment": result.get("deployment"),
+            "drawdown_days": result.get("drawdown", {}).get("days_of_data"),
+            "var_days": result.get("var", {}).get("days_of_data"),
+            "correlation_pairs": result.get("correlation", {}).get("pairs_computed"),
+        }
+    except Exception as exc:
+        import traceback
+        return {"error": str(exc)[:500], "traceback": traceback.format_exc()[:3000]}
+
+
 @router.get("/user-allocations-diagnostic/{user_id}")
 def user_allocs(user_id: int, db: Session = Depends(get_db)) -> dict:
     """Show per-bot allocation for a specific user."""
