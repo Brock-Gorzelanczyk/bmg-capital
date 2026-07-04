@@ -77,6 +77,8 @@ const MissionControlPage = lazy(() => import("@/pages/MissionControlPage"));
 const RiskConsolePage = lazy(() => import("@/pages/RiskConsolePage"));
 const RiskLivePage = lazy(() => import("@/pages/RiskLivePage"));
 const TradeJournalPage = lazy(() => import("@/pages/TradeJournalPage"));
+const StrategyLabV2 = lazy(() => import("@/pages/StrategyLabV2"));
+const PortfolioV2 = lazy(() => import("@/pages/PortfolioV2"));
 const AutopilotPage = lazy(() => import("@/pages/AutopilotPage"));
 const AutopilotPromisePage = lazy(() => import("@/pages/AutopilotPromisePage"));
 const PlaybookPage = lazy(() => import("@/pages/PlaybookPage"));
@@ -494,6 +496,8 @@ function AppInner() {
         <Route path="/risk-console" element={<Page component={RiskConsolePage} />} />
         <Route path="/risk" element={<Page component={RiskLivePage} />} />
         <Route path="/trades" element={<Page component={TradeJournalPage} />} />
+        <Route path="/strategy-v2" element={<Page component={StrategyLabV2} />} />
+        <Route path="/portfolio-v2" element={<Page component={PortfolioV2} />} />
         <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
         <Route path="/activity" element={<Page component={ActivityPage} />} />
