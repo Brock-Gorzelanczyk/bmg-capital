@@ -18,6 +18,15 @@ strategies:
   - crypto_intraday_momentum
   - crypto_volatility_breakout
   - crypto_session_open
+  # 2026-07-03 Brock: broaden signal generation. Original 3 all
+  # trend/session-followers → producing 0 signals for 24h+ when the
+  # market lacks strong sessions or breakouts. Added 4 complementary
+  # strategies covering mean-reversion, EMA cross, MACD swing, and
+  # range-breakout to catch setups the original trio misses.
+  - crypto_rsi_mean_reversion
+  - crypto_ema_cross
+  - crypto_macd_swing
+  - crypto_quant_range_break_retest
 ensemble: any_above_threshold
 # TEMP: lowered 2026-06-07 to validate organic signal firing
 # while pre-filters are loose. Restore to 0.45 after first

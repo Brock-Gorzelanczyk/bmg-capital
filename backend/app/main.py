@@ -654,6 +654,16 @@ async def lifespan(app: FastAPI):
     except Exception as _m060_exc:
         logger.error("[startup] m060_close_options_phantoms FAILED: %s", _m060_exc, exc_info=True)
 
+    # m061: kill crypto_onchain (dead capital — no on-chain API keys), redirect
+    # $30k to crypto_quant_aggressive. Brock's paste-ready 2026-07-03.
+    try:
+        from app.db.migrations.m061_kill_onchain_reallocate import run as _run_m061
+        with engine.begin() as _m061_conn:
+            _m061_result = _run_m061(_m061_conn)
+        logger.warning("[startup] m061 status: %s", _m061_result)
+    except Exception as _m061_exc:
+        logger.error("[startup] m061_kill_onchain_reallocate FAILED: %s", _m061_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
