@@ -115,8 +115,10 @@ def run(conn) -> dict:
         conn.execute(text(
             "INSERT INTO bot_allocations "
             "(user_id, profile_id, capital_pct, risk_profile, paper_mode, "
-            " enabled, starting_capital_cents, created_at, updated_at) "
-            "VALUES (:uid, :pid, 10.0, 'standard', 1, 1, :c, :now, :now)"
+            " go_live_requested, enabled, starting_capital_cents, tier, "
+            " created_at, updated_at) "
+            "VALUES (:uid, :pid, 10.0, 'standard', 1, 0, 1, :c, 'T0', "
+            "        :now, :now)"
         ), {"uid": _PERK_USER_ID, "pid": int(prof_row[0]),
             "c": target_cents, "now": now_iso})
         actions.append({
