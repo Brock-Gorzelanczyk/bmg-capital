@@ -22,6 +22,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user, require_admin
@@ -891,22 +892,59 @@ def get_cross_bot_activity(
         logger.warning("[activity] sparkline query failed: %s", _sp_exc)
         sparkline = []
 
-    # P&L summary from bot_daily_pnl (bot_trades has no pnl_cents column)
+    # P&L summary — 2026-07-04 fix: route through canonical aggregator so /activity
+    # matches /trades and dashboard/v2 instead of computing its own number from
+    # bot_daily_pnl (which had drifted from canonical by hundreds of dollars).
+    # Also count CLOSED round-trip trades for total_trades so the number matches
+    # /api/trades (sells + covers only) rather than every raw fill (buys included).
     try:
-        from sqlalchemy import func as _func
-        pnl_rows = db.query(BotDailyPnL).filter(
-            BotDailyPnL.allocation_id.in_(alloc_ids)
-        ).all()
-        total_pnl_cents = sum(r.realized_cents or 0 for r in pnl_rows)
-        winning_days = sum(1 for r in pnl_rows if (r.realized_cents or 0) > 0)
-        losing_days = sum(1 for r in pnl_rows if (r.realized_cents or 0) < 0)
+        from app.core.canonical import compute_strategy_lab_aggregate as _agg_fn
+        agg = _agg_fn(current_user.id, db) or {}
+        pv_cents = int(agg.get("total_value_cents") or 0)
+        # All-time P&L: PV minus starting capital sum for enabled user_1 allocations.
+        starting_row = db.execute(
+            text(
+                "SELECT COALESCE(SUM(starting_capital_cents), 0) "
+                "FROM bot_allocations WHERE user_id = :uid"
+            ),
+            {"uid": current_user.id},
+        ).fetchone()
+        starting_cents = int(starting_row[0] or 0) if starting_row else 0
+        total_pnl_cents = pv_cents - starting_cents
+        # Closed round-trip count: sell + cover only, matches /api/trades semantics.
+        rt_row = db.execute(
+            text(
+                "SELECT COUNT(*) FROM bot_trades t "
+                "JOIN bot_allocations a ON a.id = t.allocation_id "
+                "WHERE a.user_id = :uid "
+                "  AND t.side IN ('sell', 'cover', 'close') "
+                "  AND t.quarantined_at IS NULL"
+            ),
+            {"uid": current_user.id},
+        ).fetchone()
+        closed_roundtrips = int(rt_row[0] or 0) if rt_row else 0
+        # Winning / losing DAYS from bot_daily_pnl for the days-basis stats
+        try:
+            _pnl_rows = db.query(BotDailyPnL).filter(
+                BotDailyPnL.allocation_id.in_(alloc_ids)
+            ).all()
+            winning_days = sum(1 for r in _pnl_rows if (r.realized_cents or 0) > 0)
+            losing_days = sum(1 for r in _pnl_rows if (r.realized_cents or 0) < 0)
+        except Exception:
+            winning_days, losing_days = 0, 0
     except Exception as _pnl_exc:
         logger.warning("[activity] P&L summary query failed: %s", _pnl_exc)
-        total_pnl_cents, winning_days, losing_days = 0, 0, 0
+        total_pnl_cents, winning_days, losing_days, closed_roundtrips = 0, 0, 0, total_count
 
     summary = {
-        "total_trades": total_count,
+        # total_trades now counts CLOSED round-trips (sell+cover only) to match
+        # what /api/trades reports. Old value counted every raw fill.
+        "total_trades": closed_roundtrips,
+        # total_pnl_cents comes from canonical (PV minus starting) so it matches
+        # /trades and dashboard/v2 instead of drifting via bot_daily_pnl rollups.
         "total_pnl_cents": total_pnl_cents,
+        # winning_trades / losing_trades are DAYS, per the historical UI label
+        # "Win Rate (days)".
         "winning_trades": winning_days,
         "losing_trades": losing_days,
     }

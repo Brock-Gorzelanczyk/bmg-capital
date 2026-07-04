@@ -1148,8 +1148,11 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     # Mystery bots (stock_quant_*) have starting=0 AND zero activity → dropped.
     leaderboard = [
         e for e in leaderboard
-        if (e.get("starting_capital_cents", 0) > 0)
-        or (e.get("enabled", False) and (e.get("today_pnl_cents", 0) != 0))
+        if e.get("profile") != "cash_floor"
+        and (
+            (e.get("starting_capital_cents", 0) > 0)
+            or (e.get("enabled", False) and (e.get("today_pnl_cents", 0) != 0))
+        )
     ]
     leaderboard.sort(
         key=lambda x: (

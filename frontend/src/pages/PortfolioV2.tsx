@@ -187,7 +187,7 @@ function CapitalAllocation({ alloc, hover, onHover, onLeave, deployedPct, deploy
             color: MUTED,
           }}
         >
-          CAPITAL ALLOCATION
+          CAPITAL DEPLOYED
         </span>
         <span
           style={{

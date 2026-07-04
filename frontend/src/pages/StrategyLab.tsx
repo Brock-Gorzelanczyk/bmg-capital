@@ -2133,7 +2133,9 @@ export default function StrategyLab() {
                   disabled={activateAllMut.isPending}
                   className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-t-green text-black text-sm font-bold hover:bg-t-green/80 transition-colors disabled:opacity-50 shadow-lg shadow-t-green/20 font-ui-t"
                 >
-                  {activateAllMut.isPending ? "Activating…" : "Activate All 9 Bots"}
+                  {activateAllMut.isPending
+                    ? "Activating…"
+                    : `Activate All ${bots.filter((b) => !b.allocation?.enabled).length} Bots`}
                 </button>
               )}
               {!isViewer && (allPaused ? (
@@ -2269,8 +2271,8 @@ export default function StrategyLab() {
               {([
                 { to: "/strategy/scout",       label: "SCOUT",       badge: `${activeScoutCount} armed` },
                 { to: "/strategy/forge",        label: "FORGE",       badge: `${activeForgeCount} active` },
-                { to: "/strategy/performance",  label: "ANALYTICS",   badge: null },
-                { to: "/strategy/leaderboard",  label: "LEADERBOARD", badge: null },
+                { to: "/strategy/performance",  label: "ANALYTICS",   badge: `${bots.length} bots` },
+                { to: "/strategy/leaderboard",  label: "LEADERBOARD", badge: `${bots.length} ranked` },
                 // FUND TEAR SHEET — Open Fund Sheet →
                 { to: "/fund/tear-sheet",       label: "FUND TEAR SHEET", badge: "open →" },
               ] as const).map(({ to, label, badge }) => (

@@ -295,6 +295,17 @@ function SleeveCard({ s, seed }: { s: SleeveVals; seed: number }) {
       <div
         style={{
           fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 9,
+          color: "#50604f",
+          letterSpacing: "0.14em",
+          marginTop: 2,
+        }}
+      >
+        SLEEVE PV
+      </div>
+      <div
+        style={{
+          fontFamily: "'JetBrains Mono', monospace",
           fontSize: 12,
           color: isUp ? GREEN : RED,
           marginTop: 4,

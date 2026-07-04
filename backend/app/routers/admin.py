@@ -4800,6 +4800,147 @@ def heartbeats_diagnostic(db: Session = Depends(get_db)) -> dict:
             "never_fired": len(never_fired), "details": out}
 
 
+@router.get("/audit13-diagnostic")
+def audit13(db: Session = Depends(get_db)) -> dict:
+    """Data for the 13-item hedge fund audit."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from collections import defaultdict as _dd
+    result: dict = {}
+
+    # P1-5: bot count reconciliation
+    # Bots with a non-zero allocation for user_1 (fleet)
+    active_allocs = db.execute(text(
+        "SELECT p.name, p.asset_class, a.starting_capital_cents, a.enabled AS alloc_enabled, "
+        "  p.enabled AS profile_enabled "
+        "FROM bot_allocations a "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id = 1 "
+        "ORDER BY p.name"
+    )).fetchall()
+    result["P1-5"] = {
+        "note": "Every allocation row for user 1, with profile + alloc enabled flags.",
+        "rows": [
+            {"bot": r[0], "asset_class": r[1], "starting_usd": (int(r[2] or 0))/100,
+             "alloc_enabled": bool(r[3]), "profile_enabled": bool(r[4])}
+            for r in active_allocs
+        ],
+        "counts": {
+            "total_allocations": len(active_allocs),
+            "funded_bots": sum(1 for r in active_allocs if int(r[2] or 0) > 0),
+            "funded_and_enabled": sum(1 for r in active_allocs
+                                     if int(r[2] or 0) > 0 and bool(r[3]) and bool(r[4])),
+            "zero_capital": sum(1 for r in active_allocs if int(r[2] or 0) == 0),
+        },
+    }
+
+    # P1-7: stock_orb_breakout positions + trades
+    orb_positions = db.execute(text(
+        "SELECT p.id, p.symbol, p.qty, p.avg_cost_cents, p.opened_at, p.closed_at, "
+        "  p.exit_reason, p.quarantined_at "
+        "FROM bot_positions p "
+        "JOIN bot_allocations a ON a.id = p.allocation_id "
+        "JOIN bot_profiles bp ON bp.id = a.profile_id "
+        "WHERE bp.name = 'stock_orb_breakout' "
+        "ORDER BY p.opened_at DESC LIMIT 50"
+    )).fetchall()
+    orb_trades = db.execute(text(
+        "SELECT COUNT(*) FROM bot_trades t "
+        "JOIN bot_allocations a ON a.id = t.allocation_id "
+        "JOIN bot_profiles bp ON bp.id = a.profile_id "
+        "WHERE bp.name = 'stock_orb_breakout' AND t.quarantined_at IS NULL"
+    )).fetchone()[0]
+    orb_open_notional_cents = sum(
+        int(r[2] or 0) * int(r[3] or 0)  # qty * avg_cost_cents
+        for r in orb_positions if r[5] is None and r[7] is None
+    )
+    result["P1-7"] = {
+        "note": "stock_orb_breakout — positions + trade count. Deployment reads from open (non-closed, non-quarantined) position notionals.",
+        "open_positions": sum(1 for r in orb_positions if r[5] is None and r[7] is None),
+        "closed_positions": sum(1 for r in orb_positions if r[5] is not None),
+        "quarantined_positions": sum(1 for r in orb_positions if r[7] is not None),
+        "total_trades_ever": int(orb_trades),
+        "computed_deployed_cents": orb_open_notional_cents,
+        "computed_deployed_usd": orb_open_notional_cents / 100.0 / 100.0,  # cents*cents already, need /100 twice
+        "sample_positions": [
+            {"id": r[0], "symbol": r[1], "qty": float(r[2] or 0),
+             "avg_cost_cents": int(r[3] or 0),
+             "opened_at": str(r[4]), "closed_at": str(r[5]) if r[5] else None,
+             "exit_reason": r[6], "quarantined_at": str(r[7]) if r[7] else None}
+            for r in orb_positions[:15]
+        ],
+    }
+
+    # P2-10: per-bot rejection reason distribution from bot_signals in the last 24h.
+    # bot_signals has `reason` (JSON) and `side`. Signals that were persisted but did NOT
+    # produce a trade are the ones we want to explain. Match signal.id → trade.signal_id
+    # to know which were traded.
+    cut_24h = (_dt.now(_tz.utc) - _td(hours=24)).isoformat()
+    per_bot_gate = {}
+    watch_bots = [
+        "crypto_quant_scalp_1m", "crypto_quant_meme_tier",
+        "crypto_quant_universe_top6", "crypto_quant_10m",
+        "crypto_quant_defi_l2", "crypto_quant_aggressive",
+        "crypto_quant_alt_focus", "crypto_quant_15m",
+    ]
+    for bot_name in watch_bots:
+        row = db.execute(text(
+            "SELECT COUNT(*) AS sigs, "
+            "  COALESCE(SUM(CASE WHEN s.executed_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS traded, "
+            "  COALESCE(SUM(CASE WHEN s.side='hold' THEN 1 ELSE 0 END), 0) AS holds "
+            "FROM bot_signals s "
+            "JOIN bot_allocations a ON a.id = s.allocation_id "
+            "JOIN bot_profiles p ON p.id = a.profile_id "
+            "WHERE p.name = :bot AND s.ts >= :cut"
+        ), {"bot": bot_name, "cut": cut_24h}).fetchone()
+        # Sample of the 'reason' field for hold-type or unexecuted signals to see WHY
+        hold_reasons = db.execute(text(
+            "SELECT s.reason, COUNT(*) AS n FROM bot_signals s "
+            "JOIN bot_allocations a ON a.id = s.allocation_id "
+            "JOIN bot_profiles p ON p.id = a.profile_id "
+            "WHERE p.name = :bot AND s.ts >= :cut AND s.side='hold' "
+            "GROUP BY s.reason ORDER BY n DESC LIMIT 5"
+        ), {"bot": bot_name, "cut": cut_24h}).fetchall()
+        sigs = int(row[0] or 0)
+        traded = int(row[1] or 0)
+        holds = int(row[2] or 0)
+        per_bot_gate[bot_name] = {
+            "signals_24h": sigs,
+            "signals_executed": traded,
+            "hold_type_signals": holds,
+            "not_traded_not_hold": sigs - traded - holds,
+            "conv_pct": round((traded / sigs * 100), 2) if sigs else 0.0,
+            "top_hold_reasons": [{"reason": (r[0] or "")[:200], "count": int(r[1])}
+                                 for r in hold_reasons],
+        }
+    result["P2-10"] = {"note": "Per-bot signal outcome 24h. hold rows carry the rejection reason.", "per_bot": per_bot_gate}
+
+    # P2-9: sample 20 scalp_1m signals in the last hour for the log excerpt
+    scalp_cut = (_dt.now(_tz.utc) - _td(hours=1)).isoformat()
+    scalp_sigs = db.execute(text(
+        "SELECT s.ts, s.symbol, s.side, s.confidence, s.strategy, s.reason, "
+        "  CASE WHEN s.executed_at IS NOT NULL THEN 'EXECUTED' ELSE 'NOT_EXEC' END AS status "
+        "FROM bot_signals s "
+        "JOIN bot_allocations a ON a.id = s.allocation_id "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE p.name = 'crypto_quant_scalp_1m' AND s.ts >= :cut "
+        "ORDER BY s.ts DESC LIMIT 20"
+    ), {"cut": scalp_cut}).fetchall()
+    result["P2-9"] = {
+        "note": "20 most recent scalp_1m signals (last hour).",
+        "signals": [
+            {"ts": str(r[0]), "symbol": r[1], "side": r[2],
+             "confidence": float(r[3] or 0), "strategy": r[4],
+             "reason": (r[5] or "")[:220], "status": r[6]}
+            for r in scalp_sigs
+        ],
+    }
+
+    return result
+
+
 @router.get("/hedge-fund-audit-diagnostic")
 def hedge_fund_audit(db: Session = Depends(get_db)) -> dict:
     """Comprehensive audit: per-bot P&L, hit rate, hold time, exposure,
