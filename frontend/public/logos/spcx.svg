@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <circle cx="32" cy="32" r="32" fill="#0B0B0F"/>
+  <text
+    x="32"
+    y="38"
+    text-anchor="middle"
+    font-family="Helvetica, Arial, sans-serif"
+    font-size="17"
+    font-weight="900"
+    fill="#FFFFFF"
+    letter-spacing="0.5"
+  >SPCX</text>
+</svg>

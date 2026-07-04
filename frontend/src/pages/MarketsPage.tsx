@@ -336,6 +336,12 @@ function CryptoTab() {
 
 // ── Stock logo ────────────────────────────────────────────────────────────────
 
+// Hand-mapped static logos — for tickers that don't resolve via logo.dev
+// (synthetic private-company tickers, etc.). Checked BEFORE the API call.
+const HAND_MAPPED_LOGOS: Record<string, string> = {
+  SPCX: "/logos/spcx.svg",
+};
+
 const LOGO_TOKEN = "pk_X-1ZO13GSgeOoUrIuJ6GMQ";
 
 const AVATAR_COLORS = [
@@ -351,7 +357,8 @@ function stockColor(sym: string) {
 
 function StockLogo({ symbol }: { symbol: string }) {
   const [failed, setFailed] = useState(false);
-  const logoUrl = `https://img.logo.dev/ticker/${symbol}?token=${LOGO_TOKEN}&size=32`;
+  const handMapped = HAND_MAPPED_LOGOS[symbol];
+  const logoUrl = handMapped ?? `https://img.logo.dev/ticker/${symbol}?token=${LOGO_TOKEN}&size=32`;
   if (failed) {
     return (
       <span className={cn("inline-flex items-center justify-center w-6 h-6 rounded-full text-[9px] font-bold text-white shrink-0", stockColor(symbol))}>

@@ -6,6 +6,13 @@ import { TICKER_NAMES } from "@/data/tickerNames";
 
 // ── Logo component ─────────────────────────────────────────────────────────────
 
+// Hand-mapped static logos — for tickers that don't resolve via any online
+// logo service (synthetic private-company tickers, etc.). Checked BEFORE
+// the Clearbit/favicon lookup.
+const HAND_MAPPED_LOGOS: Record<string, string> = {
+  SPCX: "/logos/spcx.svg",
+};
+
 // Domain map for Clearbit logos — companies where the domain is non-obvious from ticker
 const TICKER_DOMAIN: Record<string, string> = {
   AAPL: "apple.com",       MSFT: "microsoft.com",   NVDA: "nvidia.com",
@@ -42,8 +49,21 @@ function avatarColor(sym: string): string {
 
 function Logo({ symbol }: { symbol: string }) {
   const [err, setErr] = useState(false);
+  const handMapped = HAND_MAPPED_LOGOS[symbol];
   const domain = TICKER_DOMAIN[symbol];
   const color = avatarColor(symbol);
+
+  if (handMapped && !err) {
+    return (
+      <img
+        src={handMapped}
+        alt={symbol}
+        className="w-5 h-5 rounded-full object-contain shrink-0"
+        onError={() => setErr(true)}
+        loading="lazy"
+      />
+    );
+  }
 
   if (!domain || err) {
     return (
