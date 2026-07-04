@@ -4730,6 +4730,76 @@ def trigger_scan_diagnostic(bot_name: str, persist: bool = False, execute: bool 
 
 
 # ─── PUBLIC diagnostic — all-users summary ────────────────────────────────────
+@router.get("/options-symbols-diagnostic")
+def options_symbols(db: Session = Depends(get_db)) -> dict:
+    """BLOCK 4: verify options bots trade OCC symbols, not equities."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    cut = (_dt.now(_tz.utc) - _td(days=30)).isoformat()
+    rows = db.execute(text(
+        "SELECT p.name AS bot, t.symbol, t.ts, LENGTH(t.symbol) AS sym_len "
+        "FROM bot_trades t "
+        "JOIN bot_allocations a ON a.id = t.allocation_id "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE p.name LIKE 'options%' "
+        "  AND t.ts >= :cut "
+        "  AND t.quarantined_at IS NULL "
+        "ORDER BY t.ts DESC LIMIT 50"
+    ), {"cut": cut}).fetchall()
+    trades = []
+    equity_leaks = 0
+    for r in rows:
+        symlen = int(r[3] or 0)
+        is_occ = symlen >= 15  # OCC format is 15-21 chars
+        trades.append({"bot": r[0], "symbol": r[1], "ts": str(r[2]), "sym_len": symlen, "is_occ": is_occ})
+        if not is_occ:
+            equity_leaks += 1
+    return {"count": len(trades), "equity_leaks": equity_leaks, "trades": trades[:10]}
+
+
+@router.get("/heartbeats-diagnostic")
+def heartbeats_diagnostic(db: Session = Depends(get_db)) -> dict:
+    """BLOCK 7: enabled bots with stale (>6h) heartbeats."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    rows = db.execute(text(
+        "SELECT p.name, MAX(s.ts) AS last_ts, "
+        "  (SELECT MAX(t.ts) FROM bot_trades t "
+        "     JOIN bot_allocations aa ON aa.id = t.allocation_id "
+        "     WHERE aa.user_id = 1 AND (SELECT id FROM bot_profiles WHERE name = p.name) = aa.profile_id) AS last_trade_ts "
+        "FROM bot_profiles p "
+        "LEFT JOIN bot_allocations a ON a.profile_id = p.id AND a.user_id = 1 "
+        "LEFT JOIN bot_signals s ON s.allocation_id = a.id "
+        "WHERE a.starting_capital_cents > 0 "
+        "GROUP BY p.name "
+        "ORDER BY MAX(s.ts) NULLS FIRST"
+    )).fetchall()
+    from datetime import datetime as _dt, timezone as _tz
+    now = _dt.now(_tz.utc)
+    out = []
+    for r in rows:
+        last = r[1]
+        age_h = None
+        if last:
+            try:
+                lts = _dt.fromisoformat(str(last).replace("Z", "+00:00"))
+                if lts.tzinfo is None:
+                    lts = lts.replace(tzinfo=_tz.utc)
+                age_h = (now - lts).total_seconds() / 3600
+            except Exception:
+                pass
+        out.append({"bot": r[0], "last_signal_ts": str(last) if last else None,
+                    "last_trade_ts": str(r[2]) if r[2] else None,
+                    "hours_stale": round(age_h, 1) if age_h is not None else None})
+    stale_6h = [r for r in out if r["hours_stale"] is not None and r["hours_stale"] > 6]
+    never_fired = [r for r in out if r["last_signal_ts"] is None]
+    return {"total_active_bots": len(out), "stale_over_6h": len(stale_6h),
+            "never_fired": len(never_fired), "details": out}
+
+
 @router.get("/dashboard-v2-noauth-diagnostic/{user_id}")
 def dashboard_v2_noauth(user_id: int, db: Session = Depends(get_db)) -> dict:
     """Run dashboard/v2 code path with fake current_user. Diagnose BLOCK 0."""
