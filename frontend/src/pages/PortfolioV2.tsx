@@ -723,7 +723,7 @@ export default function PortfolioV2() {
             color: "#50604f",
           }}
         >
-          <Link to="/strategy-v2" style={{ color: "#7e8e7e", textDecoration: "none" }}>
+          <Link to="/strategy" style={{ color: "#7e8e7e", textDecoration: "none" }}>
             Strategy Lab
           </Link>
           <span>/</span>

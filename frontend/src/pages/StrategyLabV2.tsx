@@ -769,7 +769,7 @@ export default function StrategyLabV2() {
             Strategy Library →
           </Link>
           <Link
-            to="/portfolio-v2"
+            to="/portfolio"
             style={{
               fontFamily: "'Space Grotesk', sans-serif",
               fontSize: 12,

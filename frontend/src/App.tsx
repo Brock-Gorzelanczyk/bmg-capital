@@ -395,7 +395,8 @@ function AppInner() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/chart" element={<ChartPage />} />
         <Route path="/screener" element={<Screener />} />
-        <Route path="/strategy" element={<Page component={StrategyLab} />} />
+        <Route path="/strategy" element={<Page component={StrategyLabV2} />} />
+        <Route path="/strategy/legacy" element={<Page component={StrategyLab} />} />
         <Route path="/strategy/candidates" element={<Page component={StrategyCandidates} />} />
         <Route path="/signals" element={<SignalsFeedPage />} />
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
@@ -426,7 +427,8 @@ function AppInner() {
         <Route path="/candidates/:candidateName/wfa/:jobId" element={<WfaResultPage />} />
         <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
-        <Route path="/portfolio" element={<Page component={Portfolio} />} />
+        <Route path="/portfolio" element={<Page component={PortfolioV2} />} />
+        <Route path="/portfolio/legacy" element={<Page component={Portfolio} />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/news" element={<News />} />
         <Route path="/earnings" element={<Earnings />} />
@@ -496,8 +498,8 @@ function AppInner() {
         <Route path="/risk-console" element={<Page component={RiskConsolePage} />} />
         <Route path="/risk" element={<Page component={RiskLivePage} />} />
         <Route path="/trades" element={<Page component={TradeJournalPage} />} />
-        <Route path="/strategy-v2" element={<Page component={StrategyLabV2} />} />
-        <Route path="/portfolio-v2" element={<Page component={PortfolioV2} />} />
+        <Route path="/strategy-v2" element={<Navigate to="/strategy" replace />} />
+        <Route path="/portfolio-v2" element={<Navigate to="/portfolio" replace />} />
         <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
         <Route path="/activity" element={<Page component={ActivityPage} />} />
