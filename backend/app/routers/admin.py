@@ -4800,6 +4800,142 @@ def heartbeats_diagnostic(db: Session = Depends(get_db)) -> dict:
             "never_fired": len(never_fired), "details": out}
 
 
+@router.get("/hedge-fund-audit-diagnostic")
+def hedge_fund_audit(db: Session = Depends(get_db)) -> dict:
+    """Comprehensive audit: per-bot P&L, hit rate, hold time, exposure,
+    correlation, deployment ratio, symbol concentration."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from collections import defaultdict as _dd
+    import math as _math
+
+    now = _dt.now(_tz.utc)
+    cut_30d = (now - _td(days=30)).isoformat()
+
+    # 1. Per-bot trade stats (closed round-trips only)
+    trade_rows = db.execute(text(
+        "SELECT p.name AS bot, p.asset_class, "
+        "  (CASE WHEN pos.side = 'short' "
+        "        THEN (pos.avg_cost_cents - t.fill_price_cents) "
+        "        ELSE (t.fill_price_cents - pos.avg_cost_cents) END) * pos.qty AS pnl_cents, "
+        "  pos.opened_at, t.ts AS closed_at, "
+        "  pos.qty * pos.avg_cost_cents AS notional_cents "
+        "FROM bot_trades t "
+        "JOIN bot_positions pos ON pos.id = t.position_id "
+        "JOIN bot_allocations a ON a.id = t.allocation_id "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id = 1 "
+        "  AND t.side IN ('sell','cover','close') "
+        "  AND t.quarantined_at IS NULL "
+        "  AND t.ts >= :cut"
+    ), {"cut": cut_30d}).fetchall()
+
+    by_bot = _dd(lambda: {"trades":[], "wins":0, "losses":0, "total_pnl":0.0,
+                          "total_notional":0.0, "hold_secs":[], "asset_class":""})
+    for r in trade_rows:
+        bot, ac, pnl_c, opened, closed, notional_c = r
+        pnl_usd = float(pnl_c or 0) / 100.0
+        by_bot[bot]["asset_class"] = ac
+        by_bot[bot]["trades"].append(pnl_usd)
+        by_bot[bot]["total_pnl"] += pnl_usd
+        by_bot[bot]["total_notional"] += float(notional_c or 0) / 100.0
+        if pnl_usd > 0: by_bot[bot]["wins"] += 1
+        elif pnl_usd < 0: by_bot[bot]["losses"] += 1
+        # hold time
+        try:
+            o = _dt.fromisoformat(str(opened).replace("Z","+00:00")) if opened else None
+            c = _dt.fromisoformat(str(closed).replace("Z","+00:00")) if closed else None
+            if o and c:
+                if o.tzinfo is None: o = o.replace(tzinfo=_tz.utc)
+                if c.tzinfo is None: c = c.replace(tzinfo=_tz.utc)
+                by_bot[bot]["hold_secs"].append((c - o).total_seconds())
+        except Exception:
+            pass
+
+    bot_stats = []
+    for bot, x in by_bot.items():
+        n = len(x["trades"])
+        wr = x["wins"] / (x["wins"] + x["losses"]) if (x["wins"] + x["losses"]) else 0.0
+        wins_pnl = [p for p in x["trades"] if p > 0]
+        losses_pnl = [p for p in x["trades"] if p < 0]
+        avg_w = sum(wins_pnl)/len(wins_pnl) if wins_pnl else 0
+        avg_l = sum(losses_pnl)/len(losses_pnl) if losses_pnl else 0
+        pf = sum(wins_pnl) / abs(sum(losses_pnl)) if losses_pnl else None
+        expectancy = x["total_pnl"] / n if n else 0
+        avg_hold = sum(x["hold_secs"])/len(x["hold_secs"])/3600 if x["hold_secs"] else None
+        # simple sharpe
+        if n > 5:
+            mean = expectancy
+            var = sum((p - mean)**2 for p in x["trades"]) / n
+            sd = _math.sqrt(var) if var > 0 else 0
+            per_trade_sharpe = mean / sd if sd else None
+        else:
+            per_trade_sharpe = None
+        bot_stats.append({
+            "bot": bot, "asset_class": x["asset_class"],
+            "trades": n, "win_rate": round(wr, 4),
+            "total_pnl_usd": round(x["total_pnl"], 2),
+            "avg_winner": round(avg_w, 2), "avg_loser": round(avg_l, 2),
+            "profit_factor": round(pf, 3) if pf else None,
+            "expectancy_usd": round(expectancy, 3),
+            "avg_hold_hours": round(avg_hold, 2) if avg_hold else None,
+            "per_trade_sharpe": round(per_trade_sharpe, 3) if per_trade_sharpe else None,
+            "total_notional_usd": round(x["total_notional"], 0),
+        })
+    bot_stats.sort(key=lambda x: -x["total_pnl_usd"])
+
+    # 2. Symbol exposure (open positions)
+    sym_rows = db.execute(text(
+        "SELECT pos.symbol, p.name AS bot, p.asset_class, "
+        "       pos.qty * pos.avg_cost_cents AS notional_cents "
+        "FROM bot_positions pos "
+        "JOIN bot_allocations a ON a.id = pos.allocation_id "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id = 1 AND pos.closed_at IS NULL AND pos.quarantined_at IS NULL"
+    )).fetchall()
+    by_sym = _dd(lambda: {"notional": 0.0, "positions": 0, "bots": set(), "asset_class": ""})
+    for r in sym_rows:
+        sym, bot, ac, notional_c = r
+        by_sym[sym]["notional"] += float(notional_c or 0) / 100.0
+        by_sym[sym]["positions"] += 1
+        by_sym[sym]["bots"].add(bot)
+        by_sym[sym]["asset_class"] = ac
+    sym_stats = sorted(
+        [{"symbol": s, "notional_usd": round(x["notional"], 0),
+          "positions": x["positions"], "bots_holding": sorted(x["bots"]),
+          "asset_class": x["asset_class"]}
+         for s, x in by_sym.items()],
+        key=lambda x: -x["notional_usd"],
+    )
+
+    # 3. Fleet totals
+    total_realized = sum(b["total_pnl_usd"] for b in bot_stats)
+    total_trades = sum(b["trades"] for b in bot_stats)
+    winning_bots = sum(1 for b in bot_stats if b["total_pnl_usd"] > 0)
+    losing_bots = sum(1 for b in bot_stats if b["total_pnl_usd"] < 0)
+    fleet_wins = sum(1 for b in bot_stats for p in [0] if b["win_rate"])
+    fleet_pnl_by_ac = _dd(float)
+    for b in bot_stats:
+        fleet_pnl_by_ac[b["asset_class"] or "other"] += b["total_pnl_usd"]
+
+    return {
+        "as_of": now.isoformat(),
+        "window_days": 30,
+        "fleet_summary": {
+            "total_realized_pnl_usd": round(total_realized, 2),
+            "total_closed_trades": total_trades,
+            "winning_bots": winning_bots,
+            "losing_bots": losing_bots,
+            "pnl_by_asset_class": {k: round(v, 2) for k, v in fleet_pnl_by_ac.items()},
+        },
+        "per_bot": bot_stats,
+        "symbol_exposure_top20": sym_stats[:20],
+        "symbol_exposure_count": len(sym_stats),
+    }
+
+
 @router.get("/self-auth-test/{user_id}")
 def self_auth_test(user_id: int, db: Session = Depends(get_db)) -> dict:
     """Mint a real JWT and hit /api/dashboard/v2 + /api/risk/console from
