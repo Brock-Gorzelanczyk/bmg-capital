@@ -4800,6 +4800,61 @@ def heartbeats_diagnostic(db: Session = Depends(get_db)) -> dict:
             "never_fired": len(never_fired), "details": out}
 
 
+@router.get("/self-auth-test/{user_id}")
+def self_auth_test(user_id: int, db: Session = Depends(get_db)) -> dict:
+    """Mint a real JWT and hit /api/dashboard/v2 + /api/risk/console from
+    within the app. Proves whether these endpoints work end-to-end for a
+    real user session or reject with 401 for reasons unrelated to auth
+    (dependency crashes, etc).
+    """
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    try:
+        from app.db.models.users import User as _User
+        u = db.query(_User).filter(_User.id == user_id).first()
+        if not u:
+            return {"error": f"user {user_id} not found"}
+        from app.config import settings as _s
+        from jose import jwt as _jwt
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        exp = _dt.now(_tz.utc) + _td(minutes=5)
+        token = _jwt.encode(
+            {"sub": str(user_id), "exp": exp},
+            _s.jwt_secret,
+            algorithm=_s.jwt_algorithm,
+        )
+        # Now hit the endpoints from within the same process via httpx.
+        import httpx
+        base = "http://127.0.0.1:8000"
+        headers = {"Authorization": f"Bearer {token}"}
+        results = {}
+        for path in ("/api/dashboard/v2", "/api/risk/console", "/api/trades",
+                     "/api/strategy-lab/portfolio"):
+            try:
+                r = httpx.get(base + path, headers=headers, timeout=25)
+                body_ok = None
+                if r.status_code == 200:
+                    body = r.json() if r.headers.get("content-type","").startswith("application/json") else {}
+                    if isinstance(body, dict):
+                        body_ok = list(body.keys())[:5]
+                    elif isinstance(body, list):
+                        body_ok = f"list len={len(body)}"
+                results[path] = {
+                    "status": r.status_code,
+                    "content_type": r.headers.get("content-type",""),
+                    "body_len": len(r.content),
+                    "top_keys_or_shape": body_ok,
+                    "body_preview": r.text[:200] if r.status_code != 200 else None,
+                }
+            except Exception as exc:
+                results[path] = {"error": str(exc)[:200]}
+        return {"user_id": user_id, "token_len": len(token), "results": results}
+    except Exception as exc:
+        import traceback
+        return {"error": str(exc)[:500], "traceback": traceback.format_exc()[:2000]}
+
+
 @router.get("/dashboard-v2-noauth-diagnostic/{user_id}")
 def dashboard_v2_noauth(user_id: int, db: Session = Depends(get_db)) -> dict:
     """Run dashboard/v2 code path with fake current_user. Diagnose BLOCK 0."""
