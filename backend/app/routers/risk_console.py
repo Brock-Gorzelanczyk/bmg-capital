@@ -63,7 +63,6 @@ def _open_positions_with_live_price(db: Session, user_id: int) -> list[dict]:
         live_price_usd = float(live.get(sym) or 0)
         # Notional at cost (position size)
         if opt_type is not None:
-            # options: qty × premium × 100 multiplier
             notional_usd = float(entry_price_usd) * float(qty or 0) * 100
         else:
             notional_usd = float(entry_price_usd) * float(qty or 0)
@@ -75,6 +74,13 @@ def _open_positions_with_live_price(db: Session, user_id: int) -> list[dict]:
                 unreal = (entry_price_usd - live_price_usd) * float(qty or 0)
             else:
                 unreal = (live_price_usd - entry_price_usd) * float(qty or 0)
+        # SQLite returns TEXT for DateTime columns via raw text() — handle both.
+        opened_iso: Any = None
+        if opened_at is not None:
+            if hasattr(opened_at, "isoformat"):
+                opened_iso = opened_at.isoformat()
+            else:
+                opened_iso = str(opened_at)
         out.append({
             "position_id": int(pid),
             "symbol": sym,
@@ -87,7 +93,7 @@ def _open_positions_with_live_price(db: Session, user_id: int) -> list[dict]:
             "bot": bot,
             "asset_class": ac,
             "allocation_id": int(alloc_id),
-            "opened_at": opened_at.isoformat() if opened_at else None,
+            "opened_at": opened_iso,
             "is_option": opt_type is not None,
         })
     return out
