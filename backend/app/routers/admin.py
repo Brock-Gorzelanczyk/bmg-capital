@@ -4730,6 +4730,32 @@ def trigger_scan_diagnostic(bot_name: str, persist: bool = False, execute: bool 
 
 
 # ─── PUBLIC diagnostic — all-users summary ────────────────────────────────────
+@router.get("/user-allocations-diagnostic/{user_id}")
+def user_allocs(user_id: int, db: Session = Depends(get_db)) -> dict:
+    """Show per-bot allocation for a specific user."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    rows = db.execute(text(
+        "SELECT p.name, a.starting_capital_cents, a.enabled, a.paused_reason "
+        "FROM bot_allocations a "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id = :uid "
+        "ORDER BY a.starting_capital_cents DESC"
+    ), {"uid": user_id}).fetchall()
+    return {
+        "user_id": user_id,
+        "allocations": [
+            {"bot": r[0], "starting_cents": int(r[1] or 0),
+             "starting_usd": int(r[1] or 0)/100, "enabled": bool(r[2]),
+             "paused_reason": r[3]}
+            for r in rows
+        ],
+        "sum_cents": sum(int(r[1] or 0) for r in rows),
+        "sum_usd": sum(int(r[1] or 0) for r in rows) / 100,
+    }
+
+
 @router.get("/all-users-portfolio-diagnostic")
 def all_users_portfolio(db: Session = Depends(get_db)) -> dict:
     """Sum allocations + PV per user. Hunt cross-user data mismatch."""
