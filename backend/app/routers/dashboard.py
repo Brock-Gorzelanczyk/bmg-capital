@@ -171,17 +171,29 @@ def get_dashboard_v2(
         for e in leaderboard_from_agg
     }
 
-    # ── Per-allocation snapshots (canonical, NOT dependent on StrategyPortfolio) ──
-    # These include orphan allocations (no portfolio_id) that compute_strategy_lab_aggregate
-    # skips because it iterates StrategyPortfolio rows. We use these as the
-    # authoritative per-bot values; canonical's leaderboard is preferred when
-    # present (to stay aligned with Strategy Lab) but we fall back to direct
-    # snapshots so orphans aren't silently dropped.
+    # ── Per-allocation snapshots (ORPHANS ONLY) ──────────────────────────────
+    # 2026-07-04 perf fix: dashboard was hanging at 25s+ because it called
+    # compute_bot_snapshot for EVERY allocation (29 calls) AND ALSO called
+    # compute_strategy_lab_aggregate (which internally does the same 29
+    # snapshot calls). 58+ snapshots per request → live price fetches → hang.
+    #
+    # Root cause: bot_snapshots_by_alloc is only USED as a fallback for
+    # profiles missing from leaderboard_from_agg (orphan allocations without
+    # a portfolio_id). For the 22+ bots that ARE in the aggregator's
+    # leaderboard, the snapshot data was fetched twice and discarded.
+    #
+    # Fix: only compute snapshots for orphan allocations. Drops the loop
+    # from 29 to ~1-2 per request. `pv_by_alloc` / `today_pnl_by_alloc` etc
+    # still get populated via the profile-name lookup path below for
+    # in-leaderboard bots.
+    covered_by_agg = set(pv_by_profile_name.keys())
     bot_snapshots_by_alloc: dict[int, Any] = {}
     for alloc in allocs:
         p = alloc_to_profile.get(alloc.id)
         if not p:
             continue
+        if p.name in covered_by_agg:
+            continue  # skip — aggregator already has these values
         try:
             bot_snapshots_by_alloc[alloc.id] = compute_bot_snapshot(alloc, p, db)
         except Exception as exc:
