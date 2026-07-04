@@ -4729,6 +4729,46 @@ def trigger_scan_diagnostic(bot_name: str, persist: bool = False, execute: bool 
         return {"error": str(exc)[:400], "traceback": traceback.format_exc()[:2000]}
 
 
+# ─── PUBLIC diagnostic — all-users summary ────────────────────────────────────
+@router.get("/all-users-portfolio-diagnostic")
+def all_users_portfolio(db: Session = Depends(get_db)) -> dict:
+    """Sum allocations + PV per user. Hunt cross-user data mismatch."""
+    import os as _os
+    if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
+        return {"error": "diagnostic disabled"}
+    # Users table
+    users = db.execute(text(
+        "SELECT id, email, username, is_active, created_at FROM users ORDER BY id"
+    )).fetchall()
+    # Per-user allocation sum
+    users_data = []
+    for u in users:
+        uid = int(u[0])
+        row = db.execute(text(
+            "SELECT COUNT(*), COALESCE(SUM(starting_capital_cents),0) "
+            "FROM bot_allocations WHERE user_id = :uid"
+        ), {"uid": uid}).fetchone()
+        alloc_count = int(row[0] or 0)
+        alloc_sum = int(row[1] or 0)
+        pos_count = int(db.execute(text(
+            "SELECT COUNT(*) FROM bot_positions p "
+            "JOIN bot_allocations a ON a.id = p.allocation_id "
+            "WHERE a.user_id = :uid AND p.closed_at IS NULL"
+        ), {"uid": uid}).fetchone()[0] or 0)
+        users_data.append({
+            "user_id": uid,
+            "email": u[1],
+            "username": u[2],
+            "is_active": bool(u[3]),
+            "created_at": str(u[4]),
+            "allocation_count": alloc_count,
+            "allocation_sum_cents": alloc_sum,
+            "allocation_sum_usd": alloc_sum / 100,
+            "open_positions_count": pos_count,
+        })
+    return {"users": users_data}
+
+
 # ─── PUBLIC diagnostic — 24h fleet conversion ─────────────────────────────────
 @router.get("/conversion-24h-diagnostic")
 def get_conversion_24h(db: Session = Depends(get_db)) -> dict:
