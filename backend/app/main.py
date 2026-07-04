@@ -643,6 +643,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m059_exc:
         logger.error("[startup] m059_zero_all_halted_rows FAILED: %s", _m059_exc, exc_info=True)
 
+    # m060: close phantom NULL-option_type positions on options bots that
+    # were filling position_cap slots and blocking all new signals.
+    # No env-var gate — pure phantom cleanup, no capital moved.
+    try:
+        from app.db.migrations.m060_close_options_phantoms import run as _run_m060
+        with engine.begin() as _m060_conn:
+            _m060_result = _run_m060(_m060_conn)
+        logger.warning("[startup] m060 status: %s", _m060_result)
+    except Exception as _m060_exc:
+        logger.error("[startup] m060_close_options_phantoms FAILED: %s", _m060_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
