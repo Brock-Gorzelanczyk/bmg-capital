@@ -221,7 +221,15 @@ export default function AppShell() {
 
       {/* Welcome / onboarding modal — shown to first-time authenticated users */}
       {showWelcome && pathname !== "/onboarding" && (
-        <WelcomeModal onClose={() => setShowWelcome(false)} />
+        <WelcomeModal onClose={() => {
+          // 2026-07-06: previously only the two "complete the flow" paths
+          // (WelcomeModal.tsx:159 + :190) persisted bmg_onboarded. Any
+          // other dismiss (ESC, backdrop click, X button) left the flag
+          // unset, so the modal replayed on every refresh. Persist here
+          // so any close permanently silences the modal for this browser.
+          try { localStorage.setItem("bmg_onboarded", "true"); } catch { /* ignore */ }
+          setShowWelcome(false);
+        }} />
       )}
     </div>
   );

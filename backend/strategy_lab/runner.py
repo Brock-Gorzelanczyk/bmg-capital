@@ -1770,14 +1770,26 @@ def _execute_options_signal(
     capital_usd = (alloc.starting_capital_cents if alloc.starting_capital_cents is not None else (alloc.capital_cents_within_portfolio if alloc.capital_cents_within_portfolio is not None else 5_000_000)) / 100.0
     position_dollars = capital_usd * (final_size_pct / 100.0)
 
-    # Hard sleeve-level notional cap: never risk more than 3% of sleeve capital
+    # Hard sleeve-level notional cap: never risk more than X% of sleeve capital
     # on a single options contract (regardless of profile.position_size_pct).
-    # 2026-07-01 (Brock override): dropped 5% → 3% to enforce "less cash per
-    # position, more trades" directive. On a $50k options sleeve this is
-    # $1,500/trade max. Bounded downside if a signal is bad: worst-case single
-    # trade loss ≈ $1,500. Combined with position_cap=15 in the YAML the
-    # sleeve's total exposure caps at ~$22.5k = 45% of allocation.
-    OPTIONS_MAX_NOTIONAL_PCT = 0.03
+    #
+    # History:
+    #   2026-07-01 (Brock override): dropped 5% → 3% to enforce "less cash per
+    #     position, more trades" directive. At the then-$50k options sleeve
+    #     that was $1,500/trade — comfortable for typical premium $8-15/share.
+    #   2026-07-06 (Brock m067): halved options allocation $50k → $25k as
+    #     part of Portfolio-Rank Phase 2 funding. The 3% cap became $750/trade.
+    #     Most option premiums exceed this once multiplied by the 100x
+    #     contract multiplier ($8 premium × 100 = $800), producing
+    #     contract_count = 0 for ~99.9% of signals. Result: 1429 signals
+    #     in 24h, 2 trades. Silent execution starvation.
+    #
+    # 2026-07-06 fix: raise the cap to 5% so the ABSOLUTE per-trade budget
+    # returns to $1,250 (5% × $25k), matching what the strategies were
+    # calibrated against. Bounded downside per bad signal still ~$1,250.
+    # Combined with position_cap=15 the sleeve's total exposure ceiling
+    # is ~$18,750 = 75% of allocation.
+    OPTIONS_MAX_NOTIONAL_PCT = 0.05
     notional_cap = capital_usd * OPTIONS_MAX_NOTIONAL_PCT
     if position_dollars > notional_cap:
         logger.info(
