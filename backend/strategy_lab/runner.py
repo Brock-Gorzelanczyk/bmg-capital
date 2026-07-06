@@ -1797,11 +1797,19 @@ def _execute_options_signal(
     # exposure ceiling becomes $30k = 120% of allocation. Position_cap=15
     # remains the hard concurrency governor; in practice deployment
     # rarely hits 100% simultaneously.
-    OPTIONS_MAX_NOTIONAL_PCT = 0.08
+    #
+    # 2026-07-06 (audit): 8% × $25k = $2,000 was STILL too tight. LEAPS
+    # / deep-ITM stock replacement need $3,000-5,000/contract; single-name
+    # premiums with realistic bid-ask cross $2,500 easily. The runner
+    # rounds contract_count down to 0 for any signal where premium ×
+    # 100 > $2,000. Bump to 12% → $3,000/trade covers ~95% of typical
+    # option contracts. Sleeve exposure ceiling = 12% × 15 = 180% of
+    # allocation before gross_exposure_pct (100%) kicks in.
+    OPTIONS_MAX_NOTIONAL_PCT = 0.12
     notional_cap = capital_usd * OPTIONS_MAX_NOTIONAL_PCT
     if position_dollars > notional_cap:
         logger.info(
-            "[options:%s] %s clamping per-trade budget $%.0f → $%.0f (5%% sleeve cap)",
+            "[options:%s] %s clamping per-trade budget $%.0f → $%.0f (12%% sleeve cap)",
             profile_name, sig.symbol, position_dollars, notional_cap,
         )
         position_dollars = notional_cap
