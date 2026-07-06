@@ -769,6 +769,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m070_enable_ssrn_bots FAILED: %s",
                      _m070_exc, exc_info=True)
 
+    # m071: stock sleeve rebalance. Spreads the $400K stock sleeve across
+    # 11 strategies (7 existing bots trimmed, 4 dormant stock_quant bots
+    # funded + re-enabled). Fund invariant preserved. Guard-gated.
+    try:
+        from app.db.migrations.m071_stock_sleeve_rebalance import run as _run_m071
+        with engine.begin() as _m071_conn:
+            _m071_result = _run_m071(_m071_conn)
+        logger.warning("[startup] m071 status: %s", _m071_result)
+    except Exception as _m071_exc:
+        logger.error("[startup] m071_stock_sleeve_rebalance FAILED: %s",
+                     _m071_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
