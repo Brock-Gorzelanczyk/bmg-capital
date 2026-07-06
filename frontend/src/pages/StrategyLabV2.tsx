@@ -235,13 +235,25 @@ function SleeveCard({ s, seed }: { s: SleeveVals; seed: number }) {
   const dotColor = live ? GREEN : "#fbbf24";
 
   return (
-    <div
-      className="relative rounded-[9px] overflow-hidden"
+    <Link
+      to={`/strategy/portfolio/${s.id}`}
+      className="relative rounded-[9px] overflow-hidden block group"
       style={{
         border: `1px solid ${DIM_GREEN}`,
         borderTop: `2px solid ${accent}`,
         background: "#0a100a",
         padding: "16px 17px",
+        cursor: "pointer",
+        textDecoration: "none",
+        transition: "border-color .18s ease, transform .18s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = accent;
+        e.currentTarget.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = DIM_GREEN;
+        e.currentTarget.style.transform = "translateY(0)";
       }}
     >
       <div className="flex items-center justify-between">
@@ -379,7 +391,7 @@ function SleeveCard({ s, seed }: { s: SleeveVals; seed: number }) {
           </span>
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -463,8 +475,9 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
             l.todayCents > 0 ? GREEN : l.todayCents < 0 ? RED : MUTED;
           const spark = sparkPoints(l.rank * 17 + 3, l.return30d >= 0);
           return (
-            <div
+            <Link
               key={l.profile + i}
+              to={`/strategy/bot/${l.profile}`}
               className="grid items-center"
               style={{
                 gridTemplateColumns: "44px 1fr 100px 100px 100px 80px",
@@ -474,6 +487,20 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
                 borderLeft: featured
                   ? `2px solid ${GREEN}`
                   : "2px solid transparent",
+                textDecoration: "none",
+                color: "inherit",
+                cursor: "pointer",
+                transition: "background .15s ease",
+              }}
+              onMouseEnter={(e) => {
+                if (!featured) {
+                  e.currentTarget.style.background = "rgba(74,222,128,0.04)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!featured) {
+                  e.currentTarget.style.background = "transparent";
+                }
               }}
             >
               <span
@@ -562,7 +589,7 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
               >
                 {fmtPct(l.return30d / 100, 2)}
               </span>
-            </div>
+            </Link>
           );
         })}
       </div>
