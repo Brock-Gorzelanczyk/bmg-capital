@@ -695,6 +695,18 @@ async def lifespan(app: FastAPI):
     except Exception as _m064_exc:
         logger.error("[startup] m064_strategy_farm_phase1 FAILED: %s", _m064_exc, exc_info=True)
 
+    # m065: Portfolio-Rank Bot Framework Phase 1 — tables + dummy bot.
+    # Feature flag BMG_PORTFOLIO_RANK_BOTS_ENABLED gates the rebalance
+    # endpoint. Read endpoints work regardless so the leaderboard can
+    # render state.
+    try:
+        from app.db.migrations.m065_portfolio_rank_framework import run as _run_m065
+        with engine.begin() as _m065_conn:
+            _m065_result = _run_m065(_m065_conn)
+        logger.warning("[startup] m065 status: %s", _m065_result)
+    except Exception as _m065_exc:
+        logger.error("[startup] m065_portfolio_rank_framework FAILED: %s", _m065_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
@@ -1210,6 +1222,8 @@ from app.routers.cash_floor import router as cash_floor_router
 app.include_router(cash_floor_router)
 from app.routers.farm import router as farm_router
 app.include_router(farm_router)
+from app.routers.portfolio_rank import router as portfolio_rank_router
+app.include_router(portfolio_rank_router)
 from app.routers.clean_slate import router as clean_slate_router
 app.include_router(clean_slate_router)
 app.include_router(admin_bots_router)
