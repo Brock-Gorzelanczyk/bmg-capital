@@ -1789,7 +1789,15 @@ def _execute_options_signal(
     # calibrated against. Bounded downside per bad signal still ~$1,250.
     # Combined with position_cap=15 the sleeve's total exposure ceiling
     # is ~$18,750 = 75% of allocation.
-    OPTIONS_MAX_NOTIONAL_PCT = 0.05
+    #
+    # 2026-07-06 later: Brock target is ~20 trades/day between both options
+    # bots. 5% × $25k = $1,250 was still too tight for many options
+    # premiums (single-name premiums often $10-15 × 100 = $1,000-1,500).
+    # Bump to 8% → $2,000 per trade at $25k allocation. Sleeve total
+    # exposure ceiling becomes $30k = 120% of allocation. Position_cap=15
+    # remains the hard concurrency governor; in practice deployment
+    # rarely hits 100% simultaneously.
+    OPTIONS_MAX_NOTIONAL_PCT = 0.08
     notional_cap = capital_usd * OPTIONS_MAX_NOTIONAL_PCT
     if position_dollars > notional_cap:
         logger.info(

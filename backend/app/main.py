@@ -744,6 +744,19 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m068_disable_orphan_stock_quant FAILED: %s",
                      _m068_exc, exc_info=True)
 
+    # m069: seed 3 SSRN-cited stock factor bots at $0 capital.
+    # Vault Tier A/B additions: low_volatility, value_hml,
+    # net_stock_issuance. All ship enabled=false and $0 capital so a
+    # later migration can fund from a specific source.
+    try:
+        from app.db.migrations.m069_ssrn_stock_factors_batch import run as _run_m069
+        with engine.begin() as _m069_conn:
+            _m069_result = _run_m069(_m069_conn)
+        logger.warning("[startup] m069 status: %s", _m069_result)
+    except Exception as _m069_exc:
+        logger.error("[startup] m069_ssrn_stock_factors_batch FAILED: %s",
+                     _m069_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

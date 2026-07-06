@@ -39,11 +39,30 @@ def _novy_marx_gp_a(symbols: list[str], db: Session, params: dict) -> dict[str, 
     return compute(symbols, db, params)
 
 
+def _low_volatility(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .low_volatility import compute
+    return compute(symbols, db, params)
+
+
+def _value_hml(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .value_hml import compute
+    return compute(symbols, db, params)
+
+
+def _net_stock_issuance(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .net_stock_issuance import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
     "return_lookback": _return_lookback,
     "novy_marx_gp_a": _novy_marx_gp_a,
+    # 2026-07-06 SSRN batch: 3 vault Tier A/B factors. All yfinance-backed.
+    "low_volatility": _low_volatility,
+    "value_hml": _value_hml,
+    "net_stock_issuance": _net_stock_issuance,
 }
 
 
