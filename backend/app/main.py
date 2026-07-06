@@ -781,6 +781,19 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m071_stock_sleeve_rebalance FAILED: %s",
                      _m071_exc, exc_info=True)
 
+    # m072: seed 2 fleet-gap-filler portfolio-rank bots at $0 capital.
+    # Fills trend-following gap (tsm_12m over 30 liquid ETFs) and
+    # idiosyncratic-vol gap (idio_volatility, market-residual std over
+    # S&P 500). Both dormant until funded via follow-up migration.
+    try:
+        from app.db.migrations.m072_fleet_gap_fillers import run as _run_m072
+        with engine.begin() as _m072_conn:
+            _m072_result = _run_m072(_m072_conn)
+        logger.warning("[startup] m072 status: %s", _m072_result)
+    except Exception as _m072_exc:
+        logger.error("[startup] m072_fleet_gap_fillers FAILED: %s",
+                     _m072_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

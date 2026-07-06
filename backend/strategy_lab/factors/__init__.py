@@ -54,6 +54,16 @@ def _net_stock_issuance(symbols: list[str], db: Session, params: dict) -> dict[s
     return compute(symbols, db, params)
 
 
+def _tsm_12m(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .tsm_12m import compute
+    return compute(symbols, db, params)
+
+
+def _idio_volatility(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .idio_volatility import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
@@ -63,6 +73,11 @@ _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "low_volatility": _low_volatility,
     "value_hml": _value_hml,
     "net_stock_issuance": _net_stock_issuance,
+    # 2026-07-06 fleet gap fillers:
+    #   tsm_12m: time-series momentum on ETFs — trend-following gap
+    #   idio_volatility: distinct from low_volatility, market-residual vol
+    "tsm_12m": _tsm_12m,
+    "idio_volatility": _idio_volatility,
 }
 
 
