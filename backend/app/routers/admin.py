@@ -4955,6 +4955,12 @@ def audit13(
         "crypto_quant_universe_top6", "crypto_quant_10m",
         "crypto_quant_defi_l2", "crypto_quant_aggressive",
         "crypto_quant_alt_focus", "crypto_quant_15m",
+        # 2026-07-06: added the two options bots because Patrick's sentinel
+        # flagged both as silent for 2.5+ days despite being properly funded
+        # ($25K each after m067) and enabled at both the allocation and
+        # profile level. Their inclusion here surfaces whether the strategy
+        # emitted any raw signals + how many were rejected + why.
+        "options_income", "options_directional",
     ]
     for bot_name in watch_bots:
         row = db.execute(text(

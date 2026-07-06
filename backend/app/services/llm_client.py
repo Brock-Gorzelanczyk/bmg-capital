@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -23,7 +23,132 @@ _PRICING = {
     "claude-sonnet-4-6":         (3.0, 15.0),
 }
 
-# Module-scope debounce for the relay-down alert
+# ── Relay resilience state (2026-07-06) ───────────────────────────────────────
+# Tracks last-known status so /api/health can surface relay status without
+# actively probing, and so the client can trip a circuit breaker after a
+# short burst of failures instead of spending 3-5 seconds per call retrying
+# a dead relay.
+#
+# State fields:
+#   last_success_at:        datetime of the most recent 200 from /infer
+#   consecutive_failures:   count since the last success
+#   circuit_open_until:     datetime beyond which calls short-circuit
+#   failure_history:        rolling window of failure timestamps for the
+#                           "3 failures in 5 min" circuit trip rule
+#   last_alert_by_type:     debounce map keyed by RELAY_CONNECT_ERROR /
+#                           RELAY_TIMEOUT / RELAY_5XX to prevent
+#                           duplicate ops alerts within 15 min
+_RELAY_STATE: dict = {
+    "last_success_at": None,
+    "consecutive_failures": 0,
+    "circuit_open_until": None,
+    "failure_history": [],
+    "last_alert_by_type": {},
+    "last_error_type": None,
+    "last_error_message": None,
+}
+
+# Circuit breaker parameters — matches Brock's spec.
+_CIRCUIT_TRIP_FAILURES = 3         # trip after this many failures
+_CIRCUIT_TRIP_WINDOW_SEC = 300     # ... within 5 min
+_CIRCUIT_OPEN_DURATION_SEC = 60    # short-circuit for this long
+_ALERT_DEBOUNCE_SEC = 900          # 15 min per error type
+
+
+def _classify_relay_error(exc: Exception) -> str:
+    """Return a stable error-type string for alert dedup + health surfacing."""
+    import httpx as _hx
+    if isinstance(exc, _hx.ConnectError):
+        return "RELAY_CONNECT_ERROR"
+    if isinstance(exc, _hx.TimeoutException):
+        return "RELAY_TIMEOUT"
+    msg = str(exc)
+    # 5xx bucket. _post_to_relay wraps 5xx into a RuntimeError with the
+    # status code in the message, so we string-match here.
+    for code in ("500", "502", "503", "504"):
+        if f"relay {code}" in msg or f"relay returned {code}" in msg:
+            return "RELAY_5XX"
+    # Terminal "unreachable after 3 attempts" wrapper. Best-effort extract of
+    # the wrapped exception class name from the message.
+    if "unreachable after 3 attempts" in msg:
+        for known in ("ConnectError", "ReadTimeout", "ConnectTimeout"):
+            if known in msg:
+                if known == "ConnectError":
+                    return "RELAY_CONNECT_ERROR"
+                return "RELAY_TIMEOUT"
+    return "RELAY_UNKNOWN"
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _record_relay_success() -> None:
+    _RELAY_STATE["last_success_at"] = _now()
+    _RELAY_STATE["consecutive_failures"] = 0
+    _RELAY_STATE["circuit_open_until"] = None
+    _RELAY_STATE["failure_history"] = []
+    _RELAY_STATE["last_error_type"] = None
+    _RELAY_STATE["last_error_message"] = None
+
+
+def _record_relay_failure(exc: Exception) -> str:
+    """Update state after a failure. Returns the classified error type."""
+    err_type = _classify_relay_error(exc)
+    now = _now()
+    _RELAY_STATE["consecutive_failures"] += 1
+    _RELAY_STATE["last_error_type"] = err_type
+    _RELAY_STATE["last_error_message"] = str(exc)[:400]
+    # Rolling 5-min failure history — trip the circuit if it fills up.
+    history: list = _RELAY_STATE["failure_history"]
+    history.append(now)
+    cutoff = now - timedelta(seconds=_CIRCUIT_TRIP_WINDOW_SEC)
+    _RELAY_STATE["failure_history"] = [t for t in history if t >= cutoff]
+    if len(_RELAY_STATE["failure_history"]) >= _CIRCUIT_TRIP_FAILURES:
+        _RELAY_STATE["circuit_open_until"] = now + timedelta(seconds=_CIRCUIT_OPEN_DURATION_SEC)
+        logger.warning(
+            "[llm_client] circuit breaker OPEN for %ds after %d failures in %ds "
+            "(last error: %s)",
+            _CIRCUIT_OPEN_DURATION_SEC, len(_RELAY_STATE["failure_history"]),
+            _CIRCUIT_TRIP_WINDOW_SEC, err_type,
+        )
+    return err_type
+
+
+def _circuit_open() -> bool:
+    open_until = _RELAY_STATE["circuit_open_until"]
+    if open_until is None:
+        return False
+    if _now() >= open_until:
+        # Cooldown elapsed. Half-open: reset circuit but keep failure count so
+        # a single success closes it cleanly and a fresh failure re-trips.
+        _RELAY_STATE["circuit_open_until"] = None
+        return False
+    return True
+
+
+def get_relay_state() -> dict:
+    """Return a serializable snapshot for /api/health."""
+    open_until = _RELAY_STATE["circuit_open_until"]
+    last_success = _RELAY_STATE["last_success_at"]
+    return {
+        "status": "circuit_open" if open_until and _now() < open_until
+                  else "healthy" if _RELAY_STATE["consecutive_failures"] == 0 and last_success
+                  else "unknown" if last_success is None and _RELAY_STATE["consecutive_failures"] == 0
+                  else "degraded",
+        "last_success_at": last_success.isoformat() if last_success else None,
+        "consecutive_failures": _RELAY_STATE["consecutive_failures"],
+        "circuit_open": open_until is not None and _now() < open_until,
+        "circuit_open_until": open_until.isoformat() if open_until else None,
+        "last_error_type": _RELAY_STATE["last_error_type"],
+        "last_error_message": _RELAY_STATE["last_error_message"],
+        "failures_in_window": len(_RELAY_STATE["failure_history"]),
+    }
+
+
+# Legacy single-key debounce retained so existing callers of
+# _emit_relay_down_alert do not crash. New alert path uses
+# _emit_typed_relay_alert.
 _LAST_RELAY_DOWN_ALERT_TS = 0.0
 
 
@@ -49,9 +174,22 @@ def call_llm(
         db = SessionLocal()
         owns_db = True
     try:
+        # Circuit breaker: after 3 failures within 5 min, short-circuit new
+        # calls for 60 seconds. Avoids burning 3-5s per attempt on a dead
+        # relay while ops recovers.
+        if _circuit_open():
+            open_until = _RELAY_STATE["circuit_open_until"]
+            secs_left = int((open_until - _now()).total_seconds()) if open_until else 0
+            err = RuntimeError(
+                f"relay circuit_open — short-circuiting for {secs_left}s "
+                f"(last error: {_RELAY_STATE['last_error_type']})"
+            )
+            raise err
+
         t0 = time.monotonic()
         try:
             text_out = _post_to_relay(model, prompt, system_prompt, max_tokens, agent_name)
+            _record_relay_success()
             duration_ms = int((time.monotonic() - t0) * 1000)
             _log_llm_call(agent_name=agent_name, model=model,
                           prompt_chars=len(system_prompt) + len(prompt),
@@ -59,10 +197,11 @@ def call_llm(
                           duration_ms=duration_ms, db=db)
             return text_out
         except Exception as relay_exc:
+            err_type = _record_relay_failure(relay_exc)
             if os.getenv("FALLBACK_TO_API", "false").strip().lower() != "true":
-                _emit_relay_down_alert(relay_exc)
+                _emit_typed_relay_alert(err_type, relay_exc)
                 raise RuntimeError(
-                    f"relay unreachable and FALLBACK_TO_API=false: {relay_exc}"
+                    f"relay unreachable and FALLBACK_TO_API=false ({err_type}): {relay_exc}"
                 ) from relay_exc
             _check_fallback_budget(db)  # raises RuntimeError if over cap
             text_out = _fallback_to_api(model, prompt, system_prompt, max_tokens)
@@ -277,21 +416,63 @@ def _check_fallback_budget(db) -> None:
 
 
 def _emit_relay_down_alert(exc: Exception) -> None:
-    global _LAST_RELAY_DOWN_ALERT_TS
-    now = time.monotonic()
-    if now - _LAST_RELAY_DOWN_ALERT_TS < 300:  # 5 min debounce
+    """Legacy entry point. Delegates to the typed alert so callers still work."""
+    _emit_typed_relay_alert(_classify_relay_error(exc), exc)
+
+
+def _emit_typed_relay_alert(err_type: str, exc: Exception) -> None:
+    """Post one ops alert per error type per 15-min window.
+
+    Prevents the "100 duplicate CRITs" pile-up when the Mac relay is dead:
+    first failure alerts, subsequent failures within 15 min stay silent,
+    a different error type still alerts once (so a Connect->5xx transition
+    surfaces).
+    """
+    now = _now()
+    last_alerts = _RELAY_STATE["last_alert_by_type"]
+    last = last_alerts.get(err_type)
+    if last and (now - last).total_seconds() < _ALERT_DEBOUNCE_SEC:
         return
-    _LAST_RELAY_DOWN_ALERT_TS = now
+    last_alerts[err_type] = now
+
+    # Human-readable recovery hint keyed by error type.
+    recovery_hint = {
+        "RELAY_CONNECT_ERROR":
+            "DNS resolution or TCP connect failed. Mac relay is likely "
+            "asleep, the tunnel (ngrok/cloudflared) is down, or RELAY_URL "
+            "points to a stale hostname. Wake the Mac, restart the tunnel, "
+            "verify `nslookup <relay-host>` from a shell.",
+        "RELAY_TIMEOUT":
+            "Relay accepted the connection but did not respond within the "
+            "client timeout. Mac is up but the relay process is stuck or "
+            "overloaded. Check `ps aux | grep relay` on the Mac.",
+        "RELAY_5XX":
+            "Relay returned a 5xx status. The relay process is running "
+            "but errored on this request. Check the relay's own logs "
+            "for the underlying exception.",
+        "RELAY_UNKNOWN":
+            "Unclassified relay error. Read the exception text for context.",
+    }.get(err_type, "See exception for details.")
+
     try:
         from app.services.discord import send_ops_alert
         send_ops_alert(
             severity="critical",
-            title="LLM relay unreachable + fallback disabled",
-            message=f"call_llm() raised RuntimeError. Exc: {exc}",
+            title=f"[RELAY-DOWN] {err_type} + fallback disabled",
+            message=(
+                f"call_llm() raised {err_type}.\n"
+                f"Exception: {str(exc)[:400]}\n\n"
+                f"Recovery: {recovery_hint}\n\n"
+                f"Consecutive failures: {_RELAY_STATE['consecutive_failures']}. "
+                f"Circuit breaker: "
+                f"{'OPEN' if _circuit_open() else 'CLOSED'}. "
+                f"Next alert for {err_type}: in {_ALERT_DEBOUNCE_SEC // 60} min if the "
+                f"outage persists."
+            ),
             source="llm_client",
         )
     except Exception:
-        logger.warning("[llm_client] could not emit relay-down alert", exc_info=True)
+        logger.warning("[llm_client] could not emit typed relay-down alert", exc_info=True)
 
 
 def _emit_fallback_active_alert(model: str, prompt_len: int) -> None:

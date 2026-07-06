@@ -62,7 +62,11 @@ cooldown_minutes: 5            # allow rapid re-entry (per symbol+side)
 # a SELL at t=30s (almost always OHLC noise on 1m bars, not a real
 # reversal). Bounds signals at (5 symbols) × (60/1) = 300/hr ceiling but
 # in practice pushes emitted rate under 30/hr.
-min_symbol_gap_seconds: 60
+# 2026-07-06: bumped 60 → 120 after live measurement showed 944/day at
+# 60s (only 18% reduction from 1,146). Target is <500/day. 120s gives
+# a 2× per-symbol cool-off so a legitimate reversal that survives 2 min
+# of contrary tape still fires; noise flips within 2 min get dropped.
+min_symbol_gap_seconds: 120
 
 risk_overlay:
   daily_loss_limit_pct: 2.0

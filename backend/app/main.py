@@ -1299,8 +1299,35 @@ app.include_router(trades_journal_router)
 @app.get("/health", tags=["health"])
 @app.get("/api/health", tags=["health"])
 async def health():
-    """Simple liveness check."""
-    return {"status": "ok"}
+    """Liveness + LLM relay state snapshot.
+
+    2026-07-06: extended with llm_relay derived from state in llm_client.py
+    (updated on every call_llm invocation). Passive read — no active probe
+    so /health stays fast for Railway ingress checks. If nothing has
+    called the relay recently, status is "unknown" rather than false
+    healthy.
+
+    Never raises; always returns 200 so Railway keeps routing traffic.
+    Monitoring tools should key off llm_relay.status.
+    """
+    import os as _os
+    llm_relay: dict = {
+        "status": "unknown",
+        "relay_url_configured": False,
+        "fallback_to_api_enabled": False,
+    }
+    try:
+        llm_relay["relay_url_configured"] = bool(
+            _os.getenv("RELAY_URL") and _os.getenv("RELAY_AUTH_TOKEN")
+        )
+        llm_relay["fallback_to_api_enabled"] = (
+            _os.getenv("FALLBACK_TO_API", "false").strip().lower() == "true"
+        )
+        from app.services.llm_client import get_relay_state
+        llm_relay.update(get_relay_state())
+    except Exception as exc:
+        llm_relay["check_error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+    return {"status": "ok", "llm_relay": llm_relay}
 
 
 # Serve the Vite frontend build (production only — skipped if dist/ doesn't exist)
