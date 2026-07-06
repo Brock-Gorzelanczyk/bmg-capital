@@ -1169,17 +1169,17 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             pr_name = pr[1] or f"portfolio_rank_{pr_id}"
             pr_starting = int(pr[2] or 0)
             pr_enabled = bool(pr[3])
-            # Sum current mark-to-market on holdings, best effort.
-            hv_row = db.execute(text(
-                "SELECT COALESCE(SUM("
-                "  COALESCE(current_price_cents, entry_price_cents, 0) * qty_or_weight"
-                "), 0) FROM ("
-                "  SELECT current_price_cents, entry_price_cents, "
-                "         actual_weight AS qty_or_weight "
-                "  FROM portfolio_rank_holdings WHERE bot_id = :bid"
-                ") x"
+            # 2026-07-06 Bug 4 fix: previous formula computed
+            # SUM(current_price_cents * actual_weight). actual_weight is a
+            # fraction in [0, 1] (1/49 for a 49-name basket), not a share
+            # count. Result: entry_price ~15000 cents * 0.02 * 49 rows =
+            # ~$150. Real deployed for a fully-invested long-only basket
+            # equals the starting capital while any holdings exist.
+            hc_row = db.execute(text(
+                "SELECT COUNT(*) FROM portfolio_rank_holdings WHERE bot_id = :bid"
             ), {"bid": pr_id}).fetchone()
-            hv_cents = int(hv_row[0] or 0) if hv_row else 0
+            holdings_count = int(hc_row[0] or 0) if hc_row else 0
+            hv_cents = pr_starting if holdings_count > 0 else 0
             pv_cents = pr_starting  # dry-run: PV tracks starting until real MTM
             display = DISPLAY_NAMES.get(pr_name) or pr_name.replace("_", " ").title()
             leaderboard.append({

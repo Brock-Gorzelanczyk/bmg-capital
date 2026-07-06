@@ -504,25 +504,58 @@ def get_dashboard_v2(
             "starting_capital_cents": int(e.get("starting_capital_cents") or starting_by_profile.get(prof_name, 0)),
         })
     # Append orphan-allocation bots not represented in canonical's leaderboard.
+    # 2026-07-06: previously we skipped allocs whose bot_snap was None (silent
+    # drop when compute_bot_snapshot errored for any reason — DB timeout,
+    # missing profile, phantom column). This dropped bots randomly from the
+    # /strategy leaderboard. Now we fall back to a starting-capital stub so
+    # every funded allocation is always visible.
     for alloc in allocs:
         prof = alloc_to_profile.get(alloc.id)
         if not prof or prof.name in profiles_in_lb:
             continue
         bot_snap = bot_snapshots_by_alloc.get(alloc.id)
-        if not bot_snap:
-            continue
         profiles_in_lb.add(prof.name)
-        leaderboard.append({
-            "rank": 0,
-            "profile": prof.name,
-            "name": _DISPLAY_NAMES.get(prof.name, prof.name.replace("_", " ").title()),
-            "return_30d_pct": float(bot_snap.return_30d_pct or 0.0),
-            "today_pnl_cents": int(bot_snap.today_pnl_cents or 0),
-            "watchlist_count": profile_wl_count.get(prof.id, 0),
-            "portfolio_value_cents": int(bot_snap.portfolio_value_cents or 0),
-            "deployed_cents": int(getattr(bot_snap, "deployed_cents", 0) or 0),
-            "starting_capital_cents": int(bot_snap.starting_capital_cents or 0),
-        })
+        if bot_snap:
+            leaderboard.append({
+                "rank": 0,
+                "profile": prof.name,
+                "name": _DISPLAY_NAMES.get(prof.name, prof.name.replace("_", " ").title()),
+                "return_30d_pct": float(bot_snap.return_30d_pct or 0.0),
+                "today_pnl_cents": int(bot_snap.today_pnl_cents or 0),
+                "watchlist_count": profile_wl_count.get(prof.id, 0),
+                "portfolio_value_cents": int(bot_snap.portfolio_value_cents or 0),
+                "deployed_cents": int(getattr(bot_snap, "deployed_cents", 0) or 0),
+                "starting_capital_cents": int(bot_snap.starting_capital_cents or 0),
+            })
+        else:
+            # Stub row so the bot still renders on the leaderboard.
+            starting = int(alloc.starting_capital_cents or 0)
+            leaderboard.append({
+                "rank": 0,
+                "profile": prof.name,
+                "name": _DISPLAY_NAMES.get(prof.name, prof.name.replace("_", " ").title()),
+                "return_30d_pct": 0.0,
+                "today_pnl_cents": 0,
+                "watchlist_count": profile_wl_count.get(prof.id, 0),
+                "portfolio_value_cents": starting,
+                "deployed_cents": 0,
+                "starting_capital_cents": starting,
+            })
+
+    # 2026-07-06 Bug 3 fix: cash_floor slipped back onto the leaderboard via
+    # the orphan append path. canonical.py filters it correctly for entries
+    # from canonical.leaderboard, but does not touch what dashboard.py adds
+    # here. Re-apply the same filter now that both sources have contributed.
+    leaderboard = [
+        e for e in leaderboard
+        if e.get("profile") != "cash_floor"
+        and (
+            e.get("bot_type") == "portfolio_rank"
+            or (e.get("starting_capital_cents", 0) > 0)
+            or (e.get("today_pnl_cents", 0) != 0)
+        )
+    ]
+
     # Re-rank by return_30d_pct desc so newly appended orphans get proper ranks.
     leaderboard.sort(key=lambda x: x["return_30d_pct"], reverse=True)
     for i, e in enumerate(leaderboard, start=1):
