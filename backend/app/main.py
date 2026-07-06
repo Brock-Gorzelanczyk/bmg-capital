@@ -731,6 +731,19 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m067_portfolio_rank_phase2_funding FAILED: %s",
                      _m067_exc, exc_info=True)
 
+    # m068: disable the 4 orphan stock_quant bot allocations (Bug 3 Option B).
+    # They sit at starting_capital=0 AND enabled=true — visible garbage in
+    # Patrick's fleet audit. Migration sets enabled=false. Preserves history.
+    # Fund invariant asserted post-mutation.
+    try:
+        from app.db.migrations.m068_disable_orphan_stock_quant import run as _run_m068
+        with engine.begin() as _m068_conn:
+            _m068_result = _run_m068(_m068_conn)
+        logger.warning("[startup] m068 status: %s", _m068_result)
+    except Exception as _m068_exc:
+        logger.error("[startup] m068_disable_orphan_stock_quant FAILED: %s",
+                     _m068_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
@@ -894,6 +907,12 @@ async def lifespan(app: FastAPI):
     except Exception as _pr_sched_exc:
         logger.error("[startup] portfolio_rank scheduler FAILED (non-fatal): %s",
                      _pr_sched_exc, exc_info=True)
+    try:
+        from app.services.sp500_refresh import setup_sp500_scheduler
+        setup_sp500_scheduler(scheduler)
+    except Exception as _sp_sched_exc:
+        logger.error("[startup] sp500_refresh scheduler FAILED (non-fatal): %s",
+                     _sp_sched_exc, exc_info=True)
     scheduler.start()
 
     # Kick off strategy scan in background — won't block server startup

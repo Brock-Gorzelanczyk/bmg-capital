@@ -5090,9 +5090,18 @@ def auth_debug(request: Request) -> dict:
 
 
 @router.get("/hedge-fund-audit-diagnostic")
-def hedge_fund_audit(db: Session = Depends(get_db)) -> dict:
+def hedge_fund_audit(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+) -> dict:
     """Comprehensive audit: per-bot P&L, hit rate, hold time, exposure,
-    correlation, deployment ratio, symbol concentration."""
+    correlation, deployment ratio, symbol concentration.
+
+    2026-07-06: added require_admin (was unauth). Under the previous state,
+    if BMG_DIAGNOSTIC_PV_ENABLED=true was flipped on Railway (as it currently
+    is), anyone could hit the URL and pull the whole fund's realized losses,
+    per-bot P&L, and per-symbol exposure. Now admin-gated.
+    """
     import os as _os
     if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
         return {"error": "diagnostic disabled"}
@@ -5335,8 +5344,17 @@ def risk_console_noauth(user_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/user-allocations-diagnostic/{user_id}")
-def user_allocs(user_id: int, db: Session = Depends(get_db)) -> dict:
-    """Show per-bot allocation for a specific user."""
+def user_allocs(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+) -> dict:
+    """Show per-bot allocation for a specific user.
+
+    2026-07-06: added require_admin. Previously anyone with
+    BMG_DIAGNOSTIC_PV_ENABLED=true could iterate user_ids and pull
+    another user's allocation table.
+    """
     import os as _os
     if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
         return {"error": "diagnostic disabled"}
@@ -5361,8 +5379,15 @@ def user_allocs(user_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/all-users-portfolio-diagnostic")
-def all_users_portfolio(db: Session = Depends(get_db)) -> dict:
-    """Sum allocations + PV per user. Hunt cross-user data mismatch."""
+def all_users_portfolio(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+) -> dict:
+    """Sum allocations + PV per user. Hunt cross-user data mismatch.
+
+    2026-07-06: added require_admin. Was leaking every user's email +
+    fund allocation total under the diagnostic env flag.
+    """
     import os as _os
     if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
         return {"error": "diagnostic disabled"}

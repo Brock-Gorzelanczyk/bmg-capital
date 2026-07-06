@@ -33,9 +33,20 @@ def sp500_partial() -> list[str]:
 
 
 def _load_sp500() -> list[str]:
-    """Lazy import so the full 500-name file loads only when a real bot needs it."""
-    from .sp500 import sp500
-    return sp500()
+    """Lazy import; prefer the auto-refreshed dynamic file when present.
+
+    `sp500_dynamic.py` is written nightly at 02:15 America/Chicago by
+    `app.services.sp500_refresh.refresh_and_write()` from the iShares IVV
+    holdings CSV. Falls back to the hardcoded snapshot in `sp500.py`
+    when the dynamic file is missing or fails to import (fresh deploy,
+    first-boot before the cron has run, iShares outage).
+    """
+    try:
+        from .sp500_dynamic import sp500_dynamic  # type: ignore
+        return sp500_dynamic()
+    except Exception:
+        from .sp500 import sp500
+        return sp500()
 
 
 _REGISTRY: dict[str, Callable[[], list[str]]] = {

@@ -455,6 +455,25 @@ def get_portfolio_snapshot(
                 total_value += int(alloc.starting_capital_cents or 0)
 
         total_starting = sum(int(a.starting_capital_cents or 0) for a in all_allocs)
+
+        # 2026-07-06: portfolio_rank_bots hold capital outside bot_allocations
+        # after m067. If we do not add them here, the response reports
+        # $900K PV against the $1M invariant + logs a false divergence.
+        try:
+            _pr_starting_row = db.execute(text(
+                "SELECT COALESCE(SUM(starting_capital_cents), 0) FROM portfolio_rank_bots"
+            )).fetchone()
+            _pr_starting = int(_pr_starting_row[0] or 0) if _pr_starting_row else 0
+            _pr_pnl_row = db.execute(text(
+                "SELECT COALESCE(SUM(current_pnl_cents), 0) FROM portfolio_rank_holdings"
+            )).fetchone()
+            _pr_pnl = int(_pr_pnl_row[0] or 0) if _pr_pnl_row else 0
+            total_starting += _pr_starting
+            total_value += _pr_starting + _pr_pnl
+        except Exception:
+            # Pre-m065 environment has no portfolio_rank_bots table; skip.
+            pass
+
         total_alltime_pnl = total_value - total_starting
 
         # SHIP 3: all-time % = SUM(realized_cents from bot_daily_pnl) / SUM(inception_capital_cents)

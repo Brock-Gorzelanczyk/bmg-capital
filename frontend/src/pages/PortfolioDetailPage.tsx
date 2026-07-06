@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import PortfolioRankSleevePage from "./PortfolioRankSleevePage";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Clock, ArrowDownRight, ArrowUpRight } from "lucide-react";
@@ -614,6 +615,15 @@ function HeroCard({
 
 export default function PortfolioDetailPage() {
   const { assetClass } = useParams<{ assetClass: string }>();
+  // 2026-07-06: portfolio-rank sleeve early-return. StrategyPortfolio rows
+  // only cover the four asset_class buckets (stocks/crypto/options/quant),
+  // so /strategy/portfolio/portfolio_rank hit an empty portfolios.find
+  // and rendered "portfolio not found." PortfolioRankSleevePage owns that
+  // URL and pulls from portfolio_rank_bots instead. Placed before any
+  // hook so React does not warn about hook order mismatches.
+  if (assetClass === "portfolio_rank") {
+    return <PortfolioRankSleevePage />;
+  }
   const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
