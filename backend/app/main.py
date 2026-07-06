@@ -673,6 +673,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m062_exc:
         logger.error("[startup] m062_normalize_perk_to_spec FAILED: %s", _m062_exc, exc_info=True)
 
+    # m063: signal_conclave_verdicts table for the Agent Conclave feature.
+    # Table is created empty; the feature itself is gated by CONCLAVE_ENABLED
+    # env var (default false) so this ships as a no-op.
+    try:
+        from app.db.migrations.m063_signal_conclave_verdicts import run as _run_m063
+        with engine.begin() as _m063_conn:
+            _m063_result = _run_m063(_m063_conn)
+        logger.warning("[startup] m063 status: %s", _m063_result)
+    except Exception as _m063_exc:
+        logger.error("[startup] m063_signal_conclave_verdicts FAILED: %s", _m063_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

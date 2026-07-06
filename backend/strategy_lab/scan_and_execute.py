@@ -438,11 +438,26 @@ def scan_and_execute(
                         strategy=r["strategy"],
                         ts=datetime.now(timezone.utc),
                     )
+                    # Conclave gate — optional 4-agent LLM filter that runs
+                    # between signal creation and Discord promotion. Returns
+                    # None when the feature is off or this bot is not on the
+                    # allowlist, in which case log_signal falls back to the
+                    # unfiltered default. Never blocks bot_signals writes.
+                    try:
+                        from app.services.conclave import make_conclave_gate
+                        _conclave_gate = make_conclave_gate(profile_name)
+                    except Exception as _cexc:
+                        logger.warning(
+                            "[conclave] make_gate raised for %s (fail-open, no gate): %s",
+                            profile_name, _cexc,
+                        )
+                        _conclave_gate = None
                     signal_id = log_signal(
                         db, alloc.id, sig,
                         entry_price=_ep,
                         stop_price=_stop_info.get("stop_price"),
                         target_price=_stop_info.get("target_price"),
+                        discord_gate=_conclave_gate,
                     )
                     alloc_persisted += 1
                     signals_persisted += 1

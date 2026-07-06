@@ -187,10 +187,19 @@ def log_signal(
     target_price: Optional[float] = None,
     notional_usd: Optional[float] = None,
     skip_discord: bool = False,
+    discord_gate=None,
 ) -> Optional[int]:
     """Persist a Signal to bot_signals, then fire Discord embed in background.
 
     Returns the new row's id, or None if the insert failed.
+
+    Args:
+        discord_gate: Optional callable (signal_id, signal_dict) -> bool.
+            When provided, runs in the background thread before the
+            Discord post. If it returns False the Discord post is
+            skipped. Used by the Conclave feature to gate promotion on
+            an LLM verdict. Any exception in the gate is treated as
+            approve (fail-open) so a relay outage does not kill signals.
     """
     from app.db.models.bots import BotSignal, BotAllocation, BotProfile
 
@@ -329,9 +338,28 @@ def log_signal(
     # Suppress Discord post when discipline gates filtered the signal.
     # Row is still persisted so /admin/discipline-report can show the trace.
     if not skip_discord:
+        def _gated_post(sid: int, sd: dict, gate) -> None:
+            if gate is not None:
+                try:
+                    allowed = bool(gate(sid, sd))
+                except Exception as _gexc:
+                    logger.error(
+                        "[discord-gate] gate raised for signal %d — "
+                        "fail-open, promoting: %s", sid, _gexc,
+                    )
+                    allowed = True
+                if not allowed:
+                    logger.warning(
+                        "[discord-gate] signal %d held back by gate "
+                        "(bot=%s symbol=%s side=%s)",
+                        sid, sd.get("bot"), sd.get("symbol"), sd.get("side"),
+                    )
+                    return
+            _post_signal_to_discord(sid, sd)
+
         threading.Thread(
-            target=_post_signal_to_discord,
-            args=(row.id, signal_dict),
+            target=_gated_post,
+            args=(row.id, signal_dict, discord_gate),
             daemon=True,
         ).start()
 
