@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
@@ -4801,17 +4801,23 @@ def heartbeats_diagnostic(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/audit13-diagnostic")
-def audit13(db: Session = Depends(get_db)) -> dict:
-    """Data for the 13-item hedge fund audit."""
+def audit13(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+) -> dict:
+    """Data for the 13-item hedge fund audit. Admin only.
+
+    2026-07-05: added require_admin (was unauth). Previous version leaked
+    fund allocation + position data to anyone who could hit the URL while
+    BMG_DIAGNOSTIC_PV_ENABLED was true.
+    """
     import os as _os
     if _os.getenv("BMG_DIAGNOSTIC_PV_ENABLED", "").strip().lower() not in ("true","1","yes"):
         return {"error": "diagnostic disabled"}
     from datetime import datetime as _dt, timedelta as _td, timezone as _tz
-    from collections import defaultdict as _dd
     result: dict = {}
 
     # P1-5: bot count reconciliation
-    # Bots with a non-zero allocation for user_1 (fleet)
     active_allocs = db.execute(text(
         "SELECT p.name, p.asset_class, a.starting_capital_cents, a.enabled AS alloc_enabled, "
         "  p.enabled AS profile_enabled "
@@ -4836,47 +4842,112 @@ def audit13(db: Session = Depends(get_db)) -> dict:
         },
     }
 
-    # P1-7: stock_orb_breakout positions + trades
-    orb_positions = db.execute(text(
-        "SELECT p.id, p.symbol, p.qty, p.avg_cost_cents, p.opened_at, p.closed_at, "
-        "  p.exit_reason, p.quarantined_at "
-        "FROM bot_positions p "
-        "JOIN bot_allocations a ON a.id = p.allocation_id "
-        "JOIN bot_profiles bp ON bp.id = a.profile_id "
-        "WHERE bp.name = 'stock_orb_breakout' "
-        "ORDER BY p.opened_at DESC LIMIT 50"
-    )).fetchall()
-    orb_trades = db.execute(text(
-        "SELECT COUNT(*) FROM bot_trades t "
-        "JOIN bot_allocations a ON a.id = t.allocation_id "
-        "JOIN bot_profiles bp ON bp.id = a.profile_id "
-        "WHERE bp.name = 'stock_orb_breakout' AND t.quarantined_at IS NULL"
-    )).fetchone()[0]
-    orb_open_notional_cents = sum(
-        int(r[2] or 0) * int(r[3] or 0)  # qty * avg_cost_cents
-        for r in orb_positions if r[5] is None and r[7] is None
-    )
+    # P1-7: per-bot deployment reconciliation with ghost-position detection.
+    # A "ghost" position has NO matching opening bot_trade fill (buy for long,
+    # sell for short) after the position's opened_at. Ghost positions
+    # inflate the deployment number without corresponding capital outlay.
+    watch_deploy_bots = [
+        "stock_orb_breakout",
+        "crypto_quant_scalp_1m", "crypto_quant_meme_tier",
+        "crypto_quant_universe_top6", "crypto_quant_10m",
+        "crypto_quant_defi_l2", "crypto_quant_aggressive",
+        "crypto_quant_alt_focus", "crypto_quant_15m",
+    ]
+    deploy_report = {}
+    for bot_name in watch_deploy_bots:
+        alloc_row = db.execute(text(
+            "SELECT a.id, COALESCE(a.starting_capital_cents, 0) "
+            "FROM bot_allocations a "
+            "JOIN bot_profiles p ON p.id = a.profile_id "
+            "WHERE p.name = :bot AND a.user_id = 1"
+        ), {"bot": bot_name}).fetchone()
+        if not alloc_row:
+            deploy_report[bot_name] = {"error": "no allocation for user 1"}
+            continue
+        alloc_id = int(alloc_row[0])
+        starting_cents = int(alloc_row[1] or 0)
+
+        positions = db.execute(text(
+            "SELECT id, symbol, qty, avg_cost_cents, side, opened_at, option_type, "
+            "  closed_at, quarantined_at "
+            "FROM bot_positions "
+            "WHERE allocation_id = :aid "
+            "  AND closed_at IS NULL AND quarantined_at IS NULL "
+            "ORDER BY opened_at DESC"
+        ), {"aid": alloc_id}).fetchall()
+
+        pos_detail = []
+        deployed_cents = 0
+        ghost_count = 0
+        ghost_cents = 0
+        for p in positions:
+            qty = float(p[2] or 0)
+            avg_cost_c = float(p[3] or 0)
+            side = (p[4] or "long").lower()
+            opened_at = p[5]
+            option_type = p[6]
+            if option_type is not None:
+                notional_c = int(avg_cost_c * qty * 100)
+            else:
+                notional_c = int(avg_cost_c * qty)
+            deployed_cents += notional_c
+
+            # Ghost check: does a matching opening fill exist in bot_trades?
+            # Long open = buy fill; short open = sell fill; both in the window
+            # [opened_at - 30s, opened_at + 30s] on the same symbol.
+            open_side = "buy" if side in ("long", "buy") else "sell"
+            match = db.execute(text(
+                "SELECT COUNT(*) FROM bot_trades "
+                "WHERE allocation_id = :aid AND symbol = :sym AND side = :s "
+                "  AND ts BETWEEN datetime(:ts,'-30 seconds') AND datetime(:ts,'+30 seconds') "
+                "  AND quarantined_at IS NULL"
+            ), {
+                "aid": alloc_id, "sym": p[1], "s": open_side,
+                "ts": str(opened_at) if opened_at else None,
+            }).fetchone()
+            has_opening = bool(int(match[0] or 0)) if match else False
+            if not has_opening:
+                ghost_count += 1
+                ghost_cents += notional_c
+            pos_detail.append({
+                "position_id": int(p[0]),
+                "symbol": p[1],
+                "qty": qty,
+                "avg_cost_cents": int(avg_cost_c),
+                "side": side,
+                "opened_at": str(opened_at) if opened_at else None,
+                "notional_cents": notional_c,
+                "notional_usd": round(notional_c / 100.0, 2),
+                "has_opening_trade": has_opening,
+                "is_ghost": not has_opening,
+            })
+
+        cleaned_cents = deployed_cents - ghost_cents
+        deploy_report[bot_name] = {
+            "starting_capital_usd": round(starting_cents / 100.0, 2),
+            "open_positions": len(positions),
+            "raw_deployed_usd": round(deployed_cents / 100.0, 2),
+            "raw_deployed_pct": round((deployed_cents / starting_cents * 100), 2)
+                                 if starting_cents else None,
+            "ghost_positions": ghost_count,
+            "ghost_deployed_usd": round(ghost_cents / 100.0, 2),
+            "cleaned_deployed_usd": round(cleaned_cents / 100.0, 2),
+            "cleaned_deployed_pct": round((cleaned_cents / starting_cents * 100), 2)
+                                     if starting_cents else None,
+            "positions": pos_detail[:30],
+        }
     result["P1-7"] = {
-        "note": "stock_orb_breakout — positions + trade count. Deployment reads from open (non-closed, non-quarantined) position notionals.",
-        "open_positions": sum(1 for r in orb_positions if r[5] is None and r[7] is None),
-        "closed_positions": sum(1 for r in orb_positions if r[5] is not None),
-        "quarantined_positions": sum(1 for r in orb_positions if r[7] is not None),
-        "total_trades_ever": int(orb_trades),
-        "computed_deployed_cents": orb_open_notional_cents,
-        "computed_deployed_usd": orb_open_notional_cents / 100.0,
-        "sample_positions": [
-            {"id": r[0], "symbol": r[1], "qty": float(r[2] or 0),
-             "avg_cost_cents": int(r[3] or 0),
-             "opened_at": str(r[4]), "closed_at": str(r[5]) if r[5] else None,
-             "exit_reason": r[6], "quarantined_at": str(r[7]) if r[7] else None}
-            for r in orb_positions[:15]
-        ],
+        "note": "Per-bot open position table with ghost-position detection. "
+                "A ghost position has no matching opening trade fill within +/-30s of opened_at. "
+                "cleaned_deployed_usd excludes ghosts; that number should track starting_capital.",
+        "bots": deploy_report,
     }
 
-    # P2-10: per-bot rejection reason distribution from bot_signals in the last 24h.
-    # bot_signals has `reason` (JSON) and `side`. Signals that were persisted but did NOT
-    # produce a trade are the ones we want to explain. Match signal.id → trade.signal_id
-    # to know which were traded.
+    # P2-10: Signal rejection breakdown for the 8 crypto quant bots.
+    # 2026-07-05 fix: earlier version filtered on side='hold', missing the
+    # buy/sell signals that were emitted but not executed (the actual
+    # rejects). New version groups executed_at IS NULL signals by strategy
+    # + confidence bucket so we can see where they died.
     cut_24h = (_dt.now(_tz.utc) - _td(hours=24)).isoformat()
     per_bot_gate = {}
     watch_bots = [
@@ -4889,33 +4960,52 @@ def audit13(db: Session = Depends(get_db)) -> dict:
         row = db.execute(text(
             "SELECT COUNT(*) AS sigs, "
             "  COALESCE(SUM(CASE WHEN s.executed_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS traded, "
-            "  COALESCE(SUM(CASE WHEN s.side='hold' THEN 1 ELSE 0 END), 0) AS holds "
+            "  COALESCE(SUM(CASE WHEN s.side='hold' THEN 1 ELSE 0 END), 0) AS holds, "
+            "  COALESCE(SUM(CASE WHEN s.side IN ('buy','sell') AND s.executed_at IS NULL THEN 1 ELSE 0 END), 0) AS rejects "
             "FROM bot_signals s "
             "JOIN bot_allocations a ON a.id = s.allocation_id "
             "JOIN bot_profiles p ON p.id = a.profile_id "
             "WHERE p.name = :bot AND s.ts >= :cut"
         ), {"bot": bot_name, "cut": cut_24h}).fetchone()
-        # Sample of the 'reason' field for hold-type or unexecuted signals to see WHY
-        hold_reasons = db.execute(text(
-            "SELECT s.reason, COUNT(*) AS n FROM bot_signals s "
+        # Reject reasons: buy/sell signals that were NOT executed. Grouped by
+        # the signal.reason text so we can see the gate that killed them.
+        reject_reasons = db.execute(text(
+            "SELECT COALESCE(s.reason, '<null>'), COUNT(*) AS n FROM bot_signals s "
             "JOIN bot_allocations a ON a.id = s.allocation_id "
             "JOIN bot_profiles p ON p.id = a.profile_id "
-            "WHERE p.name = :bot AND s.ts >= :cut AND s.side='hold' "
-            "GROUP BY s.reason ORDER BY n DESC LIMIT 5"
+            "WHERE p.name = :bot AND s.ts >= :cut "
+            "  AND s.side IN ('buy','sell') AND s.executed_at IS NULL "
+            "GROUP BY s.reason ORDER BY n DESC LIMIT 8"
         ), {"bot": bot_name, "cut": cut_24h}).fetchall()
+        # Open position count for the bot — if this is at position_cap, no new
+        # buys can execute regardless of signal quality.
+        pos_row = db.execute(text(
+            "SELECT COUNT(*) FROM bot_positions bp "
+            "JOIN bot_allocations a ON a.id = bp.allocation_id "
+            "JOIN bot_profiles p ON p.id = a.profile_id "
+            "WHERE p.name = :bot AND bp.closed_at IS NULL AND bp.quarantined_at IS NULL"
+        ), {"bot": bot_name}).fetchone()
+        open_pos = int(pos_row[0] or 0) if pos_row else 0
         sigs = int(row[0] or 0)
         traded = int(row[1] or 0)
         holds = int(row[2] or 0)
+        rejects = int(row[3] or 0)
         per_bot_gate[bot_name] = {
             "signals_24h": sigs,
             "signals_executed": traded,
             "hold_type_signals": holds,
-            "not_traded_not_hold": sigs - traded - holds,
+            "buy_sell_rejected": rejects,
             "conv_pct": round((traded / sigs * 100), 2) if sigs else 0.0,
-            "top_hold_reasons": [{"reason": (r[0] or "")[:200], "count": int(r[1])}
-                                 for r in hold_reasons],
+            "open_positions_now": open_pos,
+            "top_reject_reasons": [{"reason": (r[0] or "")[:200], "count": int(r[1])}
+                                   for r in reject_reasons],
         }
-    result["P2-10"] = {"note": "Per-bot signal outcome 24h. hold rows carry the rejection reason.", "per_bot": per_bot_gate}
+    result["P2-10"] = {
+        "note": "Per-bot signal outcome 24h. buy_sell_rejected = signals that "
+                "asked for a fill but executed_at stayed NULL. top_reject_reasons "
+                "is the reason text on those unexecuted buy/sell signals.",
+        "per_bot": per_bot_gate,
+    }
 
     # P2-9: sample 20 scalp_1m signals in the last hour for the log excerpt
     scalp_cut = (_dt.now(_tz.utc) - _td(hours=1)).isoformat()
@@ -4939,6 +5029,58 @@ def audit13(db: Session = Depends(get_db)) -> dict:
     }
 
     return result
+
+
+@router.get("/auth-debug")
+def auth_debug(request: Request) -> dict:
+    """Public endpoint that echoes back the Bearer token status.
+
+    NOT AUTH GATED — the whole point is to debug why auth is failing.
+    Returns the raw Authorization header, whether it decodes, decoded
+    payload (or the JWT error), and whether the resolved user exists.
+    Use this when the browser gets 401 on /api/dashboard/v2 and you
+    need to know WHY.
+
+    Returns only token metadata (exp, sub, email). Does not leak the
+    token secret or hash.
+    """
+    from app.config import settings as _settings
+    from jose import jwt as _jwt, JWTError as _JWTError
+    hdr = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+    out: dict = {
+        "has_authorization_header": bool(hdr),
+        "header_scheme": hdr.split(" ", 1)[0] if hdr else None,
+        "token_len": len(hdr.split(" ", 1)[1]) if hdr.startswith("Bearer ") else 0,
+    }
+    if not hdr.startswith("Bearer "):
+        out["error"] = "no Bearer token in Authorization header"
+        return out
+    token = hdr.split(" ", 1)[1]
+    try:
+        payload = _jwt.decode(
+            token, _settings.jwt_secret, algorithms=[_settings.jwt_algorithm]
+        )
+        out["decoded_sub"] = payload.get("sub")
+        out["decoded_email"] = payload.get("email")
+        out["decoded_username"] = payload.get("username")
+        out["decoded_exp"] = payload.get("exp")
+        # Is exp in the past?
+        from datetime import datetime, timezone
+        if payload.get("exp"):
+            exp_dt = datetime.fromtimestamp(int(payload["exp"]), tz=timezone.utc)
+            now = datetime.now(timezone.utc)
+            out["exp_iso"] = exp_dt.isoformat()
+            out["now_iso"] = now.isoformat()
+            out["expired"] = exp_dt < now
+            out["seconds_until_exp"] = int((exp_dt - now).total_seconds())
+        out["decode_ok"] = True
+    except _JWTError as e:
+        out["decode_ok"] = False
+        out["jwt_error"] = str(e)
+    except Exception as e:
+        out["decode_ok"] = False
+        out["error"] = f"{type(e).__name__}: {e}"
+    return out
 
 
 @router.get("/hedge-fund-audit-diagnostic")

@@ -132,13 +132,14 @@ interface AllocSlice {
   color: string;
 }
 
-function CapitalAllocation({ alloc, hover, onHover, onLeave, deployedPct, deployedUsd }: {
+function CapitalAllocation({ alloc, hover, onHover, onLeave, deployedPct, deployedUsd, overexposed }: {
   alloc: AllocSlice[];
   hover: number;
   onHover: (i: number) => void;
   onLeave: () => void;
   deployedPct: number;
   deployedUsd: number;
+  overexposed: boolean;
 }) {
   const CIRC = 2 * Math.PI * 76;
   let acc = 0;
@@ -154,6 +155,7 @@ function CapitalAllocation({ alloc, hover, onHover, onLeave, deployedPct, deploy
     acc += len;
     return seg;
   });
+  const AMBER = "#f0b35a";
   const center = hover >= 0
     ? {
         label: alloc[hover].name.toUpperCase(),
@@ -162,10 +164,10 @@ function CapitalAllocation({ alloc, hover, onHover, onLeave, deployedPct, deploy
         color: alloc[hover].color,
       }
     : {
-        label: "DEPLOYED",
+        label: overexposed ? "OVEREXPOSED" : "DEPLOYED",
         pct: `${deployedPct.toFixed(1)}%`,
         amt: `${fmtUsd(deployedUsd)} live`,
-        color: GREEN,
+        color: overexposed ? AMBER : GREEN,
       };
 
   return (
@@ -682,6 +684,7 @@ export default function PortfolioV2() {
 
   const deployedUsd = risk?.deployment?.deployed_usd ?? 0;
   const deployedPct = risk?.deployment?.deployment_pct ?? 0;
+  const overexposed = Boolean(risk?.deployment?.deployment_overexposed);
 
   return (
     <div
@@ -822,6 +825,7 @@ export default function PortfolioV2() {
           onLeave={() => setHover(-1)}
           deployedPct={deployedPct}
           deployedUsd={deployedUsd}
+          overexposed={overexposed}
         />
 
         <ExposureBySymbol rows={expRows} />

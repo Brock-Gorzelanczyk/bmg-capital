@@ -290,7 +290,14 @@ def get_risk_console(
             "deployed_usd": round(deployed_usd, 2),
             "unrealized_usd": round(unrealized_usd, 2),
             "deployment_pct": round(deployment_pct, 2),
-            "cash_reserve_pct": round(100 - deployment_pct, 2),
+            # 2026-07-05 fix: real deployment can exceed 100% when either
+            # (a) ghost positions inflate the notional sum, or (b) a bot
+            # opened positions beyond its stated cap. LP-facing pie fills
+            # to the capped value; overexposed=True triggers the warning
+            # badge so the number isn't silently truthy.
+            "deployment_pct_capped": round(min(100.0, deployment_pct), 2),
+            "deployment_overexposed": deployment_pct > 100.0,
+            "cash_reserve_pct": round(max(0.0, 100 - deployment_pct), 2),
             "open_positions_count": len(positions),
             "top5_concentration_pct": round(top5_concentration_pct, 2),
             "sleeve_notional_usd": {k: round(v, 2) for k, v in sleeve_totals.items()},
