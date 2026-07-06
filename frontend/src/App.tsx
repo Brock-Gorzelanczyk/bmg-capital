@@ -273,15 +273,20 @@ function AdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Login-page gate — first-time visitors in a session see the cinematic intro
- *  before the login form renders. Uses sessionStorage so the flag clears when
- *  the browser tab closes — a fresh session replays the intro. The auth store
- *  also clears the flag on logout so the next /login visit replays. Refreshes
- *  WITHIN a session see the form directly (no replay). */
+/** Login-page gate — historically bounced first-time visitors to the
+ *  cinematic intro before showing the login form. 2026-07-06: auto-play
+ *  killed. It fired on every browser session (sessionStorage clears on
+ *  tab close) and the flag write/read mismatch (evidence showed
+ *  localStorage.bmg_intro_seen was set but the gate checks
+ *  sessionStorage) meant even setting a flag manually never suppressed
+ *  it. Brock spec Option A: no auto-play, ever. Users hit the PLAY
+ *  INTRO button in the topbar (TopBar.tsx:205) to opt in, which
+ *  navigates to /intro and preserves the pathname in state so the intro
+ *  returns them where they came from.
+ *  This wrapper is retained (rather than deleted at every call site)
+ *  in case a later spec wants a flag-based replay. It is currently a
+ *  pass-through. Do not add a redirect here without a paste-ready. */
 function IntroGate({ children }: { children: ReactNode }) {
-  let seen = false;
-  try { seen = !!window.sessionStorage.getItem("bmg_intro_seen"); } catch { /* SSR safety */ }
-  if (!seen) return <Navigate to="/intro" replace />;
   return <>{children}</>;
 }
 
