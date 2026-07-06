@@ -118,12 +118,13 @@ def run(conn) -> dict:
             )
 
     # ---- 1. Trim momentum_umd + quality ----
+    # Note: portfolio_rank_bots has no updated_at column (unlike bot_allocations).
     for name, _old, new in _TRIMS:
         conn.execute(text(
             "UPDATE portfolio_rank_bots "
-            "SET starting_capital_cents = :c, updated_at = :ts "
+            "SET starting_capital_cents = :c "
             "WHERE name = :n"
-        ), {"c": new, "ts": now_iso, "n": name})
+        ), {"c": new, "n": name})
         actions.append({"bot": name, "action": "trim", "new_cents": new})
         logger.warning("[m073] trimmed %s to %d cents", name, new)
 
@@ -131,18 +132,18 @@ def run(conn) -> dict:
     for name, _old, new in _FUNDS:
         conn.execute(text(
             "UPDATE portfolio_rank_bots "
-            "SET starting_capital_cents = :c, updated_at = :ts "
+            "SET starting_capital_cents = :c "
             "WHERE name = :n"
-        ), {"c": new, "ts": now_iso, "n": name})
+        ), {"c": new, "n": name})
         actions.append({"bot": name, "action": "fund", "new_cents": new})
         logger.warning("[m073] funded %s to %d cents", name, new)
 
     # ---- 3. Disable dummy_alpha_rank ----
     for name in _PR_DISABLE:
         res = conn.execute(text(
-            "UPDATE portfolio_rank_bots SET enabled = 0, updated_at = :ts "
+            "UPDATE portfolio_rank_bots SET enabled = 0 "
             "WHERE name = :n AND enabled = 1"
-        ), {"ts": now_iso, "n": name})
+        ), {"n": name})
         actions.append({"bot": name, "action": "disable_pr", "rowcount": res.rowcount})
         logger.warning("[m073] disabled portfolio_rank_bot %s (rows=%d)", name, res.rowcount)
 
