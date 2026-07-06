@@ -17,6 +17,8 @@ export interface RiskConsole {
     deployed_usd: number;
     unrealized_usd: number;
     deployment_pct: number;
+    deployment_pct_capped: number;
+    deployment_overexposed: boolean;
     cash_reserve_pct: number;
     open_positions_count: number;
     top5_concentration_pct: number;
