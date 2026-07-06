@@ -718,6 +718,19 @@ async def lifespan(app: FastAPI):
     except Exception as _m066_exc:
         logger.error("[startup] m066_portfolio_rank_phase2 FAILED: %s", _m066_exc, exc_info=True)
 
+    # m067: Portfolio-Rank Phase 2 funding (Brock's Option D — spread
+    # $100K trim across 3 existing bots). Fund invariant asserted pre and
+    # post; on invariant break, transaction rolls back and gate does NOT
+    # record so a clean retry is possible.
+    try:
+        from app.db.migrations.m067_portfolio_rank_phase2_funding import run as _run_m067
+        with engine.begin() as _m067_conn:
+            _m067_result = _run_m067(_m067_conn)
+        logger.warning("[startup] m067 status: %s", _m067_result)
+    except Exception as _m067_exc:
+        logger.error("[startup] m067_portfolio_rank_phase2_funding FAILED: %s",
+                     _m067_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
