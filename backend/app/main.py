@@ -757,6 +757,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m069_ssrn_stock_factors_batch FAILED: %s",
                      _m069_exc, exc_info=True)
 
+    # m070: enable the 3 SSRN factor bots so their crons will fire.
+    # Capital stays at $0 (dry-run only); a follow-up migration allocates
+    # real capital when Brock decides the source.
+    try:
+        from app.db.migrations.m070_enable_ssrn_bots import run as _run_m070
+        with engine.begin() as _m070_conn:
+            _m070_result = _run_m070(_m070_conn)
+        logger.warning("[startup] m070 status: %s", _m070_result)
+    except Exception as _m070_exc:
+        logger.error("[startup] m070_enable_ssrn_bots FAILED: %s",
+                     _m070_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
