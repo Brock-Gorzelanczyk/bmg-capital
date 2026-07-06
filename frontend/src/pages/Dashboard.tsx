@@ -52,10 +52,11 @@ const DAILY_TIPS: Record<number, string> = {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 const SLEEVE_META: Record<string, { name: string; emoji: string }> = {
-  stocks:  { name: "Stocks",  emoji: "📈" },
-  crypto:  { name: "Crypto",  emoji: "🪙" },
-  options: { name: "Options", emoji: "⚡" },
-  quant:   { name: "Quant",   emoji: "🧮" },
+  stocks:          { name: "Stocks",        emoji: "📈" },
+  crypto:          { name: "Crypto",        emoji: "🪙" },
+  options:         { name: "Options",       emoji: "⚡" },
+  quant:           { name: "Quant",         emoji: "🧮" },
+  portfolio_rank:  { name: "Portfolio Rank", emoji: "🎓" },
 };
 
 function SleeveCard({ id, sleeve }: { id: string; sleeve: DashV2Sleeve }) {
@@ -308,15 +309,16 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Row 4 – 4 Sleeve Cards (Stocks/Crypto/Options/Quant). Render every
-            canonical sleeve even if the API omits one — Dashboard was missing
-            Quant pre-2026-06-27 because this array was hardcoded to 3. */}
+        {/* Row 4 – 5 Sleeve Cards (Stocks/Crypto/Options/Quant/Portfolio Rank).
+            Render every canonical sleeve even if the API omits one — Dashboard
+            was missing Quant pre-2026-06-27 because this array was hardcoded
+            to 3. Portfolio Rank added 2026-07-06 for Phase 2 anomaly bots. */}
         <div className="mb-8">
           {data?.sleeves ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {(["stocks", "crypto", "options", "quant"] as const).map((key) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              {(["stocks", "crypto", "options", "quant", "portfolio_rank"] as const).map((key) => (
                 data.sleeves[key] ? (
-                  <SleeveCard key={key} id={key} sleeve={data.sleeves[key]} />
+                  <SleeveCard key={key} id={key} sleeve={data.sleeves[key] as DashV2Sleeve} />
                 ) : (
                   <div key={key} className="bg-t-bg1 border border-t-dim rounded-2xl p-6 opacity-60">
                     <div className="text-sm font-medium text-t-mid2 uppercase tracking-wide mb-2">{key}</div>
@@ -327,12 +329,13 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               {[
                 { emoji: "📈", name: "Stocks" },
                 { emoji: "🪙", name: "Crypto" },
                 { emoji: "⚡", name: "Options" },
                 { emoji: "∑",  name: "Quant"   },
+                { emoji: "🎓", name: "Portfolio Rank" },
               ].map((p) => (
                 <Link key={p.name} to="/strategy" className="bg-t-bg1 border border-t-dim rounded-2xl p-6 hover:border-t-mid card-hover transition-colors">
                   <div className="flex items-center gap-2 mb-4">

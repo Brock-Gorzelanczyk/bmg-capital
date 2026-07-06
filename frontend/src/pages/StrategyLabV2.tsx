@@ -27,6 +27,7 @@ const SLEEVE_ACCENTS: Record<string, string> = {
   crypto: "#f0b35a",
   options: "#c79bf0",
   quant: "#38bdf8",
+  portfolio_rank: "#10b981",
 };
 
 const SLEEVE_ICONS: Record<string, string> = {
@@ -34,6 +35,7 @@ const SLEEVE_ICONS: Record<string, string> = {
   crypto: "◍",
   options: "⚡",
   quant: "∑",
+  portfolio_rank: "🎓",
 };
 
 // Utilities
@@ -406,6 +408,7 @@ interface LBRow {
   deployedCents: number;
   return30d: number;
   assetClass: string;
+  botType?: string;
 }
 
 function BotLeaderboard({ rows }: { rows: LBRow[] }) {
@@ -535,6 +538,23 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
                 >
                   {l.name}
                 </span>
+                {l.botType === "portfolio_rank" && (
+                  <span
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 8,
+                      letterSpacing: "0.1em",
+                      color: "#10b981",
+                      background: "rgba(16,185,129,0.10)",
+                      border: "1px solid rgba(16,185,129,0.30)",
+                      padding: "1px 5px",
+                      borderRadius: 3,
+                      flexShrink: 0,
+                    }}
+                  >
+                    PR
+                  </span>
+                )}
                 <svg
                   viewBox="0 0 70 20"
                   preserveAspectRatio="none"
@@ -686,15 +706,24 @@ export default function StrategyLabV2() {
     retry: 1,
   });
 
-  // Sleeve values from dashboard/v2 response (fallback to zeros)
+  // Sleeve values from dashboard/v2 response (fallback to zeros).
+  // Portfolio Rank added 2026-07-06 for Phase 2 anomaly bots so /strategy
+  // shows the same 5 sleeves as /dashboard.
   const sleeves = useMemo<SleeveVals[]>(() => {
     if (!dash?.sleeves) return [];
-    const order = ["stocks", "crypto", "options", "quant"];
+    const order = ["stocks", "crypto", "options", "quant", "portfolio_rank"];
+    const displayNames: Record<string, string> = {
+      stocks: "Stocks",
+      crypto: "Crypto",
+      options: "Options",
+      quant: "Quant",
+      portfolio_rank: "Portfolio Rank",
+    };
     return order.map((key) => {
       const s: any = (dash.sleeves as any)[key] || {};
       return {
         id: key,
-        name: key[0].toUpperCase() + key.slice(1),
+        name: displayNames[key] ?? (key[0].toUpperCase() + key.slice(1)),
         value_cents: s.value_cents || 0,
         pnl_cents: s.pnl_cents || 0,
         bots_active: s.bots_active || 0,
@@ -714,20 +743,35 @@ export default function StrategyLabV2() {
 
   const leaders = useMemo<LBRow[]>(() => {
     const lb = dash?.portfolio?.leaderboard || [];
-    return lb.slice(0, 8).map((l: any, i: number) => ({
-      rank: i + 1,
-      name: l.name || l.profile,
-      profile: l.profile,
-      allTimeCents: (l.portfolio_value_cents || 0) - (l.starting_capital_cents || 0),
-      todayCents: l.today_pnl_cents || 0,
-      deployedCents: l.deployed_cents || 0,
-      return30d: l.return_30d_pct || 0,
-      assetClass:
-        l.profile?.startsWith("stock") ? "stocks"
-        : l.profile?.startsWith("crypto") ? "crypto"
-        : l.profile?.startsWith("options") ? "options"
-        : "quant",
-    }));
+    // 2026-07-06: was .slice(0, 8) — truncated at 8 rows even though the
+    // fleet is now 25+ bots. Show all so ranks 9-25 (plus the two
+    // portfolio-rank bots) are visible.
+    return lb.map((l: any, i: number) => {
+      // Backend tags entries with bot_type = "signal_trigger" | "portfolio_rank"
+      // as of the canonical.py leaderboard integration. Fall back to name
+      // heuristics for older payloads.
+      const isPR =
+        l.bot_type === "portfolio_rank"
+        || l.profile === "momentum_umd"
+        || l.profile === "quality_gross_profitability"
+        || l.profile === "dummy_alpha_rank";
+      return {
+        rank: i + 1,
+        name: l.name || l.profile,
+        profile: l.profile,
+        allTimeCents: (l.portfolio_value_cents || 0) - (l.starting_capital_cents || 0),
+        todayCents: l.today_pnl_cents || 0,
+        deployedCents: l.deployed_cents || 0,
+        return30d: l.return_30d_pct || 0,
+        assetClass:
+          isPR ? "portfolio_rank"
+          : l.profile?.startsWith("stock") ? "stocks"
+          : l.profile?.startsWith("crypto") ? "crypto"
+          : l.profile?.startsWith("options") ? "options"
+          : "quant",
+        botType: (l.bot_type as string) || (isPR ? "portfolio_rank" : "signal_trigger"),
+      };
+    });
   }, [dash]);
 
   return (
@@ -838,7 +882,7 @@ export default function StrategyLabV2() {
 
         <div
           className="grid gap-[14px]"
-          style={{ gridTemplateColumns: "repeat(4, 1fr)", marginTop: 16 }}
+          style={{ gridTemplateColumns: "repeat(5, 1fr)", marginTop: 16 }}
         >
           {sleeves.map((s, i) => (
             <SleeveCard key={s.id} s={s} seed={7 + i * 12} />

@@ -951,13 +951,22 @@ def get_cross_bot_activity(
         # total_trades now counts CLOSED round-trips (sell+cover only) to match
         # what /api/trades reports. Old value counted every raw fill.
         "total_trades": closed_roundtrips,
-        # total_pnl_cents comes from canonical (PV minus starting) so it matches
-        # /trades and dashboard/v2 instead of drifting via bot_daily_pnl rollups.
+        # total_pnl_cents comes from canonical (PV minus starting_including_
+        # portfolio_rank) so it matches /trades and dashboard/v2. See c10b7c33
+        # for why we now include portfolio_rank_bots in the starting sum.
         "total_pnl_cents": total_pnl_cents,
-        # winning_trades / losing_trades are DAYS, per the historical UI label
-        # "Win Rate (days)".
+        # winning_trades / losing_trades are DAYS. Historic key names retained
+        # for backward compatibility with the frontend. 2026-07-06: added
+        # explicitly-named aliases so the reconciliation gap between
+        # total_trades (round-trip count) and win/lose (day count) is no
+        # longer a labeling lie.
         "winning_trades": winning_days,
         "losing_trades": losing_days,
+        "winning_days": winning_days,
+        "losing_days":  losing_days,
+        # closed_roundtrips exposed under its true name so callers who want
+        # trade-count math (not day-count) do not mistake winning_trades for it.
+        "closed_roundtrips": closed_roundtrips,
     }
 
     return {
