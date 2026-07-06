@@ -794,6 +794,20 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m072_fleet_gap_fillers FAILED: %s",
                      _m072_exc, exc_info=True)
 
+    # m073: activate 3 SSRN factor bots + clean 2 zombies.
+    # Trims momentum_umd + quality by $15k each to fund low_volatility,
+    # value_hml, net_stock_issuance at $10k each. Also disables
+    # crypto_onchain (m061 zombie) and dummy_alpha_rank (Phase 1 dev bot).
+    # Fund invariant $1M preserved. Guard-gated.
+    try:
+        from app.db.migrations.m073_activate_ssrn_and_zombie_cleanup import run as _run_m073
+        with engine.begin() as _m073_conn:
+            _m073_result = _run_m073(_m073_conn)
+        logger.warning("[startup] m073 status: %s", _m073_result)
+    except Exception as _m073_exc:
+        logger.error("[startup] m073_activate_ssrn_and_zombie_cleanup FAILED: %s",
+                     _m073_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
