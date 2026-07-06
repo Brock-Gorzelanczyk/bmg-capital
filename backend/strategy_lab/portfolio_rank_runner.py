@@ -7,24 +7,44 @@ bottom decile short), then rebalances `portfolio_rank_holdings` to
 match. Rebalance is a diff: adds and removes only, no churn on
 constant names.
 
-Phase 1 runs the plumbing without hitting the broker. Holdings are
-marked with target and actual weight; entry price is stored so future
-mark-to-market has a cost basis. Real order placement to Alpaca is
-Phase 2, when the first non-dummy bot ships.
+Phase 2 (2026-07-05) adds:
+  - Dry-run vs live-orders split. Two flags must both be true to
+    place real broker orders:
+        BMG_PORTFOLIO_RANK_BOTS_ENABLED  = master gate (also gates
+                                           the manual endpoint)
+        BMG_PORTFOLIO_RANK_LIVE_ORDERS   = live orders on
+                                           (default false)
+    In dry-run the runner sets actual_weight = target_weight and
+    logs the basket. No Alpaca calls happen. This lets us watch a
+    clean rebalance before flipping the second flag Monday morning.
+  - Discord digest to the ops webhook (routes to #dev-updates)
+    after every rebalance so Brock sees the basket without
+    curling the endpoint.
+  - Nightly runner that iterates all enabled bots and triggers
+    rebalance for any whose schedule matches today.
 """
 from __future__ import annotations
 
 import json
 import logging
 import math
+import os
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+def _env_flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in ("true", "1", "yes")
+
+
+def _live_orders_enabled() -> bool:
+    return _env_flag("BMG_PORTFOLIO_RANK_LIVE_ORDERS", "false")
 
 
 def _now_iso() -> str:
@@ -154,17 +174,29 @@ def rebalance(
     ranking: dict[str, float] = {}
     basket: dict[str, dict[str, float]] = {}
     try:
-        uni_type = str(bot["universe"].get("type", ""))
+        # Universe supports two JSON schemas:
+        #   Phase 1 dummy:  {"type": "sp500_partial"} or {"type": "custom", "symbols": [...]}
+        #   Phase 2 real:   {"kind": "alpaca_universe_by_ticker_list", "list_name": "sp500"}
+        uni = bot["universe"]
+        uni_type = str(uni.get("type", ""))
+        uni_kind = str(uni.get("kind", ""))
         if uni_type == "custom":
-            symbols = list(bot["universe"].get("symbols", []))
-        else:
+            symbols = list(uni.get("symbols", []))
+        elif uni_kind == "alpaca_universe_by_ticker_list":
+            symbols = get_universe(str(uni.get("list_name", "")))
+        elif uni_type:
             symbols = get_universe(uni_type)
+        else:
+            raise ValueError(f"universe schema unrecognized: {uni}")
         if not symbols:
-            raise ValueError(f"empty universe: {uni_type}")
+            raise ValueError(f"empty universe: {uni}")
 
-        factor_type = str(bot["factor_definition"].get("type", ""))
-        factor_params = {k: v for k, v in bot["factor_definition"].items()
-                         if k != "type"}
+        # Factor supports two schemas too:
+        #   Phase 1 dummy:  {"type": "alphabetical"}
+        #   Phase 2 real:   {"kind": "return_lookback", "months_back": 12, ...}
+        fdef = bot["factor_definition"]
+        factor_type = str(fdef.get("kind") or fdef.get("type") or "")
+        factor_params = {k: v for k, v in fdef.items() if k not in ("type", "kind")}
         ranking = compute_factor(factor_type, symbols, db, factor_params)
         basket = _target_basket(
             ranking, bot["long_decile"], bot["short_decile"],
@@ -254,6 +286,29 @@ def rebalance(
 
     db.commit()
 
+    # Phase 2: live-orders path. When BMG_PORTFOLIO_RANK_LIVE_ORDERS is
+    # true AND the basket differs from current holdings, hand off to the
+    # Alpaca client. Currently unimplemented — placing real orders is a
+    # separate PR after the dry-run cycle is verified clean. We log-loud
+    # if the flag is on so nothing goes silently unfulfilled.
+    order_mode = "dry_run"
+    if _live_orders_enabled() and error is None and (adds or removes):
+        order_mode = "live_pending"
+        logger.error(
+            "[portfolio-rank] LIVE ORDERS flag ON for %s but broker path "
+            "not yet implemented (%d adds, %d removes queued). Treating "
+            "as dry-run until Phase 2.1.",
+            bot["name"], len(adds), len(removes),
+        )
+
+    # Discord digest — routes via ops webhook to #dev-updates. Fire-and-
+    # forget; a webhook 500 must not block the DB write we just committed.
+    try:
+        _post_rebalance_digest(bot, ranking, basket, adds, removes,
+                               order_mode, latency_ms, error, triggered_by)
+    except Exception as _dexc:
+        logger.warning("[portfolio-rank] digest post failed: %s", _dexc)
+
     return {
         "bot_id": bot_id,
         "bot_name": bot["name"],
@@ -263,5 +318,161 @@ def rebalance(
         "adds": len(adds),
         "removes": len(removes),
         "latency_ms": latency_ms,
+        "order_mode": order_mode,
         "error": error,
     }
+
+
+# ── Discord digest ────────────────────────────────────────────────────────────
+
+def _post_rebalance_digest(
+    bot: dict[str, Any],
+    ranking: dict[str, float],
+    basket: dict[str, dict[str, float]],
+    adds: list[dict[str, Any]],
+    removes: list[str],
+    order_mode: str,
+    latency_ms: int,
+    error: Optional[str],
+    triggered_by: str,
+) -> None:
+    """Post a compact rebalance summary to the ops Discord webhook."""
+    from app.services.discord import send_ops_alert
+    if error:
+        send_ops_alert(
+            title=f"Portfolio-Rank rebalance FAILED — {bot['name']}",
+            message=f"Trigger: {triggered_by}\nError: {error}\n"
+                    f"Universe attempt size: {len(ranking)}\n"
+                    f"Latency: {latency_ms}ms",
+            severity="critical",
+            source="portfolio_rank_runner",
+        )
+        return
+    add_syms = [a.get("symbol", "?") for a in adds]
+    add_preview = ", ".join(add_syms[:15]) + (
+        f" (+{len(add_syms) - 15} more)" if len(add_syms) > 15 else ""
+    )
+    remove_preview = ", ".join(removes[:15]) + (
+        f" (+{len(removes) - 15} more)" if len(removes) > 15 else ""
+    )
+    citation = bot.get("paper_citation") or "no citation"
+    ssrn = bot.get("ssrn_id")
+    if ssrn:
+        citation = f"{citation} — https://ssrn.com/abstract={ssrn}"
+    fields = [
+        {"name": "universe_size", "value": str(len(ranking)), "inline": True},
+        {"name": "basket_size", "value": str(len(basket)), "inline": True},
+        {"name": "adds", "value": str(len(adds)), "inline": True},
+        {"name": "removes", "value": str(len(removes)), "inline": True},
+        {"name": "mode", "value": order_mode, "inline": True},
+        {"name": "latency_ms", "value": str(latency_ms), "inline": True},
+    ]
+    if add_syms:
+        fields.append({"name": "adds detail", "value": add_preview[:1000]})
+    if removes:
+        fields.append({"name": "removes detail", "value": remove_preview[:1000]})
+    fields.append({"name": "vault reference", "value": citation[:1000]})
+    send_ops_alert(
+        title=f"Portfolio-Rank rebalance — {bot['name']}",
+        message=f"Trigger: {triggered_by}. Mode: **{order_mode}**. "
+                f"No broker orders were placed.",
+        severity="info",
+        source="portfolio_rank_runner",
+        fields=fields,
+    )
+
+
+# ── Nightly runner ────────────────────────────────────────────────────────────
+
+def _is_rebalance_day(schedule: str, today: date) -> bool:
+    """Return True if `today` matches this bot's rebalance cadence.
+
+    - "monthly"    → first Monday of the month
+    - "quarterly"  → first Monday of Jan / Apr / Jul / Oct
+    - "weekly"     → every Monday
+    - "daily"      → every day (used by dummy_alpha_rank for verification)
+    """
+    schedule = (schedule or "").strip().lower()
+    if schedule == "daily":
+        return True
+    if today.weekday() != 0:  # Monday only for weekly / monthly / quarterly
+        return schedule == ""
+    if schedule == "weekly":
+        return True
+    if schedule == "monthly":
+        return today.day <= 7  # first Monday of the month
+    if schedule == "quarterly":
+        return today.day <= 7 and today.month in (1, 4, 7, 10)
+    return False
+
+
+def nightly_run(db: Session, triggered_by: str = "cron") -> dict[str, Any]:
+    """Iterate every enabled bot; rebalance those whose schedule matches today.
+
+    Feature-flag gated on BMG_PORTFOLIO_RANK_BOTS_ENABLED. When off, returns
+    a no-op result so a stray cron fire cannot side-effect.
+    """
+    if not _env_flag("BMG_PORTFOLIO_RANK_BOTS_ENABLED", "false"):
+        return {"skipped": "BMG_PORTFOLIO_RANK_BOTS_ENABLED=false"}
+
+    from datetime import date as _date
+    today = _date.today()
+    rows = db.execute(text(
+        "SELECT id, name, rebalance_schedule FROM portfolio_rank_bots "
+        "WHERE enabled = 1"
+    )).fetchall()
+
+    results: list[dict[str, Any]] = []
+    for r in rows:
+        bot_id = int(r[0])
+        name = r[1]
+        schedule = r[2]
+        if not _is_rebalance_day(schedule, today):
+            results.append({"bot_id": bot_id, "name": name,
+                            "skipped": f"not a {schedule} rebalance day"})
+            continue
+        try:
+            res = rebalance(db, bot_id, triggered_by=triggered_by)
+            results.append(res)
+        except Exception as exc:
+            logger.error("[portfolio-rank] nightly rebalance %s raised: %s",
+                         name, exc, exc_info=True)
+            results.append({"bot_id": bot_id, "name": name,
+                            "error": f"{type(exc).__name__}: {exc}"})
+    return {"triggered_by": triggered_by, "date": today.isoformat(),
+            "count": len(results), "results": results}
+
+
+# ── Scheduler wiring ──────────────────────────────────────────────────────────
+
+def setup_portfolio_rank_scheduler(scheduler) -> None:
+    """Register the nightly cron job. Called from main.py startup.
+
+    Fires at 03:00 America/Chicago every day. Job body checks each bot's
+    schedule and only runs those whose cadence matches today. Runs
+    unconditionally (no env-flag gate at register time) so we do not have
+    to redeploy when the master flag flips — the gate lives inside
+    nightly_run().
+    """
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+    except Exception as exc:
+        logger.warning("[portfolio-rank] apscheduler unavailable, cron not wired: %s", exc)
+        return
+
+    def _job() -> None:
+        from app.db.session import SessionLocal
+        db = SessionLocal()
+        try:
+            res = nightly_run(db, triggered_by="cron_0300ct")
+            logger.warning("[portfolio-rank] nightly_run result: %s", res)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _job,
+        CronTrigger(hour=3, minute=0, timezone="America/Chicago"),
+        id="portfolio_rank_nightly",
+        replace_existing=True,
+    )
+    logger.warning("[portfolio-rank] nightly cron registered: 03:00 America/Chicago")

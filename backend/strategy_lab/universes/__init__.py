@@ -32,8 +32,15 @@ def sp500_partial() -> list[str]:
     return list(_SP500_PARTIAL)
 
 
+def _load_sp500() -> list[str]:
+    """Lazy import so the full 500-name file loads only when a real bot needs it."""
+    from .sp500 import sp500
+    return sp500()
+
+
 _REGISTRY: dict[str, Callable[[], list[str]]] = {
     "sp500_partial": sp500_partial,
+    "sp500": _load_sp500,
 }
 
 

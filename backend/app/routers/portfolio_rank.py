@@ -171,6 +171,26 @@ def rebalance_bot(
     return result
 
 
+@router.post("/nightly-run")
+def nightly_run_endpoint(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+) -> dict:
+    """Manually trigger the nightly rebalance loop.
+
+    Same code path as the 03:00 America/Chicago cron. Feature-flag gated
+    inside nightly_run(). Useful for verification without waiting for
+    cron; also lets Brock re-run a missed night.
+    """
+    if not _env_flag("BMG_PORTFOLIO_RANK_BOTS_ENABLED", "false"):
+        raise HTTPException(
+            status_code=403,
+            detail="portfolio-rank bots disabled — set BMG_PORTFOLIO_RANK_BOTS_ENABLED=true",
+        )
+    from strategy_lab.portfolio_rank_runner import nightly_run as _run
+    return _run(db, triggered_by="manual_nightly_endpoint")
+
+
 @router.get("/status")
 def status(
     db: Session = Depends(get_db),
@@ -190,6 +210,7 @@ def status(
     )).fetchone()
     return {
         "feature_enabled": _env_flag("BMG_PORTFOLIO_RANK_BOTS_ENABLED", "false"),
+        "live_orders_enabled": _env_flag("BMG_PORTFOLIO_RANK_LIVE_ORDERS", "false"),
         "bot_count_total": int(counts[0]) if counts else 0,
         "bot_count_enabled": int(enabled[0]) if enabled else 0,
         "holdings_total": int(holdings[0]) if holdings else 0,

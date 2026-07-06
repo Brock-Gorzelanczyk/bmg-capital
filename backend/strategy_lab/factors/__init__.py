@@ -29,8 +29,21 @@ def alphabetical(symbols: list[str], db: Session, params: dict) -> dict[str, flo
     return scores
 
 
+def _return_lookback(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .return_lookback import compute
+    return compute(symbols, db, params)
+
+
+def _novy_marx_gp_a(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .novy_marx_gp_a import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
+    # 2026-07-05 Phase 2 factors — both hit yfinance for data.
+    "return_lookback": _return_lookback,
+    "novy_marx_gp_a": _novy_marx_gp_a,
 }
 
 

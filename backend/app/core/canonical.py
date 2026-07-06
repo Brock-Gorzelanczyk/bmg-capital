@@ -1146,11 +1146,73 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     # though they carry historical negative realized — historical P&L alone
     # does NOT keep them on the board (Brock: "halted bots polluting").
     # Mystery bots (stock_quant_*) have starting=0 AND zero activity → dropped.
+    # Tag all signal-trigger entries so the frontend can distinguish them
+    # from portfolio-rank bots we append below.
+    for e in leaderboard:
+        e.setdefault("bot_type", "signal_trigger")
+
+    # 2026-07-06 Portfolio-Rank Phase 2 integration.
+    # Append portfolio_rank_bots rows so both bot types share one leaderboard.
+    # These bots do NOT roll into the fund PV total (their capital lives in
+    # a separate table, and until Brock funds them explicitly they carry
+    # $0). Showing them here lets the UI badge them and lets Brock see the
+    # dry-run baskets without a second endpoint.
+    try:
+        pr_rows = db.execute(text(
+            "SELECT id, name, starting_capital_cents, enabled, "
+            "  rebalance_schedule, last_rebalanced_at, paper_citation, ssrn_id "
+            "FROM portfolio_rank_bots "
+            "ORDER BY name"
+        )).fetchall()
+        for pr in pr_rows:
+            pr_id = int(pr[0])
+            pr_name = pr[1] or f"portfolio_rank_{pr_id}"
+            pr_starting = int(pr[2] or 0)
+            pr_enabled = bool(pr[3])
+            # Sum current mark-to-market on holdings, best effort.
+            hv_row = db.execute(text(
+                "SELECT COALESCE(SUM("
+                "  COALESCE(current_price_cents, entry_price_cents, 0) * qty_or_weight"
+                "), 0) FROM ("
+                "  SELECT current_price_cents, entry_price_cents, "
+                "         actual_weight AS qty_or_weight "
+                "  FROM portfolio_rank_holdings WHERE bot_id = :bid"
+                ") x"
+            ), {"bid": pr_id}).fetchone()
+            hv_cents = int(hv_row[0] or 0) if hv_row else 0
+            pv_cents = pr_starting  # dry-run: PV tracks starting until real MTM
+            display = DISPLAY_NAMES.get(pr_name) or pr_name.replace("_", " ").title()
+            leaderboard.append({
+                "rank": 0,
+                "profile": pr_name,
+                "name": display,
+                "bot_type": "portfolio_rank",
+                "enabled": pr_enabled,
+                "return_30d_pct": 0.0,
+                "all_time_return_pct": 0.0,
+                "today_pnl_cents": 0,
+                "watchlist_count": 0,
+                "portfolio_value_cents": pv_cents,
+                "realized_pnl_cents": 0,
+                "unrealized_pnl_cents": 0,
+                "deployed_cents": hv_cents,
+                "starting_capital_cents": pr_starting,
+                "signals_24h": 0,
+                "trades_24h":  0,
+                "rebalance_schedule": pr[4],
+                "last_rebalanced_at": str(pr[5]) if pr[5] else None,
+                "paper_citation": pr[6],
+                "ssrn_id": pr[7],
+            })
+    except Exception as _pr_exc:
+        logger.warning("[leaderboard] portfolio_rank append failed: %s", _pr_exc)
+
     leaderboard = [
         e for e in leaderboard
         if e.get("profile") != "cash_floor"
         and (
-            (e.get("starting_capital_cents", 0) > 0)
+            e.get("bot_type") == "portfolio_rank"
+            or (e.get("starting_capital_cents", 0) > 0)
             or (e.get("enabled", False) and (e.get("today_pnl_cents", 0) != 0))
         )
     ]

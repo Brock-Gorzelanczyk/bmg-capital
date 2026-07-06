@@ -707,6 +707,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m065_exc:
         logger.error("[startup] m065_portfolio_rank_framework FAILED: %s", _m065_exc, exc_info=True)
 
+    # m066: Portfolio-Rank Phase 2 — momentum_umd + quality_gross_profitability
+    # seeded with starting_capital=0 (funding source deferred to Brock).
+    # Both bots ship enabled=false so nothing runs until the master flag flips.
+    try:
+        from app.db.migrations.m066_portfolio_rank_phase2 import run as _run_m066
+        with engine.begin() as _m066_conn:
+            _m066_result = _run_m066(_m066_conn)
+        logger.warning("[startup] m066 status: %s", _m066_result)
+    except Exception as _m066_exc:
+        logger.error("[startup] m066_portfolio_rank_phase2 FAILED: %s", _m066_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
@@ -864,6 +875,12 @@ async def lifespan(app: FastAPI):
     setup_onchain_scheduler(scheduler)
     from app.jobs.aqa_loop import register_aqa_jobs
     register_aqa_jobs(scheduler)
+    try:
+        from strategy_lab.portfolio_rank_runner import setup_portfolio_rank_scheduler
+        setup_portfolio_rank_scheduler(scheduler)
+    except Exception as _pr_sched_exc:
+        logger.error("[startup] portfolio_rank scheduler FAILED (non-fatal): %s",
+                     _pr_sched_exc, exc_info=True)
     scheduler.start()
 
     # Kick off strategy scan in background — won't block server startup
