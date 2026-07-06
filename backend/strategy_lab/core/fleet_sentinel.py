@@ -70,6 +70,39 @@ def _is_in_active_window(active_hours: Optional[tuple[int, int]]) -> bool:
     return start <= utc_hour < end
 
 
+def _is_bot_funded_and_enabled(db: Session, bot_name: str) -> bool:
+    """Return True if the bot has real capital AND its allocation is enabled.
+
+    2026-07-06: added because the sentinel was spam-alerting on halted bots
+    (crypto_quant_scalper, crypto_quant_mean_reversion at $0 per m062).
+    Every 10 minutes Patrick would report an 8000-min signal gap on bots
+    that were intentionally halted; those alerts drowned real regressions.
+    Now every staleness check runs this filter first so halted bots do
+    not fire alerts.
+    """
+    try:
+        row = db.execute(sql_text("""
+            SELECT COALESCE(SUM(ba.starting_capital_cents), 0) AS cap,
+                   MAX(CASE WHEN ba.enabled THEN 1 ELSE 0 END) AS any_enabled
+              FROM bot_allocations ba
+              JOIN bot_profiles bp ON bp.id = ba.profile_id
+             WHERE bp.name = :bot
+               AND ba.paper_mode = 1
+        """), {"bot": bot_name}).fetchone()
+        if not row:
+            return False
+        cap = int(row[0] or 0)
+        any_enabled = bool(row[1] or 0)
+        return cap > 0 and any_enabled
+    except Exception as exc:
+        logger.warning("[fleet_sentinel] funded/enabled check failed for %s: %s",
+                       bot_name, exc)
+        # Fail-open: if we cannot determine bot state, allow the alert. Better
+        # to have one false positive than miss a real regression while a DB
+        # query is transiently broken.
+        return True
+
+
 # ── Check 1: RED bot transition ────────────────────────────────────────────────
 
 def _check_red_transitions(db: Session) -> list[dict]:
@@ -148,6 +181,12 @@ railway ssh "cd /app && python3 -c 'from strategy_lab.runner import run_bot_prof
 def _check_deploy_health(db: Session) -> list[dict]:
     alerts = []
     try:
+        # 2026-07-06: skip if crypto_quant_aggressive is not funded / enabled.
+        # After m067 trimmed its allocation from $130K to $80K, the bot is
+        # still active — but if a future migration halted it, this alert
+        # would fire every hour with a false positive.
+        if not _is_bot_funded_and_enabled(db, "crypto_quant_aggressive"):
+            return alerts
         # Proxy: if startup trace log is missing from today, the process restarted
         # without completing setup_bot_scheduler. Check by looking for a
         # recent bot_signals row — if signals exist but come from before a 2h gap
@@ -215,6 +254,12 @@ def _check_signal_staleness(db: Session) -> list[dict]:
 
         for bot_name, cfg in _BOT_CADENCE.items():
             if not _is_in_active_window(cfg["active_hours"]):
+                continue
+
+            # 2026-07-06: skip halted / disabled bots. Halted bots (mean_rev,
+            # scalper at $0 per m062) were driving 3-4 alerts per 10-min cycle
+            # with 8000+ minute gaps, drowning real regressions.
+            if not _is_bot_funded_and_enabled(db, bot_name):
                 continue
 
             cadence_min = cfg["cadence_min"]
