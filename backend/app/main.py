@@ -684,6 +684,17 @@ async def lifespan(app: FastAPI):
     except Exception as _m063_exc:
         logger.error("[startup] m063_signal_conclave_verdicts FAILED: %s", _m063_exc, exc_info=True)
 
+    # m064: Strategy Farm Phase 1 — strategy_templates + farm_candidates.
+    # Seeds 10 templates. Generator endpoint is gated by
+    # BMG_STRATEGY_FARM_ENABLED (default false).
+    try:
+        from app.db.migrations.m064_strategy_farm_phase1 import run as _run_m064
+        with engine.begin() as _m064_conn:
+            _m064_result = _run_m064(_m064_conn)
+        logger.warning("[startup] m064 status: %s", _m064_result)
+    except Exception as _m064_exc:
+        logger.error("[startup] m064_strategy_farm_phase1 FAILED: %s", _m064_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
@@ -1197,6 +1208,8 @@ from app.routers.friction import router as friction_router
 app.include_router(friction_router)
 from app.routers.cash_floor import router as cash_floor_router
 app.include_router(cash_floor_router)
+from app.routers.farm import router as farm_router
+app.include_router(farm_router)
 from app.routers.clean_slate import router as clean_slate_router
 app.include_router(clean_slate_router)
 app.include_router(admin_bots_router)
