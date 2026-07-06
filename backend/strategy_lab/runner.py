@@ -1798,15 +1798,38 @@ def _execute_options_signal(
     # remains the hard concurrency governor; in practice deployment
     # rarely hits 100% simultaneously.
     #
-    # 2026-07-06 (audit): 8% × $25k = $2,000 was STILL too tight. LEAPS
-    # / deep-ITM stock replacement need $3,000-5,000/contract; single-name
-    # premiums with realistic bid-ask cross $2,500 easily. The runner
-    # rounds contract_count down to 0 for any signal where premium ×
-    # 100 > $2,000. Bump to 12% → $3,000/trade covers ~95% of typical
-    # option contracts. Sleeve exposure ceiling = 12% × 15 = 180% of
-    # allocation before gross_exposure_pct (100%) kicks in.
+    # 2026-07-06 (audit v2): traced the actual sizing chain end-to-end:
+    #   Strategy BASE_SIZE (typically 0.04-0.05)
+    #   → runner:799 adjusted_size_pct = size_hint × 100 = 4-5%
+    #   → vol_weighted_sizing cap (max 10%, usually no-op)
+    #   → pyramid.initial_size_pct HALVES it → 2-2.5%
+    #   → line 1771 position_dollars = $25k × 2.5% = ~$625
+    # At $625/trade, contract_count = floor($625 / premium×100) = 0 for
+    # any premium > $6.25. That's why the 8%→12% cap bump was a no-op:
+    # position_dollars never got anywhere near the ceiling. The ceiling
+    # doesn't matter when the ACTUAL budget is starved from upstream.
+    #
+    # Fix: enforce a FLOOR of 10% (=$2,500 at $25k) on options
+    # position_dollars. This bypasses the pyramid halving and gives each
+    # options signal enough budget to actually open ≥1 contract of most
+    # typical premium ranges (up to ~$25/contract). Then apply the 12%
+    # ceiling as before. Effective range: $2,500-$3,000/trade.
+    #
+    # Justification: pyramid entry (start at 50%, add on +1 ATR, +2 ATR)
+    # is an equity pattern. Options positions don't scale in that way —
+    # you enter once with the intended contract count, then either close
+    # at target or stop. Halving the initial entry for options is a
+    # design mismatch, not a risk feature. The floor overrides it.
+    OPTIONS_MIN_NOTIONAL_PCT = 0.10
     OPTIONS_MAX_NOTIONAL_PCT = 0.12
+    notional_floor = capital_usd * OPTIONS_MIN_NOTIONAL_PCT
     notional_cap = capital_usd * OPTIONS_MAX_NOTIONAL_PCT
+    if position_dollars < notional_floor:
+        logger.info(
+            "[options:%s] %s raising per-trade budget $%.0f → $%.0f (10%% sleeve floor: skip pyramid halving)",
+            profile_name, sig.symbol, position_dollars, notional_floor,
+        )
+        position_dollars = notional_floor
     if position_dollars > notional_cap:
         logger.info(
             "[options:%s] %s clamping per-trade budget $%.0f → $%.0f (12%% sleeve cap)",
