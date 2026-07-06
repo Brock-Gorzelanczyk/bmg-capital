@@ -42,6 +42,22 @@ def _fund_pv_and_pnl(db: Session, user_id: int = 1) -> dict:
     current = int(row[1] or 0)
     if current == 0:
         current = starting  # fallback if current not populated
+    # 2026-07-06: include portfolio-rank capital so the pre-market digest
+    # matches the $1M fund invariant. Portfolio-rank bots contribute their
+    # starting_capital + SUM(current_pnl_cents on holdings).
+    try:
+        pr_starting_row = db.execute(text(
+            "SELECT COALESCE(SUM(starting_capital_cents), 0) FROM portfolio_rank_bots"
+        )).fetchone()
+        pr_starting = int(pr_starting_row[0] or 0) if pr_starting_row else 0
+        pr_pnl_row = db.execute(text(
+            "SELECT COALESCE(SUM(current_pnl_cents), 0) FROM portfolio_rank_holdings"
+        )).fetchone()
+        pr_pnl = int(pr_pnl_row[0] or 0) if pr_pnl_row else 0
+        starting += pr_starting
+        current += pr_starting + pr_pnl
+    except Exception:
+        pass
     return {
         "pv_cents": current,
         "starting_cents": starting,

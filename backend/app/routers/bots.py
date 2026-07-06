@@ -902,6 +902,10 @@ def get_cross_bot_activity(
         agg = _agg_fn(current_user.id, db) or {}
         pv_cents = int(agg.get("total_value_cents") or 0)
         # All-time P&L: PV minus starting capital sum for enabled user_1 allocations.
+        # 2026-07-06: canonical's total_value_cents now includes portfolio_rank_bots
+        # capital (m067 funded $100K into that table). If we sum only bot_allocations
+        # here, the delta between the two shows up as ~$95K of phantom P&L. Sum both
+        # tables so the invariant holds: pv_cents - starting_cents = true fleet P&L.
         starting_row = db.execute(
             text(
                 "SELECT COALESCE(SUM(starting_capital_cents), 0) "
@@ -910,6 +914,13 @@ def get_cross_bot_activity(
             {"uid": current_user.id},
         ).fetchone()
         starting_cents = int(starting_row[0] or 0) if starting_row else 0
+        try:
+            pr_row = db.execute(text(
+                "SELECT COALESCE(SUM(starting_capital_cents), 0) FROM portfolio_rank_bots"
+            )).fetchone()
+            starting_cents += int(pr_row[0] or 0) if pr_row else 0
+        except Exception as _pr_exc:
+            logger.warning("[activity] portfolio_rank starting sum failed: %s", _pr_exc)
         total_pnl_cents = pv_cents - starting_cents
         # Closed round-trip count: sell + cover only, matches /api/trades semantics.
         rt_row = db.execute(

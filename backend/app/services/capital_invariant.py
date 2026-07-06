@@ -100,6 +100,25 @@ def check_capital_invariant(db, user_id: int = 1) -> CapitalInvariantStatus:
 
     per_bot = [{"name": r[0], "starting_cents": int(r[1] or 0)} for r in rows]
     current_sum = sum(b["starting_cents"] for b in per_bot)
+
+    # 2026-07-06: portfolio-rank bots (Phase 2 anomalies) live outside
+    # bot_allocations. m067 funded momentum_umd + quality_gross_profitability
+    # by trimming three bot_allocations rows by $100K total. Without adding
+    # portfolio_rank_bots capital back here, current_sum reads $900K and the
+    # watchdog fires CRIT every 5 min. Include the second table so the
+    # invariant equals the true fund capital ($1M).
+    try:
+        pr_row = db.execute(text(
+            "SELECT COALESCE(SUM(starting_capital_cents), 0) FROM portfolio_rank_bots"
+        )).fetchone()
+        pr_sum = int(pr_row[0] or 0) if pr_row else 0
+        current_sum += pr_sum
+        per_bot.append({"name": "__portfolio_rank_total__",
+                        "starting_cents": pr_sum})
+    except Exception:
+        # portfolio_rank_bots table absent (pre-m065 environment) — ignore
+        pass
+
     drift = current_sum - EXPECTED_SUM_CENTS
 
     abs_drift = abs(drift)
