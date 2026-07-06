@@ -42,7 +42,9 @@ def evaluate(db: Session, signal_dict: dict) -> dict[str, Any]:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     try:
         # Round-trip PnL: match sell/cover trades against the entry position
-        # for the same bot+strategy family in the last 30 days.
+        # for the same bot in the last 30 days. Optional strategy filter
+        # routes through bot_signals (which owns the strategy column;
+        # bot_positions/bot_trades do not).
         rows = db.execute(text("""
             SELECT
               t.fill_price_cents,
@@ -53,8 +55,9 @@ def evaluate(db: Session, signal_dict: dict) -> dict[str, Any]:
             JOIN bot_positions pos ON pos.id = t.position_id
             JOIN bot_allocations a ON a.id = t.allocation_id
             JOIN bot_profiles p ON p.id = a.profile_id
+            LEFT JOIN bot_signals s ON s.id = t.signal_id
             WHERE p.name = :bot
-              AND (:strategy = '' OR pos.strategy = :strategy)
+              AND (:strategy = '' OR s.strategy = :strategy)
               AND t.side IN ('sell', 'cover', 'close')
               AND t.quarantined_at IS NULL
               AND t.ts >= :cut
