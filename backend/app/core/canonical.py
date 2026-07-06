@@ -1258,6 +1258,32 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             fleet_total, sleeve_sum_cents, total_cash_cents,
         )
 
+    # 2026-07-06: roll portfolio-rank bots into the fund PV total so every
+    # consumer of total_value_cents (dashboard, risk_console, monitoring,
+    # tear sheet) sees the true $1M invariant. Without this, callers who
+    # trust agg["total_value_cents"] see a $100K gap after m067 funded the
+    # two Phase 2 anomaly bots. Contribution per bot = starting_capital +
+    # SUM(current_pnl_cents on holdings). Dry-run mode keeps current_pnl at
+    # 0, so the value equals starting_capital until the runner writes MTM.
+    _pr_extra = 0
+    try:
+        _pr_rows = db.execute(text(
+            "SELECT id, COALESCE(starting_capital_cents, 0) "
+            "FROM portfolio_rank_bots"
+        )).fetchall()
+        for _r in _pr_rows:
+            _bid = int(_r[0])
+            _sc = int(_r[1] or 0)
+            _pnl_row = db.execute(text(
+                "SELECT COALESCE(SUM(current_pnl_cents), 0) "
+                "FROM portfolio_rank_holdings WHERE bot_id = :bid"
+            ), {"bid": _bid}).fetchone()
+            _bot_pnl = int(_pnl_row[0] or 0) if _pnl_row else 0
+            _pr_extra += _sc + _bot_pnl
+    except Exception as _pr_exc:
+        logger.warning("[canonical] portfolio_rank PV rollup failed: %s", _pr_exc)
+    total_value += _pr_extra
+
     # 5-col header windows: All-Time / MTD / WTD / Today $ + %.
     try:
         pnl_windows = _compute_pnl_windows(

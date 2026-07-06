@@ -45,6 +45,10 @@ export interface DashboardV2 {
     crypto: DashV2Sleeve;
     options: DashV2Sleeve;
     quant?: DashV2Sleeve;
+    // 2026-07-06 added for Portfolio-Rank Phase 2. Momentum + quality bots
+    // live in portfolio_rank_bots table, not bot_allocations, so they need
+    // their own sleeve in the fund PV rollup.
+    portfolio_rank?: DashV2Sleeve;
   };
   health: {
     bots_active: number;

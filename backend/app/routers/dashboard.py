@@ -294,10 +294,56 @@ def get_dashboard_v2(
     if total_value == 0 and total_starting > 0:
         total_value = total_starting
 
+    # ── Portfolio-rank bots (Phase 2) ─────────────────────────────────────
+    # These live in portfolio_rank_bots, NOT bot_allocations. m067 funded
+    # momentum_umd and quality_gross_profitability at $50K each. Without
+    # this block, their $100K would silently vanish from the dashboard PV,
+    # leaving the invariant broken: bot_allocations $950K but fund PV
+    # displayed as $950K instead of $1M.
+    pr_value_cents = 0
+    pr_pnl_cents = 0
+    pr_bots_total = 0
+    pr_bots_active = 0
+    pr_open_positions = 0
+    try:
+        pr_rows = db.execute(text(
+            "SELECT id, name, starting_capital_cents, enabled "
+            "FROM portfolio_rank_bots"
+        )).fetchall()
+        for _pr in pr_rows:
+            _pr_id = int(_pr[0])
+            _pr_starting = int(_pr[2] or 0)
+            _pr_enabled = bool(_pr[3])
+            # PV = starting_capital + realized/unrealized P&L on holdings.
+            # In dry-run mode current_pnl_cents starts at 0. Sum defensively
+            # so PV can drift with mark-to-market updates when they land.
+            _pnl_row = db.execute(text(
+                "SELECT COALESCE(SUM(current_pnl_cents), 0) "
+                "FROM portfolio_rank_holdings WHERE bot_id = :bid"
+            ), {"bid": _pr_id}).fetchone()
+            _pr_bot_pnl = int(_pnl_row[0] or 0) if _pnl_row else 0
+            _pr_bot_pv = _pr_starting + _pr_bot_pnl
+            pr_value_cents += _pr_bot_pv
+            pr_pnl_cents   += _pr_bot_pnl
+            pr_bots_total  += 1
+            if _pr_enabled and _pr_starting > 0:
+                pr_bots_active += 1
+            # Open positions = count of holdings rows for this bot.
+            _cnt_row = db.execute(text(
+                "SELECT COUNT(*) FROM portfolio_rank_holdings WHERE bot_id = :bid"
+            ), {"bid": _pr_id}).fetchone()
+            pr_open_positions += int(_cnt_row[0] or 0) if _cnt_row else 0
+        # Roll into fund PV total so the header hero stat matches m067's
+        # $1M invariant.
+        total_value += pr_value_cents
+        total_today_pnl += pr_pnl_cents
+    except Exception as _pr_exc:
+        logger.warning("[dashboard/v2] portfolio_rank rollup failed: %s", _pr_exc)
+
     # ── Per-sleeve breakdown ─────────────────────────────────────────────────
     sleeve_data: dict[str, dict[str, int]] = {
         s: {"value_cents": 0, "open_positions": 0, "watching": 0, "pnl_cents": 0, "bots_active": 0, "bots_total": 0}
-        for s in ("stocks", "crypto", "options", "quant")
+        for s in ("stocks", "crypto", "options", "quant", "portfolio_rank")
     }
     seen_profile_sleeve: set[tuple[int, str]] = set()
 
@@ -325,6 +371,15 @@ def get_dashboard_v2(
             continue
         s = _profile_sleeve(p.name, p.asset_class)
         sleeve_data[s]["open_positions"] += 1
+
+    # Populate the portfolio_rank sleeve from the values computed above.
+    # This must run BEFORE the invariant check so the sleeve sum matches
+    # total_value (which now includes portfolio-rank capital).
+    sleeve_data["portfolio_rank"]["value_cents"]     = pr_value_cents
+    sleeve_data["portfolio_rank"]["pnl_cents"]       = pr_pnl_cents
+    sleeve_data["portfolio_rank"]["bots_total"]      = pr_bots_total
+    sleeve_data["portfolio_rank"]["bots_active"]     = pr_bots_active
+    sleeve_data["portfolio_rank"]["open_positions"] = pr_open_positions
 
     # ── Sleeve reservations ───────────────────────────────────────────────────
     try:

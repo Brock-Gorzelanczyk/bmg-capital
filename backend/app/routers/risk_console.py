@@ -246,6 +246,48 @@ def get_risk_console(
         "SELECT COALESCE(SUM(starting_capital_cents), 0) FROM bot_allocations WHERE user_id = :uid"
     ), {"uid": uid}).fetchone()
     starting_cents = int(row[0] or 0) if row else _FUND_INCEPTION_CENTS
+
+    # 2026-07-06: include portfolio-rank bot capital in the fund starting
+    # total AND in the per-sleeve pie. Note: pv_cents ALREADY includes
+    # portfolio-rank capital (canonical.py rolls it into total_value_cents
+    # as of this same PR). We only need to add here for numbers that come
+    # from local queries: starting_cents (from bot_allocations only) and
+    # sleeve_totals (from bot_positions only).
+    pr_starting_cents = 0
+    pr_pv_cents = 0
+    pr_deployed_usd = 0.0
+    try:
+        pr_rows = db.execute(text(
+            "SELECT id, starting_capital_cents FROM portfolio_rank_bots"
+        )).fetchall()
+        for _r in pr_rows:
+            _bid = int(_r[0])
+            _sc = int(_r[1] or 0)
+            pr_starting_cents += _sc
+            _pnl_row = db.execute(text(
+                "SELECT COALESCE(SUM(current_pnl_cents), 0) "
+                "FROM portfolio_rank_holdings WHERE bot_id = :bid"
+            ), {"bid": _bid}).fetchone()
+            _bot_pnl = int(_pnl_row[0] or 0) if _pnl_row else 0
+            pr_pv_cents += _sc + _bot_pnl
+        # Deployed for portfolio-rank = sum of holdings notional at entry.
+        _dep_row = db.execute(text(
+            "SELECT COALESCE(SUM("
+            "  CASE WHEN entry_price_cents IS NOT NULL AND actual_weight IS NOT NULL "
+            "       THEN entry_price_cents * actual_weight "
+            "       ELSE 0 END"
+            "), 0) FROM portfolio_rank_holdings"
+        )).fetchone()
+        _pr_dep_cents = int(_dep_row[0] or 0) if _dep_row else 0
+        pr_deployed_usd = _pr_dep_cents / 100.0
+    except Exception as _pr_exc:
+        logger.warning("[risk-console] portfolio_rank rollup failed: %s", _pr_exc)
+
+    # Roll portfolio-rank capital into starting + deployed. Do NOT add to
+    # pv_cents — canonical already included it. Local alias for readability.
+    starting_cents += pr_starting_cents
+    pv_cents_adj = pv_cents
+    deployed_usd += pr_deployed_usd
     deployment_pct = (deployed_usd * 100) / (starting_cents / 100) if starting_cents else 0
 
     # Net exposure by symbol (sum across bots)
@@ -263,9 +305,10 @@ def get_risk_console(
             b["is_option"] = True
     net_exposure = sorted(by_symbol.values(), key=lambda x: -x["notional_usd"])
 
-    # Concentration: top-5 symbols as % of PV
+    # Concentration: top-5 symbols as % of PV (uses portfolio-rank-inclusive PV
+    # so the denominator matches the fund invariant).
     top5 = sum(x["notional_usd"] for x in net_exposure[:5])
-    pv_usd = pv_cents / 100.0
+    pv_usd = pv_cents_adj / 100.0
     top5_concentration_pct = (top5 / pv_usd * 100) if pv_usd else 0
 
     dd = _max_drawdown_from_snapshots(db, uid, days=60)
@@ -276,14 +319,19 @@ def get_risk_console(
     sleeve_totals = defaultdict(float)
     for p in positions:
         sleeve_totals[p["asset_class"] or "unknown"] += p["notional_usd"]
+    # Portfolio-rank capital surfaces as its own sleeve. Even before the
+    # runner places holdings, we surface starting_capital here so the pie
+    # includes the $100K and the LP-facing narrative stays consistent.
+    if pr_pv_cents > 0:
+        sleeve_totals["portfolio_rank"] = pr_pv_cents / 100.0
 
     return {
         "as_of": datetime.now(timezone.utc).isoformat(),
         "user_id": uid,
         "fund": {
-            "pv_cents": pv_cents,
+            "pv_cents": pv_cents_adj,
             "starting_cents": starting_cents,
-            "all_time_pnl_cents": pv_cents - starting_cents,
+            "all_time_pnl_cents": pv_cents_adj - starting_cents,
             "pnl_windows": pnl,
         },
         "deployment": {

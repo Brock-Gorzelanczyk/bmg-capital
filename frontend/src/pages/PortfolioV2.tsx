@@ -26,6 +26,9 @@ const SLEEVE_COLORS: Record<string, string> = {
   options: "#c79bf0",
   option: "#c79bf0",
   quant: "#38bdf8",
+  // Portfolio-Rank sleeve — factor-based bots (momentum, quality).
+  // Distinct emerald so the pie makes it obvious these are not quant.
+  portfolio_rank: "#10b981",
   cash: "#3a4a3a",
 };
 
@@ -646,6 +649,11 @@ export default function PortfolioV2() {
       ["Stocks", "stock"],
       ["Crypto", "crypto"],
       ["Options", "option"],
+      // 2026-07-06 Portfolio-Rank Phase 2. momentum_umd + quality_gross_profitability.
+      // Backend surfaces this as sleeves.portfolio_rank in dashboard/v2 AND as
+      // sleeve_notional_usd.portfolio_rank in risk/console. Rendering the slice
+      // is what fixes the $998K → $898K "gap" LP-visible complaint.
+      ["Portfolio Rank", "portfolio_rank"],
     ];
     for (const [name, key] of known) {
       const amt = (sleeves[key] || 0) + (key === "option" ? (sleeves["options"] || 0) : 0);
