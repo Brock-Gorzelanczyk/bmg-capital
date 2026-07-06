@@ -23,16 +23,24 @@ def _can_fire_signal(
     symbol: str,
     side: str,
     cooldown_min: float,
+    min_symbol_gap_seconds: float = 0.0,
 ) -> bool:
     """Profile-level cooldown gate.
 
-    Queries across ALL allocations for this bot so multiple allocations cannot
-    independently bypass the same cooldown window. Also enforces a minimum
-    1-minute concurrent-scan dedup regardless of cooldown_minutes setting.
+    Two independent checks:
+      1. Per (symbol, side) cooldown — cooldown_minutes from YAML, min 1 min.
+         Blocks a re-fire of the same directional signal.
+      2. Per symbol (any side) dedup — min_symbol_gap_seconds from YAML.
+         Off by default (0). Set on high-frequency scalpers (scalp_1m) to
+         collapse buy/sell flip noise from 1m bars. A BUY at t=0 followed by
+         a SELL at t=30s on the same symbol is almost always OHLC noise,
+         not a real reversal — the 30s SELL gets dropped.
     """
+    from sqlalchemy import text as _text
+
+    # Check 1 — per (symbol, side) cooldown (existing behavior).
     effective_min = max(cooldown_min, 1.0)  # always block within 1 min
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=effective_min)
-    from sqlalchemy import text as _text
     row = db.execute(
         _text("""
             SELECT bs.id FROM bot_signals bs
@@ -52,6 +60,30 @@ def _can_fire_signal(
             profile_name, symbol, side, effective_min, row[0],
         )
         return False
+
+    # Check 2 — per-symbol (any-side) dedup for high-frequency scalpers.
+    # Opt-in via profile YAML `min_symbol_gap_seconds`. Default 0 = disabled.
+    if min_symbol_gap_seconds > 0:
+        sym_cutoff = datetime.now(timezone.utc) - timedelta(seconds=min_symbol_gap_seconds)
+        srow = db.execute(
+            _text("""
+                SELECT bs.id, bs.side FROM bot_signals bs
+                JOIN bot_allocations ba ON ba.id = bs.allocation_id
+                JOIN bot_profiles bp ON bp.id = ba.profile_id
+                WHERE bp.name = :pname
+                  AND bs.symbol = :symbol
+                  AND bs.ts >= :cutoff
+                LIMIT 1
+            """),
+            {"pname": profile_name, "symbol": symbol, "cutoff": sym_cutoff},
+        ).first()
+        if srow is not None:
+            logger.warning(
+                "[symbol-dedup] %s %s/%s — same symbol %s fired within last %.0fs (signal id=%s)",
+                profile_name, symbol, side, srow[1], min_symbol_gap_seconds, srow[0],
+            )
+            return False
+
     return True
 
 
@@ -298,9 +330,15 @@ def scan_and_execute(
         or 999
     )
 
+    # min_symbol_gap_seconds — per-symbol (any-side) dedup for scalpers.
+    # 2026-07-05: added after scalp_1m fired 1,146 signals in 24h (~48/hr,
+    # ceiling 120/hr). Set to 60s on scalp_1m to collapse buy/sell noise
+    # on the same symbol within one 2-min scan window. Default 0 = off.
+    min_symbol_gap_s = float(profile.get("min_symbol_gap_seconds", 0) or 0)
+
     logger.warning(
-        "[scan:%s] cooldown_minutes=%.0f position_cap=%d",
-        profile_name, cooldown_min, position_cap,
+        "[scan:%s] cooldown_minutes=%.0f position_cap=%d min_symbol_gap_s=%.0f",
+        profile_name, cooldown_min, position_cap, min_symbol_gap_s,
     )
 
     # ── Pre-deduplicate: keep one signal per (symbol, side) — highest confidence ─
@@ -354,7 +392,10 @@ def scan_and_execute(
             # Hard profile-level cooldown gate — checks ALL allocations for this bot
             # so multiple allocations cannot independently bypass the same cooldown.
             # Also enforces minimum 1-minute concurrent-scan dedup.
-            if not _can_fire_signal(db, profile_name, r["symbol"], r["side"], cooldown_min):
+            if not _can_fire_signal(
+                db, profile_name, r["symbol"], r["side"], cooldown_min,
+                min_symbol_gap_seconds=min_symbol_gap_s,
+            ):
                 continue
 
             # Persist

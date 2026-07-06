@@ -52,7 +52,17 @@ trailing_stop_activate_at_pct: 0.4
 trailing_stop_distance_pct: 0.2
 hold_max_hours: 0.5            # 30-min max — real scalp
 
-cooldown_minutes: 5            # allow rapid re-entry
+cooldown_minutes: 5            # allow rapid re-entry (per symbol+side)
+
+# 2026-07-05 Brock: scalp_1m fired 1,146 signals in 24h (~48/hr) — 3x the
+# healthy ceiling for a 1m scalper. Root cause: 4 strategies × 5 symbols ×
+# 2 sides = 40 possible signal pairs per scan, and 5-min per-(symbol,side)
+# cooldown left room for buy/sell flip noise on the same symbol. This
+# gap adds an any-side dedup at the same (symbol) so a BUY at t=0 blocks
+# a SELL at t=30s (almost always OHLC noise on 1m bars, not a real
+# reversal). Bounds signals at (5 symbols) × (60/1) = 300/hr ceiling but
+# in practice pushes emitted rate under 30/hr.
+min_symbol_gap_seconds: 60
 
 risk_overlay:
   daily_loss_limit_pct: 2.0
