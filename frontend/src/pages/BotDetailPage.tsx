@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import PortfolioRankDetailPage from "./PortfolioRankDetailPage";
 import { BracketFrame, SectionLabel } from "@/components/design";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -2675,10 +2676,27 @@ function BotWhySection({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// 2026-07-06: portfolio-rank bots (Phase 2 anomaly + dummy) have a completely
+// different data shape than signal-trigger bots. Route them to their own
+// component instead of forcing the signal-trigger layout to be null on every
+// field. Kept as a hardcoded name check because there are only 3 of these
+// bots today and adding a runtime `bot_type` fetch would add a network hop
+// before any render.
+const _PORTFOLIO_RANK_BOT_NAMES = new Set([
+  "dummy_alpha_rank",
+  "momentum_umd",
+  "quality_gross_profitability",
+]);
+
 export default function BotDetailPage() {
   const { botName = "" } = useParams<{ botName: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
+
+  // Portfolio-rank early return — full layout owned by PortfolioRankDetailPage.
+  if (_PORTFOLIO_RANK_BOT_NAMES.has(botName)) {
+    return <PortfolioRankDetailPage botName={botName} />;
+  }
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [selectedSignal, setSelectedSignal] = useState<BotSignal | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<BotPosition | null>(null);

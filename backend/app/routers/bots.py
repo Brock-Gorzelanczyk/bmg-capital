@@ -515,6 +515,15 @@ def list_bots(
             row["current_equity_usd"] = round(snap.portfolio_value_cents / 100, 2)
             row["all_time_pnl_usd"] = round((snap.portfolio_value_cents - starting) / 100, 2)
             row["all_time_pnl_pct"] = snap.all_time_return_pct
+            # 2026-07-06: previously the response only exposed the *_usd
+            # keys. Frontend and diagnostic consumers were reading
+            # today_pnl_cents / all_time_pnl_cents (integers, no float
+            # precision loss) and getting undefined → leaderboard rendered
+            # $0 for every bot. Expose the cent-precise variants directly
+            # so callers stop having to compute round(x_usd * 100).
+            row["today_pnl_cents"]    = int(snap.today_pnl_cents or 0)
+            row["all_time_pnl_cents"] = int((snap.portfolio_value_cents or 0) - starting)
+            row["starting_capital_cents"] = int(starting)
         else:
             row["demo"] = True
             row["return_30d_pct"] = None
@@ -527,6 +536,9 @@ def list_bots(
             row["current_equity_usd"] = None
             row["all_time_pnl_usd"] = None
             row["all_time_pnl_pct"] = None
+            row["today_pnl_cents"] = None
+            row["all_time_pnl_cents"] = None
+            row["starting_capital_cents"] = None
 
         result.append(row)
 
