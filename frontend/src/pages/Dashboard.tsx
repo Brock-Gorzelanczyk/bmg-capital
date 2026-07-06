@@ -134,11 +134,16 @@ export default function Dashboard() {
   const qc = useQueryClient();
   const isViewer = useIsViewer();
 
-  const { data } = useQuery({
+  const { data, error, isLoading, isError, refetch } = useQuery({
     queryKey: ["dashboard-v2"],
     queryFn: getDashboardV2,
     staleTime: 60_000,
-    retry: 1,
+    // 2026-07-05: bumped retry 1 -> 3 with exponential backoff. Users were
+    // seeing a silent "$—" whenever the first fetch failed (cold start,
+    // upstream 502, token race). One retry was not enough on cold starts;
+    // the query would give up and leave data undefined forever.
+    retry: 3,
+    retryDelay: (n) => Math.min(1000 * 2 ** n, 8000),
   });
 
   const { data: regime } = useQuery({
@@ -235,8 +240,33 @@ export default function Dashboard() {
         <BracketFrame className="mb-8 p-5 rounded-xl" glow>
           <SectionLabel as="p" className="mb-3">Portfolio Value</SectionLabel>
           <div className="text-5xl font-bold tracking-tight tabular-nums font-mono-t">
-            {totalValue ? fmtUsd(totalValue) : <span className="text-t-muted">$—</span>}
+            {totalValue
+              ? fmtUsd(totalValue)
+              : isLoading
+                ? <span className="text-t-muted animate-pulse">loading…</span>
+                : isError
+                  ? <span className="text-t-red text-2xl">could not load PV</span>
+                  : <span className="text-t-muted">$—</span>}
           </div>
+          {isError && (
+            <div className="mt-3 text-xs text-t-red flex items-center gap-3">
+              <span>
+                {(error as any)?.response?.status
+                  ? `HTTP ${(error as any).response.status}${
+                      (error as any).response?.data?.detail
+                        ? `: ${(error as any).response.data.detail}`
+                        : ""
+                    }`
+                  : (error as any)?.message || "unknown error"}
+              </span>
+              <button
+                onClick={() => refetch()}
+                className="text-t-red underline underline-offset-2 hover:opacity-80"
+              >
+                retry
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-4 mt-3 flex-wrap">
             <span className={cn("text-lg font-semibold tabular-nums font-mono-t", isUp ? "text-[var(--bmg-green)]" : "text-t-red")}>
               {isUp ? "+" : ""}{fmtUsd(todayPnl)}{" "}

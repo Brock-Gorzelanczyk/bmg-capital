@@ -426,12 +426,26 @@ async def get_bars(
         bars_list = cached
         main_ohlcv = [{"open": b["o"], "high": b["h"], "low": b["l"], "close": b["c"], "volume": b["v"]} for b in bars_list]
     else:
-        try:
+        # 2026-07-05 resilience fix: yfinance sync calls used to block the
+        # async loop with no timeout. When yfinance hung (rate-limit,
+        # transient upstream error, DNS blip), the request would hang past
+        # Railway's 30s ingress limit and return a 502 Bad Gateway with no
+        # useful error message. Now we run the fetch in a worker thread with
+        # a 15s wall-clock cap; on timeout or unhandled provider error we
+        # return 503 with a specific message so the client can retry with
+        # backoff instead of parsing an opaque gateway error.
+        import asyncio as _asyncio
+
+        def _sync_fetch() -> list[dict]:
             ticker = yf.Ticker(symbol.upper())
-            rows = _fetch_yf_ohlcv(ticker, start_str, end_exclusive, interval, timeframe, adjustment)
-            if not rows:
+            _rows = _fetch_yf_ohlcv(ticker, start_str, end_exclusive, interval, timeframe, adjustment)
+            if not _rows:
                 # CCXT fallback for crypto symbols (e.g. FET-USD → FET/USDT on Binance)
-                rows = _fetch_ccxt_ohlcv(symbol, timeframe, start_str)
+                _rows = _fetch_ccxt_ohlcv(symbol, timeframe, start_str)
+            return _rows
+
+        try:
+            rows = await _asyncio.wait_for(_asyncio.to_thread(_sync_fetch), timeout=15.0)
             if not rows:
                 raise HTTPException(status_code=404, detail=f"No data for {symbol}")
 
@@ -440,10 +454,15 @@ async def get_bars(
 
             ttl = 3600 if timeframe in ("4Hour", "1Hour") else 300 if timeframe in ("30Min", "15Min", "5Min", "1Min") else 86400
             set_cache(cache_sym, timeframe, start_str, end_str, bars_list, ttl)
+        except _asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=503,
+                detail=f"yfinance timeout for {symbol} after 15s; retry with backoff",
+            )
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=502, detail=f"bars provider error for {symbol}: {e}")
 
     if not bars_list:
         raise HTTPException(status_code=404, detail=f"No data for {symbol}")

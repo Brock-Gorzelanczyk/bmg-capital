@@ -47,7 +47,9 @@ export default function TradingDeskIframePage() {
     async function poll() {
       if (stopped) return;
       try {
-        const res = await client.get("/api/live/bot-activity", {
+        // client baseURL is "/api" so this path must NOT include the prefix
+        // or we ship /api/api/live/bot-activity → 502 route mismatch.
+        const res = await client.get("/live/bot-activity", {
           params: {
             since_signal_id: lastSignalIdRef.current,
             since_trade_id: lastTradeIdRef.current,
