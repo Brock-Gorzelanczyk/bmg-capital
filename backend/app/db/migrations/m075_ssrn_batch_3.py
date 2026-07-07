@@ -134,10 +134,12 @@ _ST_TRIMS = [
 _ST_NEW = [
     {
         "profile_name": "macro_faber_gtaa",
+        "asset_class": "stock",
         "starting_capital_cents": 1_500_000,  # 15k
     },
     {
         "profile_name": "spy_iron_condor_weekly",
+        "asset_class": "options",
         "starting_capital_cents": 1_500_000,  # 15k
     },
 ]
@@ -251,24 +253,28 @@ def run(conn) -> dict:
     # ── 4. Create bot_profiles + bot_allocations for new signal-trigger ─
     for b in _ST_NEW:
         pname = b["profile_name"]
-        # Get or create bot_profile
+        asset_class = b["asset_class"]
+        # Get or create bot_profile. bot_profiles has NOT NULL on
+        # name + asset_class + enabled.
         prof = conn.execute(text(
             "SELECT id FROM bot_profiles WHERE name = :n"
         ), {"n": pname}).fetchone()
         if not prof:
             conn.execute(text(
-                "INSERT INTO bot_profiles (name, enabled, created_at) "
-                "VALUES (:n, 1, :ts)"
-            ), {"n": pname, "ts": now_iso})
+                "INSERT INTO bot_profiles (name, asset_class, enabled, "
+                "created_at) VALUES (:n, :ac, 1, :ts)"
+            ), {"n": pname, "ac": asset_class, "ts": now_iso})
             prof = conn.execute(text(
                 "SELECT id FROM bot_profiles WHERE name = :n"
             ), {"n": pname}).fetchone()
             actions.append({"table": "profile", "bot": pname,
                             "action": "created"})
-            logger.warning("[m075] created bot_profile %s", pname)
+            logger.warning("[m075] created bot_profile %s (%s)",
+                           pname, asset_class)
         profile_id = int(prof[0])
 
-        # Get or create bot_allocations row
+        # Get or create bot_allocations row. bot_allocations has NOT NULL
+        # on go_live_requested (default False).
         alloc = conn.execute(text(
             "SELECT id FROM bot_allocations WHERE user_id = :uid AND "
             "profile_id = :pid"
@@ -277,10 +283,11 @@ def run(conn) -> dict:
             conn.execute(text("""
                 INSERT INTO bot_allocations
                   (user_id, profile_id, capital_pct, risk_profile,
-                   paper_mode, enabled, starting_capital_cents,
-                   tier, created_at, updated_at)
+                   paper_mode, go_live_requested, enabled,
+                   starting_capital_cents, tier, created_at, updated_at)
                 VALUES
-                  (:uid, :pid, 1.5, 'standard', 1, 1, :cap, 'T2', :ts, :ts)
+                  (:uid, :pid, 1.5, 'standard', 1, 0, 1, :cap, 'T2',
+                   :ts, :ts)
             """), {
                 "uid": _BROCK_USER_ID, "pid": profile_id,
                 "cap": b["starting_capital_cents"], "ts": now_iso,
