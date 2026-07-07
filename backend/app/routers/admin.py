@@ -596,6 +596,77 @@ def options_quarantine_all_open(
     }
 
 
+# ── POST /api/admin/positions/quarantine-all-sim ────────────────────────────
+#
+# Path 2 (honest labeling): quarantine every open position that is NOT
+# verified against Alpaca (alpaca_order_id IS NULL on ALL entry trades
+# for that position). Leaves REAL Alpaca-linked positions untouched.
+#
+# After running, /api/admin/broker-reconciliation open_positions_count
+# should match Alpaca positions_count within 1-2 (small race with new
+# fills). This ends the "586 in DB vs 5 at Alpaca" mismatch.
+
+@router.post("/positions/quarantine-all-sim")
+def positions_quarantine_all_sim(
+    reason: str = "path2_honest_labeling_2026_07_07",
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+) -> Dict[str, Any]:
+    """Quarantine every open position that has no linked Alpaca fill.
+
+    Criteria for quarantine:
+      - closed_at IS NULL
+      - quarantined_at IS NULL
+      - No BotTrade rows exist for this position with alpaca_order_id NOT NULL
+
+    A position is considered "real" if at least one of its trades has an
+    alpaca_order_id (meaning a real Alpaca fill was recorded during entry).
+    Everything else was a silent DB fallback write.
+    """
+    from sqlalchemy import text as _t
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Count before
+    before_row = db.execute(_t(
+        "SELECT COUNT(*) FROM bot_positions "
+        "WHERE closed_at IS NULL AND quarantined_at IS NULL"
+    )).fetchone()
+    before_count = int(before_row[0] or 0)
+
+    # Quarantine any open position that has NO alpaca-linked trade.
+    res = db.execute(_t("""
+        UPDATE bot_positions
+        SET quarantined_at = :ts, quarantine_reason = :r
+        WHERE id IN (
+            SELECT p.id
+            FROM bot_positions p
+            WHERE p.closed_at IS NULL
+              AND p.quarantined_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM bot_trades t
+                WHERE t.position_id = p.id
+                  AND t.alpaca_order_id IS NOT NULL
+              )
+        )
+    """), {"ts": now_iso, "r": reason})
+    db.commit()
+
+    after_row = db.execute(_t(
+        "SELECT COUNT(*) FROM bot_positions "
+        "WHERE closed_at IS NULL AND quarantined_at IS NULL"
+    )).fetchone()
+    after_count = int(after_row[0] or 0)
+
+    return {
+        "quarantined_count": res.rowcount,
+        "open_positions_before": before_count,
+        "open_positions_after": after_count,
+        "remaining_are_alpaca_verified": True,
+        "reason": reason,
+        "ts": now_iso,
+    }
+
+
 # ── POST /api/admin/bots/scrub-ghost-pnl ─────────────────────────────────────
 
 @router.post("/bots/scrub-ghost-pnl")
