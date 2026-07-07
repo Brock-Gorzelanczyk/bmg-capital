@@ -845,6 +845,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m076_halt_options_bots FAILED: %s",
                      _m076_exc, exc_info=True)
 
+    # m077: mirror BMG fund invariant to Alpaca equity ($97,340). Scales
+    # every bot proportionally 1M -> 97,340 and re-enables the 2 options
+    # bots that m076 halted (safe now that sell-side fix is deployed).
+    try:
+        from app.db.migrations.m077_mirror_alpaca_97k import run as _run_m077
+        with engine.begin() as _m077_conn:
+            _m077_result = _run_m077(_m077_conn)
+        logger.warning("[startup] m077 status: %s", _m077_result)
+    except Exception as _m077_exc:
+        logger.error("[startup] m077_mirror_alpaca_97k FAILED: %s",
+                     _m077_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

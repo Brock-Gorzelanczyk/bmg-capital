@@ -27,7 +27,12 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-EXPECTED_SUM_CENTS = 100_000_000  # $1,000,000.00
+# 2026-07-07 m077: BMG fund invariant now mirrors Alpaca paper equity
+# rather than the original $1M target. Brock's directive after
+# discovering the credit-side sign flip drained buying power:
+# "we can still use all of the bots and strategies and bring the app to
+# mirror alpaca at 97k".
+EXPECTED_SUM_CENTS = 9_734_000    # $97,340.00 (Alpaca equity at m077 write)
 DRIFT_OK_CENTS = 100              # ±$1 OK band
 DRIFT_WARN_CENTS = 10_000         # $100 = WARN
 # Above WARN = CRIT
