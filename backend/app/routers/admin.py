@@ -392,6 +392,131 @@ def alpaca_ping(
         }
 
 
+# ── GET /api/admin/broker-reconciliation ────────────────────────────────────
+#
+# Ground-truth answer to "is our track record real or DB-simulated?"
+# Pulls Alpaca /v2/positions + /v2/orders and cross-references against
+# BMG's bot_trades and bot_positions. Any drift means silent fallback
+# writes (see runner.py:_execute_signal) are producing synthetic rows.
+
+@router.get("/broker-reconciliation")
+def broker_reconciliation(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Cross-check Alpaca broker state vs BMG DB claim.
+
+    Returns per-source counts + drift verdict. Zero real Alpaca fills
+    means every "trade" in bot_trades is a silent DB fallback from the
+    runner's exception handler (best-effort broker call, sim on any
+    failure). This endpoint surfaces that.
+    """
+    import os as _os
+    import urllib.request as _ur
+    import json as _json
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import text as _text
+
+    key = _os.getenv("ALPACA_PAPER_KEY") or _os.getenv("ALPACA_API_KEY", "")
+    secret = _os.getenv("ALPACA_PAPER_SECRET") or _os.getenv("ALPACA_SECRET_KEY", "")
+
+    now = datetime.now(timezone.utc)
+    cutoff_24h = (now - timedelta(hours=24)).isoformat()
+    result: Dict[str, Any] = {"as_of": now.isoformat()}
+
+    alpaca_positions: list = []
+    alpaca_orders: list = []
+    alpaca_error: str | None = None
+
+    if not key or not secret:
+        alpaca_error = "no_credentials"
+    else:
+        base = "https://paper-api.alpaca.markets/v2"
+        hdrs = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
+        try:
+            with _ur.urlopen(_ur.Request(f"{base}/positions", headers=hdrs), timeout=10) as r:
+                alpaca_positions = _json.loads(r.read())
+        except Exception as exc:
+            alpaca_error = f"positions_fetch_failed: {exc}"
+        try:
+            with _ur.urlopen(
+                _ur.Request(f"{base}/orders?status=all&limit=500&direction=desc", headers=hdrs),
+                timeout=10,
+            ) as r:
+                alpaca_orders = _json.loads(r.read())
+        except Exception as exc:
+            alpaca_error = f"{alpaca_error or ''}; orders_fetch_failed: {exc}"
+
+    orders_24h = [
+        o for o in alpaca_orders
+        if (o.get("submitted_at") or o.get("created_at") or "") >= cutoff_24h
+    ]
+    orders_filled = [o for o in alpaca_orders if o.get("status") == "filled"]
+
+    result["alpaca"] = {
+        "positions_count": len(alpaca_positions),
+        "orders_count_all_time": len(alpaca_orders),
+        "orders_filled_all_time": len(orders_filled),
+        "orders_24h_count": len(orders_24h),
+        "error": alpaca_error,
+    }
+
+    # BMG DB claim
+    db_positions_row = db.execute(_text(
+        "SELECT COUNT(*) FROM bot_positions WHERE closed_at IS NULL"
+    )).fetchone()
+    db_trades_24h_row = db.execute(_text(
+        "SELECT COUNT(*) FROM bot_trades WHERE ts >= :cut"
+    ), {"cut": cutoff_24h}).fetchone()
+    db_trades_alpaca_linked_row = db.execute(_text(
+        "SELECT COUNT(*) FROM bot_trades WHERE alpaca_order_id IS NOT NULL"
+    )).fetchone()
+    db_trades_no_alpaca_row = db.execute(_text(
+        "SELECT COUNT(*) FROM bot_trades WHERE alpaca_order_id IS NULL"
+    )).fetchone()
+
+    result["bmg_db"] = {
+        "open_positions_count": int(db_positions_row[0] or 0),
+        "trades_24h": int(db_trades_24h_row[0] or 0),
+        "trades_with_alpaca_order_id": int(db_trades_alpaca_linked_row[0] or 0),
+        "trades_without_alpaca_order_id": int(db_trades_no_alpaca_row[0] or 0),
+    }
+
+    # Verdict
+    db_open = result["bmg_db"]["open_positions_count"]
+    alp_open = result["alpaca"]["positions_count"]
+    pct_real = 0.0
+    total_trades = (
+        result["bmg_db"]["trades_with_alpaca_order_id"]
+        + result["bmg_db"]["trades_without_alpaca_order_id"]
+    )
+    if total_trades > 0:
+        pct_real = round(
+            result["bmg_db"]["trades_with_alpaca_order_id"] / total_trades * 100, 2
+        )
+
+    if alpaca_error:
+        verdict = "UNKNOWN — Alpaca query failed"
+    elif db_open == alp_open == 0 and total_trades == 0:
+        verdict = "EMPTY — no positions on either side"
+    elif alp_open == 0 and db_open > 0:
+        verdict = (
+            "DRIFT — DB reports positions but Alpaca has none. Every 'trade' in "
+            "bot_trades is a silent DB fallback from runner._execute_signal, not a real "
+            "Alpaca paper fill. Track record is internal simulation, not verifiable."
+        )
+    elif alp_open > 0 and db_open == 0:
+        verdict = "DRIFT — Alpaca has positions not tracked in BMG DB"
+    else:
+        drift = abs(db_open - alp_open)
+        verdict = f"PARTIAL — DB={db_open} vs Alpaca={alp_open} (drift={drift})"
+
+    result["verdict"] = verdict
+    result["pct_real_alpaca_fills"] = pct_real
+
+    return result
+
+
 # ── POST /api/admin/bots/scrub-ghost-pnl ─────────────────────────────────────
 
 @router.post("/bots/scrub-ghost-pnl")

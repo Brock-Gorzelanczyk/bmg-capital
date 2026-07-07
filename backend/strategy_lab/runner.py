@@ -2415,9 +2415,28 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                 extended_hours=_in_ext_hours,
             )
             order_id = result.get("order_id")
+            logger.warning(
+                "[ALPACA-FILL] %s %s %s x%.4f → order_id=%s (REAL Alpaca paper order)",
+                profile_name, "sell" if is_short else "buy", sig.symbol, qty, order_id,
+            )
         except Exception as exc:
-            logger.warning("[execute:%s] bracket_order failed for %s: %s", profile_name, sig.symbol, exc)
-            # Fall through — still create DB rows as simulated paper fill
+            # Escalated 2026-07-07 from warning to error so silent fallbacks
+            # surface in Sentry. Prior state was 100% Alpaca-rejected orders
+            # falling through to DB-only simulation with a debug-level warning
+            # that nobody saw. Log full exception + explicit fallback marker.
+            logger.error(
+                "[ALPACA-REJECT] %s %s x%.4f side=%s exception_type=%s message=%r",
+                profile_name, sig.symbol, qty, "sell" if is_short else "buy",
+                type(exc).__name__, str(exc),
+            )
+            logger.error(
+                "[SIMULATED-FILL-FALLBACK] %s %s — writing DB row with alpaca_order_id=NULL. "
+                "This is a synthetic trade, not a real Alpaca fill. Track record credibility=0.",
+                profile_name, sig.symbol,
+            )
+            # Fall through — still create DB rows as simulated paper fill.
+            # Removing this fallback is Path A of the P0 fix; for now the
+            # loud logging surfaces the problem for triage.
 
     fill_cents = entry_price * 100  # float — preserves sub-penny precision (e.g. SHIB)
 
