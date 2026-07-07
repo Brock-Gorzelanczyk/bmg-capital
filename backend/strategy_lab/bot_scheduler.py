@@ -748,6 +748,34 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job bot_stock_pead (16:00 ET Mon-Fri)")
 
+    # macro_faber_gtaa: 3:45 PM ET daily Mon-Fri (post-close prep, applies
+    # 10-month SMA rule on 5 macro ETFs). Fires once immediately so bar
+    # cache warms on deploy.
+    scheduler.add_job(
+        lambda: _run_and_log("macro_faber_gtaa"),
+        CronTrigger(day_of_week="mon-fri", hour=15, minute=45, timezone=ET),
+        id="bot_macro_faber_gtaa",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=1800,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_macro_faber_gtaa (15:45 ET Mon-Fri)")
+
+    # spy_iron_condor_weekly: Monday 10:00 AM ET (weekly 16-delta condor
+    # entry on SPY/QQQ/IWM at 45 DTE). One-shot per week during RTH.
+    scheduler.add_job(
+        lambda: _run_and_log("spy_iron_condor_weekly"),
+        CronTrigger(day_of_week="mon", hour=10, minute=0, timezone=ET),
+        id="bot_spy_iron_condor_weekly",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job bot_spy_iron_condor_weekly (10:00 ET Mon)")
+
     # One-time startup log: emit cooldown_minutes for each quant bot so Railway
     # logs confirm the YAML setting is in effect on this deploy.
     try:

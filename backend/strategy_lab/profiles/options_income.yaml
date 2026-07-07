@@ -129,7 +129,7 @@ ensemble: weighted_vote
 # per-trade budget lands at min($4k, $1.5k) = $1.5k on a $50k sleeve.
 # Worst-case: 15 positions × $1.5k = $22.5k risk (45% of sleeve).
 composite_threshold: 30
-position_cap: 15
+position_cap: 30
 position_size_pct: 8.0
 stop_loss_pct: 50.0
 take_profit_pct: 50.0

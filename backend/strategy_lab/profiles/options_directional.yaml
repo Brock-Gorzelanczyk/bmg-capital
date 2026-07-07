@@ -114,7 +114,7 @@ ensemble: weighted_vote
 # don't fit the "many small trades" pattern. Credit spreads + debit spreads
 # should fire much more frequently.
 composite_threshold: 30
-position_cap: 15
+position_cap: 30
 position_size_pct: 8.0
 stop_loss_pct: 100.0
 take_profit_pct: 50.0
