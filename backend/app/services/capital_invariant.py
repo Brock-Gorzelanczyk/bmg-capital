@@ -65,6 +65,8 @@ _EXPECTED_NAMES = (
     # 2026-07-02 Brock table (m057)
     "stock_gap_fade", "stock_orb_breakout",
     "stock_momentum_breakout", "stock_pead",
+    # 2026-07-07 m075 (SSRN batch 3): 2 new signal-trigger bots
+    "macro_faber_gtaa", "spy_iron_condor_weekly",
 )
 # NOTE: Adding a new production bot? Also add its name here — otherwise the
 # capital_invariant watchdog will false-trigger CRIT because the new bot's
