@@ -1837,6 +1837,46 @@ def _execute_options_signal(
         )
         position_dollars = notional_cap
 
+    # ── VIX/VIX3M regime gate for short-vol setups (Simon-Campasano 2014) ────
+    # Only applied to short-vol setups (credit spreads, condors, wheel).
+    # Long-vol setups (long calls, LEAPS, debit spreads) are exempt.
+    # In backwardation (VIX/VIX3M > 1.0) short-vol has poor expected value;
+    # multiplier=0 skips the trade. Neutral zone scales to half size.
+    _SHORT_VOL_SETUPS = {
+        "bull_put_credit_spread", "bear_call_credit_spread",
+        "iron_condor_45dte", "neutral_calendar_spread",
+        "wheel_strategy", "cash_secured_put", "covered_call_30d",
+        "jade_lizard",
+    }
+    try:
+        import json as _vg_json
+        _reason_data = _vg_json.loads(sig.reason) if sig.reason else {}
+        _setup = _reason_data.get("setup", "")
+    except Exception:
+        _setup = ""
+
+    if _setup in _SHORT_VOL_SETUPS:
+        try:
+            from strategy_lab.core.vix_regime import get_vix_regime_multiplier
+            _vix_mult = get_vix_regime_multiplier()
+            if _vix_mult == 0.0:
+                logger.warning(
+                    "[vix_regime] %s %s setup=%s SKIP — VIX backwardation, short-vol regime OFF",
+                    profile_name, sig.symbol, _setup,
+                )
+                return False
+            elif _vix_mult < 1.0:
+                logger.info(
+                    "[vix_regime] %s %s setup=%s size *= %.2f (neutral regime)",
+                    profile_name, sig.symbol, _setup, _vix_mult,
+                )
+                position_dollars *= _vix_mult
+        except Exception as _vg_exc:
+            logger.warning(
+                "[vix_regime] gate lookup failed for %s: %s — proceeding at 1.0",
+                profile_name, _vg_exc,
+            )
+
     # ── Phase 5: per-user concentration / sector / cluster gates (options) ──
     # Wire-in is BEFORE contract count compute. Options notional measured at
     # the budget level (post per-trade sleeve clamp). _resolve_option_details

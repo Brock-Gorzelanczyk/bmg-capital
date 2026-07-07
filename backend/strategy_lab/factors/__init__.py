@@ -64,6 +64,16 @@ def _idio_volatility(symbols: list[str], db: Session, params: dict) -> dict[str,
     return compute(symbols, db, params)
 
 
+def _residual_momentum(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .residual_momentum import compute
+    return compute(symbols, db, params)
+
+
+def _bab(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .bab import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
@@ -78,6 +88,11 @@ _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     #   idio_volatility: distinct from low_volatility, market-residual vol
     "tsm_12m": _tsm_12m,
     "idio_volatility": _idio_volatility,
+    # 2026-07-07 SSRN batch (top-of-catalog picks):
+    #   residual_momentum: Blitz-Huij-Martens — 2x Sharpe of raw 12-1 momentum
+    #   bab: Frazzini-Pedersen Betting Against Beta — long-only low-beta variant
+    "residual_momentum": _residual_momentum,
+    "bab": _bab,
 }
 
 

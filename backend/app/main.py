@@ -808,6 +808,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m073_activate_ssrn_and_zombie_cleanup FAILED: %s",
                      _m073_exc, exc_info=True)
 
+    # m074: seed 2 more SSRN factor bots. Trims momentum_umd + quality
+    # each 35k -> 25k to fund residual_momentum + bab at 10k each.
+    # Enabled on insert; first rebalance next 03:00 CT cron.
+    try:
+        from app.db.migrations.m074_ssrn_batch_2 import run as _run_m074
+        with engine.begin() as _m074_conn:
+            _m074_result = _run_m074(_m074_conn)
+        logger.warning("[startup] m074 status: %s", _m074_result)
+    except Exception as _m074_exc:
+        logger.error("[startup] m074_ssrn_batch_2 FAILED: %s",
+                     _m074_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

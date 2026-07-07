@@ -1,0 +1,42 @@
+name: macro_faber_gtaa
+asset_class: stock
+broker: alpaca_paper_stocks
+universe:
+  source: static
+  size: 5
+  symbols:
+    - VTI    # US total-market equities
+    - EFA    # Foreign developed equities
+    - VNQ    # US REITs
+    - DBC    # Broad commodity basket
+    - IEF    # US 7-10y Treasuries
+scan_lookback_period: "2y"
+confidence_threshold: 0.50
+cadence: "0 20 * * 2"   # Once daily 20:00 UTC = 15:00 ET (post-close data)
+long_only: true
+strategies:
+  - faber_gtaa
+ensemble: any_above_threshold
+position_cap: 5
+position_size_pct: 20.0    # Each of 5 ETFs = 20% of allocation
+hold_min_days: 30          # Faber is monthly-cadence; enforce hold
+rebalance_only: false
+risk_overlay:
+  portfolio_drawdown_circuit_pct: 25
+regime_filters: []
+execution:
+  order_type: limit
+  limit_offset_bps: 3
+  reprice_after_seconds: 60
+  reprice_attempts: 3
+  fallback_to_market: true
+  use_brackets: false
+paper_only: true
+discord:
+  channel: stocks-signals
+
+risk:
+  deployment_target_pct: 1.0    # Fully invested when all 5 ETFs trending
+  target_position_count: 5
+  max_position_pct: 0.20        # 20% per ETF is the design
+  max_total_deployed_pct: 1.0
