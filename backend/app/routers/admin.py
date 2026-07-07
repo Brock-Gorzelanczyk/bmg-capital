@@ -2486,13 +2486,22 @@ def capital_invariant(
       warn — drift in ($1, $100]
       crit — drift > $100  (logs CRITICAL + Discord ops alert)
     """
-    from app.services.capital_invariant import check_capital_invariant
+    from app.services.capital_invariant import (
+        check_capital_invariant,
+        EXPECTED_SUM_CENTS as _capinv_expected_const,
+    )
+    def _capinv_expected() -> int:
+        return _capinv_expected_const
     status = check_capital_invariant(db, user_id=1)
     return {
         "status":                status.status,
         "is_valid":              status.is_valid,
         "current_sum_cents":     status.current_sum_cents,
-        "expected_sum_cents":    100_000_000,
+        # 2026-07-07 m077: expected pulled from service constant so
+        # the mirror-Alpaca rescale ($97,340) is reflected in API
+        # responses. Was hardcoded to 100_000_000 which caused a
+        # $903k phantom drift display after m077 landed.
+        "expected_sum_cents":    _capinv_expected(),
         "drift_cents":           status.drift_cents,
         "drift_dollars":         status.drift_dollars,
         "enabled_count":         status.enabled_count,
