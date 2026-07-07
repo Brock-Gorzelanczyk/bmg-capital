@@ -7,9 +7,9 @@ broker: alpaca_paper_crypto
 # by ~2/3 vs Aggressive but should catch bigger moves per trade. Tests
 # whether the aggressive edge scales with holding period or decays.
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, ADA/USD,
-            AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD,
-            ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD,
+  symbols: [BTC/USD, ETH/USD, SOL/USD, BCH/USD, XRP/USD, ADA/USD,
+            AVAX/USD, POL/USD, DOT/USD, LINK/USD, CRV/USD, GRT/USD,
+            ARB/USD, ARB/USD, UNI/USD, AAVE/USD, LTC/USD, CRV/USD,
             DOGE/USD, SHIB/USD]
 
 scan_timeframe: "15m"

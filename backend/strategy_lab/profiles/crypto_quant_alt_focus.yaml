@@ -8,11 +8,11 @@ broker: alpaca_paper_crypto
 # more actionable signals per bar. Sized 40% of aggressive to bound risk
 # during the "does alt-tier arbitrage actually work paper-wise" test window.
 universe:
-  tier_b: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD]
-  tier_c: [ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD]
+  tier_b: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, CRV/USD, GRT/USD]
+  tier_c: [ARB/USD, ARB/USD, UNI/USD, AAVE/USD, LTC/USD, CRV/USD]
   tier_d: [DOGE/USD, SHIB/USD, PEPE/USD]
-  symbols: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD,
-            ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD,
+  symbols: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, CRV/USD, GRT/USD,
+            ARB/USD, ARB/USD, UNI/USD, AAVE/USD, LTC/USD, CRV/USD,
             DOGE/USD, SHIB/USD, PEPE/USD]
 
 scan_timeframe: "5m"

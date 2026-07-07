@@ -2,7 +2,8 @@ name: crypto_day
 asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, DOGE/USD, ADA/USD, AVAX/USD, LINK/USD, AAVE/USD, UNI/USD, OP/USD]
+  # 2026-07-07 dropped OP/USD (not on Alpaca paper), added ARB/USD.
+  symbols: [BTC/USD, ETH/USD, SOL/USD, DOGE/USD, ADA/USD, AVAX/USD, LINK/USD, AAVE/USD, UNI/USD, ARB/USD]
 scan_timeframe: "1h"
 scan_lookback_bars: 500
 cadence: "*/5 * * * *"

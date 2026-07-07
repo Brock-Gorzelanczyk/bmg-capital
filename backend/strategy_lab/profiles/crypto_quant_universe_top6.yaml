@@ -8,7 +8,7 @@ broker: alpaca_paper_crypto
 # signals should have lower spread cost and higher fill quality. Compares
 # against Aggressive's broader-universe results as an A/B.
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, ADA/USD]
+  symbols: [BTC/USD, ETH/USD, SOL/USD, BCH/USD, XRP/USD, ADA/USD]
 
 scan_timeframe: "5m"
 scan_lookback_bars: 200

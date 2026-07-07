@@ -6,7 +6,7 @@ broker: alpaca_paper_crypto
 # their own news + protocol flow. Full 8-strategy stack — the diversification
 # benefit comes from the UNIVERSE, not from a narrower alpha family.
 universe:
-  symbols: [ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, LINK/USD, NEAR/USD, DOT/USD]
+  symbols: [ARB/USD, ARB/USD, UNI/USD, AAVE/USD, LTC/USD, LINK/USD, GRT/USD, DOT/USD]
 
 scan_timeframe: "5m"
 scan_lookback_bars: 200

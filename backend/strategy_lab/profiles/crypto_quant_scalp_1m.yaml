@@ -7,7 +7,7 @@ broker: alpaca_paper_crypto
 # turnover. Sized at $30k to bound micro-loss accumulation risk while we
 # see whether 1m bar noise actually contains actionable alpha in paper.
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD]
+  symbols: [BTC/USD, ETH/USD, SOL/USD, BCH/USD, XRP/USD]
 
 scan_timeframe: "1m"
 scan_lookback_bars: 240

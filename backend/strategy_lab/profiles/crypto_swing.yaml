@@ -2,8 +2,15 @@ name: crypto_swing
 asset_class: crypto
 broker: alpaca_paper_crypto
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, POL/USD, LINK/USD, DOT/USD, ADA/USD, ATOM/USD, DOGE/USD,
-            ARB/USD, OP/USD, INJ/USD, FET/USD, TIA/USD, SEI/USD, JUP/USD, ONDO/USD, WIF/USD, BONK/USD]
+  # 2026-07-07 pruned to Alpaca-tradeable list (Sentry confirmed
+  # BNB, ATOM, NEAR, MATIC, ETC, XLM, ALGO, SUI, APT, TIA, OP, INJ,
+  # FET, SEI, JUP are all "asset not found" / "not active" on Alpaca
+  # paper. Kept: majors + LARGE-cap alts + BONK/WIF/ONDO which are
+  # on the Alpaca list per /v2/assets.
+  symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, POL/USD, LINK/USD,
+            DOT/USD, ADA/USD, DOGE/USD, ARB/USD, ONDO/USD, WIF/USD,
+            BONK/USD, PEPE/USD, SHIB/USD, LTC/USD, XRP/USD, BCH/USD,
+            AAVE/USD, UNI/USD]
 cadence: "0 */4 * * *"
 watchlist:
   rebuild_at: "0 0 * * *"

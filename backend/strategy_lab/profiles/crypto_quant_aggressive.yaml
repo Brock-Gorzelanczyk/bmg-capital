@@ -3,14 +3,17 @@ asset_class: quant
 broker: alpaca_paper_crypto
 
 universe:
-  tier_a: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, ADA/USD]
-  tier_b: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD]
-  tier_c: [ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD]
-  tier_d: [DOGE/USD, SHIB/USD]
-  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, ADA/USD,
-            AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD,
-            ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD,
-            DOGE/USD, SHIB/USD]
+  # 2026-07-07 pruned to Alpaca-tradeable list. Dropped:
+  # BNB, ATOM, NEAR, OP, INJ, SUI, APT, TIA — "asset not found" or
+  # "not active" on Alpaca paper per Sentry sweep.
+  tier_a: [BTC/USD, ETH/USD, SOL/USD, XRP/USD, ADA/USD, DOGE/USD]
+  tier_b: [AVAX/USD, POL/USD, DOT/USD, LINK/USD, LTC/USD, BCH/USD]
+  tier_c: [ARB/USD, UNI/USD, AAVE/USD, CRV/USD, ONDO/USD, GRT/USD]
+  tier_d: [SHIB/USD, PEPE/USD, BONK/USD, WIF/USD]
+  symbols: [BTC/USD, ETH/USD, SOL/USD, XRP/USD, ADA/USD, DOGE/USD,
+            AVAX/USD, POL/USD, DOT/USD, LINK/USD, LTC/USD, BCH/USD,
+            ARB/USD, UNI/USD, AAVE/USD, CRV/USD, ONDO/USD, GRT/USD,
+            SHIB/USD, PEPE/USD, BONK/USD, WIF/USD]
 
 scan_timeframe: "5m"
 scan_lookback_bars: 200

@@ -7,9 +7,9 @@ broker: alpaca_paper_crypto
 # noise. Middle-ground between 5m Aggressive and 15m variant. Tests whether
 # the 5m aggressive edge holds at 10m or if noise dominates.
 universe:
-  symbols: [BTC/USD, ETH/USD, SOL/USD, BNB/USD, XRP/USD, ADA/USD,
-            AVAX/USD, POL/USD, DOT/USD, LINK/USD, ATOM/USD, NEAR/USD,
-            ARB/USD, OP/USD, INJ/USD, SUI/USD, APT/USD, TIA/USD,
+  symbols: [BTC/USD, ETH/USD, SOL/USD, BCH/USD, XRP/USD, ADA/USD,
+            AVAX/USD, POL/USD, DOT/USD, LINK/USD, CRV/USD, GRT/USD,
+            ARB/USD, ARB/USD, UNI/USD, AAVE/USD, LTC/USD, CRV/USD,
             DOGE/USD, SHIB/USD]
 
 scan_timeframe: "10m"
