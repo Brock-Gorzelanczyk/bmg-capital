@@ -74,6 +74,21 @@ def _bab(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
     return compute(symbols, db, params)
 
 
+def _pead(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .pead import compute
+    return compute(symbols, db, params)
+
+
+def _insider_cluster_buys(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .insider_cluster_buys import compute
+    return compute(symbols, db, params)
+
+
+def _crypto_xs_momentum(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .crypto_xs_momentum import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
@@ -93,6 +108,13 @@ _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     #   bab: Frazzini-Pedersen Betting Against Beta — long-only low-beta variant
     "residual_momentum": _residual_momentum,
     "bab": _bab,
+    # 2026-07-07 SSRN batch 3:
+    #   pead: Post-Earnings-Announcement Drift (Bernard-Thomas)
+    #   insider_cluster_buys: Cohen-Malloy-Pomorski opportunistic insider signal
+    #   crypto_xs_momentum: Liu-Tsyvinski-Wu crypto cross-section
+    "pead": _pead,
+    "insider_cluster_buys": _insider_cluster_buys,
+    "crypto_xs_momentum": _crypto_xs_momentum,
 }
 
 

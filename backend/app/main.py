@@ -820,6 +820,20 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m074_ssrn_batch_2 FAILED: %s",
                      _m074_exc, exc_info=True)
 
+    # m075: SSRN batch 3. Seeds 3 new portfolio-rank factor bots
+    # (pead, insider_cluster_buys, crypto_xs_momentum) at $10k each
+    # AND creates 2 new signal-trigger bots (macro_faber_gtaa,
+    # spy_iron_condor_weekly) at $15k each. Trims existing PR + ST
+    # bots to preserve $1M fund invariant.
+    try:
+        from app.db.migrations.m075_ssrn_batch_3 import run as _run_m075
+        with engine.begin() as _m075_conn:
+            _m075_result = _run_m075(_m075_conn)
+        logger.warning("[startup] m075 status: %s", _m075_result)
+    except Exception as _m075_exc:
+        logger.error("[startup] m075_ssrn_batch_3 FAILED: %s",
+                     _m075_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

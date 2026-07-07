@@ -54,10 +54,16 @@ def _load_etf_liquid() -> list[str]:
     return etf_liquid()
 
 
+def _load_crypto_top20() -> list[str]:
+    from .crypto_top20 import crypto_top20
+    return crypto_top20()
+
+
 _REGISTRY: dict[str, Callable[[], list[str]]] = {
     "sp500_partial": sp500_partial,
     "sp500": _load_sp500,
     "etf_liquid": _load_etf_liquid,
+    "crypto_top20": _load_crypto_top20,
 }
 
 

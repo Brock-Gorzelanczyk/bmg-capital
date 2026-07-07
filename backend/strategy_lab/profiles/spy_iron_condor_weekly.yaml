@@ -1,0 +1,41 @@
+name: spy_iron_condor_weekly
+asset_class: options
+broker: alpaca_paper_stocks
+universe:
+  source: static
+  size: 1
+  symbols:
+    - SPY
+scan_lookback_period: "60d"
+confidence_threshold: 0.40
+cadence: "0 15 * * 1"    # Monday 15:00 UTC (10:00 ET) — weekly entry
+long_only: false
+strategies:
+  - iron_condor_45dte
+ensemble: any_above_threshold
+composite_threshold: 20
+position_cap: 8
+position_size_pct: 12.0
+hold_min_days: 7
+hold_max_days: 45
+risk_overlay:
+  portfolio_drawdown_circuit_pct: 15
+  max_position_size_pct: 15
+regime_filters:
+  vix_max: 30    # skip entries when VIX > 30 (backwardation zone)
+execution:
+  order_type: limit
+  limit_offset_bps: 5
+  reprice_after_seconds: 60
+  reprice_attempts: 3
+  fallback_to_market: false
+  use_brackets: false
+paper_only: true
+discord:
+  channel: options-signals
+
+risk:
+  deployment_target_pct: 0.75
+  target_position_count: 5
+  max_position_pct: 0.15
+  max_total_deployed_pct: 0.85
