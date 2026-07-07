@@ -3,10 +3,12 @@ asset_class: options
 broker: alpaca_paper_stocks
 universe:
   source: static
-  size: 1
+  size: 3
   symbols:
     - SPY
-scan_lookback_period: "60d"
+    - QQQ
+    - IWM
+scan_lookback_period: "1y"
 confidence_threshold: 0.40
 cadence: "0 15 * * 1"    # Monday 15:00 UTC (10:00 ET) — weekly entry
 long_only: false
