@@ -2004,6 +2004,46 @@ def _execute_options_signal(
     #       intent="long_directional" / "spread_debit" / "diagonal" → long
     _credit_intents = {"short_credit", "neutral_credit"}
     _pos_side = "short" if opt.get("intent") in _credit_intents else "long"
+
+    # 2026-07-07 (Brock): submit real Alpaca options order. If Alpaca
+    # rejects or the broker isn't available, log and skip. No sim
+    # fallback — the app now only contains broker-verified data.
+    alpaca_options_order_id: str | None = None
+    try:
+        from strategy_lab.core.execution import get_broker
+        _opt_broker = get_broker("options")
+        _opt_side_str = "sell" if _pos_side == "short" else "buy"
+        # Alpaca requires a limit price on options. Use mid premium as limit.
+        _limit_price = round(fill_cents / 100.0, 2)
+        _opt_resp = _opt_broker.submit_options_order(
+            contract_symbol=occ_symbol,
+            contracts=int(contract_count),
+            side=_opt_side_str,
+            limit_price=_limit_price,
+            time_in_force="day",
+        )
+        if _opt_resp.get("status_code") in (200, 201):
+            alpaca_options_order_id = _opt_resp.get("order_id")
+            logger.warning(
+                "[ALPACA-FILL] %s %s %s x%d limit=%.2f → order_id=%s (REAL Alpaca options order)",
+                profile_name, _opt_side_str, occ_symbol, int(contract_count),
+                _limit_price, alpaca_options_order_id,
+            )
+        else:
+            logger.error(
+                "[ALPACA-REJECT] %s options %s x%d side=%s status=%s body=%r",
+                profile_name, occ_symbol, int(contract_count), _opt_side_str,
+                _opt_resp.get("status_code"), str(_opt_resp.get("body"))[:300],
+            )
+            return False
+    except Exception as _opt_broker_exc:
+        logger.error(
+            "[ALPACA-REJECT] %s options %s x%d exception_type=%s message=%r",
+            profile_name, occ_symbol, int(contract_count),
+            type(_opt_broker_exc).__name__, str(_opt_broker_exc),
+        )
+        return False
+
     try:
         pos = BotPosition(
             allocation_id=alloc.id,
@@ -2054,6 +2094,7 @@ def _execute_options_signal(
             ts=now,
             position_id=pos.id,
             signal_id=signal_id,
+            alpaca_order_id=alpaca_options_order_id,
             is_paper=True,
             expected_fill_cents=fill_cents,
             slippage_bps=_opt_slip_bps,
@@ -2473,23 +2514,17 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                 profile_name, "sell" if is_short else "buy", sig.symbol, qty, order_id,
             )
         except Exception as exc:
-            # Escalated 2026-07-07 from warning to error so silent fallbacks
-            # surface in Sentry. Prior state was 100% Alpaca-rejected orders
-            # falling through to DB-only simulation with a debug-level warning
-            # that nobody saw. Log full exception + explicit fallback marker.
+            # 2026-07-07 (Brock: "I want to verify the data in the app is
+            # real if it is real we can keep it"): rip out the silent DB
+            # fallback entirely. On Alpaca rejection, log the reason and
+            # SKIP the trade. No BotPosition, no BotTrade rows written.
+            # The app now contains only broker-verified data.
             logger.error(
                 "[ALPACA-REJECT] %s %s x%.4f side=%s exception_type=%s message=%r",
                 profile_name, sig.symbol, qty, "sell" if is_short else "buy",
                 type(exc).__name__, str(exc),
             )
-            logger.error(
-                "[SIMULATED-FILL-FALLBACK] %s %s — writing DB row with alpaca_order_id=NULL. "
-                "This is a synthetic trade, not a real Alpaca fill. Track record credibility=0.",
-                profile_name, sig.symbol,
-            )
-            # Fall through — still create DB rows as simulated paper fill.
-            # Removing this fallback is Path A of the P0 fix; for now the
-            # loud logging surfaces the problem for triage.
+            return False
 
     fill_cents = entry_price * 100  # float — preserves sub-penny precision (e.g. SHIB)
 

@@ -857,6 +857,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m077_mirror_alpaca_97k FAILED: %s",
                      _m077_exc, exc_info=True)
 
+    # m078: purge all sim-fallback trades + positions. App now contains
+    # only Alpaca-verified data. Companion to the runner.py change that
+    # removes the DB-write fallback on Alpaca rejection.
+    try:
+        from app.db.migrations.m078_purge_sim_data import run as _run_m078
+        with engine.begin() as _m078_conn:
+            _m078_result = _run_m078(_m078_conn)
+        logger.warning("[startup] m078 status: %s", _m078_result)
+    except Exception as _m078_exc:
+        logger.error("[startup] m078_purge_sim_data FAILED: %s",
+                     _m078_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
