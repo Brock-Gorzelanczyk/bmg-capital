@@ -1991,13 +1991,26 @@ def _execute_options_signal(
         contract_count, opt["strike_price"] or 0, opt["expiration_date"] or "?",
         premium, premium * 100 * contract_count,
     )
+    # 2026-07-07 CRITICAL FIX: position side derived from setup intent, NOT
+    # sig.side. All 6 credit-strategy files (iron_condor_45dte,
+    # bull_put_credit_spread, bear_call_credit_spread, cash_secured_put,
+    # covered_call_30d, wheel_strategy, jade_lizard) emit side="buy" to mean
+    # "open a position" but they're semantically SHORT premium — collecting
+    # credit. Prior code stored them all as long positions, which flipped
+    # the sign on mark-to-market P&L and produced phantom sleeve gains of
+    # $750k+ when marks rose (an actual loss for a short position).
+    #
+    # Rule: intent="short_credit" or "neutral_credit" → short position
+    #       intent="long_directional" / "spread_debit" / "diagonal" → long
+    _credit_intents = {"short_credit", "neutral_credit"}
+    _pos_side = "short" if opt.get("intent") in _credit_intents else "long"
     try:
         pos = BotPosition(
             allocation_id=alloc.id,
             symbol=occ_symbol,
             qty=float(contract_count),
             avg_cost_cents=fill_cents,
-            side="long" if sig.side == "buy" else "short",
+            side=_pos_side,
             opened_at=now,
             closed_at=None,
             is_paper=True,

@@ -503,15 +503,18 @@ def broker_reconciliation(
     # DB fills per source. Distinguish real Alpaca (alpaca_order_id NOT NULL)
     # vs silent DB fallback (alpaca_order_id NULL) per bot for the last 24h
     # so a caller can see which bots are actually routing to broker.
+    # 2026-07-07 fix: group by p.name only (not starting_capital_cents)
+    # to eliminate duplicate rows when a bot has multiple allocations
+    # (e.g. Brock's own alloc + Perk's demo alloc appear as 2 rows).
     src_rows = db.execute(_text("""
-        SELECT p.name, a.starting_capital_cents,
+        SELECT p.name, MAX(a.starting_capital_cents) AS starting_cents,
                SUM(CASE WHEN t.alpaca_order_id IS NOT NULL THEN 1 ELSE 0 END) AS real_fills,
                SUM(CASE WHEN t.alpaca_order_id IS NULL THEN 1 ELSE 0 END) AS sim_fills
         FROM bot_trades t
         JOIN bot_allocations a ON a.id = t.allocation_id
         JOIN bot_profiles p ON p.id = a.profile_id
         WHERE t.ts >= :cut
-        GROUP BY p.name, a.starting_capital_cents
+        GROUP BY p.name
         ORDER BY real_fills + sim_fills DESC
     """), {"cut": cutoff_24h}).fetchall()
     result["bmg_db_by_bot_24h"] = [
@@ -557,6 +560,40 @@ def broker_reconciliation(
     result["pct_real_alpaca_fills"] = pct_real
 
     return result
+
+
+# ── POST /api/admin/options/quarantine-all-open ────────────────────────────
+#
+# Emergency: mark every open options position as quarantined so the
+# canonical PV aggregator drops it from sleeve mark-to-market. Used to
+# reset the sleeve after a sign-flip / sizing / illiquid-mark bug.
+# Position rows are preserved for audit history — only quarantined_at
+# and quarantine_reason are set.
+
+@router.post("/options/quarantine-all-open")
+def options_quarantine_all_open(
+    reason: str = "sign_flip_and_illiquid_marks_2026_07_07",
+    db: Session = Depends(get_db),
+    current_user=Depends(require_admin),
+) -> Dict[str, Any]:
+    """Quarantine every open options position (option_type IS NOT NULL and
+    closed_at IS NULL and quarantined_at IS NULL). Returns count quarantined.
+    """
+    from sqlalchemy import text as _t
+    now_iso = datetime.now(timezone.utc).isoformat()
+    res = db.execute(_t("""
+        UPDATE bot_positions
+        SET quarantined_at = :ts, quarantine_reason = :r
+        WHERE option_type IS NOT NULL
+          AND closed_at IS NULL
+          AND quarantined_at IS NULL
+    """), {"ts": now_iso, "r": reason})
+    db.commit()
+    return {
+        "quarantined_count": res.rowcount,
+        "reason": reason,
+        "ts": now_iso,
+    }
 
 
 # ── POST /api/admin/bots/scrub-ghost-pnl ─────────────────────────────────────
