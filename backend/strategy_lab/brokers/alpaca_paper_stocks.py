@@ -38,7 +38,20 @@ class PaperStocksAdapter(BrokerAdapter):
 
     def _post(self, path: str, payload: dict) -> Any:
         resp = requests.post(f"{_PAPER_BASE}{path}", json=payload, headers=self._headers, timeout=10)
-        resp.raise_for_status()
+        if not resp.ok:
+            # 2026-07-07: raise_for_status hides the response body which is
+            # where Alpaca puts the actual rejection reason. Include the
+            # first 300 chars of body in the exception so [ALPACA-REJECT]
+            # log lines are actionable.
+            body = ""
+            try:
+                body = resp.text[:300]
+            except Exception:
+                pass
+            raise requests.HTTPError(
+                f"{resp.status_code} {resp.reason} for {path}: {body}",
+                response=resp,
+            )
         return resp.json()
 
     def _delete(self, path: str) -> bool:
