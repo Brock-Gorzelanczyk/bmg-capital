@@ -16,7 +16,7 @@ def _v1_signals(symbol: str, closes: list[float]) -> List[Signal]:
     recent_vol_low = closes[-1] > 0 and max_move < closes[-1] * 0.03
     if recent_vol_low:
         return [Signal(
-            symbol=symbol, side="buy", confidence=0.60,
+            symbol=symbol, side="sell", confidence=0.60,
             size_hint=0.60,
             reason="Calendar spread: sell 30d ATM option, buy 60d ATM option, profit on time decay",
             strategy=STRATEGY_NAME,

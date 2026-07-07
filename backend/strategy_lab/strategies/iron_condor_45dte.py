@@ -99,7 +99,7 @@ def generate_signals(bars: dict, profile_config: dict, regime: dict) -> List[Sig
             continue
         out.append(Signal(
             symbol=symbol,
-            side="buy",
+            side="sell",
             confidence=conf,
             size_hint=BASE_SIZE,
             reason=reason,
@@ -113,5 +113,5 @@ def generate_signal(symbol: str, closes: list[float], **kwargs) -> Optional[Sign
     enter, conf, reason = _entry_conditions(symbol, closes, regime)
     if not enter:
         return None
-    return Signal(symbol=symbol, side="buy", confidence=conf,
+    return Signal(symbol=symbol, side="sell", confidence=conf,
                   size_hint=BASE_SIZE, reason=reason, strategy=STRATEGY_NAME)

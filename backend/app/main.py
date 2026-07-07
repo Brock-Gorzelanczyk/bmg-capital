@@ -834,6 +834,17 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m075_ssrn_batch_3 FAILED: %s",
                      _m075_exc, exc_info=True)
 
+    # m076: emergency halt of options bots after credit-side sign flip
+    # exhausted Alpaca margin. Fix in same commit; halt is precautionary.
+    try:
+        from app.db.migrations.m076_halt_options_bots import run as _run_m076
+        with engine.begin() as _m076_conn:
+            _m076_result = _run_m076(_m076_conn)
+        logger.warning("[startup] m076 status: %s", _m076_result)
+    except Exception as _m076_exc:
+        logger.error("[startup] m076_halt_options_bots FAILED: %s",
+                     _m076_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
