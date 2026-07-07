@@ -779,14 +779,16 @@ def compute_portfolio_snapshot(
 
 # ── Aggregate (whole Strategy Lab) ───────────────────────────────────────────
 
-# ── P&L window helper (2026-07-02) ─────────────────────────────────────────────
+# ── P&L window helper (2026-07-02, rebased 2026-07-07) ────────────────────────
 # Powers the 5-col header on /strategy: All-Time / MTD / WTD / Today $ + %.
-# Baselines: fund inception fixed at $1M ($100M cents). MTD/WTD baselines come
-# from SUM(bot_daily_pnl.portfolio_value_eod_cents) on the anchor date across
-# all user_1 allocations. If the anchor snapshot is missing, we fall back per
-# the spec (MTD → $1M inception, WTD → earliest snapshot in window).
+# Baselines: fund inception REBASED to $97,340 (9,734,000 cents) on 2026-07-07
+# after m077 rescaled the fund from $1M to mirror Alpaca paper equity. The old
+# $1M baseline was producing a phantom -$903K all-time loss (the rescale delta,
+# not real trading losses). MTD/WTD baselines come from SUM(bot_daily_pnl.
+# portfolio_value_eod_cents) on the anchor date across all user_1 allocations.
+# If the anchor snapshot is missing, we fall back to the rebased inception.
 
-_FUND_INCEPTION_CENTS = 100_000_000  # $1,000,000 exact — Brock's directive
+_FUND_INCEPTION_CENTS = 9_734_000  # $97,340 — post-m077 mirror-Alpaca baseline
 
 
 def _last_biz_day_of_prior_month(anchor: date) -> date:
@@ -1060,6 +1062,22 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     except Exception as _cnt_exc:
         logger.warning("[leaderboard] 24h signal/trade count query failed: %s", _cnt_exc)
 
+    # 2026-07-07: which allocations currently hold at least one open position.
+    # Drives the "live in trade" green dot on the leaderboard so Brock can see
+    # at a glance which strategies are actively in the market vs waiting.
+    open_positions_by_alloc: dict[int, int] = {}
+    try:
+        for aid, cnt in db.execute(
+            text(
+                "SELECT allocation_id, COUNT(*) FROM bot_positions "
+                "WHERE closed_at IS NULL AND quarantined_at IS NULL "
+                "GROUP BY allocation_id"
+            )
+        ).fetchall():
+            open_positions_by_alloc[int(aid)] = int(cnt)
+    except Exception as _op_exc:
+        logger.warning("[leaderboard] open-position count query failed: %s", _op_exc)
+
     leaderboard = []
     seen_alloc_ids: set[int] = set()
     for port_snap in portfolio_snapshots:
@@ -1085,6 +1103,8 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 # investigation (asset-class gate, cooldowns, missing prices).
                 "signals_24h": signals_24h_by_alloc.get(bot.allocation_id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(bot.allocation_id, 0),
+                "open_positions_count": open_positions_by_alloc.get(bot.allocation_id, 0),
+                "has_open_position": open_positions_by_alloc.get(bot.allocation_id, 0) > 0,
             })
             seen_alloc_ids.add(bot.allocation_id)
 
@@ -1118,6 +1138,8 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "starting_capital_cents": snap.starting_capital_cents,
                 "signals_24h": signals_24h_by_alloc.get(a.id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
+                "open_positions_count": open_positions_by_alloc.get(a.id, 0),
+                "has_open_position": open_positions_by_alloc.get(a.id, 0) > 0,
             })
         else:
             starting_c = int(a.starting_capital_cents or 0)
@@ -1137,6 +1159,8 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "starting_capital_cents": starting_c,
                 "signals_24h": signals_24h_by_alloc.get(a.id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
+                "open_positions_count": open_positions_by_alloc.get(a.id, 0),
+                "has_open_position": open_positions_by_alloc.get(a.id, 0) > 0,
             })
     # 2026-07-03 Brock: hide zero-capital + inactive allocations. Rule:
     # - Show if starting_capital > 0 (allocated bot, real fleet member)

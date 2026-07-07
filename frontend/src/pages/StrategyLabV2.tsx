@@ -409,6 +409,8 @@ interface LBRow {
   return30d: number;
   assetClass: string;
   botType?: string;
+  hasOpenPosition?: boolean;
+  openPositionsCount?: number;
 }
 
 function BotLeaderboard({ rows }: { rows: LBRow[] }) {
@@ -538,6 +540,20 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
                 >
                   {l.name}
                 </span>
+                {l.hasOpenPosition && (
+                  <span
+                    title={`LIVE — ${l.openPositionsCount ?? 1} open position${(l.openPositionsCount ?? 1) === 1 ? "" : "s"}`}
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: "#22c55e",
+                      boxShadow: "0 0 6px rgba(34,197,94,0.9), 0 0 12px rgba(34,197,94,0.4)",
+                      flexShrink: 0,
+                      animation: "sl-live-pulse 1.6s ease-in-out infinite",
+                    }}
+                  />
+                )}
                 {l.botType === "portfolio_rank" && (
                   <span
                     style={{
@@ -770,6 +786,8 @@ export default function StrategyLabV2() {
           : l.profile?.startsWith("options") ? "options"
           : "quant",
         botType: (l.bot_type as string) || (isPR ? "portfolio_rank" : "signal_trigger"),
+        hasOpenPosition: Boolean(l.has_open_position),
+        openPositionsCount: Number(l.open_positions_count || 0),
       };
     });
   }, [dash]);
@@ -787,6 +805,7 @@ export default function StrategyLabV2() {
         @keyframes sl-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
         @keyframes sl-regime { 0%{transform:translateX(0)} 100%{transform:translateX(-33.33%)} }
         @keyframes sl-glow { 0%,100%{ box-shadow:0 0 22px rgba(74,222,128,0.14), inset 0 0 26px rgba(74,222,128,0.03) } 50%{ box-shadow:0 0 34px rgba(74,222,128,0.24), inset 0 0 30px rgba(74,222,128,0.06) } }
+        @keyframes sl-live-pulse { 0%,100%{ transform:scale(1); opacity:1 } 50%{ transform:scale(1.25); opacity:0.7 } }
       `}</style>
 
       {/* Scanline overlay */}

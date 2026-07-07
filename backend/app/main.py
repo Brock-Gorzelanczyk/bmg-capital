@@ -869,6 +869,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m078_purge_sim_data FAILED: %s",
                      _m078_exc, exc_info=True)
 
+    # m079: purge pre-m077 daily snapshots so all-time / MTD / WTD
+    # anchor at the $97,340 rebase point instead of the phantom $1M
+    # baseline. Kills the fake -$903K loss on /strategy header.
+    try:
+        from app.db.migrations.m079_rebase_pnl_snapshots import run as _run_m079
+        with engine.begin() as _m079_conn:
+            _m079_result = _run_m079(_m079_conn)
+        logger.warning("[startup] m079 status: %s", _m079_result)
+    except Exception as _m079_exc:
+        logger.error("[startup] m079_rebase_pnl_snapshots FAILED: %s",
+                     _m079_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
