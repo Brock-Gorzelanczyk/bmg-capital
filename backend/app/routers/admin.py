@@ -482,6 +482,48 @@ def broker_reconciliation(
         "trades_without_alpaca_order_id": int(db_trades_no_alpaca_row[0] or 0),
     }
 
+    # Per-asset-class breakdown of Alpaca activity in 24h window.
+    result["alpaca_by_asset"] = {}
+    for cls in ("us_equity", "us_option", "crypto"):
+        cls_positions = [p for p in alpaca_positions
+                         if p.get("asset_class", "us_equity") == cls]
+        cls_orders_24h = [o for o in orders_24h
+                          if o.get("asset_class") == cls]
+        cls_orders_filled_24h = [o for o in cls_orders_24h
+                                 if o.get("status") == "filled"]
+        cls_orders_rejected_24h = [o for o in cls_orders_24h
+                                   if o.get("status") in ("rejected", "canceled", "expired")]
+        result["alpaca_by_asset"][cls] = {
+            "positions": len(cls_positions),
+            "orders_24h": len(cls_orders_24h),
+            "orders_filled_24h": len(cls_orders_filled_24h),
+            "orders_rejected_24h": len(cls_orders_rejected_24h),
+        }
+
+    # DB fills per source. Distinguish real Alpaca (alpaca_order_id NOT NULL)
+    # vs silent DB fallback (alpaca_order_id NULL) per bot for the last 24h
+    # so a caller can see which bots are actually routing to broker.
+    src_rows = db.execute(_text("""
+        SELECT p.name, a.starting_capital_cents,
+               SUM(CASE WHEN t.alpaca_order_id IS NOT NULL THEN 1 ELSE 0 END) AS real_fills,
+               SUM(CASE WHEN t.alpaca_order_id IS NULL THEN 1 ELSE 0 END) AS sim_fills
+        FROM bot_trades t
+        JOIN bot_allocations a ON a.id = t.allocation_id
+        JOIN bot_profiles p ON p.id = a.profile_id
+        WHERE t.ts >= :cut
+        GROUP BY p.name, a.starting_capital_cents
+        ORDER BY real_fills + sim_fills DESC
+    """), {"cut": cutoff_24h}).fetchall()
+    result["bmg_db_by_bot_24h"] = [
+        {
+            "bot": row[0],
+            "starting_cents": int(row[1] or 0),
+            "real_alpaca_fills": int(row[2] or 0),
+            "sim_fallback_fills": int(row[3] or 0),
+        }
+        for row in src_rows
+    ]
+
     # Verdict
     db_open = result["bmg_db"]["open_positions_count"]
     alp_open = result["alpaca"]["positions_count"]
