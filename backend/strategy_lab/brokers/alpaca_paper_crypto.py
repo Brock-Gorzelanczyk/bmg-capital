@@ -102,20 +102,23 @@ class PaperCryptoAdapter(BrokerAdapter):
         limit_price: Optional[float] = None,
         extended_hours: bool = False,  # accepted for signature parity with the stocks adapter — crypto trades 24/7
     ) -> dict:
-        """Submit an OCO bracket order via Alpaca paper API for crypto.
+        """Submit an entry order for crypto.
 
-        Uses order_class='bracket' with take_profit.limit_price and
-        stop_loss.stop_price legs.  Crypto always uses GTC time_in_force.
-        Entry is a limit order if limit_price is provided, otherwise market.
+        NB: Alpaca paper crypto REJECTS bracket / OTOCO orders with
+        `crypto orders not allowed for advanced order_class`. Confirmed
+        via 2026-07-07 Sentry sweep of every crypto attempt in prod.
+        Bracket semantics (stop_price / target_price) are handled by
+        the position_monitor loop server-side, so we downgrade to a
+        simple market/limit order here and let the monitor manage exits.
+
+        Stop and target are logged so downstream reconciliation can
+        cross-check that the position_monitor honored them.
         """
         payload: dict = {
             "symbol": symbol,
             "qty": str(qty),
             "side": side,
             "time_in_force": "gtc",
-            "order_class": "bracket",
-            "take_profit": {"limit_price": str(target_price)},
-            "stop_loss": {"stop_price": str(stop_price)},
         }
         if limit_price is not None:
             payload["type"] = "limit"
@@ -125,7 +128,8 @@ class PaperCryptoAdapter(BrokerAdapter):
 
         data = self._post("/orders", payload)
         logger.info(
-            "[PAPER-CRYPTO] Bracket order: %s %s x%.6f entry=%s stop=%.4f target=%.4f → id=%s",
+            "[PAPER-CRYPTO] Simple order (bracket downgraded): %s %s x%.6f "
+            "entry=%s stop=%.4f target=%.4f (managed by position_monitor) → id=%s",
             side, symbol, qty,
             f"limit@{limit_price}" if limit_price else "market",
             stop_price, target_price, data.get("id"),

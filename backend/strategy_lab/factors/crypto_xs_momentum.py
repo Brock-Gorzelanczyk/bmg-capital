@@ -30,10 +30,12 @@ def _weekly_return(ticker: str, lookback_days: int) -> Optional[float]:
         logger.warning("[factor:crypto_xs_momentum] yfinance import failed: %s", exc)
         return None
 
+    # Universe uses Alpaca format (BTC/USD) — yfinance requires dash (BTC-USD).
+    yf_ticker = ticker.replace("/", "-")
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=lookback_days + 3)
     try:
-        hist = yf.Ticker(ticker).history(
+        hist = yf.Ticker(yf_ticker).history(
             start=start.strftime("%Y-%m-%d"),
             end=end.strftime("%Y-%m-%d"),
             interval="1d",
