@@ -128,6 +128,28 @@ class PaperStocksAdapter(BrokerAdapter):
         data = resp.json() if resp.content else {}
         return {"status_code": resp.status_code, "body": data, "order_id": data.get("id")}
 
+    def _get_owned_qty(self, symbol: str) -> float:
+        """Return current owned qty at Alpaca for symbol. Zero if not held.
+
+        Used pre-flight before SELL orders to avoid Alpaca rejecting with
+        'fractional orders cannot be sold short' when we don't have the
+        position. Cheap: /v2/positions/{symbol} is one request, cached
+        60s inside Alpaca side.
+        """
+        try:
+            resp = requests.get(
+                f"{_PAPER_BASE}/positions/{symbol}",
+                headers=self._headers,
+                timeout=5,
+            )
+            if resp.status_code == 404:
+                return 0.0
+            resp.raise_for_status()
+            data = resp.json()
+            return abs(float(data.get("qty", 0) or 0))
+        except Exception:
+            return 0.0
+
     def submit_bracket_order(
         self,
         symbol: str,
@@ -138,18 +160,51 @@ class PaperStocksAdapter(BrokerAdapter):
         limit_price: Optional[float] = None,
         extended_hours: bool = False,
     ) -> dict:
-        """Submit an OCO bracket order via Alpaca paper API.
+        """Submit an entry order to Alpaca paper.
 
-        Uses order_class='bracket' with take_profit.limit_price and
-        stop_loss.stop_price legs.  Entry is a limit order if limit_price
-        is provided, otherwise market.
+        NB: 2026-07-07 — bracket orders were rejecting ~80% of stock
+        submissions because our runner computes stop_price/target_price
+        from a cached entry_price, which drifts from Alpaca's live
+        base_price. Alpaca requires take_profit > base_price for BUY and
+        < base_price for SELL, so any drift produced 422 rejects with
+        "take_profit.limit_price must be >= base_price + 0.01".
 
-        In extended hours Alpaca rejects bracket and market orders, so we
-        fall back to a plain limit order with extended_hours=true.
+        Fix: downgrade to a plain limit order (or market if no limit).
+        Stop and target still logged so position_monitor can close
+        server-side. Same approach the crypto adapter now uses.
+
+        For SELL orders: pre-flight check that we actually own the qty.
+        Alpaca's "fractional orders cannot be sold short" rejects any
+        fractional sell where owned_qty=0 or < requested_qty. Skip the
+        submit entirely in that case rather than eat a hard reject.
         """
+        if side == "sell":
+            owned = self._get_owned_qty(symbol)
+            if owned < qty:
+                # Don't try to sell what we don't own. Downsize or skip.
+                if owned <= 0:
+                    logger.info(
+                        "[PAPER-STOCKS] SKIP sell %s x%.4f — Alpaca owned=0 "
+                        "(would reject as fractional short)",
+                        symbol, qty,
+                    )
+                    return {"order_id": None, "raw": {"skipped": "no_position"}}
+                logger.info(
+                    "[PAPER-STOCKS] downsize sell %s %.4f -> %.4f (owned)",
+                    symbol, qty, owned,
+                )
+                qty = owned
+        # 2026-07-07: downgrade to simple market/limit order (no bracket).
+        # Alpaca's bracket geometry (take_profit direction, stop_loss
+        # direction) is validated against base_price at submit time. Our
+        # stop_price / target_price are computed off cached entry_price
+        # which drifts from Alpaca's base_price during volatile market
+        # opens. Result: 80%+ of stock brackets rejected with
+        # "take_profit.limit_price must be >= base_price + 0.01" or
+        # "take_profit.limit_price must be < stop_loss.stop_price".
+        # Server-side position_monitor handles exits at stop_price /
+        # target_price. Same fix pattern as crypto adapter.
         if extended_hours:
-            # Alpaca only accepts simple limit orders outside RTH — no brackets,
-            # no market orders.  Use entry price as the limit (or mid of stop/target).
             entry_limit = limit_price or round((stop_price + target_price) / 2, 4)
             payload: dict = {
                 "symbol": symbol,
@@ -172,9 +227,6 @@ class PaperStocksAdapter(BrokerAdapter):
             "qty": str(qty),
             "side": side,
             "time_in_force": "day",
-            "order_class": "bracket",
-            "take_profit": {"limit_price": str(target_price)},
-            "stop_loss": {"stop_price": str(stop_price)},
         }
         if limit_price is not None:
             payload["type"] = "limit"
@@ -184,7 +236,8 @@ class PaperStocksAdapter(BrokerAdapter):
 
         data = self._post("/orders", payload)
         logger.info(
-            "[PAPER-STOCKS] Bracket order: %s %s x%.4f entry=%s stop=%.4f target=%.4f → id=%s",
+            "[PAPER-STOCKS] Simple order (bracket downgraded): %s %s x%.4f entry=%s "
+            "stop=%.4f target=%.4f (managed by position_monitor) → id=%s",
             side, symbol, qty,
             f"limit@{limit_price}" if limit_price else "market",
             stop_price, target_price, data.get("id"),
