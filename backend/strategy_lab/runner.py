@@ -1729,6 +1729,77 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     else:
         occ_symbol = None
 
+    # ── 2026-07-08 · Multi-leg construction for defined-risk credit spreads ──
+    # Alpaca paper rejects single-leg SELLs as cash-secured (needs strike × 100
+    # collateral we don't have). Multi-leg orders reduce required collateral
+    # to spread width × 100. Build a `legs` list for spread setups.
+    #
+    # Wing width: fixed $1 for indices with $1-strike chains (SPY/QQQ/IWM).
+    # Popular single-names typically have $1 or $2.50 strikes. Rounding all
+    # leg strikes to whole dollars keeps us on the standard grid — anything
+    # off-grid gets rejected as "contract not found" (Alpaca 42210000).
+    legs: list[dict] | None = None
+    if contract_count > 0 and occ_symbol and expiration_date and strike_price and spot > 0:
+        wing_width = 1.0  # $1-wide spreads keep collateral small ($100/contract)
+
+        def _leg_occ(strk: float, opt_t: str) -> str:
+            # Snap to whole dollar — most liquid chains use integer strikes.
+            snapped = float(round(float(strk)))
+            return _build_occ_symbol(
+                underlying=underlying,
+                expiration_date=expiration_date,
+                option_type=opt_t,
+                strike_price=snapped,
+            )
+
+        if intent == "short_credit" and option_type == "put":
+            # bull_put_credit_spread / cash_secured_put / wheel_strategy / jade_lizard put side
+            # Sell short put + buy hedge put (lower strike). Net credit received.
+            put_short = strike_price
+            put_hedge = round(put_short - wing_width, 2)
+            legs = [
+                {"symbol": _leg_occ(put_short, "put"), "side": "sell", "ratio_qty": 1,
+                 "position_intent": "sell_to_open", "role": "short_put"},
+                {"symbol": _leg_occ(put_hedge, "put"), "side": "buy",  "ratio_qty": 1,
+                 "position_intent": "buy_to_open",  "role": "long_put_hedge"},
+            ]
+        elif intent == "short_credit" and option_type == "call":
+            # bear_call_credit_spread / covered_call_30d (naked call side)
+            call_short = strike_price
+            call_hedge = round(call_short + wing_width, 2)
+            legs = [
+                {"symbol": _leg_occ(call_short, "call"), "side": "sell", "ratio_qty": 1,
+                 "position_intent": "sell_to_open", "role": "short_call"},
+                {"symbol": _leg_occ(call_hedge, "call"), "side": "buy",  "ratio_qty": 1,
+                 "position_intent": "buy_to_open",  "role": "long_call_hedge"},
+            ]
+        elif intent == "neutral_credit" and "condor" in setup:
+            # 4-leg iron condor. Primary strike was call short. Put short mirrors OTM below.
+            call_short = strike_price
+            call_hedge = round(call_short + wing_width, 2)
+            put_short = round(spot * 0.92, 2)  # 16-delta OTM put
+            put_hedge = round(put_short - wing_width, 2)
+            legs = [
+                {"symbol": _leg_occ(call_short, "call"), "side": "sell", "ratio_qty": 1,
+                 "position_intent": "sell_to_open", "role": "short_call"},
+                {"symbol": _leg_occ(call_hedge, "call"), "side": "buy",  "ratio_qty": 1,
+                 "position_intent": "buy_to_open",  "role": "long_call_hedge"},
+                {"symbol": _leg_occ(put_short,  "put"),  "side": "sell", "ratio_qty": 1,
+                 "position_intent": "sell_to_open", "role": "short_put"},
+                {"symbol": _leg_occ(put_hedge,  "put"),  "side": "buy",  "ratio_qty": 1,
+                 "position_intent": "buy_to_open",  "role": "long_put_hedge"},
+            ]
+        elif intent == "spread_debit":
+            # bull_call_debit_spread — pay net debit. Buy long call + sell short call above.
+            call_long = strike_price
+            call_short = round(call_long + wing_width, 2)
+            legs = [
+                {"symbol": _leg_occ(call_long,  "call"), "side": "buy",  "ratio_qty": 1,
+                 "position_intent": "buy_to_open",  "role": "long_call"},
+                {"symbol": _leg_occ(call_short, "call"), "side": "sell", "ratio_qty": 1,
+                 "position_intent": "sell_to_open", "role": "short_call_hedge"},
+            ]
+
     return {
         "option_type": option_type,
         "strike_price": strike_price,
@@ -1740,6 +1811,7 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
         "selected_dte": selected_dte,
         "intent": intent,
         "occ_symbol": occ_symbol,
+        "legs": legs,  # non-None for defined-risk spread setups
     }
 
 
@@ -2025,30 +2097,73 @@ def _execute_options_signal(
         # sells. Slightly overpay to guarantee fill, since strategy edge
         # is directional not micro-execution.
         _mid = fill_cents / 100.0
-        if _opt_side_str == "buy":
-            _limit_price = round(_mid * 1.20, 2)  # walk up toward ask
-        else:
-            _limit_price = round(_mid * 0.85, 2)  # walk down toward bid
-        _opt_resp = _opt_broker.submit_options_order(
-            contract_symbol=occ_symbol,
-            contracts=int(contract_count),
-            side=_opt_side_str,
-            limit_price=_limit_price,
-            time_in_force="day",
-        )
-        if _opt_resp.get("status_code") in (200, 201):
-            alpaca_options_order_id = _opt_resp.get("order_id")
-            logger.warning(
-                "[ALPACA-FILL] %s %s %s x%d limit=%.2f → order_id=%s (REAL Alpaca options order)",
-                profile_name, _opt_side_str, occ_symbol, int(contract_count),
-                _limit_price, alpaca_options_order_id,
+
+        # ── 2026-07-08 · Multi-leg dispatch for defined-risk spread setups ──
+        # If _resolve_option_details built a `legs` list (bull_put, bear_call,
+        # iron_condor, jade_lizard, bull_call_debit_spread), submit as an
+        # Alpaca mleg order. Single-leg naked shorts get rejected by paper
+        # for "insufficient options buying power for cash-secured put"
+        # (confirmed 2026-07-08 direct API test) because collateral required
+        # is strike × 100 (~$70k). mleg orders reduce collateral to spread
+        # width × 100 (~$500 for a $5-wide spread).
+        _legs = opt.get("legs")
+        if _legs and hasattr(_opt_broker, "submit_multileg_options_order"):
+            # Net credit (for shorts) or net debit (for spread_debit) = mid
+            # premium of primary leg × 0.30 as a conservative estimate.
+            # Alpaca's mleg limit_price is the net cash flow — for a credit
+            # spread we want as much credit as possible, so bid slightly
+            # BELOW estimated net credit to increase fill probability.
+            _net_estimate = round(_mid * 0.30, 2)
+            _net_limit = max(0.05, round(_net_estimate * 0.85, 2))
+            _opt_resp = _opt_broker.submit_multileg_options_order(
+                legs=_legs,
+                qty=int(contract_count),
+                limit_price=_net_limit,
+                time_in_force="day",
             )
-        else:
-            logger.error(
-                "[ALPACA-REJECT] %s options %s x%d side=%s status=%s body=%r",
-                profile_name, occ_symbol, int(contract_count), _opt_side_str,
-                _opt_resp.get("status_code"), str(_opt_resp.get("body"))[:300],
+            _log_leg_summary = " + ".join(
+                f"{l['side'][:1].upper()}{l.get('role', l['symbol'][-9:])}" for l in _legs
             )
+            if _opt_resp.get("status_code") in (200, 201):
+                alpaca_options_order_id = _opt_resp.get("order_id")
+                logger.warning(
+                    "[ALPACA-MLEG-FILL] %s intent=%s x%d net_limit=%.2f legs=%d [%s] → order_id=%s",
+                    profile_name, opt.get("intent"), int(contract_count),
+                    _net_limit, len(_legs), _log_leg_summary, alpaca_options_order_id,
+                )
+            else:
+                logger.error(
+                    "[ALPACA-MLEG-REJECT] %s intent=%s x%d net_limit=%.2f legs=%d [%s] status=%s body=%r",
+                    profile_name, opt.get("intent"), int(contract_count),
+                    _net_limit, len(_legs), _log_leg_summary,
+                    _opt_resp.get("status_code"), str(_opt_resp.get("body"))[:300],
+                )
+                return False
+        else:
+            if _opt_side_str == "buy":
+                _limit_price = round(_mid * 1.20, 2)  # walk up toward ask
+            else:
+                _limit_price = round(_mid * 0.85, 2)  # walk down toward bid
+            _opt_resp = _opt_broker.submit_options_order(
+                contract_symbol=occ_symbol,
+                contracts=int(contract_count),
+                side=_opt_side_str,
+                limit_price=_limit_price,
+                time_in_force="day",
+            )
+            if _opt_resp.get("status_code") in (200, 201):
+                alpaca_options_order_id = _opt_resp.get("order_id")
+                logger.warning(
+                    "[ALPACA-FILL] %s %s %s x%d limit=%.2f → order_id=%s (REAL Alpaca options order)",
+                    profile_name, _opt_side_str, occ_symbol, int(contract_count),
+                    _limit_price, alpaca_options_order_id,
+                )
+            else:
+                logger.error(
+                    "[ALPACA-REJECT] %s options %s x%d side=%s status=%s body=%r",
+                    profile_name, occ_symbol, int(contract_count), _opt_side_str,
+                    _opt_resp.get("status_code"), str(_opt_resp.get("body"))[:300],
+                )
             return False
     except Exception as _opt_broker_exc:
         logger.error(

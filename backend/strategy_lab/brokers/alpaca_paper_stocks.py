@@ -128,6 +128,62 @@ class PaperStocksAdapter(BrokerAdapter):
         data = resp.json() if resp.content else {}
         return {"status_code": resp.status_code, "body": data, "order_id": data.get("id")}
 
+    def submit_multileg_options_order(
+        self,
+        legs: list[dict],
+        qty: int,
+        limit_price: float,
+        time_in_force: str = "day",
+    ) -> dict:
+        """Submit an Alpaca multi-leg options order (order_class="mleg").
+
+        Enables defined-risk credit spreads and iron condors. Alpaca paper
+        rejected all single-leg SELLs today with "insufficient options
+        buying power for cash-secured put" (need strike × 100 collateral).
+        Multi-leg orders reduce collateral required to spread width × 100.
+
+        legs: list of dicts, each {"symbol": occ, "side": "buy"|"sell",
+                                    "ratio_qty": int, "position_intent":
+                                    "sell_to_open"|"buy_to_open"|
+                                    "sell_to_close"|"buy_to_close"}
+        qty: overall order qty (each leg's fill = qty * ratio_qty)
+        limit_price: NET price (credit or debit) at which order fills.
+                     For credit spreads, positive = credit received.
+                     Alpaca requires positive number regardless of side.
+        """
+        payload = {
+            "order_class": "mleg",
+            "qty": str(qty),
+            "type": "limit",
+            "time_in_force": time_in_force,
+            "limit_price": str(round(abs(limit_price), 2)),
+            "legs": [
+                {
+                    "symbol": leg["symbol"],
+                    "ratio_qty": str(leg.get("ratio_qty", 1)),
+                    "side": leg["side"],
+                    "position_intent": leg.get(
+                        "position_intent",
+                        "sell_to_open" if leg["side"] == "sell" else "buy_to_open",
+                    ),
+                }
+                for leg in legs
+            ],
+        }
+        resp = requests.post(
+            f"{_PAPER_BASE}/orders",
+            json=payload,
+            headers=self._headers,
+            timeout=10,
+        )
+        data = resp.json() if resp.content else {}
+        return {
+            "status_code": resp.status_code,
+            "body": data,
+            "order_id": data.get("id"),
+            "leg_count": len(legs),
+        }
+
     def _get_owned_qty(self, symbol: str) -> float:
         """Return current owned qty at Alpaca for symbol. Zero if not held.
 
