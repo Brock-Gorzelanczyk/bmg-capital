@@ -150,6 +150,171 @@ def _entry_price_cents(db: Session, symbol: str) -> Optional[int]:
     return None
 
 
+# Alpaca fractional dollar-notional minimum. Rebalance names below this
+# get skipped with [DROP:notional_below_minimum] rather than submitted
+# to a guaranteed reject.
+_ALPACA_MIN_NOTIONAL_USD = 1.00
+
+
+def _submit_broker_orders_for_rebalance(
+    bot: dict,
+    adds: list[dict],
+    removes: list[str],
+) -> dict:
+    """Phase 2 broker path — submit real Alpaca market DAY orders.
+
+    Called from rebalance() when BMG_PORTFOLIO_RANK_LIVE_ORDERS=true AND
+    there's a diff. Long-only (every PR bot has short_decile=0 as of
+    2026-07-08). Skips crypto symbols since crypto adapter has a different
+    order shape — logged for follow-up.
+
+    Order sequence: REMOVES first (frees buying power), then ADDS.
+    Sizing: dollar_target = starting_capital × abs(target_weight).
+    Notional < $1 skipped (Alpaca fractional minimum).
+
+    Returns {"orders_placed": [...], "orders_failed": [...],
+             "orders_skipped": [...]} per-symbol result rows. Callers
+    should merge order_ids into the adds dict for rebalance_log.
+    """
+    from strategy_lab.core.execution import get_broker
+
+    results = {"orders_placed": [], "orders_failed": [], "orders_skipped": []}
+    starting_dollars = int(bot.get("starting_capital_cents") or 0) / 100.0
+    if starting_dollars <= 0:
+        logger.warning(
+            "[portfolio-rank] %s starting_capital=0 — skipping broker submission",
+            bot["name"],
+        )
+        return results
+
+    try:
+        broker = get_broker("stock")
+    except Exception as _bexc:
+        logger.error(
+            "[portfolio-rank] %s get_broker('stock') failed: %s",
+            bot["name"], _bexc,
+        )
+        return results
+
+    # Look up owned qty at broker once for the sell loop.
+    owned_by_sym: dict[str, float] = {}
+    try:
+        for p in broker.get_positions():
+            owned_by_sym[str(p.get("symbol") or "").upper()] = float(p.get("qty") or 0)
+    except Exception as _pexc:
+        logger.warning(
+            "[portfolio-rank] %s get_positions failed (proceeding without qty lookup): %s",
+            bot["name"], _pexc,
+        )
+
+    # ── SELLS (removes) — frees buying power for buys ──────────────────────
+    for sym in removes:
+        sym_u = sym.upper()
+        if "/" in sym_u:
+            results["orders_skipped"].append({
+                "symbol": sym, "side": "sell",
+                "reason": "crypto_route_not_wired",
+            })
+            logger.warning(
+                "[portfolio-rank] %s SKIP sell %s — crypto broker path not wired",
+                bot["name"], sym,
+            )
+            continue
+        owned = owned_by_sym.get(sym_u, 0.0)
+        if owned <= 0:
+            results["orders_skipped"].append({
+                "symbol": sym, "side": "sell",
+                "reason": "no_position_at_broker",
+            })
+            continue
+        try:
+            resp = broker.submit_order(symbol=sym_u, qty=owned, side="sell")
+            oid = (resp or {}).get("order_id")
+            results["orders_placed"].append({
+                "symbol": sym, "side": "sell", "qty": owned, "order_id": oid,
+            })
+            logger.warning(
+                "[PR-ALPACA-FILL] %s SELL %s qty=%.6f → order_id=%s",
+                bot["name"], sym_u, owned, oid,
+            )
+        except Exception as _sexc:
+            results["orders_failed"].append({
+                "symbol": sym, "side": "sell",
+                "error": f"{type(_sexc).__name__}: {_sexc}",
+            })
+            logger.error(
+                "[PR-ALPACA-REJECT] %s SELL %s qty=%.6f: %s",
+                bot["name"], sym_u, owned, _sexc,
+            )
+
+    # ── BUYS (adds) ────────────────────────────────────────────────────────
+    for add in adds:
+        sym = str(add.get("symbol") or "").strip()
+        if not sym:
+            continue
+        sym_u = sym.upper()
+        if "/" in sym_u:
+            results["orders_skipped"].append({
+                "symbol": sym, "side": "buy",
+                "reason": "crypto_route_not_wired",
+            })
+            logger.warning(
+                "[portfolio-rank] %s SKIP buy %s — crypto broker path not wired",
+                bot["name"], sym,
+            )
+            continue
+
+        weight = abs(float(add.get("target_weight") or 0))
+        dollar_target = starting_dollars * weight
+        if dollar_target < _ALPACA_MIN_NOTIONAL_USD:
+            results["orders_skipped"].append({
+                "symbol": sym, "side": "buy",
+                "reason": f"notional_below_minimum ({dollar_target:.4f} < {_ALPACA_MIN_NOTIONAL_USD})",
+            })
+            continue
+
+        entry_px_c = int(add.get("entry_price_cents") or 0)
+        entry_px = entry_px_c / 100.0
+        if entry_px <= 0:
+            results["orders_skipped"].append({
+                "symbol": sym, "side": "buy",
+                "reason": "no_entry_price",
+            })
+            continue
+
+        qty = round(dollar_target / entry_px, 6)
+        if qty <= 0:
+            results["orders_skipped"].append({
+                "symbol": sym, "side": "buy",
+                "reason": f"qty_rounded_to_zero (target=${dollar_target:.4f} px=${entry_px:.4f})",
+            })
+            continue
+
+        try:
+            resp = broker.submit_order(symbol=sym_u, qty=qty, side="buy")
+            oid = (resp or {}).get("order_id")
+            add["alpaca_order_id"] = oid  # merged into rebalance_log adds JSON
+            results["orders_placed"].append({
+                "symbol": sym, "side": "buy", "qty": qty, "order_id": oid,
+                "notional_usd": dollar_target,
+            })
+            logger.warning(
+                "[PR-ALPACA-FILL] %s BUY %s qty=%.6f notional=$%.2f → order_id=%s",
+                bot["name"], sym_u, qty, dollar_target, oid,
+            )
+        except Exception as _bexc:
+            results["orders_failed"].append({
+                "symbol": sym, "side": "buy",
+                "error": f"{type(_bexc).__name__}: {_bexc}",
+            })
+            logger.error(
+                "[PR-ALPACA-REJECT] %s BUY %s qty=%.6f notional=$%.2f: %s",
+                bot["name"], sym_u, qty, dollar_target, _bexc,
+            )
+
+    return results
+
+
 def rebalance(
     db: Session,
     bot_id: int,
@@ -287,19 +452,50 @@ def rebalance(
     db.commit()
 
     # Phase 2: live-orders path. When BMG_PORTFOLIO_RANK_LIVE_ORDERS is
-    # true AND the basket differs from current holdings, hand off to the
-    # Alpaca client. Currently unimplemented — placing real orders is a
-    # separate PR after the dry-run cycle is verified clean. We log-loud
-    # if the flag is on so nothing goes silently unfulfilled.
+    # true AND the basket differs from current holdings, submit real
+    # Alpaca market DAY orders. Long-only (every PR bot has short_decile=0).
+    # Result rows saved into rebalance_log via the adds/removes JSON.
     order_mode = "dry_run"
+    broker_results: dict = {}
     if _live_orders_enabled() and error is None and (adds or removes):
-        order_mode = "live_pending"
-        logger.error(
-            "[portfolio-rank] LIVE ORDERS flag ON for %s but broker path "
-            "not yet implemented (%d adds, %d removes queued). Treating "
-            "as dry-run until Phase 2.1.",
-            bot["name"], len(adds), len(removes),
+        broker_results = _submit_broker_orders_for_rebalance(bot, adds, removes)
+        placed = len(broker_results.get("orders_placed", []))
+        failed = len(broker_results.get("orders_failed", []))
+        skipped = len(broker_results.get("orders_skipped", []))
+        if placed > 0:
+            order_mode = "live"
+        elif failed > 0 and placed == 0:
+            order_mode = "live_all_rejected"
+        elif skipped > 0 and placed == 0 and failed == 0:
+            order_mode = "live_all_skipped"
+        else:
+            order_mode = "live"
+        logger.warning(
+            "[portfolio-rank] %s live orders: placed=%d failed=%d skipped=%d",
+            bot["name"], placed, failed, skipped,
         )
+        # Persist broker outcome into rebalance_log by rewriting the adds JSON.
+        # We already inserted the log row above with the initial adds shape;
+        # update in place so the alpaca_order_ids merged into `adds` items
+        # by _submit_broker_orders_for_rebalance make it into the record.
+        try:
+            db.execute(text("""
+                UPDATE portfolio_rank_rebalance_log
+                SET adds = :ad,
+                    ranking_output = :ro
+                WHERE bot_id = :bid AND triggered_by = :tb
+                  AND created_at = (SELECT MAX(created_at)
+                                    FROM portfolio_rank_rebalance_log
+                                    WHERE bot_id = :bid AND triggered_by = :tb)
+            """), {
+                "ad": json.dumps({"adds": adds, "broker_results": broker_results}),
+                "ro": json.dumps({k: round(v, 4) for k, v in
+                                  list(ranking.items())[:60]}),
+                "bid": bot_id, "tb": triggered_by,
+            })
+            db.commit()
+        except Exception as _lexc:
+            logger.warning("[portfolio-rank] rebalance_log broker update failed: %s", _lexc)
 
     # Discord digest — routes via ops webhook to #dev-updates. Fire-and-
     # forget; a webhook 500 must not block the DB write we just committed.
@@ -469,10 +665,19 @@ def setup_portfolio_rank_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Fire 5 minutes AFTER US equity market open so market DAY orders
+    # submitted by the broker path are accepted. Alpaca rejects market
+    # orders received outside regular trading hours ("market is closed").
+    # 09:35 America/New_York = post-open buffer, always right regardless
+    # of DST. Rebalance days themselves are still gated inside nightly_run
+    # via _is_rebalance_day (weekly=Mon, monthly=first Mon, etc).
     scheduler.add_job(
         _job,
-        CronTrigger(hour=3, minute=0, timezone="America/Chicago"),
+        CronTrigger(hour=9, minute=35, timezone="America/New_York"),
         id="portfolio_rank_nightly",
         replace_existing=True,
     )
-    logger.warning("[portfolio-rank] nightly cron registered: 03:00 America/Chicago")
+    logger.warning(
+        "[portfolio-rank] rebalance cron registered: 09:35 America/New_York "
+        "(post-market-open, so broker DAY orders accept)"
+    )
