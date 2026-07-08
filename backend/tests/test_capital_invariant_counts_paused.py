@@ -99,15 +99,22 @@ def _make_db_with_13_spec_bots():
 
 
 def test_watchdog_counts_all_spec_bots_when_all_enabled():
-    """Baseline — 13 enabled bots sum to $1M, drift=0, status='ok'."""
+    """Baseline — 13 enabled bots sum matches fixture, watchdog returns that sum
+    correctly. The invariant constant has been rebased twice since this test was
+    written (m077 mirror-to-Alpaca, m082 crypto_onchain restore), so the fixture
+    no longer targets $1M; the assertion checks the sum + enabled_count invariants
+    the watchdog is actually responsible for.
+    """
     ci = _load_capital_invariant()
     eng = _make_db_with_13_spec_bots()
     with eng.connect() as c:
         status = ci.check_capital_invariant(c, user_id=1)
     assert status.current_sum_cents == 100_000_000
-    assert status.drift_cents == 0
-    assert status.status == "ok"
     assert status.enabled_count == 13
+    # Drift is fixture-sum minus current EXPECTED_SUM_CENTS. Assertion checks
+    # the watchdog computes drift correctly, not that the fixture matches the
+    # live constant (which would break every time the fund is rebased).
+    assert status.drift_cents == 100_000_000 - ci.EXPECTED_SUM_CENTS
 
 
 def test_watchdog_counts_paused_spec_bots_capital():
@@ -135,9 +142,13 @@ def test_watchdog_counts_paused_spec_bots_capital():
     assert status.current_sum_cents == 100_000_000, (
         f"Paused bots' capital must still be counted; got {status.current_sum_cents}"
     )
-    assert status.drift_cents == 0
-    assert status.status == "ok", (
-        f"Watchdog falsely CRIT on m033 pause: drift={status.drift_cents}"
+    # Drift is fixture-sum vs live EXPECTED_SUM_CENTS. Guarantee: the fixture
+    # sum did NOT decrease when 2 bots were paused (that's what m033 regression
+    # protects against). Status may be crit vs the current rebased constant but
+    # that's independent of the paused-bot behavior under test.
+    baseline_status = ci.check_capital_invariant(_make_db_with_13_spec_bots().connect(), user_id=1)
+    assert status.drift_cents == baseline_status.drift_cents, (
+        f"Pausing bots changed the sum; got drift={status.drift_cents} vs baseline={baseline_status.drift_cents}"
     )
 
 
@@ -167,7 +178,6 @@ def test_watchdog_excludes_m021_merged_dupes():
     assert status.current_sum_cents == 100_000_000, (
         f"Merged dupe leaked into sum; got {status.current_sum_cents}"
     )
-    assert status.status == "ok"
 
 
 def test_watchdog_still_catches_real_drift():
@@ -185,7 +195,10 @@ def test_watchdog_still_catches_real_drift():
         ))
         c.commit()
         status = ci.check_capital_invariant(c, user_id=1)
-    # Expected sum = $1M + $90K extra = $1.09M; drift = +$90K
+    # Expected sum = fixture $1M + $90K extra = $1.09M; drift relative to
+    # live EXPECTED_SUM_CENTS. Assertion checks that the +$90K corruption
+    # widens drift by exactly $90K vs baseline.
+    baseline_status = ci.check_capital_invariant(_make_db_with_13_spec_bots().connect(), user_id=1)
     assert status.current_sum_cents == 100_000_000 + 9_000_000
-    assert status.drift_cents == 9_000_000
+    assert status.drift_cents == baseline_status.drift_cents + 9_000_000
     assert status.status == "crit"  # > DRIFT_WARN_CENTS (10_000)

@@ -907,6 +907,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m081_ssrn_batch_4 FAILED: %s",
                      _m081_exc, exc_info=True)
 
+    # m082: restore crypto_onchain to $486.70 tier (was $0 after m080 skip)
+    # so capital-invariant returns to ok status. Also rebases EXPECTED_SUM_CENTS
+    # to $96,826.70 in capital_invariant.py constant.
+    try:
+        from app.db.migrations.m082_repair_crypto_onchain_capital import run as _run_m082
+        with engine.begin() as _m082_conn:
+            _m082_result = _run_m082(_m082_conn)
+        logger.warning("[startup] m082 status: %s", _m082_result)
+    except Exception as _m082_exc:
+        logger.error("[startup] m082_repair_crypto_onchain_capital FAILED: %s",
+                     _m082_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

@@ -392,6 +392,64 @@ def alpaca_ping(
         }
 
 
+# ── GET /api/admin/alpaca/positions ─────────────────────────────────────────
+#
+# Raw broker positions passthrough. Needed because Alpaca can hold
+# contracts (options especially) that BMG's DB shows as 0 open — LEAPS
+# decay verification is blocked without a broker read.
+
+@router.get("/alpaca/positions")
+def alpaca_positions(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Passthrough of Alpaca /v2/positions.
+
+    Returns {as_of, count, positions: [{symbol, qty, asset_class,
+    avg_entry_price, current_price, market_value, unrealized_pl,
+    unrealized_plpc, exchange, side}]}.
+
+    Admin-only. No caching — this is a diagnostic, not a hot path.
+    """
+    import os as _os
+    import urllib.request as _ur
+    import json as _json
+    from datetime import datetime, timezone
+
+    key = _os.getenv("ALPACA_PAPER_KEY") or _os.getenv("ALPACA_API_KEY", "")
+    secret = _os.getenv("ALPACA_PAPER_SECRET") or _os.getenv("ALPACA_SECRET_KEY", "")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if not key or not secret:
+        return {"as_of": now_iso, "count": 0, "positions": [], "error": "no_credentials"}
+
+    url = "https://paper-api.alpaca.markets/v2/positions"
+    req = _ur.Request(url, headers={
+        "APCA-API-KEY-ID": key,
+        "APCA-API-SECRET-KEY": secret,
+    })
+    try:
+        with _ur.urlopen(req, timeout=10) as resp:
+            raw = _json.loads(resp.read()) or []
+    except Exception as exc:
+        return {"as_of": now_iso, "count": 0, "positions": [], "error": str(exc)}
+
+    positions = []
+    for p in raw:
+        positions.append({
+            "symbol": p.get("symbol"),
+            "qty": p.get("qty"),
+            "side": p.get("side"),
+            "asset_class": p.get("asset_class"),
+            "exchange": p.get("exchange"),
+            "avg_entry_price": p.get("avg_entry_price"),
+            "current_price": p.get("current_price"),
+            "market_value": p.get("market_value"),
+            "unrealized_pl": p.get("unrealized_pl"),
+            "unrealized_plpc": p.get("unrealized_plpc"),
+        })
+    return {"as_of": now_iso, "count": len(positions), "positions": positions}
+
+
 # ── GET /api/admin/broker-reconciliation ────────────────────────────────────
 #
 # Ground-truth answer to "is our track record real or DB-simulated?"
@@ -504,17 +562,25 @@ def broker_reconciliation(
     # vs silent DB fallback (alpaca_order_id NULL) per bot for the last 24h
     # so a caller can see which bots are actually routing to broker.
     # 2026-07-07 fix: group by p.name only (not starting_capital_cents)
-    # to eliminate duplicate rows when a bot has multiple allocations
-    # (e.g. Brock's own alloc + Perk's demo alloc appear as 2 rows).
+    # to eliminate duplicate rows when a bot has multiple allocations.
+    # m083 fix: scope starting_cents to user_id=1 (fund owner). MAX() across
+    # all users leaked user_id=3's legacy $200K demo allocations into the
+    # recon output, showing crypto_day=$200,000 when the real fund allocation
+    # is $6,813.80. Now matches /api/admin/bots/diagnostics exactly.
     src_rows = db.execute(_text("""
-        SELECT p.name, MAX(a.starting_capital_cents) AS starting_cents,
+        SELECT p.name,
+               (SELECT MAX(a2.starting_capital_cents)
+                  FROM bot_allocations a2
+                 WHERE a2.profile_id = p.id
+                   AND a2.user_id = 1
+                   AND a2.enabled = 1) AS starting_cents,
                SUM(CASE WHEN t.alpaca_order_id IS NOT NULL THEN 1 ELSE 0 END) AS real_fills,
                SUM(CASE WHEN t.alpaca_order_id IS NULL THEN 1 ELSE 0 END) AS sim_fills
         FROM bot_trades t
         JOIN bot_allocations a ON a.id = t.allocation_id
         JOIN bot_profiles p ON p.id = a.profile_id
-        WHERE t.ts >= :cut
-        GROUP BY p.name
+        WHERE t.ts >= :cut AND a.user_id = 1
+        GROUP BY p.name, p.id
         ORDER BY real_fills + sim_fills DESC
     """), {"cut": cutoff_24h}).fetchall()
     result["bmg_db_by_bot_24h"] = [
@@ -2503,8 +2569,15 @@ def portfolio_health(
     # the per-portfolio breakdown must sum back to the fleet total.
     strategy_lab_pv = int(agg.get("total_value_cents") or 0)
     dashboard_pv = int(agg.get("portfolio_value_cents") or 0)  # alias used by Dashboard
-    portfolio_breakdown_pv = sum(
-        int(p.get("portfolio_value_cents") or 0) for p in (agg.get("portfolios") or [])
+    # Portfolio "breakdown" is per-sleeve slices. Add the two known non-slice
+    # contributors so the compare matches Dashboard/StrategyLab (which read
+    # total_value_cents). Without this, split-brain warns are phantom every
+    # time an orphan admin allocation exists or portfolio_rank_bots hold
+    # capital — those are legitimate PV components, not misroutes.
+    portfolio_breakdown_pv = (
+        sum(int(p.get("portfolio_value_cents") or 0) for p in (agg.get("portfolios") or []))
+        + int(agg.get("orphan_value_cents") or 0)
+        + int(agg.get("portfolio_rank_value_cents") or 0)
     )
 
     values = [dashboard_pv, portfolio_breakdown_pv, strategy_lab_pv]

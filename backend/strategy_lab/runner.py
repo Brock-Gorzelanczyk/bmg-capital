@@ -2175,12 +2175,17 @@ def _execute_options_signal(
                     _limit_price, alpaca_options_order_id,
                 )
             else:
+                # m083 fix: indent bug in mleg PR (commit 0799cc33) left the
+                # `return False` at the outer else-branch scope so EVERY
+                # single-leg options fill (including today's SNOW/IWM long
+                # calls at Alpaca) got no BotPosition/BotTrade row. Orphaned
+                # 5 real broker contracts. Now only return False on reject.
                 logger.error(
-                    "[ALPACA-REJECT] %s options %s x%d side=%s status=%s body=%r",
+                    "[DROP:alpaca_reject_single_leg] %s options %s x%d side=%s status=%s body=%r",
                     profile_name, occ_symbol, int(contract_count), _opt_side_str,
                     _opt_resp.get("status_code"), str(_opt_resp.get("body"))[:300],
                 )
-            return False
+                return False
     except Exception as _opt_broker_exc:
         logger.error(
             "[ALPACA-REJECT] %s options %s x%d exception_type=%s message=%r",
@@ -2654,6 +2659,20 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                 extended_hours=_in_ext_hours,
             )
             order_id = result.get("order_id")
+            # m083 real-only guard #2: adapters return {"order_id": None, "raw":
+            # {"skipped": "no_position"}} for sell-without-ownership and similar
+            # pre-flight skips. That's a real broker rejection — no fill
+            # happened. Refusing here matches the m078 intent (no sim rows) and
+            # closes the quant sleeve sim leak: crypto adapter was returning
+            # order_id=None on impossible spot shorts, runner treated it as
+            # success and wrote BotPosition + BotTrade with alpaca_order_id=NULL.
+            if order_id is None:
+                _skipped = (result.get("raw") or {}).get("skipped", "unknown")
+                logger.error(
+                    "[DROP:no_broker_order_id] %s %s x%.4f side=%s skip_reason=%s (adapter pre-flight)",
+                    profile_name, sig.symbol, qty, "sell" if is_short else "buy", _skipped,
+                )
+                return False
             logger.warning(
                 "[ALPACA-FILL] %s %s %s x%.4f → order_id=%s (REAL Alpaca paper order)",
                 profile_name, "sell" if is_short else "buy", sig.symbol, qty, order_id,

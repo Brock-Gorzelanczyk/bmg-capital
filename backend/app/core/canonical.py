@@ -1327,6 +1327,12 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         # Alias for callers that read portfolio_value_cents at the aggregate
         # level (mirrors the per-portfolio shape). Always populated — never None.
         "portfolio_value_cents": total_value,
+        # m083: expose the two "outside the portfolios[] slice" contributors so
+        # /admin/portfolio-health can compute portfolio_pv correctly instead of
+        # summing only portfolios[] (which excludes orphan admin allocations
+        # + portfolio_rank_bots by construction, producing a phantom split-brain).
+        "orphan_value_cents": orphan_value_diag,
+        "portfolio_rank_value_cents": _pr_extra,
         "yesterday_value_cents": yesterday_total,
         "today_pnl_cents": total_today_pnl,
         "today_pnl_pct": today_pct,

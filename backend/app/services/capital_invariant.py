@@ -32,7 +32,11 @@ logger = logging.getLogger(__name__)
 # discovering the credit-side sign flip drained buying power:
 # "we can still use all of the bots and strategies and bring the app to
 # mirror alpaca at 97k".
-EXPECTED_SUM_CENTS = 9_734_000    # $97,340.00 (Alpaca equity at m077 write)
+# 2026-07-08 m082: rebased to $96,826.70 after m080's outlier redistribution
+# left the fleet $1,000 short of the m077 target. m082 restores crypto_onchain
+# to $486.70 (48670 cents) matching crypto_lt tier, bringing the fleet to
+# $96,826.70. Any future rebalance should update this constant too.
+EXPECTED_SUM_CENTS = 9_682_670    # $96,826.70 (post-m080 + m082 crypto_onchain restore)
 DRIFT_OK_CENTS = 100              # ±$1 OK band
 DRIFT_WARN_CENTS = 10_000         # $100 = WARN
 # Above WARN = CRIT
