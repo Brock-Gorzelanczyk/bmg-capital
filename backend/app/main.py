@@ -1411,6 +1411,8 @@ app.include_router(tuning.router)
 app.include_router(exams.router)
 app.include_router(exams.verify_router)
 app.include_router(admin.router)
+from app.routers.options_diagnostic import router as options_diagnostic_router
+app.include_router(options_diagnostic_router)
 from app.routers.concentration import router as concentration_router
 app.include_router(concentration_router)
 from app.routers.allocator import router as allocator_router
