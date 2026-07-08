@@ -92,6 +92,31 @@ class PaperCryptoAdapter(BrokerAdapter):
     def cancel_order(self, order_id: str) -> bool:
         return self._delete(f"/orders/{order_id}")
 
+    def _get_owned_qty(self, symbol: str) -> float:
+        """Return current owned qty at Alpaca for symbol. Zero if not held.
+
+        Pre-flight for SELL orders. Alpaca crypto does NOT allow shorts —
+        any sell for qty > owned_qty rejects with "insufficient balance".
+        Cheap: /v2/positions/{symbol} is one request.
+
+        Symbol accepted in either "BTC/USD" or "BTCUSD" form. Alpaca
+        positions endpoint expects "BTCUSD" for crypto (no slash).
+        """
+        try:
+            pos_sym = symbol.replace("/", "")
+            resp = requests.get(
+                f"{_PAPER_BASE}/positions/{pos_sym}",
+                headers=self._headers,
+                timeout=5,
+            )
+            if resp.status_code == 404:
+                return 0.0
+            resp.raise_for_status()
+            data = resp.json()
+            return abs(float(data.get("qty", 0) or 0))
+        except Exception:
+            return 0.0
+
     def submit_bracket_order(
         self,
         symbol: str,
@@ -113,7 +138,27 @@ class PaperCryptoAdapter(BrokerAdapter):
 
         Stop and target are logged so downstream reconciliation can
         cross-check that the position_monitor honored them.
+
+        For SELL orders (2026-07-08): pre-flight ownership check.
+        Alpaca crypto does not allow shorts, so selling more than we own
+        rejects with insufficient balance. Skip if owned=0, downsize if
+        owned < requested. Same fix pattern as the stocks adapter.
         """
+        if side == "sell":
+            owned = self._get_owned_qty(symbol)
+            if owned < qty:
+                if owned <= 0:
+                    logger.info(
+                        "[PAPER-CRYPTO] SKIP sell %s x%.6f — Alpaca owned=0 "
+                        "(would reject as insufficient balance)",
+                        symbol, qty,
+                    )
+                    return {"order_id": None, "raw": {"skipped": "no_position"}}
+                logger.info(
+                    "[PAPER-CRYPTO] downsize sell %s %.6f -> %.6f (owned)",
+                    symbol, qty, owned,
+                )
+                qty = owned
         payload: dict = {
             "symbol": symbol,
             "qty": str(qty),

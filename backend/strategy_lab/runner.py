@@ -2013,8 +2013,18 @@ def _execute_options_signal(
         from strategy_lab.core.execution import get_broker
         _opt_broker = get_broker("options")
         _opt_side_str = "sell" if _pos_side == "short" else "buy"
-        # Alpaca requires a limit price on options. Use mid premium as limit.
-        _limit_price = round(fill_cents / 100.0, 2)
+        # Alpaca requires a limit price on options. Options bid-ask spreads
+        # can be 15-30% wide on ATM/ITM strikes, so a limit priced at mid
+        # rejects ~50% of the time (SPY261218C00700000 at $30 canceled
+        # 2026-07-07 for this reason — mid was $30 but ask was ~$47).
+        # Fix: walk the limit into the spread by 20% for buys / 15% for
+        # sells. Slightly overpay to guarantee fill, since strategy edge
+        # is directional not micro-execution.
+        _mid = fill_cents / 100.0
+        if _opt_side_str == "buy":
+            _limit_price = round(_mid * 1.20, 2)  # walk up toward ask
+        else:
+            _limit_price = round(_mid * 0.85, 2)  # walk down toward bid
         _opt_resp = _opt_broker.submit_options_order(
             contract_symbol=occ_symbol,
             contracts=int(contract_count),
