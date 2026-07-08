@@ -1500,7 +1500,8 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     # intent ∈ {"long_directional", "short_credit", "spread_debit",
     #           "spread_credit", "diagonal", "neutral_credit"}
     LONG_DIRECTIONAL = {"long_call_directional", "leaps_stock_replacement"}
-    SHORT_CREDIT_PUT = {"cash_secured_put", "wheel_strategy", "bull_put_credit_spread", "jade_lizard"}
+    SHORT_CREDIT_PUT = {"cash_secured_put", "wheel_strategy", "bull_put_credit_spread",
+                        "jade_lizard", "vrp_put_write"}
     SHORT_CREDIT_CALL = {"covered_call_30d", "bear_call_credit_spread"}
     NEUTRAL_CREDIT = {"iron_condor_45dte", "neutral_calendar_spread"}
     SPREAD_DEBIT = {"bull_call_debit_spread"}
@@ -1703,8 +1704,23 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     # NB: position_dollars already encodes the per-trade allocation; we
     # interpret it as the *max premium-at-risk for this trade*. If even one
     # contract exceeds it, we return contract_count=0 → caller must skip.
+    #
+    # 2026-07-08: for defined-risk spread setups (mleg), max risk per contract
+    # is the wing width × 100 (max loss = spread width - net credit), NOT the
+    # primary short-leg premium × 100 which represents notional not risk.
+    # Without this branch, a $2.77 SPY put premium × 100 = $277 rejects sizing
+    # for a $200 budget even though the actual max-loss on a $1-wide spread
+    # is only ~$70. Uses $1 wing (matches leg-construction default below).
+    _CREDIT_INTENTS_LOCAL = {"short_credit", "neutral_credit", "spread_credit"}
     max_premium_at_risk = position_dollars  # already sleeve_capital × position_size_pct
-    per_contract_cost = max(0.01, contract_premium) * 100
+    if intent in _CREDIT_INTENTS_LOCAL or intent == "spread_debit":
+        # Defined-risk spread: risk = wing_width × 100 per contract.
+        # For iron condor, both wings contribute (~2× width × 100).
+        _wing = 1.0
+        _leg_multiplier = 2.0 if intent == "neutral_credit" else 1.0
+        per_contract_cost = _wing * 100.0 * _leg_multiplier
+    else:
+        per_contract_cost = max(0.01, contract_premium) * 100
     raw_count = math.floor(max_premium_at_risk / per_contract_cost)
     contract_count = max(0, raw_count)
 

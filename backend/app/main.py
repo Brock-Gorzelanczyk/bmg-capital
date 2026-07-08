@@ -896,6 +896,17 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m080_cap_outlier_allocations FAILED: %s",
                      _m080_exc, exc_info=True)
 
+    # m081: SSRN batch 4 — Sloan accruals PR bot + promote tsmom_multi_asset
+    # to production + wire vrp_put_write into options_income (Israelov 2019).
+    try:
+        from app.db.migrations.m081_ssrn_batch_4 import run as _run_m081
+        with engine.begin() as _m081_conn:
+            _m081_result = _run_m081(_m081_conn)
+        logger.warning("[startup] m081 status: %s", _m081_result)
+    except Exception as _m081_exc:
+        logger.error("[startup] m081_ssrn_batch_4 FAILED: %s",
+                     _m081_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

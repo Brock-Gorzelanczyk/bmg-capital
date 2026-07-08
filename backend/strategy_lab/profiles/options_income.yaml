@@ -109,6 +109,7 @@ strategies:
   - iron_condor_45dte
   - jade_lizard
   - neutral_calendar_spread
+  - vrp_put_write   # 2026-07-08 SSRN batch 4 (Israelov 2019, SSRN 3437199)
 ensemble: weighted_vote
 # Options strategies pre-date Phase 1's discipline filter and don't yet
 # emit volume_agreement / mtf_alignment / cross_asset_agree in their reason

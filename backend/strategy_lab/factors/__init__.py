@@ -89,6 +89,11 @@ def _crypto_xs_momentum(symbols: list[str], db: Session, params: dict) -> dict[s
     return compute(symbols, db, params)
 
 
+def _accruals(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .accruals import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
@@ -115,6 +120,10 @@ _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "pead": _pead,
     "insider_cluster_buys": _insider_cluster_buys,
     "crypto_xs_momentum": _crypto_xs_momentum,
+    # 2026-07-08 SSRN batch 4:
+    #   accruals: Sloan 1996 — one of the most-replicated cross-sectional
+    #             anomalies. Long low-accrual (quality earnings) names.
+    "accruals": _accruals,
 }
 
 

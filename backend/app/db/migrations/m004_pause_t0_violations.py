@@ -24,7 +24,8 @@ _T0_INCUBATION_PROFILES = [
     "crypto_meanrev_2163",
     "earnings_nlp",
     "quality_factor",
-    "tsmom_multi_asset",
+    # 2026-07-08: tsmom_multi_asset promoted to production in m081 (SSRN batch
+    # 4). Removed from T0 pause list so m004 stops re-pausing it every restart.
     "value_quality",
 ]
 
