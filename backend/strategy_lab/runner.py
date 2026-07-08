@@ -1820,8 +1820,12 @@ def _execute_options_signal(
     # you enter once with the intended contract count, then either close
     # at target or stop. Halving the initial entry for options is a
     # design mismatch, not a risk feature. The floor overrides it.
-    OPTIONS_MIN_NOTIONAL_PCT = 0.10
-    OPTIONS_MAX_NOTIONAL_PCT = 0.12
+    # 2026-07-08: dropped MAX 12%→8% after today's LEAPS run put 12% of the
+    # fund into 3 individual-name long calls (MSFT/PDD/XLK) with −7% decay
+    # in one session. Until the 8 halted credit strategies come back online
+    # to balance the sleeve, cap long-call concentration harder.
+    OPTIONS_MIN_NOTIONAL_PCT = 0.06
+    OPTIONS_MAX_NOTIONAL_PCT = 0.08
     notional_floor = capital_usd * OPTIONS_MIN_NOTIONAL_PCT
     notional_cap = capital_usd * OPTIONS_MAX_NOTIONAL_PCT
     if position_dollars < notional_floor:

@@ -881,6 +881,21 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m079_rebase_pnl_snapshots FAILED: %s",
                      _m079_exc, exc_info=True)
 
+    # m080: cap any bot_allocation over $15k, redistribute excess so
+    # invariant holds. Kills the 1.42x leverage bug where one bot's
+    # allocation slipped past m077's rescale and it was buying $23k
+    # per-position baskets on a $97k fund (GOOGL alone at 24%
+    # concentration). Runs BEFORE market open so today's scans see the
+    # capped values, not the stale big-capital ones.
+    try:
+        from app.db.migrations.m080_cap_outlier_allocations import run as _run_m080
+        with engine.begin() as _m080_conn:
+            _m080_result = _run_m080(_m080_conn)
+        logger.warning("[startup] m080 status: %s", _m080_result)
+    except Exception as _m080_exc:
+        logger.error("[startup] m080_cap_outlier_allocations FAILED: %s",
+                     _m080_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
