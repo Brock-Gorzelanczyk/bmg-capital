@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 _MIGRATION_NAME = "m088_earnings_straddle_funding_2026_07_09"
 _BUMP_CENTS = 92_020  # $920.20 — exact remainder from m085 pool
+_PRE_BUMP_CENTS = 194_680   # $1,946.80 — options_directional value BEFORE m088
+_POST_BUMP_CENTS = 286_700  # $2,867.00 — options_directional value AFTER m088
 
 
 def run(conn) -> dict:
@@ -47,6 +49,22 @@ def run(conn) -> dict:
 
     alloc_id = int(row[0])
     old_cents = int(row[1] or 0)
+
+    # Data-level idempotency: if we're already at (or past) the expected
+    # post-bump value, the bump already ran on a prior boot even if
+    # schema_migrations didn't stick (known-issue #12). Skip.
+    if old_cents >= _POST_BUMP_CENTS:
+        logger.warning(
+            "[m088] options_directional already at %d cents (>= post-bump target %d) — skipping to avoid double-bump",
+            old_cents, _POST_BUMP_CENTS,
+        )
+        record(conn, _MIGRATION_NAME)
+        return {
+            "executed": True,
+            "action": "already_bumped",
+            "current_cents": old_cents,
+        }
+
     new_cents = old_cents + _BUMP_CENTS
 
     conn.execute(text(
