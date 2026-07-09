@@ -94,6 +94,16 @@ def _accruals(symbols: list[str], db: Session, params: dict) -> dict[str, float]
     return compute(symbols, db, params)
 
 
+def _short_term_momentum(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .short_term_momentum import compute
+    return compute(symbols, db, params)
+
+
+def _cw_vol_spread(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .cw_vol_spread import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
@@ -124,6 +134,14 @@ _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     #   accruals: Sloan 1996 — one of the most-replicated cross-sectional
     #             anomalies. Long low-accrual (quality earnings) names.
     "accruals": _accruals,
+    # 2026-07-09 SSRN batch 5:
+    #   short_term_momentum: Medhat-Schmeling 2022 RFS — 1-month momentum
+    #                        conditioned on turnover. Fills the month t-1
+    #                        gap the 12-1 UMD explicitly skips.
+    #   cw_vol_spread:       Cremers-Weinbaum 2010 JFQA — OI-weighted IV
+    #                        spread (call - put) as informed-flow signal.
+    "short_term_momentum": _short_term_momentum,
+    "cw_vol_spread": _cw_vol_spread,
 }
 
 

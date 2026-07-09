@@ -105,43 +105,71 @@ def _fetch_db_positions(db, user_id: int) -> List[Dict[str, Any]]:
             "source": "bot_positions",
         })
 
-    # portfolio_rank_holdings: qty derived from target_weight × sleeve_capital
-    # ÷ entry_price. This is a best-effort reconstruction — the table stores
-    # weights not shares — but matches how _submit_broker_orders_for_rebalance
-    # sized the actual Alpaca buy. Reconciliation cares about symbol presence
-    # first, qty match second.
+    # portfolio_rank_holdings: filter to symbols the broker actually FILLED.
+    # The initial version of this union included every target-basket name,
+    # which turned 220+ dry-run/rejected target names into fake db_only rows
+    # in the reconciler. Fix: only include holdings whose most-recent
+    # rebalance_log has that symbol in broker_results.orders_placed with a
+    # non-null order_id.
     try:
-        pr_rows = db.execute(_text("""
-            SELECT h.symbol, h.side, h.target_weight, h.entry_price_cents,
-                   b.starting_capital_cents, b.name
-              FROM portfolio_rank_holdings h
-              JOIN portfolio_rank_bots b ON b.id = h.bot_id
-             WHERE b.enabled = 1
+        import json as _json
+        filled_syms: set[str] = set()
+        log_rows = db.execute(_text("""
+            SELECT bot_id, adds, created_at
+              FROM portfolio_rank_rebalance_log
+             ORDER BY created_at DESC
+             LIMIT 200
         """)).fetchall()
-        for r in pr_rows:
-            sym = str(r[0] or "").upper()
-            if not sym:
+        seen_bots: set[int] = set()
+        for r in log_rows:
+            bid = int(r[0])
+            if bid in seen_bots:
+                continue  # only most-recent log per bot
+            seen_bots.add(bid)
+            try:
+                adds_data = _json.loads(r[1] or "null")
+            except Exception:
                 continue
-            side = str(r[1] or "long")
-            weight = abs(float(r[2] or 0))
-            entry_px_c = int(r[3] or 0)
-            starting_c = int(r[4] or 0)
-            dollar_target = (starting_c / 100.0) * weight
-            entry_px = entry_px_c / 100.0
-            qty = (dollar_target / entry_px) if entry_px > 0 else 0.0
-            out.append({
-                "position_id": None,
-                "allocation_id": None,
-                "symbol": sym,
-                "qty": round(qty, 6),
-                "side": side,
-                "avg_cost_cents": float(entry_px_c),
-                "notional_db": dollar_target,
-                "source": f"portfolio_rank_holdings/{r[5]}",
-            })
+            if not isinstance(adds_data, dict):
+                continue
+            br = adds_data.get("broker_results") or {}
+            for placed in br.get("orders_placed", []):
+                sym = str(placed.get("symbol") or "").upper()
+                if sym and placed.get("order_id"):
+                    filled_syms.add(sym)
+
+        if filled_syms:
+            pr_rows = db.execute(_text("""
+                SELECT h.symbol, h.side, h.target_weight, h.entry_price_cents,
+                       b.starting_capital_cents, b.name
+                  FROM portfolio_rank_holdings h
+                  JOIN portfolio_rank_bots b ON b.id = h.bot_id
+                 WHERE b.enabled = 1
+            """)).fetchall()
+            for r in pr_rows:
+                sym = str(r[0] or "").upper()
+                if sym not in filled_syms:
+                    continue
+                side = str(r[1] or "long")
+                weight = abs(float(r[2] or 0))
+                entry_px_c = int(r[3] or 0)
+                starting_c = int(r[4] or 0)
+                dollar_target = (starting_c / 100.0) * weight
+                entry_px = entry_px_c / 100.0
+                qty = (dollar_target / entry_px) if entry_px > 0 else 0.0
+                out.append({
+                    "position_id": None,
+                    "allocation_id": None,
+                    "symbol": sym,
+                    "qty": round(qty, 6),
+                    "side": side,
+                    "avg_cost_cents": float(entry_px_c),
+                    "notional_db": dollar_target,
+                    "source": f"portfolio_rank_holdings/{r[5]}",
+                })
     except Exception as _pr_exc:  # pragma: no cover
         logger.warning(
-            "[reconcile] portfolio_rank_holdings fetch failed (proceeding without PR positions): %s",
+            "[reconcile] portfolio_rank fetch failed (proceeding without PR positions): %s",
             _pr_exc,
         )
 

@@ -1498,7 +1498,7 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
 
     # ── Classify the setup → intent ──────────────────────────────────────────
     # intent ∈ {"long_directional", "short_credit", "spread_debit",
-    #           "spread_credit", "diagonal", "neutral_credit"}
+    #           "spread_credit", "diagonal", "neutral_credit", "long_straddle"}
     LONG_DIRECTIONAL = {"long_call_directional", "leaps_stock_replacement"}
     SHORT_CREDIT_PUT = {"cash_secured_put", "wheel_strategy", "bull_put_credit_spread",
                         "jade_lizard", "vrp_put_write"}
@@ -1506,6 +1506,7 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     NEUTRAL_CREDIT = {"iron_condor_45dte", "neutral_calendar_spread"}
     SPREAD_DEBIT = {"bull_call_debit_spread"}
     DIAGONAL = {"pmcc_diagonal"}
+    LONG_STRADDLE = {"earnings_straddle_long"}  # 2026-07-09 SSRN batch 5
 
     if setup in LONG_DIRECTIONAL:
         intent = "long_directional"
@@ -1524,6 +1525,13 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
         option_type = "call"
     elif setup in DIAGONAL:
         intent = "diagonal"
+        option_type = "call"
+    elif setup in LONG_STRADDLE:
+        # Gao-Xing-Zhang 2018 pre-earnings straddle. Long ATM call + long
+        # ATM put, same strike. Full debit = max loss. Primary "option_type"
+        # is "call" only for OCC symbol construction (the primary leg logs
+        # under the call side); the actual position is 2-leg via `legs`.
+        intent = "long_straddle"
         option_type = "call"
     else:
         # Conservative fallback: treat as short_credit put (safest default for
@@ -1719,6 +1727,11 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
         _wing = 1.0
         _leg_multiplier = 2.0 if intent == "neutral_credit" else 1.0
         per_contract_cost = _wing * 100.0 * _leg_multiplier
+    elif intent == "long_straddle":
+        # Long straddle: pay call debit + put debit. ATM put premium ~= ATM
+        # call premium by put-call parity, so full 2-leg cost ≈ 2 × primary
+        # premium × 100. Max loss is this full debit.
+        per_contract_cost = max(0.01, contract_premium) * 100 * 2.0
     else:
         per_contract_cost = max(0.01, contract_premium) * 100
     raw_count = math.floor(max_premium_at_risk / per_contract_cost)
@@ -1814,6 +1827,16 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
                  "position_intent": "buy_to_open",  "role": "long_call"},
                 {"symbol": _leg_occ(call_short, "call"), "side": "sell", "ratio_qty": 1,
                  "position_intent": "sell_to_open", "role": "short_call_hedge"},
+            ]
+        elif intent == "long_straddle":
+            # earnings_straddle_long — buy ATM call + buy ATM put at same strike.
+            # Full debit paid; max loss = net debit; profit = jump size beyond
+            # break-evens. Both legs BUY, so no naked-short collateral required.
+            legs = [
+                {"symbol": _leg_occ(strike_price, "call"), "side": "buy", "ratio_qty": 1,
+                 "position_intent": "buy_to_open", "role": "long_call_straddle"},
+                {"symbol": _leg_occ(strike_price, "put"),  "side": "buy", "ratio_qty": 1,
+                 "position_intent": "buy_to_open", "role": "long_put_straddle"},
             ]
 
     return {

@@ -932,6 +932,50 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m084_close_phantom_positions FAILED: %s",
                      _m084_exc, exc_info=True)
 
+    # ── SSRN batch 5 (2026-07-09) ──────────────────────────────────────
+    # m085: halt crypto_quant_scalp_1m + crypto_quant_meme_tier (bleeders,
+    #       frees $2,920.20 pool)
+    # m086: seed short_term_momentum PR bot ($1,000) — Medhat-Schmeling 2022
+    # m087: seed cw_vol_spread PR bot ($1,000) — Cremers-Weinbaum 2010
+    # m088: bump options_directional for earnings_straddle strategy ($920.20)
+    #       — Gao-Xing-Zhang 2018 pre-earnings straddle
+    # Net fund invariant delta = 0. All four MUST run in the same boot cycle.
+    try:
+        from app.db.migrations.m085_halt_scalp_meme_bleeders import run as _run_m085
+        with engine.begin() as _m085_conn:
+            _m085_result = _run_m085(_m085_conn)
+        logger.warning("[startup] m085 status: %s", _m085_result)
+    except Exception as _m085_exc:
+        logger.error("[startup] m085_halt_scalp_meme_bleeders FAILED: %s",
+                     _m085_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m086_short_term_momentum_bot import run as _run_m086
+        with engine.begin() as _m086_conn:
+            _m086_result = _run_m086(_m086_conn)
+        logger.warning("[startup] m086 status: %s", _m086_result)
+    except Exception as _m086_exc:
+        logger.error("[startup] m086_short_term_momentum_bot FAILED: %s",
+                     _m086_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m087_cw_vol_spread_bot import run as _run_m087
+        with engine.begin() as _m087_conn:
+            _m087_result = _run_m087(_m087_conn)
+        logger.warning("[startup] m087 status: %s", _m087_result)
+    except Exception as _m087_exc:
+        logger.error("[startup] m087_cw_vol_spread_bot FAILED: %s",
+                     _m087_exc, exc_info=True)
+
+    try:
+        from app.db.migrations.m088_earnings_straddle_funding import run as _run_m088
+        with engine.begin() as _m088_conn:
+            _m088_result = _run_m088(_m088_conn)
+        logger.warning("[startup] m088 status: %s", _m088_result)
+    except Exception as _m088_exc:
+        logger.error("[startup] m088_earnings_straddle_funding FAILED: %s",
+                     _m088_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

@@ -99,6 +99,11 @@ strategies:
   - bull_call_debit_spread
   - leaps_stock_replacement
   - long_call_directional
+  # 2026-07-09 SSRN batch 5 — Gao-Xing-Zhang 2018 SSRN 2204549.
+  # Long ATM straddle 3 trading days pre-earnings, close T+1 after.
+  # Fires event-driven; skipped for symbols without a scheduled earnings
+  # date in the window. Mleg long_straddle intent — 2-leg debit, both buys.
+  - earnings_straddle
 ensemble: weighted_vote
 # Same Phase 1 discipline-gate compensation as options_income — these
 # strategies don't emit the new factor fields in their reason JSON so
