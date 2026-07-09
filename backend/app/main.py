@@ -919,6 +919,19 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m082_repair_crypto_onchain_capital FAILED: %s",
                      _m082_exc, exc_info=True)
 
+    # m084: close 10 phantom bot_positions surfaced by 2026-07-09 audit —
+    # DB rows that Alpaca has no matching position for (~$4K in stocks +
+    # 2 worthless options). Companion to per-leg mleg BotPosition write
+    # and portfolio_rank_holdings reconciler inclusion.
+    try:
+        from app.db.migrations.m084_close_phantom_positions import run as _run_m084
+        with engine.begin() as _m084_conn:
+            _m084_result = _run_m084(_m084_conn)
+        logger.warning("[startup] m084 status: %s", _m084_result)
+    except Exception as _m084_exc:
+        logger.error("[startup] m084_close_phantom_positions FAILED: %s",
+                     _m084_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

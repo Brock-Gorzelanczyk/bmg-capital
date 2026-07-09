@@ -258,14 +258,20 @@ def _get_keyword_value_source(call_node, keyword_name):
     return None
 
 
-def test_botposition_in_execute_options_uses_occ_symbol():
-    """Every BotPosition(...) inside _execute_options_signal must use occ_symbol.
+_ACCEPTABLE_SYMBOL_EXPRS = ("occ_symbol", "_lr['symbol']", '_lr["symbol"]')
 
-    This is the gap that blocked options trading: the old code passed sig.symbol
-    (an equity ticker like "AAPL") to BotPosition.symbol, which then failed the
-    asset-class registry on every subsequent check. The fix routes occ_symbol
-    (the OCC contract like "AAPL250621C00150000") instead. Re-introducing
-    sig.symbol on this column fails this test loud.
+
+def test_botposition_in_execute_options_uses_occ_symbol():
+    """Every BotPosition(...) inside _execute_options_signal must use an OCC-form
+    symbol source. This is the gap that blocked options trading: the old code
+    passed sig.symbol (the equity ticker "AAPL") which failed the asset-class
+    registry on every subsequent check.
+
+    Since 2026-07-09 the runner writes one BotPosition per mleg leg, so the
+    literal `symbol=occ_symbol` was replaced with `symbol=_lr['symbol']` where
+    `_lr` is a per-leg dict populated from either `_legs` (mleg) or a
+    one-element list containing `occ_symbol` (single-leg). Both patterns are
+    acceptable; `sig.symbol` is still forbidden.
     """
     func = _get_execute_options_signal_ast()
     calls = _find_constructor_calls(func, "BotPosition")
@@ -276,16 +282,19 @@ def test_botposition_in_execute_options_uses_occ_symbol():
             f"BotPosition at line {call.lineno} missing symbol= kwarg"
         )
         assert "sig.symbol" not in sym, (
-            f"BotPosition at line {call.lineno} uses sig.symbol — must use occ_symbol. "
+            f"BotPosition at line {call.lineno} uses sig.symbol — must use occ_symbol or _lr['symbol']. "
             f"This was the gap blocking options trades for 12+ days."
         )
-        assert "occ_symbol" in sym, (
-            f"BotPosition at line {call.lineno} symbol expr does not reference occ_symbol: {sym!r}"
+        assert any(tok in sym for tok in _ACCEPTABLE_SYMBOL_EXPRS), (
+            f"BotPosition at line {call.lineno} symbol expr does not use an "
+            f"OCC-form source (occ_symbol / _lr['symbol']): {sym!r}"
         )
 
 
 def test_bottrade_in_execute_options_uses_occ_symbol():
-    """Every BotTrade(...) inside _execute_options_signal must use occ_symbol."""
+    """Every BotTrade(...) inside _execute_options_signal must use an OCC-form
+    symbol source (occ_symbol or the per-leg `_lr['symbol']` since 2026-07-09).
+    """
     func = _get_execute_options_signal_ast()
     calls = _find_constructor_calls(func, "BotTrade")
     assert calls, "Expected at least one BotTrade(...) inside _execute_options_signal"
@@ -295,10 +304,11 @@ def test_bottrade_in_execute_options_uses_occ_symbol():
             f"BotTrade at line {call.lineno} missing symbol= kwarg"
         )
         assert "sig.symbol" not in sym, (
-            f"BotTrade at line {call.lineno} uses sig.symbol — must use occ_symbol."
+            f"BotTrade at line {call.lineno} uses sig.symbol — must use occ_symbol or _lr['symbol']."
         )
-        assert "occ_symbol" in sym, (
-            f"BotTrade at line {call.lineno} symbol expr does not reference occ_symbol: {sym!r}"
+        assert any(tok in sym for tok in _ACCEPTABLE_SYMBOL_EXPRS), (
+            f"BotTrade at line {call.lineno} symbol expr does not use an "
+            f"OCC-form source (occ_symbol / _lr['symbol']): {sym!r}"
         )
 
 

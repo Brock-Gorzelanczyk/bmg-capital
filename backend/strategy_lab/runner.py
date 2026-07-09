@@ -2195,30 +2195,64 @@ def _execute_options_signal(
         return False
 
     try:
-        pos = BotPosition(
-            allocation_id=alloc.id,
-            symbol=occ_symbol,
-            qty=float(contract_count),
-            avg_cost_cents=fill_cents,
-            side=_pos_side,
-            opened_at=now,
-            closed_at=None,
-            is_paper=True,
-            stop_price_usd=None,
-            target_price_usd=None,
-            trailing_stop_activated=False,
-            # Options fields
-            option_type=opt["option_type"],
-            strike_price=opt["strike_price"],
-            expiration_date=opt["expiration_date"],
-            underlying_symbol=opt["underlying_symbol"],
-            contract_count=contract_count,
-            contract_premium_cents=opt["contract_premium_cents"],
-        )
-        db.add(pos)
-        db.flush()
+        # 2026-07-09 — Per-leg BotPosition writes for mleg orders. Prior to this
+        # commit only the primary (occ_symbol) leg got a bot_positions row, so
+        # the hedge/short-side legs Alpaca actually placed showed up as
+        # "broker-only" in the reconciler. Fix: iterate legs, write one row per
+        # broker contract so reconcile matches. For single-leg orders the list
+        # collapses to one entry, matching the pre-fix behavior.
+        def _parse_occ_leg(sym: str) -> tuple[str, float, str, str]:
+            """Return (option_type, strike_price, expiration_date, underlying)
+            parsed from an OCC option contract symbol."""
+            # Reverse of _build_occ_symbol. Strike is last 8 digits × 1e-3.
+            # Type is the char at position -9. Expiry (YYMMDD) is chars -15..-9.
+            strike = int(sym[-8:]) / 1000.0
+            opt_char = sym[-9]
+            yymmdd = sym[-15:-9]
+            expiry_iso = f"20{yymmdd[0:2]}-{yymmdd[2:4]}-{yymmdd[4:6]}"
+            underlying = sym[:-15]
+            return (
+                "call" if opt_char.upper() == "C" else "put",
+                strike,
+                expiry_iso,
+                underlying,
+            )
 
-        # Friction model: options pay slippage 5bps + $0.65/contract commission
+        _used_mleg = bool(_legs) and alpaca_options_order_id is not None
+        _leg_rows: list[dict] = []
+        if _used_mleg:
+            for _leg in _legs:
+                _leg_sym = _leg["symbol"]
+                _leg_side = "short" if _leg["side"] == "sell" else "long"
+                _l_type, _l_strike, _l_expiry, _l_under = _parse_occ_leg(_leg_sym)
+                # Hedge legs are a fraction of primary premium; approximate as
+                # 15% of primary. Mark-to-market updates this later.
+                _l_is_hedge = "hedge" in str(_leg.get("role", ""))
+                _l_prem_cents = int(round(fill_cents * (0.15 if _l_is_hedge else 1.0)))
+                _leg_rows.append({
+                    "symbol": _leg_sym,
+                    "side_pos": _leg_side,
+                    "side_trade": _leg["side"],  # "buy" / "sell"
+                    "option_type": _l_type,
+                    "strike_price": _l_strike,
+                    "expiration_date": _l_expiry,
+                    "underlying_symbol": _l_under,
+                    "premium_cents": _l_prem_cents,
+                })
+        else:
+            _leg_rows.append({
+                "symbol": occ_symbol,
+                "side_pos": _pos_side,
+                "side_trade": sig.side,
+                "option_type": opt["option_type"],
+                "strike_price": opt["strike_price"],
+                "expiration_date": opt["expiration_date"],
+                "underlying_symbol": opt["underlying_symbol"],
+                "premium_cents": opt["contract_premium_cents"],
+            })
+
+        # Friction model: options pay slippage 5bps + $0.65/contract commission.
+        # Charged per leg since each leg is a separately-cleared contract.
         try:
             from app.services.friction import model_friction_cents, slippage_bps_for
             _opt_friction_cents = model_friction_cents(
@@ -2234,30 +2268,65 @@ def _execute_options_signal(
 
         from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
         _rt_options = _regime_tag_dict(db, source="runner._execute_signal_options")
-        trade = BotTrade(
-            allocation_id=alloc.id,
-            symbol=occ_symbol,
-            side=sig.side,
-            qty=float(contract_count),
-            fill_price_cents=fill_cents,
-            fees_cents=_opt_friction_cents,
-            ts=now,
-            position_id=pos.id,
-            signal_id=signal_id,
-            alpaca_order_id=alpaca_options_order_id,
-            is_paper=True,
-            expected_fill_cents=fill_cents,
-            slippage_bps=_opt_slip_bps,
-            # Options fields
-            option_type=opt["option_type"],
-            strike_price=opt["strike_price"],
-            expiration_date=opt["expiration_date"],
-            underlying_symbol=opt["underlying_symbol"],
-            contract_count=contract_count,
-            contract_premium_cents=opt["contract_premium_cents"],
-            **_rt_options,
-        )
-        db.add(trade)
+
+        pos = None  # primary position row for downstream logging
+        _written_pos_ids: list[int] = []
+        _written_trade_ids: list[int] = []
+        for _lr in _leg_rows:
+            _lr_pos = BotPosition(
+                allocation_id=alloc.id,
+                symbol=_lr["symbol"],
+                qty=float(contract_count),
+                avg_cost_cents=_lr["premium_cents"],
+                side=_lr["side_pos"],
+                opened_at=now,
+                closed_at=None,
+                is_paper=True,
+                stop_price_usd=None,
+                target_price_usd=None,
+                trailing_stop_activated=False,
+                option_type=_lr["option_type"],
+                strike_price=_lr["strike_price"],
+                expiration_date=_lr["expiration_date"],
+                underlying_symbol=_lr["underlying_symbol"],
+                contract_count=contract_count,
+                contract_premium_cents=_lr["premium_cents"],
+            )
+            db.add(_lr_pos)
+            db.flush()
+            if pos is None:
+                pos = _lr_pos  # keep primary reference for cooldown + logging
+            _written_pos_ids.append(_lr_pos.id)
+
+            _lr_trade = BotTrade(
+                allocation_id=alloc.id,
+                symbol=_lr["symbol"],
+                side=_lr["side_trade"],
+                qty=float(contract_count),
+                fill_price_cents=_lr["premium_cents"],
+                fees_cents=_opt_friction_cents,
+                ts=now,
+                position_id=_lr_pos.id,
+                signal_id=signal_id,
+                alpaca_order_id=alpaca_options_order_id,
+                is_paper=True,
+                expected_fill_cents=_lr["premium_cents"],
+                slippage_bps=_opt_slip_bps,
+                option_type=_lr["option_type"],
+                strike_price=_lr["strike_price"],
+                expiration_date=_lr["expiration_date"],
+                underlying_symbol=_lr["underlying_symbol"],
+                contract_count=contract_count,
+                contract_premium_cents=_lr["premium_cents"],
+                **_rt_options,
+            )
+            db.add(_lr_trade)
+            db.flush()
+            _written_trade_ids.append(_lr_trade.id)
+
+        trade = None  # keep for downstream reference (last written trade)
+        if _written_trade_ids:
+            trade = db.query(BotTrade).get(_written_trade_ids[-1])
 
         # SHIP 6: record 24h cooldown AFTER successful position insert, BEFORE commit.
         # NOTE: cooldown key is now the OCC contract (not the underlying).
@@ -2286,9 +2355,16 @@ def _execute_options_signal(
         # NEW 2026-07-02: explicit trade-inserted marker + True return so the
         # scan_and_execute counter reflects actual fills, not "reached execute".
         logger.warning(
-            "[trade-inserted] bot=%s side=%s symbol=%s occ=%s contracts=%d pos_id=%d trade_id=%d",
+            "[trade-inserted] bot=%s side=%s symbol=%s occ=%s contracts=%d pos_id=%d trade_id=%d legs=%d",
             profile_name, sig.side, sig.symbol, occ_symbol, contract_count, pos.id, trade.id,
+            len(_leg_rows),
         )
+        if _used_mleg:
+            logger.warning(
+                "[mleg-tracked] bot=%s primary_occ=%s legs_written=%d pos_ids=%s trade_ids=%s alpaca_order_id=%s",
+                profile_name, occ_symbol, len(_leg_rows), _written_pos_ids,
+                _written_trade_ids, alpaca_options_order_id,
+            )
         return True
     except Exception as exc:
         logger.error("[options:%s] DB write failed for %s: %s", profile_name, sig.symbol, exc)

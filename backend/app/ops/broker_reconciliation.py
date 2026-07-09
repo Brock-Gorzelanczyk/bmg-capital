@@ -68,14 +68,23 @@ def _default_alpaca_fetcher() -> List[BrokerPosition]:
 
 
 def _fetch_db_positions(db, user_id: int) -> List[Dict[str, Any]]:
-    """Return one row per open bot_position for the given user.
+    """Return one row per tracked BMG position for the given user.
 
-    Joins bot_positions → bot_allocations to filter by user_id. Returns dicts
-    with: symbol, qty, avg_cost_cents, side, allocation_id, position_id.
+    Two source tables:
+      1. bot_positions — the per-signal trigger runtime (options + quant + swing).
+         Joined via bot_allocations to filter by user_id.
+      2. portfolio_rank_holdings — the portfolio-rank sleeve (Phase 2 broker
+         execution). One row per basket name; does NOT link to bot_allocations.
+         Included so PR broker fills don't get flagged as broker-only.
+
+    Returns dicts with: symbol, qty, side, notional_db, source.
     """
     # Imported lazily so tests can mock app.db.models.bots without affecting
     # module import time.
+    from sqlalchemy import text as _text
     from app.db.models.bots import BotAllocation, BotPosition
+
+    out: List[Dict[str, Any]] = []
 
     rows = (
         db.query(BotPosition, BotAllocation)
@@ -84,8 +93,6 @@ def _fetch_db_positions(db, user_id: int) -> List[Dict[str, Any]]:
         .filter(BotPosition.closed_at.is_(None))
         .all()
     )
-
-    out: List[Dict[str, Any]] = []
     for pos, alloc in rows:
         out.append({
             "position_id": pos.id,
@@ -95,7 +102,49 @@ def _fetch_db_positions(db, user_id: int) -> List[Dict[str, Any]]:
             "side": str(pos.side or "long"),
             "avg_cost_cents": float(pos.avg_cost_cents or 0),
             "notional_db": float(pos.qty or 0) * float(pos.avg_cost_cents or 0) / 100.0,
+            "source": "bot_positions",
         })
+
+    # portfolio_rank_holdings: qty derived from target_weight × sleeve_capital
+    # ÷ entry_price. This is a best-effort reconstruction — the table stores
+    # weights not shares — but matches how _submit_broker_orders_for_rebalance
+    # sized the actual Alpaca buy. Reconciliation cares about symbol presence
+    # first, qty match second.
+    try:
+        pr_rows = db.execute(_text("""
+            SELECT h.symbol, h.side, h.target_weight, h.entry_price_cents,
+                   b.starting_capital_cents, b.name
+              FROM portfolio_rank_holdings h
+              JOIN portfolio_rank_bots b ON b.id = h.bot_id
+             WHERE b.enabled = 1
+        """)).fetchall()
+        for r in pr_rows:
+            sym = str(r[0] or "").upper()
+            if not sym:
+                continue
+            side = str(r[1] or "long")
+            weight = abs(float(r[2] or 0))
+            entry_px_c = int(r[3] or 0)
+            starting_c = int(r[4] or 0)
+            dollar_target = (starting_c / 100.0) * weight
+            entry_px = entry_px_c / 100.0
+            qty = (dollar_target / entry_px) if entry_px > 0 else 0.0
+            out.append({
+                "position_id": None,
+                "allocation_id": None,
+                "symbol": sym,
+                "qty": round(qty, 6),
+                "side": side,
+                "avg_cost_cents": float(entry_px_c),
+                "notional_db": dollar_target,
+                "source": f"portfolio_rank_holdings/{r[5]}",
+            })
+    except Exception as _pr_exc:  # pragma: no cover
+        logger.warning(
+            "[reconcile] portfolio_rank_holdings fetch failed (proceeding without PR positions): %s",
+            _pr_exc,
+        )
+
     return out
 
 
