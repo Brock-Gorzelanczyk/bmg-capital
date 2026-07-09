@@ -42,6 +42,14 @@ export interface BotListItem {
     current_equity_usd: number | null;
     is_post_reset?: boolean;
     reset_date?: string | null;
+    // 2026-07-09 StrategyLabLive: expose sharpe + deployed so the leaderboard
+    // doesn't need a per-bot round trip. Populated by /api/bots list_bots
+    // response (nullable when allocation is missing / bot is in demo state).
+    sharpe_30d?: number | null;
+    deployed_cents?: number | null;
+    starting_capital_cents?: number | null;
+    win_count?: number;
+    loss_count?: number;
   };
 }
 
@@ -326,6 +334,11 @@ function _rawBotToListItem(b: any): BotListItem {
       current_equity_usd: b.current_equity_usd ?? null,
       is_post_reset: b.is_post_reset ?? false,
       reset_date: b.reset_date ?? null,
+      sharpe_30d: b.sharpe_30d ?? null,
+      deployed_cents: b.deployed_cents ?? null,
+      starting_capital_cents: b.starting_capital_cents ?? null,
+      win_count: b.win_count ?? 0,
+      loss_count: b.loss_count ?? 0,
     },
   };
 }

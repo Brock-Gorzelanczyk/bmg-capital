@@ -524,6 +524,15 @@ def list_bots(
             row["today_pnl_cents"]    = int(snap.today_pnl_cents or 0)
             row["all_time_pnl_cents"] = int((snap.portfolio_value_cents or 0) - starting)
             row["starting_capital_cents"] = int(starting)
+            # 2026-07-09 StrategyLabLive: expose sharpe/win_rate/trades/deployed
+            # so the leaderboard doesn't have to hit N per-bot endpoints for what
+            # canonical already computed once.
+            row["sharpe_30d"] = snap.sharpe_30d
+            row["win_rate_pct"] = round(snap.win_rate * 100, 1) if snap.win_rate is not None else None
+            row["win_count"] = int(snap.win_count or 0)
+            row["loss_count"] = int(snap.loss_count or 0)
+            row["total_trades"] = int((snap.win_count or 0) + (snap.loss_count or 0))
+            row["deployed_cents"] = int(snap.deployed_cents or 0)
         else:
             row["demo"] = True
             row["return_30d_pct"] = None
@@ -539,6 +548,12 @@ def list_bots(
             row["today_pnl_cents"] = None
             row["all_time_pnl_cents"] = None
             row["starting_capital_cents"] = None
+            row["sharpe_30d"] = None
+            row["win_rate_pct"] = None
+            row["win_count"] = 0
+            row["loss_count"] = 0
+            row["total_trades"] = 0
+            row["deployed_cents"] = 0
 
         result.append(row)
 

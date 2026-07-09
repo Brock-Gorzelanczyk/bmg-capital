@@ -78,6 +78,7 @@ const RiskConsolePage = lazy(() => import("@/pages/RiskConsolePage"));
 const RiskLivePage = lazy(() => import("@/pages/RiskLivePage"));
 const TradeJournalPage = lazy(() => import("@/pages/TradeJournalPage"));
 const StrategyLabV2 = lazy(() => import("@/pages/StrategyLabV2"));
+const StrategyLabLive = lazy(() => import("@/pages/StrategyLabLive"));
 const PortfolioV2 = lazy(() => import("@/pages/PortfolioV2"));
 const AutopilotPage = lazy(() => import("@/pages/AutopilotPage"));
 const AutopilotPromisePage = lazy(() => import("@/pages/AutopilotPromisePage"));
@@ -402,6 +403,7 @@ function AppInner() {
         <Route path="/screener" element={<Screener />} />
         <Route path="/strategy" element={<Page component={StrategyLabV2} />} />
         <Route path="/strategy/legacy" element={<Page component={StrategyLab} />} />
+        <Route path="/strategy/live" element={<Page component={StrategyLabLive} />} />
         <Route path="/strategy/candidates" element={<Page component={StrategyCandidates} />} />
         <Route path="/signals" element={<SignalsFeedPage />} />
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
