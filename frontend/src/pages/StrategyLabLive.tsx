@@ -17,7 +17,11 @@ type SilentReason = "NO SIGNALS" | "PERSIST-DROPPED" | "ALL REJECTED" | "DISABLE
 
 interface NavEntry {
   date: string;
-  value_cents: number;
+  // Backend `get_nav_history` returns `nav_cents`; older callers used
+  // `value_cents`. Accept either so this survives a rename.
+  nav_cents?: number;
+  value_cents?: number;
+  pct_change?: number;
 }
 
 interface InertBotRow {
@@ -245,15 +249,16 @@ export default function StrategyLabLive() {
 
   useEffect(() => {
     if (!seriesRef.current || navEntries.length === 0) return;
-    const openCents = navEntries[0]?.value_cents ?? 0;
+    const getCents = (e: NavEntry): number => (e.nav_cents ?? e.value_cents ?? 0);
+    const openCents = getCents(navEntries[0]);
     const points = navEntries
       .map((e) => {
         const t = Math.floor(new Date(e.date).getTime() / 1000) as UTCTimestamp;
-        const raw = e.value_cents / 100;
+        const raw = getCents(e) / 100;
         const v = chartView === "P&L" ? raw - openCents / 100 : raw;
         return { time: t, value: v };
       })
-      .filter((p) => Number.isFinite(p.value))
+      .filter((p) => Number.isFinite(p.value) && p.value !== 0)
       .sort((a, b) => (a.time as number) - (b.time as number));
     seriesRef.current.setData(points);
     seriesRef.current.applyOptions({
@@ -271,6 +276,15 @@ export default function StrategyLabLive() {
       const name = (b.profile?.name ?? "").toLowerCase();
       return name.includes(q);
     });
+    // Edge / trade sort: prefer 30d Sharpe when available, else expectancy $/trade.
+    // Keeps sorting monotonic across bots at different maturity.
+    const edgeScore = (s: BotListItem["stats"]): number => {
+      if (s.sharpe_30d !== null && s.sharpe_30d !== undefined) return s.sharpe_30d;
+      if ((s.total_trades ?? 0) > 0 && s.all_time_pnl_usd !== null && s.all_time_pnl_usd !== undefined) {
+        return s.all_time_pnl_usd / (s.total_trades as number);
+      }
+      return -Infinity;
+    };
     const dir = sortDir === "asc" ? 1 : -1;
     return [...rows].sort((a, b) => {
       const av =
@@ -279,7 +293,7 @@ export default function StrategyLabLive() {
           : sortKey === "deployed_cents"
           ? (a.stats.deployed_cents ?? 0) / 100
           : sortKey === "sharpe_30d"
-          ? a.stats.sharpe_30d ?? -999
+          ? edgeScore(a.stats)
           : sortKey === "all_time_pnl_usd"
           ? a.stats.all_time_pnl_usd
           : (a.stats as any)[sortKey];
@@ -289,7 +303,7 @@ export default function StrategyLabLive() {
           : sortKey === "deployed_cents"
           ? (b.stats.deployed_cents ?? 0) / 100
           : sortKey === "sharpe_30d"
-          ? b.stats.sharpe_30d ?? -999
+          ? edgeScore(b.stats)
           : sortKey === "all_time_pnl_usd"
           ? b.stats.all_time_pnl_usd
           : (b.stats as any)[sortKey];
@@ -514,7 +528,7 @@ export default function StrategyLabLive() {
                 <th className="text-left text-xs uppercase tracking-wider px-3 py-2 text-slate-400">Silent?</th>
                 <th>{th("Trades", "total_trades")}</th>
                 <th>{th("Win %", "win_rate_pct")}</th>
-                <th>{th("Sharpe 30d", "sharpe_30d")}</th>
+                <th>{th("Edge / trade", "sharpe_30d")}</th>
                 <th>{th("30d %", "return_30d_pct")}</th>
                 <th>{th("All-Time $", "all_time_pnl_usd")}</th>
                 <th>{th("Allocated", "starting_capital_usd")}</th>
@@ -565,12 +579,26 @@ export default function StrategyLabLive() {
                       {trades === 0 ? "—" : `${winPct.toFixed(0)}%`}
                     </td>
                     <td className="px-3 py-2 font-mono tabular-nums">
-                      {sharpe === null || sharpe === undefined ? (
-                        <span className="text-slate-600">—</span>
-                      ) : (
-                        <span className={sharpe > 1.0 ? "text-emerald-400" : sharpe < 0 ? "text-red-400" : "text-slate-300"}>
+                      {sharpe !== null && sharpe !== undefined ? (
+                        <span
+                          className={sharpe > 1.0 ? "text-emerald-400" : sharpe < 0 ? "text-red-400" : "text-slate-300"}
+                          title={`30d annualized Sharpe · needs >1.0 for PROVEN`}
+                        >
                           {sharpe.toFixed(2)}
+                          <span className="text-slate-500 text-[10px] ml-1">σ30d</span>
                         </span>
+                      ) : trades > 0 && atUsd !== null && atUsd !== undefined ? (
+                        <span
+                          className={atUsd >= 0 ? "text-emerald-400" : "text-red-400"}
+                          title={`Expectancy = all-time P&L / closed trades. Shown while daily-Sharpe window is short.`}
+                        >
+                          {fmtSigned(atUsd / trades)}
+                          <span className="text-slate-500 text-[10px] ml-1">
+                            /trade ({trades})
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-600">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono tabular-nums">
