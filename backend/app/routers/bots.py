@@ -735,10 +735,32 @@ def get_portfolios(
         .all()
     )
 
+    # 2026-07-09 fix: previously orphan allocations (portfolio_id IS NULL)
+    # were invisible in /portfolios responses, so a bot funded via a
+    # migration but never bound to a StrategyPortfolio row (e.g.
+    # spy_iron_condor_weekly at $1,460.10) showed up in capital-invariant
+    # + /api/portfolio/snapshot sleeve totals but NOT in the sleeve's
+    # bot-card list. That's the "2 dedicated bots · $6,273 starting" gap
+    # Brock hit on the Options page. Fix: also fold in asset-class-
+    # matched orphans so each sleeve card counts the same set of
+    # allocations its capital total is being built from.
+    _ORPHAN_ASSET_TO_SLEEVE = {"stock": "stocks", "stocks": "stocks",
+                                "crypto": "crypto", "options": "options",
+                                "quant": "quant"}
+    _orphan_allocs = [a for a in all_allocs if a.portfolio_id is None]
+
     result = []
     for port in portfolios_db:
         try:
             port_allocs = [a for a in all_allocs if a.portfolio_id == port.id]
+            # Add orphans whose profile.asset_class maps to this sleeve.
+            for oa in _orphan_allocs:
+                prof = profile_map.get(oa.profile_id)
+                if not prof:
+                    continue
+                mapped = _ORPHAN_ASSET_TO_SLEEVE.get((prof.asset_class or "").lower())
+                if mapped == port.asset_class and oa not in port_allocs:
+                    port_allocs.append(oa)
             pairs = [(a, profile_map[a.profile_id]) for a in port_allocs if a.profile_id in profile_map]
 
             snap = compute_portfolio_snapshot(port, pairs, db)

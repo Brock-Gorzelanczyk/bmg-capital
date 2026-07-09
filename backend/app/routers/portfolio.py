@@ -476,9 +476,13 @@ def get_portfolio_snapshot(
 
         total_alltime_pnl = total_value - total_starting
 
-        # SHIP 3: all-time % = SUM(realized_cents from bot_daily_pnl) / SUM(inception_capital_cents)
-        # Replaces the broken (total_value - total_starting) / total_starting formula which
-        # re-zeroed history whenever starting_capital_cents changed (known-issues #10).
+        # SHIP 3 (respected per test contract test_ship3_spec_required):
+        # fund-level return_alltime_pct = SUM(realized_cents) / SUM(inception).
+        # This is the IMMUTABLE track-record % (doesn't shift on reallocation).
+        # Note the intentional divergence from total_pnl_alltime_cents which
+        # includes unrealized. If they disagree visually, that's realized-only
+        # % + realized+unrealized $ — labeling should reflect this, not the
+        # formula. See known-issues #10 for why SHIP 3 exists.
         _alloc_ids = [a.id for a in all_allocs]
         if _alloc_ids:
             _fleet_row = db.execute(
@@ -639,8 +643,14 @@ def get_portfolio_snapshot(
             else:
                 value = bucket["current_value_cents"]
             ret_30d = round(bucket["return_30d_weighted"] / start, 2) if start else 0.0
-            # SHIP 3: all-time % = SUM(realized_cents from bot_daily_pnl) / SUM(inception_capital_cents)
-            # Replaces (value - start) / start which re-zeroed history on capital resets.
+            # SHIP 3 (respected per test_ship3_spec_required):
+            # per-sleeve alltime_return_pct = SUM(realized) / SUM(inception).
+            # alltime_pnl_cents (below) is the (value - start) view which
+            # includes unrealized. Frontends should label these clearly:
+            # one is the immutable realized track record, the other is
+            # current mark-to-market. Do NOT collapse them into the same
+            # formula — SHIP 3 exists to prevent the reallocation drift
+            # bug from known-issues #10.
             _sleeve_alloc_ids = bucket["_alloc_ids"]
             if _sleeve_alloc_ids:
                 _sleeve_row = db.execute(
@@ -659,18 +669,26 @@ def get_portfolio_snapshot(
                 ret_alltime = round(_sleeve_realized / _sleeve_inception * 100, 2) if _sleeve_inception else 0.0
             else:
                 ret_alltime = 0.0
+            alltime_pnl_cents = value - start
+            # Reserved capital: guard against stale sleeve_config rows from
+            # the $1M paper-fund era. A reservation larger than the fund's
+            # actual current sleeve value is definitionally impossible;
+            # cap at the current value to keep utilization math sane.
+            _reserved = _sleeve_reservations.get(key, 0)
+            if _reserved > value and value > 0:
+                _reserved = value
             by_sleeve[key] = {
                 "starting_capital_cents": start,
                 "current_value_cents":    value,
                 "open_positions":         bucket["open_positions"],
                 "today_pnl_cents":        bucket["today_pnl_cents"],
-                "alltime_pnl_cents":      value - start,
+                "alltime_pnl_cents":      alltime_pnl_cents,
                 "alltime_return_pct":     ret_alltime,
                 "return_30d_pct":         ret_30d,
                 "active_bots":            bucket["active_bots"],
                 "total_bots":             bucket["total_bots"],
                 "bot_ids":                bucket["bot_ids"],
-                "reserved_capital_cents": _sleeve_reservations.get(key, 0),
+                "reserved_capital_cents": _reserved,
             }
 
         # Alloc map for status lookups
