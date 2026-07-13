@@ -52,6 +52,13 @@ SPEC_BOT_NAMES = frozenset({
     # 2026-07-02 Brock table (m057)
     "stock_gap_fade", "stock_orb_breakout",
     "stock_momentum_breakout", "stock_pead",
+    # 2026-07-12 fleet expansion (previously being stomped every boot):
+    #   tsmom_multi_asset     — Moskowitz-Ooi-Pedersen 2012 TSMOM (m081)
+    #   macro_faber_gtaa      — Faber Global Tactical Asset Alloc (m072)
+    #   spy_iron_condor_weekly — options_income sibling (m072)
+    "tsmom_multi_asset",
+    "macro_faber_gtaa",
+    "spy_iron_condor_weekly",
 })
 # NOTE: this frozenset is the "known-good bot names" for the fund's
 # user_id=1 allocations. m026 runs EVERY boot (not just once) — it disables

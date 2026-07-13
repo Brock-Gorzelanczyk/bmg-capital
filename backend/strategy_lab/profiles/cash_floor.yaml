@@ -1,0 +1,38 @@
+name: cash_floor
+asset_class: stock
+broker: alpaca_paper_stocks
+# Cash Floor: the "reserve" bot — deploys the fund's cash-floor slice
+# passively into SPY + QQQ so idle capital is not sitting flat while
+# the active bots trade. Per vault decision-history: 60% SPY / 40% QQQ.
+# 2026-07-12: audit surfaced this bot had zero strategies attached
+# (verdict = no_strategies_attached). Wiring the profile YAML fixes that.
+universe:
+  source: static
+  symbols:
+    - SPY
+    - QQQ
+# Daily near close so the DCA fills go through at end-of-day pricing.
+cadence: "30 15 * * 1-5"
+scan_lookback_period: "3mo"
+strategies:
+  - dca
+ensemble: any_above_threshold
+confidence_threshold: 0.10
+# Two names in the universe; position_cap 2 so both get bought.
+position_cap: 2
+# Split ~60/40 SPY/QQQ. dca strategy sizes by 1/position_cap so we
+# accept ~50/50; drift is corrected by monthly rebalance once wired.
+position_size_pct: 50.0
+stop_loss_pct: 999.0
+take_profit_pct: 999.0
+hold_max_days: 3650
+strategy_type: passive_hold
+risk_overlay:
+  daily_loss_limit_pct: 999.0
+  portfolio_drawdown_circuit_pct: 999.0
+  pdt_enforce: false
+paper_only: true
+enabled: true
+notes: "Passive SPY/QQQ 60/40 cash floor. No stops, no take-profits. Rebalance discipline via monthly cadence override once monthly_rebalance strategy handles target weights (TODO)."
+discord:
+  channel: stocks-signals

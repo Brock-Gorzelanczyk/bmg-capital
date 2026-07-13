@@ -999,6 +999,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m090_cleanup_2026_07_12 FAILED: %s",
                      _m090_exc, exc_info=True)
 
+    # m091: reactivate the 3 bots m026 was stomping every boot.
+    # Must run AFTER m026 so m026's stomp finishes first and this
+    # migration has the last word.
+    try:
+        from app.db.migrations.m091_reactivate_stomped_bots import run as _run_m091
+        with engine.begin() as _m091_conn:
+            _m091_result = _run_m091(_m091_conn)
+        logger.warning("[startup] m091 status: %s", _m091_result)
+    except Exception as _m091_exc:
+        logger.error("[startup] m091_reactivate_stomped_bots FAILED: %s",
+                     _m091_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
