@@ -27,9 +27,21 @@ router = APIRouter(prefix="/api/trades", tags=["trades"])
 
 
 def _round_trip_query(uid: int, days: int) -> str:
-    """Return round-trip trades — matches sell/cover exits with position rows.
+    """Return round-trip trades — matches EXIT trades with their position rows.
 
-    We JOIN bot_trades (exits) with bot_positions to get entry price + hold.
+    2026-07-13 fix: previously the WHERE clause was
+    `t.side IN ('sell','cover','close')`. For LONG positions that filters
+    correctly (long entry = buy, long exit = sell). But for SHORT positions
+    (options credit legs, short-selling stocks) the ENTRY is side='sell' too,
+    so entry trades leaked into the "closes" listing with entry=exit=fill
+    and pnl=0. That's exactly the 8 phantom options_income closes Brock's
+    RIA-stats spec flagged.
+
+    Filter now uses pos.closed_at IS NOT NULL — only positions that are
+    actually closed produce rows. For OPTIONS positions that are closed via
+    an Alpaca-side settlement without a BMG-recorded BUY-to-close trade
+    (expiry-worthless / assignment), the reconcile-options-closes admin
+    endpoint materializes a synthetic exit trade with the correct pnl.
     """
     return """
     SELECT
@@ -59,6 +71,8 @@ def _round_trip_query(uid: int, days: int) -> str:
       AND t.side IN ('sell', 'cover', 'close')
       AND t.quarantined_at IS NULL
       AND t.ts >= :cut
+      AND pos.closed_at IS NOT NULL
+      AND t.ts > pos.opened_at
     """
 
 

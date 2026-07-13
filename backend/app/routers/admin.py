@@ -3388,6 +3388,23 @@ def reconcile_broker(
     return reconcile_positions(db, user_id=user_id)
 
 
+# ── POST /api/admin/reconcile-option-closes ─────────────────────────────────
+# RIA-stats spec (2026-07-13): options positions accumulate marks-only P&L
+# but never book realized P&L on close because Alpaca handles the close
+# side (expiry-worthless, assignment, buy-to-close) without notifying BMG.
+# This endpoint walks all open option positions, checks Alpaca, closes any
+# that are gone at the broker with the right exit_reason and pnl.
+@router.post("/reconcile-option-closes")
+def reconcile_option_closes_endpoint(
+    user_id: int = Query(1, description="user_id whose positions to reconcile"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Force-run the option-close sync now. Returns per-position outcomes."""
+    from app.services.option_close_sync import reconcile_option_closes
+    return reconcile_option_closes(db, user_id=user_id)
+
+
 # ── GET /api/admin/factor-scorecard ─────────────────────────────────────────
 # Alphalens-style per-factor validation: computes IC + quintile spread for
 # every enabled portfolio-rank bot by joining its rebalance_log ranking

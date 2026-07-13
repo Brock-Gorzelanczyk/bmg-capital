@@ -171,8 +171,16 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     )
     db.add(exit_trade)
 
+    # RIA spec: exit_reason must never be null and must be one of the
+    # canonical enum values {take_profit, stop, expiry, assignment, roll,
+    # manual}. Map legacy verbose reasons to their canonical bucket.
+    try:
+        from app.services.option_close_sync import canonicalize_exit_reason
+        canonical_reason = canonicalize_exit_reason(reason)
+    except Exception:
+        canonical_reason = reason or "manual"
     pos.closed_at = now
-    pos.exit_reason = reason
+    pos.exit_reason = canonical_reason
     db.commit()
 
     # Fire Discord embed for exit signal — must be AFTER commit so signal row is visible
