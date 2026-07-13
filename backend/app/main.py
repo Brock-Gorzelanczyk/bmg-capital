@@ -988,6 +988,17 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m089_halt_sim_crypto_quants FAILED: %s",
                      _m089_exc, exc_info=True)
 
+    # m090: zero the m089 $0.20 rounding drift + backfill m084/m085 into
+    # schema_migrations so they stop re-executing every boot.
+    try:
+        from app.db.migrations.m090_cleanup_2026_07_12 import run as _run_m090
+        with engine.begin() as _m090_conn:
+            _m090_result = _run_m090(_m090_conn)
+        logger.warning("[startup] m090 status: %s", _m090_result)
+    except Exception as _m090_exc:
+        logger.error("[startup] m090_cleanup_2026_07_12 FAILED: %s",
+                     _m090_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
