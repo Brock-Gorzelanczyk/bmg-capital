@@ -3388,6 +3388,32 @@ def reconcile_broker(
     return reconcile_positions(db, user_id=user_id)
 
 
+# ── GET /api/admin/factor-scorecard ─────────────────────────────────────────
+# Alphalens-style per-factor validation: computes IC + quintile spread for
+# every enabled portfolio-rank bot by joining its rebalance_log ranking
+# outputs to forward N-day yfinance returns. Slow (yfinance-bound) — call
+# on-demand not on every dashboard refresh.
+@router.get("/factor-scorecard")
+def factor_scorecard(
+    forward_days: int = Query(21, description="Forward return horizon in trading days"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Return {verdict, ic_mean, ic_tstat, quintile_spread_pct} per PR bot.
+
+    Verdicts:
+      significant_positive  — ic_tstat > 2.0  (factor produces real signal)
+      significant_inverse   — ic_tstat < -2.0 (factor is anti-signal; flip sign or halt)
+      weak_signal           — 0 < |ic_tstat| < 2.0 (unclear, need more data)
+      no_signal             — |ic_mean| < 0.02 (noise)
+      insufficient_data     — fewer than 3 rebalances so far
+      no_valid_forward_returns — bars unavailable for the tracked names
+      error                 — computation raised
+    """
+    from app.services.factor_scorecard import compute_all_scorecards
+    return compute_all_scorecards(db, forward_days=forward_days)
+
+
 # ── GET /api/admin/migration-status ──────────────────────────────────────────
 # 2026-06-29 diagnostic: lists schema_migrations entries + open-position
 # counts per bot per symbol. Helps verify m033 (and other migrations) ran
