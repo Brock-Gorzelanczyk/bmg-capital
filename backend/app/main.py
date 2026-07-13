@@ -1024,6 +1024,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m092_ssrn_batch_6 FAILED: %s",
                      _m092_exc, exc_info=True)
 
+    # m093: create smart_money_13f_holdings + cusip_symbol_cache tables so
+    # the edgar_13f ingest job (registered below at scheduler setup time)
+    # has somewhere to write. Companion to m092's smart_money_13f PR bot.
+    try:
+        from app.db.migrations.m093_smart_money_13f_tables import run as _run_m093
+        with engine.begin() as _m093_conn:
+            _m093_result = _run_m093(_m093_conn)
+        logger.warning("[startup] m093 status: %s", _m093_result)
+    except Exception as _m093_exc:
+        logger.error("[startup] m093_smart_money_13f_tables FAILED: %s",
+                     _m093_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
@@ -1187,6 +1199,12 @@ async def lifespan(app: FastAPI):
     except Exception as _pr_sched_exc:
         logger.error("[startup] portfolio_rank scheduler FAILED (non-fatal): %s",
                      _pr_sched_exc, exc_info=True)
+    try:
+        from app.services.edgar_13f import setup_edgar_13f_scheduler
+        setup_edgar_13f_scheduler(scheduler)
+    except Exception as _edgar_sched_exc:
+        logger.error("[startup] edgar_13f scheduler FAILED (non-fatal): %s",
+                     _edgar_sched_exc, exc_info=True)
     try:
         from app.services.sp500_refresh import setup_sp500_scheduler
         setup_sp500_scheduler(scheduler)
