@@ -9,7 +9,11 @@ from strategy_lab.core.signals import Signal
 logger = logging.getLogger(__name__)
 
 STRATEGY_NAME = "crypto_relative_strength"
-RS_THRESHOLD = 1.05  # alt must outperform BTC by 5%
+# 2026-07-13: 1.05 (5% outperformance in 14d) was too strict — crypto_swing
+# saw 0 signals in 24h with the whole strategy roster. Relaxed to 1.02 (2%
+# outperformance), which is a realistic RS-leader threshold. Composite gate
+# downstream keeps the noise out.
+RS_THRESHOLD = 1.02  # alt must outperform BTC by 2% over 14d
 
 
 def _v1_signals(

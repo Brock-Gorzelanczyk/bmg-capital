@@ -16,8 +16,15 @@ logger = logging.getLogger(__name__)
 STRATEGY_NAME = "crypto_rsi_mean_reversion"
 
 RSI_PERIOD = 14
-OVERSOLD = 30.0
-OVERBOUGHT = 70.0
+# 2026-07-13: crypto_swing produced 0 signals in 24h with the original
+# 30/70 thresholds — RSI in the 40-60 range most of the time so nothing
+# ever qualified. Relaxed to 40/60 so this strategy actually fires ~3-5×
+# more often. Composite discipline gate still filters the low-conviction
+# entries downstream, and confidence is scaled by how deep past the band
+# we are — so a 45-RSI signal comes in at conf ~0.33 (below the 0.55
+# threshold) while a 25-RSI signal still lands at conf ~0.6+.
+OVERSOLD = 40.0
+OVERBOUGHT = 60.0
 
 # BTC dominance change threshold — if change > 2%, risk of altcoin outflow
 BTC_DOM_CHANGE_LIMIT = 2.0

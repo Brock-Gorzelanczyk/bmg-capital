@@ -540,8 +540,41 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
             # Very last-resort fallback — legacy realized-only.
             return_30d_pct = round(realized_30d_cents / starting_capital_cents * 100, 2)
 
-    # ── Sharpe: not computable without daily return series ───────────────────
+    # ── Sharpe 30d — computed from bot_daily_pnl daily return series ────────
+    # 2026-07-13: was `= None`. Wire up now that most bots have some daily
+    # PnL history. Formula: annualized Sharpe of daily returns over the last
+    # 30 calendar days. Daily return = (realized+unrealized) / starting.
+    # Requires ≥ 5 days of data or returns None (too noisy otherwise).
     sharpe_30d: Optional[float] = None
+    try:
+        _cutoff_30d = date.today() - timedelta(days=30)
+        _daily_rows = (
+            db.query(BotDailyPnL)
+            .filter(
+                BotDailyPnL.allocation_id == alloc.id,
+                BotDailyPnL.date >= _cutoff_30d,
+            )
+            .order_by(BotDailyPnL.date.asc())
+            .all()
+        )
+        _start = float(alloc.starting_capital_cents or 0)
+        if _start > 0 and len(_daily_rows) >= 5:
+            _daily_returns = [
+                (float(r.realized_cents or 0) + float(r.unrealized_cents or 0)) / _start
+                for r in _daily_rows
+            ]
+            _n = len(_daily_returns)
+            _mean = sum(_daily_returns) / _n
+            _var = sum((x - _mean) ** 2 for x in _daily_returns) / max(1, _n - 1)
+            _std = _var ** 0.5 if _var > 0 else 0.0
+            if _std > 0:
+                # Annualize: 252 trading days per year
+                sharpe_30d = round((_mean / _std) * (252 ** 0.5), 2)
+    except Exception as _sharpe_exc:
+        logger.debug(
+            "[canonical] sharpe compute failed for alloc %d: %s",
+            alloc.id, _sharpe_exc,
+        )
 
     # ── Open position details with live mark-to-market ───────────────────────
     price_ts = datetime.now(timezone.utc).isoformat()
