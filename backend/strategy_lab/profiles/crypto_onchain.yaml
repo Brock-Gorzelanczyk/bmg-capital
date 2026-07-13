@@ -4,13 +4,18 @@ broker: alpaca_paper_crypto
 universe:
   symbols: [BTC/USD, ETH/USD, SOL/USD, AVAX/USD, LINK/USD]
 cadence: "30 */4 * * *"
+# 2026-07-12: original on-chain strategies (mvrv_zscore, sopr, exchange_outflow,
+# funding_rate_contrarian, liquidation_cascade, social_sentiment) all require
+# paid data feeds (Glassnode / Coinglass / LunarCrush). GLASSNODE_API_KEY was
+# never provisioned on Railway → get_latest_metric() returned None on every
+# scan → 6 strategies produced 0 signals for 30+ days. Swapped for free-OHLC-
+# only siblings so the $486.70 allocation actually trades. Restore the
+# on-chain variants when the data feed lands.
 strategies:
-  - mvrv_zscore_accumulation
-  - sopr_capitulation_buy
-  - exchange_outflow_signal
-  - funding_rate_contrarian
-  - liquidation_cascade_fade
-  - social_sentiment_extreme_fade
+  - crypto_ema_cross
+  - crypto_macd_swing
+  - crypto_momentum_breakout
+  - crypto_mr_zscore_reversion
 ensemble: weighted_vote
 cooldown_minutes: 240
 position_cap: 3

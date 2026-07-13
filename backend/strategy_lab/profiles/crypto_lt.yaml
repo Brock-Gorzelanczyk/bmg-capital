@@ -50,3 +50,9 @@ risk:
 # 7-day deployment push (Brock 2026-06-24): bump sizing for active newer bots.
 position_size_pct_override: 15
 
+# 2026-07-12: inert-bot-scan showed 5 signals/24h blocked by confidence.
+# Composite gate too strict for the DCA / rebalance style strategies here.
+# Lower to 40 so DCA + monthly rebal actually fire on schedule. Bot has
+# been idle 36 days on $4,867.
+composite_threshold_override: 40
+

@@ -82,3 +82,9 @@ risk:
 # 7-day deployment push (Brock 2026-06-24): bump sizing for active newer bots.
 position_size_pct_override: 15
 
+# 2026-07-12: inert-bot-scan showed 36 signals/24h blocked by confidence
+# (composite score < default 60). Strategies fire but the discipline gate
+# filters everything. Lower to 40 so at least the highest-conviction
+# factor-blend signals land. Bot has been idle 36 days on $4,867.
+composite_threshold_override: 40
+
