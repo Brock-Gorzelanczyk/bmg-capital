@@ -6,6 +6,7 @@ type Verdict =
   | "significant_positive"
   | "significant_inverse"
   | "weak_signal"
+  | "weak_signal_after_dsr"
   | "no_signal"
   | "insufficient_data"
   | "no_valid_forward_returns"
@@ -15,6 +16,7 @@ interface Scorecard {
   bot_id: number;
   bot_name: string;
   verdict: Verdict;
+  verdict_original?: Verdict;
   n_rebalances?: number;
   min_required?: number;
   forward_days?: number;
@@ -22,6 +24,7 @@ interface Scorecard {
   ic_std?: number;
   ic_tstat?: number;
   quintile_spread_pct?: number;
+  survives_dsr?: boolean | null;
   per_rebal_sample?: Array<{
     rebal_date: string;
     n_symbols_scored: number;
@@ -31,10 +34,18 @@ interface Scorecard {
   error?: string;
 }
 
+interface DsrSummary {
+  n_tested: number;
+  threshold: number;
+  n_survived: number;
+  explanation: string;
+}
+
 interface ScorecardResponse {
   as_of: string;
   forward_days: number;
   n_bots: number;
+  dsr?: DsrSummary;
   scorecards: Scorecard[];
 }
 
@@ -42,6 +53,7 @@ const VERDICT_COLORS: Record<Verdict, string> = {
   significant_positive: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40",
   significant_inverse: "bg-purple-500/20 text-purple-300 border border-purple-500/40",
   weak_signal: "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40",
+  weak_signal_after_dsr: "bg-amber-500/20 text-amber-300 border border-amber-500/40",
   no_signal: "bg-slate-500/20 text-slate-300 border border-slate-500/40",
   insufficient_data: "bg-slate-700 text-slate-400 border border-slate-600",
   no_valid_forward_returns: "bg-amber-500/20 text-amber-300 border border-amber-500/40",
@@ -52,6 +64,7 @@ const VERDICT_LABELS: Record<Verdict, string> = {
   significant_positive: "REAL SIGNAL",
   significant_inverse: "INVERSE — FLIP OR HALT",
   weak_signal: "WEAK",
+  weak_signal_after_dsr: "FAILS DSR",
   no_signal: "NOISE",
   insufficient_data: "NOT ENOUGH DATA",
   no_valid_forward_returns: "NO BARS",
@@ -159,7 +172,7 @@ export default function FactorScorecardPage() {
       </div>
 
       {/* Summary buckets */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         {[
           { label: "REAL SIGNAL", count: buckets.real, cls: VERDICT_COLORS.significant_positive },
           { label: "INVERSE", count: buckets.inverse, cls: VERDICT_COLORS.significant_inverse },
@@ -173,6 +186,30 @@ export default function FactorScorecardPage() {
           </div>
         ))}
       </div>
+
+      {/* DSR summary strip */}
+      {data?.dsr && (
+        <div className="mb-6 border border-slate-800 rounded p-3 bg-slate-950/50 text-xs">
+          <div className="flex items-baseline justify-between">
+            <div className="text-slate-400 uppercase tracking-wider">
+              Deflated Sharpe (Bailey-Prado 2014)
+            </div>
+            <div className="text-slate-500">
+              threshold |t| &gt; {data.dsr.threshold.toFixed(2)} · N tested: {data.dsr.n_tested}
+            </div>
+          </div>
+          <div className="mt-1 text-slate-300">
+            <span className="text-emerald-400 font-mono">{data.dsr.n_survived}</span>{" "}
+            of {data.dsr.n_tested} factors survive multiple-testing correction. Factors
+            marked{" "}
+            <span className="inline-block px-2 py-0.5 text-[10px] font-mono rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              FAILS DSR
+            </span>{" "}
+            had positive raw IC but don't clear the corrected significance bar — treat
+            as unconfirmed, not noise.
+          </div>
+        </div>
+      )}
 
       {error ? (
         <div className="border border-red-500/30 bg-red-950/20 rounded p-4 text-red-300 text-sm">

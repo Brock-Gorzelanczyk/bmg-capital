@@ -261,7 +261,21 @@ def compute_bot_scorecard(
 
 def compute_all_scorecards(db: Session,
                             forward_days: int = _DEFAULT_FORWARD_DAYS) -> dict:
-    """Iterate all enabled PR bots, compute one scorecard each."""
+    """Iterate all enabled PR bots, compute one scorecard each, then apply
+    Deflated Sharpe Ratio (Bailey-Prado 2014, SSRN 2460551) multi-testing
+    correction over the trial set.
+
+    Simple practical DSR haircut used here:
+      threshold_dsr = 2 * sqrt(1 + log(N) / 2)
+
+    Where N = number of tested factors (this scorecard run). Any factor
+    whose IC t-stat clears this threshold is likely a real signal even
+    after correcting for the fact that we tested many factors.
+    Bonferroni-flavored: with 20 factors tested, threshold ≈ 3.5 (vs
+    the naïve 2.0). Factors previously verdict=significant_positive that
+    fail this test get "weak_signal_after_dsr" — not noise, but not
+    proven either.
+    """
     rows = db.execute(text(
         "SELECT id, name FROM portfolio_rank_bots WHERE enabled = 1 "
         "ORDER BY name"
@@ -277,9 +291,44 @@ def compute_all_scorecards(db: Session,
             logger.error("[scorecard] compute failed for %s: %s", r[1], exc)
             scorecards.append({"bot_id": int(r[0]), "bot_name": r[1],
                                "verdict": "error", "error": str(exc)[:200]})
+
+    # DSR correction pass
+    n_tested = sum(1 for s in scorecards
+                   if s.get("ic_tstat") is not None)
+    dsr_threshold = 2.0 * math.sqrt(1.0 + math.log(max(2, n_tested)) / 2.0) \
+        if n_tested >= 2 else 2.0
+    n_survived = 0
+    for s in scorecards:
+        t = s.get("ic_tstat")
+        if t is None:
+            s["survives_dsr"] = None
+        elif abs(t) > dsr_threshold:
+            s["survives_dsr"] = True
+            n_survived += 1
+            # keep verdict positive
+        else:
+            s["survives_dsr"] = False
+            # Downgrade the verdict label so the frontend can visually flag it
+            if s.get("verdict") == "significant_positive":
+                s["verdict_original"] = "significant_positive"
+                s["verdict"] = "weak_signal_after_dsr"
+            elif s.get("verdict") == "significant_inverse":
+                s["verdict_original"] = "significant_inverse"
+                s["verdict"] = "weak_signal_after_dsr"
+
     return {
         "as_of": datetime.now(timezone.utc).isoformat(),
         "forward_days": forward_days,
         "n_bots": len(scorecards),
+        "dsr": {
+            "n_tested": n_tested,
+            "threshold": round(dsr_threshold, 2),
+            "n_survived": n_survived,
+            "explanation": (
+                f"Deflated Sharpe threshold (Bailey-Prado 2014): with {n_tested} "
+                f"factors tested, need |IC t-stat| > {round(dsr_threshold,2)} to "
+                f"survive multiple-testing correction. {n_survived} factor(s) survive."
+            ),
+        },
         "scorecards": scorecards,
     }

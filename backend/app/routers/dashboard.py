@@ -598,3 +598,359 @@ def get_dashboard_v2(
         "analyst_highlights": highlights,
         "open_positions": open_positions_list,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Dashboard visual-upgrade endpoints (2026-07-13 spec)
+# All read from the canonical portfolio service (compute_bot_snapshot per
+# alloc, summed) — no re-derived math.
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/hero-stats")
+def get_hero_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Fleet-level hero row: realized P&L, trades closed, win rate, Sharpe."""
+    from app.core.canonical import compute_bot_snapshot
+
+    allocs = (
+        db.query(BotAllocation)
+        .filter(
+            BotAllocation.user_id == current_user.id,
+            BotAllocation.enabled.is_(True),
+        )
+        .all()
+    )
+    profile_ids = list({a.profile_id for a in allocs})
+    profs = {
+        p.id: p for p in db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
+    }
+
+    total_realized = 0
+    total_wins = 0
+    total_losses = 0
+    weighted_sharpe_num = 0.0
+    weighted_sharpe_den = 0
+    for alloc in allocs:
+        prof = profs.get(alloc.profile_id)
+        if not prof:
+            continue
+        try:
+            snap = compute_bot_snapshot(alloc, prof, db)
+        except Exception as exc:
+            logger.warning("[hero-stats] snapshot failed alloc=%d: %s", alloc.id, exc)
+            continue
+        total_realized += int(snap.realized_pnl_cents or 0)
+        total_wins += int(snap.win_count or 0)
+        total_losses += int(snap.loss_count or 0)
+        if snap.sharpe_30d is not None and (alloc.starting_capital_cents or 0) > 0:
+            weighted_sharpe_num += float(snap.sharpe_30d) * int(alloc.starting_capital_cents)
+            weighted_sharpe_den += int(alloc.starting_capital_cents)
+
+    total_closed = total_wins + total_losses
+    win_rate = (total_wins / total_closed) if total_closed > 0 else None
+    sharpe_30d = (
+        (weighted_sharpe_num / weighted_sharpe_den) if weighted_sharpe_den > 0 else None
+    )
+    return {
+        "realized_pnl_cents": int(total_realized),
+        "trades_closed_alltime": int(total_closed),
+        "win_rate": round(win_rate, 4) if win_rate is not None else None,
+        "sharpe_30d": round(sharpe_30d, 2) if sharpe_30d is not None else None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+_TOP_TRADES_WINDOW_DAYS = {"7d": 7, "30d": 30, "90d": 90, "all": 3650}
+
+
+@router.get("/top-trades")
+def get_top_trades(
+    window: str = "30d",
+    side: str = "win",
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return top-N winning or losing closed trades in window."""
+    days = _TOP_TRADES_WINDOW_DAYS.get(window, 30)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    limit = max(1, min(int(limit), 25))
+    side_wants_wins = side.lower() != "loss"
+
+    rows = db.execute(
+        text(
+            """
+            SELECT t.id            AS trade_id,
+                   t.symbol        AS symbol,
+                   t.ts            AS closed_at,
+                   t.fill_price_cents AS exit_cents,
+                   t.qty           AS qty,
+                   p.avg_cost_cents AS entry_cents,
+                   p.opened_at     AS opened_at,
+                   bp.name         AS bot_name,
+                   bp.asset_class  AS asset_class
+              FROM bot_trades t
+              JOIN bot_positions p ON p.id = t.position_id
+              JOIN bot_allocations a ON a.id = t.allocation_id
+              JOIN bot_profiles bp ON bp.id = a.profile_id
+             WHERE a.user_id = :uid
+               AND t.side IN ('sell', 'cover', 'close')
+               AND t.quarantined_at IS NULL
+               AND t.ts >= :cutoff
+               AND p.avg_cost_cents > 0
+            """
+        ),
+        {"uid": current_user.id, "cutoff": cutoff},
+    ).fetchall()
+
+    trades = []
+    for r in rows:
+        entry = float(r[5]) / 100.0
+        exit_p = float(r[3]) / 100.0
+        qty = float(r[4] or 0)
+        pnl_usd = (float(r[3]) - float(r[5])) * qty / 100.0
+        pnl_pct = ((float(r[3]) / float(r[5])) - 1.0) if float(r[5]) > 0 else 0.0
+        trades.append(
+            {
+                "trade_id": int(r[0]),
+                "bot": r[7],
+                "sleeve": _profile_sleeve(r[7], r[8]),
+                "symbol": r[1],
+                "entry_price": round(entry, 4),
+                "exit_price": round(exit_p, 4),
+                "qty": qty,
+                "pnl_usd": round(pnl_usd, 2),
+                "pnl_pct": round(pnl_pct, 4),
+                "opened_at": r[6].isoformat() if hasattr(r[6], "isoformat") else str(r[6]),
+                "closed_at": r[2].isoformat() if hasattr(r[2], "isoformat") else str(r[2]),
+            }
+        )
+
+    trades.sort(key=lambda t: t["pnl_usd"], reverse=side_wants_wins)
+    top = trades[:limit] if side_wants_wins else trades[:limit]
+
+    # Sparkline: fetch daily bars per unique symbol in the trade window.
+    # Cache to avoid duplicate fetches across trades on the same symbol.
+    from datetime import date as _date
+
+    def _sparkline(symbol: str, opened_at: str, closed_at: str) -> list[float]:
+        try:
+            import yfinance as yf  # type: ignore
+        except Exception:
+            return []
+        try:
+            s = datetime.fromisoformat(opened_at.replace("Z", "+00:00")).date()
+            e = datetime.fromisoformat(closed_at.replace("Z", "+00:00")).date()
+        except Exception:
+            return []
+        # Widen by a couple days on each side for context
+        s_pad = s - timedelta(days=2)
+        e_pad = e + timedelta(days=2)
+        try:
+            h = yf.Ticker(symbol).history(
+                start=s_pad.strftime("%Y-%m-%d"),
+                end=e_pad.strftime("%Y-%m-%d"),
+                interval="1d",
+                auto_adjust=True,
+            )
+        except Exception:
+            return []
+        if h is None or h.empty:
+            return []
+        return [round(float(v), 4) for v in h["Close"].tolist()]
+
+    for t in top:
+        t["daily_marks"] = _sparkline(t["symbol"], t["opened_at"], t["closed_at"])
+
+    return {
+        "window": window,
+        "side": "win" if side_wants_wins else "loss",
+        "trades": top,
+        "candidates_considered": len(trades),
+    }
+
+
+@router.get("/trade-stream")
+def get_trade_stream(
+    since: int | None = None,
+    limit: int = 500,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Cursor-paginated closed trades. Cheap: no joins beyond profile.name."""
+    limit = max(1, min(int(limit), 2000))
+    since_id = int(since or 0)
+
+    rows = db.execute(
+        text(
+            """
+            SELECT t.id, t.ts, t.symbol, t.fill_price_cents, t.qty,
+                   p.avg_cost_cents, bp.name, bp.asset_class
+              FROM bot_trades t
+              JOIN bot_positions p ON p.id = t.position_id
+              JOIN bot_allocations a ON a.id = t.allocation_id
+              JOIN bot_profiles bp ON bp.id = a.profile_id
+             WHERE a.user_id = :uid
+               AND t.side IN ('sell', 'cover', 'close')
+               AND t.quarantined_at IS NULL
+               AND t.id > :since_id
+               AND p.avg_cost_cents > 0
+             ORDER BY t.id ASC
+             LIMIT :lim
+            """
+        ),
+        {"uid": current_user.id, "since_id": since_id, "lim": limit},
+    ).fetchall()
+
+    trades = []
+    max_id = since_id
+    for r in rows:
+        pnl_usd = (float(r[3]) - float(r[5])) * float(r[4] or 0) / 100.0
+        trades.append({
+            "id": int(r[0]),
+            "closed_at": r[1].isoformat() if hasattr(r[1], "isoformat") else str(r[1]),
+            "symbol": r[2],
+            "pnl_usd": round(pnl_usd, 2),
+            "bot": r[6],
+            "sleeve": _profile_sleeve(r[6], r[7]),
+        })
+        if int(r[0]) > max_id:
+            max_id = int(r[0])
+
+    return {
+        "trades": trades,
+        "next_cursor": max_id,
+        "has_more": len(trades) >= limit,
+    }
+
+
+@router.get("/sleeve-distributions")
+def get_sleeve_distributions(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Per-sleeve daily P&L for ridgeline plotting."""
+    days = max(1, min(int(days), 365))
+    cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
+
+    rows = db.execute(
+        text(
+            """
+            SELECT bp.name, bp.asset_class, dp.date,
+                   (COALESCE(dp.realized_cents,0) + COALESCE(dp.unrealized_cents,0)) AS total
+              FROM bot_daily_pnl dp
+              JOIN bot_allocations a ON a.id = dp.allocation_id
+              JOIN bot_profiles bp ON bp.id = a.profile_id
+             WHERE a.user_id = :uid AND dp.date >= :cutoff
+            """
+        ),
+        {"uid": current_user.id, "cutoff": cutoff},
+    ).fetchall()
+
+    by_sleeve: dict[str, dict[str, int]] = {}
+    for r in rows:
+        sleeve = _profile_sleeve(r[0], r[1])
+        d = r[2].isoformat() if hasattr(r[2], "isoformat") else str(r[2])
+        by_sleeve.setdefault(sleeve, {})
+        by_sleeve[sleeve][d] = by_sleeve[sleeve].get(d, 0) + int(r[3] or 0)
+
+    result: dict[str, list[dict]] = {}
+    for sleeve, date_map in by_sleeve.items():
+        result[sleeve] = [
+            {"date": d, "pnl_cents": v} for d, v in sorted(date_map.items())
+        ]
+    return {"days": days, "sleeves": result}
+
+
+def _estimate_next_rebalance(schedule: str, last: datetime | None) -> str | None:
+    """Best-effort next rebalance date given a cadence and last-rebal time."""
+    if not schedule:
+        return None
+    schedule = str(schedule).lower().strip()
+    base = last or datetime.now(timezone.utc)
+    if isinstance(base, str):
+        try:
+            base = datetime.fromisoformat(base)
+        except Exception:
+            base = datetime.now(timezone.utc)
+    if schedule == "daily":
+        return (base + timedelta(days=1)).isoformat()
+    if schedule == "weekly":
+        # Next Monday
+        days_ahead = (7 - base.weekday()) % 7 or 7
+        return (base + timedelta(days=days_ahead)).isoformat()
+    if schedule == "monthly":
+        # First Monday of next month
+        year = base.year + (1 if base.month == 12 else 0)
+        month = 1 if base.month == 12 else base.month + 1
+        first = datetime(year, month, 1, tzinfo=timezone.utc)
+        days_ahead = (0 - first.weekday()) % 7  # 0 = Monday
+        return (first + timedelta(days=days_ahead)).isoformat()
+    if schedule == "quarterly":
+        y = base.year
+        m = base.month
+        # Next quarter start (Jan/Apr/Jul/Oct)
+        for q_month in (1, 4, 7, 10, 13):
+            if q_month > m:
+                target_month = q_month if q_month <= 12 else 1
+                target_year = y if q_month <= 12 else y + 1
+                first = datetime(target_year, target_month, 1, tzinfo=timezone.utc)
+                days_ahead = (0 - first.weekday()) % 7
+                return (first + timedelta(days=days_ahead)).isoformat()
+    return None
+
+
+@router.get("/session-meta")
+def get_session_meta(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Session-bar fields: per-sleeve last_scan_at + PR-bot next_rebalance_at."""
+    # Last scan per sleeve = MAX(bot_heartbeat.last_scan_at) grouped by sleeve.
+    try:
+        rows = db.execute(text(
+            """
+            SELECT hb.bot_name, hb.last_scan_at, bp.asset_class
+              FROM bot_heartbeat hb
+         LEFT JOIN bot_profiles bp ON bp.name = hb.bot_name
+            """
+        )).fetchall()
+    except Exception as exc:
+        logger.warning("[session-meta] heartbeat query failed: %s", exc)
+        rows = []
+
+    sleeve_last: dict[str, str] = {}
+    for r in rows:
+        bot_name = r[0]
+        last = r[1]
+        ac = r[2]
+        sleeve = _profile_sleeve(bot_name, ac)
+        if not last:
+            continue
+        last_iso = last.isoformat() if hasattr(last, "isoformat") else str(last)
+        prev = sleeve_last.get(sleeve)
+        if prev is None or last_iso > prev:
+            sleeve_last[sleeve] = last_iso
+
+    # PR bot next_rebalance_at
+    try:
+        pr_rows = db.execute(text(
+            "SELECT name, rebalance_schedule, last_rebalanced_at "
+            "FROM portfolio_rank_bots WHERE enabled = 1"
+        )).fetchall()
+    except Exception as exc:
+        logger.warning("[session-meta] pr query failed: %s", exc)
+        pr_rows = []
+
+    pr_next: dict[str, str | None] = {}
+    for r in pr_rows:
+        pr_next[r[0]] = _estimate_next_rebalance(r[1], r[2])
+
+    return {
+        "sleeve_last_scan_at": sleeve_last,
+        "pr_next_rebalance_at": pr_next,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
