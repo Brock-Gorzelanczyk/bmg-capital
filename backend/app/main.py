@@ -1011,6 +1011,19 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m091_reactivate_stomped_bots FAILED: %s",
                      _m091_exc, exc_info=True)
 
+    # m092: SSRN batch 6 — halt crypto_quant_defi_l2 (last sim-only
+    # crypto quant bleeder) and seed 3 new PR bots: os_ratio, overnight_
+    # momentum, smart_money_13f. Freed $2,920.20 exactly balances new
+    # allocations. Fund invariant preserved.
+    try:
+        from app.db.migrations.m092_ssrn_batch_6 import run as _run_m092
+        with engine.begin() as _m092_conn:
+            _m092_result = _run_m092(_m092_conn)
+        logger.warning("[startup] m092 status: %s", _m092_result)
+    except Exception as _m092_exc:
+        logger.error("[startup] m092_ssrn_batch_6 FAILED: %s",
+                     _m092_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

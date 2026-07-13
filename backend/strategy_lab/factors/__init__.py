@@ -104,6 +104,21 @@ def _cw_vol_spread(symbols: list[str], db: Session, params: dict) -> dict[str, f
     return compute(symbols, db, params)
 
 
+def _os_ratio(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .os_ratio import compute
+    return compute(symbols, db, params)
+
+
+def _overnight_momentum(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .overnight_momentum import compute
+    return compute(symbols, db, params)
+
+
+def _smart_money_13f(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .smart_money_13f import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
@@ -142,6 +157,21 @@ _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     #                        spread (call - put) as informed-flow signal.
     "short_term_momentum": _short_term_momentum,
     "cw_vol_spread": _cw_vol_spread,
+    # 2026-07-12 SSRN batch 6:
+    #   os_ratio:            Roll-Schwartz-Subrahmanyam 2010, Johnson-So 2012 —
+    #                        option volume / stock volume as informed-flow
+    #                        signal. Long low O/S. Complements cw_vol_spread.
+    #   overnight_momentum:  Lou-Polk-Skouras 2019 JFE — sum of overnight
+    #                        (close→open) returns. Daily rebal, uncorrelated
+    #                        with 12-1 UMD.
+    #   smart_money_13f:     Frazzini-Lamont 2008 — track Δ shares held by
+    #                        top-100 hedge funds via SEC 13F filings.
+    #                        Quarterly rebal. Reads from smart_money_13f_holdings
+    #                        cache; degrades to empty scores until the EDGAR
+    #                        ingest job ships.
+    "os_ratio": _os_ratio,
+    "overnight_momentum": _overnight_momentum,
+    "smart_money_13f": _smart_money_13f,
 }
 
 
