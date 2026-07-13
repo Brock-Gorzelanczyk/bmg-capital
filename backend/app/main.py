@@ -64,6 +64,7 @@ from app.routers import strategy_workshop, price_alerts
 from app.routers.admin_bots import router as admin_bots_router
 from app.routers.sentinel import router as sentinel_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.pnl import router as pnl_router
 from app.routers.allocation import router as allocation_router
 from app.routers.trading_gate import router as trading_gate_router
 from app.routers.blackouts import router as blackouts_router
@@ -1597,6 +1598,7 @@ from app.routers.admin_quarantine import router as admin_quarantine_router
 app.include_router(admin_quarantine_router)
 app.include_router(sentinel_router)
 app.include_router(dashboard_router)
+app.include_router(pnl_router)
 app.include_router(scout_router)
 app.include_router(forge_router)
 app.include_router(performance_router)

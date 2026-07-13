@@ -148,6 +148,63 @@ def list_trades(
     }
 
 
+# ── /api/trades/top ─────────────────────────────────────────────────────────
+# MIROFISH dashboard spec (2026-07-13): dir=wins|losses, window=month.
+# Alias to dashboard.top-trades so both surfaces read from the same query.
+@router.get("/top")
+def top_trades_alias(
+    dir: str = Query("wins", pattern="^(wins|losses)$"),
+    window: str = Query("month", pattern="^(week|month|quarter|all)$"),
+    limit: int = Query(5, ge=1, le=25),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from app.routers.dashboard import get_top_trades, _TOP_TRADES_WINDOW_DAYS
+    _win_map = {"week": "7d", "month": "30d", "quarter": "90d", "all": "all"}
+    _side = "win" if dir == "wins" else "loss"
+    return get_top_trades(
+        window=_win_map.get(window, "30d"),
+        side=_side,
+        limit=limit,
+        db=db,
+        current_user=current_user,
+    )
+
+
+# ── /api/trades/closed ──────────────────────────────────────────────────────
+# MIROFISH dashboard spec: closed-trade stream since a cursor (session_open
+# is a timestamp on the client; we accept trade_id cursor OR session_open ISO).
+@router.get("/closed")
+def closed_trades_stream(
+    since: str | None = Query(None, description="Trade ID cursor or ISO timestamp"),
+    limit: int = Query(500, ge=1, le=2000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from app.routers.dashboard import get_trade_stream
+    since_id: int | None = None
+    if since:
+        # Accept either an int cursor or an ISO timestamp we'll convert to
+        # a cursor via a SELECT MIN(id) WHERE ts >= that timestamp.
+        try:
+            since_id = int(since)
+        except (TypeError, ValueError):
+            try:
+                cut = datetime.fromisoformat(since.replace("Z", "+00:00"))
+                row = db.execute(text(
+                    "SELECT MIN(t.id) FROM bot_trades t "
+                    "JOIN bot_allocations a ON a.id = t.allocation_id "
+                    "WHERE a.user_id = :uid AND t.ts >= :cut"
+                ), {"uid": current_user.id, "cut": cut}).fetchone()
+                min_id = int(row[0]) if row and row[0] else 0
+                since_id = max(0, min_id - 1) if min_id else 0
+            except Exception:
+                since_id = None
+    return get_trade_stream(
+        since=since_id, limit=limit, db=db, current_user=current_user,
+    )
+
+
 @router.get("/stats")
 def trade_stats(
     bot: Optional[str] = Query(None),

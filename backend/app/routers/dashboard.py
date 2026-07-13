@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user
@@ -611,7 +611,7 @@ def get_hero_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Fleet-level hero row: realized P&L, trades closed, win rate, Sharpe."""
+    """Fleet-level hero row: realized P&L (all-time + today), trades, win rate, Sharpe."""
     from app.core.canonical import compute_bot_snapshot
 
     allocs = (
@@ -622,6 +622,7 @@ def get_hero_stats(
         )
         .all()
     )
+    alloc_ids = [a.id for a in allocs]
     profile_ids = list({a.profile_id for a in allocs})
     profs = {
         p.id: p for p in db.query(BotProfile).filter(BotProfile.id.in_(profile_ids)).all()
@@ -653,8 +654,26 @@ def get_hero_stats(
     sharpe_30d = (
         (weighted_sharpe_num / weighted_sharpe_den) if weighted_sharpe_den > 0 else None
     )
+
+    # Today's realized P&L: SUM(bot_daily_pnl.realized_cents) for date=today.
+    realized_today = 0
+    if alloc_ids:
+        try:
+            row = db.execute(text(
+                "SELECT COALESCE(SUM(realized_cents), 0) "
+                "FROM bot_daily_pnl "
+                "WHERE allocation_id IN :ids "
+                "  AND date = CURRENT_DATE"
+            ).bindparams(bindparam("ids", expanding=True)),
+                {"ids": alloc_ids},
+            ).fetchone()
+            realized_today = int(row[0] or 0) if row else 0
+        except Exception as exc:
+            logger.warning("[hero-stats] realized_today query failed: %s", exc)
+
     return {
         "realized_pnl_cents": int(total_realized),
+        "realized_pnl_today_cents": int(realized_today),
         "trades_closed_alltime": int(total_closed),
         "win_rate": round(win_rate, 4) if win_rate is not None else None,
         "sharpe_30d": round(sharpe_30d, 2) if sharpe_30d is not None else None,

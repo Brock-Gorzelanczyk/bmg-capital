@@ -302,6 +302,11 @@ def reconcile_positions(
     ]
 
     severity = _classify_severity(qty_mismatched, broker_only, db_only)
+    # RIA-stats spec (2026-07-13) — verdict alias for the dashboard SIM/LIVE
+    # dot. SYNCED = zero divergence, WARN/ALERT/ERROR mirror severity so the
+    # frontend can flag partial mismatches.
+    _verdict_map = {"ok": "SYNCED", "warn": "WARN", "alert": "ALERT", "error": "ERROR"}
+    verdict = _verdict_map.get(severity, "UNKNOWN")
 
     return {
         "as_of": as_of,
@@ -313,6 +318,7 @@ def reconcile_positions(
         "db_only": db_only,
         "qty_mismatched": qty_mismatched,
         "divergence_severity": severity,
+        "verdict": verdict,
     }
 
 

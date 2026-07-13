@@ -80,6 +80,7 @@ const TradeJournalPage = lazy(() => import("@/pages/TradeJournalPage"));
 const StrategyLabV2 = lazy(() => import("@/pages/StrategyLabV2"));
 const StrategyLabLive = lazy(() => import("@/pages/StrategyLabLive"));
 const FactorScorecardPage = lazy(() => import("@/pages/FactorScorecardPage"));
+const DashboardMirofish = lazy(() => import("@/pages/DashboardMirofish"));
 const PortfolioV2 = lazy(() => import("@/pages/PortfolioV2"));
 const AutopilotPage = lazy(() => import("@/pages/AutopilotPage"));
 const AutopilotPromisePage = lazy(() => import("@/pages/AutopilotPromisePage"));
@@ -406,6 +407,7 @@ function AppInner() {
         <Route path="/strategy/legacy" element={<Page component={StrategyLab} />} />
         <Route path="/strategy/live" element={<Page component={StrategyLabLive} />} />
         <Route path="/strategy/factor-scorecard" element={<Page component={FactorScorecardPage} />} />
+        <Route path="/dashboard/mirofish" element={<Page component={DashboardMirofish} />} />
         <Route path="/strategy/candidates" element={<Page component={StrategyCandidates} />} />
         <Route path="/signals" element={<SignalsFeedPage />} />
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
