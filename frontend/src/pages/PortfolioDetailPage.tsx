@@ -518,12 +518,20 @@ function HeroCard({
       value: `$${currentUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       color: "#eafbe9",
     },
-    { label: "ALL-TIME P&L", value: fmtUsd(portfolio.pnl_cents ?? 0), color: pnlColor(pnlUsd) },
+    // 2026-07-12: "ALL-TIME P&L" is (current_value − starting) = realized +
+    // unrealized. "ALL-TIME RETURN" per SHIP 3 is SUM(realized) /
+    // SUM(inception) — immutable across reallocations. The two intentionally
+    // disagree when a sleeve has open unrealized. Relabel + tooltip so the
+    // divergence looks like a design choice, not a bug.
+    { label: "MARK-TO-MARKET P&L", value: fmtUsd(portfolio.pnl_cents ?? 0), color: pnlColor(pnlUsd),
+      title: "Current value minus starting capital. Includes unrealized on open positions." },
     {
-      label: "ALL-TIME RETURN",
+      label: "REALIZED RETURN",
       value: `${fmtPct(portfolio.pnl_pct ?? 0)}${anyBotPostReset ? " ⓘ" : ""}`,
       color: pnlColor(portfolio.pnl_pct ?? 0),
-      title: anyBotPostReset ? "Track record reset 2026-06-28. Performance tracking restarts from this date." : undefined,
+      title: anyBotPostReset
+        ? "SHIP 3 realized-only return (SUM realized / SUM inception). Track record reset 2026-06-28."
+        : "SHIP 3 realized-only return (SUM realized / SUM inception). Doesn't drift on reallocation. May differ from mark-to-market $ when open positions carry unrealized.",
     },
     { label: "TODAY P&L", value: fmtUsd(portfolio.today_pnl_cents ?? 0), color: pnlColor(todayPnlUsd) },
     { label: "ACTIVE BOTS", value: `${activeBots} / ${totalBots}`, color: accent },

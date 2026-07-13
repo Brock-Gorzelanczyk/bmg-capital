@@ -976,6 +976,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m088_earnings_straddle_funding FAILED: %s",
                      _m088_exc, exc_info=True)
 
+    # m089: halt 4 sim-only crypto quant bleeders + redistribute the freed
+    # $13,141 to the three broker-real-fill winners (options_directional,
+    # options_income, stock_quant_day_momentum). Fund invariant preserved.
+    try:
+        from app.db.migrations.m089_halt_sim_crypto_quants import run as _run_m089
+        with engine.begin() as _m089_conn:
+            _m089_result = _run_m089(_m089_conn)
+        logger.warning("[startup] m089 status: %s", _m089_result)
+    except Exception as _m089_exc:
+        logger.error("[startup] m089_halt_sim_crypto_quants FAILED: %s",
+                     _m089_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

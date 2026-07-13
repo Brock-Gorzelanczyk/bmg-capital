@@ -36,6 +36,24 @@ def already_ran(conn, name: str) -> bool:
 
 
 def record(conn, name: str) -> None:
+    """Mark a migration as applied. Commits, then verifies the row landed.
+
+    2026-07-12 hardening for known-issue #12 (m084/m085 landed data
+    changes but never recorded in schema_migrations, causing them to
+    re-run every boot):
+
+      1. Same-transaction verify SELECT after the INSERT — catches the
+         case where the INSERT was silently rolled back by an outer
+         context (SQLAlchemy 2.0 auto-begin nuance under engine.begin()).
+      2. On verify failure, retry via a brand-new connection from the
+         underlying engine. This isolates the write from whatever
+         transactional weirdness caused the first attempt to drop.
+      3. Loud logging so a silent failure can't hide again.
+
+    Commit remains inside record() to preserve the invariant tested by
+    test_m033_* — callers should still be able to expect the row is
+    visible from other sessions once record() returns.
+    """
     try:
         conn.execute(
             text(
@@ -46,7 +64,53 @@ def record(conn, name: str) -> None:
         )
         conn.commit()
     except Exception as exc:
-        logger.warning("[gate] record(%s) failed: %s", name, exc)
+        logger.warning("[gate] record(%s) primary INSERT/commit failed: %s", name, exc)
+
+    # Verify the row is actually visible. If not, retry through a new
+    # engine connection so a rolled-back tx cannot silently drop the row.
+    try:
+        verify = conn.execute(
+            text("SELECT 1 FROM schema_migrations WHERE migration_name = :n"),
+            {"n": name},
+        ).fetchone()
+    except Exception as exc:
+        logger.warning("[gate] record(%s) verify SELECT failed: %s", name, exc)
+        verify = None
+
+    if verify is not None:
+        return
+
+    # Primary path lost the write. Try a fresh engine connection.
+    try:
+        engine = conn.engine  # SQLAlchemy 2.0 Connection.engine
+    except Exception:
+        engine = None
+    if engine is None:
+        logger.error(
+            "[gate] record(%s) did not persist and no engine available for retry — "
+            "migration WILL re-run next boot",
+            name,
+        )
+        return
+
+    try:
+        with engine.begin() as retry_conn:
+            retry_conn.execute(
+                text(
+                    "INSERT INTO schema_migrations (migration_name) VALUES (:n)"
+                    " ON CONFLICT (migration_name) DO NOTHING"
+                ),
+                {"n": name},
+            )
+        logger.warning(
+            "[gate] record(%s) recovered via retry_conn — primary path had rolled back",
+            name,
+        )
+    except Exception as exc:
+        logger.error(
+            "[gate] record(%s) retry_conn ALSO failed: %s — migration WILL re-run next boot",
+            name, exc,
+        )
 
 
 def verify_count(
