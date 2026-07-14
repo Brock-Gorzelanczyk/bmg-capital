@@ -1322,7 +1322,15 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     # two Phase 2 anomaly bots. Contribution per bot = starting_capital +
     # SUM(current_pnl_cents on holdings). Dry-run mode keeps current_pnl at
     # 0, so the value equals starting_capital until the runner writes MTM.
+    #
+    # 2026-07-14: also add PR bot P&L to today_pnl_cents so this endpoint
+    # matches dashboard/v2 (which does the same at routers/dashboard.py:339).
+    # Prior to this, dashboard.today_pnl and strategy-lab.today_pnl diverged
+    # by exactly the PR sleeve's current_pnl every time. Both endpoints now
+    # use the same rollup — the "today" label is technically all-time PR pnl
+    # until we add EOD snapshots for PR holdings, but it's consistent.
     _pr_extra = 0
+    _pr_pnl_today = 0
     try:
         _pr_rows = db.execute(text(
             "SELECT id, COALESCE(starting_capital_cents, 0) "
@@ -1337,9 +1345,11 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             ), {"bid": _bid}).fetchone()
             _bot_pnl = int(_pnl_row[0] or 0) if _pnl_row else 0
             _pr_extra += _sc + _bot_pnl
+            _pr_pnl_today += _bot_pnl
     except Exception as _pr_exc:
         logger.warning("[canonical] portfolio_rank PV rollup failed: %s", _pr_exc)
     total_value += _pr_extra
+    total_today_pnl += _pr_pnl_today
 
     # 5-col header windows: All-Time / MTD / WTD / Today $ + %.
     try:
