@@ -3388,6 +3388,20 @@ def reconcile_broker(
     return reconcile_positions(db, user_id=user_id)
 
 
+# ── GET /api/admin/threshold-experiment ─────────────────────────────────────
+# Time-boxed experiment on the 985f176d composite threshold cuts. Bucket
+# closed trades by score band {30-59, 60+} per bot, report win rate + expectancy.
+@router.get("/threshold-experiment")
+def threshold_experiment_endpoint(
+    days: int = Query(14, ge=1, le=90, description="Lookback window in days"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Report threshold-experiment bucket stats + auto-revert candidates."""
+    from app.services.threshold_experiment import bucket_report
+    return bucket_report(db, days=days)
+
+
 # ── POST /api/admin/reconcile-option-closes ─────────────────────────────────
 # RIA-stats spec (2026-07-13): options positions accumulate marks-only P&L
 # but never book realized P&L on close because Alpaca handles the close

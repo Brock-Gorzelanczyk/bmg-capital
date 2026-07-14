@@ -290,7 +290,8 @@ CREATE TABLE IF NOT EXISTS bot_trades (
     contract_premium_cents REAL,
     regime_vix TEXT,
     regime_trend TEXT,
-    regime_btc_dom_band TEXT
+    regime_btc_dom_band TEXT,
+    composite_score_at_execution INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS regime_snapshots (

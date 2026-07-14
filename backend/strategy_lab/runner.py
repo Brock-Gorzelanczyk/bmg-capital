@@ -716,6 +716,20 @@ def run_bot_profile(profile_name: str) -> dict:
 
                     _gates_filtered = bool(_gate_result and not _gate_result.all_passed)
 
+                    # Time-boxed threshold experiment (2026-07-13): stamp the
+                    # composite score on the signal so _execute_signal can write
+                    # it to bot_trades.composite_score_at_execution. Every
+                    # admitted trade is labeled with the score it entered at,
+                    # letting us compare the 30-59 band (previously blocked at
+                    # default 60) vs the 60+ band per bot after 14 days.
+                    if _gate_result is not None:
+                        try:
+                            sig.composite_score_at_execution = int(
+                                getattr(_gate_result, "composite_score", 0) or 0
+                            )
+                        except Exception:
+                            pass
+
                     # ── Persist signal to bot_signals now (before any execution guard
                     # that could continue/skip).  Wrapped so a DB error never aborts
                     # the scan loop.
@@ -2341,6 +2355,9 @@ def _execute_options_signal(
                 underlying_symbol=_lr["underlying_symbol"],
                 contract_count=contract_count,
                 contract_premium_cents=_lr["premium_cents"],
+                composite_score_at_execution=getattr(
+                    sig, "composite_score_at_execution", None
+                ),
                 **_rt_options,
             )
             db.add(_lr_trade)
@@ -2898,6 +2915,9 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             alpaca_order_id=order_id,
             expected_fill_cents=fill_cents,
             slippage_bps=_slip_bps,
+            composite_score_at_execution=getattr(
+                sig, "composite_score_at_execution", None
+            ),
             **_rt_equity,
         )
         db.add(trade)

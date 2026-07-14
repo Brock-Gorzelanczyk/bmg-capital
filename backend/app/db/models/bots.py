@@ -132,6 +132,10 @@ class BotTrade(Base):
     regime_vix: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     regime_trend: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     regime_btc_dom_band: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Time-boxed threshold experiment (m095 / 2026-07-13). Composite score
+    # at the moment the runner admitted this trade — lets us compare the
+    # 30-59 band (previously blocked at default 60) vs the 60+ band.
+    composite_score_at_execution: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
 class BotDailyPnL(Base):

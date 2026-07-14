@@ -17,6 +17,12 @@ class Signal:
     reason: str
     strategy: str
     ts: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # Time-boxed threshold experiment (2026-07-13): the discipline gate's
+    # composite score at the moment this signal was admitted to execution.
+    # Runner sets this from _gate_result.composite_score just before
+    # _execute_signal writes the BotTrade row. Nullable — strategies
+    # themselves never populate it.
+    composite_score_at_execution: Optional[int] = None
 
     def __post_init__(self) -> None:
         if self.side not in ("buy", "sell", "hold"):

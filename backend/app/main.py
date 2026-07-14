@@ -1048,6 +1048,17 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m094_backfill_exit_reasons FAILED: %s",
                      _m094_exc, exc_info=True)
 
+    # m095: add composite_score_at_execution to bot_trades so the
+    # time-boxed threshold experiment can tag every admitted trade.
+    try:
+        from app.db.migrations.m095_add_composite_score_at_execution import run as _run_m095
+        with engine.begin() as _m095_conn:
+            _m095_result = _run_m095(_m095_conn)
+        logger.warning("[startup] m095 status: %s", _m095_result)
+    except Exception as _m095_exc:
+        logger.error("[startup] m095_add_composite_score_at_execution FAILED: %s",
+                     _m095_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
@@ -1229,6 +1240,12 @@ async def lifespan(app: FastAPI):
     except Exception as _pr_mark_exc:
         logger.error("[startup] pr_daily_mark scheduler FAILED (non-fatal): %s",
                      _pr_mark_exc, exc_info=True)
+    try:
+        from app.services.threshold_experiment import setup_threshold_experiment_scheduler
+        setup_threshold_experiment_scheduler(scheduler)
+    except Exception as _te_exc:
+        logger.error("[startup] threshold_experiment scheduler FAILED (non-fatal): %s",
+                     _te_exc, exc_info=True)
     try:
         from app.services.sp500_refresh import setup_sp500_scheduler
         setup_sp500_scheduler(scheduler)
