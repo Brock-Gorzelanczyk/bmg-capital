@@ -1252,6 +1252,12 @@ async def lifespan(app: FastAPI):
     except Exception as _sp_sched_exc:
         logger.error("[startup] sp500_refresh scheduler FAILED (non-fatal): %s",
                      _sp_sched_exc, exc_info=True)
+    try:
+        from app.services.buying_power_healer import setup_buying_power_healer
+        setup_buying_power_healer(scheduler)
+    except Exception as _bph_exc:
+        logger.error("[startup] buying_power_healer scheduler FAILED (non-fatal): %s",
+                     _bph_exc, exc_info=True)
     scheduler.start()
 
     # Kick off strategy scan in background — won't block server startup

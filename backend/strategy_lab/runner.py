@@ -2191,6 +2191,11 @@ def _execute_options_signal(
                     _net_limit, len(_legs), _log_leg_summary,
                     _opt_resp.get("status_code"), str(_opt_resp.get("body"))[:300],
                 )
+                _persist_broker_reject_hold(
+                    db, alloc, sig, entry_price=0,
+                    reject_kind="options_mleg_reject",
+                    reject_detail=f"status={_opt_resp.get('status_code')} body={str(_opt_resp.get('body'))[:150]}",
+                )
                 return False
         else:
             if _opt_side_str == "buy":
@@ -2222,12 +2227,22 @@ def _execute_options_signal(
                     profile_name, occ_symbol, int(contract_count), _opt_side_str,
                     _opt_resp.get("status_code"), str(_opt_resp.get("body"))[:300],
                 )
+                _persist_broker_reject_hold(
+                    db, alloc, sig, entry_price=0,
+                    reject_kind="options_single_leg_reject",
+                    reject_detail=f"status={_opt_resp.get('status_code')} body={str(_opt_resp.get('body'))[:150]}",
+                )
                 return False
     except Exception as _opt_broker_exc:
         logger.error(
             "[ALPACA-REJECT] %s options %s x%d exception_type=%s message=%r",
             profile_name, occ_symbol, int(contract_count),
             type(_opt_broker_exc).__name__, str(_opt_broker_exc),
+        )
+        _persist_broker_reject_hold(
+            db, alloc, sig, entry_price=0,
+            reject_kind="options_broker_exception",
+            reject_detail=f"{type(_opt_broker_exc).__name__}: {str(_opt_broker_exc)[:200]}",
         )
         return False
 
@@ -2413,6 +2428,57 @@ def _execute_options_signal(
         except Exception:
             pass
         return False
+
+
+# ── Broker-reject hold-signal persistence ────────────────────────────────────
+#
+# 2026-07-14: created after a 3-week silent failure. Alpaca ran out of buying
+# power → runner dropped every crypto/options BUY through the
+# [DROP:no_broker_order_id] path → no bot_signals rows written → dashboard
+# and inert-scan showed "signals produced but 0 trades" with no explanation.
+#
+# Every broker-reject exit MUST now call this helper so the inert-bot-scan
+# can surface the reason and Discord alerter can page within minutes.
+
+def _persist_broker_reject_hold(
+    db,
+    alloc,
+    sig,
+    entry_price: float,
+    *,
+    reject_kind: str,
+    reject_detail: str,
+) -> None:
+    """Persist a hold-signal so silent broker rejects surface on the dashboard.
+
+    reject_kind: short slug for filtering (e.g. "broker_pre_flight_skip",
+                 "alpaca_exception", "options_broker_reject").
+    reject_detail: human-readable reason (skipped code, exception text, etc.).
+    """
+    try:
+        from datetime import datetime, timezone
+        from app.db.models.bots import BotSignal as _BotSig
+        hold = _BotSig(
+            allocation_id=alloc.id,
+            ts=datetime.now(timezone.utc),
+            symbol=sig.symbol,
+            side="hold",
+            confidence=float(getattr(sig, "confidence", 0.0) or 0.0),
+            reason=f"{reject_kind}: {reject_detail}"[:500],
+            strategy=getattr(sig, "strategy", None),
+            entry_price=entry_price if entry_price and entry_price > 0 else None,
+        )
+        db.add(hold)
+        db.commit()
+    except Exception as _persist_exc:
+        logger.warning(
+            "[broker-reject] hold-signal persist failed (%s/%s): %s",
+            reject_kind, getattr(sig, "symbol", "?"), _persist_exc,
+        )
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 # ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────
@@ -2788,6 +2854,11 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
                     "[DROP:no_broker_order_id] %s %s x%.4f side=%s skip_reason=%s (adapter pre-flight)",
                     profile_name, sig.symbol, qty, "sell" if is_short else "buy", _skipped,
                 )
+                _persist_broker_reject_hold(
+                    db, alloc, sig, entry_price,
+                    reject_kind="broker_pre_flight_skip",
+                    reject_detail=str(_skipped),
+                )
                 return False
             logger.warning(
                 "[ALPACA-FILL] %s %s %s x%.4f → order_id=%s (REAL Alpaca paper order)",
@@ -2799,10 +2870,20 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             # fallback entirely. On Alpaca rejection, log the reason and
             # SKIP the trade. No BotPosition, no BotTrade rows written.
             # The app now contains only broker-verified data.
+            #
+            # 2026-07-14: silent-fail policy created a 3-week blind spot when
+            # Alpaca returned buying_power=0. Now persist a hold-signal so the
+            # inert-bot-scan and Discord alerter can surface the reject within
+            # minutes rather than weeks.
             logger.error(
                 "[ALPACA-REJECT] %s %s x%.4f side=%s exception_type=%s message=%r",
                 profile_name, sig.symbol, qty, "sell" if is_short else "buy",
                 type(exc).__name__, str(exc),
+            )
+            _persist_broker_reject_hold(
+                db, alloc, sig, entry_price,
+                reject_kind="alpaca_exception",
+                reject_detail=f"{type(exc).__name__}: {str(exc)[:200]}",
             )
             return False
 
