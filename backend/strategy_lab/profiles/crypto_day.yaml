@@ -69,3 +69,7 @@ risk:
 # 7-day deployment push (Brock 2026-06-24): bump sizing for active newer bots.
 position_size_pct_override: 15
 
+
+# 2026-07-13 fire-more push: default 60 composite gate was blocking signals.
+# crypto_day was blocking 377 signals/day with default 60 composite gate. Relaxed to 30.
+composite_threshold_override: 30

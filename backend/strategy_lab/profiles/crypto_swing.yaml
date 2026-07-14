@@ -28,7 +28,7 @@ strategies:
   - crypto_macd_swing
   - crypto_relative_strength
 ensemble: weighted_vote
-confidence_threshold: 0.55
+confidence_threshold: 0.30  # 2026-07-13 relaxed from 0.55 to unstick strategies
 cooldown_minutes: 240
 position_cap: 12                # 2026-07-02 Brock: more concurrent swing positions
 position_size_pct: 4.0
@@ -65,3 +65,6 @@ risk:
 # 7-day deployment push (Brock 2026-06-24): bump sizing for active newer bots.
 position_size_pct_override: 15
 
+
+# 2026-07-13 fire-more push: relaxed composite gate
+composite_threshold_override: 30

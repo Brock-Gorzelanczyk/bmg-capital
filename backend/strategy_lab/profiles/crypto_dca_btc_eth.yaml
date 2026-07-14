@@ -13,7 +13,7 @@ universe:
 scan_timeframe: "1d"
 scan_lookback_bars: 30
 # Weekly cadence — Monday 10:00 AM UTC. Same slot as crypto_lt.
-cadence: "0 10 * * 1"
+cadence: "0 10 * * *"  # daily at 10 UTC (was weekly)
 
 strategies:
   - crypto_dca_weekly

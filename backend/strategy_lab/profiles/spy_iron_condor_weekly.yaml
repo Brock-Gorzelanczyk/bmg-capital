@@ -10,7 +10,7 @@ universe:
     - IWM
 scan_lookback_period: "1y"
 confidence_threshold: 0.40
-cadence: "0 15 * * 1"    # Monday 15:00 UTC (10:00 ET) — weekly entry
+cadence: "0 15 * * 1-5"  # Mon-Fri (was weekly)    # Monday 15:00 UTC (10:00 ET) — weekly entry
 long_only: false
 strategies:
   - iron_condor_45dte

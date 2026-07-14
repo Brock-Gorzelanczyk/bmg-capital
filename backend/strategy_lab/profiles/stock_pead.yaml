@@ -97,3 +97,7 @@ discord:
   channel: stocks-signals
 
 skip_execution_guards: true
+
+# 2026-07-13 fire-more push: default 60 composite gate was blocking signals.
+# 0 signals with default 60 gate. Relaxed to 30.
+composite_threshold_override: 30

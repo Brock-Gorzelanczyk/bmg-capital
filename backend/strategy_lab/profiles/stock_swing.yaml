@@ -38,7 +38,7 @@ universe:
     - price_gte: 5
     - adv_gte: 10000000
 scan_lookback_period: "1y"
-confidence_threshold: 0.45
+confidence_threshold: 0.30  # 2026-07-13 relaxed from 0.45
 cadence: "50 15 * * 1-5"
 long_only: true
 watchlist:
@@ -121,7 +121,7 @@ risk:
 
 # 7-day deployment push (Brock 2026-06-24): looser discipline for proven bots.
 # Scale 0-100; default 60. Lower = more signals pass.
-composite_threshold_override: 50
+composite_threshold_override: 30  # 2026-07-13 was 50
 
 # 7-day deployment push (Brock 2026-06-24): bump sizing for proven bots.
 position_size_pct_override: 25
