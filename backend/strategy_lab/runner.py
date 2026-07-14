@@ -1762,7 +1762,15 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
 
     # Build OCC symbol from resolved strike+expiry+type (post all early-reject paths).
     # Reject paths above return contract_count=0; this branch never runs for them.
-    if contract_count > 0:
+    # 2026-07-14: snap primary strike to the same grid we'll use for legs so
+    # the leading leg's contract exists on Alpaca (was previously off-grid
+    # for anything > $200 spot).
+    if contract_count > 0 and spot > 0 and strike_price:
+        if spot >= 200:   _primary_grid = 5.0
+        elif spot >= 100: _primary_grid = 2.5
+        elif spot >=  25: _primary_grid = 1.0
+        else:             _primary_grid = 0.5
+        strike_price = round(round(float(strike_price) / _primary_grid) * _primary_grid, 2)
         occ_symbol = _build_occ_symbol(
             underlying=underlying,
             expiration_date=expiration_date,
@@ -1777,17 +1785,41 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     # collateral we don't have). Multi-leg orders reduce required collateral
     # to spread width × 100. Build a `legs` list for spread setups.
     #
-    # Wing width: fixed $1 for indices with $1-strike chains (SPY/QQQ/IWM).
-    # Popular single-names typically have $1 or $2.50 strikes. Rounding all
-    # leg strikes to whole dollars keeps us on the standard grid — anything
-    # off-grid gets rejected as "contract not found" (Alpaca 42210000).
+    # 2026-07-14: strike selector was snapping to whole dollars, but most
+    # single-names with spot > $200 (META/TSLA/AVGO/PANW etc.) only trade
+    # $5-increment strikes. Every credit spread got rejected as "asset not
+    # found" (Alpaca 42210000). Fix: snap to the correct grid per underlying
+    # price and set wing_width to match so both legs land on real contracts.
+    #
+    # Grid heuristic:
+    #   spot >= $200 : $5 strikes  → wing = $5 (max collateral $500/contract)
+    #   spot >= $100 : $2.50       → wing = $2.50
+    #   spot >=  $25 : $1          → wing = $1
+    #   spot <   $25 : $0.50       → wing = $0.50
+    def _strike_grid(spot_price: float) -> float:
+        if spot_price >= 200: return 5.0
+        if spot_price >= 100: return 2.5
+        if spot_price >=  25: return 1.0
+        return 0.5
+
+    def _snap_to_grid(strike: float, grid: float, direction: str = "nearest") -> float:
+        """Snap `strike` to the nearest multiple of `grid`. `direction` can be
+        'nearest', 'down', or 'up' to force rounding for short/long leg pairing."""
+        if grid <= 0: return round(strike, 2)
+        if direction == "down":
+            return round((int(strike / grid)) * grid, 2)
+        if direction == "up":
+            import math as _m
+            return round(_m.ceil(strike / grid) * grid, 2)
+        return round(round(strike / grid) * grid, 2)
+
     legs: list[dict] | None = None
     if contract_count > 0 and occ_symbol and expiration_date and strike_price and spot > 0:
-        wing_width = 1.0  # $1-wide spreads keep collateral small ($100/contract)
+        grid = _strike_grid(spot)
+        wing_width = grid  # one grid step keeps us on the standard chain
 
         def _leg_occ(strk: float, opt_t: str) -> str:
-            # Snap to whole dollar — most liquid chains use integer strikes.
-            snapped = float(round(float(strk)))
+            snapped = _snap_to_grid(float(strk), grid)
             return _build_occ_symbol(
                 underlying=underlying,
                 expiration_date=expiration_date,
@@ -1798,7 +1830,9 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
         if intent == "short_credit" and option_type == "put":
             # bull_put_credit_spread / cash_secured_put / wheel_strategy / jade_lizard put side
             # Sell short put + buy hedge put (lower strike). Net credit received.
-            put_short = strike_price
+            # Snap short DOWN and hedge one grid below so both are on-grid and
+            # the pair remains a valid credit spread (hedge < short).
+            put_short = _snap_to_grid(strike_price, grid, "down")
             put_hedge = round(put_short - wing_width, 2)
             legs = [
                 {"symbol": _leg_occ(put_short, "put"), "side": "sell", "ratio_qty": 1,
@@ -1808,7 +1842,8 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
             ]
         elif intent == "short_credit" and option_type == "call":
             # bear_call_credit_spread / covered_call_30d (naked call side)
-            call_short = strike_price
+            # Snap short UP and hedge one grid above (hedge > short).
+            call_short = _snap_to_grid(strike_price, grid, "up")
             call_hedge = round(call_short + wing_width, 2)
             legs = [
                 {"symbol": _leg_occ(call_short, "call"), "side": "sell", "ratio_qty": 1,
@@ -1818,9 +1853,9 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
             ]
         elif intent == "neutral_credit" and "condor" in setup:
             # 4-leg iron condor. Primary strike was call short. Put short mirrors OTM below.
-            call_short = strike_price
+            call_short = _snap_to_grid(strike_price, grid, "up")
             call_hedge = round(call_short + wing_width, 2)
-            put_short = round(spot * 0.92, 2)  # 16-delta OTM put
+            put_short = _snap_to_grid(spot * 0.92, grid, "down")  # 16-delta OTM put
             put_hedge = round(put_short - wing_width, 2)
             legs = [
                 {"symbol": _leg_occ(call_short, "call"), "side": "sell", "ratio_qty": 1,
@@ -1834,7 +1869,7 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
             ]
         elif intent == "spread_debit":
             # bull_call_debit_spread — pay net debit. Buy long call + sell short call above.
-            call_long = strike_price
+            call_long = _snap_to_grid(strike_price, grid, "down")
             call_short = round(call_long + wing_width, 2)
             legs = [
                 {"symbol": _leg_occ(call_long,  "call"), "side": "buy",  "ratio_qty": 1,

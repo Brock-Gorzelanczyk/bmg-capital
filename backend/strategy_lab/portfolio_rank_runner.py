@@ -196,6 +196,30 @@ def _submit_broker_orders_for_rebalance(
         )
         return results
 
+    # ── 2026-07-14 · Per-name notional cap tied to REAL fund NAV ────────────
+    # Prior sizing formula was starting_dollars * target_weight. When
+    # starting_capital was $150K-ish (funded assuming $1M NAV) and basket
+    # was 6 equal-weight names, each name got sized at $25K on a $97K
+    # actual NAV — total gross ~$150K on $97K NAV consumed all buying
+    # power and silenced the whole crypto+options fleet for 3 weeks.
+    #
+    # Cap: MAX_PCT_PER_NAME_OF_NAV (default 6%) × current Alpaca
+    # portfolio_value. Ensures single-name exposure stays proportional to
+    # what the fund actually has, not what the bot was funded assuming.
+    _MAX_PCT_PER_NAME_OF_NAV = 0.06
+    _fund_nav_dollars: float | None = None
+    try:
+        _acct = broker.get_account() or {}
+        _pv_str = _acct.get("portfolio_value") or _acct.get("equity") or "0"
+        _fund_nav_dollars = float(_pv_str)
+        if _fund_nav_dollars <= 0:
+            _fund_nav_dollars = None
+    except Exception as _acct_exc:
+        logger.warning(
+            "[portfolio-rank] %s NAV cap disabled — get_account failed: %s",
+            bot["name"], _acct_exc,
+        )
+
     # Look up owned qty at broker once for the sell loop.
     owned_by_sym: dict[str, float] = {}
     try:
@@ -266,6 +290,17 @@ def _submit_broker_orders_for_rebalance(
 
         weight = abs(float(add.get("target_weight") or 0))
         dollar_target = starting_dollars * weight
+        # Apply per-name cap if we have a live NAV read.
+        if _fund_nav_dollars is not None:
+            per_name_cap = _fund_nav_dollars * _MAX_PCT_PER_NAME_OF_NAV
+            if dollar_target > per_name_cap:
+                logger.warning(
+                    "[portfolio-rank] %s %s notional capped $%.0f → $%.0f "
+                    "(%.1f%% of $%.0f NAV)",
+                    bot["name"], sym_u, dollar_target, per_name_cap,
+                    _MAX_PCT_PER_NAME_OF_NAV * 100, _fund_nav_dollars,
+                )
+                dollar_target = per_name_cap
         if dollar_target < _ALPACA_MIN_NOTIONAL_USD:
             results["orders_skipped"].append({
                 "symbol": sym, "side": "buy",
