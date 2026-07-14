@@ -232,6 +232,13 @@ export default function Dashboard() {
           >
             Brief me
           </button>
+          <Link
+            to="/dashboard/mirofish"
+            className="px-3 py-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-mono text-[10px] tracking-widest transition-colors"
+            title="MIROFISH panels — dot-matrix hero, trade lattice, ridgeline"
+          >
+            MIROFISH →
+          </Link>
         </div>
       </div>
 
