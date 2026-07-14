@@ -1224,6 +1224,12 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] option_close_sync scheduler FAILED (non-fatal): %s",
                      _ocs_exc, exc_info=True)
     try:
+        from app.jobs.pr_daily_mark import setup_pr_daily_mark_scheduler
+        setup_pr_daily_mark_scheduler(scheduler)
+    except Exception as _pr_mark_exc:
+        logger.error("[startup] pr_daily_mark scheduler FAILED (non-fatal): %s",
+                     _pr_mark_exc, exc_info=True)
+    try:
         from app.services.sp500_refresh import setup_sp500_scheduler
         setup_sp500_scheduler(scheduler)
     except Exception as _sp_sched_exc:

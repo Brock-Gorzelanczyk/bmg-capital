@@ -55,6 +55,14 @@ ASSET_CLASS_REGISTRY: dict[str, dict] = {
     "stock_momentum_breakout":      {"asset_class": "equity",  "ticker_allowlist": None},
     "stock_pead":                   {"asset_class": "equity",  "ticker_allowlist": None},
     "cash_floor":                   {"asset_class": "equity",  "ticker_allowlist": ["SPY", "QQQ"]},
+    # 2026-07-13 zero-P&L triage item B: macro_faber_gtaa fired 65 signals
+    # in 24h but hit orders_attempted=0 because it wasn't registered here.
+    # Registry lookup raised "unknown bot_id" → _execute_signal returned
+    # False silently. Same root cause as tsmom_multi_asset (below): a bot
+    # whose profile.asset_class routes through the equity registry-gate
+    # (runner.py line 2429 skips the check only for "options").
+    "macro_faber_gtaa":              {"asset_class": "equity",  "ticker_allowlist": None},
+    "tsmom_multi_asset":             {"asset_class": "equity",  "ticker_allowlist": None},
 }
 
 # Spec-slug aliases — DO NOT silently resolve. Raise with the canonical name
