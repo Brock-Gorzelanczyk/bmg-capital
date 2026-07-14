@@ -8,7 +8,7 @@
  *
  * Existing /strategy page (StrategyLab.tsx) left untouched per memory rule.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { getDashboardV2 } from "@/api/dashboard";
@@ -81,17 +81,37 @@ function sleeveSpark(seed: number, up: boolean): string {
   return out.join(" ");
 }
 
+// ─── Freshness helpers ────────────────────────────────────────────────────────
+
+const ONE_TRADING_DAY_MS = 24 * 60 * 60 * 1000;
+
+function fmtRelative(ts: number | null): string {
+  if (!ts) return "unknown";
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
 // ─── Portfolio Value hero band ────────────────────────────────────────────────
 
-function PortfolioValueBand() {
-  const { data: agg } = useQuery({
+function PortfolioValueBand({ onUpdated }: { onUpdated?: (ts: number) => void }) {
+  const query = useQuery({
     queryKey: ["strategy-lab-portfolio"],
     queryFn: getStrategyLabPortfolio,
     staleTime: 30_000,
   });
+  const agg = query.data;
+  const dataUpdatedAt = query.dataUpdatedAt || null;
+
+  useMemo(() => {
+    if (dataUpdatedAt && onUpdated) onUpdated(dataUpdatedAt);
+  }, [dataUpdatedAt, onUpdated]);
 
   const pv = agg?.total_value_cents ?? 0;
   const pnl = agg?.pnl;
+  const freshnessTitle = `Last synced ${fmtRelative(dataUpdatedAt)} · canonical aggregate re-marks every 15m during market hours`;
 
   const deltas = [
     { label: "ALL-TIME", data: pnl?.all_time, seed: 11 },
@@ -127,6 +147,7 @@ function PortfolioValueBand() {
       >
         <div>
           <div
+            title={freshnessTitle}
             style={{
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: "44px",
@@ -135,6 +156,7 @@ function PortfolioValueBand() {
               color: "#f4f8f4",
               lineHeight: 1,
               textShadow: "0 0 26px rgba(74,222,128,0.28)",
+              cursor: "help",
             }}
           >
             {fmtUsd(pv)}
@@ -148,7 +170,7 @@ function PortfolioValueBand() {
             }}
           >
             Canonical aggregate ·{" "}
-            <span style={{ color: GREEN }}>updates live</span>
+            <span style={{ color: GREEN }}>{fmtRelative(dataUpdatedAt)}</span>
           </div>
         </div>
         {deltas.map((d) => {
@@ -223,7 +245,7 @@ interface SleeveVals {
   asset_class: string;
 }
 
-function SleeveCard({ s, seed }: { s: SleeveVals; seed: number }) {
+function SleeveCard({ s, seed, lastSyncedAt }: { s: SleeveVals; seed: number; lastSyncedAt: number | null }) {
   const accent = SLEEVE_ACCENTS[s.asset_class] || GREEN;
   const icon = SLEEVE_ICONS[s.asset_class] || "•";
   const isUp = s.pnl_cents >= 0;
@@ -235,6 +257,22 @@ function SleeveCard({ s, seed }: { s: SleeveVals; seed: number }) {
   const live = s.bots_active > 0;
   const dotGlow = live ? "0 0 6px rgba(74,222,128,0.9)" : "none";
   const dotColor = live ? GREEN : "#fbbf24";
+
+  // Data-sanity guards. Amber-flag impossible or suspicious values.
+  //   - value_cents < 0            : sleeve PV can never be negative
+  //   - crypto sleeve pnl == 0     : crypto marks 24/7; identical zero P&L
+  //                                  means the mark job hasn't run
+  //   - marks older than 1 tradday : gray-out PV number
+  const pvNegative = s.value_cents < 0;
+  const staleFreshness = lastSyncedAt !== null && (Date.now() - lastSyncedAt) > ONE_TRADING_DAY_MS;
+  const cryptoZeroToday = s.asset_class === "crypto" && s.value_cents > 0 && s.pnl_cents === 0;
+  const anySanityFlag = pvNegative || cryptoZeroToday;
+  const pvColor = staleFreshness ? MUTED : "#f4f8f4";
+  const pvTitle = pvNegative
+    ? `⚠ Impossible value: sleeve PV should never be negative`
+    : cryptoZeroToday
+    ? `⚠ Crypto sleeve shows +$0 today — mark job may be frozen`
+    : `Last synced ${fmtRelative(lastSyncedAt)} · ${s.asset_class} sleeve`;
 
   return (
     <Link
@@ -297,20 +335,35 @@ function SleeveCard({ s, seed }: { s: SleeveVals; seed: number }) {
         </span>
       </div>
       <div
+        title={pvTitle}
         style={{
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: 23,
-          color: "#f4f8f4",
+          color: pvColor,
           marginTop: 13,
+          cursor: "help",
         }}
       >
         {fmtUsd(s.value_cents)}
+        {anySanityFlag && (
+          <span
+            title={pvTitle}
+            style={{
+              marginLeft: 6,
+              fontSize: 12,
+              color: "#f0b35a",
+              verticalAlign: "middle",
+            }}
+          >
+            ⚠
+          </span>
+        )}
       </div>
       <div
         style={{
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: 9,
-          color: "#50604f",
+          color: anySanityFlag ? "#f0b35a" : "#50604f",
           letterSpacing: "0.14em",
           marginTop: 2,
         }}
@@ -712,6 +765,286 @@ function RegimeStrip() {
   );
 }
 
+// ─── Data-sanity banner ───────────────────────────────────────────────────────
+
+interface SanityFlag {
+  severity: "warn" | "info";
+  label: string;
+  detail: string;
+}
+
+function SanityBanner({ flags }: { flags: SanityFlag[] }) {
+  if (flags.length === 0) return null;
+  return (
+    <div
+      className="rounded-[8px] mt-4"
+      style={{
+        border: "1px solid rgba(240,179,90,0.35)",
+        background: "rgba(240,179,90,0.06)",
+        padding: "10px 14px",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 10,
+          letterSpacing: "0.14em",
+          color: "#f0b35a",
+        }}
+      >
+        ⚠ DATA-SANITY CHECKS · {flags.length} impossible/suspicious value{flags.length === 1 ? "" : "s"}
+      </div>
+      <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none" }}>
+        {flags.map((f, i) => (
+          <li
+            key={i}
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11,
+              color: "#dce8dc",
+              marginTop: 3,
+            }}
+          >
+            <span style={{ color: "#f0b35a" }}>{f.label}</span>{" "}
+            <span style={{ color: MUTED }}>· {f.detail}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ─── Gate experiment panel ────────────────────────────────────────────────────
+//
+// Surfaces the 985f176d threshold experiment: for each experiment bot, show
+// prior/new composite gate values, trades + expectancy in the 30-59 band
+// (admitted under the loosened gate) vs 60+ band, and revert-candidate flags.
+// Powered by GET /api/admin/threshold-experiment which needs admin auth.
+// Falls back to a compact "requires admin" note when not authorized.
+
+interface BandStats {
+  trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number | null;
+  expectancy_usd: number | null;
+  total_pnl_usd: number;
+}
+
+interface ExperimentRow {
+  bot: string;
+  in_experiment: boolean;
+  band_30_59: BandStats;
+  band_60_plus: BandStats;
+  band_null_pre_experiment: BandStats;
+  revert_candidate: boolean;
+  revert_reason: string | null;
+}
+
+interface ExperimentReport {
+  as_of: string;
+  days_window: number;
+  experiment_bots: string[];
+  revert_candidates: string[];
+  per_bot: ExperimentRow[];
+}
+
+function GateExperimentPanel() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["threshold-experiment"],
+    queryFn: async (): Promise<ExperimentReport> => {
+      const res = await client.get<ExperimentReport>("/admin/threshold-experiment", {
+        params: { days: 14 },
+      });
+      return res.data;
+    },
+    staleTime: 300_000,
+    retry: false,
+  });
+
+  const experimentRows = useMemo<ExperimentRow[]>(() => {
+    if (!data) return [];
+    // Show experiment bots first, sorted so revert-candidates float to top.
+    return [...data.per_bot]
+      .filter((r) => r.in_experiment)
+      .sort((a, b) => {
+        if (a.revert_candidate !== b.revert_candidate) return a.revert_candidate ? -1 : 1;
+        return b.band_30_59.trades - a.band_30_59.trades;
+      });
+  }, [data]);
+
+  if (error) {
+    return (
+      <div className="mt-6">
+        <div
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            letterSpacing: "0.16em",
+            color: GREEN,
+            opacity: 0.8,
+          }}
+        >
+          // GATE EXPERIMENT · 30 threshold, 14d window
+        </div>
+        <div
+          className="rounded-[8px] mt-2"
+          style={{
+            border: `1px solid ${DIM_GREEN}`,
+            background: "#0a100a",
+            padding: "10px 14px",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            color: MUTED,
+          }}
+        >
+          Experiment panel requires admin auth · sign in as admin to view band-level stats.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-3">
+        <span
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            letterSpacing: "0.16em",
+            color: GREEN,
+            opacity: 0.8,
+          }}
+        >
+          // GATE EXPERIMENT · 30 threshold, {data?.days_window ?? 14}d
+        </span>
+        <span
+          className="flex-1"
+          style={{
+            height: 1,
+            background: "linear-gradient(90deg,rgba(74,222,128,0.2),transparent)",
+          }}
+        />
+        {data && data.revert_candidates.length > 0 && (
+          <span
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10,
+              color: "#f0b35a",
+            }}
+          >
+            {data.revert_candidates.length} revert candidate{data.revert_candidates.length === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+
+      <div
+        className="rounded-[10px] mt-3 overflow-hidden"
+        style={{
+          border: `1px solid ${DIM_GREEN}`,
+          background: "#0a100a",
+        }}
+      >
+        <div
+          className="grid items-center"
+          style={{
+            gridTemplateColumns: "1.4fr 68px 90px 90px 90px 90px 90px 90px",
+            padding: "9px 18px",
+            borderBottom: `1px solid ${DIM_GREEN}`,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 9,
+            letterSpacing: "0.1em",
+            color: MUTED,
+          }}
+        >
+          <span>BOT</span>
+          <span style={{ textAlign: "right" }}>GATE</span>
+          <span style={{ textAlign: "right" }}>30–59 N</span>
+          <span style={{ textAlign: "right" }}>30–59 WIN%</span>
+          <span style={{ textAlign: "right" }}>30–59 EXP $</span>
+          <span style={{ textAlign: "right" }}>60+ N</span>
+          <span style={{ textAlign: "right" }}>60+ WIN%</span>
+          <span style={{ textAlign: "right" }}>60+ EXP $</span>
+        </div>
+        {isLoading && (
+          <div
+            style={{
+              padding: "12px 18px",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11,
+              color: MUTED,
+            }}
+          >
+            Loading experiment stats…
+          </div>
+        )}
+        {!isLoading && experimentRows.length === 0 && (
+          <div
+            style={{
+              padding: "12px 18px",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11,
+              color: MUTED,
+            }}
+          >
+            No trades yet in either band · experiment tagging accumulates as trades close.
+          </div>
+        )}
+        {experimentRows.map((r) => {
+          const lowExp = r.band_30_59.expectancy_usd;
+          const hiExp = r.band_60_plus.expectancy_usd;
+          const lowExpColor = lowExp === null ? MUTED : lowExp > 0 ? GREEN : RED;
+          const hiExpColor = hiExp === null ? MUTED : hiExp > 0 ? GREEN : RED;
+          return (
+            <div
+              key={r.bot}
+              className="grid items-center"
+              style={{
+                gridTemplateColumns: "1.4fr 68px 90px 90px 90px 90px 90px 90px",
+                padding: "8px 18px",
+                borderBottom: "1px solid rgba(74,222,128,0.05)",
+                background: r.revert_candidate ? "rgba(240,179,90,0.05)" : "transparent",
+                borderLeft: r.revert_candidate
+                  ? `2px solid #f0b35a`
+                  : "2px solid transparent",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 12,
+              }}
+              title={r.revert_reason || undefined}
+            >
+              <span style={{ color: "#f4f8f4" }}>
+                {r.bot}
+                {r.revert_candidate && (
+                  <span style={{ marginLeft: 6, color: "#f0b35a", fontSize: 10 }}>REVERT?</span>
+                )}
+              </span>
+              <span style={{ textAlign: "right", color: "#38bdf8" }}>30</span>
+              <span style={{ textAlign: "right", color: "#dce8dc" }}>{r.band_30_59.trades}</span>
+              <span style={{ textAlign: "right", color: MUTED }}>
+                {r.band_30_59.win_rate !== null
+                  ? `${(r.band_30_59.win_rate * 100).toFixed(0)}%`
+                  : "—"}
+              </span>
+              <span style={{ textAlign: "right", color: lowExpColor }}>
+                {lowExp !== null ? (lowExp >= 0 ? "+" : "") + lowExp.toFixed(2) : "—"}
+              </span>
+              <span style={{ textAlign: "right", color: "#dce8dc" }}>{r.band_60_plus.trades}</span>
+              <span style={{ textAlign: "right", color: MUTED }}>
+                {r.band_60_plus.win_rate !== null
+                  ? `${(r.band_60_plus.win_rate * 100).toFixed(0)}%`
+                  : "—"}
+              </span>
+              <span style={{ textAlign: "right", color: hiExpColor }}>
+                {hiExp !== null ? (hiExp >= 0 ? "+" : "") + hiExp.toFixed(2) : "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StrategyLabV2() {
@@ -720,6 +1053,11 @@ export default function StrategyLabV2() {
     queryFn: getDashboardV2,
     staleTime: 60_000,
     retry: 1,
+  });
+  const { data: agg } = useQuery({
+    queryKey: ["strategy-lab-portfolio"],
+    queryFn: getStrategyLabPortfolio,
+    staleTime: 30_000,
   });
 
   // Sleeve values from dashboard/v2 response (fallback to zeros).
@@ -753,9 +1091,7 @@ export default function StrategyLabV2() {
     });
   }, [dash]);
 
-  const activeBotCount = useMemo(() => {
-    return sleeves.reduce((sum, s) => sum + s.bots_active, 0);
-  }, [sleeves]);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
   const leaders = useMemo<LBRow[]>(() => {
     const lb = dash?.portfolio?.leaderboard || [];
@@ -791,6 +1127,65 @@ export default function StrategyLabV2() {
       };
     });
   }, [dash]);
+
+  // Bot count SINGLE SOURCE (spec item #4).
+  // The leaderboard is the array that actually renders the table, so derive
+  // the top-line count from it. Prior code summed sleeve bots_active — that
+  // gave 38/41/46 depending on which snapshot the sleeve rollup landed on.
+  const activeBotCount = leaders.length;
+  const sleeveBotSum = useMemo(
+    () => sleeves.reduce((sum, s) => sum + s.bots_active, 0),
+    [sleeves],
+  );
+
+  // Data-sanity guards (spec item #1). Every check is a client-side invariant.
+  const sanityFlags = useMemo<SanityFlag[]>(() => {
+    const out: SanityFlag[] = [];
+    // 1. Sleeve PV impossible negative
+    for (const s of sleeves) {
+      if (s.value_cents < 0) {
+        out.push({
+          severity: "warn",
+          label: `${s.name} sleeve PV negative`,
+          detail: `${fmtSignedUsd(s.value_cents)} — sleeve PV cannot be negative`,
+        });
+      }
+    }
+    // 2. Crypto sleeve pnl_cents == 0 while value_cents > 0 → mark frozen
+    for (const s of sleeves) {
+      if (s.asset_class === "crypto" && s.value_cents > 0 && s.pnl_cents === 0) {
+        out.push({
+          severity: "warn",
+          label: "Crypto marks may be stale",
+          detail: "Crypto trades 24/7 — a $0 today P&L usually means the mark job has not run",
+        });
+      }
+    }
+    // 3. Header/table count mismatch
+    if (sleeveBotSum > 0 && sleeveBotSum !== activeBotCount) {
+      out.push({
+        severity: "warn",
+        label: "Bot count mismatch",
+        detail: `Sleeve rollup reports ${sleeveBotSum} bots but leaderboard renders ${activeBotCount}`,
+      });
+    }
+    // 4. Identical P&L windows (all_time == mtd == wtd == today ≠ 0). Frozen aggregate.
+    const pnl = agg?.pnl;
+    if (pnl?.all_time && pnl?.today && pnl?.mtd && pnl?.wtd) {
+      const at = pnl.all_time.cents;
+      const t = pnl.today.cents;
+      const m = pnl.mtd.cents;
+      const w = pnl.wtd.cents;
+      if (at !== 0 && at === t && at === m && at === w) {
+        out.push({
+          severity: "warn",
+          label: "P&L windows identical across all periods",
+          detail: `all_time = mtd = wtd = today = ${fmtSignedUsd(at)} — window computation likely broken`,
+        });
+      }
+    }
+    return out;
+  }, [sleeves, activeBotCount, sleeveBotSum, agg]);
 
   return (
     <div
@@ -887,28 +1282,34 @@ export default function StrategyLabV2() {
           </Link>
           <div className="flex-1" />
           <div
+            title={`Derived from the leaderboard array (single source of truth) · sleeve rollup reports ${sleeveBotSum}`}
             style={{
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: 11,
               color: MUTED,
+              cursor: "help",
             }}
           >
             {activeBotCount} bots active
           </div>
         </div>
 
-        <PortfolioValueBand />
+        <SanityBanner flags={sanityFlags} />
+
+        <PortfolioValueBand onUpdated={setLastSyncedAt} />
 
         <div
           className="grid gap-[14px]"
           style={{ gridTemplateColumns: "repeat(5, 1fr)", marginTop: 16 }}
         >
           {sleeves.map((s, i) => (
-            <SleeveCard key={s.id} s={s} seed={7 + i * 12} />
+            <SleeveCard key={s.id} s={s} seed={7 + i * 12} lastSyncedAt={lastSyncedAt} />
           ))}
         </div>
 
         <BotLeaderboard rows={leaders} />
+
+        <GateExperimentPanel />
 
         <div
           className="flex items-center gap-4"
