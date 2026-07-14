@@ -16,8 +16,12 @@ logger = logging.getLogger(__name__)
 
 STRATEGY_NAME = "mean_reversion"
 PERIOD = 20
-BUY_THRESHOLD = -2.0
-SELL_THRESHOLD = 1.5
+# 2026-07-13 fire-more: stock_swing produced 0 signals from this strategy
+# at z-score < -2.0 (that's the 2.5% tail — very rare). Relaxed to -1.2
+# (12% of distribution) so we get ~5× more signals. Confidence still
+# scales with |z_score| so shallow mean-reversions score low.
+BUY_THRESHOLD = -1.2
+SELL_THRESHOLD = 1.0
 
 
 def _sma(prices: list[float], period: int) -> float:

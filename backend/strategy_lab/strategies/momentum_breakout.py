@@ -14,8 +14,13 @@ from strategy_lab.core.signals import Signal
 logger = logging.getLogger(__name__)
 
 STRATEGY_NAME = "momentum_breakout"
-PERIOD = 20
-VOLUME_MULTIPLIER = 1.5
+# 2026-07-13 fire-more relaxation: stock_swing + stock_momentum_breakout
+# were producing 0 signals in 24h at PERIOD=20, VOLUME_MULTIPLIER=1.5.
+# 20-day high + 1.5× volume is rare — the two conditions rarely coincide.
+# Relaxed to 10-day highs + 1.1× volume so the gate is closer to the
+# market baseline. Discipline gate still filters low-conviction downstream.
+PERIOD = 10
+VOLUME_MULTIPLIER = 1.1
 
 
 def _v1_signals(

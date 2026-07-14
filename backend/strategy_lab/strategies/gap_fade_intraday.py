@@ -37,7 +37,10 @@ STRATEGY_NAME = "gap_fade_intraday"
 # 2026-07-02: entry thresholds. Same aggressive-tuning philosophy as the
 # 2026-07-01 options overhaul — go easy on the entry gate so the strategy
 # fires; execution layer manages risk.
-MIN_GAP_PCT   = 0.020   # 2.0% minimum gap
+MIN_GAP_PCT   = 0.010   # 2026-07-13 fire-more: was 2.0%, dropped to 1.0%
+                         # — stock_gap_fade had 0 trades in 10 days at
+                         # 2% gap threshold. 1% gaps happen 3-5× more
+                         # often, execution layer risk-manages exits.
 MAX_GAP_PCT   = 0.15    # 15% max — beyond this, the news is real (M&A etc.)
 BASE_SIZE     = 0.05    # 5% position size hint
 

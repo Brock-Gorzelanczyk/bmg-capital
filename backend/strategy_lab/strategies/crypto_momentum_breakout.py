@@ -13,10 +13,15 @@ logger = logging.getLogger(__name__)
 
 STRATEGY_NAME = "crypto_momentum_breakout"
 
-# 30d on daily bars = 30 bars; on hourly bars = 720
-LOOKBACK_DAILY = 30
-LOOKBACK_HOURLY = 720   # 30d * 24h
-VOLUME_MULTIPLIER = 1.5
+# 2026-07-13 fire-more relaxation: crypto_swing had 0 signals/24h from
+# this strategy. Original (30d high + 1.5× vol + BTC dom < 50) is a
+# high-conviction triple-gate that only fires 2-3× per name per year.
+# Relaxed to 10d high + 1.1× vol, and BTC dom gate becomes advisory
+# (raises confidence but doesn't block). Discipline gate downstream
+# still filters shallow signals via confidence_threshold.
+LOOKBACK_DAILY = 10
+LOOKBACK_HOURLY = 240   # 10d × 24h
+VOLUME_MULTIPLIER = 1.1
 BTC_DOM_NEUTRAL = 50.0
 
 
@@ -81,9 +86,13 @@ def generate_signals(
         price_breakout = current_close > prev_high
         volume_ok = avg_volume > 0 and current_volume > VOLUME_MULTIPLIER * avg_volume
 
-        if price_breakout and volume_ok and btc_dom_ok:
+        # 2026-07-13: btc_dom_ok now advisory not gating — it boosts
+        # confidence but doesn't block signals.
+        if price_breakout and volume_ok:
             volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
-            confidence = min(0.85, volume_ratio / 3.0)
+            _base_conf = min(0.85, max(0.35, volume_ratio / 3.0))
+            confidence = _base_conf + (0.10 if btc_dom_ok else 0.0)
+            confidence = min(0.85, confidence)
             signals.append(Signal(
                 symbol=symbol,
                 side="buy",
