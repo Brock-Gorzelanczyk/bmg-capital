@@ -176,6 +176,57 @@ const useTradeStream = () =>
     retry: false,
   });
 
+// Reuses the existing /api/dashboard/v2 batch for signals + bot activity +
+// sleeves + regime — one call powers ~half the page.
+interface DashV2 {
+  portfolio: {
+    total_value_cents: number;
+    today_pnl_cents: number;
+    today_pnl_pct: number;
+    return_30d_pct: number;
+    return_all_time_pct?: number;
+  };
+  regime: {
+    vix_regime: string;
+    trend_regime: string;
+    btc_dominance: number;
+    label: string;
+    description: string;
+  };
+  sleeves: Record<
+    string,
+    {
+      today_pnl_pct?: number;
+      today_pnl_usd?: number;
+      value_cents?: number;
+      bots_active?: number;
+      bots_total?: number;
+    }
+  >;
+  health: {
+    bots_active: number;
+    bots_total: number;
+    status: string;
+  };
+  recent_signals: Array<{
+    id: number;
+    ts: string;
+    bot_name: string;
+    display_name?: string;
+    symbol: string;
+    side: string;
+    strategy?: string;
+    reason?: string;
+  }>;
+}
+const useDashV2 = () =>
+  useQuery({
+    queryKey: ["mirofish", "dashv2"],
+    queryFn: async () => (await client.get<DashV2>("/dashboard/v2")).data,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+  });
+
 const useRidgeline = () =>
   useQuery({
     queryKey: ["mirofish", "ridgeline"],
@@ -698,6 +749,286 @@ function Ridge({ label, points }: { label: string; points: RidgeSlice[] }) {
   );
 }
 
+// ─── Additional panels matching the mock ──────────────────────────────────
+
+function PortfolioValueHero({ v2 }: { v2?: DashV2 }) {
+  const pv = v2?.portfolio.total_value_cents ?? 0;
+  const allTimePct = v2?.portfolio.return_all_time_pct;
+  const allTimeUsd =
+    v2?.portfolio.total_value_cents && v2?.portfolio.return_all_time_pct !== undefined
+      ? (v2.portfolio.total_value_cents / 100) *
+        (v2.portfolio.return_all_time_pct / (100 + v2.portfolio.return_all_time_pct))
+      : null;
+  const positive = (allTimePct ?? 0) >= 0;
+  return (
+    <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/10 p-5">
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest">
+        <span className="text-emerald-400/80">Portfolio Value · Paper</span>
+        <span className="text-slate-500">All Systems Normal</span>
+      </div>
+      <div className="mt-2 text-4xl font-mono tabular-nums text-emerald-300">
+        ${(pv / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </div>
+      <div className={`mt-1 text-xs font-mono ${positive ? "text-emerald-400" : "text-red-400"}`}>
+        {positive ? "▲" : "▼"}{" "}
+        {allTimeUsd !== null
+          ? `${allTimeUsd >= 0 ? "+" : ""}$${Math.abs(allTimeUsd).toLocaleString("en-US", { maximumFractionDigits: 0 })} all-time · `
+          : ""}
+        {allTimePct !== undefined ? `${(allTimePct >= 0 ? "+" : "") + allTimePct.toFixed(2)}%` : "—"}
+      </div>
+    </div>
+  );
+}
+
+function LiveFiringNow({ v2 }: { v2?: DashV2 }) {
+  const signals = (v2?.recent_signals ?? []).slice(0, 6);
+  const distinctBots = new Set(signals.map((s) => s.bot_name)).size;
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 h-full">
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="text-xs uppercase tracking-widest text-slate-400">
+          Live Firing Now
+        </div>
+        <div className="text-[10px] text-slate-500">across {distinctBots} bots</div>
+      </div>
+      {signals.length === 0 ? (
+        <div className="text-slate-500 text-xs text-center py-6">
+          no signals in the last window
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {signals.map((s) => {
+            const long = ["buy", "long"].includes(s.side.toLowerCase());
+            return (
+              <div key={s.id} className="flex items-center gap-3 text-xs">
+                <span
+                  className={`inline-block px-2 py-0.5 font-mono rounded text-[10px] ${
+                    long
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : "bg-red-500/20 text-red-300 border border-red-500/40"
+                  }`}
+                >
+                  {long ? "LONG" : "SHORT"}
+                </span>
+                <span className="font-mono text-slate-200 min-w-[75px]">{s.symbol}</span>
+                <span className="text-slate-500 truncate flex-1">
+                  {s.display_name ?? s.bot_name} · {s.strategy ?? "—"}
+                </span>
+                <span className="text-[10px] text-slate-600 font-mono">
+                  {new Date(s.ts).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BotActivity({ v2 }: { v2?: DashV2 }) {
+  const bots = Object.entries(v2?.sleeves ?? {}).flatMap(([sleeve, s]) => {
+    // The v2 endpoint returns per-sleeve rollups. We synthesize a per-bot
+    // "row" per sleeve using bots_active/bots_total. Real per-bot list is
+    // available on /api/bots — but MIROFISH targets show sleeve-level.
+    return {
+      sleeve,
+      active: s.bots_active ?? 0,
+      total: s.bots_total ?? 0,
+    };
+  });
+  const armed = v2?.health.bots_active ?? 0;
+  const total = v2?.health.bots_total ?? 0;
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 h-full">
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="text-xs uppercase tracking-widest text-slate-400">Bot Activity</div>
+        <div className="text-[10px] font-mono text-emerald-400">
+          {armed} / {total} ARMED
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {bots.map((b) => (
+          <div
+            key={b.sleeve}
+            className="flex items-center justify-between border border-slate-800 rounded px-2 py-1.5"
+          >
+            <div>
+              <div className="text-xs text-slate-300 capitalize">{b.sleeve}</div>
+              <div className="text-[9px] text-slate-500 uppercase">{b.sleeve}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-emerald-400 font-mono">{b.active}/{b.total}</div>
+              <div className="text-[9px] text-slate-500 uppercase">armed</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SignalFunnel({ closed }: { closed: ClosedTrade[] }) {
+  // Rough approximation from live data we have: scanned/passed/executed/winners
+  // Actual signal-funnel numbers would need a dedicated /api/admin/discipline
+  // endpoint — for now derive from closed-trades-today + open positions
+  const today = new Date().toISOString().slice(0, 10);
+  const todays = closed.filter((t) => (t.closed_at ?? "").startsWith(today));
+  const wins = todays.filter((t) => t.pnl_usd > 0).length;
+  const stages = [
+    { label: "Executed", value: todays.length },
+    { label: "Winners", value: wins },
+  ];
+  const winPct = todays.length > 0 ? Math.round((wins / todays.length) * 100) : 0;
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 h-full">
+      <div className="text-xs uppercase tracking-widest text-slate-400 mb-3">
+        Today · Signal Funnel
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {stages.map((s) => (
+          <div key={s.label} className="border border-slate-800 rounded p-3 text-center">
+            <div className="text-[10px] uppercase text-slate-500 tracking-widest">{s.label}</div>
+            <div className="text-2xl font-mono text-emerald-300 mt-1 tabular-nums">{s.value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 text-[10px] text-slate-500 text-center">
+        discipline edge · {winPct}% of closed trades were winners today
+      </div>
+    </div>
+  );
+}
+
+function SleeveTiles({ v2 }: { v2?: DashV2 }) {
+  const order = ["stocks", "crypto", "options", "quant"] as const;
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {order.map((k) => {
+        const s = v2?.sleeves[k];
+        const pct = s?.today_pnl_pct ?? 0;
+        const positive = pct >= 0;
+        return (
+          <div
+            key={k}
+            className={`rounded border p-3 ${
+              positive
+                ? "border-emerald-500/30 bg-emerald-950/10"
+                : "border-red-500/30 bg-red-950/10"
+            }`}
+          >
+            <div className="text-xs text-slate-300 capitalize">{k}</div>
+            <div
+              className={`mt-1 text-lg font-mono tabular-nums ${
+                positive ? "text-emerald-300" : "text-red-300"
+              }`}
+            >
+              TODAY {pct >= 0 ? "+" : ""}
+              {pct.toFixed(2)}%
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MarketRegime({ v2 }: { v2?: DashV2 }) {
+  const r = v2?.regime;
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 h-full">
+      <div className="text-xs uppercase tracking-widest text-slate-400 mb-2">
+        Market Regime
+      </div>
+      <div className="text-xl font-mono text-emerald-300">
+        {r?.label ?? "—"}
+      </div>
+      <div className="mt-2 text-[10px] text-slate-500">{r?.description ?? ""}</div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-mono text-slate-400">
+        <div>
+          <span className="text-slate-500 mr-1">VIX</span>
+          {r?.vix_regime ?? "—"}
+        </div>
+        <div>
+          <span className="text-slate-500 mr-1">BTC.D</span>
+          {r?.btc_dominance !== undefined ? `${r.btc_dominance.toFixed(0)}%` : "—"}
+        </div>
+        <div>
+          <span className="text-slate-500 mr-1">TREND</span>
+          {r?.trend_regime ?? "—"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TickerTape() {
+  const symbols = [
+    "SPY", "QQQ", "NVDA", "AAPL", "MSFT", "TSLA", "AMZN",
+    "BTC/USD", "ETH/USD", "SOL/USD",
+  ];
+  return (
+    <div className="border border-slate-800 bg-slate-950/60 rounded overflow-hidden">
+      <style>{`
+        @keyframes mirofish-marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
+      <div className="flex items-center gap-3 px-3 py-2 text-[10px] font-mono">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded">
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" /> LIVE
+        </span>
+        <div className="flex-1 overflow-hidden">
+          <div
+            className="whitespace-nowrap flex gap-8 text-slate-400"
+            style={{
+              animation: "mirofish-marquee 45s linear infinite",
+              width: "max-content",
+            }}
+          >
+            {[...symbols, ...symbols].map((s, i) => (
+              <span key={i} className="text-slate-300">
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuickLinkCards() {
+  const links = [
+    { to: "/strategy/library", title: "Strategy Library", subtitle: "100+ strategies built" },
+    { to: "/fund/tear-sheet", title: "Fund Tear Sheet", subtitle: "LP-grade performance" },
+    { to: "/fund/floor", title: "Walk the Fund Floor", subtitle: "meet your agents" },
+  ];
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {links.map((l) => (
+        <a
+          key={l.to}
+          href={l.to}
+          className="rounded border border-slate-800 bg-slate-950/40 p-3 hover:border-emerald-500/40 hover:bg-emerald-950/20 transition-colors flex items-center justify-between"
+        >
+          <div>
+            <div className="text-sm text-slate-200 font-mono">{l.title}</div>
+            <div className="text-[10px] text-slate-500">{l.subtitle}</div>
+          </div>
+          <div className="text-emerald-400 text-lg">→</div>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────
 export default function DashboardMirofish() {
   const hero = useHero();
@@ -705,6 +1036,7 @@ export default function DashboardMirofish() {
   const recon = useRecon();
   const closed = useTradeStream();
   const ridges = useRidgeline();
+  const v2 = useDashV2();
 
   const reconStale =
     recon.isError || (recon.dataUpdatedAt > 0 && Date.now() - recon.dataUpdatedAt > 5 * 60 * 1000);
@@ -730,21 +1062,41 @@ export default function DashboardMirofish() {
         recon={recon.data}
         reconStale={reconStale}
       />
-      <HeroPanel hero={hero.data} />
+      <TickerTape />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-1">
-          <TopTradesCard />
-        </div>
-        <div className="lg:col-span-2">
-          <TradeLattice trades={closed.data?.trades ?? []} />
-        </div>
+      {/* Row: Portfolio Value + Realized P&L Today */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <PortfolioValueHero v2={v2.data} />
+        <HeroPanel hero={hero.data} />
+      </div>
+
+      {/* Row: LIVE FIRING NOW + BOT ACTIVITY */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <LiveFiringNow v2={v2.data} />
+        <BotActivity v2={v2.data} />
+      </div>
+
+      {/* Row: Trade Lattice full-width */}
+      <TradeLattice trades={closed.data?.trades ?? []} />
+
+      {/* Row: Signal Funnel + Top Wins/Losses */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SignalFunnel closed={closed.data?.trades ?? []} />
+        <TopTradesCard />
+      </div>
+
+      {/* Row: Sleeve tiles + Market Regime */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SleeveTiles v2={v2.data} />
+        <MarketRegime v2={v2.data} />
       </div>
 
       <RidgelinePanel sleeves={ridges.data} />
 
+      <QuickLinkCards />
+
       <div className="text-[10px] text-slate-600 text-center font-mono">
-        hero ~5s · session ~5s · recon ~30s · lattice ~30s · ridgeline hourly
+        hero+session+v2 ~5s · recon ~30s · lattice ~30s · ridgeline hourly
       </div>
     </div>
   );
