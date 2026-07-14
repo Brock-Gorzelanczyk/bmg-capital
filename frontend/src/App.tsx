@@ -407,7 +407,8 @@ function AppInner() {
         <Route path="/strategy/legacy" element={<Page component={StrategyLab} />} />
         <Route path="/strategy/live" element={<Page component={StrategyLabLive} />} />
         <Route path="/strategy/factor-scorecard" element={<Page component={FactorScorecardPage} />} />
-        <Route path="/dashboard/mirofish" element={<Page component={DashboardMirofish} />} />
+        <Route path="/dashboard/mirofish" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard/legacy" element={<Page component={Dashboard} />} />
         <Route path="/strategy/candidates" element={<Page component={StrategyCandidates} />} />
         <Route path="/signals" element={<SignalsFeedPage />} />
         <Route path="/strategy/scout" element={<StrategyScoutPage />} />
@@ -532,7 +533,7 @@ function AppInner() {
         <Route path="/staking" element={<StakingPage />} />
         <Route path="/dca-baskets" element={<DCABasketsPage />} />
         {/* Friendly URL aliases */}
-        <Route path="/dashboard" element={<Page component={Dashboard} />} />
+        <Route path="/dashboard" element={<Page component={DashboardMirofish} />} />
         <Route path="/net-worth" element={<NetWorthPage />} />
         <Route path="/capital-pods" element={<Navigate to="/pods" replace />} />
         <Route path="/ta-workshop" element={<Navigate to="/workshop" replace />} />
