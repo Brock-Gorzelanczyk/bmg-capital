@@ -94,79 +94,64 @@ def _fetch_db_positions(db, user_id: int) -> List[Dict[str, Any]]:
         .all()
     )
     for pos, alloc in rows:
+        # 2026-07-14 audit: mleg SHORT-leg positions are written with
+        # qty=positive AND side="short" (runner._execute_signal_options
+        # per-leg loop). Alpaca returns qty=NEGATIVE for the same short.
+        # Normalize DB qty to signed form so the reconciler's qty compare
+        # matches. Long stays positive; short flips.
+        _raw_qty = float(pos.qty or 0)
+        _pos_side = str(pos.side or "long").lower()
+        _signed_qty = -abs(_raw_qty) if _pos_side == "short" else _raw_qty
         out.append({
             "position_id": pos.id,
             "allocation_id": alloc.id,
             "symbol": str(pos.symbol).upper(),
-            "qty": float(pos.qty or 0),
-            "side": str(pos.side or "long"),
+            "qty": _signed_qty,
+            "side": _pos_side,
             "avg_cost_cents": float(pos.avg_cost_cents or 0),
-            "notional_db": float(pos.qty or 0) * float(pos.avg_cost_cents or 0) / 100.0,
+            "notional_db": abs(_signed_qty) * float(pos.avg_cost_cents or 0) / 100.0,
             "source": "bot_positions",
         })
 
-    # portfolio_rank_holdings: filter to symbols the broker actually FILLED.
-    # The initial version of this union included every target-basket name,
-    # which turned 220+ dry-run/rejected target names into fake db_only rows
-    # in the reconciler. Fix: only include holdings whose most-recent
-    # rebalance_log has that symbol in broker_results.orders_placed with a
-    # non-null order_id.
+    # portfolio_rank_holdings: include EVERY holding on enabled PR bots.
+    # 2026-07-14 audit: the previous filter required broker_results.order_id
+    # in rebalance_log to be non-null. But portfolio_rank_runner does not
+    # always populate that field — many PR bots have holdings at broker
+    # ($70K+ notional: V $23K, MA $23K, PG $22K etc) that the reconciler
+    # was flagging as broker_only. The underlying invariant is: if a symbol
+    # is in portfolio_rank_holdings for an enabled bot, we intend to hold
+    # it. Trust that as the DB source of truth. Entry-price gate stays
+    # (skip target-only rows that never filled).
     try:
-        import json as _json
-        filled_syms: set[str] = set()
-        log_rows = db.execute(_text("""
-            SELECT bot_id, adds, created_at
-              FROM portfolio_rank_rebalance_log
-             ORDER BY created_at DESC
-             LIMIT 200
+        pr_rows = db.execute(_text("""
+            SELECT h.symbol, h.side, h.target_weight, h.entry_price_cents,
+                   b.starting_capital_cents, b.name
+              FROM portfolio_rank_holdings h
+              JOIN portfolio_rank_bots b ON b.id = h.bot_id
+             WHERE b.enabled = 1
+               AND h.entry_price_cents > 0
         """)).fetchall()
-        seen_bots: set[int] = set()
-        for r in log_rows:
-            bid = int(r[0])
-            if bid in seen_bots:
-                continue  # only most-recent log per bot
-            seen_bots.add(bid)
-            try:
-                adds_data = _json.loads(r[1] or "null")
-            except Exception:
+        for r in pr_rows:
+            sym = str(r[0] or "").upper()
+            if not sym:
                 continue
-            if not isinstance(adds_data, dict):
-                continue
-            br = adds_data.get("broker_results") or {}
-            for placed in br.get("orders_placed", []):
-                sym = str(placed.get("symbol") or "").upper()
-                if sym and placed.get("order_id"):
-                    filled_syms.add(sym)
-
-        if filled_syms:
-            pr_rows = db.execute(_text("""
-                SELECT h.symbol, h.side, h.target_weight, h.entry_price_cents,
-                       b.starting_capital_cents, b.name
-                  FROM portfolio_rank_holdings h
-                  JOIN portfolio_rank_bots b ON b.id = h.bot_id
-                 WHERE b.enabled = 1
-            """)).fetchall()
-            for r in pr_rows:
-                sym = str(r[0] or "").upper()
-                if sym not in filled_syms:
-                    continue
-                side = str(r[1] or "long")
-                weight = abs(float(r[2] or 0))
-                entry_px_c = int(r[3] or 0)
-                starting_c = int(r[4] or 0)
-                dollar_target = (starting_c / 100.0) * weight
-                entry_px = entry_px_c / 100.0
-                qty = (dollar_target / entry_px) if entry_px > 0 else 0.0
-                out.append({
-                    "position_id": None,
-                    "allocation_id": None,
-                    "symbol": sym,
-                    "qty": round(qty, 6),
-                    "side": side,
-                    "avg_cost_cents": float(entry_px_c),
-                    "notional_db": dollar_target,
-                    "source": f"portfolio_rank_holdings/{r[5]}",
-                })
+            side = str(r[1] or "long")
+            weight = abs(float(r[2] or 0))
+            entry_px_c = int(r[3] or 0)
+            starting_c = int(r[4] or 0)
+            dollar_target = (starting_c / 100.0) * weight
+            entry_px = entry_px_c / 100.0
+            qty = (dollar_target / entry_px) if entry_px > 0 else 0.0
+            out.append({
+                "position_id": None,
+                "allocation_id": None,
+                "symbol": sym,
+                "qty": round(qty, 6),
+                "side": side,
+                "avg_cost_cents": float(entry_px_c),
+                "notional_db": dollar_target,
+                "source": f"portfolio_rank_holdings/{r[5]}",
+            })
     except Exception as _pr_exc:  # pragma: no cover
         logger.warning(
             "[reconcile] portfolio_rank fetch failed (proceeding without PR positions): %s",
