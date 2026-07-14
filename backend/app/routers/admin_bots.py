@@ -437,8 +437,23 @@ def pause_bot(
     db: Session = Depends(get_db),
     admin: User = Depends(require_bot_admin),
 ):
+    """Pause: bot stops taking NEW trades; existing positions stay open.
+
+    2026-07-15 fix: previously this endpoint only wrote bot_config_overrides
+    .paused=true, but the runner filter reads BotAllocation.paused_reason IS
+    NULL — so the UI Pause button silently did nothing. Now writes both:
+    the override (for UI state) AND the allocation (for real execution
+    block). Symmetric with resume_bot below.
+    """
     _require_bot(bot_id)
     _write_override(db, bot_id, "paused", True, admin.email)
+    from app.db.models.bots import BotAllocation, BotProfile
+    bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
+    if bp:
+        db.query(BotAllocation).filter(BotAllocation.profile_id == bp.id).update({
+            "paused_reason": "admin_pause",
+        })
+        db.commit()
     try:
         from app.services.audit_trail import post_audit_event
         post_audit_event(db, actor=admin.email, action="pause", entity_type="bot",
@@ -456,6 +471,16 @@ def resume_bot(
 ):
     _require_bot(bot_id)
     _write_override(db, bot_id, "paused", False, admin.email)
+    from app.db.models.bots import BotAllocation, BotProfile
+    bp = db.query(BotProfile).filter(BotProfile.name == bot_id).first()
+    if bp:
+        # Only clear our own admin_pause reason — leave health_halt / merged_into_
+        # untouched so an admin resume doesn't override a legitimate system pause.
+        db.query(BotAllocation).filter(
+            BotAllocation.profile_id == bp.id,
+            BotAllocation.paused_reason == "admin_pause",
+        ).update({"paused_reason": None})
+        db.commit()
     try:
         from app.services.audit_trail import post_audit_event
         post_audit_event(db, actor=admin.email, action="resume", entity_type="bot",

@@ -2082,6 +2082,34 @@ def _execute_options_signal(
     except Exception as _conc_exc:
         logger.warning("[concentration] gate raised, continuing: %s", _conc_exc)
 
+    # ── 2026-07-15 · Options risk gates (post-BABA-slippage-loss)  ─────────
+    # Three gates that guard against the loss pattern that cost $2,478 (97%
+    # of the day's fund P&L) on 2026-07-14:
+    #   Gate 1 — per-trade GROSS EXPOSURE cap tied to REAL fund NAV, not
+    #           stale alloc.starting_capital. The debit-budget cap ($2K) let
+    #           a spread through whose legs each marked at $12K gross.
+    #   Gate 2 — fleet-wide options gross cap. Sums current broker options
+    #           market_value; reject if adding this trade would push total
+    #           options gross past OPTIONS_GROSS_MAX_PCT_NAV (default 40%).
+    #   Gate 3 — DTE floor. Reject weekly gambles (DTE < 7).
+    # All three write a hold-signal via _persist_broker_reject_hold so the
+    # rejection surfaces on the dashboard within one scan cycle.
+    _opt_gates_ok, _opt_gates_reason = _check_options_risk_gates(
+        db=db, profile_name=profile_name, sig=sig,
+        position_dollars_budget=position_dollars,
+    )
+    if not _opt_gates_ok:
+        logger.warning(
+            "[options-risk-gate] %s %s BLOCKED: %s",
+            profile_name, sig.symbol, _opt_gates_reason,
+        )
+        _persist_broker_reject_hold(
+            db, alloc, sig, entry_price=0,
+            reject_kind="options_risk_gate",
+            reject_detail=_opt_gates_reason,
+        )
+        return False
+
     opt = _resolve_option_details(sig, position_dollars)
     premium = opt["display_premium"]
     contract_count = opt["contract_count"]
@@ -2514,6 +2542,138 @@ def _persist_broker_reject_hold(
             db.rollback()
         except Exception:
             pass
+
+
+# ── Options risk gates (2026-07-15 · post-BABA-slippage-loss) ────────────────
+#
+# Three gates enforced pre-execution on every options entry. They exist
+# BECAUSE options_directional lost $2,478 in one session on 2026-07-14
+# by opening a BABA call spread whose legs each marked at $12K+ gross —
+# the debit-budget cap ($2K) let it through because the check was on net
+# debit, not on gross leg exposure. Combined with the strike-grid fix
+# (c51e43a4), these gates close the loop on that failure mode.
+#
+# Env overrides:
+#   OPTIONS_MAX_PER_TRADE_GROSS_PCT_NAV   (default 0.06)  per-trade gross cap
+#   OPTIONS_GROSS_MAX_PCT_NAV             (default 0.40)  fleet options gross cap
+#   OPTIONS_MIN_DTE                       (default 7)     minimum DTE
+#   OPTIONS_RISK_GATES_ENABLED            (default true)  kill switch
+
+def _fund_nav_dollars(db=None) -> float | None:
+    """Real fund NAV from Alpaca /v2/account.portfolio_value.
+
+    Returns None if creds are missing or the call fails — callers should
+    fail-open (allow the trade) so a diagnostic error can never silently
+    halt the fleet. All-cash paper accounts return their cash balance.
+    """
+    import os as _os, urllib.request as _ur, json as _json
+    key = _os.getenv("ALPACA_PAPER_KEY") or _os.getenv("ALPACA_API_KEY", "")
+    sec = _os.getenv("ALPACA_PAPER_SECRET") or _os.getenv("ALPACA_SECRET_KEY", "")
+    if not key or not sec:
+        return None
+    try:
+        req = _ur.Request(
+            "https://paper-api.alpaca.markets/v2/account",
+            headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": sec},
+        )
+        with _ur.urlopen(req, timeout=6) as r:
+            data = _json.loads(r.read())
+        pv = float(data.get("portfolio_value") or data.get("equity") or 0)
+        return pv if pv > 0 else None
+    except Exception as _fn_exc:
+        logger.debug("[options-risk-gate] NAV fetch failed: %s", _fn_exc)
+        return None
+
+
+def _current_options_gross_dollars() -> float | None:
+    """Sum of |market_value| across all options positions at Alpaca.
+
+    Returns None on failure — callers fail-open.
+    """
+    import os as _os, urllib.request as _ur, json as _json
+    key = _os.getenv("ALPACA_PAPER_KEY") or _os.getenv("ALPACA_API_KEY", "")
+    sec = _os.getenv("ALPACA_PAPER_SECRET") or _os.getenv("ALPACA_SECRET_KEY", "")
+    if not key or not sec:
+        return None
+    try:
+        req = _ur.Request(
+            "https://paper-api.alpaca.markets/v2/positions",
+            headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": sec},
+        )
+        with _ur.urlopen(req, timeout=6) as r:
+            positions = _json.loads(r.read()) or []
+        gross = 0.0
+        for p in positions:
+            if p.get("asset_class") == "us_option":
+                gross += abs(float(p.get("market_value") or 0))
+        return gross
+    except Exception as _og_exc:
+        logger.debug("[options-risk-gate] options-gross fetch failed: %s", _og_exc)
+        return None
+
+
+def _check_options_risk_gates(
+    db,
+    profile_name: str,
+    sig,
+    position_dollars_budget: float,
+) -> tuple[bool, str]:
+    """Returns (allowed, reason). reason='' when allowed.
+
+    Fail-open on any diagnostic error so a bug here can never silence the
+    fleet — that's the exact class of failure this module exists to prevent.
+    """
+    import os as _os
+    enabled = _os.getenv("OPTIONS_RISK_GATES_ENABLED", "true").strip().lower() == "true"
+    if not enabled:
+        return True, ""
+
+    max_per_trade_pct = float(_os.getenv("OPTIONS_MAX_PER_TRADE_GROSS_PCT_NAV", "0.06"))
+    max_gross_pct    = float(_os.getenv("OPTIONS_GROSS_MAX_PCT_NAV", "0.40"))
+    min_dte          = int(_os.getenv("OPTIONS_MIN_DTE", "7"))
+
+    nav = _fund_nav_dollars(db)
+    if nav is None or nav <= 0:
+        # Fail-open: no NAV read, can't enforce the cap. Log so we notice.
+        logger.warning("[options-risk-gate] NAV unreadable — gates fail-open")
+        return True, ""
+
+    # ── Gate 1: per-trade gross cap tied to real NAV ────────────────────
+    per_trade_cap = nav * max_per_trade_pct
+    if position_dollars_budget > per_trade_cap:
+        return False, (
+            f"per_trade_gross_cap: budget ${position_dollars_budget:.0f} > "
+            f"{max_per_trade_pct*100:.1f}% NAV (${per_trade_cap:.0f})"
+        )
+
+    # ── Gate 2: fleet options gross cap ─────────────────────────────────
+    current_gross = _current_options_gross_dollars()
+    if current_gross is not None:
+        gross_cap = nav * max_gross_pct
+        projected_gross = current_gross + position_dollars_budget
+        if projected_gross > gross_cap:
+            return False, (
+                f"fleet_options_gross_cap: current ${current_gross:.0f} + new "
+                f"${position_dollars_budget:.0f} = ${projected_gross:.0f} > "
+                f"{max_gross_pct*100:.0f}% NAV (${gross_cap:.0f})"
+            )
+
+    # ── Gate 3: DTE floor ───────────────────────────────────────────────
+    try:
+        import json as _rj
+        _reason_data = _rj.loads(sig.reason) if sig.reason else {}
+        _dte = _reason_data.get("dte") or _reason_data.get("target_dte")
+    except Exception:
+        _dte = None
+    if _dte is not None:
+        try:
+            _dte_val = int(_dte)
+            if _dte_val < min_dte:
+                return False, f"dte_floor: dte={_dte_val} < {min_dte}"
+        except Exception:
+            pass
+
+    return True, ""
 
 
 # ── Signal execution (Step 4: open position at Alpaca paper) ─────────────────

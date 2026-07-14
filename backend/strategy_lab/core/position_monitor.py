@@ -55,6 +55,24 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     """Record exit trade and mark position closed."""
     from app.db.models.bots import BotTrade, BotSignal
 
+    # ── 2026-07-15 · Idempotency guard ──────────────────────────────────────
+    # If the position is already marked closed, skip. Two callers (option
+    # close reconciler + monitor loop) can race for the same position when
+    # it disappears at broker between their scans; without this guard we
+    # write two exit BotTrade rows and two exit signals per leg (the JD/PYPL
+    # dupes Brock flagged on 2026-07-14). Re-fetch to ensure we see any
+    # commit from a peer transaction.
+    try:
+        db.refresh(pos)
+    except Exception:
+        pass
+    if getattr(pos, "closed_at", None) is not None:
+        logger.info(
+            "[monitor] _close_position skip pos_id=%s symbol=%s — already closed at %s",
+            getattr(pos, "id", "?"), pos.symbol, pos.closed_at,
+        )
+        return
+
     # ── SHIP 2 asset-class gate (path #4) — BEFORE BotTrade insert ──────────
     # Closing an existing position, so bot_id comes from the allocation profile.
     try:

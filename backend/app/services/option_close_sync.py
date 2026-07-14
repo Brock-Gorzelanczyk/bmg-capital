@@ -229,7 +229,15 @@ def reconcile_option_closes(db: Session, user_id: int = 1) -> dict[str, Any]:
                 reason = "expiry"
                 exit_price_usd = 0.0
             else:
-                reason = "assignment"
+                # 2026-07-15 fix: was defaulting to "assignment" on every close
+                # where the per-symbol Alpaca order search missed. That's wrong
+                # for mleg exits filed under parent order IDs (JD/PYPL/BABA
+                # spread exits on 2026-07-14 got mislabeled). Real assignments
+                # require broker settlement evidence (shares appearing in stock
+                # positions post-close). Without that evidence, "manual" is the
+                # honest label — the position closed at broker via some order
+                # we couldn't join back to this OCC symbol.
+                reason = "manual"
                 exit_price_usd = 0.0
 
         try:
