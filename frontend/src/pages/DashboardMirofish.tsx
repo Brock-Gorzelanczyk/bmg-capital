@@ -227,6 +227,57 @@ const useDashV2 = () =>
     refetchOnWindowFocus: true,
   });
 
+interface FunnelResp {
+  scanned: number;
+  passed_filter: number;
+  executed: number;
+  winners: number;
+  win_pct: number;
+  discipline_edge_pct: number;
+}
+const useSignalFunnel = () =>
+  useQuery({
+    queryKey: ["mirofish", "funnel"],
+    queryFn: async () =>
+      (await client.get<FunnelResp>("/dashboard/signal-funnel-today")).data,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+
+interface QuoteMap {
+  quotes: Record<string, { last: number }>;
+}
+const useLiveQuotes = (symbols: string[]) =>
+  useQuery({
+    queryKey: ["mirofish", "live-quotes", symbols.join(",")],
+    queryFn: async () =>
+      (
+        await client.get<QuoteMap>("/dashboard/live-quotes", {
+          params: { symbols: symbols.join(",") },
+        })
+      ).data.quotes,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+
+interface BotListItem {
+  name: string;
+  display_name?: string;
+  asset_class: string;
+  enabled: boolean;
+  starting_capital_usd?: number | null;
+}
+const useBots = () =>
+  useQuery({
+    queryKey: ["mirofish", "bots"],
+    queryFn: async () => {
+      const res = await client.get<{ bots: BotListItem[] }>("/bots");
+      return res.data.bots ?? [];
+    },
+    refetchInterval: 15_000,
+    retry: false,
+  });
+
 const useRidgeline = () =>
   useQuery({
     queryKey: ["mirofish", "ridgeline"],
@@ -831,19 +882,22 @@ function LiveFiringNow({ v2 }: { v2?: DashV2 }) {
   );
 }
 
-function BotActivity({ v2 }: { v2?: DashV2 }) {
-  const bots = Object.entries(v2?.sleeves ?? {}).flatMap(([sleeve, s]) => {
-    // The v2 endpoint returns per-sleeve rollups. We synthesize a per-bot
-    // "row" per sleeve using bots_active/bots_total. Real per-bot list is
-    // available on /api/bots — but MIROFISH targets show sleeve-level.
-    return {
-      sleeve,
-      active: s.bots_active ?? 0,
-      total: s.bots_total ?? 0,
-    };
-  });
+function BotActivity({ v2, bots }: { v2?: DashV2; bots?: BotListItem[] }) {
+  // Real per-bot list from /api/bots (upgraded 2026-07-14). Shows first 12
+  // enabled bots with sleeve + funded state. Matches mock's per-row layout.
   const armed = v2?.health.bots_active ?? 0;
   const total = v2?.health.bots_total ?? 0;
+  const rows = (bots ?? [])
+    .filter((b) => b.enabled)
+    .slice(0, 12)
+    .map((b) => {
+      const funded = (b.starting_capital_usd ?? 0) > 0;
+      return {
+        name: b.display_name ?? b.name,
+        sleeve: b.asset_class,
+        state: funded ? "armed" : "idle",
+      };
+    });
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 h-full">
       <div className="flex items-baseline justify-between mb-3">
@@ -852,19 +906,29 @@ function BotActivity({ v2 }: { v2?: DashV2 }) {
           {armed} / {total} ARMED
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {bots.map((b) => (
+      <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto">
+        {rows.length === 0 && (
+          <div className="col-span-2 text-slate-500 text-xs text-center py-4">
+            no active bots
+          </div>
+        )}
+        {rows.map((r) => (
           <div
-            key={b.sleeve}
-            className="flex items-center justify-between border border-slate-800 rounded px-2 py-1.5"
+            key={r.name}
+            className="flex items-center justify-between border border-slate-800 rounded px-2 py-1"
           >
-            <div>
-              <div className="text-xs text-slate-300 capitalize">{b.sleeve}</div>
-              <div className="text-[9px] text-slate-500 uppercase">{b.sleeve}</div>
+            <div className="truncate flex-1">
+              <div className="text-[11px] text-slate-300 truncate">{r.name}</div>
+              <div className="text-[9px] text-slate-500 uppercase">{r.sleeve}</div>
             </div>
-            <div className="text-right">
-              <div className="text-xs text-emerald-400 font-mono">{b.active}/{b.total}</div>
-              <div className="text-[9px] text-slate-500 uppercase">armed</div>
+            <div
+              className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded ml-2 ${
+                r.state === "armed"
+                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                  : "bg-slate-700/50 text-slate-400 border border-slate-600"
+              }`}
+            >
+              {r.state}
             </div>
           </div>
         ))}
@@ -873,33 +937,29 @@ function BotActivity({ v2 }: { v2?: DashV2 }) {
   );
 }
 
-function SignalFunnel({ closed }: { closed: ClosedTrade[] }) {
-  // Rough approximation from live data we have: scanned/passed/executed/winners
-  // Actual signal-funnel numbers would need a dedicated /api/admin/discipline
-  // endpoint — for now derive from closed-trades-today + open positions
-  const today = new Date().toISOString().slice(0, 10);
-  const todays = closed.filter((t) => (t.closed_at ?? "").startsWith(today));
-  const wins = todays.filter((t) => t.pnl_usd > 0).length;
+function SignalFunnel({ funnel }: { funnel?: FunnelResp }) {
   const stages = [
-    { label: "Executed", value: todays.length },
-    { label: "Winners", value: wins },
+    { label: "Scanned", value: funnel?.scanned ?? 0 },
+    { label: "Passed Filter", value: funnel?.passed_filter ?? 0 },
+    { label: "Executed", value: funnel?.executed ?? 0 },
+    { label: "Winners", value: funnel?.winners ?? 0 },
   ];
-  const winPct = todays.length > 0 ? Math.round((wins / todays.length) * 100) : 0;
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 h-full">
       <div className="text-xs uppercase tracking-widest text-slate-400 mb-3">
         Today · Signal Funnel
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         {stages.map((s) => (
           <div key={s.label} className="border border-slate-800 rounded p-3 text-center">
-            <div className="text-[10px] uppercase text-slate-500 tracking-widest">{s.label}</div>
+            <div className="text-[9px] uppercase text-slate-500 tracking-widest">{s.label}</div>
             <div className="text-2xl font-mono text-emerald-300 mt-1 tabular-nums">{s.value}</div>
           </div>
         ))}
       </div>
       <div className="mt-3 text-[10px] text-slate-500 text-center">
-        discipline edge · {winPct}% of closed trades were winners today
+        discipline edge · {funnel?.discipline_edge_pct?.toFixed(2) ?? "0.00"}% of scanned signals
+        reach execution · win {funnel?.win_pct?.toFixed(1) ?? "0.0"}%
       </div>
     </div>
   );
@@ -967,11 +1027,13 @@ function MarketRegime({ v2 }: { v2?: DashV2 }) {
   );
 }
 
+const TICKER_SYMBOLS = [
+  "SPY", "QQQ", "NVDA", "AAPL", "MSFT", "TSLA", "AMZN",
+  "BTC/USD", "ETH/USD", "SOL/USD",
+];
+
 function TickerTape() {
-  const symbols = [
-    "SPY", "QQQ", "NVDA", "AAPL", "MSFT", "TSLA", "AMZN",
-    "BTC/USD", "ETH/USD", "SOL/USD",
-  ];
+  const { data: quotes } = useLiveQuotes(TICKER_SYMBOLS);
   return (
     <div className="border border-slate-800 bg-slate-950/60 rounded overflow-hidden">
       <style>{`
@@ -988,15 +1050,27 @@ function TickerTape() {
           <div
             className="whitespace-nowrap flex gap-8 text-slate-400"
             style={{
-              animation: "mirofish-marquee 45s linear infinite",
+              animation: "mirofish-marquee 60s linear infinite",
               width: "max-content",
             }}
           >
-            {[...symbols, ...symbols].map((s, i) => (
-              <span key={i} className="text-slate-300">
-                {s}
-              </span>
-            ))}
+            {[...TICKER_SYMBOLS, ...TICKER_SYMBOLS].map((s, i) => {
+              const q = quotes?.[s];
+              const price = q?.last;
+              return (
+                <span key={i} className="flex items-baseline gap-2">
+                  <span className="text-slate-300">{s}</span>
+                  <span className="text-slate-400 tabular-nums">
+                    {price !== undefined
+                      ? price.toLocaleString("en-US", {
+                          minimumFractionDigits: price < 10 ? 4 : 2,
+                          maximumFractionDigits: price < 10 ? 4 : 2,
+                        })
+                      : "—"}
+                  </span>
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1037,6 +1111,8 @@ export default function DashboardMirofish() {
   const closed = useTradeStream();
   const ridges = useRidgeline();
   const v2 = useDashV2();
+  const funnel = useSignalFunnel();
+  const bots = useBots();
 
   const reconStale =
     recon.isError || (recon.dataUpdatedAt > 0 && Date.now() - recon.dataUpdatedAt > 5 * 60 * 1000);
@@ -1073,7 +1149,7 @@ export default function DashboardMirofish() {
       {/* Row: LIVE FIRING NOW + BOT ACTIVITY */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <LiveFiringNow v2={v2.data} />
-        <BotActivity v2={v2.data} />
+        <BotActivity v2={v2.data} bots={bots.data} />
       </div>
 
       {/* Row: Trade Lattice full-width */}
@@ -1081,7 +1157,7 @@ export default function DashboardMirofish() {
 
       {/* Row: Signal Funnel + Top Wins/Losses */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SignalFunnel closed={closed.data?.trades ?? []} />
+        <SignalFunnel funnel={funnel.data} />
         <TopTradesCard />
       </div>
 

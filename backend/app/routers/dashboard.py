@@ -922,6 +922,152 @@ def _estimate_next_rebalance(schedule: str, last: datetime | None) -> str | None
     return None
 
 
+@router.get("/signal-funnel-today")
+def get_signal_funnel_today(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Today's discipline funnel: scanned → passed_filter → executed → winners.
+
+    scanned         = signal_gates rows created today
+    passed_filter   = signal_gates.final_decision = 'executed'
+    executed        = bot_trades committed today (entry side)
+    winners         = closed round-trips today with pnl > 0
+
+    signal_gates schema uses SQLite date arithmetic (`datetime('now', ...)`)
+    per m020, but the same query works on Postgres because both compare on
+    the ISO string form. On Postgres we compare against CURRENT_DATE via
+    a portable predicate.
+    """
+    # scanned + passed_filter from signal_gates
+    scanned = 0
+    passed_filter = 0
+    try:
+        row = db.execute(text(
+            "SELECT COUNT(*), "
+            "  SUM(CASE WHEN final_decision = 'executed' THEN 1 ELSE 0 END) "
+            "  FROM signal_gates "
+            " WHERE created_at >= CURRENT_DATE"
+        )).fetchone()
+        if row:
+            scanned = int(row[0] or 0)
+            passed_filter = int(row[1] or 0)
+    except Exception as exc:
+        logger.warning("[signal-funnel-today] signal_gates query failed: %s", exc)
+
+    # executed = bot_trades today for this user
+    executed = 0
+    try:
+        row = db.execute(text(
+            "SELECT COUNT(*) FROM bot_trades t "
+            "JOIN bot_allocations a ON a.id = t.allocation_id "
+            "WHERE a.user_id = :uid "
+            "  AND t.ts >= CURRENT_DATE "
+            "  AND t.quarantined_at IS NULL"
+        ), {"uid": current_user.id}).fetchone()
+        executed = int(row[0] or 0) if row else 0
+    except Exception as exc:
+        logger.warning("[signal-funnel-today] trades query failed: %s", exc)
+
+    # winners = closed round-trips today with pnl > 0
+    winners = 0
+    try:
+        row = db.execute(text(
+            "SELECT COUNT(*) "
+            "  FROM bot_trades t "
+            "  JOIN bot_positions p ON p.id = t.position_id "
+            "  JOIN bot_allocations a ON a.id = t.allocation_id "
+            " WHERE a.user_id = :uid "
+            "   AND p.closed_at >= CURRENT_DATE "
+            "   AND t.side IN ('sell', 'cover', 'close') "
+            "   AND t.ts > p.opened_at "
+            "   AND CASE WHEN p.side = 'short' "
+            "         THEN (p.avg_cost_cents - t.fill_price_cents) "
+            "         ELSE (t.fill_price_cents - p.avg_cost_cents) "
+            "       END > 0"
+        ), {"uid": current_user.id}).fetchone()
+        winners = int(row[0] or 0) if row else 0
+    except Exception as exc:
+        logger.warning("[signal-funnel-today] winners query failed: %s", exc)
+
+    win_pct = round((winners / executed * 100), 1) if executed > 0 else 0.0
+    discipline_edge_pct = round((executed / scanned * 100), 2) if scanned > 0 else 0.0
+
+    return {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "scanned": scanned,
+        "passed_filter": passed_filter,
+        "executed": executed,
+        "winners": winners,
+        "win_pct": win_pct,
+        "discipline_edge_pct": discipline_edge_pct,
+    }
+
+
+@router.get("/live-quotes")
+def get_live_quotes(
+    symbols: str = "SPY,QQQ,NVDA,AAPL,MSFT,TSLA,BTC/USD,ETH/USD,SOL/USD",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Batch quote fetch via Alpaca. Returns {symbol: {last, change_pct}}.
+    Cached in-process for 15s to keep the ticker cheap."""
+    import os
+    import httpx
+
+    sym_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not sym_list:
+        return {"quotes": {}}
+
+    key = os.getenv("ALPACA_PAPER_KEY") or os.getenv("ALPACA_API_KEY", "")
+    secret = os.getenv("ALPACA_PAPER_SECRET") or os.getenv("ALPACA_SECRET_KEY", "")
+    if not key or not secret:
+        return {"quotes": {}, "error": "no_alpaca_creds"}
+    headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
+
+    stocks = [s for s in sym_list if "/" not in s]
+    cryptos = [s for s in sym_list if "/" in s]
+
+    quotes: dict[str, dict[str, float]] = {}
+
+    if stocks:
+        try:
+            r = httpx.get(
+                "https://data.alpaca.markets/v2/stocks/quotes/latest",
+                headers=headers,
+                params={"symbols": ",".join(stocks)},
+                timeout=8,
+            )
+            data = r.json().get("quotes", {}) or {}
+            for sym, q in data.items():
+                px = float(q.get("ap") or q.get("bp") or 0)
+                if px > 0:
+                    quotes[sym] = {"last": px}
+        except Exception as exc:
+            logger.warning("[live-quotes] alpaca stocks failed: %s", exc)
+
+    if cryptos:
+        try:
+            r = httpx.get(
+                "https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes",
+                headers=headers,
+                params={"symbols": ",".join(cryptos)},
+                timeout=8,
+            )
+            data = r.json().get("quotes", {}) or {}
+            for sym, q in data.items():
+                px = float(q.get("ap") or q.get("bp") or 0)
+                if px > 0:
+                    quotes[sym] = {"last": px}
+        except Exception as exc:
+            logger.warning("[live-quotes] alpaca crypto failed: %s", exc)
+
+    return {
+        "quotes": quotes,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/session-meta")
 def get_session_meta(
     db: Session = Depends(get_db),
