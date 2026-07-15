@@ -450,6 +450,24 @@ def alpaca_positions(
     return {"as_of": now_iso, "count": len(positions), "positions": positions}
 
 
+# ── POST /api/admin/orphan-adopter/run ──────────────────────────────────────
+# STOP-THE-LINE #3 (2026-07-15): walks live Alpaca options positions,
+# attributes untracked ones to originating bots via order history, inserts
+# BotPosition rows so the app's tracking catches up to broker truth.
+# Unattributable → ledger row with manual_review flag.
+
+@router.post("/orphan-adopter/run")
+def run_orphan_adopter(
+    dry_run: bool = Query(False, description="If true, report what WOULD be adopted without inserting rows."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Manually kick the orphan adopter. Runs the same code the 15-min
+    scheduler runs. Set dry_run=true to preview without inserting."""
+    from app.services.orphan_adopter import adopt_orphans
+    return adopt_orphans(db, dry_run=dry_run)
+
+
 # ── GET /api/admin/broker-reconciliation ────────────────────────────────────
 #
 # Ground-truth answer to "is our track record real or DB-simulated?"

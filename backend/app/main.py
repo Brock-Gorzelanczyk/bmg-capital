@@ -1259,6 +1259,12 @@ async def lifespan(app: FastAPI):
     except Exception as _bph_exc:
         logger.error("[startup] buying_power_healer scheduler FAILED (non-fatal): %s",
                      _bph_exc, exc_info=True)
+    try:
+        from app.services.orphan_adopter import setup_orphan_adopter
+        setup_orphan_adopter(scheduler)
+    except Exception as _oa_exc:
+        logger.error("[startup] orphan_adopter scheduler FAILED (non-fatal): %s",
+                     _oa_exc, exc_info=True)
     scheduler.start()
 
     # Kick off strategy scan in background — won't block server startup
