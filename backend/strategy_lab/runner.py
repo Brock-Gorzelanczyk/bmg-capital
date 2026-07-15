@@ -2131,6 +2131,31 @@ def _execute_options_signal(
     premium = opt["display_premium"]
     contract_count = opt["contract_count"]
 
+    # ── 2026-07-15 STOP-THE-LINE · Post-resolve LEG-NOTIONAL gate ────────
+    # The pre-resolve gate at line ~2114 checks premium-at-risk (position_
+    # dollars_budget) — but that's the DEBIT you pay, not the leg notional.
+    # The BABA disaster on 2026-07-14 was a $2K debit spread whose EACH LEG
+    # marked at $12K+ gross because the strategy picked deep-ITM strikes.
+    # This gate catches that: single-leg notional = strike × 100 × contracts.
+    # Threshold: OPTIONS_MAX_LEG_NOTIONAL_PCT_NAV (default 20% NAV).
+    # Fails open on any diagnostic error so a bug here can never silence
+    # the fleet — that's the class of failure the observability layer
+    # is built to prevent.
+    _leg_ok, _leg_reason = _check_leg_notional_gate(
+        opt=opt, contract_count=contract_count,
+    )
+    if not _leg_ok:
+        logger.warning(
+            "[options-leg-gate] %s %s BLOCKED: %s",
+            profile_name, sig.symbol, _leg_reason,
+        )
+        _persist_broker_reject_hold(
+            db, alloc, sig, entry_price=0,
+            reject_kind="options_leg_notional_gate",
+            reject_detail=_leg_reason,
+        )
+        return False
+
     # Skip if sizing logic rejected the trade (DTE filter or 1-contract > budget)
     if contract_count <= 0:
         reject_reason = opt.get("reject_reason", "contract_count_zero")
@@ -2629,6 +2654,72 @@ def _current_options_gross_dollars() -> float | None:
         return None
 
 
+def _check_leg_notional_gate(
+    opt: dict,
+    contract_count: int,
+) -> tuple[bool, str]:
+    """STOP-THE-LINE gate (2026-07-15) — post-resolve leg notional cap.
+
+    Rejects trades where any single leg's notional (strike × 100 × contracts)
+    exceeds OPTIONS_MAX_LEG_NOTIONAL_PCT_NAV × real fund NAV. Default 20%.
+
+    The premium-at-risk gate can't catch the BABA-style disaster because a
+    $2K debit spread can have each leg trading at $12K+ market value on the
+    chain. This gate catches that specifically: the exposure the fund takes
+    on the leg, not the cash paid for it.
+
+    Returns (allowed, reason). Fails open on diagnostic errors.
+    """
+    import os as _os
+    enabled = _os.getenv("OPTIONS_RISK_GATES_ENABLED", "true").strip().lower() == "true"
+    if not enabled:
+        return True, ""
+
+    max_leg_pct = float(_os.getenv("OPTIONS_MAX_LEG_NOTIONAL_PCT_NAV", "0.20"))
+
+    strike = float(opt.get("strike_price") or 0)
+    if strike <= 0 or contract_count <= 0:
+        return True, ""
+
+    nav = _fund_nav_dollars(None)
+    if nav is None or nav <= 0:
+        return True, ""
+
+    # For spreads, iterate legs (each leg has its own strike). Otherwise use
+    # the primary strike.
+    legs = opt.get("legs") or []
+    max_leg_nav_pct = 0.0
+    worst_symbol = None
+    if legs:
+        # Extract strike from OCC symbol: strike_millidollars = last 8 digits
+        for lg in legs:
+            sym = lg.get("symbol") or ""
+            if len(sym) < 15: continue
+            try:
+                # OCC format: TICKER YYMMDD C/P STRIKE(8-digit, in millis)
+                strike_millis = int(sym[-8:])
+                leg_strike = strike_millis / 1000.0
+            except (ValueError, TypeError):
+                continue
+            leg_notional = leg_strike * 100 * contract_count
+            pct = leg_notional / nav
+            if pct > max_leg_nav_pct:
+                max_leg_nav_pct = pct
+                worst_symbol = sym
+    else:
+        leg_notional = strike * 100 * contract_count
+        max_leg_nav_pct = leg_notional / nav
+        worst_symbol = opt.get("occ_symbol")
+
+    if max_leg_nav_pct > max_leg_pct:
+        return False, (
+            f"leg_notional_cap: {worst_symbol} notional = "
+            f"{max_leg_nav_pct*100:.1f}% NAV > {max_leg_pct*100:.0f}% "
+            f"(NAV ${nav:,.0f}, contracts {contract_count})"
+        )
+    return True, ""
+
+
 def _check_options_risk_gates(
     db,
     profile_name: str,
@@ -2646,12 +2737,13 @@ def _check_options_risk_gates(
         return True, ""
 
     max_per_trade_pct = float(_os.getenv("OPTIONS_MAX_PER_TRADE_GROSS_PCT_NAV", "0.06"))
-    # Fleet-wide options gross cap. Default 200% NAV (effectively off) —
-    # defined-risk credit spreads can safely stack way past NAV in gross
-    # market value since max loss per contract is spread_width × 100. The
-    # per-trade cap + per-bot position_cap + Alpaca buying_power do the
-    # real work. This gate is left as a runtime knob for emergencies only.
-    max_gross_pct    = float(_os.getenv("OPTIONS_GROSS_MAX_PCT_NAV", "2.0"))
+    # Fleet-wide options gross cap. Default 100% NAV — options gross should
+    # not exceed the fund's own equity. At 366% gross (observed 2026-07-15)
+    # the fleet lost -2.5% in one session on entry slippage alone. The
+    # premium-at-risk cap doesn't catch this because spreads' NET debit
+    # is small even when leg notional is huge. Set > 1.5 via env to
+    # effectively disable this gate.
+    max_gross_pct    = float(_os.getenv("OPTIONS_GROSS_MAX_PCT_NAV", "1.0"))
     min_dte          = int(_os.getenv("OPTIONS_MIN_DTE", "7"))
 
     nav = _fund_nav_dollars(db)

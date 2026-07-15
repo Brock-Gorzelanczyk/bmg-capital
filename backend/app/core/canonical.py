@@ -1237,7 +1237,30 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             ), {"bid": pr_id}).fetchone()
             holdings_count = int(hc_row[0] or 0) if hc_row else 0
             hv_cents = pr_starting if holdings_count > 0 else 0
-            pv_cents = pr_starting  # dry-run: PV tracks starting until real MTM
+
+            # 2026-07-15 STOP-THE-LINE #2 (Spec A, third request):
+            # Previously every PR row hardcoded PV=starting, today=0, return=0
+            # with a comment "dry-run: PV tracks starting until real MTM".
+            # The MTM job (pr_daily_mark, d21d7156) has been writing
+            # current_pnl_cents to portfolio_rank_holdings — the leaderboard
+            # just wasn't reading it. Roll up the marks so 17 blank rows get
+            # real P&L.
+            pr_unrealized_pnl = 0
+            try:
+                _pnl_row = db.execute(text(
+                    "SELECT COALESCE(SUM(current_pnl_cents), 0) "
+                    "FROM portfolio_rank_holdings WHERE bot_id = :bid"
+                ), {"bid": pr_id}).fetchone()
+                pr_unrealized_pnl = int(_pnl_row[0] or 0) if _pnl_row else 0
+            except Exception as _pnl_exc:
+                logger.warning("[leaderboard] PR %s pnl rollup failed: %s", pr_name, _pnl_exc)
+
+            pv_cents = pr_starting + pr_unrealized_pnl
+            all_time_pct = round((pr_unrealized_pnl / pr_starting * 100.0), 3) if pr_starting > 0 else 0.0
+            # today_pnl mirrors dashboard/v2 convention (sum of current_pnl_cents)
+            # until we add EOD snapshots for PR holdings that give a true delta.
+            today_pnl_cents = pr_unrealized_pnl
+
             display = DISPLAY_NAMES.get(pr_name) or pr_name.replace("_", " ").title()
             leaderboard.append({
                 "rank": 0,
@@ -1245,13 +1268,13 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "name": display,
                 "bot_type": "portfolio_rank",
                 "enabled": pr_enabled,
-                "return_30d_pct": 0.0,
-                "all_time_return_pct": 0.0,
-                "today_pnl_cents": 0,
+                "return_30d_pct": all_time_pct,   # no 30d window yet; alias all-time
+                "all_time_return_pct": all_time_pct,
+                "today_pnl_cents": today_pnl_cents,
                 "watchlist_count": 0,
                 "portfolio_value_cents": pv_cents,
                 "realized_pnl_cents": 0,
-                "unrealized_pnl_cents": 0,
+                "unrealized_pnl_cents": pr_unrealized_pnl,
                 "deployed_cents": hv_cents,
                 "starting_capital_cents": pr_starting,
                 "signals_24h": 0,
