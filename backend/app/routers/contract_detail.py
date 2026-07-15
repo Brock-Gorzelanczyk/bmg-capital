@@ -188,10 +188,19 @@ def get_position_detail(
     underlying = parsed["root"] if parsed else (pos.underlying_symbol or pos.symbol)
     spot = _fetch_spot(underlying) if underlying else None
 
-    # P&L math — SAME formula as portfolio.py fix (×100 for options).
+    # P&L math — SAME formula as portfolio.py fix (×100 for options) with
+    # a sign flip for short legs. For a short, premium received at entry is
+    # the cost basis (credit) and current premium is the cost to close (debit):
+    # short_pnl = premium_received - current_premium. Longs: value - cost.
+    is_short = (getattr(pos, "side", "long") or "long").lower() == "short"
     cost_basis = avg_premium * contracts * contract_multiplier
     market_value = (mark * contracts * contract_multiplier) if (mark is not None) else None
-    open_pl = (market_value - cost_basis) if (market_value is not None) else None
+    if market_value is None:
+        open_pl = None
+    elif is_short:
+        open_pl = cost_basis - market_value
+    else:
+        open_pl = market_value - cost_basis
     open_pl_pct = ((open_pl / cost_basis) * 100.0) if (open_pl is not None and cost_basis > 0) else None
 
     # Breakeven — call: strike + avg; put: strike - avg.
