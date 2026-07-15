@@ -618,6 +618,12 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         open_positions.append({
             "id": p.id,
             "symbol": p.symbol,
+            # 2026-07-15: expose side + option-specific fields so the Bot Detail
+            # positions table renders LONG/SHORT badges and the humanized
+            # "BABA $111 CALL · 44d" label. Previously these were null on the
+            # canonical snapshot so options bot pages showed the raw OCC
+            # symbol only and every row defaulted to LONG.
+            "side": getattr(p, "side", "long"),
             "qty": qty,
             "avg_cost_cents": p.avg_cost_cents,
             "avg_cost": round(cost, 2) if cost else None,
@@ -628,6 +634,12 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
             "market_value": market_val,
             "unrealized_pnl": unreal,
             "unrealized_pnl_pct": unreal_pct,
+            # Options-specific (null for stock/crypto)
+            "option_type": getattr(p, "option_type", None),
+            "strike_price": getattr(p, "strike_price", None),
+            "expiration_date": getattr(p, "expiration_date", None),
+            "underlying_symbol": getattr(p, "underlying_symbol", None),
+            "contract_count": getattr(p, "contract_count", None),
         })
 
     # ── Watchlist count ──────────────────────────────────────────────────────
