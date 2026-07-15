@@ -2360,6 +2360,11 @@ def _execute_options_signal(
         )
         return False
 
+    # Defined at outer scope so the auto-flatten path in the outer except can
+    # reference it safely even if the exception fired before the leg list was
+    # built inside the try.
+    _leg_rows: list[dict] = []
+    _pos_side = "long"
     try:
         # 2026-07-09 — Per-leg BotPosition writes for mleg orders. Prior to this
         # commit only the primary (occ_symbol) leg got a bot_positions row, so
@@ -2385,7 +2390,6 @@ def _execute_options_signal(
             )
 
         _used_mleg = bool(_legs) and alpaca_options_order_id is not None
-        _leg_rows: list[dict] = []
         if _used_mleg:
             for _leg in _legs:
                 _leg_sym = _leg["symbol"]
@@ -2399,6 +2403,7 @@ def _execute_options_signal(
                     "symbol": _leg_sym,
                     "side_pos": _leg_side,
                     "side_trade": _leg["side"],  # "buy" / "sell"
+                    "qty": int(contract_count),  # auto-flatten needs this
                     "option_type": _l_type,
                     "strike_price": _l_strike,
                     "expiration_date": _l_expiry,
@@ -2410,6 +2415,7 @@ def _execute_options_signal(
                 "symbol": occ_symbol,
                 "side_pos": _pos_side,
                 "side_trade": sig.side,
+                "qty": int(contract_count),
                 "option_type": opt["option_type"],
                 "strike_price": opt["strike_price"],
                 "expiration_date": opt["expiration_date"],
@@ -2536,9 +2542,32 @@ def _execute_options_signal(
             )
         return True
     except Exception as exc:
-        logger.error("[options:%s] DB write failed for %s: %s", profile_name, sig.symbol, exc)
+        # 2026-07-15 STOP-THE-LINE #2: transactional order+position insert.
+        # If we reach here, an Alpaca options order has ALREADY been submitted
+        # (possibly filled) but the DB write for BotPosition/BotTrade failed
+        # partway. That's exactly the leak that created 45 orphan legs at
+        # broker with no BMG record. Auto-flatten each leg at Alpaca so we
+        # never carry a position we can't track.
+        logger.error(
+            "[options:%s] DB write failed for %s — attempting auto-flatten: %s",
+            profile_name, sig.symbol, exc,
+        )
         try:
             db.rollback()
+        except Exception:
+            pass
+        # Best-effort flatten each leg. If flatten also fails, log LOUD so a
+        # human can reconcile — better a visible orphan than a silent one.
+        _flatten_results = _auto_flatten_option_legs(_leg_rows, _pos_side)
+        try:
+            _persist_broker_reject_hold(
+                db, alloc, sig, entry_price=0,
+                reject_kind="options_db_write_failed_flattened",
+                reject_detail=(
+                    f"DB insert exception ({type(exc).__name__}: {str(exc)[:150]}); "
+                    f"auto-flatten: {_flatten_results}"
+                ),
+            )
         except Exception:
             pass
         return False
@@ -2553,6 +2582,60 @@ def _execute_options_signal(
 #
 # Every broker-reject exit MUST now call this helper so the inert-bot-scan
 # can surface the reason and Discord alerter can page within minutes.
+
+def _auto_flatten_option_legs(leg_rows: list[dict], position_side: str) -> str:
+    """Close every filled leg at Alpaca so we never carry an untracked position.
+
+    Called when the DB insert for BotPosition/BotTrade fails AFTER an Alpaca
+    order has already been submitted. Preserves the STOP-THE-LINE #2 promise:
+    order placement and DB row succeed or fail TOGETHER.
+
+    Returns a human-readable summary of what got closed (or why not) so the
+    caller can include it in the hold-signal reason.
+
+    Never raises — if the flatten itself fails, we log LOUD so a human can
+    reconcile manually.
+    """
+    if not leg_rows:
+        return "no legs to flatten"
+    try:
+        from strategy_lab.core.execution import get_broker
+        broker = get_broker("options")
+    except Exception as exc:
+        logger.error("[auto-flatten] broker unavailable — leaving legs open at Alpaca: %s", exc)
+        return f"broker_unavailable: {type(exc).__name__}"
+
+    results: list[str] = []
+    for lr in leg_rows:
+        occ = lr.get("symbol") or ""
+        leg_trade_side = lr.get("side_trade", "buy")   # "buy" or "sell"
+        # To CLOSE: opposite of the opening trade side.
+        close_side = "sell" if leg_trade_side == "buy" else "buy"
+        try:
+            resp = broker.submit_options_order(
+                contract_symbol=occ,
+                contracts=int(lr.get("qty", 1) or 1),
+                side=close_side,
+                limit_price=0.01,   # market-like — accept anything for exit
+                time_in_force="day",
+            )
+            status = resp.get("status_code") if isinstance(resp, dict) else None
+            if status in (200, 201):
+                results.append(f"{occ}=closed")
+            else:
+                results.append(f"{occ}=REJECT({status})")
+                logger.error(
+                    "[auto-flatten] CLOSE REJECTED %s status=%s body=%r — ORPHAN AT BROKER",
+                    occ, status, str(resp.get("body"))[:150] if isinstance(resp, dict) else "?",
+                )
+        except Exception as exc:
+            results.append(f"{occ}=EXC({type(exc).__name__})")
+            logger.error(
+                "[auto-flatten] EXCEPTION closing %s — ORPHAN AT BROKER: %s",
+                occ, exc,
+            )
+    return "; ".join(results)
+
 
 def _persist_broker_reject_hold(
     db,
