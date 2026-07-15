@@ -373,6 +373,10 @@ def _position_to_dict(p: BotPosition) -> dict:
     return {
         "id": p.id,
         "symbol": p.symbol,
+        # 2026-07-15: expose side so the frontend can badge LONG (green) /
+        # SHORT (red) — was previously omitted, so short legs displayed as
+        # LONG by default and P&L signs disagreed with the badge.
+        "side": getattr(p, "side", "long"),
         "qty": p.qty,
         "avg_cost_cents": p.avg_cost_cents,
         "avg_cost": round(p.avg_cost_cents / 100, 2),
@@ -2357,11 +2361,24 @@ def get_bot(
     positions: list[dict] = []
     has_real_data = False
 
-    if allocation:
+    # 2026-07-15 fix: gather positions across ALL allocations for this profile,
+    # not just the current user's. options_directional / options_income had
+    # 18/16 open positions visible on /api/portfolio/open-positions but 0 on
+    # this endpoint because allocation.user_id lookup returned None, so the
+    # position filter matched nothing and the UI showed an empty positions
+    # table. Union across all allocation IDs for the profile makes the bot
+    # detail page consistent with the fund-wide positions endpoint.
+    all_profile_alloc_ids = [
+        a.id for a in db.query(BotAllocation)
+        .filter(BotAllocation.profile_id == profile.id)
+        .all()
+    ]
+
+    if allocation and all_profile_alloc_ids:
         recent_signals = [
             _signal_to_dict(s)
             for s in db.query(BotSignal)
-            .filter(BotSignal.allocation_id == allocation.id)
+            .filter(BotSignal.allocation_id.in_(all_profile_alloc_ids))
             .order_by(BotSignal.ts.desc())
             .limit(20)
             .all()
@@ -2370,7 +2387,7 @@ def get_bot(
             _position_to_dict(p)
             for p in db.query(BotPosition)
             .filter(
-                BotPosition.allocation_id == allocation.id,
+                BotPosition.allocation_id.in_(all_profile_alloc_ids),
                 BotPosition.closed_at.is_(None),
                 BotPosition.quarantined_at.is_(None),
             )
