@@ -1762,14 +1762,18 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
 
     # Build OCC symbol from resolved strike+expiry+type (post all early-reject paths).
     # Reject paths above return contract_count=0; this branch never runs for them.
-    # 2026-07-14: snap primary strike to the same grid we'll use for legs so
-    # the leading leg's contract exists on Alpaca (was previously off-grid
-    # for anything > $200 spot).
+    # 2026-07-14 (v2): snap primary strike to the actual Alpaca OCC grid — $1
+    # for major ETFs, $5 for everything above $25, $2.50 for cheap stocks.
+    # v1 mapped $100-$200 spot to $2.50 grid and produced 100% "asset not
+    # found" rejects; v2 fixes that.
+    _DOLLAR_STRIKE_ETFS_PRIMARY = {"SPY","QQQ","IWM","EEM","GLD","TLT","DIA","XLK","XLF","XLE","XLI","XLU","XLV","XLY","XLP","XLB","XLRE","SMH","XBI","XLC","VXX"}
     if contract_count > 0 and spot > 0 and strike_price:
-        if spot >= 200:   _primary_grid = 5.0
-        elif spot >= 100: _primary_grid = 2.5
-        elif spot >=  25: _primary_grid = 1.0
-        else:             _primary_grid = 0.5
+        if underlying and underlying.upper() in _DOLLAR_STRIKE_ETFS_PRIMARY:
+            _primary_grid = 1.0
+        elif spot < 25:
+            _primary_grid = 2.5
+        else:
+            _primary_grid = 5.0
         strike_price = round(round(float(strike_price) / _primary_grid) * _primary_grid, 2)
         occ_symbol = _build_occ_symbol(
             underlying=underlying,
@@ -1785,22 +1789,25 @@ def _resolve_option_details(sig, position_dollars: float) -> dict:
     # collateral we don't have). Multi-leg orders reduce required collateral
     # to spread width × 100. Build a `legs` list for spread setups.
     #
-    # 2026-07-14: strike selector was snapping to whole dollars, but most
-    # single-names with spot > $200 (META/TSLA/AVGO/PANW etc.) only trade
-    # $5-increment strikes. Every credit spread got rejected as "asset not
-    # found" (Alpaca 42210000). Fix: snap to the correct grid per underlying
-    # price and set wing_width to match so both legs land on real contracts.
+    # 2026-07-14 (v2, post-live-verification): strike snap must respect the
+    # actual OCC grid each ticker uses at Alpaca. Prior heuristic (v1) mapped
+    # spot ≥ $100 → $2.50 grid, but virtually all single-name equities above
+    # $50 trade $5 strikes; the $2.50 snap picked strikes that don't exist,
+    # producing 100% "invalid legs" (42210000) rejects on ANET/PLTR/DECK/
+    # SHOP/HOOD/CROX/ABNB/ZS etc.
     #
-    # Grid heuristic:
-    #   spot >= $200 : $5 strikes  → wing = $5 (max collateral $500/contract)
-    #   spot >= $100 : $2.50       → wing = $2.50
-    #   spot >=  $25 : $1          → wing = $1
-    #   spot <   $25 : $0.50       → wing = $0.50
+    # Real grid at Alpaca:
+    #   Major index ETFs (SPY/QQQ/IWM/EEM/GLD/TLT/DIA): $1 strikes
+    #   Everything else: $5 strikes (dominant across S&P + Russell single-names)
+    #   Very cheap stocks (spot < $25): $2.50 (uncommon; $1 also seen)
+    #   Sub-$10: $0.50 (rare; skip these)
+    _DOLLAR_STRIKE_ETFS = {"SPY","QQQ","IWM","EEM","GLD","TLT","DIA","XLK","XLF","XLE","XLI","XLU","XLV","XLY","XLP","XLB","XLRE","SMH","XBI","XLC","VXX"}
+
     def _strike_grid(spot_price: float) -> float:
-        if spot_price >= 200: return 5.0
-        if spot_price >= 100: return 2.5
-        if spot_price >=  25: return 1.0
-        return 0.5
+        if underlying and underlying.upper() in _DOLLAR_STRIKE_ETFS:
+            return 1.0
+        if spot_price < 25: return 2.5
+        return 5.0
 
     def _snap_to_grid(strike: float, grid: float, direction: str = "nearest") -> float:
         """Snap `strike` to the nearest multiple of `grid`. `direction` can be
