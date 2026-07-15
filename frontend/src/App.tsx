@@ -98,6 +98,7 @@ const CFPBookingPage = lazy(() => import("@/pages/CFPBookingPage"));
 const StakingPage = lazy(() => import("@/pages/StakingPage"));
 const DCABasketsPage = lazy(() => import("@/pages/DCABasketsPage"));
 const BotDetailPage = lazy(() => import("@/pages/BotDetailPage"));
+const ContractDetailPage = lazy(() => import("@/pages/ContractDetailPage"));
 const CandidateDetailPage = lazy(() => import("@/pages/CandidateDetailPage"));
 const BacktestResultPage = lazy(() => import("@/pages/BacktestResultPage"));
 const WfaResultPage = lazy(() => import("@/pages/WfaResultPage"));
@@ -433,6 +434,8 @@ function AppInner() {
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
         <Route path="/strategy/bot/:botName" element={<BotDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
+        <Route path="/contract/:positionId" element={<ContractDetailPage />} />
+        <Route path="/positions/:positionId" element={<ContractDetailPage />} />
         <Route path="/candidates" element={<CandidatesPage />} />
         <Route path="/candidates/:candidateName" element={<CandidateDetailPage />} />
         <Route path="/candidates/:candidateName/backtest/:jobId" element={<BacktestResultPage />} />

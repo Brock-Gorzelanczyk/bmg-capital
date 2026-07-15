@@ -3064,12 +3064,20 @@ export default function BotDetailPage() {
                               : hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
                           })()
                         : "—";
+                      // Options rows route to Contract Detail (live single-contract view).
+                      // Equity/crypto rows still go to the underlying's chart.
+                      const rowHref = isPosOptions
+                        ? `/contract/${pos.id}`
+                        : `/chart?symbol=${pos.symbol}`;
+                      const rowTitle = isPosOptions
+                        ? `View live contract detail for ${pos.symbol}`
+                        : `View ${pos.symbol} chart`;
                       return (
                         <tr
                           key={pos.id}
                           className="border-b border-t-dim/50 last:border-0 cursor-pointer hover:bg-t-bg1/30 transition-colors"
-                          onClick={() => navigate(`/chart?symbol=${pos.symbol}`)}
-                          title={`View ${pos.symbol} chart`}
+                          onClick={() => navigate(rowHref)}
+                          title={rowTitle}
                         >
                           <td className="py-2.5">
                             {isPosOptions && parsed ? (

@@ -78,6 +78,7 @@ from app.routers.leaderboard import router as leaderboard_router
 from app.routers.learning import router as learning_router
 from app.routers.candidates import router as candidates_router
 from app.routers.walk_forward import router as walk_forward_router
+from app.routers.contract_detail import router as contract_detail_router
 from app.routers.cost import router as cost_router
 from app.routers.ic import router as ic_router
 from app.routers.fund_agents import router as fund_agents_router
@@ -1526,6 +1527,7 @@ app.include_router(bars.router)
 app.include_router(screener.router)
 app.include_router(watchlist.router)
 app.include_router(portfolio.router)
+app.include_router(contract_detail_router)
 app.include_router(alerts.router)
 app.include_router(market.router)
 app.include_router(news.router)
