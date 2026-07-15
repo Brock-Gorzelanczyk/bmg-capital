@@ -2141,8 +2141,17 @@ def _execute_options_signal(
     # Fails open on any diagnostic error so a bug here can never silence
     # the fleet — that's the class of failure the observability layer
     # is built to prevent.
+    # Pass strategy name so the LEAPS DTE floor applies specifically to that
+    # strategy. Extracted from sig.reason JSON (setup field) since sig doesn't
+    # carry the strategy name directly at this call site.
+    _strategy_name = ""
+    try:
+        import json as _sn_json
+        _strategy_name = (_sn_json.loads(sig.reason) if sig.reason else {}).get("setup", "")
+    except Exception:
+        pass
     _leg_ok, _leg_reason = _check_leg_notional_gate(
-        opt=opt, contract_count=contract_count,
+        opt=opt, contract_count=contract_count, strategy_name=_strategy_name,
     )
     if not _leg_ok:
         logger.warning(
@@ -2657,25 +2666,63 @@ def _current_options_gross_dollars() -> float | None:
 def _check_leg_notional_gate(
     opt: dict,
     contract_count: int,
+    strategy_name: str = "",
 ) -> tuple[bool, str]:
-    """STOP-THE-LINE gate (2026-07-15) — post-resolve leg notional cap.
+    """STOP-THE-LINE gates (2026-07-15 v2, post-audit) — pre-submit caps.
 
-    Rejects trades where any single leg's notional (strike × 100 × contracts)
-    exceeds OPTIONS_MAX_LEG_NOTIONAL_PCT_NAV × real fund NAV. Default 20%.
+    Enforces four independent caps. First failure short-circuits.
 
-    The premium-at-risk gate can't catch the BABA-style disaster because a
-    $2K debit spread can have each leg trading at $12K+ market value on the
-    chain. This gate catches that specifically: the exposure the fund takes
-    on the leg, not the cash paid for it.
+      Gate A — max contracts per spread (default 5). Rejects the
+               15-lot BABA-sized order that started this whole thing.
+      Gate B — per-position leg-notional cap tied to real NAV.
+               Default OPTIONS_MAX_NOTIONAL_PCT = 20% NAV. Applies to
+               the WORST leg of a spread (strike × 100 × contracts).
+      Gate C — options SLEEVE total notional cap. Sums current broker
+               options gross + this trade's max leg notional. Default
+               OPTIONS_SLEEVE_MAX_PCT = 100% NAV.
+      Gate D — DTE floor SPECIFIC to the LEAPS strategy. LEAPS by
+               definition are long-dated (>= 6mo). If the strategy is
+               leaps_stock_replacement and DTE < 180, reject — a
+               3-week "LEAPS" isn't a LEAPS, it's a directional gamble.
 
-    Returns (allowed, reason). Fails open on diagnostic errors.
+    All caps fail open on diagnostic errors so a bug here can never
+    silence the fleet. Returns (allowed, reason). Env override for any
+    cap = kill switch (set to something huge or 0).
     """
     import os as _os
     enabled = _os.getenv("OPTIONS_RISK_GATES_ENABLED", "true").strip().lower() == "true"
     if not enabled:
         return True, ""
 
-    max_leg_pct = float(_os.getenv("OPTIONS_MAX_LEG_NOTIONAL_PCT_NAV", "0.20"))
+    # ── Gate A · max contracts per spread ────────────────────────────────
+    max_contracts = int(_os.getenv("OPTIONS_MAX_CONTRACTS_PER_TRADE", "5"))
+    if contract_count > max_contracts:
+        return False, (
+            f"max_contracts_per_trade: contracts={contract_count} > cap={max_contracts} "
+            f"(rejects BABA-scale 15-lot orders)"
+        )
+
+    # ── Gate D · LEAPS DTE floor ─────────────────────────────────────────
+    leaps_min_dte = int(_os.getenv("LEAPS_MIN_DTE", "180"))
+    if strategy_name == "leaps_stock_replacement":
+        exp_iso = opt.get("expiration_date") or ""
+        if exp_iso:
+            try:
+                from datetime import datetime as _dt, timezone as _tz
+                exp = _dt.fromisoformat(exp_iso).replace(tzinfo=_tz.utc).date()
+                today = _dt.now(_tz.utc).date()
+                dte = (exp - today).days
+                if dte < leaps_min_dte:
+                    return False, (
+                        f"leaps_dte_floor: strategy=leaps_stock_replacement "
+                        f"dte={dte} < {leaps_min_dte} (LEAPS by definition are >= 6mo)"
+                    )
+            except (ValueError, TypeError):
+                pass
+
+    # ── Gate B + C need NAV ──────────────────────────────────────────────
+    max_leg_pct = float(_os.getenv("OPTIONS_MAX_NOTIONAL_PCT", _os.getenv("OPTIONS_MAX_LEG_NOTIONAL_PCT_NAV", "0.20")))
+    sleeve_max_pct = float(_os.getenv("OPTIONS_SLEEVE_MAX_PCT", "1.0"))
 
     strike = float(opt.get("strike_price") or 0)
     if strike <= 0 or contract_count <= 0:
@@ -2688,35 +2735,46 @@ def _check_leg_notional_gate(
     # For spreads, iterate legs (each leg has its own strike). Otherwise use
     # the primary strike.
     legs = opt.get("legs") or []
-    max_leg_nav_pct = 0.0
+    max_leg_notional = 0.0
     worst_symbol = None
     if legs:
-        # Extract strike from OCC symbol: strike_millidollars = last 8 digits
         for lg in legs:
             sym = lg.get("symbol") or ""
             if len(sym) < 15: continue
             try:
-                # OCC format: TICKER YYMMDD C/P STRIKE(8-digit, in millis)
                 strike_millis = int(sym[-8:])
                 leg_strike = strike_millis / 1000.0
             except (ValueError, TypeError):
                 continue
             leg_notional = leg_strike * 100 * contract_count
-            pct = leg_notional / nav
-            if pct > max_leg_nav_pct:
-                max_leg_nav_pct = pct
+            if leg_notional > max_leg_notional:
+                max_leg_notional = leg_notional
                 worst_symbol = sym
     else:
-        leg_notional = strike * 100 * contract_count
-        max_leg_nav_pct = leg_notional / nav
+        max_leg_notional = strike * 100 * contract_count
         worst_symbol = opt.get("occ_symbol")
 
+    # ── Gate B · per-position notional cap ───────────────────────────────
+    max_leg_nav_pct = max_leg_notional / nav
     if max_leg_nav_pct > max_leg_pct:
         return False, (
-            f"leg_notional_cap: {worst_symbol} notional = "
-            f"{max_leg_nav_pct*100:.1f}% NAV > {max_leg_pct*100:.0f}% "
-            f"(NAV ${nav:,.0f}, contracts {contract_count})"
+            f"per_position_notional_cap: {worst_symbol} notional = "
+            f"${max_leg_notional:,.0f} ({max_leg_nav_pct*100:.1f}% NAV) > "
+            f"{max_leg_pct*100:.0f}% cap (NAV ${nav:,.0f}, contracts {contract_count})"
         )
+
+    # ── Gate C · sleeve-total notional cap ──────────────────────────────
+    current_sleeve_gross = _current_options_gross_dollars()
+    if current_sleeve_gross is not None:
+        sleeve_cap = nav * sleeve_max_pct
+        projected_sleeve = current_sleeve_gross + max_leg_notional
+        if projected_sleeve > sleeve_cap:
+            return False, (
+                f"sleeve_total_notional_cap: current sleeve ${current_sleeve_gross:,.0f} "
+                f"+ new position ${max_leg_notional:,.0f} = ${projected_sleeve:,.0f} > "
+                f"{sleeve_max_pct*100:.0f}% NAV cap (${sleeve_cap:,.0f})"
+            )
+
     return True, ""
 
 
