@@ -48,6 +48,7 @@ import {
 } from "@/api/bots";
 import { cn } from "@/lib/utils";
 import { formatTradeSize, formatQty } from "@/lib/formatTradeSize";
+import { parseOCC, dteFromOCC, dteColor, optionPnL } from "@/lib/parseOCC";
 import { CoachmarkOverlay } from "@/pages/CustomBotBuilderPage";
 import { getWatchlistAnalyses, type WatchlistAnalysis } from "@/api/analyst";
 import { getLatestPrices } from "@/api/bars";
@@ -3020,10 +3021,36 @@ export default function BotDetailPage() {
                   <tbody>
                     {positions.map((pos) => {
                       const isPosOptions = !!pos.option_type;
-                      // Prefer server-enriched fields; fall back to live price fetch
-                      const currentValue = pos.market_value ?? (livePrices[pos.symbol] != null && pos.qty ? livePrices[pos.symbol]! * pos.qty : null);
-                      const unrealizedPnl = pos.unrealized_pnl ?? null;
-                      const pnlPct = pos.unrealized_pnl_pct ?? null;
+                      // Options: derive from parseOCC + optionPnL so display always
+                      // matches the corrected backend math (×100 contract multiplier).
+                      // Falls back to server-enriched fields when live mark is
+                      // unavailable so pre-mark rows still show cost basis.
+                      const parsed = isPosOptions ? parseOCC(pos.symbol) : null;
+                      const dte = isPosOptions ? dteFromOCC(pos.symbol) : null;
+                      let currentValue: number | null;
+                      let unrealizedPnl: number | null;
+                      let pnlPct: number | null;
+                      if (isPosOptions) {
+                        const contracts = pos.contract_count ?? Math.max(1, Math.floor(pos.qty ?? 1));
+                        const avgPremium = pos.avg_cost_cents != null ? pos.avg_cost_cents / 100 : 0;
+                        const mark = livePrices[pos.symbol] ?? null;
+                        if (mark != null && mark > 0) {
+                          const p = optionPnL(avgPremium, mark, contracts);
+                          currentValue = p.value;
+                          unrealizedPnl = p.pl;
+                          pnlPct = p.plPct;  // capped at ±999% by the helper
+                        } else {
+                          // No live mark yet — show the server-computed values.
+                          currentValue = pos.market_value ?? (avgPremium * contracts * 100);
+                          unrealizedPnl = pos.unrealized_pnl ?? null;
+                          pnlPct = pos.unrealized_pnl_pct ?? null;
+                          if (pnlPct != null) pnlPct = Math.max(-999, Math.min(999, pnlPct));
+                        }
+                      } else {
+                        currentValue = pos.market_value ?? (livePrices[pos.symbol] != null && pos.qty ? livePrices[pos.symbol]! * pos.qty : null);
+                        unrealizedPnl = pos.unrealized_pnl ?? null;
+                        pnlPct = pos.unrealized_pnl_pct ?? null;
+                      }
                       const timeHeld = pos.opened_at
                         ? (() => {
                             // Ensure UTC parsing — isoformat() from Python has no Z suffix
@@ -3045,41 +3072,66 @@ export default function BotDetailPage() {
                           title={`View ${pos.symbol} chart`}
                         >
                           <td className="py-2.5">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-semibold text-t-hi font-mono-t">{pos.symbol}</span>
-                              {isSymbolMismatch(pos.symbol) && (
-                                <span className="text-[10px] text-t-amber border border-t-amber/30 bg-t-amber/10 px-1 py-0.5 rounded font-medium whitespace-nowrap font-ui-t">⚠️ mismatch</span>
-                              )}
-                              {isPosOptions && pos.option_type && (
-                                <span className={cn(
-                                  "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide font-ui-t",
-                                  pos.option_type === "call" ? "bg-emerald-900/60 text-emerald-300" : "bg-red-900/60 text-red-300"
-                                )}>
-                                  {pos.option_type}
-                                </span>
-                              )}
-                              {isPosOptions && pos.strike_price != null && (
-                                <span className="text-xs text-t-mid2 font-mono-t">
-                                  ${pos.strike_price % 1 === 0 ? pos.strike_price.toFixed(0) : pos.strike_price.toFixed(2)}
-                                </span>
-                              )}
-                              {isPosOptions && pos.expiration_date && (
-                                <span className="text-xs text-t-muted font-mono-t">
-                                  {new Date(pos.expiration_date + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
-                                </span>
-                              )}
-                            </div>
+                            {isPosOptions && parsed ? (
+                              <div className="flex flex-col gap-0.5" title={pos.symbol}>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-t-hi font-mono-t">
+                                    {parsed.root} ${parsed.strike % 1 === 0 ? parsed.strike.toFixed(0) : parsed.strike.toFixed(2)}
+                                  </span>
+                                  <span className={cn(
+                                    "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide font-ui-t",
+                                    parsed.type === "CALL"
+                                      ? "bg-emerald-900/60 text-emerald-300"
+                                      : "bg-red-900/60 text-red-300"
+                                  )}>
+                                    {parsed.type}
+                                  </span>
+                                  {dte != null && (
+                                    <span
+                                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded font-ui-t"
+                                      style={{
+                                        color: dteColor(dte),
+                                        border: `1px solid ${dteColor(dte)}40`,
+                                        background: `${dteColor(dte)}14`,
+                                      }}
+                                    >
+                                      {dte}d
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-t-muted font-mono-t">
+                                  {parsed.expiry.toLocaleDateString("en-US", {
+                                    month: "short", day: "numeric", year: "2-digit", timeZone: "UTC"
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold text-t-hi font-mono-t">{pos.symbol}</span>
+                                {isSymbolMismatch(pos.symbol) && (
+                                  <span className="text-[10px] text-t-amber border border-t-amber/30 bg-t-amber/10 px-1 py-0.5 rounded font-medium whitespace-nowrap font-ui-t">⚠️ mismatch</span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="py-2.5">
-                            {isPosOptions ? (
-                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-700/30 font-ui-t">
-                                OPTIONS
-                              </span>
-                            ) : (
-                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-t-cyan/15 text-t-cyan border border-t-cyan/20 font-ui-t">
-                                LONG
-                              </span>
-                            )}
+                            {(() => {
+                              // Position side badge — LONG/SHORT for both options and equity/crypto.
+                              // Backend now returns pos.side="long"|"short" (audit 2026-07-15).
+                              const isShort = pos.side === "short" || pos.side === "sell";
+                              return (
+                                <span
+                                  className={cn(
+                                    "text-xs font-semibold px-1.5 py-0.5 rounded font-ui-t border",
+                                    isShort
+                                      ? "bg-red-900/40 text-red-300 border-red-700/30"
+                                      : "bg-emerald-900/40 text-emerald-300 border-emerald-700/30"
+                                  )}
+                                >
+                                  {isShort ? "SHORT" : "LONG"}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="py-2.5 text-right text-t-mid2 tabular-nums font-mono-t">
                             {isPosOptions

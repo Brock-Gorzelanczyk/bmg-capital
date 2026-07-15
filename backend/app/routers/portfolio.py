@@ -238,9 +238,18 @@ def get_open_positions(
             current_price  = entry_price
             price_source   = "stale"
 
-        current_value_usd = round(current_price * pos.qty, 2)
-        unrealized_usd    = round((current_price - entry_price) * pos.qty, 2)
-        cost_basis        = entry_price * pos.qty
+        # 2026-07-15 fix: options positions need ×100 contract multiplier.
+        # For an option, avg_cost_cents = per-contract premium (in cents), qty
+        # = contract count. Notional per contract = premium × 100. Without the
+        # ×100, cost_basis was computed against 1/100 of the real cost, so a
+        # 5-lot BABA call at $19.70 → $23.65 read as +$3.95×5=$19.75 profit
+        # against $98.50 cost = +20.05%… but the display code did $19.75 ÷
+        # $98.50 badly and produced the +214% / -1994% garbage Brock flagged.
+        # Correct: cost = premium × qty × 100 for options; premium × qty for stock/crypto.
+        contract_multiplier  = 100 if getattr(pos, "option_type", None) else 1
+        current_value_usd = round(current_price * pos.qty * contract_multiplier, 2)
+        unrealized_usd    = round((current_price - entry_price) * pos.qty * contract_multiplier, 2)
+        cost_basis        = entry_price * pos.qty * contract_multiplier
         unrealized_pct    = round((unrealized_usd / cost_basis * 100) if cost_basis > 0 else 0.0, 4)
 
         opened_at = pos.opened_at
@@ -259,7 +268,7 @@ def get_open_positions(
             "bot_color":          _bot_color(profile.asset_class),
             "asset_class":        profile.asset_class,
             "symbol":             pos.symbol,
-            "side":               "buy",
+            "side":               getattr(pos, "side", "long"),
             "qty":                pos.qty,
             "entry_price":        entry_price,
             "current_price":      current_price,
@@ -270,11 +279,22 @@ def get_open_positions(
             "price_fetched_at":   price_fetched_at_iso,
             "opened_at":          pos.opened_at.isoformat(),
             "held_seconds":       max(0, held_seconds),
+            # Options-specific fields (null for stock/crypto). Populated so the
+            # frontend can render "BABA $111 CALL · Aug 28 '26 · 44d" without
+            # having to re-parse OCC symbols server-side.
+            "option_type":        getattr(pos, "option_type", None),
+            "strike_price":       getattr(pos, "strike_price", None),
+            "expiration_date":    getattr(pos, "expiration_date", None),
+            "underlying_symbol":  getattr(pos, "underlying_symbol", None),
+            "contract_count":     getattr(pos, "contract_count", None),
         })
 
-    total_cost = sum(
-        (pos.avg_cost_cents / 100.0) * pos.qty for pos in open_positions
-    )
+    # Total cost includes the ×100 contract multiplier for options positions
+    # (same fix as the per-row P&L math above).
+    def _pos_cost(_p) -> float:
+        _mult = 100 if getattr(_p, "option_type", None) else 1
+        return (_p.avg_cost_cents / 100.0) * _p.qty * _mult
+    total_cost = sum(_pos_cost(pos) for pos in open_positions)
     total_unrealized_pct = round(
         (total_unrealized_usd / total_cost * 100) if total_cost > 0 else 0.0, 4
     )

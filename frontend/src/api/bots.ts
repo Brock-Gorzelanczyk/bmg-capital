@@ -66,6 +66,7 @@ export interface BotSignal {
 export interface BotPosition {
   id: number;
   symbol: string;
+  side?: "long" | "short" | "buy" | "sell" | null;
   qty: number;
   avg_cost_cents: number;
   avg_cost?: number | null;
@@ -622,6 +623,13 @@ export interface OpenPosition {
   price_fetched_at: string;
   opened_at: string;
   held_seconds: number;
+  // Options-specific fields — populated by /portfolio/open-positions when
+  // the underlying BotPosition has option_type set. Null for stock/crypto.
+  option_type?: "call" | "put" | "spread" | "condor" | "calendar" | null;
+  strike_price?: number | null;
+  expiration_date?: string | null;   // ISO "YYYY-MM-DD"
+  underlying_symbol?: string | null;
+  contract_count?: number | null;
 }
 
 export interface OpenPositionsResponse {
