@@ -110,7 +110,7 @@ def scan_and_execute(
         strategies_executed, signals_generated, results, errors,
         signals_persisted, trades_executed, persist_errors, execute_errors.
     """
-    from strategy_lab.seeds import load_profile
+    from strategy_lab.core.effective_config import load_effective_config
     from strategy_lab.runner import _load_strategy_module, _execute_signal
     from app.db.models.bots import BotProfile as _BP, BotAllocation as _BA
 
@@ -121,8 +121,13 @@ def scan_and_execute(
     trades_executed = 0
     execute_errors: List[Dict[str, Any]] = []
 
-    # ── 1. Load profile YAML ──────────────────────────────────────────────────
-    profile = load_profile(profile_name)
+    # ── 1. Load profile — YAML merged with runtime overrides (2026-07-15 fix)
+    # Prior code called load_profile() which ONLY reads YAML. Runtime knobs
+    # written to bot_config_overrides via /api/admin/bots/{id}/config never
+    # reached the runner, so the admin UI thresholds/cooldowns were dead.
+    # Verified: 13 crypto bots + 5 equity/options bots had overrides set
+    # tonight; effective_config.py wasn't wired into this scan path.
+    profile = load_effective_config(profile_name, db)
     if not profile:
         logger.warning("[scan:%s] profile YAML not found", profile_name)
         return _empty_result(profile_name, f"Profile '{profile_name}' not found")

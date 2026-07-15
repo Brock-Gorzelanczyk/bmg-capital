@@ -228,8 +228,13 @@ def run_bot_profile(profile_name: str) -> dict:
     logger.warning(">>> [runner:%s] scan cycle START %s", profile_name, _scan_start.isoformat())
     try:
         # 1. Load profile YAML
-        from strategy_lab.seeds import load_profile
-        profile = load_profile(profile_name)
+        from strategy_lab.core.effective_config import load_effective_config
+        from app.db.session import SessionLocal as _EC_Session
+        _ec_db = _EC_Session()
+        try:
+            profile = load_effective_config(profile_name, _ec_db)
+        finally:
+            _ec_db.close()
 
         # 2. Get all enabled allocations for this profile
         from app.db.session import SessionLocal
@@ -1201,8 +1206,13 @@ def trace_bot_profile(profile_name: str, confidence_threshold_override: float | 
     }
 
     try:
-        from strategy_lab.seeds import load_profile
-        profile = load_profile(profile_name)
+        from strategy_lab.core.effective_config import load_effective_config
+        from app.db.session import SessionLocal as _EC_Session
+        _ec_db = _EC_Session()
+        try:
+            profile = load_effective_config(profile_name, _ec_db)
+        finally:
+            _ec_db.close()
 
         # Apply confidence threshold override
         if confidence_threshold_override is not None:
