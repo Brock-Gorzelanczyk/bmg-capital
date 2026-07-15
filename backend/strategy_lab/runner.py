@@ -2629,7 +2629,12 @@ def _check_options_risk_gates(
         return True, ""
 
     max_per_trade_pct = float(_os.getenv("OPTIONS_MAX_PER_TRADE_GROSS_PCT_NAV", "0.06"))
-    max_gross_pct    = float(_os.getenv("OPTIONS_GROSS_MAX_PCT_NAV", "0.40"))
+    # Fleet-wide options gross cap. Default 200% NAV (effectively off) —
+    # defined-risk credit spreads can safely stack way past NAV in gross
+    # market value since max loss per contract is spread_width × 100. The
+    # per-trade cap + per-bot position_cap + Alpaca buying_power do the
+    # real work. This gate is left as a runtime knob for emergencies only.
+    max_gross_pct    = float(_os.getenv("OPTIONS_GROSS_MAX_PCT_NAV", "2.0"))
     min_dte          = int(_os.getenv("OPTIONS_MIN_DTE", "7"))
 
     nav = _fund_nav_dollars(db)
@@ -2646,17 +2651,21 @@ def _check_options_risk_gates(
             f"{max_per_trade_pct*100:.1f}% NAV (${per_trade_cap:.0f})"
         )
 
-    # ── Gate 2: fleet options gross cap ─────────────────────────────────
-    current_gross = _current_options_gross_dollars()
-    if current_gross is not None:
-        gross_cap = nav * max_gross_pct
-        projected_gross = current_gross + position_dollars_budget
-        if projected_gross > gross_cap:
-            return False, (
-                f"fleet_options_gross_cap: current ${current_gross:.0f} + new "
-                f"${position_dollars_budget:.0f} = ${projected_gross:.0f} > "
-                f"{max_gross_pct*100:.0f}% NAV (${gross_cap:.0f})"
-            )
+    # ── Gate 2: fleet options gross cap (opt-in emergency brake) ────────
+    # Skip entirely at the default 200% ceiling so the fleet can keep
+    # trading. Tighten via OPTIONS_GROSS_MAX_PCT_NAV env if a specific
+    # scenario needs it.
+    if max_gross_pct < 1.5:
+        current_gross = _current_options_gross_dollars()
+        if current_gross is not None:
+            gross_cap = nav * max_gross_pct
+            projected_gross = current_gross + position_dollars_budget
+            if projected_gross > gross_cap:
+                return False, (
+                    f"fleet_options_gross_cap: current ${current_gross:.0f} + new "
+                    f"${position_dollars_budget:.0f} = ${projected_gross:.0f} > "
+                    f"{max_gross_pct*100:.0f}% NAV (${gross_cap:.0f})"
+                )
 
     # ── Gate 3: DTE floor ───────────────────────────────────────────────
     try:
