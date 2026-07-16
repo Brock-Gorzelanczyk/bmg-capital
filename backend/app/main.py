@@ -1207,28 +1207,63 @@ async def lifespan(app: FastAPI):
     # Start the live data stream and background scheduler
     await stream_manager.start()
     setup_scheduler()
-    from app.routers.monitoring import setup_monitoring_scheduler
-    setup_monitoring_scheduler(scheduler)
+
+    # ── 2026-07-16 PATH-2 TRIM (Brock cost cut) ─────────────────────────
+    # Only schedulers that Strategy Lab needs are ON below. Everything else
+    # is commented out with markers. To restore any single scheduler, delete
+    # the leading "# PAUSED 2026-07-16 (cost): " from its block and redeploy.
+    # See memory/project_path2_trim_2026_07_16.md for the full list.
+    #
+    # STAYS ON:
+    #   - bot_scheduler        (the trade scanner; without it bots don't run)
+    #   - buying_power_healer  (auto-frees Alpaca BP so bots keep trading)
+    #   - orphan_adopter       (reconciles broker vs BMG positions)
+    #   - option_close_sync    (options exit tracking)
+    #   - pr_daily_mark        (PR bot mark-to-market on leaderboard)
+    #
+    # PAUSED:
+    #   - monitoring_scheduler (was the biggest cost driver — health/status
+    #                          checks every 60s. Strategy Lab doesn't need.)
+    #   - onchain_scheduler    (crypto onchain data ingest — not on strat lab)
+    #   - aqa_loop             (LLM agent quality assurance loop)
+    #   - portfolio_rank_scheduler (PR rebalance; manual only for now)
+    #   - edgar_13f            (SEC filings ingest for smart_money factor)
+    #   - threshold_experiment (my threshold experiment daemon)
+    #   - sp500_refresh        (universe refresh; slow-changing)
+
     logger.warning("[startup-trace] calling setup_bot_scheduler")
     from strategy_lab.bot_scheduler import setup_bot_scheduler
     setup_bot_scheduler(scheduler)
     logger.warning("[startup-trace] setup_bot_scheduler returned")
-    from app.services.onchain_ingest import setup_onchain_scheduler
-    setup_onchain_scheduler(scheduler)
-    from app.jobs.aqa_loop import register_aqa_jobs
-    register_aqa_jobs(scheduler)
-    try:
-        from strategy_lab.portfolio_rank_runner import setup_portfolio_rank_scheduler
-        setup_portfolio_rank_scheduler(scheduler)
-    except Exception as _pr_sched_exc:
-        logger.error("[startup] portfolio_rank scheduler FAILED (non-fatal): %s",
-                     _pr_sched_exc, exc_info=True)
-    try:
-        from app.services.edgar_13f import setup_edgar_13f_scheduler
-        setup_edgar_13f_scheduler(scheduler)
-    except Exception as _edgar_sched_exc:
-        logger.error("[startup] edgar_13f scheduler FAILED (non-fatal): %s",
-                     _edgar_sched_exc, exc_info=True)
+
+    # PAUSED 2026-07-16 (cost): monitoring_scheduler was the biggest CPU drain
+    # from app.routers.monitoring import setup_monitoring_scheduler
+    # setup_monitoring_scheduler(scheduler)
+
+    # PAUSED 2026-07-16 (cost): onchain data ingest
+    # from app.services.onchain_ingest import setup_onchain_scheduler
+    # setup_onchain_scheduler(scheduler)
+
+    # PAUSED 2026-07-16 (cost): AQA LLM loop
+    # from app.jobs.aqa_loop import register_aqa_jobs
+    # register_aqa_jobs(scheduler)
+
+    # PAUSED 2026-07-16 (cost): PR rebalance daemon
+    # try:
+    #     from strategy_lab.portfolio_rank_runner import setup_portfolio_rank_scheduler
+    #     setup_portfolio_rank_scheduler(scheduler)
+    # except Exception as _pr_sched_exc:
+    #     logger.error("[startup] portfolio_rank scheduler FAILED (non-fatal): %s",
+    #                  _pr_sched_exc, exc_info=True)
+
+    # PAUSED 2026-07-16 (cost): SEC 13F ingest
+    # try:
+    #     from app.services.edgar_13f import setup_edgar_13f_scheduler
+    #     setup_edgar_13f_scheduler(scheduler)
+    # except Exception as _edgar_sched_exc:
+    #     logger.error("[startup] edgar_13f scheduler FAILED (non-fatal): %s",
+    #                  _edgar_sched_exc, exc_info=True)
+
     try:
         from app.services.option_close_sync import setup_option_close_sync_scheduler
         setup_option_close_sync_scheduler(scheduler)
@@ -1241,18 +1276,23 @@ async def lifespan(app: FastAPI):
     except Exception as _pr_mark_exc:
         logger.error("[startup] pr_daily_mark scheduler FAILED (non-fatal): %s",
                      _pr_mark_exc, exc_info=True)
-    try:
-        from app.services.threshold_experiment import setup_threshold_experiment_scheduler
-        setup_threshold_experiment_scheduler(scheduler)
-    except Exception as _te_exc:
-        logger.error("[startup] threshold_experiment scheduler FAILED (non-fatal): %s",
-                     _te_exc, exc_info=True)
-    try:
-        from app.services.sp500_refresh import setup_sp500_scheduler
-        setup_sp500_scheduler(scheduler)
-    except Exception as _sp_sched_exc:
-        logger.error("[startup] sp500_refresh scheduler FAILED (non-fatal): %s",
-                     _sp_sched_exc, exc_info=True)
+
+    # PAUSED 2026-07-16 (cost): threshold experiment daemon
+    # try:
+    #     from app.services.threshold_experiment import setup_threshold_experiment_scheduler
+    #     setup_threshold_experiment_scheduler(scheduler)
+    # except Exception as _te_exc:
+    #     logger.error("[startup] threshold_experiment scheduler FAILED (non-fatal): %s",
+    #                  _te_exc, exc_info=True)
+
+    # PAUSED 2026-07-16 (cost): SP500 universe refresh
+    # try:
+    #     from app.services.sp500_refresh import setup_sp500_scheduler
+    #     setup_sp500_scheduler(scheduler)
+    # except Exception as _sp_sched_exc:
+    #     logger.error("[startup] sp500_refresh scheduler FAILED (non-fatal): %s",
+    #                  _sp_sched_exc, exc_info=True)
+
     try:
         from app.services.buying_power_healer import setup_buying_power_healer
         setup_buying_power_healer(scheduler)
@@ -1267,8 +1307,10 @@ async def lifespan(app: FastAPI):
                      _oa_exc, exc_info=True)
     scheduler.start()
 
-    # Kick off strategy scan in background — won't block server startup
-    asyncio.create_task(_startup_strategy_scan())
+    # PAUSED 2026-07-16 (cost): startup strategy scan ran full universe on every
+    # boot — dozens of yfinance calls + DB writes. Bot scheduler handles real
+    # trading; this was for user "daily equity snapshots" (non-Strategy-Lab).
+    # asyncio.create_task(_startup_strategy_scan())
 
     # Health check: warn if ANTHROPIC_API_KEY is missing — AI features degrade gracefully
     import os
@@ -1278,35 +1320,38 @@ async def lifespan(app: FastAPI):
             "Set in Railway environment variables."
         )
 
-    # Sentinel — startup heartbeat + internal tick loop + Railway watcher
-    from app.services.sentinel_monitor import (
-        log_config as _sentinel_log_config,
-        send_startup_heartbeat as _sentinel_startup,
-        sentinel_loop as _sentinel_loop,
-        railway_watcher_loop as _railway_watcher_loop,
-    )
-    _sentinel_log_config()
-    asyncio.create_task(asyncio.to_thread(_sentinel_startup))
-    asyncio.create_task(_sentinel_loop())
-    asyncio.create_task(_railway_watcher_loop())
+    # PAUSED 2026-07-16 (cost): Sentinel + Railway watcher run 24/7 async
+    # loops that eat CPU even when idle. Ops monitoring — nothing to do with
+    # Strategy Lab. See memory/project_path2_trim_2026_07_16.md.
+    #
+    # from app.services.sentinel_monitor import (
+    #     log_config as _sentinel_log_config,
+    #     send_startup_heartbeat as _sentinel_startup,
+    #     sentinel_loop as _sentinel_loop,
+    #     railway_watcher_loop as _railway_watcher_loop,
+    # )
+    # _sentinel_log_config()
+    # asyncio.create_task(asyncio.to_thread(_sentinel_startup))
+    # asyncio.create_task(_sentinel_loop())
+    # asyncio.create_task(_railway_watcher_loop())
 
-    # One-time intro conversation — fires if #fund-team-chat webhook is set and never run before
-    async def _maybe_run_intro():
-        import asyncio as _aio
-        await _aio.sleep(15)  # wait for scheduler + agents to settle
-        try:
-            from agents.intro_conversation import has_run_intro, run_intro_conversation as _run_intro
-            from app.dependencies import get_db as _get_db
-            _db = next(_get_db())
-            try:
-                if not has_run_intro(_db):
-                    logger.info("[startup] firing first-run intro conversation")
-                    await _aio.to_thread(_run_intro, _db)
-            finally:
-                _db.close()
-        except Exception as _exc:
-            logger.warning("[startup] intro conversation failed (non-fatal): %s", _exc)
-    asyncio.create_task(_maybe_run_intro())
+    # PAUSED 2026-07-16 (cost): first-run LLM intro conversation
+    # async def _maybe_run_intro():
+    #     import asyncio as _aio
+    #     await _aio.sleep(15)
+    #     try:
+    #         from agents.intro_conversation import has_run_intro, run_intro_conversation as _run_intro
+    #         from app.dependencies import get_db as _get_db
+    #         _db = next(_get_db())
+    #         try:
+    #             if not has_run_intro(_db):
+    #                 logger.info("[startup] firing first-run intro conversation")
+    #                 await _aio.to_thread(_run_intro, _db)
+    #         finally:
+    #             _db.close()
+    #     except Exception as _exc:
+    #         logger.warning("[startup] intro conversation failed (non-fatal): %s", _exc)
+    # asyncio.create_task(_maybe_run_intro())
 
     # One-shot pre-market book post — fires 90s after boot when
     # BMG_FIRE_PREMARKET_NOW=true. Used to verify the format overnight
