@@ -59,36 +59,63 @@ from app.alpaca.stream import stream_manager
 from app.screener.scheduler import scheduler, setup_scheduler
 from app.ws.manager import connection_manager
 from app.ws.router import router as ws_router
-from app.routers import bars, screener, watchlist, portfolio, alerts, market, news, earnings, strategy, auth, backtest, research, paper, screens, learn, explain, options, notifications, discovery, onboarding, journal, journal_analytics, social, tiers, chart_drawings, support, recap, crypto, db_restore, crypto_strategy, defi, security, governance, bridge, copilot, workspace, workshop, monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement, robo, autonomous, autopilot, playbook, founder, linked_accounts, voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp, staking, dca_baskets, bots, strategy_lab, strategy_library, custom_bot, analyst, v2_shadow, smart_money, exams, admin, discipline, hypotheses, brain, tuning
-from app.routers import strategy_workshop, price_alerts
+
+# 2026-07-16 PATH-2 TRIM (Brock cost cut) — Strategy Lab essentials only.
+# Every module NOT in this reduced list is paused to shrink RAM footprint.
+# Restore by uncommenting the desired router below AND its include_router
+# line further down. See memory/project_path2_trim_2026_07_16.md.
+from app.routers import (
+    bars,       # /api/bars — Chart data used by Bot Detail / Contract Detail
+    portfolio,  # /api/portfolio — open positions endpoint
+    auth,       # /api/auth — login
+    bots,       # /api/bots — bot list + detail
+    strategy_lab,  # /api/strategy-lab — the star of the show
+    admin,      # /api/admin — gates, threshold experiment, orphan adopter
+)
 from app.routers.admin_bots import router as admin_bots_router
-from app.routers.sentinel import router as sentinel_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.pnl import router as pnl_router
 from app.routers.allocation import router as allocation_router
-from app.routers.trading_gate import router as trading_gate_router
-from app.routers.blackouts import router as blackouts_router
-from app.routers.scout import router as scout_router
-from app.routers.forge import router as forge_router
 from app.routers.performance import router as performance_router
-from app.routers.markets import router as markets_router
-from app.routers import symbols as symbols_router
-from app.routers import chart_layouts as chart_layouts_router
 from app.routers.leaderboard import router as leaderboard_router
-from app.routers.learning import router as learning_router
-from app.routers.candidates import router as candidates_router
-from app.routers.walk_forward import router as walk_forward_router
 from app.routers.contract_detail import router as contract_detail_router
-from app.routers.cost import router as cost_router
-from app.routers.ic import router as ic_router
-from app.routers.fund_agents import router as fund_agents_router
-from app.routers.fund import router as fund_router
-from app.routers.proposals import router as proposals_router
-from app.routers.budget_router import router as budget_router
-from app.routers.research_feed import router as research_feed_router
-from app.routers.admin_reconstruct import router as admin_reconstruct_router
-from app.routers import notification_channels as notification_channels_router
-from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
+from app.routers.portfolio_rank import router as portfolio_rank_router
+
+# ─── PAUSED 2026-07-16 (cost) — restore by uncommenting the block you want ──
+# from app.routers import (
+#     screener, watchlist, alerts, market, news, earnings, strategy, backtest,
+#     research, paper, screens, learn, explain, options, notifications,
+#     discovery, onboarding, journal, journal_analytics, social, tiers,
+#     chart_drawings, support, recap, crypto, db_restore, crypto_strategy,
+#     defi, security, governance, bridge, copilot, workspace, workshop,
+#     monitoring, gdpr, net_worth, tax, estate, pods, rules, tlh, engagement,
+#     robo, autonomous, autopilot, playbook, founder, linked_accounts,
+#     voice_ai, daily_brief, deposit_match, referral, learn_earn, ipo, cfp,
+#     staking, dca_baskets, strategy_library, custom_bot, analyst, v2_shadow,
+#     smart_money, exams, discipline, hypotheses, brain, tuning,
+# )
+# from app.routers import strategy_workshop, price_alerts
+# from app.routers.sentinel import router as sentinel_router
+# from app.routers.trading_gate import router as trading_gate_router
+# from app.routers.blackouts import router as blackouts_router
+# from app.routers.scout import router as scout_router
+# from app.routers.forge import router as forge_router
+# from app.routers.markets import router as markets_router
+# from app.routers import symbols as symbols_router
+# from app.routers import chart_layouts as chart_layouts_router
+# from app.routers.learning import router as learning_router
+# from app.routers.candidates import router as candidates_router
+# from app.routers.walk_forward import router as walk_forward_router
+# from app.routers.cost import router as cost_router
+# from app.routers.ic import router as ic_router
+# from app.routers.fund_agents import router as fund_agents_router
+# from app.routers.fund import router as fund_router
+# from app.routers.proposals import router as proposals_router
+# from app.routers.budget_router import router as budget_router
+# from app.routers.research_feed import router as research_feed_router
+# from app.routers.admin_reconstruct import router as admin_reconstruct_router
+# from app.routers import notification_channels as notification_channels_router
+# from app.db.models.engagement import MarketChallenge, MarketChallengeAttempt, LeagueCohort, LeaguePoints  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -157,37 +184,34 @@ async def lifespan(app: FastAPI):
     finally:
         _seed_db2.close()
 
-    # Seed IMCP learning curriculum (no-op if tracks already exist)
-    from app.seeds.learning_seed import seed_learning_content
-    _seed_db3 = SessionLocal()
-    try:
-        seed_learning_content(_seed_db3)
-    finally:
-        _seed_db3.close()
+    # PAUSED 2026-07-16 (cost): learning + exam content — not Strategy Lab.
+    # from app.seeds.learning_seed import seed_learning_content
+    # _seed_db3 = SessionLocal()
+    # try: seed_learning_content(_seed_db3)
+    # finally: _seed_db3.close()
+    #
+    # from app.seeds.exam_seed import seed_exam_questions
+    # from app.db.models.exams import ExamQuestion
+    # _seed_exam_db = SessionLocal()
+    # try:
+    #     q_count = _seed_exam_db.query(ExamQuestion).count()
+    #     if q_count < 60:
+    #         seed_exam_questions(_seed_exam_db)
+    # except Exception as _exam_seed_exc:
+    #     logger.warning("[startup] exam_seed failed (non-fatal): %s", _exam_seed_exc)
+    # finally:
+    #     _seed_exam_db.close()
 
-    # Seed exam questions (only if fewer than 60 exist)
-    from app.seeds.exam_seed import seed_exam_questions
-    from app.db.models.exams import ExamQuestion
-    _seed_exam_db = SessionLocal()
-    try:
-        q_count = _seed_exam_db.query(ExamQuestion).count()
-        if q_count < 60:
-            seed_exam_questions(_seed_exam_db)
-    except Exception as _exam_seed_exc:
-        logger.warning("[startup] exam_seed failed (non-fatal): %s", _exam_seed_exc)
-    finally:
-        _seed_exam_db.close()
-
-    # Seed example workshop charts for user_id=1 (non-fatal — idempotent)
-    try:
-        from app.routers.strategy_workshop import startup_seed_workshop_examples
-        _seed_workshop_db = SessionLocal()
-        try:
-            startup_seed_workshop_examples(_seed_workshop_db)
-        finally:
-            _seed_workshop_db.close()
-    except Exception as _workshop_seed_exc:
-        logger.warning("[startup] workshop_charts seed failed (non-fatal): %s", _workshop_seed_exc)
+    # PAUSED 2026-07-16 (cost): workshop seed uses the paused strategy_workshop router
+    # try:
+    #     from app.routers.strategy_workshop import startup_seed_workshop_examples
+    #     _seed_workshop_db = SessionLocal()
+    #     try:
+    #         startup_seed_workshop_examples(_seed_workshop_db)
+    #     finally:
+    #         _seed_workshop_db.close()
+    # except Exception as _workshop_seed_exc:
+    #     logger.warning("[startup] workshop_charts seed failed (non-fatal): %s", _workshop_seed_exc)
 
     # Ensure bot_paper_accounts table + crypto_quant_aggressive $100k sub-account row
     # (non-fatal — same idempotent pattern as learning_seed)
@@ -1163,42 +1187,38 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] capital_invariant boot check failed: %s",
                      _inv_exc, exc_info=True)
 
-    # Seed hypotheses from strategy_definitions (idempotent — adds only new entries)
-    try:
-        from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
-        _hyp_db = SessionLocal()
-        try:
-            _seed_hyp(_hyp_db)
-        finally:
-            _hyp_db.close()
-    except Exception as _hyp_seed_exc:
-        logger.warning("[startup] hypotheses seed failed (non-fatal): %s", _hyp_seed_exc)
+    # PAUSED 2026-07-16 (cost): hypotheses seed (not on Strategy Lab)
+    # try:
+    #     from app.services.hypotheses import seed_hypotheses_from_strategies as _seed_hyp
+    #     _hyp_db = SessionLocal()
+    #     try: _seed_hyp(_hyp_db)
+    #     finally: _hyp_db.close()
+    # except Exception as _hyp_seed_exc:
+    #     logger.warning("[startup] hypotheses seed failed (non-fatal): %s", _hyp_seed_exc)
 
-    # Seed smart_money_congress if table is empty (non-fatal — network may be down)
-    from app.db.models.smart_money import SmartMoneyCongressTrade
-    _smc_db = SessionLocal()
-    try:
-        smc_count = _smc_db.query(SmartMoneyCongressTrade).count()
-        if smc_count == 0:
-            from app.services.smart_money.congress import fetch_and_upsert_congress
-
-            async def _seed_congress():
-                _seed_smc_db = SessionLocal()
-                try:
-                    result = await fetch_and_upsert_congress(_seed_smc_db, days_back=30)
-                    logger.info("[startup] smart_money_congress seeded: %s", result)
-                except Exception as _e:
-                    logger.warning("[startup] smart_money_congress seed failed (non-fatal): %s", _e)
-                finally:
-                    _seed_smc_db.close()
-
-            asyncio.create_task(_seed_congress())
-        else:
-            logger.info("[startup] smart_money_congress already has %d rows — skipping seed", smc_count)
-    except Exception as _e:
-        logger.warning("[startup] smart_money_congress seed check failed (non-fatal): %s", _e)
-    finally:
-        _smc_db.close()
+    # PAUSED 2026-07-16 (cost): smart_money_congress seed — not on Strategy Lab
+    # from app.db.models.smart_money import SmartMoneyCongressTrade
+    # _smc_db = SessionLocal()
+    # try:
+    #     smc_count = _smc_db.query(SmartMoneyCongressTrade).count()
+    #     if smc_count == 0:
+    #         from app.services.smart_money.congress import fetch_and_upsert_congress
+    #         async def _seed_congress():
+    #             _seed_smc_db = SessionLocal()
+    #             try:
+    #                 result = await fetch_and_upsert_congress(_seed_smc_db, days_back=30)
+    #                 logger.info("[startup] smart_money_congress seeded: %s", result)
+    #             except Exception as _e:
+    #                 logger.warning("[startup] smart_money_congress seed failed (non-fatal): %s", _e)
+    #             finally:
+    #                 _seed_smc_db.close()
+    #         asyncio.create_task(_seed_congress())
+    #     else:
+    #         logger.info("[startup] smart_money_congress already has %d rows — skipping seed", smc_count)
+    # except Exception as _e:
+    #     logger.warning("[startup] smart_money_congress seed check failed (non-fatal): %s", _e)
+    # finally:
+    #     _smc_db.close()
 
     # Wire Alpaca stream events to connected WebSocket clients
     stream_manager.on_quote(connection_manager.send_to_symbol_subscribers)
@@ -1571,149 +1591,152 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
+# ─── 2026-07-16 PATH-2 TRIM (Brock cost cut) — Strategy Lab essentials only ─
+# Everything routes through only 12 routers now. Every other include_router
+# is commented below. To restore a specific one: uncomment the include line
+# AND its import above.
 app.include_router(ws_router)
 app.include_router(auth.router)
 app.include_router(bars.router)
-app.include_router(screener.router)
-app.include_router(watchlist.router)
 app.include_router(portfolio.router)
 app.include_router(contract_detail_router)
-app.include_router(alerts.router)
-app.include_router(market.router)
-app.include_router(news.router)
-app.include_router(earnings.router)
-app.include_router(strategy.router)
-app.include_router(backtest.router)
-app.include_router(research.router)
-# paper.router removed — tables archived 2026-06-06
-app.include_router(screens.router)
-app.include_router(learn.router)
-app.include_router(learning_router)
-app.include_router(explain.router)
-app.include_router(options.router)
-app.include_router(notifications.router)
-app.include_router(discovery.router)
-app.include_router(onboarding.router)
-app.include_router(journal.router)
-app.include_router(journal_analytics.router)
-app.include_router(social.router)
-app.include_router(engagement.router)
-app.include_router(tiers.router)
-app.include_router(chart_drawings.router)
-app.include_router(support.router)
-app.include_router(recap.router)
-app.include_router(crypto.router)
-app.include_router(crypto_strategy.router)
-app.include_router(defi.router)
-app.include_router(security.router)
-app.include_router(governance.router)
-app.include_router(bridge.router)
-app.include_router(db_restore.router)
-app.include_router(copilot.router)
-app.include_router(workspace.router)
-app.include_router(workshop.router)
-app.include_router(strategy_workshop.router)
-app.include_router(price_alerts.router)
-app.include_router(monitoring.router)
-app.include_router(autonomous.router)
-app.include_router(gdpr.router)
-app.include_router(net_worth.router)
-app.include_router(tax.router)
-app.include_router(estate.router)
-app.include_router(pods.router)
-app.include_router(rules.router)
-app.include_router(rules.transfers_router)
-app.include_router(tlh.router)
-app.include_router(robo.router)
-app.include_router(autopilot.router)
-app.include_router(playbook.router)
-app.include_router(founder.router)
-app.include_router(linked_accounts.router)
-app.include_router(voice_ai.router)
-app.include_router(daily_brief.router)
-app.include_router(deposit_match.router)
-app.include_router(referral.router)
-app.include_router(learn_earn.router)
-app.include_router(ipo.router)
-app.include_router(cfp.router)
-app.include_router(staking.router)
-app.include_router(dca_baskets.router)
-app.include_router(allocation_router)
-app.include_router(trading_gate_router)
-app.include_router(blackouts_router)
 app.include_router(bots.router)
 app.include_router(strategy_lab.router)
-app.include_router(notification_channels_router.router)
-app.include_router(strategy_library.router)
-app.include_router(custom_bot.router)
-app.include_router(analyst.router)
-app.include_router(v2_shadow.router)
-app.include_router(smart_money.router)
-app.include_router(discipline.router)
-app.include_router(hypotheses.router)
-app.include_router(brain.router)
-app.include_router(tuning.router)
-app.include_router(exams.router)
-app.include_router(exams.verify_router)
 app.include_router(admin.router)
-from app.routers.options_diagnostic import router as options_diagnostic_router
-app.include_router(options_diagnostic_router)
-from app.routers.concentration import router as concentration_router
-app.include_router(concentration_router)
-from app.routers.allocator import router as allocator_router
-app.include_router(allocator_router)
-from app.routers.capital_execute import router as capital_execute_router
-app.include_router(capital_execute_router)
-from app.routers.friction import router as friction_router
-app.include_router(friction_router)
-from app.routers.cash_floor import router as cash_floor_router
-app.include_router(cash_floor_router)
-from app.routers.farm import router as farm_router
-app.include_router(farm_router)
-from app.routers.portfolio_rank import router as portfolio_rank_router
-app.include_router(portfolio_rank_router)
-from app.routers.clean_slate import router as clean_slate_router
-app.include_router(clean_slate_router)
 app.include_router(admin_bots_router)
-from app.routers.admin_quarantine import router as admin_quarantine_router
-app.include_router(admin_quarantine_router)
-app.include_router(sentinel_router)
 app.include_router(dashboard_router)
 app.include_router(pnl_router)
-app.include_router(scout_router)
-app.include_router(forge_router)
+app.include_router(allocation_router)
 app.include_router(performance_router)
-app.include_router(markets_router)
-app.include_router(symbols_router.router)
-app.include_router(chart_layouts_router.router)
 app.include_router(leaderboard_router)
-app.include_router(candidates_router)
-app.include_router(walk_forward_router)
-app.include_router(cost_router)
-app.include_router(ic_router)
-app.include_router(fund_agents_router)
-app.include_router(fund_router)
-app.include_router(proposals_router)
-app.include_router(budget_router)
-app.include_router(research_feed_router)
-app.include_router(admin_reconstruct_router)
-from app.routers.agent_opening_reads import router as agent_opening_reads_router
-app.include_router(agent_opening_reads_router)
-from app.routers.cio_meeting import router as cio_meeting_router
-app.include_router(cio_meeting_router)
-from app.routers.fund_floor import router as fund_floor_router
-app.include_router(fund_floor_router)
-from app.routers.strategy_journal import router as strategy_journal_router
-app.include_router(strategy_journal_router)
-from app.routers import aqa_admin
-app.include_router(aqa_admin.router)
-from app.routers.live_activity import router as live_activity_router
-app.include_router(live_activity_router)
-from app.routers.risk_console import router as risk_console_router
-app.include_router(risk_console_router)
-from app.routers.trades_journal import router as trades_journal_router
-app.include_router(trades_journal_router)
+app.include_router(portfolio_rank_router)
+
+# ─── PAUSED 2026-07-16 (cost) — uncomment to restore any single router ──────
+# app.include_router(screener.router)
+# app.include_router(watchlist.router)
+# app.include_router(alerts.router)
+# app.include_router(market.router)
+# app.include_router(news.router)
+# app.include_router(earnings.router)
+# app.include_router(strategy.router)
+# app.include_router(backtest.router)
+# app.include_router(research.router)
+# app.include_router(screens.router)
+# app.include_router(learn.router)
+# app.include_router(learning_router)
+# app.include_router(explain.router)
+# app.include_router(options.router)
+# app.include_router(notifications.router)
+# app.include_router(discovery.router)
+# app.include_router(onboarding.router)
+# app.include_router(journal.router)
+# app.include_router(journal_analytics.router)
+# app.include_router(social.router)
+# app.include_router(engagement.router)
+# app.include_router(tiers.router)
+# app.include_router(chart_drawings.router)
+# app.include_router(support.router)
+# app.include_router(recap.router)
+# app.include_router(crypto.router)
+# app.include_router(crypto_strategy.router)
+# app.include_router(defi.router)
+# app.include_router(security.router)
+# app.include_router(governance.router)
+# app.include_router(bridge.router)
+# app.include_router(db_restore.router)
+# app.include_router(copilot.router)
+# app.include_router(workspace.router)
+# app.include_router(workshop.router)
+# app.include_router(strategy_workshop.router)
+# app.include_router(price_alerts.router)
+# app.include_router(monitoring.router)
+# app.include_router(autonomous.router)
+# app.include_router(gdpr.router)
+# app.include_router(net_worth.router)
+# app.include_router(tax.router)
+# app.include_router(estate.router)
+# app.include_router(pods.router)
+# app.include_router(rules.router)
+# app.include_router(rules.transfers_router)
+# app.include_router(tlh.router)
+# app.include_router(robo.router)
+# app.include_router(autopilot.router)
+# app.include_router(playbook.router)
+# app.include_router(founder.router)
+# app.include_router(linked_accounts.router)
+# app.include_router(voice_ai.router)
+# app.include_router(daily_brief.router)
+# app.include_router(deposit_match.router)
+# app.include_router(referral.router)
+# app.include_router(learn_earn.router)
+# app.include_router(ipo.router)
+# app.include_router(cfp.router)
+# app.include_router(staking.router)
+# app.include_router(dca_baskets.router)
+# app.include_router(trading_gate_router)
+# app.include_router(blackouts_router)
+# app.include_router(notification_channels_router.router)
+# app.include_router(strategy_library.router)
+# app.include_router(custom_bot.router)
+# app.include_router(analyst.router)
+# app.include_router(v2_shadow.router)
+# app.include_router(smart_money.router)
+# app.include_router(discipline.router)
+# app.include_router(hypotheses.router)
+# app.include_router(brain.router)
+# app.include_router(tuning.router)
+# app.include_router(exams.router)
+# app.include_router(exams.verify_router)
+# from app.routers.options_diagnostic import router as options_diagnostic_router
+# app.include_router(options_diagnostic_router)
+# from app.routers.concentration import router as concentration_router
+# app.include_router(concentration_router)
+# from app.routers.allocator import router as allocator_router
+# app.include_router(allocator_router)
+# from app.routers.capital_execute import router as capital_execute_router
+# app.include_router(capital_execute_router)
+# from app.routers.friction import router as friction_router
+# app.include_router(friction_router)
+# from app.routers.cash_floor import router as cash_floor_router
+# app.include_router(cash_floor_router)
+# from app.routers.farm import router as farm_router
+# app.include_router(farm_router)
+# from app.routers.clean_slate import router as clean_slate_router
+# app.include_router(clean_slate_router)
+# from app.routers.admin_quarantine import router as admin_quarantine_router
+# app.include_router(admin_quarantine_router)
+# app.include_router(sentinel_router)
+# app.include_router(scout_router)
+# app.include_router(forge_router)
+# app.include_router(markets_router)
+# app.include_router(symbols_router.router)
+# app.include_router(chart_layouts_router.router)
+# app.include_router(candidates_router)
+# app.include_router(walk_forward_router)
+# app.include_router(cost_router)
+# app.include_router(ic_router)
+# app.include_router(fund_agents_router)
+# app.include_router(fund_router)
+# app.include_router(proposals_router)
+# app.include_router(budget_router)
+# app.include_router(research_feed_router)
+# app.include_router(admin_reconstruct_router)
+# from app.routers.agent_opening_reads import router as agent_opening_reads_router
+# app.include_router(agent_opening_reads_router)
+# from app.routers.cio_meeting import router as cio_meeting_router
+# app.include_router(cio_meeting_router)
+# from app.routers.fund_floor import router as fund_floor_router
+# app.include_router(fund_floor_router)
+# from app.routers.strategy_journal import router as strategy_journal_router
+# app.include_router(strategy_journal_router)
+# from app.routers import aqa_admin
+# app.include_router(aqa_admin.router)
+# from app.routers.live_activity import router as live_activity_router
+# app.include_router(live_activity_router)
+# from app.routers.risk_console import router as risk_console_router
+# app.include_router(risk_console_router)
+# from app.routers.trades_journal import router as trades_journal_router
+# app.include_router(trades_journal_router)
 
 
 @app.get("/health", tags=["health"])
