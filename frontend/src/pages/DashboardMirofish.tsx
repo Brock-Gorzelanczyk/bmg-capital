@@ -127,7 +127,7 @@ const useHero = () =>
     queryKey: ["mirofish", "hero"],
     queryFn: async () =>
       (await client.get<HeroStats>("/dashboard/hero-stats")).data,
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 
@@ -136,7 +136,7 @@ const useSession = () =>
     queryKey: ["mirofish", "session"],
     queryFn: async () =>
       (await client.get<SessionMeta>("/dashboard/session-meta")).data,
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 
@@ -223,7 +223,7 @@ const useDashV2 = () =>
   useQuery({
     queryKey: ["mirofish", "dashv2"],
     queryFn: async () => (await client.get<DashV2>("/dashboard/v2")).data,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 

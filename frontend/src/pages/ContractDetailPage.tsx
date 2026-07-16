@@ -96,7 +96,7 @@ export default function ContractDetailPage() {
       const r = await client.get<PositionDetail>(`/contract/positions/${positionId}`);
       return r.data;
     },
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,   // 2026-07-16 cost cut: 5s → 30s
     refetchOnWindowFocus: true,
     enabled: Boolean(positionId),
   });
@@ -144,7 +144,8 @@ export default function ContractDetailPage() {
     }
 
     tick();
-    const iv = setInterval(tick, 3_000);
+    // 2026-07-16 cost cut: 3s → 15s. Still feels live; 4x less backend load.
+    const iv = setInterval(tick, 15_000);
     return () => { cancelled = true; clearInterval(iv); if (dropTimer) clearTimeout(dropTimer); };
   }, [posQuery.data?.occ_symbol]);
 

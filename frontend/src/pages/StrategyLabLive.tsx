@@ -48,7 +48,9 @@ const WINDOW_DAYS: Record<Window, number> = {
   "ALL": 3650,
 };
 
-const POLL_MS = 15_000;
+// 2026-07-16 cost cut: 15s → 60s. Strategy Lab is a browse page, not a
+// live-trading terminal — no need to hammer the backend every 15 seconds.
+const POLL_MS = 60_000;
 
 function fmtDollars(v: number | null | undefined, digits = 0): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";

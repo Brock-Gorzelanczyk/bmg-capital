@@ -43,17 +43,32 @@ _latest_sentinel: dict | None = None
 # ── Scheduler setup ───────────────────────────────────────────────────────────
 
 def setup_monitoring_scheduler(scheduler) -> None:
-    """Register all check frequency buckets + cleanup job."""
+    """Register all check frequency buckets + cleanup job.
+
+    2026-07-16 cost cuts (Brock: get Railway cost < $15/mo): every interval
+    is now env-tunable. Defaults were 60s / 5m / 15m — driving cost. New
+    defaults are 5x slower on the low-value tiers but still catch drift on
+    a useful cadence. Set to smaller values if you need it back.
+
+    Env:
+      MONITORING_MINUTE_INTERVAL_SEC   (default 300, was 60)
+      MONITORING_5MIN_INTERVAL_SEC     (default 900, was 300)
+      MONITORING_HEALTH_INTERVAL_SEC   (default 600, was 60)
+    """
+    import os
     from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
 
-    # Per-frequency runners
+    minute_sec  = int(os.getenv("MONITORING_MINUTE_INTERVAL_SEC", "300"))
+    fivemin_sec = int(os.getenv("MONITORING_5MIN_INTERVAL_SEC", "900"))
+    health_sec  = int(os.getenv("MONITORING_HEALTH_INTERVAL_SEC", "600"))
+
     scheduler.add_job(
-        _run_minute_checks, IntervalTrigger(seconds=60),
+        _run_minute_checks, IntervalTrigger(seconds=minute_sec),
         id="monitoring_minute", replace_existing=True,
     )
     scheduler.add_job(
-        _run_5min_checks, IntervalTrigger(minutes=5),
+        _run_5min_checks, IntervalTrigger(seconds=fivemin_sec),
         id="monitoring_5min", replace_existing=True,
     )
     scheduler.add_job(
@@ -68,20 +83,22 @@ def setup_monitoring_scheduler(scheduler) -> None:
         _run_daily_checks, CronTrigger(hour=6, minute=0, timezone="UTC"),
         id="monitoring_daily", replace_existing=True,
     )
-
     # Legacy health check → still feeds _health_history for /history endpoint
     scheduler.add_job(
-        _legacy_health_check, IntervalTrigger(seconds=60),
+        _legacy_health_check, IntervalTrigger(seconds=health_sec),
         id="monitoring_health_legacy", replace_existing=True,
     )
-
     # 90-day cleanup at midnight
     scheduler.add_job(
         _run_cleanup, CronTrigger(hour=0, minute=30, timezone="UTC"),
         id="monitoring_cleanup", replace_existing=True,
     )
 
-    logger.info("Monitoring scheduler jobs registered (registry-driven).")
+    logger.info(
+        "Monitoring scheduler jobs registered — minute=%ds 5min=%ds health=%ds "
+        "(env-tunable, cost-optimized defaults)",
+        minute_sec, fivemin_sec, health_sec,
+    )
 
 
 async def _run_minute_checks():
