@@ -46,7 +46,12 @@ _pause_banners_posted = False  # fire-once guard for startup banner
 
 
 def _signal_posting_enabled() -> bool:
-    """Return True only when DISCORD_SIGNAL_POSTING_ENABLED=true (default: false)."""
+    """Return True only when DISCORD_SIGNAL_POSTING_ENABLED=true (default: false).
+
+    Master kill: DISCORD_ENABLED=false silences EVERYTHING (added 2026-07-16).
+    """
+    if os.getenv("DISCORD_ENABLED", "true").strip().lower() == "false":
+        return False
     return os.getenv("DISCORD_SIGNAL_POSTING_ENABLED", "false").strip().lower() == "true"
 
 
@@ -55,7 +60,11 @@ def should_post_to_fund_updates(event: str, urgency: str = "routine") -> bool:
 
     Only returns True when urgency="critical" — a bot failure requiring manual
     intervention, an audit finding needing a code fix, or system-level emergency.
+
+    Master kill: DISCORD_ENABLED=false silences EVERYTHING (added 2026-07-16).
     """
+    if os.getenv("DISCORD_ENABLED", "true").strip().lower() == "false":
+        return False
     return urgency == "critical"
 
 

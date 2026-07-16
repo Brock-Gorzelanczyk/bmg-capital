@@ -47,7 +47,19 @@ BOT_DISPLAY = {
 }
 
 
+def _discord_master_kill() -> bool:
+    """Master kill switch — silences EVERY Discord post regardless of channel.
+
+    2026-07-16: added because DISCORD_OPS_ALERTS_ENABLED=false only gated
+    ops alerts; per-trade signal posts (send_signal, send_daily_summary)
+    kept posting. Set DISCORD_ENABLED=false and NOTHING goes to Discord.
+    """
+    return os.getenv("DISCORD_ENABLED", "true").strip().lower() == "false"
+
+
 def _webhook_url() -> str:
+    if _discord_master_kill():
+        return ""
     from app.config import settings
     return settings.discord_signal_webhook_url
 
@@ -55,6 +67,8 @@ def _webhook_url() -> str:
 def _ops_webhook_url() -> str:
     """Ops alert webhook — distinct from signal webhook so silencing signals
     doesn't also silence ops health."""
+    if _discord_master_kill():
+        return ""
     from app.config import settings
     return settings.alert_webhook_url
 
