@@ -1,3 +1,19 @@
+# ── 2026-08-03 memory trim (Brock cost cut) ──────────────────────────
+# Removed to shrink container from ~6 GB → ~2.5 GB:
+#   PyMuPDF   — PDF parsing (used only in tax.py, lazy import)
+#   anthropic — Anthropic LLM client (used only in llm_client.py + aqa.py)
+#   simfin    — fundamentals data (used only in quality_momentum_screen)
+#   scipy     — scientific computing (transitive dep of sklearn/statsmodels)
+#   scikit-learn — ML models (used only in allocator.py LedoitWolf)
+#   statsmodels — stat models (used only in factor_attribution + frac_diff)
+#   arch      — GARCH/volatility models (grepped: no importers)
+#
+# All 5 remaining importers use `import X` INSIDE function bodies (lazy),
+# so removing the packages does NOT crash the module at load time. The
+# features that use them will raise ImportError only if called.
+#
+# To restore: uncomment the package line + redeploy.
+# ─────────────────────────────────────────────────────────────────────
 fastapi==0.115.5
 sentry-sdk[fastapi]==2.18.0
 uvicorn[standard]==0.32.1
@@ -21,14 +37,14 @@ bcrypt==4.2.1
 stripe>=8.0.0
 ccxt>=4.3.0
 python-multipart>=0.0.9
-PyMuPDF>=1.24.0
-anthropic>=0.40.0
+# PyMuPDF>=1.24.0         # PAUSED 2026-08-03 (memory) — tax PDF parsing
+# anthropic>=0.40.0       # PAUSED 2026-08-03 (memory) — LLM Analyst
 PyYAML>=6.0
 psycopg2-binary>=2.9.0
 beautifulsoup4>=4.12.0
-simfin>=1.0.0
+# simfin>=1.0.0           # PAUSED 2026-08-03 (memory) — fundamentals
 pandas_datareader>=0.10.0
-scipy>=1.11.0
-scikit-learn>=1.4.0
-statsmodels>=0.14.0
-arch>=7.0.0
+# scipy>=1.11.0           # PAUSED 2026-08-03 (memory) — pulled in by sklearn/statsmodels only
+# scikit-learn>=1.4.0     # PAUSED 2026-08-03 (memory) — allocator.LedoitWolf
+# statsmodels>=0.14.0     # PAUSED 2026-08-03 (memory) — factor attribution + frac_diff
+# arch>=7.0.0             # PAUSED 2026-08-03 (memory) — GARCH models (no active importers)
