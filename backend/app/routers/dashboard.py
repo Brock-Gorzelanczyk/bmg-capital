@@ -502,6 +502,10 @@ def get_dashboard_v2(
             # cross-fetching /strategy-lab/portfolio.
             "deployed_cents": int(e.get("deployed_cents") or deployed_by_profile.get(prof_name, 0)),
             "starting_capital_cents": int(e.get("starting_capital_cents") or starting_by_profile.get(prof_name, 0)),
+            # 2026-08-05: propagate the total_trades count from canonical so
+            # the Strategy Lab leaderboard's yellow TRADES column shows real
+            # numbers instead of 0. StrategyLabV2 reads this via /api/dashboard/v2.
+            "total_trades": int(e.get("total_trades") or 0),
         })
     # Append orphan-allocation bots not represented in canonical's leaderboard.
     # 2026-07-06: previously we skipped allocs whose bot_snap was None (silent
@@ -515,6 +519,19 @@ def get_dashboard_v2(
             continue
         bot_snap = bot_snapshots_by_alloc.get(alloc.id)
         profiles_in_lb.add(prof.name)
+        # 2026-08-05: same TRADES column fix — count real (unquarantined)
+        # bot_trades for this allocation so orphan-alloc rows show counts too.
+        try:
+            from app.db.models.bots import BotTrade as _BT
+            _bot_trade_count = (
+                db.query(_BT)
+                .filter(_BT.allocation_id == alloc.id)
+                .filter(_BT.quarantined_at.is_(None))
+                .count()
+            )
+        except Exception:
+            _bot_trade_count = 0
+
         if bot_snap:
             leaderboard.append({
                 "rank": 0,
@@ -526,6 +543,7 @@ def get_dashboard_v2(
                 "portfolio_value_cents": int(bot_snap.portfolio_value_cents or 0),
                 "deployed_cents": int(getattr(bot_snap, "deployed_cents", 0) or 0),
                 "starting_capital_cents": int(bot_snap.starting_capital_cents or 0),
+                "total_trades": _bot_trade_count,
             })
         else:
             # Stub row so the bot still renders on the leaderboard.
@@ -540,6 +558,7 @@ def get_dashboard_v2(
                 "portfolio_value_cents": starting,
                 "deployed_cents": 0,
                 "starting_capital_cents": starting,
+                "total_trades": _bot_trade_count,
             })
 
     # 2026-07-06 Bug 3 fix: cash_floor slipped back onto the leaderboard via
