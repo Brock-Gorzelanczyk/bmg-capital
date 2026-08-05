@@ -568,6 +568,87 @@ def run_daily_reconciliation_endpoint(
     return run_daily_reconciliation(db)
 
 
+@router.post("/drift-repair-2026-08-05")
+def drift_repair_2026_08_05(
+    dry_run: bool = Query(True, description="Preview only when true (default)."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """One-shot: close the BMG↔Alpaca drift discovered on 2026-08-05.
+
+    - Quarantines 3 duplicate option positions (BABA 111C, BABA 112C short,
+      RIVN 16C) that were adopted twice on 2026-07-14.
+    - Repairs the surviving BABA 112C short whose entry basis was $0.59
+      but Alpaca reports avg_entry_price $7.97.
+    """
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotPosition
+
+    now = datetime.now(timezone.utc)
+    dupe_ids = [12154, 12155, 12107]
+    reason = "duplicate_baba_rivn_2026_07_14"
+
+    dupes = (
+        db.query(BotPosition)
+        .filter(BotPosition.id.in_(dupe_ids))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    dupe_snapshot = [
+        {"id": p.id, "symbol": p.symbol, "qty": float(p.qty or 0), "opened_at": p.opened_at.isoformat() if p.opened_at else None}
+        for p in dupes
+    ]
+
+    baba_short_matches = (
+        db.query(BotPosition)
+        .filter(BotPosition.symbol.like("BABA%C%"))
+        .filter(BotPosition.qty < 0)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .filter(~BotPosition.id.in_(dupe_ids))
+        .all()
+    )
+    baba_repair_targets = []
+    for p in baba_short_matches:
+        if p.symbol and "112" in p.symbol:
+            baba_repair_targets.append({
+                "id": p.id,
+                "symbol": p.symbol,
+                "qty": float(p.qty or 0),
+                "current_entry_cents": int(p.entry_price_cents or 0),
+                "current_entry_usd": (int(p.entry_price_cents or 0)) / 100.0,
+                "new_entry_cents": 797,
+                "new_entry_usd": 7.97,
+            })
+
+    if not dry_run:
+        if dupes:
+            (
+                db.query(BotPosition)
+                .filter(BotPosition.id.in_([p.id for p in dupes]))
+                .update(
+                    {"quarantined_at": now, "quarantine_reason": reason},
+                    synchronize_session=False,
+                )
+            )
+        for target in baba_repair_targets:
+            (
+                db.query(BotPosition)
+                .filter(BotPosition.id == target["id"])
+                .update(
+                    {"entry_price_cents": 797},
+                    synchronize_session=False,
+                )
+            )
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "quarantined_dupes": dupe_snapshot,
+        "baba_short_basis_repaired": baba_repair_targets,
+    }
+
+
 @router.post("/quarantine-non-broker-trades")
 def quarantine_non_broker_trades(
     dry_run: bool = Query(True, description="Preview only when true (default). Set false to actually quarantine."),
