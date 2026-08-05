@@ -2292,12 +2292,39 @@ def _execute_options_signal(
                 f"{l['side'][:1].upper()}{l.get('role', l['symbol'][-9:])}" for l in _legs
             )
             if _opt_resp.get("status_code") in (200, 201):
-                alpaca_options_order_id = _opt_resp.get("order_id")
-                logger.warning(
-                    "[ALPACA-MLEG-FILL] %s intent=%s x%d net_limit=%.2f legs=%d [%s] → order_id=%s",
-                    profile_name, opt.get("intent"), int(contract_count),
-                    _net_limit, len(_legs), _log_leg_summary, alpaca_options_order_id,
-                )
+                # 2026-08-05 FIX: 200/201 means Alpaca ACCEPTED the order — NOT
+                # that it filled. Limit orders can sit "new" for hours then
+                # expire without filling. Prior code wrote BotPosition +
+                # BotTrade rows immediately, so options_directional booked
+                # ~75 phantom mleg fills that never actually happened at the
+                # broker (~$6K reported profit that doesn't exist).
+                # Now: only book if Alpaca confirms actual fill via
+                # order_status/filled_qty in the response body.
+                _resp_body = _opt_resp.get("body") or {}
+                _order_status = str(_resp_body.get("status") or "").lower()
+                _filled_qty = float(_resp_body.get("filled_qty") or 0)
+                if _order_status in ("filled", "partially_filled") and _filled_qty > 0:
+                    alpaca_options_order_id = _opt_resp.get("order_id")
+                    logger.warning(
+                        "[ALPACA-MLEG-FILL] %s intent=%s x%d net_limit=%.2f legs=%d [%s] status=%s filled=%.0f → order_id=%s",
+                        profile_name, opt.get("intent"), int(contract_count),
+                        _net_limit, len(_legs), _log_leg_summary,
+                        _order_status, _filled_qty, alpaca_options_order_id,
+                    )
+                else:
+                    # Accepted but not filled yet. Do NOT book — reconciler
+                    # will pick it up if it fills later.
+                    logger.warning(
+                        "[ALPACA-MLEG-ACCEPTED-NOT-FILLED] %s intent=%s x%d status=%s filled=%.0f order_id=%s — skipping DB write until reconciler confirms fill",
+                        profile_name, opt.get("intent"), int(contract_count),
+                        _order_status, _filled_qty, _opt_resp.get("order_id"),
+                    )
+                    _persist_broker_reject_hold(
+                        db, alloc, sig, entry_price=0,
+                        reject_kind="options_mleg_accepted_not_filled",
+                        reject_detail=f"status={_order_status} filled_qty={_filled_qty} order_id={_opt_resp.get('order_id')}",
+                    )
+                    return False
             else:
                 logger.error(
                     "[ALPACA-MLEG-REJECT] %s intent=%s x%d net_limit=%.2f legs=%d [%s] status=%s body=%r",
@@ -2324,12 +2351,29 @@ def _execute_options_signal(
                 time_in_force="day",
             )
             if _opt_resp.get("status_code") in (200, 201):
-                alpaca_options_order_id = _opt_resp.get("order_id")
-                logger.warning(
-                    "[ALPACA-FILL] %s %s %s x%d limit=%.2f → order_id=%s (REAL Alpaca options order)",
-                    profile_name, _opt_side_str, occ_symbol, int(contract_count),
-                    _limit_price, alpaca_options_order_id,
-                )
+                # 2026-08-05 FIX: same fill-vs-accepted bug as mleg path above.
+                _resp_body = _opt_resp.get("body") or {}
+                _order_status = str(_resp_body.get("status") or "").lower()
+                _filled_qty = float(_resp_body.get("filled_qty") or 0)
+                if _order_status in ("filled", "partially_filled") and _filled_qty > 0:
+                    alpaca_options_order_id = _opt_resp.get("order_id")
+                    logger.warning(
+                        "[ALPACA-FILL] %s %s %s x%d limit=%.2f status=%s filled=%.0f → order_id=%s",
+                        profile_name, _opt_side_str, occ_symbol, int(contract_count),
+                        _limit_price, _order_status, _filled_qty, alpaca_options_order_id,
+                    )
+                else:
+                    logger.warning(
+                        "[ALPACA-ACCEPTED-NOT-FILLED] %s %s %s x%d status=%s filled=%.0f order_id=%s — skipping DB write",
+                        profile_name, _opt_side_str, occ_symbol, int(contract_count),
+                        _order_status, _filled_qty, _opt_resp.get("order_id"),
+                    )
+                    _persist_broker_reject_hold(
+                        db, alloc, sig, entry_price=0,
+                        reject_kind="options_single_accepted_not_filled",
+                        reject_detail=f"status={_order_status} filled_qty={_filled_qty} order_id={_opt_resp.get('order_id')}",
+                    )
+                    return False
             else:
                 # m083 fix: indent bug in mleg PR (commit 0799cc33) left the
                 # `return False` at the outer else-branch scope so EVERY
@@ -3353,6 +3397,25 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
         fill_cents = float(apply_entry_haircut(int(round(fill_cents)), sig.side))
     except Exception as _slip_exc:
         logger.warning("[execute:%s] slippage haircut skipped for %s: %s", profile_name, sig.symbol, _slip_exc)
+
+    # 2026-08-05 FIX #2: sim-vs-real leak. If broker was None (no creds or
+    # broker.get_account failed), we would fall through to write BotPosition/
+    # BotTrade rows with alpaca_order_id=NULL. That created a whole class of
+    # "sim" trades that mixed with real Alpaca fills invisibly — 57% of
+    # BMG's bot_trades in the last 30 days had no Alpaca order ID and were
+    # inflating loss numbers vs broker truth by ~$400 on stock bots.
+    # Refuse to write DB rows if we don't have a real broker order id.
+    if broker is None or order_id is None:
+        logger.warning(
+            "[execute:%s] BLOCK sim-only trade for %s (broker=%s order_id=%s) — refusing DB write",
+            profile_name, sig.symbol, "connected" if broker else "none", order_id,
+        )
+        _persist_broker_reject_hold(
+            db, alloc, sig, entry_price,
+            reject_kind="sim_only_no_broker_id",
+            reject_detail=f"broker={'connected' if broker else 'none'} order_id={order_id}",
+        )
+        return False
 
     # 5–6. Create BotPosition + BotTrade — wrapped so a DB error can't corrupt the
     # session and block all subsequent signals in this scan cycle.

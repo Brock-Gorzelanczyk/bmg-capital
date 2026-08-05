@@ -483,14 +483,35 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     # We still call get_all_time_pct so legacy callers / spec tests can read the
     # historical realized-only metric, but the user-facing all_time_return_pct
     # reflects what the user actually owns right now.
+    # 2026-08-05 FIX #3: prior formula used post-2026-06-28-reset starting_capital
+    # so "all-time" only reflected the 5 weeks since the fund-wide reset. Now
+    # prefer inception_capital_cents when set (the true starting anchor) and
+    # combine the SHIP-3 historical realized track with current unrealized so
+    # the number matches what users understand as "lifetime P&L".
     from app.services.bot_performance import get_all_time_pct as _get_all_time_pct
-    _pnl_based_pct = _get_all_time_pct(alloc.id, db)  # historical realized-only — kept for legacy callers
-    if starting_capital_cents:
-        all_time_return_pct = round(
-            (portfolio_value_cents - starting_capital_cents) / starting_capital_cents * 100, 2
-        )
+    _pnl_based_pct = _get_all_time_pct(alloc.id, db)
+    _inception_capital = getattr(alloc, "inception_capital_cents", None) or starting_capital_cents
+    if _inception_capital and _inception_capital > 0:
+        # If a track_reset_marker exists for this alloc, use the historical
+        # realized-only metric as numerator + current unrealized, denominated
+        # by inception_capital. Otherwise the post-reset delta is fine.
+        try:
+            from app.db.models.bots import BotDailyPnL as _BDP
+            _has_reset = db.query(_BDP).filter(
+                _BDP.allocation_id == alloc.id,
+                _BDP.note == "track_reset_marker",
+            ).first() is not None
+        except Exception:
+            _has_reset = False
+        if _has_reset and _pnl_based_pct is not None:
+            # Combine: (historical_realized_pct) + (current unrealized / inception)
+            _unreal_pct = round(unrealized_pnl_cents / _inception_capital * 100, 2) if _inception_capital else 0.0
+            all_time_return_pct = round(_pnl_based_pct + _unreal_pct, 2)
+        else:
+            all_time_return_pct = round(
+                (portfolio_value_cents - _inception_capital) / _inception_capital * 100, 2
+            )
     elif _pnl_based_pct != 0.0:
-        # Fallback for the unusual case where starting is zero but a track record exists.
         all_time_return_pct = _pnl_based_pct
     else:
         all_time_return_pct = 0.0
