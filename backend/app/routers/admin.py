@@ -474,6 +474,32 @@ def run_orphan_adopter(
 # filled orders (phantom — order accepted but never filled), mark the row
 # quarantined so it drops out of every P&L calculation.
 
+# ── Invariant Engine — Layer 3 tripwire ──────────────────────────────────
+# GET returns the latest persisted snapshot (fast, no computation).
+# POST triggers a fresh run + returns results.
+
+@router.get("/invariants")
+def get_invariants(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Return the latest persisted invariant snapshot. Reads from a JSON
+    file the scheduler writes every 15 min. Fast + safe for the UI banner
+    to poll frequently."""
+    from app.services.invariant_engine import read_latest_snapshot
+    return read_latest_snapshot()
+
+
+@router.post("/invariants/run")
+def run_invariants(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Trigger a fresh invariant sweep on-demand. Same code the scheduler
+    runs. Returns green/amber/red summary + per-check details."""
+    from app.services.invariant_engine import run_all_invariants
+    return run_all_invariants(db)
+
+
 @router.post("/rollback-adopter-inserts")
 def rollback_adopter_inserts(
     since_hours: int = Query(24, description="Only quarantine positions opened within the last N hours"),

@@ -1331,6 +1331,12 @@ async def lifespan(app: FastAPI):
     except Exception as _dr_exc:
         logger.error("[startup] daily_reconciler scheduler FAILED (non-fatal): %s",
                      _dr_exc, exc_info=True)
+    try:
+        from app.services.invariant_engine import setup_invariant_engine
+        setup_invariant_engine(scheduler)
+    except Exception as _ie_exc:
+        logger.error("[startup] invariant_engine scheduler FAILED (non-fatal): %s",
+                     _ie_exc, exc_info=True)
     scheduler.start()
 
     # PAUSED 2026-07-16 (cost): startup strategy scan ran full universe on every
@@ -1741,8 +1747,9 @@ app.include_router(portfolio_rank_router)
 # app.include_router(live_activity_router)
 # from app.routers.risk_console import router as risk_console_router
 # app.include_router(risk_console_router)
-# from app.routers.trades_journal import router as trades_journal_router
-# app.include_router(trades_journal_router)
+# 2026-08-05 Layer 6 hygiene: restored /api/trades (was paused in Path-2 trim)
+from app.routers.trades_journal import router as trades_journal_router
+app.include_router(trades_journal_router)
 
 
 @app.get("/health", tags=["health"])

@@ -5,6 +5,7 @@ import { useIsAdmin, useIsViewer } from "@/store/authStore";
 import { House, BarChart2, Bot, Newspaper, User } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import InvariantBanner from "@/components/InvariantBanner";
 import LegalFooter from "@/components/LegalFooter";
 import CommandPalette from "@/components/ui/CommandPalette";
 import CopilotModal from "@/components/ui/CopilotModal";
@@ -147,6 +148,8 @@ export default function AppShell() {
           </div>
         )}
         {!isChart && <TopBar onMenuToggle={() => setSidebarOpen((o) => !o)} />}
+        <InvariantBanner />
+        {/* ↑ Layer 3 tripwire — red bar surfaces when any invariant breaches */}
         <main
           className={
             isChart
