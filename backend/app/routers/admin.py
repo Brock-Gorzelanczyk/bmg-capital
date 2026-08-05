@@ -474,6 +474,63 @@ def run_orphan_adopter(
 # filled orders (phantom — order accepted but never filled), mark the row
 # quarantined so it drops out of every P&L calculation.
 
+@router.post("/rollback-adopter-inserts")
+def rollback_adopter_inserts(
+    since_hours: int = Query(24, description="Only quarantine positions opened within the last N hours"),
+    dry_run: bool = Query(True, description="Preview by default"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Emergency rollback for the orphan adopter runaway (2026-08-05).
+
+    Adopter creates BotPosition rows but NO corresponding entry BotTrade
+    (real trades always ship as a pair). Any open BotPosition opened in
+    the last N hours that has zero BotTrade rows pointing at it is an
+    adopter-created phantom. Quarantine them.
+    """
+    from datetime import datetime, timedelta, timezone
+    from app.db.models.bots import BotPosition, BotTrade
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=since_hours)
+    now = datetime.now(timezone.utc)
+
+    recent = (
+        db.query(BotPosition)
+        .filter(BotPosition.opened_at >= cutoff)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    victims: list[int] = []
+    kept: int = 0
+    for p in recent:
+        has_trade = db.query(BotTrade).filter(BotTrade.position_id == p.id).first() is not None
+        if has_trade:
+            kept += 1
+        else:
+            victims.append(p.id)
+
+    if not dry_run and victims:
+        (
+            db.query(BotPosition)
+            .filter(BotPosition.id.in_(victims))
+            .update(
+                {"quarantined_at": now, "quarantine_reason": "adopter_runaway_rollback_2026_08_05"},
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+
+    return {
+        "since_hours": since_hours,
+        "dry_run": dry_run,
+        "recent_positions_scanned": len(recent),
+        "with_trade_kept": kept,
+        "orphan_position_quarantined": len(victims) if not dry_run else 0,
+        "orphan_position_ids_would_quarantine": victims if dry_run else victims[:20],
+    }
+
+
 @router.post("/daily-recon/run")
 def run_daily_reconciliation_endpoint(
     db: Session = Depends(get_db),
