@@ -456,6 +456,7 @@ interface LBRow {
   rank: number;
   name: string;
   profile: string;
+  totalTrades: number;
   allTimeCents: number;
   todayCents: number;
   deployedCents: number;
@@ -509,7 +510,7 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
         <div
           className="grid items-center"
           style={{
-            gridTemplateColumns: "44px 1fr 100px 100px 100px 80px",
+            gridTemplateColumns: "44px 1fr 70px 100px 100px 100px 80px",
             padding: "9px 18px",
             borderBottom: `1px solid ${DIM_GREEN}`,
             fontFamily: "'JetBrains Mono', monospace",
@@ -520,6 +521,7 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
         >
           <span>#</span>
           <span>BOT</span>
+          <span style={{ textAlign: "right", color: "#facc15" }}>TRADES</span>
           <span style={{ textAlign: "right" }}>ALL-TIME</span>
           <span style={{ textAlign: "right" }}>TODAY</span>
           <span style={{ textAlign: "right" }}>DEPLOYED</span>
@@ -538,7 +540,7 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
               to={`/strategy/bot/${l.profile}`}
               className="grid items-center"
               style={{
-                gridTemplateColumns: "44px 1fr 100px 100px 100px 80px",
+                gridTemplateColumns: "44px 1fr 70px 100px 100px 100px 80px",
                 padding: featured ? "13px 18px" : "9px 18px",
                 background: featured ? "rgba(74,222,128,0.05)" : "transparent",
                 borderBottom: "1px solid rgba(74,222,128,0.05)",
@@ -638,6 +640,18 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
                   />
                 </svg>
               </div>
+              <span
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 12,
+                  color: "#facc15",  // yellow — per Brock spec 2026-08-05
+                  textAlign: "right",
+                  fontWeight: 600,
+                }}
+                title={`${l.totalTrades} total trade${l.totalTrades === 1 ? "" : "s"} ever placed by this bot`}
+              >
+                {l.totalTrades.toLocaleString()}
+              </span>
               <span
                 style={{
                   fontFamily: "'JetBrains Mono', monospace",
@@ -1111,6 +1125,7 @@ export default function StrategyLabV2() {
         rank: i + 1,
         name: l.name || l.profile,
         profile: l.profile,
+        totalTrades: Number(l.total_trades || 0),
         allTimeCents: (l.portfolio_value_cents || 0) - (l.starting_capital_cents || 0),
         todayCents: l.today_pnl_cents || 0,
         deployedCents: l.deployed_cents || 0,

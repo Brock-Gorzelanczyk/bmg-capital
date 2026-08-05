@@ -1107,6 +1107,9 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     _cut_24h = datetime.now(timezone.utc) - _td(hours=24)
     signals_24h_by_alloc: dict[int, int] = {}
     trades_24h_by_alloc: dict[int, int] = {}
+    # 2026-08-05: Brock wants total (all-time) trade count on the leaderboard.
+    # Rendered as a yellow column left of ALL-TIME on the Strategy Lab table.
+    total_trades_by_alloc: dict[int, int] = {}
     try:
         for aid, cnt in db.execute(
             text(
@@ -1125,6 +1128,14 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             {"cut": _cut_24h.isoformat()},
         ).fetchall():
             trades_24h_by_alloc[int(aid)] = int(cnt)
+        for aid, cnt in db.execute(
+            text(
+                "SELECT allocation_id, COUNT(*) FROM bot_trades "
+                "WHERE quarantined_at IS NULL "
+                "GROUP BY allocation_id"
+            )
+        ).fetchall():
+            total_trades_by_alloc[int(aid)] = int(cnt)
     except Exception as _cnt_exc:
         logger.warning("[leaderboard] 24h signal/trade count query failed: %s", _cnt_exc)
 
@@ -1169,6 +1180,7 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 # investigation (asset-class gate, cooldowns, missing prices).
                 "signals_24h": signals_24h_by_alloc.get(bot.allocation_id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(bot.allocation_id, 0),
+                "total_trades": total_trades_by_alloc.get(bot.allocation_id, 0),
                 "open_positions_count": open_positions_by_alloc.get(bot.allocation_id, 0),
                 "has_open_position": open_positions_by_alloc.get(bot.allocation_id, 0) > 0,
             })
@@ -1204,6 +1216,7 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "starting_capital_cents": snap.starting_capital_cents,
                 "signals_24h": signals_24h_by_alloc.get(a.id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
+                "total_trades": total_trades_by_alloc.get(a.id, 0),
                 "open_positions_count": open_positions_by_alloc.get(a.id, 0),
                 "has_open_position": open_positions_by_alloc.get(a.id, 0) > 0,
             })
@@ -1225,6 +1238,7 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "starting_capital_cents": starting_c,
                 "signals_24h": signals_24h_by_alloc.get(a.id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
+                "total_trades": total_trades_by_alloc.get(a.id, 0),
                 "open_positions_count": open_positions_by_alloc.get(a.id, 0),
                 "has_open_position": open_positions_by_alloc.get(a.id, 0) > 0,
             })

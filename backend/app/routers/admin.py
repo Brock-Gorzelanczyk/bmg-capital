@@ -468,6 +468,132 @@ def run_orphan_adopter(
     return adopt_orphans(db, dry_run=dry_run)
 
 
+# ── POST /api/admin/quarantine-non-broker-trades ────────────────────────────
+# 2026-08-05 STOP-THE-LINE #4: Walk every open BotTrade + BotPosition. If
+# alpaca_order_id is NULL (sim leak) OR the id is NOT in the set of Alpaca
+# filled orders (phantom — order accepted but never filled), mark the row
+# quarantined so it drops out of every P&L calculation.
+
+@router.post("/quarantine-non-broker-trades")
+def quarantine_non_broker_trades(
+    dry_run: bool = Query(True, description="Preview only when true (default). Set false to actually quarantine."),
+    lookback_days: int = Query(90, description="How far back to walk both BMG trades and Alpaca fills."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Reconcile BMG bot_trades against Alpaca. Quarantine anything not real.
+
+    Returns per-bot counts of {kept, quarantined_phantom, quarantined_sim}
+    plus a list of the alpaca_order_ids that BMG expected but Alpaca never
+    filled. Idempotent — already-quarantined rows are skipped.
+    """
+    import os, json, urllib.request, urllib.parse
+    from datetime import datetime, timedelta, timezone
+    from app.db.models.bots import BotTrade, BotPosition, BotAllocation, BotProfile
+
+    key = os.getenv("ALPACA_PAPER_KEY") or os.getenv("ALPACA_API_KEY", "")
+    sec = os.getenv("ALPACA_PAPER_SECRET") or os.getenv("ALPACA_SECRET_KEY", "")
+    if not key or not sec:
+        raise HTTPException(500, "Alpaca creds not configured")
+
+    # ── 1. Pull all Alpaca filled order IDs in the lookback window ────────
+    cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+    alpaca_filled_ids: set[str] = set()
+    until = datetime.now(timezone.utc)
+    for _ in range(50):  # pagination cap
+        params = urllib.parse.urlencode({
+            "status": "closed", "limit": 500,
+            "after": cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "until": until.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "direction": "desc",
+        })
+        req = urllib.request.Request(
+            f"https://paper-api.alpaca.markets/v2/orders?{params}",
+            headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": sec},
+        )
+        try:
+            batch = json.loads(urllib.request.urlopen(req, timeout=15).read()) or []
+        except Exception as exc:
+            raise HTTPException(500, f"Alpaca orders fetch failed: {exc}")
+        if not batch: break
+        for o in batch:
+            if o.get("status") == "filled" and o.get("id"):
+                alpaca_filled_ids.add(o["id"])
+        oldest = min((o.get("submitted_at") or o.get("created_at") or "") for o in batch)
+        if not oldest: break
+        try:
+            import re as _re
+            _s = _re.sub(r'\.(\d+)([+-Z])', lambda m: '.' + m.group(1).ljust(6, '0')[:6] + m.group(2), oldest)
+            new_until = datetime.fromisoformat(_s.replace("Z","+00:00"))
+        except Exception: break
+        if new_until >= until: break
+        until = new_until - timedelta(seconds=1)
+        if len(batch) < 500: break
+
+    # ── 2. Walk BMG bot_trades in the window ──────────────────────────────
+    trades = (
+        db.query(BotTrade)
+        .filter(BotTrade.ts >= cutoff)
+        .filter(BotTrade.quarantined_at.is_(None))
+        .all()
+    )
+
+    # Map allocation → bot name
+    alloc_to_bot: dict[int, str] = {}
+    allocs = db.query(BotAllocation).all()
+    profs = {p.id: p.name for p in db.query(BotProfile).all()}
+    for a in allocs:
+        alloc_to_bot[a.id] = profs.get(a.profile_id, f"alloc_{a.id}")
+
+    per_bot: dict[str, dict] = {}
+    ids_to_quarantine_trade: list[int] = []
+    ids_to_quarantine_position: set[int] = set()
+    now_dt = datetime.now(timezone.utc)
+
+    for t in trades:
+        bot = alloc_to_bot.get(t.allocation_id, "unknown")
+        stats = per_bot.setdefault(bot, {"kept": 0, "phantom": 0, "sim": 0})
+        oid = getattr(t, "alpaca_order_id", None)
+        if oid and oid in alpaca_filled_ids:
+            stats["kept"] += 1
+            continue
+        if oid:
+            stats["phantom"] += 1
+            reason = f"phantom_not_filled_at_alpaca:{oid}"
+        else:
+            stats["sim"] += 1
+            reason = "sim_no_alpaca_order_id"
+        ids_to_quarantine_trade.append(t.id)
+        if t.position_id: ids_to_quarantine_position.add(t.position_id)
+        if not dry_run:
+            t.quarantined_at = now_dt
+            t.quarantine_reason = reason
+
+    # ── 3. Quarantine matching BotPosition rows ───────────────────────────
+    if not dry_run and ids_to_quarantine_position:
+        (
+            db.query(BotPosition)
+            .filter(BotPosition.id.in_(list(ids_to_quarantine_position)))
+            .filter(BotPosition.quarantined_at.is_(None))
+            .update(
+                {"quarantined_at": now_dt, "quarantine_reason": "trade_quarantined_broker_recon"},
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+
+    return {
+        "as_of": now_dt.isoformat(),
+        "dry_run": dry_run,
+        "lookback_days": lookback_days,
+        "alpaca_filled_ids_in_window": len(alpaca_filled_ids),
+        "bmg_trades_in_window": len(trades),
+        "trades_to_quarantine": len(ids_to_quarantine_trade),
+        "positions_to_quarantine": len(ids_to_quarantine_position),
+        "per_bot": dict(sorted(per_bot.items(), key=lambda x: -(x[1]["phantom"] + x[1]["sim"]))),
+    }
+
+
 # ── GET /api/admin/broker-reconciliation ────────────────────────────────────
 #
 # Ground-truth answer to "is our track record real or DB-simulated?"
