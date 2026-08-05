@@ -474,6 +474,17 @@ def run_orphan_adopter(
 # filled orders (phantom — order accepted but never filled), mark the row
 # quarantined so it drops out of every P&L calculation.
 
+@router.post("/daily-recon/run")
+def run_daily_reconciliation_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Manually trigger the daily reconciliation pipeline (quarantine + orphan
+    adopt + drift check). Same code the 05:00 UTC scheduler runs."""
+    from app.services.daily_reconciler import run_daily_reconciliation
+    return run_daily_reconciliation(db)
+
+
 @router.post("/quarantine-non-broker-trades")
 def quarantine_non_broker_trades(
     dry_run: bool = Query(True, description="Preview only when true (default). Set false to actually quarantine."),

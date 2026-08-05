@@ -1325,6 +1325,12 @@ async def lifespan(app: FastAPI):
     except Exception as _oa_exc:
         logger.error("[startup] orphan_adopter scheduler FAILED (non-fatal): %s",
                      _oa_exc, exc_info=True)
+    try:
+        from app.services.daily_reconciler import setup_daily_reconciler
+        setup_daily_reconciler(scheduler)
+    except Exception as _dr_exc:
+        logger.error("[startup] daily_reconciler scheduler FAILED (non-fatal): %s",
+                     _dr_exc, exc_info=True)
     scheduler.start()
 
     # PAUSED 2026-07-16 (cost): startup strategy scan ran full universe on every
