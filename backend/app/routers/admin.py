@@ -568,84 +568,79 @@ def run_daily_reconciliation_endpoint(
     return run_daily_reconciliation(db)
 
 
-@router.post("/drift-repair-2026-08-05")
-def drift_repair_2026_08_05(
-    dry_run: bool = Query(True, description="Preview only when true (default)."),
+@router.get("/bmg-alpaca-diff")
+def bmg_alpaca_diff(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """One-shot: close the BMG↔Alpaca drift discovered on 2026-08-05.
-
-    - Quarantines 3 duplicate option positions (BABA 111C, BABA 112C short,
-      RIVN 16C) that were adopted twice on 2026-07-14.
-    - Repairs the surviving BABA 112C short whose entry basis was $0.59
-      but Alpaca reports avg_entry_price $7.97.
-    """
-    from datetime import datetime, timezone
+    """Compare BMG open positions (aggregated by symbol+side) to Alpaca.
+    Returns three lists — phantoms (BMG-only), missing (Alpaca-only), and
+    qty mismatches on common keys. Read-only."""
+    import os, urllib.request, json
+    from collections import defaultdict
     from app.db.models.bots import BotPosition
 
-    now = datetime.now(timezone.utc)
-    dupe_ids = [12154, 12155, 12107]
-    reason = "duplicate_baba_rivn_2026_07_14"
-
-    dupes = (
+    bmg_rows = (
         db.query(BotPosition)
-        .filter(BotPosition.id.in_(dupe_ids))
-        .filter(BotPosition.quarantined_at.is_(None))
-        .all()
-    )
-    dupe_snapshot = [
-        {"id": p.id, "symbol": p.symbol, "qty": float(p.qty or 0), "opened_at": p.opened_at.isoformat() if p.opened_at else None}
-        for p in dupes
-    ]
-
-    baba_short_matches = (
-        db.query(BotPosition)
-        .filter(BotPosition.symbol.like("BABA%C%"))
-        .filter(BotPosition.qty < 0)
         .filter(BotPosition.closed_at.is_(None))
         .filter(BotPosition.quarantined_at.is_(None))
-        .filter(~BotPosition.id.in_(dupe_ids))
         .all()
     )
-    baba_repair_targets = []
-    for p in baba_short_matches:
-        if p.symbol and "112" in p.symbol:
-            baba_repair_targets.append({
-                "id": p.id,
-                "symbol": p.symbol,
-                "qty": float(p.qty or 0),
-                "current_entry_cents": int(p.entry_price_cents or 0),
-                "current_entry_usd": (int(p.entry_price_cents or 0)) / 100.0,
-                "new_entry_cents": 797,
-                "new_entry_usd": 7.97,
+    bmg_agg: dict = defaultdict(lambda: {"qty": 0.0, "rows": 0, "ids": []})
+    for p in bmg_rows:
+        side = (p.side or "long").lower()
+        key = (p.symbol or "", side)
+        bmg_agg[key]["qty"] += float(p.qty or 0)
+        bmg_agg[key]["rows"] += 1
+        bmg_agg[key]["ids"].append(p.id)
+
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+    req = urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/positions",
+        headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+    )
+    alp_list = json.loads(urllib.request.urlopen(req, timeout=15).read())
+    alp_agg = {}
+    for p in alp_list:
+        sym = p.get("symbol")
+        q = float(p.get("qty"))
+        side = "short" if q < 0 else "long"
+        alp_agg[(sym, side)] = abs(q)
+
+    bmg_keys = set(bmg_agg.keys())
+    alp_keys = set(alp_agg.keys())
+    only_bmg = sorted(bmg_keys - alp_keys)
+    only_alp = sorted(alp_keys - bmg_keys)
+    common   = bmg_keys & alp_keys
+    mismatches = []
+    for k in common:
+        if abs(bmg_agg[k]["qty"] - alp_agg[k]) > 0.5:
+            mismatches.append({
+                "symbol": k[0], "side": k[1],
+                "bmg_qty": round(bmg_agg[k]["qty"], 4),
+                "alp_qty": round(alp_agg[k], 4),
+                "bmg_rows": bmg_agg[k]["rows"],
+                "bmg_position_ids": bmg_agg[k]["ids"],
             })
 
-    if not dry_run:
-        if dupes:
-            (
-                db.query(BotPosition)
-                .filter(BotPosition.id.in_([p.id for p in dupes]))
-                .update(
-                    {"quarantined_at": now, "quarantine_reason": reason},
-                    synchronize_session=False,
-                )
-            )
-        for target in baba_repair_targets:
-            (
-                db.query(BotPosition)
-                .filter(BotPosition.id == target["id"])
-                .update(
-                    {"entry_price_cents": 797},
-                    synchronize_session=False,
-                )
-            )
-        db.commit()
-
     return {
-        "dry_run": dry_run,
-        "quarantined_dupes": dupe_snapshot,
-        "baba_short_basis_repaired": baba_repair_targets,
+        "bmg_open_positions_rows": len(bmg_rows),
+        "bmg_unique_symbol_side": len(bmg_keys),
+        "alpaca_unique_symbol_side": len(alp_keys),
+        "only_in_bmg_count": len(only_bmg),
+        "only_in_alpaca_count": len(only_alp),
+        "qty_mismatch_count": len(mismatches),
+        "only_in_bmg": [
+            {"symbol": k[0], "side": k[1],
+             "qty": round(bmg_agg[k]["qty"], 4),
+             "rows": bmg_agg[k]["rows"],
+             "ids": bmg_agg[k]["ids"]} for k in only_bmg
+        ],
+        "only_in_alpaca": [
+            {"symbol": k[0], "side": k[1], "qty": round(alp_agg[k], 4)} for k in only_alp
+        ],
+        "qty_mismatches": mismatches,
     }
 
 
