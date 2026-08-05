@@ -275,6 +275,17 @@ async function _doPoll(): Promise<void> {
 async function main(): Promise<void> {
   console.log("[discord] worker starting…");
 
+  // 2026-08-05 KILL SWITCH (Brock cost cut). Set DISCORD_WORKER_ENABLED=false
+  // on Railway to run the worker as a no-op — no Discord login, no polling,
+  // no cron jobs, no messages ever. Restore by setting to "true" (or
+  // deleting the env var — default is enabled).
+  if (process.env.DISCORD_WORKER_ENABLED?.trim().toLowerCase() === "false") {
+    console.warn("[discord] DISCORD_WORKER_ENABLED=false — worker sleeping. No Discord activity.");
+    // Keep the process alive so Railway doesn't restart-loop.
+    setInterval(() => {}, 1 << 30);
+    return;
+  }
+
   if (!process.env.DISCORD_BOT_TOKEN) {
     console.error("[discord] DISCORD_BOT_TOKEN not set — exiting");
     process.exit(1);
