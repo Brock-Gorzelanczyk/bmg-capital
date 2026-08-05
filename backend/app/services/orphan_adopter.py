@@ -188,44 +188,65 @@ def _attribute_position_to_bot(
 # ── Adopt loop ──────────────────────────────────────────────────────────────
 
 def adopt_orphans(db, dry_run: bool = False) -> dict:
-    """Main entry. Walks Alpaca options, matches to BMG, inserts adopters
+    """Main entry. Walks Alpaca options, matches to BMG, upserts adopters
     or ledger rows. Returns diagnostic dict.
+
+    2026-08-05 v2 fixes after runaway (Brock stop-the-line):
+      * IDEMPOTENT — key on (allocation_id, occ_symbol, side) not just occ.
+        Skip if a row already exists in that key. Prevents the "run twice,
+        duplicate" pattern.
+      * COST BASIS from Alpaca's avg_entry_price on the position itself,
+        NOT current_price/mark. Prevents phantom P&L on first adoption.
+      * PAIRED TRADE — create a BotTrade alongside each BotPosition so
+        future rollback-orphan-position sweeps don't kill legit adopts.
+      * DRY-RUN DIFF explicit: net_adds == alpaca_count - db_count.
     """
     enabled = os.getenv("ORPHAN_ADOPTION_ENABLED", "true").strip().lower() == "true"
     if not enabled:
         return {"skipped": "disabled_by_env"}
 
-    from app.db.models.bots import BotPosition
+    from app.db.models.bots import BotPosition, BotTrade
 
     hours = int(os.getenv("ORPHAN_ATTRIBUTION_WINDOW_HOURS", "72"))
 
     broker_pos = _fetch_broker_options()
     orders = _fetch_order_history(hours)
 
-    # BMG side — every OCC symbol with an open position row
+    # BMG side — key = (allocation_id, symbol, side). Multiple bots can each
+    # legitimately hold the same OCC with different intents (long vs short).
     bmg_open = (
         db.query(BotPosition)
         .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
         .filter(BotPosition.option_type.isnot(None))
         .all()
     )
-    bmg_symbols_by_id = {p.id: p.symbol for p in bmg_open}
-    bmg_symbols = set(bmg_symbols_by_id.values())
+    bmg_keys: set[tuple] = {
+        (p.allocation_id, p.symbol, getattr(p, "side", "long")) for p in bmg_open
+    }
+    bmg_count = len(bmg_open)
 
     orphans_found: list[dict] = []
     adopted: list[dict] = []
     ledgered: list[dict] = []
+    skipped_idempotent: list[str] = []
 
     for bp in broker_pos:
         occ = bp.get("symbol")
-        if not occ or occ in bmg_symbols:
+        if not occ:
             continue
 
         qty = float(bp.get("qty") or 0)
+        broker_side = "short" if qty < 0 else "long"
+        # Alpaca avg_entry_price is the actual fill price. Use it, NOT
+        # current_price / market_value / mark — those inject P&L drift on
+        # the first tick after adoption.
+        avg_entry = float(bp.get("avg_entry_price") or 0)
         entry = {
             "occ_symbol": occ,
             "broker_qty": qty,
-            "broker_side": bp.get("side"),
+            "broker_side": broker_side,
+            "avg_entry_price": avg_entry,
             "market_value": float(bp.get("market_value") or 0),
             "unrealized_pl": float(bp.get("unrealized_pl") or 0),
         }
@@ -236,20 +257,28 @@ def adopt_orphans(db, dry_run: bool = False) -> dict:
             ledgered.append({**entry, "reason": "no_matching_alpaca_order_or_bot_trade"})
             continue
 
-        # Adopt: insert BotPosition
+        # IDEMPOTENCY GUARD — same (alloc, occ, side) already open? skip.
+        key = (attribution["allocation_id"], occ, broker_side)
+        if key in bmg_keys:
+            skipped_idempotent.append(f"{occ}@alloc{attribution['allocation_id']}/{broker_side}")
+            continue
+
         if dry_run:
             adopted.append({**entry, **attribution, "dry_run": True})
             continue
 
         try:
             parsed = _parse_occ(occ) or {}
+            # Cost basis in cents from Alpaca avg_entry_price (dollars).
+            cost_cents = int(round(avg_entry * 100)) if avg_entry > 0 else attribution.get("avg_cost_cents", 0)
+            now_ts = datetime.now(timezone.utc)
             pos = BotPosition(
                 allocation_id=attribution["allocation_id"],
                 symbol=occ,
                 qty=abs(qty),
-                avg_cost_cents=attribution["avg_cost_cents"],
-                side=attribution["side"],
-                opened_at=datetime.now(timezone.utc),
+                avg_cost_cents=cost_cents,
+                side=broker_side,
+                opened_at=now_ts,
                 closed_at=None,
                 is_paper=True,
                 option_type=parsed.get("option_type"),
@@ -257,15 +286,39 @@ def adopt_orphans(db, dry_run: bool = False) -> dict:
                 expiration_date=parsed.get("expiration_date"),
                 underlying_symbol=parsed.get("root"),
                 contract_count=int(abs(qty)),
-                contract_premium_cents=attribution["avg_cost_cents"],
+                contract_premium_cents=cost_cents,
             )
             db.add(pos)
+            db.flush()  # get pos.id
+            # Paired entry trade — so rollback-orphan-position sweeps don't
+            # nuke this adoption. Marked alpaca_order_id="adopter" so it's
+            # traceable + won't accidentally match a real Alpaca fill.
+            entry_trade = BotTrade(
+                allocation_id=attribution["allocation_id"],
+                symbol=occ,
+                side="short" if broker_side == "short" else "buy",
+                qty=abs(qty),
+                fill_price_cents=cost_cents,
+                fees_cents=0,
+                ts=now_ts,
+                position_id=pos.id,
+                is_paper=True,
+                alpaca_order_id=attribution.get("alpaca_order_id_source") or "orphan_adopter",
+                option_type=parsed.get("option_type"),
+                strike_price=parsed.get("strike_price"),
+                expiration_date=parsed.get("expiration_date"),
+                underlying_symbol=parsed.get("root"),
+                contract_count=int(abs(qty)),
+                contract_premium_cents=cost_cents,
+            )
+            db.add(entry_trade)
             db.commit()
-            adopted.append({**entry, **attribution, "pos_id": pos.id})
+            bmg_keys.add(key)   # prevent same-run dupes
+            adopted.append({**entry, **attribution, "pos_id": pos.id, "trade_id": entry_trade.id})
             logger.warning(
-                "[orphan-adopter] ADOPTED %s → bot=%s alloc=%d pos_id=%d qty=%.4f side=%s",
+                "[orphan-adopter] ADOPTED %s → bot=%s alloc=%d pos_id=%d trade_id=%d qty=%.4f side=%s avg_entry=%.4f",
                 occ, attribution["profile_name"], attribution["allocation_id"],
-                pos.id, abs(qty), attribution["side"],
+                pos.id, entry_trade.id, abs(qty), broker_side, avg_entry,
             )
         except Exception as exc:
             db.rollback()
@@ -274,20 +327,27 @@ def adopt_orphans(db, dry_run: bool = False) -> dict:
 
     # ── Drift metric (Brock's daily check) ───────────────────────────────
     alpaca_legs = len(broker_pos)
-    db_legs = len(bmg_symbols) + len(adopted)  # post-adoption
+    db_legs_after = bmg_count + len(adopted)
     alpaca_upl = sum(float(p.get("unrealized_pl") or 0) for p in broker_pos)
-    # We can't easily sum BMG unrealized without hitting price cache; report
-    # position-count drift here + let a follow-up task compute the P&L drift.
+    # Net adds should equal (alpaca_count - bmg_count_before) minus anything
+    # skipped-idempotent. Log LOUD if it doesn't, because that means we're
+    # trying to add rows we shouldn't.
+    net_adds_expected = alpaca_legs - bmg_count
+    net_adds_actual = len(adopted) if not dry_run else 0
 
     result = {
         "as_of": datetime.now(timezone.utc).isoformat(),
         "broker_options_count": alpaca_legs,
-        "bmg_options_count_before": len(bmg_symbols),
-        "bmg_options_count_after":  db_legs,
+        "bmg_options_count_before": bmg_count,
+        "bmg_options_count_after":  db_legs_after,
         "orphans_found": len(orphans_found),
         "adopted": len(adopted),
+        "skipped_idempotent": len(skipped_idempotent),
+        "skipped_idempotent_sample": skipped_idempotent[:10],
         "ledgered_for_review": len(ledgered),
         "alpaca_total_unrealized_pl": round(alpaca_upl, 2),
+        "net_adds_expected": net_adds_expected,
+        "net_adds_actual": net_adds_actual,
         "adopted_details": adopted,
         "ledgered_details": ledgered,
         "dry_run": dry_run,
@@ -300,8 +360,8 @@ def adopt_orphans(db, dry_run: bool = False) -> dict:
             send_ops_alert(
                 title=f"[orphan-adopter] adopted={len(adopted)} ledgered={len(ledgered)}",
                 message=(
-                    f"Broker options: {alpaca_legs}. BMG had {len(bmg_symbols)} before, "
-                    f"{db_legs} after. {len(ledgered)} could not be attributed and need "
+                    f"Broker options: {alpaca_legs}. BMG had {bmg_count} before, "
+                    f"{db_legs_after} after. {len(ledgered)} could not be attributed and need "
                     f"manual review — see logs for OCC symbols."
                 ),
                 severity="warn",

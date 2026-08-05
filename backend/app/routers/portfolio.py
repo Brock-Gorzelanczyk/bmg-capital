@@ -218,6 +218,20 @@ def get_open_positions(
     total_unrealized_usd = 0.0
     distinct_bots: set[str] = set()
 
+    # 2026-08-05 mark-at-midpoint fix (Brock's verified finding). For options,
+    # fetch the NBBO midpoint via fetch_option_marks_cents which already uses
+    # (bid+ask)/2. Prior code piped OCC symbols through fetch_live_prices
+    # which returned Alpaca's pessimistic side-of-book mark (bid for longs,
+    # ask for shorts), producing $8-12K phantom loss on wide-market spreads.
+    option_marks_cents: dict[str, int] = {}
+    _occ_symbols = [p.symbol for p in open_positions if getattr(p, "option_type", None)]
+    if _occ_symbols:
+        try:
+            from app.services.option_marks import fetch_option_marks_cents
+            option_marks_cents = fetch_option_marks_cents(_occ_symbols) or {}
+        except Exception as _om_exc:
+            logger.warning("[open-positions] option_marks fetch failed: %s", _om_exc)
+
     for pos in open_positions:
         alloc   = alloc_by_id.get(pos.allocation_id)
         if not alloc:
@@ -227,29 +241,37 @@ def get_open_positions(
             continue
 
         entry_price          = pos.avg_cost_cents / 100.0
-        live_price, source   = price_result.get(pos.symbol, (0.0, "unavailable"))
-        live_price           = float(live_price or 0)
+        is_option            = bool(getattr(pos, "option_type", None))
+        is_short             = getattr(pos, "side", "long") == "short"
 
-        if live_price > 0:
-            current_price  = live_price
-            price_source   = source
+        # Options use midpoint mark (option_marks_cents); stock/crypto use
+        # fetch_live_prices result.
+        if is_option:
+            _mc = option_marks_cents.get(pos.symbol)
+            if _mc is not None:
+                current_price = _mc / 100.0
+                price_source  = "options_midpoint"
+            else:
+                current_price = entry_price
+                price_source  = "stale_no_option_quote"
         else:
-            # Fall back to entry price; flag as stale so the UI can show a warning
-            current_price  = entry_price
-            price_source   = "stale"
+            live_price, source = price_result.get(pos.symbol, (0.0, "unavailable"))
+            live_price = float(live_price or 0)
+            if live_price > 0:
+                current_price = live_price
+                price_source  = source
+            else:
+                current_price = entry_price
+                price_source  = "stale"
 
-        # 2026-07-15 fix: options positions need ×100 contract multiplier.
-        # For an option, avg_cost_cents = per-contract premium (in cents), qty
-        # = contract count. Notional per contract = premium × 100. Without the
-        # ×100, cost_basis was computed against 1/100 of the real cost, so a
-        # 5-lot BABA call at $19.70 → $23.65 read as +$3.95×5=$19.75 profit
-        # against $98.50 cost = +20.05%… but the display code did $19.75 ÷
-        # $98.50 badly and produced the +214% / -1994% garbage Brock flagged.
-        # Correct: cost = premium × qty × 100 for options; premium × qty for stock/crypto.
-        contract_multiplier  = 100 if getattr(pos, "option_type", None) else 1
+        contract_multiplier  = 100 if is_option else 1
         current_value_usd = round(current_price * pos.qty * contract_multiplier, 2)
-        unrealized_usd    = round((current_price - entry_price) * pos.qty * contract_multiplier, 2)
         cost_basis        = entry_price * pos.qty * contract_multiplier
+        # Short-side sign flip: short leg profits when mark drops below entry.
+        if is_short:
+            unrealized_usd = round((entry_price - current_price) * pos.qty * contract_multiplier, 2)
+        else:
+            unrealized_usd = round((current_price - entry_price) * pos.qty * contract_multiplier, 2)
         unrealized_pct    = round((unrealized_usd / cost_basis * 100) if cost_basis > 0 else 0.0, 4)
 
         opened_at = pos.opened_at
