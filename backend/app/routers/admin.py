@@ -568,6 +568,52 @@ def run_daily_reconciliation_endpoint(
     return run_daily_reconciliation(db)
 
 
+@router.get("/trades-today-by-bot")
+def trades_today_by_bot(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Per-bot trade counts since 00:00 UTC today. Splits real-broker
+    fills from sim fills. Read-only."""
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotTrade
+
+    now = datetime.now(timezone.utc)
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    trades = (
+        db.query(BotTrade.bot_name, BotTrade.alpaca_order_id)
+        .filter(BotTrade.ts >= midnight)
+        .filter(BotTrade.quarantined_at.is_(None))
+        .all()
+    )
+    from collections import defaultdict
+    agg: dict = defaultdict(lambda: {"total": 0, "with_broker_order_id": 0})
+    for bot_name, oid in trades:
+        agg[bot_name]["total"] += 1
+        if oid:
+            agg[bot_name]["with_broker_order_id"] += 1
+    out = []
+    for bot_name, d in agg.items():
+        out.append({
+            "bot_name": bot_name,
+            "total": d["total"],
+            "with_broker_order_id": d["with_broker_order_id"],
+            "sim_or_no_broker": d["total"] - d["with_broker_order_id"],
+        })
+    out.sort(key=lambda x: -x["total"])
+    total_all = sum(x["total"] for x in out)
+    total_broker = sum(x["with_broker_order_id"] for x in out)
+    return {
+        "as_of": now.isoformat(),
+        "since": midnight.isoformat(),
+        "by_bot": out,
+        "total_trades": total_all,
+        "total_with_broker": total_broker,
+        "total_sim_or_no_broker": total_all - total_broker,
+    }
+
+
 @router.get("/bmg-alpaca-diff")
 def bmg_alpaca_diff(
     db: Session = Depends(get_db),
