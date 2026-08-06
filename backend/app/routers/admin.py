@@ -568,6 +568,16 @@ def run_daily_reconciliation_endpoint(
     return run_daily_reconciliation(db)
 
 
+@router.post("/pr-mark-now")
+def pr_mark_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Fire portfolio-rank daily-mark synchronously. Clears I6 stale holdings."""
+    from app.jobs.pr_daily_mark import mark_all_pr_holdings
+    return mark_all_pr_holdings(db)
+
+
 @router.post("/quarantine-sim-only")
 def quarantine_sim_only(
     lookback_hours: int = Query(72, description="How far back to walk BotTrade rows."),
