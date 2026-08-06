@@ -363,8 +363,10 @@ def _check_i7_exposure_caps(db) -> Result:
 
         # Net cap defaults to 250% NAV (was gross cap — now applied to net).
         # Gross cap for informational bar at 500% (rarely trips).
-        net_max_pct = float(os.getenv("NET_EXPOSURE_MAX_PCT_NAV", "2.5"))
-        gross_max_pct = float(os.getenv("GROSS_EXPOSURE_MAX_PCT_NAV", "5.0"))
+        # 2026-08-06 PM Claude spec Step 5.1: tightened from 2.5/5.0.
+        # 100% NAV net is the honest cap; 200% gross allows spread pairs.
+        net_max_pct = float(os.getenv("NET_EXPOSURE_MAX_PCT_NAV", "1.0"))
+        gross_max_pct = float(os.getenv("GROSS_EXPOSURE_MAX_PCT_NAV", "2.0"))
         per_max_pct = float(os.getenv("OPTIONS_MAX_NOTIONAL_PCT", "0.20"))
         actual = {
             "gross_usd": round(gross, 2),
@@ -482,12 +484,15 @@ def _check_i10_signal_funnel(db) -> Result:
     try:
         from sqlalchemy import text as _text
         cut = datetime.now(timezone.utc) - timedelta(hours=24)
+        # 2026-08-06 PM Claude spec Step 8.2: exclude paused bots — they
+        # legitimately fire signals but skip execution; those aren't
+        # unexplained drops.
         rows = db.execute(_text(
             "SELECT bp.name, "
             "  COALESCE((SELECT COUNT(*) FROM bot_signals bs WHERE bs.allocation_id=ba.id AND bs.ts>=:cut), 0) sigs, "
             "  COALESCE((SELECT COUNT(*) FROM bot_trades bt WHERE bt.allocation_id=ba.id AND bt.ts>=:cut AND bt.quarantined_at IS NULL), 0) trades "
             "FROM bot_allocations ba JOIN bot_profiles bp ON bp.id=ba.profile_id "
-            "WHERE ba.enabled = TRUE"
+            "WHERE ba.enabled = TRUE AND ba.paused_reason IS NULL"
         ), {"cut": cut.isoformat()}).fetchall()
         # A bot with signals but 0 trades AND no hold rows explaining it = drop.
         drop_bots = []

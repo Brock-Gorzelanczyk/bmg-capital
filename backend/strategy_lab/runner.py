@@ -2001,19 +2001,17 @@ def _execute_options_signal(
     # fund into 3 individual-name long calls (MSFT/PDD/XLK) with −7% decay
     # in one session. Until the 8 halted credit strategies come back online
     # to balance the sleeve, cap long-call concentration harder.
-    OPTIONS_MIN_NOTIONAL_PCT = 0.06
+    # 2026-08-06 PM Claude spec Step 5.2: removed hardcoded notional floor
+    # bypass. The "raise to floor" hack was a month-old temp workaround
+    # marked "until credit strategies come back online". Credit strategies
+    # are back. If pyramid halving under-sizes options budgets, that surfaces
+    # as low fill counts (measurable) rather than being silently masked.
+    # The 8% cap remains as a per-trade sleeve concentration guard.
     OPTIONS_MAX_NOTIONAL_PCT = 0.08
-    notional_floor = capital_usd * OPTIONS_MIN_NOTIONAL_PCT
     notional_cap = capital_usd * OPTIONS_MAX_NOTIONAL_PCT
-    if position_dollars < notional_floor:
-        logger.info(
-            "[options:%s] %s raising per-trade budget $%.0f → $%.0f (10%% sleeve floor: skip pyramid halving)",
-            profile_name, sig.symbol, position_dollars, notional_floor,
-        )
-        position_dollars = notional_floor
     if position_dollars > notional_cap:
         logger.info(
-            "[options:%s] %s clamping per-trade budget $%.0f → $%.0f (12%% sleeve cap)",
+            "[options:%s] %s clamping per-trade budget $%.0f → $%.0f (8%% sleeve cap)",
             profile_name, sig.symbol, position_dollars, notional_cap,
         )
         position_dollars = notional_cap
