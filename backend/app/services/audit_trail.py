@@ -94,6 +94,8 @@ def _post_discord(
     notes: str | None,
     ts: str,
 ) -> None:
+    if os.getenv("NOTIFICATIONS_DISCORD_ENABLED", "false").strip().lower() != "true":
+        return
     token      = os.getenv("DISCORD_BOT_TOKEN", "")
     channel_id = os.getenv("DISCORD_CH_AUDIT_TRAIL", "") or os.getenv("DISCORD_CH_DEV_LOG", "")
     if not token or not channel_id:

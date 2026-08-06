@@ -72,6 +72,9 @@ def _throttled(channel_id: int, bot_name: str) -> bool:
 # ── Channel adapters ──────────────────────────────────────────────────────────
 
 def _send_discord(webhook_url: str, signal: dict) -> None:
+    import os
+    if os.getenv("NOTIFICATIONS_DISCORD_ENABLED", "false").strip().lower() != "true":
+        return
     bot = signal.get("bot", "")
     symbol = signal.get("symbol", "")
     side = signal.get("side", "").upper()

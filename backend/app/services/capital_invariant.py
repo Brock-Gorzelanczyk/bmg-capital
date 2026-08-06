@@ -169,6 +169,8 @@ def check_capital_invariant(db, user_id: int = 1) -> CapitalInvariantStatus:
 
 def _post_discord_ops(message: str) -> None:
     """Best-effort POST to DISCORD_WH_OPS. Never raises."""
+    if os.environ.get("NOTIFICATIONS_DISCORD_ENABLED", "false").strip().lower() != "true":
+        return
     webhook = os.environ.get("DISCORD_WH_OPS", "").strip()
     if not webhook:
         return

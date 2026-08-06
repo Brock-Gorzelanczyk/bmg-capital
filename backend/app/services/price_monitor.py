@@ -73,6 +73,9 @@ def run_price_alert_monitor(db) -> None:
 
 
 def _post_discord(alert, current_price: float, chart_name: Optional[str]) -> None:
+    import os
+    if os.getenv("NOTIFICATIONS_DISCORD_ENABLED", "false").strip().lower() != "true":
+        return
     from app.config import settings
     from app.services.discord_public import _post_to_channel
 

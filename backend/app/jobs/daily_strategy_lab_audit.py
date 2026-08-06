@@ -377,6 +377,8 @@ def _build_summary_markdown(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _post_discord(summary_markdown: str) -> None:
+    if os.environ.get("NOTIFICATIONS_DISCORD_ENABLED", "false").strip().lower() != "true":
+        return
     webhook = os.environ.get("DISCORD_WH_DAILY_AUDIT")
     if not webhook:
         logger.info("DISCORD_WH_DAILY_AUDIT not set, skipping Discord post")

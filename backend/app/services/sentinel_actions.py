@@ -313,6 +313,8 @@ def _trip_circuit_breaker(action_name: str, reason: str, duration_minutes: int =
 # ── Discord embed helpers for action pre/post ─────────────────────────────────
 
 def _post_autofix_embed(title: str, color: int, fields: list[dict], channel_id: str = "") -> None:
+    if os.getenv("NOTIFICATIONS_DISCORD_ENABLED", "false").strip().lower() != "true":
+        return
     token = os.getenv("DISCORD_BOT_TOKEN", "")
     channel = channel_id or os.getenv("DISCORD_CHANNEL_ID_SENTINEL_OPS", "")
     if not token or not channel:
