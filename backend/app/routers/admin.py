@@ -744,6 +744,53 @@ def adopt_all_alpaca_orphans(
     }
 
 
+@router.post("/rollback-catchall-adoption")
+def rollback_catchall_adoption(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Undo the broker_orphan_catchall adoption — it double-counts against
+    fund PV. Quarantines every BotPosition + BotTrade under the
+    'broker_orphan_catchall' profile so they drop out of PV rollup."""
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotPosition, BotTrade, BotProfile, BotAllocation
+
+    now = datetime.now(timezone.utc)
+    prof = db.query(BotProfile).filter(BotProfile.name == "broker_orphan_catchall").first()
+    if not prof:
+        return {"error": "profile_not_found"}
+    allocs = db.query(BotAllocation).filter(BotAllocation.profile_id == prof.id).all()
+    alloc_ids = [a.id for a in allocs]
+    positions = (
+        db.query(BotPosition)
+        .filter(BotPosition.allocation_id.in_(alloc_ids))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    trades = (
+        db.query(BotTrade)
+        .filter(BotTrade.allocation_id.in_(alloc_ids))
+        .filter(BotTrade.quarantined_at.is_(None))
+        .all()
+    )
+    if not dry_run:
+        for p in positions:
+            p.quarantined_at = now
+            p.quarantine_reason = "catchall_double_count_rollback_2026_08_06"
+        for t in trades:
+            t.quarantined_at = now
+            t.quarantine_reason = "catchall_double_count_rollback_2026_08_06"
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "allocation_ids": alloc_ids,
+        "positions_quarantined": len(positions),
+        "trades_quarantined": len(trades),
+    }
+
+
 @router.post("/reconcile-qty-mismatches")
 def reconcile_qty_mismatches(
     dry_run: bool = Query(True),
