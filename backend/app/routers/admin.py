@@ -872,6 +872,51 @@ def reconcile_qty_mismatches(
     }
 
 
+@router.get("/inspect-bot-trades")
+def inspect_bot_trades(
+    profile: str = Query(...),
+    limit: int = Query(30),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Dump raw BotTrade rows for a given profile so we can see why
+    realized P&L is zero despite trades > 0."""
+    from app.db.models.bots import BotTrade, BotProfile, BotAllocation
+    prof = db.query(BotProfile).filter(BotProfile.name == profile).first()
+    if not prof:
+        return {"error": f"profile '{profile}' not found"}
+    allocs = db.query(BotAllocation).filter(BotAllocation.profile_id == prof.id).all()
+    alloc_ids = [a.id for a in allocs]
+    trades = (
+        db.query(BotTrade)
+        .filter(BotTrade.allocation_id.in_(alloc_ids))
+        .filter(BotTrade.quarantined_at.is_(None))
+        .order_by(BotTrade.ts.desc())
+        .limit(limit)
+        .all()
+    )
+    out = []
+    for t in trades:
+        out.append({
+            "id": t.id,
+            "ts": t.ts.isoformat() if t.ts else None,
+            "symbol": t.symbol,
+            "side": t.side,
+            "qty": float(t.qty or 0),
+            "fill_price_cents": t.fill_price_cents,
+            "fill_price_dollars": (t.fill_price_cents or 0) / 100,
+            "fees_cents": t.fees_cents,
+            "position_id": t.position_id,
+            "alpaca_order_id": t.alpaca_order_id,
+        })
+    return {
+        "profile": profile,
+        "allocation_ids": alloc_ids,
+        "total_trades_active": len(out),
+        "trades": out,
+    }
+
+
 @router.get("/inspect-symbol")
 def inspect_symbol(
     symbol: str = Query(...),
