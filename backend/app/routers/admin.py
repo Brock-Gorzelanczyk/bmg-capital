@@ -568,6 +568,64 @@ def run_daily_reconciliation_endpoint(
     return run_daily_reconciliation(db)
 
 
+@router.post("/quarantine-sim-only")
+def quarantine_sim_only(
+    lookback_hours: int = Query(72, description="How far back to walk BotTrade rows."),
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Quarantine BotTrade rows where alpaca_order_id IS NULL. These are
+    sim / no-broker leaks and never correspond to a real fill."""
+    from datetime import datetime, timezone, timedelta
+    from app.db.models.bots import BotTrade, BotPosition
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=lookback_hours)
+
+    victims = (
+        db.query(BotTrade)
+        .filter(BotTrade.ts >= cutoff)
+        .filter(BotTrade.alpaca_order_id.is_(None))
+        .filter(BotTrade.quarantined_at.is_(None))
+        .all()
+    )
+    victim_ids = [t.id for t in victims]
+    position_ids = [t.position_id for t in victims if t.position_id]
+
+    if not dry_run and victim_ids:
+        (
+            db.query(BotTrade)
+            .filter(BotTrade.id.in_(victim_ids))
+            .update(
+                {"quarantined_at": now, "quarantine_reason": "sim_no_broker_id_2026_08_06"},
+                synchronize_session=False,
+            )
+        )
+        if position_ids:
+            (
+                db.query(BotPosition)
+                .filter(BotPosition.id.in_(position_ids))
+                .filter(BotPosition.quarantined_at.is_(None))
+                .update(
+                    {"quarantined_at": now, "quarantine_reason": "sim_no_broker_id_2026_08_06"},
+                    synchronize_session=False,
+                )
+            )
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "lookback_hours": lookback_hours,
+        "victims_count": len(victims),
+        "position_ids_count": len(position_ids),
+        "sample": [
+            {"id": t.id, "symbol": t.symbol, "side": t.side, "qty": t.qty, "ts": t.ts.isoformat() if t.ts else None, "position_id": t.position_id}
+            for t in victims[:10]
+        ],
+    }
+
+
 @router.post("/quarantine-bmg-phantom-positions")
 def quarantine_bmg_phantom_positions(
     dry_run: bool = Query(True, description="Preview only when true (default)."),
