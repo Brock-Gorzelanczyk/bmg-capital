@@ -576,13 +576,15 @@ def trades_today_by_bot(
     """Per-bot trade counts since 00:00 UTC today. Splits real-broker
     fills from sim fills. Read-only."""
     from datetime import datetime, timezone
-    from app.db.models.bots import BotTrade
+    from app.db.models.bots import BotTrade, BotAllocation, BotProfile
 
     now = datetime.now(timezone.utc)
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     trades = (
-        db.query(BotTrade.bot_name, BotTrade.alpaca_order_id)
+        db.query(BotProfile.name, BotTrade.alpaca_order_id)
+        .join(BotAllocation, BotAllocation.id == BotTrade.allocation_id)
+        .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
         .filter(BotTrade.ts >= midnight)
         .filter(BotTrade.quarantined_at.is_(None))
         .all()
