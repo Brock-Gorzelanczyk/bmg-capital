@@ -364,14 +364,21 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
                 _dropped, getattr(profile, "name", "?"),
             )
 
-    # ── Deployed capital (entry-cost notional) ────────────────────────────────
-    # Sum of qty × avg_cost across open positions. Equities: dollars-at-cost.
-    # Options: premium × contracts × 100 (per-share entry × contract multiplier).
-    # Mirrors the definition used by /api/portfolio/allocation-live so the
-    # leaderboard "deployed %" and the deployment summary widget agree.
+    # ── Deployed capital = cash outlay (2026-08-06 rebuild directive) ─────────
+    # Previously: sum(abs) across every leg, so bull call spread's short leg
+    # inflated deployed by its premium. Real capital at risk for a debit
+    # spread = long premium - short premium (net debit).
+    #
+    # New rule: LONG positions add their entry cost; SHORT positions
+    # contribute 0 (short generates cash, doesn't consume it — margin is
+    # held elsewhere). A bull call spread's deployed = long leg cost only,
+    # closely approximating the net debit.
     deployed_cents = 0
     for p in open_pos_rows:
         if not p.avg_cost_cents or not p.qty:
+            continue
+        side = (getattr(p, "side", "long") or "long").lower()
+        if side == "short":
             continue
         if p.option_type is not None:
             contracts = float(p.qty)
