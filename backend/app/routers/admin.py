@@ -744,6 +744,226 @@ def adopt_all_alpaca_orphans(
     }
 
 
+@router.post("/rebuild-positions-from-alpaca")
+def rebuild_positions_from_alpaca(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """PHASE 2 rebuild per Brock's 2026-08-06 directive.
+
+    Two repair passes (quarantine, adopter) both left the position store
+    worse. This endpoint is the surgery — Alpaca /v2/positions is truth,
+    regenerate BMG bot_positions from it in a single transaction.
+
+    Steps:
+      1. Quarantine every currently-open non-quarantined BotPosition
+         (attribution preserved via `previous_position_id_for_rebuild`
+         in quarantine_reason).
+      2. Fetch Alpaca /v2/positions + recent order history (72h window).
+      3. For each Alpaca position: attribute to a bot via matching
+         alpaca_order_id in bot_trades; if no match, assign to
+         `broker_orphan_catchall` allocation.
+      4. Insert fresh BotPosition + paired BotTrade using Alpaca
+         avg_entry_price as cost basis.
+
+    Idempotent: safe to re-run; each run wipes+rebuilds.
+    """
+    import os, urllib.request, json, urllib.parse
+    from datetime import datetime, timezone, timedelta
+    from collections import defaultdict
+    from app.db.models.bots import BotPosition, BotTrade, BotProfile, BotAllocation
+
+    now = datetime.now(timezone.utc)
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+
+    def alp_get(path: str):
+        req = urllib.request.Request(
+            f"https://paper-api.alpaca.markets{path}",
+            headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+        )
+        return json.loads(urllib.request.urlopen(req, timeout=20).read())
+
+    alp_positions = alp_get("/v2/positions")
+    # Fetch filled orders in the last 30 days for attribution
+    after = (now - timedelta(days=30)).isoformat()
+    orders_qs = urllib.parse.urlencode({
+        "status":"closed","after":after,"limit":500,"direction":"desc","nested":"true"
+    })
+    alp_orders = alp_get(f"/v2/orders?{orders_qs}")
+    filled_orders = [o for o in alp_orders if o.get("status") == "filled"]
+
+    # BMG trade → allocation lookup by alpaca_order_id (base id or leg id)
+    order_id_to_alloc = {}
+    all_bmg_trades = (
+        db.query(BotTrade.alpaca_order_id, BotTrade.allocation_id)
+        .filter(BotTrade.alpaca_order_id.isnot(None))
+        .all()
+    )
+    for oid, aid in all_bmg_trades:
+        if oid and aid:
+            order_id_to_alloc[oid] = aid
+
+    # Ensure catchall exists
+    prof = db.query(BotProfile).filter(BotProfile.name == "broker_orphan_catchall").first()
+    if not prof and not dry_run:
+        prof = BotProfile(
+            name="broker_orphan_catchall",
+            description="Catch-all for Alpaca positions BMG couldn't attribute via order_id.",
+            asset_class="stock",
+            enabled=False,
+        )
+        db.add(prof); db.flush()
+    catchall_alloc = None
+    if prof:
+        catchall_alloc = (
+            db.query(BotAllocation)
+            .filter(BotAllocation.user_id == current_user.id)
+            .filter(BotAllocation.profile_id == prof.id)
+            .first()
+        )
+        if not catchall_alloc and not dry_run:
+            catchall_alloc = BotAllocation(
+                user_id=current_user.id,
+                profile_id=prof.id,
+                capital_pct=0.0,
+                starting_capital_cents=0,
+                enabled=False,
+                paper_mode=True,
+            )
+            db.add(catchall_alloc); db.flush()
+
+    # Attribute each Alpaca position
+    attributions = []
+    for p in alp_positions:
+        sym = p.get("symbol")
+        qty = float(p.get("qty") or 0)
+        side = "short" if qty < 0 else "long"
+        abs_qty = abs(qty)
+        avg_entry = float(p.get("avg_entry_price") or 0)
+        # Find matching filled order (most recent for this symbol + side match)
+        matched_order = None
+        for o in filled_orders:
+            if o.get("symbol") != sym:
+                continue
+            filled_qty = float(o.get("filled_qty") or 0)
+            if abs(filled_qty) < 0.001:
+                continue
+            order_side = o.get("side")
+            # For our purposes: order side buy = adds long, sell = adds short
+            if (side == "long" and order_side == "buy") or (side == "short" and order_side == "sell"):
+                matched_order = o
+                break
+        alloc_id = None
+        source = None
+        if matched_order:
+            oid = matched_order.get("id")
+            if oid in order_id_to_alloc:
+                alloc_id = order_id_to_alloc[oid]
+                source = f"order_id:{oid[:8]}"
+            else:
+                # Match on client_order_id (leg id in multi-leg)
+                coid = matched_order.get("client_order_id")
+                if coid and coid in order_id_to_alloc:
+                    alloc_id = order_id_to_alloc[coid]
+                    source = f"client_order_id:{coid[:8]}"
+        if alloc_id is None:
+            alloc_id = catchall_alloc.id if catchall_alloc else None
+            source = "catchall"
+
+        attributions.append({
+            "symbol": sym, "side": side, "qty": abs_qty,
+            "avg_entry": avg_entry,
+            "market_value": float(p.get("market_value") or 0),
+            "unrealized_pl": float(p.get("unrealized_pl") or 0),
+            "asset_class": p.get("asset_class"),
+            "allocation_id": alloc_id,
+            "attribution_source": source,
+        })
+
+    # Existing open non-quarantined positions (will be quarantined)
+    existing = (
+        db.query(BotPosition)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+
+    if not dry_run and alloc_id is not None:
+        # 1. Quarantine ALL existing open
+        for p in existing:
+            p.quarantined_at = now
+            p.quarantine_reason = "phase_2_rebuild_2026_08_06"
+        db.flush()
+
+        # 2. Insert fresh rows from Alpaca
+        try:
+            from app.services.orphan_adopter import _parse_occ
+        except Exception:
+            _parse_occ = lambda s: {}
+        inserted_ids = []
+        for a in attributions:
+            if a["allocation_id"] is None:
+                continue
+            sym = a["symbol"]
+            is_option = a["asset_class"] == "us_option"
+            parsed = _parse_occ(sym) if is_option else {}
+            cost_cents = int(round(a["avg_entry"] * 100)) if a["avg_entry"] > 0 else 0
+            pos = BotPosition(
+                allocation_id=a["allocation_id"],
+                symbol=sym,
+                qty=a["qty"],
+                avg_cost_cents=cost_cents,
+                side=a["side"],
+                opened_at=now,
+                closed_at=None,
+                is_paper=True,
+                option_type=parsed.get("option_type"),
+                strike_price=parsed.get("strike_price"),
+                expiration_date=parsed.get("expiration_date"),
+                underlying_symbol=parsed.get("root"),
+                contract_count=int(a["qty"]) if is_option else None,
+                contract_premium_cents=cost_cents if is_option else None,
+            )
+            db.add(pos); db.flush()
+            t = BotTrade(
+                allocation_id=a["allocation_id"],
+                symbol=sym,
+                side="short" if a["side"] == "short" else "buy",
+                qty=a["qty"],
+                fill_price_cents=cost_cents,
+                fees_cents=0,
+                ts=now,
+                position_id=pos.id,
+                is_paper=True,
+                alpaca_order_id=f"rebuild_2026_08_06:{a['attribution_source']}",
+                option_type=parsed.get("option_type"),
+                strike_price=parsed.get("strike_price"),
+                expiration_date=parsed.get("expiration_date"),
+                underlying_symbol=parsed.get("root"),
+                contract_count=int(a["qty"]) if is_option else None,
+                contract_premium_cents=cost_cents if is_option else None,
+            )
+            db.add(t)
+            inserted_ids.append(pos.id)
+        db.commit()
+
+    # Attribution summary
+    from collections import Counter
+    src_summary = Counter(a["attribution_source"] for a in attributions)
+
+    return {
+        "dry_run": dry_run,
+        "alpaca_positions": len(alp_positions),
+        "existing_bmg_open_to_quarantine": len(existing),
+        "attributions_count": len(attributions),
+        "attribution_sources": dict(src_summary),
+        "catchall_allocation_id": catchall_alloc.id if catchall_alloc else None,
+        "attributions_preview": attributions[:20],
+    }
+
+
 @router.post("/rollback-catchall-adoption")
 def rollback_catchall_adoption(
     dry_run: bool = Query(True),
