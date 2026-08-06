@@ -5096,7 +5096,12 @@ def get_bot_diagnostics(
                  WHERE bp.allocation_id = a.id
                    AND bp.closed_at IS NULL
                    AND bp.quarantined_at IS NULL) AS open_positions_count,
-               (SELECT COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) FROM bot_positions bp
+               (SELECT COALESCE(SUM(
+                   CASE
+                     WHEN LOWER(COALESCE(bp.side,'long')) = 'short' THEN 0
+                     WHEN bp.option_type IS NOT NULL THEN bp.qty * bp.avg_cost_cents * 100
+                     ELSE bp.qty * bp.avg_cost_cents
+                   END), 0) FROM bot_positions bp
                  WHERE bp.allocation_id = a.id
                    AND bp.closed_at IS NULL
                    AND bp.quarantined_at IS NULL) AS open_positions_notional_cents,
@@ -5327,7 +5332,12 @@ def get_bot_diagnostic_singular(
                  WHERE bp.allocation_id = a.id
                    AND bp.closed_at IS NULL
                    AND bp.quarantined_at IS NULL) AS open_positions_count,
-               (SELECT COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) FROM bot_positions bp
+               (SELECT COALESCE(SUM(
+                   CASE
+                     WHEN LOWER(COALESCE(bp.side,'long')) = 'short' THEN 0
+                     WHEN bp.option_type IS NOT NULL THEN bp.qty * bp.avg_cost_cents * 100
+                     ELSE bp.qty * bp.avg_cost_cents
+                   END), 0) FROM bot_positions bp
                  WHERE bp.allocation_id = a.id
                    AND bp.closed_at IS NULL
                    AND bp.quarantined_at IS NULL) AS open_positions_notional_cents,
@@ -5415,7 +5425,12 @@ def compute_bot_diagnostics(db: Session, user_id: int = 1) -> list[dict]:
                  WHERE bp.allocation_id = a.id
                    AND bp.closed_at IS NULL
                    AND bp.quarantined_at IS NULL) AS open_positions_count,
-               (SELECT COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) FROM bot_positions bp
+               (SELECT COALESCE(SUM(
+                   CASE
+                     WHEN LOWER(COALESCE(bp.side,'long')) = 'short' THEN 0
+                     WHEN bp.option_type IS NOT NULL THEN bp.qty * bp.avg_cost_cents * 100
+                     ELSE bp.qty * bp.avg_cost_cents
+                   END), 0) FROM bot_positions bp
                  WHERE bp.allocation_id = a.id
                    AND bp.closed_at IS NULL
                    AND bp.quarantined_at IS NULL) AS open_positions_notional_cents,
