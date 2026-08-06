@@ -744,6 +744,44 @@ def adopt_all_alpaca_orphans(
     }
 
 
+@router.get("/inspect-symbol")
+def inspect_symbol(
+    symbol: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Dump every BotPosition row for the given symbol (open + closed +
+    quarantined) so we can see where BMG state actually is."""
+    from app.db.models.bots import BotPosition, BotProfile, BotAllocation
+    rows = (
+        db.query(BotPosition)
+        .filter(BotPosition.symbol == symbol)
+        .order_by(BotPosition.opened_at.desc())
+        .limit(50)
+        .all()
+    )
+    out = []
+    for p in rows:
+        alloc = db.query(BotAllocation).filter(BotAllocation.id == p.allocation_id).first() if p.allocation_id else None
+        prof_name = None
+        if alloc and alloc.profile_id:
+            prof = db.query(BotProfile).filter(BotProfile.id == alloc.profile_id).first()
+            prof_name = prof.name if prof else None
+        out.append({
+            "id": p.id,
+            "allocation_id": p.allocation_id,
+            "profile": prof_name,
+            "qty": float(p.qty or 0),
+            "side": p.side,
+            "avg_cost_cents": p.avg_cost_cents,
+            "opened_at": p.opened_at.isoformat() if p.opened_at else None,
+            "closed_at": p.closed_at.isoformat() if p.closed_at else None,
+            "quarantined_at": p.quarantined_at.isoformat() if p.quarantined_at else None,
+            "quarantine_reason": p.quarantine_reason,
+        })
+    return {"symbol": symbol, "rows": out, "count": len(out)}
+
+
 @router.post("/pr-mark-now")
 def pr_mark_now(
     db: Session = Depends(get_db),
