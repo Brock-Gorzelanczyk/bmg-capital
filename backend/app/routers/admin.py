@@ -568,6 +568,182 @@ def run_daily_reconciliation_endpoint(
     return run_daily_reconciliation(db)
 
 
+@router.post("/adopt-all-alpaca-orphans")
+def adopt_all_alpaca_orphans(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Catch-all adopter: every Alpaca position not tracked in BMG gets
+    inserted as a BotPosition + BotTrade under a synthetic
+    'broker_orphan_catchall' allocation. Clears I9 orphans and closes
+    the I2 P&L drift caused by untracked broker holdings.
+
+    Idempotent: skips (symbol, side) keys already open in BMG.
+    """
+    import os, urllib.request, json
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotPosition, BotTrade, BotProfile, BotAllocation
+
+    now = datetime.now(timezone.utc)
+
+    # Ensure catchall profile + allocation exist
+    prof = db.query(BotProfile).filter(BotProfile.name == "broker_orphan_catchall").first()
+    if not prof:
+        if dry_run:
+            profile_action = "would_create_profile"
+            prof_id = None
+        else:
+            prof = BotProfile(
+                name="broker_orphan_catchall",
+                description="Catch-all for Alpaca positions not attributable to any BMG strategy (2026-08-06).",
+                asset_class="stock",
+                enabled=False,
+            )
+            db.add(prof); db.flush()
+            profile_action = "created_profile"
+            prof_id = prof.id
+    else:
+        profile_action = "profile_exists"
+        prof_id = prof.id
+
+    alloc = None
+    if prof:
+        alloc = (
+            db.query(BotAllocation)
+            .filter(BotAllocation.user_id == current_user.id)
+            .filter(BotAllocation.profile_id == prof.id)
+            .first()
+        )
+    if prof and not alloc and not dry_run:
+        alloc = BotAllocation(
+            user_id=current_user.id,
+            profile_id=prof.id,
+            capital_pct=0.0,
+            starting_capital_cents=0,
+            enabled=False,
+            paper_mode=True,
+        )
+        db.add(alloc); db.flush()
+    alloc_id = alloc.id if alloc else None
+
+    # Fetch Alpaca positions
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+    req = urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/positions",
+        headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+    )
+    alp_list = json.loads(urllib.request.urlopen(req, timeout=15).read())
+
+    # BMG open, non-quarantined — key by (symbol, side)
+    bmg_rows = (
+        db.query(BotPosition)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    from collections import defaultdict
+    bmg_qty_by_key: dict = defaultdict(float)
+    for p in bmg_rows:
+        side = (p.side or "long").lower()
+        bmg_qty_by_key[(p.symbol or "", side)] += float(p.qty or 0)
+
+    adopted: list[dict] = []
+    skipped_matched: list[str] = []
+
+    for p in alp_list:
+        sym = p.get("symbol")
+        raw_qty = float(p.get("qty"))
+        side = "short" if raw_qty < 0 else "long"
+        abs_qty = abs(raw_qty)
+        key = (sym, side)
+
+        bmg_qty = bmg_qty_by_key.get(key, 0.0)
+        missing_qty = abs_qty - bmg_qty
+        if missing_qty <= 0.001:
+            skipped_matched.append(f"{sym}/{side}")
+            continue
+
+        avg_entry = float(p.get("avg_entry_price") or 0)
+        asset_class = p.get("asset_class") or "us_equity"
+        is_option = asset_class == "us_option" or (len(sym or "") > 10 and any(c in (sym or "") for c in ("C0","P0","C1","P1")))
+
+        entry = {
+            "symbol": sym, "side": side, "missing_qty": missing_qty,
+            "avg_entry_price": avg_entry,
+            "market_value": float(p.get("market_value") or 0),
+            "unrealized_pl": float(p.get("unrealized_pl") or 0),
+            "asset_class": asset_class,
+        }
+
+        if dry_run or alloc_id is None:
+            adopted.append({**entry, "would_adopt": True})
+            continue
+
+        cost_cents = int(round(avg_entry * 100)) if avg_entry > 0 else 0
+        parsed = {}
+        if is_option:
+            try:
+                from app.services.orphan_adopter import _parse_occ
+                parsed = _parse_occ(sym) or {}
+            except Exception:
+                pass
+
+        pos = BotPosition(
+            allocation_id=alloc_id,
+            symbol=sym,
+            qty=missing_qty,
+            avg_cost_cents=cost_cents,
+            side=side,
+            opened_at=now,
+            closed_at=None,
+            is_paper=True,
+            option_type=parsed.get("option_type"),
+            strike_price=parsed.get("strike_price"),
+            expiration_date=parsed.get("expiration_date"),
+            underlying_symbol=parsed.get("root"),
+            contract_count=int(missing_qty) if is_option else None,
+            contract_premium_cents=cost_cents if is_option else None,
+        )
+        db.add(pos); db.flush()
+        entry_trade = BotTrade(
+            allocation_id=alloc_id,
+            symbol=sym,
+            side="short" if side == "short" else "buy",
+            qty=missing_qty,
+            fill_price_cents=cost_cents,
+            fees_cents=0,
+            ts=now,
+            position_id=pos.id,
+            is_paper=True,
+            alpaca_order_id="catchall_adopter_2026_08_06",
+            option_type=parsed.get("option_type"),
+            strike_price=parsed.get("strike_price"),
+            expiration_date=parsed.get("expiration_date"),
+            underlying_symbol=parsed.get("root"),
+            contract_count=int(missing_qty) if is_option else None,
+            contract_premium_cents=cost_cents if is_option else None,
+        )
+        db.add(entry_trade)
+        adopted.append({**entry, "pos_id": pos.id, "trade_id": entry_trade.id})
+
+    if not dry_run:
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "profile_action": profile_action,
+        "profile_id": prof_id,
+        "allocation_id": alloc_id,
+        "alpaca_positions": len(alp_list),
+        "bmg_open_positions": len(bmg_rows),
+        "adopted_count": len(adopted),
+        "skipped_matched_count": len(skipped_matched),
+        "adopted_preview": adopted[:15],
+    }
+
+
 @router.post("/pr-mark-now")
 def pr_mark_now(
     db: Session = Depends(get_db),

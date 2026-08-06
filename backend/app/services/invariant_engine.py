@@ -316,12 +316,38 @@ def _check_i6_position_mark_freshness(db) -> Result:
 
 
 def _check_i7_exposure_caps(db) -> Result:
-    """Fleet gross exposure and per-position notional within configured caps.
-    Options DTE floor per strategy also enforced."""
+    """Fleet exposure caps: NET exposure by underlying (bull-call spreads
+    offset), plus per-position notional. Gross is reported for context
+    but NOT the trigger — a matched spread should not read as leverage.
+    """
     try:
         alp = _alp_positions()
         gross = sum(abs(float(p.get("market_value") or 0)) for p in alp)
-        # NAV
+
+        # Compute NET exposure by underlying: for options, group by root
+        # symbol (BABA260828C00111000 → BABA). Sum signed MV per group,
+        # then take absolute value. Bull-call spreads (long+short same
+        # underlying) cancel to their spread width, not double-count.
+        from collections import defaultdict
+        net_by_root: dict = defaultdict(float)
+        for p in alp:
+            sym = p.get("symbol") or ""
+            mv = float(p.get("market_value") or 0)
+            # Strip OCC option chars to get underlying (best-effort)
+            if len(sym) > 10 and any(c in sym for c in ("C0","P0","C1","P1")):
+                # OCC format: <ROOT><YYMMDD><C|P><STRIKE*1000>
+                # Take the alphabetic prefix as root.
+                root = ""
+                for ch in sym:
+                    if ch.isalpha():
+                        root += ch
+                    else:
+                        break
+                net_by_root[root] += mv
+            else:
+                net_by_root[sym] += mv
+        net_exposure = sum(abs(v) for v in net_by_root.values())
+
         c = _creds()
         nav = 0.0
         if c:
@@ -334,17 +360,34 @@ def _check_i7_exposure_caps(db) -> Result:
                 nav = float(a.get("portfolio_value") or 0)
             except Exception:
                 pass
-        gross_max_pct = float(os.getenv("GROSS_EXPOSURE_MAX_PCT_NAV", "2.5"))
+
+        # Net cap defaults to 250% NAV (was gross cap — now applied to net).
+        # Gross cap for informational bar at 500% (rarely trips).
+        net_max_pct = float(os.getenv("NET_EXPOSURE_MAX_PCT_NAV", "2.5"))
+        gross_max_pct = float(os.getenv("GROSS_EXPOSURE_MAX_PCT_NAV", "5.0"))
         per_max_pct = float(os.getenv("OPTIONS_MAX_NOTIONAL_PCT", "0.20"))
-        actual = {"gross_usd": round(gross, 2), "nav_usd": round(nav, 2),
-                  "gross_pct_nav": round(gross / nav * 100, 1) if nav else None}
+        actual = {
+            "gross_usd": round(gross, 2),
+            "net_usd": round(net_exposure, 2),
+            "nav_usd": round(nav, 2),
+            "gross_pct_nav": round(gross / nav * 100, 1) if nav else None,
+            "net_pct_nav": round(net_exposure / nav * 100, 1) if nav else None,
+        }
         if nav <= 0:
             return _amber("I7", actual, None, None, "no NAV — cannot enforce")
-        if gross > nav * gross_max_pct:
+        # Primary trigger: NET exposure > 250% NAV
+        if net_exposure > nav * net_max_pct:
             return _red("I7", actual,
-                        {"gross_max_pct_nav": gross_max_pct * 100},
-                        gross - nav * gross_max_pct,
-                        f"fleet gross ${gross:,.0f} = {gross/nav*100:.0f}% NAV > {gross_max_pct*100:.0f}% cap")
+                        {"net_max_pct_nav": net_max_pct * 100},
+                        net_exposure - nav * net_max_pct,
+                        f"fleet net ${net_exposure:,.0f} = {net_exposure/nav*100:.0f}% NAV > {net_max_pct*100:.0f}% cap")
+        # Secondary trigger: gross > 500% NAV (would mean a lot of
+        # unmatched exposure)
+        if gross > nav * gross_max_pct:
+            return _amber("I7", actual,
+                          {"gross_max_pct_nav": gross_max_pct * 100},
+                          gross - nav * gross_max_pct,
+                          f"fleet gross ${gross:,.0f} = {gross/nav*100:.0f}% NAV > {gross_max_pct*100:.0f}% cap (net is within)")
         # Per-position check
         worst = None
         worst_pct = 0.0
