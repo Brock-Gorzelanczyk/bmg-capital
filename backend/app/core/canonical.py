@@ -1302,11 +1302,28 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             except Exception as _pnl_exc:
                 logger.warning("[leaderboard] PR %s pnl rollup failed: %s", pr_name, _pnl_exc)
 
+            # 2026-08-06: count rebalances (basket bots don't create BotTrade
+            # rows — their "activity" is periodic basket rebalances). Show
+            # that as the TRADES column so the row doesn't misleadingly
+            # display 0 when the bot has actually done work.
+            pr_rebalance_count = 0
+            try:
+                _r_row = db.execute(text(
+                    "SELECT COUNT(*) FROM portfolio_rank_rebalance_log "
+                    "WHERE bot_id = :bid AND (error IS NULL OR error = '')"
+                ), {"bid": pr_id}).fetchone()
+                pr_rebalance_count = int(_r_row[0] or 0) if _r_row else 0
+            except Exception as _rc_exc:
+                logger.warning("[leaderboard] PR %s rebalance count failed: %s", pr_name, _rc_exc)
+
             pv_cents = pr_starting + pr_unrealized_pnl
             all_time_pct = round((pr_unrealized_pnl / pr_starting * 100.0), 3) if pr_starting > 0 else 0.0
-            # today_pnl mirrors dashboard/v2 convention (sum of current_pnl_cents)
-            # until we add EOD snapshots for PR holdings that give a true delta.
-            today_pnl_cents = pr_unrealized_pnl
+            # 2026-08-06: previously today_pnl_cents = pr_unrealized_pnl,
+            # which is cumulative — that made the TODAY column duplicate
+            # ALL-TIME and made bots look like they moved today when they
+            # didn't. We have no daily-snapshot table for PR holdings yet,
+            # so report 0 as the honest answer until EOD snapshots ship.
+            today_pnl_cents = 0
 
             display = DISPLAY_NAMES.get(pr_name) or pr_name.replace("_", " ").title()
             leaderboard.append({
@@ -1326,6 +1343,7 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "starting_capital_cents": pr_starting,
                 "signals_24h": 0,
                 "trades_24h":  0,
+                "total_trades": pr_rebalance_count,
                 "rebalance_schedule": pr[4],
                 "last_rebalanced_at": str(pr[5]) if pr[5] else None,
                 "paper_citation": pr[6],
