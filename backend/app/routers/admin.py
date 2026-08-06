@@ -744,6 +744,87 @@ def adopt_all_alpaca_orphans(
     }
 
 
+@router.post("/reconcile-qty-mismatches")
+def reconcile_qty_mismatches(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """For every (symbol, side) where BMG's aggregated qty differs from
+    Alpaca's, force BMG rows to sum to Alpaca's qty.
+
+    Rule: if BMG > Alpaca, scale each open non-quarantined row's qty
+    down proportionally (preserving allocation attribution). If BMG <
+    Alpaca and only ONE row exists, bump it up. If multiple rows and
+    BMG < Alpaca, add the delta to the first row (rare — we usually
+    only see BMG > Alpaca from stale historic fills).
+    """
+    import os, urllib.request, json
+    from datetime import datetime, timezone
+    from collections import defaultdict
+    from app.db.models.bots import BotPosition
+
+    now = datetime.now(timezone.utc)
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+    req = urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/positions",
+        headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+    )
+    alp_list = json.loads(urllib.request.urlopen(req, timeout=15).read())
+    alp_qty_by_key: dict = {}
+    for p in alp_list:
+        sym = p.get("symbol")
+        q = float(p.get("qty"))
+        side = "short" if q < 0 else "long"
+        alp_qty_by_key[(sym, side)] = abs(q)
+
+    bmg_rows = (
+        db.query(BotPosition)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    bmg_by_key: dict = defaultdict(list)
+    for p in bmg_rows:
+        side = (p.side or "long").lower()
+        bmg_by_key[(p.symbol or "", side)].append(p)
+
+    actions = []
+    for key, alp_qty in alp_qty_by_key.items():
+        bmg_group = bmg_by_key.get(key, [])
+        bmg_total = sum(float(p.qty or 0) for p in bmg_group)
+        delta = alp_qty - bmg_total
+        if abs(delta) < 0.001 or not bmg_group:
+            continue
+        # Distribute delta proportionally across bmg_group
+        # If BMG > Alpaca (delta < 0): scale down each row by ratio
+        if bmg_total > 0:
+            ratio = alp_qty / bmg_total
+            for p in bmg_group:
+                old = float(p.qty or 0)
+                new = old * ratio
+                actions.append({
+                    "position_id": p.id,
+                    "symbol": p.symbol,
+                    "side": p.side,
+                    "old_qty": round(old, 6),
+                    "new_qty": round(new, 6),
+                    "allocation_id": p.allocation_id,
+                })
+                if not dry_run:
+                    p.qty = new
+
+    if not dry_run and actions:
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "actions_count": len(actions),
+        "actions_preview": actions[:30],
+    }
+
+
 @router.get("/inspect-symbol")
 def inspect_symbol(
     symbol: str = Query(...),
