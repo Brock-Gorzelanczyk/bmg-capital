@@ -568,6 +568,87 @@ def run_daily_reconciliation_endpoint(
     return run_daily_reconciliation(db)
 
 
+@router.post("/quarantine-bmg-phantom-positions")
+def quarantine_bmg_phantom_positions(
+    dry_run: bool = Query(True, description="Preview only when true (default)."),
+    max_age_hours: int = Query(48, description="Only touch positions opened this many hours ago at most (avoid new fills)."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Quarantine BMG open positions whose (symbol, side) key doesn't
+    exist in Alpaca. Skips positions opened in the last N hours to avoid
+    catching in-flight fills that Alpaca hasn't reported yet."""
+    import os, urllib.request, json
+    from datetime import datetime, timezone, timedelta
+    from collections import defaultdict
+    from app.db.models.bots import BotPosition
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=max_age_hours)
+
+    # Fetch Alpaca positions
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+    req = urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/positions",
+        headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+    )
+    alp_list = json.loads(urllib.request.urlopen(req, timeout=15).read())
+    alp_keys = set()
+    for p in alp_list:
+        sym = p.get("symbol")
+        q = float(p.get("qty"))
+        side = "short" if q < 0 else "long"
+        alp_keys.add((sym, side))
+
+    # BMG open, non-quarantined positions
+    bmg_rows = (
+        db.query(BotPosition)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+
+    victims: list[dict] = []
+    for p in bmg_rows:
+        side = (p.side or "long").lower()
+        key = (p.symbol or "", side)
+        if key in alp_keys:
+            continue
+        # Skip in-flight
+        if p.opened_at and p.opened_at.replace(tzinfo=timezone.utc) > cutoff:
+            continue
+        victims.append({
+            "id": p.id,
+            "symbol": p.symbol,
+            "side": side,
+            "qty": float(p.qty or 0),
+            "opened_at": p.opened_at.isoformat() if p.opened_at else None,
+        })
+
+    if not dry_run and victims:
+        ids = [v["id"] for v in victims]
+        (
+            db.query(BotPosition)
+            .filter(BotPosition.id.in_(ids))
+            .update(
+                {"quarantined_at": now, "quarantine_reason": "bmg_phantom_not_at_broker_2026_08_06"},
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "max_age_hours": max_age_hours,
+        "bmg_open_rows_scanned": len(bmg_rows),
+        "alpaca_keys": len(alp_keys),
+        "quarantined_count": len(victims) if not dry_run else 0,
+        "victims_count": len(victims),
+        "victims_preview": victims[:20],
+    }
+
+
 @router.get("/trades-today-by-bot")
 def trades_today_by_bot(
     db: Session = Depends(get_db),
