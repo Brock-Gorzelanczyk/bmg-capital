@@ -805,6 +805,24 @@ def rebuild_positions_from_alpaca(
         if oid and aid:
             order_id_to_alloc[oid] = aid
 
+    # Symbol-based attribution fallback: latest bot_trade per symbol → allocation.
+    # Excludes rebuild markers, catchall adopter, and quarantined rows so we
+    # attribute to the ORIGINATING bot, not to a previous rebuild's catchall row.
+    symbol_to_alloc = {}
+    symbol_trades = (
+        db.query(BotTrade.symbol, BotTrade.allocation_id, BotTrade.ts)
+        .filter(BotTrade.symbol.isnot(None))
+        .filter(BotTrade.quarantined_at.is_(None))
+        .filter(~BotTrade.alpaca_order_id.like("rebuild_%") if BotTrade.alpaca_order_id is not None else True)
+        .filter(~BotTrade.alpaca_order_id.like("catchall_%") if BotTrade.alpaca_order_id is not None else True)
+        .filter(~BotTrade.alpaca_order_id.like("orphan_adopter%") if BotTrade.alpaca_order_id is not None else True)
+        .order_by(BotTrade.ts.desc())
+        .all()
+    )
+    for sym, aid, _ts in symbol_trades:
+        if sym and aid and sym not in symbol_to_alloc:
+            symbol_to_alloc[sym] = aid
+
     # Ensure catchall exists
     prof = db.query(BotProfile).filter(BotProfile.name == "broker_orphan_catchall").first()
     if not prof and not dry_run:
@@ -868,6 +886,9 @@ def rebuild_positions_from_alpaca(
                 if coid and coid in order_id_to_alloc:
                     alloc_id = order_id_to_alloc[coid]
                     source = f"client_order_id:{coid[:8]}"
+        if alloc_id is None and sym in symbol_to_alloc:
+            alloc_id = symbol_to_alloc[sym]
+            source = f"symbol:{sym}"
         if alloc_id is None:
             alloc_id = catchall_alloc.id if catchall_alloc else None
             source = "catchall"
