@@ -744,6 +744,40 @@ def adopt_all_alpaca_orphans(
     }
 
 
+@router.post("/close-quarantined-positions")
+def close_quarantined_positions(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """STEP 2 reconcile: every quarantined BotPosition that still has
+    closed_at=NULL gets closed_at set + exit_reason='reconcile_close'.
+    Fixes the split between 'open (closed_at IS NULL)' consumers and
+    'open+non-quarantined' consumers. Idempotent."""
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotPosition
+
+    now = datetime.now(timezone.utc)
+    victims = (
+        db.query(BotPosition)
+        .filter(BotPosition.quarantined_at.isnot(None))
+        .filter(BotPosition.closed_at.is_(None))
+        .all()
+    )
+    count = len(victims)
+    if not dry_run and count:
+        for p in victims:
+            p.closed_at = now
+            if not p.exit_reason:
+                p.exit_reason = "reconcile_close"
+        db.commit()
+    return {
+        "dry_run": dry_run,
+        "closed_count": count if not dry_run else 0,
+        "would_close": count,
+    }
+
+
 @router.post("/rebuild-positions-from-alpaca")
 def rebuild_positions_from_alpaca(
     dry_run: bool = Query(True),
