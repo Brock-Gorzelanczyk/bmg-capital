@@ -1462,24 +1462,73 @@ def rebuild_realized_pnl(
         # dominant case; a follow-up pass can add long-short split for bots
         # that trade both sides of the same underlying.
 
-    # Now UPDATE bot_trades.pnl_cents for every alpaca_order_id we scored
+    # UPDATE existing close-side rows, and INSERT new ones for Alpaca
+    # fills BMG doesn't have (the 66 quarantined closes on stock_quant_day_momentum
+    # etc. — sim closes stay dead; real close-side rows get created from Alpaca).
     updates = 0
+    inserts = 0
+    # Cache Alpaca order metadata by oid for insert path
+    alp_order_by_id = {o.get("id"): o for o in filled}
+    # Pre-fetch existing bot_trades keyed by alpaca_order_id (any side, any status)
+    existing_by_oid: dict = {}
+    for r in db.query(BotTrade).filter(BotTrade.alpaca_order_id.in_(list(realized_by_order.keys()))).all():
+        existing_by_oid.setdefault(r.alpaca_order_id, []).append(r)
     if not dry_run:
         for oid, pnls in realized_by_order.items():
             total_cents = sum(p[0] for p in pnls)
             sources = {p[2] for p in pnls}
             src = "exact" if sources == {"exact"} else ("reconstructed" if "reconstructed" in sources else "exact")
-            # Find matching bot_trades row(s) with this oid on close side
-            rows = (
-                db.query(BotTrade)
-                .filter(BotTrade.alpaca_order_id == oid)
-                .filter(BotTrade.side.in_(("sell", "close", "cover")))
-                .all()
+            # Determine the closing allocation from the FIFO pair (last entry
+            # in pnls carries the target allocation attribution).
+            attributed_alloc = pnls[-1][1]
+            existing = existing_by_oid.get(oid, [])
+            # Try to update an existing row on the close side first
+            close_rows = [r for r in existing if (r.side or "").lower() in ("sell","close","cover")]
+            if close_rows:
+                for r in close_rows:
+                    r.pnl_cents = total_cents
+                    r.pnl_source = src
+                    updates += 1
+                continue
+            # Otherwise INSERT a fresh close-side row from Alpaca truth
+            o = alp_order_by_id.get(oid)
+            if not o or attributed_alloc is None:
+                continue
+            filled_qty = float(o.get("filled_qty") or 0)
+            filled_px = float(o.get("filled_avg_price") or 0)
+            filled_at = o.get("filled_at") or o.get("submitted_at")
+            asset_class = o.get("asset_class") or ""
+            is_opt = asset_class == "us_option"
+            alp_side = (o.get("side") or "").lower()
+            # BMG side convention: sell=closes long, cover=closes short
+            # If pnls came from long-lot FIFO (which our current impl always
+            # does), the close is a 'sell'. Short-side FIFO would use 'cover'.
+            bmg_side = "sell" if alp_side == "sell" else "cover"
+            from datetime import datetime as _dt
+            try:
+                ts = _dt.fromisoformat(str(filled_at).replace("Z","+00:00")) if filled_at else datetime.now(timezone.utc)
+            except Exception:
+                ts = datetime.now(timezone.utc)
+            new_t = BotTrade(
+                allocation_id=attributed_alloc,
+                symbol=o.get("symbol"),
+                side=bmg_side,
+                qty=filled_qty,
+                fill_price_cents=int(round(filled_px * 100)),
+                fees_cents=0,
+                ts=ts,
+                is_paper=True,
+                alpaca_order_id=oid,
+                pnl_cents=total_cents,
+                pnl_source=src,
             )
-            for r in rows:
-                r.pnl_cents = total_cents
-                r.pnl_source = src
-                updates += 1
+            if is_opt:
+                new_t.option_type = "call" if "C" in (o.get("symbol") or "")[10:] else "put"
+                new_t.underlying_symbol = "".join(c for c in (o.get("symbol") or "") if c.isalpha())
+                new_t.contract_count = int(filled_qty)
+                new_t.contract_premium_cents = int(round(filled_px * 100))
+            db.add(new_t)
+            inserts += 1
         db.commit()
 
     # Also mark opening rows with pnl_source=null explicitly (already is) —
@@ -1513,6 +1562,7 @@ def rebuild_realized_pnl(
         "pairs_reconstructed": reconstructed_count,
         "unattributed_close_qty": unattributed_count,
         "bot_trade_rows_updated": updates,
+        "bot_trade_rows_inserted": inserts,
         "reconcile_close_rows_updated": reconcile_updates,
     }
 
