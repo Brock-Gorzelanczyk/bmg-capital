@@ -1192,6 +1192,74 @@ def inspect_bot_trades(
     }
 
 
+@router.get("/i2-drift-detail")
+def i2_drift_detail(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Per-position UPL comparison — BMG vs Alpaca — so we can pinpoint
+    which rows contribute to the I2 drift."""
+    import os, urllib.request, json
+    from app.db.models.bots import BotPosition
+
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+    req = urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/positions",
+        headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+    )
+    alp_list = json.loads(urllib.request.urlopen(req, timeout=15).read())
+    alp_by_sym = {p.get("symbol"): p for p in alp_list}
+
+    bmg_open = (
+        db.query(BotPosition)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    rows = []
+    total_bmg = 0.0
+    total_alp = 0.0
+    for p in bmg_open:
+        sym = p.symbol
+        is_opt = bool(getattr(p, "option_type", None))
+        is_short = getattr(p, "side", "long") == "short"
+        mult = 100 if is_opt else 1
+        entry = (p.avg_cost_cents or 0) / 100.0
+        alp = alp_by_sym.get(sym)
+        if not alp:
+            continue
+        curr = float(alp.get("current_price") or 0)
+        alp_entry = float(alp.get("avg_entry_price") or 0)
+        alp_qty = float(alp.get("qty"))
+        alp_upl = float(alp.get("unrealized_pl") or 0)
+        bmg_qty = float(p.qty or 0)
+        # BMG UPL calc same logic as I2 check
+        if is_short:
+            bmg_upl = (entry - curr) * bmg_qty * mult
+        else:
+            bmg_upl = (curr - entry) * bmg_qty * mult
+        total_bmg += bmg_upl
+        total_alp += alp_upl
+        diff = bmg_upl - alp_upl
+        if abs(diff) > 1:
+            rows.append({
+                "symbol": sym, "is_opt": is_opt, "side": p.side,
+                "bmg_entry": entry, "alp_entry": alp_entry,
+                "curr": curr, "bmg_qty": bmg_qty, "alp_qty": alp_qty,
+                "bmg_upl": round(bmg_upl, 2), "alp_upl": round(alp_upl, 2),
+                "delta": round(diff, 2),
+            })
+    rows.sort(key=lambda x: -abs(x["delta"]))
+    return {
+        "total_bmg_upl": round(total_bmg, 2),
+        "total_alp_upl": round(total_alp, 2),
+        "total_delta": round(total_bmg - total_alp, 2),
+        "count_with_diff": len(rows),
+        "top_diffs": rows[:20],
+    }
+
+
 @router.get("/inspect-symbol")
 def inspect_symbol(
     symbol: str = Query(...),
