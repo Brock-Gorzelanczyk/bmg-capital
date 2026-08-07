@@ -1147,6 +1147,49 @@ def reconcile_qty_mismatches(
     }
 
 
+@router.get("/inspect-bot-positions")
+def inspect_bot_positions(
+    profile: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Every BotPosition for a profile with open/closed/quarantined breakdown."""
+    from app.db.models.bots import BotPosition, BotProfile, BotAllocation
+    prof = db.query(BotProfile).filter(BotProfile.name == profile).first()
+    if not prof:
+        return {"error": "profile_not_found"}
+    allocs = db.query(BotAllocation).filter(BotAllocation.profile_id == prof.id).all()
+    alloc_ids = [a.id for a in allocs]
+    positions = (
+        db.query(BotPosition)
+        .filter(BotPosition.allocation_id.in_(alloc_ids))
+        .order_by(BotPosition.opened_at.desc())
+        .limit(80)
+        .all()
+    )
+    out = []
+    for p in positions:
+        out.append({
+            "id": p.id,
+            "symbol": p.symbol, "side": p.side, "qty": float(p.qty or 0),
+            "avg_cost_cents": p.avg_cost_cents,
+            "opened_at": p.opened_at.isoformat() if p.opened_at else None,
+            "closed_at": p.closed_at.isoformat() if p.closed_at else None,
+            "quarantined_at": p.quarantined_at.isoformat() if p.quarantined_at else None,
+            "quarantine_reason": p.quarantine_reason,
+            "exit_reason": p.exit_reason,
+        })
+    open_c = sum(1 for p in positions if not p.closed_at and not p.quarantined_at)
+    closed_c = sum(1 for p in positions if p.closed_at and not p.quarantined_at)
+    quar_c = sum(1 for p in positions if p.quarantined_at)
+    return {
+        "profile": profile, "allocation_ids": alloc_ids,
+        "total_positions": len(positions),
+        "open_active": open_c, "closed_only": closed_c, "quarantined": quar_c,
+        "positions": out,
+    }
+
+
 @router.get("/inspect-bot-trades")
 def inspect_bot_trades(
     profile: str = Query(...),
