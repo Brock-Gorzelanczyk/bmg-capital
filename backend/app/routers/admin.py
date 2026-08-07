@@ -1523,11 +1523,18 @@ def rebuild_realized_pnl(
             break
         page_after = batch[-1].get("filled_at") or batch[-1].get("submitted_at")
 
-    # Build alpaca_order_id → allocation lookup from bot_trades
+    # Iteration 3 (2026-08-07): scope the alpaca_order_id → allocation
+    # lookup to CURRENT USER'S allocations only. Previously the scan hit
+    # every row in bot_trades regardless of user, so oids from other
+    # users' allocs would attribute to the first-scanned user 1 alloc
+    # (the crypto_quant_aggressive alloc 27 phantom root cause).
+    from app.db.models.bots import BotAllocation as _BAlloc
+    _user_alloc_ids = {a.id for a in db.query(_BAlloc).filter(_BAlloc.user_id == current_user.id).all()}
     order_id_to_alloc: dict = {}
     for oid, aid in (
         db.query(BotTrade.alpaca_order_id, BotTrade.allocation_id)
         .filter(BotTrade.alpaca_order_id.isnot(None))
+        .filter(BotTrade.allocation_id.in_(list(_user_alloc_ids)) if _user_alloc_ids else False)
         .all()
     ):
         if oid and aid:
