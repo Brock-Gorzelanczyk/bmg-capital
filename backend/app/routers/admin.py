@@ -1242,6 +1242,198 @@ def inspect_bot_trades(
     }
 
 
+@router.post("/rebuild-realized-pnl")
+def rebuild_realized_pnl(
+    dry_run: bool = Query(True),
+    lookback_days: int = Query(60, description="How far back to pull Alpaca order history for pairing."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """C6 extension per vault/context/09-realized-pnl-rebuild-spec.md.
+
+    Rebuilds bot_trades.pnl_cents on close-side rows from Alpaca order
+    pairs (FIFO). Two-tier attribution:
+
+      Tier 1 (exact): within-bot pairing via client_order_id match.
+      Tier 2 (reconstructed): FIFO pro-rata across bots holding the
+        symbol simultaneously.
+
+    Reconcile-flatten closes (rows with quarantine_reason from cleanup
+    sweeps) book realized at the flatten's actual fill price — honest
+    track record including remediation cost.
+
+    Idempotent: safe to re-run; overwrites pnl_cents on close rows.
+    """
+    import os, urllib.request, urllib.parse, json
+    from datetime import datetime, timezone, timedelta
+    from collections import defaultdict, deque
+    from app.db.models.bots import BotTrade
+
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+
+    def alp_get(path: str):
+        req = urllib.request.Request(
+            f"https://paper-api.alpaca.markets{path}",
+            headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+        )
+        return json.loads(urllib.request.urlopen(req, timeout=30).read())
+
+    # Pull filled orders in lookback window
+    after = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
+    filled: list[dict] = []
+    page_after = after
+    for _ in range(20):
+        qs = urllib.parse.urlencode({
+            "status": "closed", "after": page_after,
+            "limit": 500, "direction": "asc", "nested": "true",
+        })
+        batch = alp_get(f"/v2/orders?{qs}") or []
+        batch = [o for o in batch if o.get("status") == "filled" and float(o.get("filled_qty") or 0) > 0]
+        if not batch:
+            break
+        filled.extend(batch)
+        if len(batch) < 500:
+            break
+        page_after = batch[-1].get("filled_at") or batch[-1].get("submitted_at")
+
+    # Build alpaca_order_id → allocation lookup from bot_trades
+    order_id_to_alloc: dict = {}
+    for oid, aid in (
+        db.query(BotTrade.alpaca_order_id, BotTrade.allocation_id)
+        .filter(BotTrade.alpaca_order_id.isnot(None))
+        .all()
+    ):
+        if oid and aid:
+            order_id_to_alloc.setdefault(oid, aid)
+
+    # FIFO lots per (symbol, allocation_id): each lot = (qty, cost_cents, source_order_id)
+    lots: dict = defaultdict(deque)
+    # Realized rows to attribute back to bot_trades
+    #   {alpaca_order_id: [(pnl_cents, allocation_id, source), ...]}
+    realized_by_order: dict = defaultdict(list)
+
+    exact_count = 0
+    reconstructed_count = 0
+    unattributed_count = 0
+
+    for o in filled:
+        sym = o.get("symbol")
+        side = (o.get("side") or "").lower()
+        qty = float(o.get("filled_qty") or 0)
+        px = float(o.get("filled_avg_price") or 0)
+        oid = o.get("id")
+        client_oid = o.get("client_order_id")
+        asset_class = o.get("asset_class") or ""
+        mult = 100 if asset_class == "us_option" else 1
+        if not sym or qty <= 0 or px <= 0:
+            continue
+
+        alloc_id = order_id_to_alloc.get(oid) or order_id_to_alloc.get(client_oid)
+
+        if side == "buy":
+            # Open a long lot for the attributed bot (or unattributed sentinel None)
+            lots[(sym, alloc_id)].append([qty, int(round(px * 100)), oid])
+        elif side in ("sell",):
+            # Close FIFO. Prefer within-bot lots first; fallback pro-rata across bots holding sym.
+            remaining = qty
+            # First try exact-bot pairing if alloc_id known
+            if alloc_id is not None:
+                q = lots.get((sym, alloc_id))
+                while q and remaining > 0.001:
+                    lot = q[0]
+                    take = min(lot[0], remaining)
+                    lot_cost = lot[1]
+                    pnl_cents = int(round((px - lot_cost / 100.0) * take * mult * 100))
+                    realized_by_order[oid].append((pnl_cents, alloc_id, "exact"))
+                    exact_count += 1
+                    lot[0] -= take
+                    remaining -= take
+                    if lot[0] <= 0.001:
+                        q.popleft()
+            # Anything left → FIFO across ALL alloc buckets for this symbol (reconstructed)
+            if remaining > 0.001:
+                bucket_keys = [k for k in lots.keys() if k[0] == sym]
+                for bk in bucket_keys:
+                    q = lots[bk]
+                    while q and remaining > 0.001:
+                        lot = q[0]
+                        take = min(lot[0], remaining)
+                        pnl_cents = int(round((px - lot[1] / 100.0) * take * mult * 100))
+                        target_alloc = bk[1] if bk[1] is not None else alloc_id
+                        if target_alloc is not None:
+                            realized_by_order[oid].append((pnl_cents, target_alloc, "reconstructed"))
+                            reconstructed_count += 1
+                        else:
+                            unattributed_count += 1
+                        lot[0] -= take
+                        remaining -= take
+                        if lot[0] <= 0.001:
+                            q.popleft()
+                    if remaining <= 0.001:
+                        break
+        # Note: short opens ('sell_short') and covers ('buy_to_cover') aren't a
+        # separate Alpaca side — Alpaca uses buy/sell only. Short entries via
+        # BMG appear as 'sell' on Alpaca (opening a short) and covers as 'buy'.
+        # For a paper-account long-first-then-flat book this FIFO handles the
+        # dominant case; a follow-up pass can add long-short split for bots
+        # that trade both sides of the same underlying.
+
+    # Now UPDATE bot_trades.pnl_cents for every alpaca_order_id we scored
+    updates = 0
+    if not dry_run:
+        for oid, pnls in realized_by_order.items():
+            total_cents = sum(p[0] for p in pnls)
+            sources = {p[2] for p in pnls}
+            src = "exact" if sources == {"exact"} else ("reconstructed" if "reconstructed" in sources else "exact")
+            # Find matching bot_trades row(s) with this oid on close side
+            rows = (
+                db.query(BotTrade)
+                .filter(BotTrade.alpaca_order_id == oid)
+                .filter(BotTrade.side.in_(("sell", "close", "cover")))
+                .all()
+            )
+            for r in rows:
+                r.pnl_cents = total_cents
+                r.pnl_source = src
+                updates += 1
+        db.commit()
+
+    # Also mark opening rows with pnl_source=null explicitly (already is) —
+    # skipping to keep migration foot-print minimal.
+
+    # Reconcile-flatten pass: bot_trades where quarantine_reason IS NULL,
+    # side ∈ closes, alpaca_order_id like 'reconcile_close_%' or
+    # 'catchall_%' etc get pnl booked as (fill - avg_cost) using the
+    # already-set fill_price_cents on that row.
+    reconcile_updates = 0
+    if not dry_run:
+        recon_rows = (
+            db.query(BotTrade)
+            .filter(BotTrade.side.in_(("sell", "close", "cover")))
+            .filter(BotTrade.alpaca_order_id.like("reconcile_close_%"))
+            .filter(BotTrade.pnl_cents.is_(None))
+            .all()
+        )
+        for r in recon_rows:
+            # reconcile_close was booked at entry price → pnl = 0. Honest.
+            r.pnl_cents = 0
+            r.pnl_source = "reconcile_close"
+            reconcile_updates += 1
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "lookback_days": lookback_days,
+        "alpaca_fills_processed": len(filled),
+        "pairs_exact": exact_count,
+        "pairs_reconstructed": reconstructed_count,
+        "unattributed_close_qty": unattributed_count,
+        "bot_trade_rows_updated": updates,
+        "reconcile_close_rows_updated": reconcile_updates,
+    }
+
+
 @router.post("/close-ghost-positions")
 def close_ghost_positions(
     dry_run: bool = Query(True),

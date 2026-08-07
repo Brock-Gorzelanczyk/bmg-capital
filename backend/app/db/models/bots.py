@@ -136,6 +136,15 @@ class BotTrade(Base):
     # at the moment the runner admitted this trade — lets us compare the
     # 30-59 band (previously blocked at default 60) vs the 60+ band.
     composite_score_at_execution: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # m096 / 2026-08-06 — Realized P&L rebuild from Alpaca order pairs.
+    # Populated on close-side rows (sell/close/cover) by the C6-extension
+    # rebuild endpoint. NULL on open-side rows and on close-side rows
+    # that haven't been rebuilt yet. pnl_source ∈ {'exact', 'reconstructed'}
+    # tags whether pairing came from a within-bot client_order_id match
+    # (exact) or a FIFO pro-rata fallback across bots sharing the symbol
+    # (reconstructed). See vault/context/09-realized-pnl-rebuild-spec.md.
+    pnl_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pnl_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
 
 class BotDailyPnL(Base):

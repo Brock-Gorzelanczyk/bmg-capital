@@ -306,14 +306,23 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
         side_lower = t.side.lower()
         if side_lower not in ("sell", "close", "cover"):
             continue
-        avg_cost = pos_cost_map.get(t.position_id) if t.position_id else None
-        if avg_cost is None:
-            avg_cost = buy_price_by_symbol.get(t.symbol, t.fill_price_cents)
-        # "cover" closes a short: profit when exit price < entry price
-        if side_lower == "cover":
-            fill_pnl = int((avg_cost - t.fill_price_cents) * t.qty) - int(t.fees_cents or 0)
+        # 2026-08-06 (m096 + C6 extension): prefer bot_trades.pnl_cents
+        # when the realized-P&L rebuild has populated it from Alpaca
+        # order pairs. Only fall back to on-the-fly avg_cost math when
+        # pnl_cents is NULL (row was inserted before the rebuild ran or
+        # attribution failed). See vault/context/09-realized-pnl-rebuild-spec.md.
+        rebuilt_pnl = getattr(t, "pnl_cents", None)
+        if rebuilt_pnl is not None:
+            fill_pnl = int(rebuilt_pnl)
         else:
-            fill_pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
+            avg_cost = pos_cost_map.get(t.position_id) if t.position_id else None
+            if avg_cost is None:
+                avg_cost = buy_price_by_symbol.get(t.symbol, t.fill_price_cents)
+            # "cover" closes a short: profit when exit price < entry price
+            if side_lower == "cover":
+                fill_pnl = int((avg_cost - t.fill_price_cents) * t.qty) - int(t.fees_cents or 0)
+            else:
+                fill_pnl = int((t.fill_price_cents - avg_cost) * t.qty) - int(t.fees_cents or 0)
         realized_pnl_cents += fill_pnl
         if fill_pnl > 0:
             win_count += 1
