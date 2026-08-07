@@ -1194,25 +1194,28 @@ def inspect_bot_positions(
 def inspect_bot_trades(
     profile: str = Query(...),
     limit: int = Query(30),
+    include_quarantined: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """Dump raw BotTrade rows for a given profile so we can see why
     realized P&L is zero despite trades > 0."""
+    from collections import Counter
     from app.db.models.bots import BotTrade, BotProfile, BotAllocation
     prof = db.query(BotProfile).filter(BotProfile.name == profile).first()
     if not prof:
         return {"error": f"profile '{profile}' not found"}
     allocs = db.query(BotAllocation).filter(BotAllocation.profile_id == prof.id).all()
     alloc_ids = [a.id for a in allocs]
-    trades = (
-        db.query(BotTrade)
-        .filter(BotTrade.allocation_id.in_(alloc_ids))
-        .filter(BotTrade.quarantined_at.is_(None))
-        .order_by(BotTrade.ts.desc())
-        .limit(limit)
-        .all()
-    )
+    q = db.query(BotTrade).filter(BotTrade.allocation_id.in_(alloc_ids))
+    if not include_quarantined:
+        q = q.filter(BotTrade.quarantined_at.is_(None))
+    trades = q.order_by(BotTrade.ts.desc()).limit(limit).all()
+    # Summary of all trades regardless of quarantine
+    all_trades = db.query(BotTrade).filter(BotTrade.allocation_id.in_(alloc_ids)).all()
+    side_all = Counter(t.side.lower() for t in all_trades)
+    side_active = Counter(t.side.lower() for t in all_trades if not t.quarantined_at)
+    quarantined_sells = sum(1 for t in all_trades if t.quarantined_at and t.side.lower() in ('sell','close','cover'))
     out = []
     for t in trades:
         out.append({
@@ -1232,6 +1235,10 @@ def inspect_bot_trades(
         "allocation_ids": alloc_ids,
         "total_trades_active": len(out),
         "trades": out,
+        "sides_all_time_all_status": dict(side_all),
+        "sides_all_time_active_only": dict(side_active),
+        "quarantined_sell_or_close_count": quarantined_sells,
+        "total_all_rows": len(all_trades),
     }
 
 
