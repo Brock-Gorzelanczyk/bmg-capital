@@ -1147,6 +1147,64 @@ def reconcile_qty_mismatches(
     }
 
 
+@router.post("/backup-sqlite")
+def backup_sqlite(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Manual point-in-time SQLite backup to a timestamped file on the
+    same /data volume. Uses SQLite's built-in backup API — atomic,
+    consistent snapshot even while writers are active. Returns path,
+    size, and row counts."""
+    import os, sqlite3, shutil
+    from datetime import datetime, timezone
+    from app.db.session import engine
+    from sqlalchemy import inspect, text
+
+    url = engine.url
+    if url.get_backend_name() != "sqlite":
+        return {"error": "not_sqlite", "driver": url.get_backend_name()}
+    src_path = url.database
+    if not src_path or not os.path.exists(src_path):
+        return {"error": "src_not_found", "path": src_path}
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    dst_path = f"{src_path}.{ts}.bak"
+
+    # Use SQLite's backup API for a consistent snapshot
+    src_conn = sqlite3.connect(src_path)
+    dst_conn = sqlite3.connect(dst_path)
+    with dst_conn:
+        src_conn.backup(dst_conn)
+    src_conn.close()
+    dst_conn.close()
+
+    src_size = os.path.getsize(src_path)
+    dst_size = os.path.getsize(dst_path)
+
+    # Row counts sanity — compare bot_positions between live and backup
+    with engine.connect() as c:
+        live_bp = c.execute(text("SELECT COUNT(*) FROM bot_positions")).scalar() or 0
+        live_bt = c.execute(text("SELECT COUNT(*) FROM bot_trades")).scalar() or 0
+    bk_conn = sqlite3.connect(dst_path)
+    bk_bp = bk_conn.execute("SELECT COUNT(*) FROM bot_positions").fetchone()[0]
+    bk_bt = bk_conn.execute("SELECT COUNT(*) FROM bot_trades").fetchone()[0]
+    bk_conn.close()
+
+    return {
+        "source_path": src_path,
+        "backup_path": dst_path,
+        "source_size_bytes": src_size,
+        "backup_size_bytes": dst_size,
+        "source_size_mb": round(src_size / (1024*1024), 2),
+        "backup_size_mb": round(dst_size / (1024*1024), 2),
+        "live_bot_positions_count": live_bp,
+        "backup_bot_positions_count": bk_bp,
+        "live_bot_trades_count": live_bt,
+        "backup_bot_trades_count": bk_bt,
+        "row_counts_match": (live_bp == bk_bp and live_bt == bk_bt),
+    }
+
+
 @router.get("/db-driver")
 def db_driver(
     current_user: User = Depends(require_admin),
