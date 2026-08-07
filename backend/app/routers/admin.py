@@ -1190,6 +1190,65 @@ def inspect_bot_positions(
     }
 
 
+@router.get("/order-id-overlap")
+def order_id_overlap(
+    lookback_days: int = Query(60),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Diagnostic: how many BMG bot_trades.alpaca_order_id values actually
+    match live Alpaca /v2/orders UUIDs? Non-overlap means the rebuild
+    can't pair anything and needs a different key."""
+    import os, urllib.request, urllib.parse, json
+    from datetime import datetime, timezone, timedelta
+    from app.db.models.bots import BotTrade
+
+    kid = os.environ.get("ALPACA_API_KEY", "")
+    ksec = os.environ.get("ALPACA_SECRET_KEY", "")
+    after = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
+    alp_ids = set()
+    alp_client_ids = set()
+    page_after = after
+    for _ in range(10):
+        qs = urllib.parse.urlencode({"status":"closed","after":page_after,"limit":500,"direction":"asc","nested":"true"})
+        req = urllib.request.Request(
+            f"https://paper-api.alpaca.markets/v2/orders?{qs}",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        )
+        batch = json.loads(urllib.request.urlopen(req, timeout=30).read()) or []
+        if not batch: break
+        for o in batch:
+            if o.get("id"): alp_ids.add(o["id"])
+            if o.get("client_order_id"): alp_client_ids.add(o["client_order_id"])
+        if len(batch) < 500: break
+        page_after = batch[-1].get("filled_at") or batch[-1].get("submitted_at")
+
+    bmg_ids = {oid for (oid,) in db.query(BotTrade.alpaca_order_id).filter(BotTrade.alpaca_order_id.isnot(None)).all()}
+    # Split BMG ids by prefix
+    by_prefix = {}
+    for oid in bmg_ids:
+        if oid.startswith("rebuild_"): by_prefix["rebuild"] = by_prefix.get("rebuild",0)+1
+        elif oid.startswith("catchall_"): by_prefix["catchall"] = by_prefix.get("catchall",0)+1
+        elif oid.startswith("reconcile_close"): by_prefix["reconcile"] = by_prefix.get("reconcile",0)+1
+        elif oid.startswith("orphan_adopter"): by_prefix["orphan_adopter"] = by_prefix.get("orphan_adopter",0)+1
+        elif len(oid) == 36 and oid.count("-") == 4: by_prefix["uuid"] = by_prefix.get("uuid",0)+1
+        else: by_prefix["other"] = by_prefix.get("other",0)+1
+
+    overlap_ids = bmg_ids & alp_ids
+    overlap_client = bmg_ids & alp_client_ids
+
+    return {
+        "alpaca_order_ids_in_window": len(alp_ids),
+        "alpaca_client_order_ids_in_window": len(alp_client_ids),
+        "bmg_alpaca_order_ids_total": len(bmg_ids),
+        "bmg_by_prefix": by_prefix,
+        "overlap_bmg_vs_alpaca_id": len(overlap_ids),
+        "overlap_bmg_vs_alpaca_client_id": len(overlap_client),
+        "sample_overlap_ids": list(overlap_ids)[:5],
+        "sample_overlap_client": list(overlap_client)[:5],
+    }
+
+
 @router.get("/inspect-bot-trades")
 def inspect_bot_trades(
     profile: str = Query(...),
