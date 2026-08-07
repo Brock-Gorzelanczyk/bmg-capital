@@ -1300,6 +1300,7 @@ def i2_drift_detail(
         .all()
     )
     rows = []
+    no_alp_match = []
     total_bmg = 0.0
     total_alp = 0.0
     for p in bmg_open:
@@ -1310,6 +1311,11 @@ def i2_drift_detail(
         entry = (p.avg_cost_cents or 0) / 100.0
         alp = alp_by_sym.get(sym)
         if not alp:
+            no_alp_match.append({
+                "id": p.id, "symbol": sym, "side": p.side, "qty": float(p.qty or 0),
+                "entry_cents": p.avg_cost_cents, "allocation_id": p.allocation_id,
+                "is_option": is_opt,
+            })
             continue
         curr = float(alp.get("current_price") or 0)
         alp_entry = float(alp.get("avg_entry_price") or 0)
@@ -1339,6 +1345,8 @@ def i2_drift_detail(
         "total_delta": round(total_bmg - total_alp, 2),
         "count_with_diff": len(rows),
         "top_diffs": rows[:20],
+        "no_alp_match_count": len(no_alp_match),
+        "no_alp_match": no_alp_match,
     }
 
 
