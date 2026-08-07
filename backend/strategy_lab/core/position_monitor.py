@@ -170,6 +170,27 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
     except Exception as _sig_exc:
         logger.warning("[monitor] exit signal log failed for %s: %s", pos.symbol, _sig_exc)
 
+    # 2026-08-07 P0 sim-leak fix: position_monitor.exit_trade was the
+    # REAL source of the I3 sim rows (not bot_executor as first assumed).
+    # Runner opens positions via real Alpaca broker; this exit path
+    # writes side='sell'/'cover' with alpaca_order_id=NULL by default.
+    # Every stop/target/expiry exit became a sim close for 30 days.
+    #
+    # Fix: gate the write. If sim writes are disabled (default), log the
+    # exit intent + skip the trade write + leave position OPEN. That
+    # matches Alpaca reality (no broker close was submitted). Next
+    # scheduled Alpaca reconcile / orphan adopter will pick up when
+    # broker state actually changes.
+    from app.services.trade_write_gate import check_trade_write
+    _gate_result = check_trade_write(alpaca_order_id=None, source_path="position_monitor")
+    if _gate_result.blocked:
+        logger.error(
+            "[position_monitor] EXIT WRITE BLOCKED %s reason=%s — position stays open in BMG "
+            "(matches broker reality; no close order was submitted)",
+            pos.symbol, _gate_result.reason,
+        )
+        return
+
     from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
     _rt_exit = _regime_tag_dict(db, source="position_monitor.exit_trade")
     exit_trade = BotTrade(
