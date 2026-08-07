@@ -1389,6 +1389,111 @@ def reconcile_user1_to_alpaca(
     }
 
 
+@router.get("/audit-users")
+def audit_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Per-user counts of allocations / positions / trades. Ahead of
+    single-tenant enforcement (user 1 = the fund, others = test)."""
+    from app.db.models.bots import BotAllocation, BotPosition, BotTrade
+    from collections import defaultdict
+    counts: dict = defaultdict(lambda: {
+        "allocations": 0, "enabled_allocations": 0,
+        "positions_total": 0, "positions_open_nonquar": 0,
+        "trades_total": 0, "trades_active": 0,
+        "starting_capital_total_cents": 0,
+    })
+    for a in db.query(BotAllocation).all():
+        c = counts[a.user_id]
+        c["allocations"] += 1
+        if a.enabled:
+            c["enabled_allocations"] += 1
+        c["starting_capital_total_cents"] += int(a.starting_capital_cents or 0)
+    # Positions + trades
+    alloc_user = {a.id: a.user_id for a in db.query(BotAllocation).all()}
+    for p in db.query(BotPosition).all():
+        u = alloc_user.get(p.allocation_id)
+        if u is None: continue
+        counts[u]["positions_total"] += 1
+        if not p.closed_at and not p.quarantined_at:
+            counts[u]["positions_open_nonquar"] += 1
+    for t in db.query(BotTrade).all():
+        u = alloc_user.get(t.allocation_id)
+        if u is None: continue
+        counts[u]["trades_total"] += 1
+        if not t.quarantined_at:
+            counts[u]["trades_active"] += 1
+    out = []
+    for u, c in sorted(counts.items()):
+        out.append({"user_id": u, **c,
+                    "starting_capital_total_usd": round(c["starting_capital_total_cents"]/100, 2)})
+    return {"users": out}
+
+
+@router.post("/quarantine-non-user1-allocations")
+def quarantine_non_user1_allocations(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Disable + tombstone every BotAllocation whose user_id != 1.
+    Also mark their open positions quarantined so they drop out of
+    every rollup. Data-only, reversible via UPDATE."""
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotAllocation, BotPosition, BotTrade
+    now = datetime.now(timezone.utc)
+    allocs = db.query(BotAllocation).filter(BotAllocation.user_id != 1).all()
+    alloc_ids = [a.id for a in allocs]
+    open_pos = (
+        db.query(BotPosition)
+        .filter(BotPosition.allocation_id.in_(alloc_ids))
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .count()
+    )
+    active_trades = (
+        db.query(BotTrade)
+        .filter(BotTrade.allocation_id.in_(alloc_ids))
+        .filter(BotTrade.quarantined_at.is_(None))
+        .count()
+    )
+    if not dry_run and alloc_ids:
+        # Tombstone allocations
+        for a in allocs:
+            a.enabled = False
+            a.paused_reason = "single_tenant_user1_only_2026_08_07"
+        # Quarantine their open positions (so they don't enter user 1's rollup by mistake)
+        (
+            db.query(BotPosition)
+            .filter(BotPosition.allocation_id.in_(alloc_ids))
+            .filter(BotPosition.closed_at.is_(None))
+            .filter(BotPosition.quarantined_at.is_(None))
+            .update(
+                {"quarantined_at": now, "quarantine_reason": "single_tenant_user1_only_2026_08_07"},
+                synchronize_session=False,
+            )
+        )
+        # Quarantine their trades
+        (
+            db.query(BotTrade)
+            .filter(BotTrade.allocation_id.in_(alloc_ids))
+            .filter(BotTrade.quarantined_at.is_(None))
+            .update(
+                {"quarantined_at": now, "quarantine_reason": "single_tenant_user1_only_2026_08_07"},
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+    return {
+        "dry_run": dry_run,
+        "allocations_to_tombstone": len(alloc_ids),
+        "open_positions_to_quarantine": open_pos,
+        "active_trades_to_quarantine": active_trades,
+        "affected_user_ids": sorted({a.user_id for a in allocs}),
+    }
+
+
 @router.post("/reset-reconstructed-pnl-user1")
 def reset_reconstructed_pnl_user1(
     dry_run: bool = Query(True),
