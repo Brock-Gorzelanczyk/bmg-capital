@@ -1366,6 +1366,108 @@ def inspect_bot_trades(
     }
 
 
+@router.post("/merge-duplicate-allocations")
+def merge_duplicate_allocations(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Iteration 3 (a): sweep every profile with >1 active BotAllocation
+    for the same user. Merge dupes into ONE surviving alloc, re-point
+    trades/positions/signals, tombstone dead allocs.
+
+    Survivor selection: prefer alloc with highest starting_capital_cents;
+    tie → lowest id. No heuristic-based prefer-at-lookup remains after
+    this — known-issue #3 has recurred, per compounding rule heuristics
+    are off the table.
+
+    Data-only migration (UPDATE + tombstone). No schema change.
+    """
+    from datetime import datetime, timezone
+    from collections import defaultdict
+    from app.db.models.bots import BotAllocation, BotTrade, BotPosition, BotSignal
+
+    now = datetime.now(timezone.utc)
+    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == current_user.id).all()
+    by_profile: dict = defaultdict(list)
+    for a in allocs:
+        by_profile[a.profile_id].append(a)
+
+    merges: list[dict] = []
+    total_trades_repointed = 0
+    total_positions_repointed = 0
+    total_signals_repointed = 0
+    total_tombstoned = 0
+
+    for profile_id, group in by_profile.items():
+        if len(group) < 2:
+            continue
+        # Survivor: highest starting_capital, then lowest id
+        group_sorted = sorted(group, key=lambda a: (-(a.starting_capital_cents or 0), a.id))
+        survivor = group_sorted[0]
+        dead = group_sorted[1:]
+        dead_ids = [d.id for d in dead]
+
+        # Count what would move (works for both dry-run and live)
+        n_trades = db.query(BotTrade).filter(BotTrade.allocation_id.in_(dead_ids)).count()
+        n_positions = db.query(BotPosition).filter(BotPosition.allocation_id.in_(dead_ids)).count()
+        n_signals = db.query(BotSignal).filter(BotSignal.allocation_id.in_(dead_ids)).count()
+
+        merges.append({
+            "profile_id": profile_id,
+            "survivor_alloc_id": survivor.id,
+            "survivor_starting_cents": survivor.starting_capital_cents,
+            "dead_alloc_ids": dead_ids,
+            "dead_starting_cents": [d.starting_capital_cents for d in dead],
+            "trades_to_repoint": n_trades,
+            "positions_to_repoint": n_positions,
+            "signals_to_repoint": n_signals,
+        })
+
+        if not dry_run and dead_ids:
+            db.query(BotTrade).filter(BotTrade.allocation_id.in_(dead_ids)).update(
+                {"allocation_id": survivor.id}, synchronize_session=False,
+            )
+            db.query(BotPosition).filter(BotPosition.allocation_id.in_(dead_ids)).update(
+                {"allocation_id": survivor.id}, synchronize_session=False,
+            )
+            db.query(BotSignal).filter(BotSignal.allocation_id.in_(dead_ids)).update(
+                {"allocation_id": survivor.id}, synchronize_session=False,
+            )
+            # Also carry starting_capital forward if survivor has zero and any dead has non-zero
+            if not (survivor.starting_capital_cents or 0):
+                for d in dead:
+                    if (d.starting_capital_cents or 0) > 0:
+                        survivor.starting_capital_cents = d.starting_capital_cents
+                        break
+            # Tombstone
+            for d in dead:
+                d.enabled = False
+                d.paused_reason = f"merged_into_alloc_{survivor.id}_2026_08_07"
+            total_trades_repointed += n_trades
+            total_positions_repointed += n_positions
+            total_signals_repointed += n_signals
+            total_tombstoned += len(dead_ids)
+
+    if not dry_run and merges:
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "profiles_with_duplicates": len(merges),
+        "merges": merges,
+        "total_trades_repointed": total_trades_repointed,
+        "total_positions_repointed": total_positions_repointed,
+        "total_signals_repointed": total_signals_repointed,
+        "total_tombstoned": total_tombstoned,
+        "backups_confirmed": False,
+        "prevention_still_deferred": [
+            "unique partial index bot_allocations(user_id, profile_id) WHERE enabled=true",
+            "invariant I12: profiles with >1 active alloc == 0",
+        ],
+    }
+
+
 @router.post("/rebuild-realized-pnl")
 def rebuild_realized_pnl(
     dry_run: bool = Query(True),
@@ -1441,10 +1543,16 @@ def rebuild_realized_pnl(
     reconstructed_count = 0
     unattributed_count = 0
 
-    # Iteration 2 (2026-08-07): constrained Tier-2 reconstruction.
-    # A close can only attribute to bots whose open lots (a) predate the
-    # close ts and (b) actually cover qty. Distribution across bots is
-    # PROPORTIONAL to open-lot size, not first-key FIFO.
+    # Iteration 3 (2026-08-07): SIGNED-INVENTORY FIFO per (symbol, alloc).
+    # Handles both long round-trips (buy→sell) and short round-trips
+    # (sell→buy_to_cover). Lots carry signed qty: +qty for a long lot,
+    # −qty for a short lot. A crossing (long lot closed by sell, short
+    # lot covered by buy) realizes P&L on the crossing chunk.
+    #
+    # Inventory that would go negative-then-positive across the lookback
+    # window boundary (an open we can't see because it predates lookback)
+    # is tagged WINDOW_TRUNCATED, not force-paired.
+    window_truncated_count = 0
     for o in filled:
         sym = o.get("symbol")
         side = (o.get("side") or "").lower()
@@ -1460,70 +1568,127 @@ def rebuild_realized_pnl(
 
         alloc_id = order_id_to_alloc.get(oid) or order_id_to_alloc.get(client_oid)
 
-        if side == "buy":
-            # Open a long lot for the attributed bot (or unattributed sentinel None).
-            # Each lot carries the open ts for the postdating guard.
-            lots[(sym, alloc_id)].append([qty, int(round(px * 100)), oid, close_ts])
-        elif side in ("sell",):
-            remaining = qty
-            # Tier 1 — exact: within-bot FIFO if alloc_id known
-            if alloc_id is not None:
-                q = lots.get((sym, alloc_id))
-                while q and remaining > 0.001:
-                    lot = q[0]
-                    if lot[3] > close_ts:  # can't close a future open
-                        break
-                    take = min(lot[0], remaining)
-                    pnl_cents = int(round((px - lot[1] / 100.0) * take * mult * 100))
+        # Signed direction for THIS fill's effect on inventory:
+        # buy = +qty, sell = -qty. Sign of existing inventory determines
+        # whether this fill is an OPEN (same sign) or CLOSE (opposite sign).
+        fill_sign = +1 if side == "buy" else -1
+        remaining = qty
+
+        def eligible_lots_for(target_alloc):
+            """Return list of lots for (sym, target_alloc) that predate
+            close_ts, in FIFO order. Sign of lot[0] indicates long/short."""
+            q = lots.get((sym, target_alloc))
+            if not q: return []
+            return [lot for lot in q if lot[3] <= close_ts]
+
+        def opposite_lots_for(target_alloc):
+            """Eligible lots whose sign is opposite to fill_sign — those
+            are the ones this fill CLOSES."""
+            return [lot for lot in eligible_lots_for(target_alloc)
+                    if (lot[0] > 0) != (fill_sign > 0)]
+
+        # Tier 1 — exact: within-bot closing if alloc_id known.
+        if alloc_id is not None:
+            q = lots.get((sym, alloc_id))
+            if q:
+                # Walk lots in FIFO order looking for opposite-sign lots
+                i = 0
+                while i < len(q) and remaining > 0.001:
+                    lot = q[i]
+                    if lot[3] > close_ts:
+                        i += 1; continue
+                    same_sign = (lot[0] > 0) == (fill_sign > 0)
+                    if same_sign:
+                        # Fill adds to same-sign inventory; don't close here
+                        i += 1; continue
+                    # Opposite-sign lot → this fill closes some/all of it
+                    lot_abs = abs(lot[0])
+                    take = min(lot_abs, remaining)
+                    entry_cents = lot[1]
+                    # PnL: if lot was LONG (lot[0] > 0), close is a sell → (px − entry) * take
+                    # if lot was SHORT (lot[0] < 0), close is a buy   → (entry − px) * take
+                    if lot[0] > 0:
+                        pnl_cents = int(round((px - entry_cents / 100.0) * take * mult * 100))
+                    else:
+                        pnl_cents = int(round((entry_cents / 100.0 - px) * take * mult * 100))
                     realized_by_order[oid].append((pnl_cents, alloc_id, "exact"))
                     exact_count += 1
-                    lot[0] -= take
+                    # Reduce lot abs qty, remove if depleted
+                    if lot[0] > 0:
+                        lot[0] -= take
+                    else:
+                        lot[0] += take
                     remaining -= take
-                    if lot[0] <= 0.001:
-                        q.popleft()
-            # Tier 2 — reconstructed: PROPORTIONAL across all bots holding
-            # eligible (predates-close) open lots for this symbol.
-            if remaining > 0.001:
-                # Sum eligible per-bot open qty (attributed bots only —
-                # unattributed sentinel None can't take reconstruction)
-                per_bot_open: dict = defaultdict(float)
-                per_bot_lots: dict = defaultdict(list)
-                for bk, q in lots.items():
-                    if bk[0] != sym: continue
-                    if bk[1] is None: continue  # skip unattributed sentinel
-                    for lot in q:
-                        if lot[3] > close_ts: continue
-                        per_bot_open[bk[1]] += lot[0]
-                        per_bot_lots[bk[1]].append(lot)
-                total_eligible = sum(per_bot_open.values())
-                if total_eligible <= 0.001:
-                    # No eligible open lots. Skip — can't reconstruct honestly.
-                    unattributed_count += int(remaining)
-                    continue
-                # Cap the reconstructable qty by what's actually available
+                    if abs(lot[0]) <= 0.001:
+                        del q[i]
+                    else:
+                        i += 1
+
+        # Tier 2 — reconstructed: proportional across all bots' eligible
+        # opposite-sign lots.
+        if remaining > 0.001:
+            per_bot_opp: dict = defaultdict(float)
+            per_bot_opp_lots: dict = defaultdict(list)
+            for bk, q in lots.items():
+                if bk[0] != sym: continue
+                if bk[1] is None: continue
+                if bk[1] == alloc_id: continue  # already tried Tier 1
+                for lot in q:
+                    if lot[3] > close_ts: continue
+                    same_sign = (lot[0] > 0) == (fill_sign > 0)
+                    if same_sign: continue
+                    per_bot_opp[bk[1]] += abs(lot[0])
+                    per_bot_opp_lots[bk[1]].append(lot)
+            total_eligible = sum(per_bot_opp.values())
+            if total_eligible > 0.001:
                 take_total = min(remaining, total_eligible)
-                # Distribute proportionally to each bot's open share
-                for target_alloc, bot_open_qty in per_bot_open.items():
-                    if bot_open_qty <= 0: continue
-                    share = (bot_open_qty / total_eligible) * take_total
-                    # Walk this bot's own lots FIFO for the share
+                for target_alloc, bot_opp_qty in per_bot_opp.items():
+                    if bot_opp_qty <= 0: continue
+                    share = (bot_opp_qty / total_eligible) * take_total
                     bot_remaining = share
-                    for lot in per_bot_lots[target_alloc]:
+                    for lot in per_bot_opp_lots[target_alloc]:
                         if bot_remaining <= 0.001: break
-                        take = min(lot[0], bot_remaining)
-                        pnl_cents = int(round((px - lot[1] / 100.0) * take * mult * 100))
+                        lot_abs = abs(lot[0])
+                        take = min(lot_abs, bot_remaining)
+                        if lot[0] > 0:
+                            pnl_cents = int(round((px - lot[1] / 100.0) * take * mult * 100))
+                        else:
+                            pnl_cents = int(round((lot[1] / 100.0 - px) * take * mult * 100))
                         realized_by_order[oid].append((pnl_cents, target_alloc, "reconstructed"))
                         reconstructed_count += 1
-                        lot[0] -= take
+                        if lot[0] > 0:
+                            lot[0] -= take
+                        else:
+                            lot[0] += take
                         bot_remaining -= take
-                        if lot[0] <= 0.001:
-                            # remove from source deque
-                            src_key = (sym, target_alloc)
-                            if lots.get(src_key) and lots[src_key][0] is lot:
-                                lots[src_key].popleft()
+                        src_key = (sym, target_alloc)
+                        if lots.get(src_key) and abs(lots[src_key][0][0] if lots[src_key] else 1) <= 0.001:
+                            lots[src_key].popleft()
                 remaining -= take_total
-                if remaining > 0.001:
-                    unattributed_count += int(remaining)
+
+        # Any remaining fill qty OPENS a new lot (same-sign inventory).
+        # This is either a legitimate new open, or (if it's a sell) a
+        # WINDOW_TRUNCATED close whose original open predates our lookback.
+        if remaining > 0.001:
+            # Store as signed lot with fill_sign
+            lots[(sym, alloc_id)].append([fill_sign * remaining, int(round(px * 100)), oid, close_ts])
+            # If this fill would have needed to close inventory but couldn't
+            # find any (opposite-sign inventory was empty), tag it truncated.
+            # Detection heuristic: if a sell hits and inventory has never
+            # been positive for this (sym, alloc), the original long open
+            # is outside the window. Flag but don't force-pair.
+            if side == "sell" and alloc_id is not None:
+                # Check whether we ever saw a positive lot here
+                q = lots.get((sym, alloc_id), [])
+                has_ever_long = any(l[0] > 0 for l in q) or any(
+                    l[1] < px * 100 * 0.99 for l in q
+                )
+                # This is a loose flag — surfacing quantity, not gating.
+                # If the whole window shows only sells with no matching buys,
+                # count as truncated so the report is honest.
+                if not has_ever_long:
+                    window_truncated_count += 1
+            unattributed_count += 0  # opens are not unattributed; they're new lots
 
     # UPDATE existing close-side rows, and INSERT new ones for Alpaca
     # fills BMG doesn't have (the 66 quarantined closes on stock_quant_day_momentum
@@ -1667,6 +1832,7 @@ def rebuild_realized_pnl(
         "reconcile_close_rows_updated": reconcile_updates,
         "per_bot": per_bot_report,
         "sanity_flagged_bots": [r for r in per_bot_report if r["provisional_flag"]],
+        "window_truncated_count": window_truncated_count,
     }
 
 
