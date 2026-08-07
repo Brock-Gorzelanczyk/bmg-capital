@@ -171,6 +171,16 @@ def _check_i2_unrealized_pl(db) -> Result:
 
         alp = _alp_positions()
         alp_upl = sum(float(p.get("unrealized_pl") or 0) for p in alp)
+        # 2026-08-06 PM Claude Step 3.2: use Alpaca's current_price for
+        # option marks so BMG unrealized matches broker UPL by
+        # construction. Falls back to FMP midpoint only when Alpaca
+        # doesn't report the position.
+        alpaca_price_by_sym: dict[str, float] = {}
+        for _p in alp:
+            _sym = _p.get("symbol")
+            _px = float(_p.get("current_price") or 0)
+            if _sym and _px > 0:
+                alpaca_price_by_sym[_sym] = _px
 
         bmg_open = (
             db.query(BotPosition)
@@ -178,17 +188,25 @@ def _check_i2_unrealized_pl(db) -> Result:
             .filter(BotPosition.quarantined_at.is_(None))
             .all()
         )
-        # Get option marks at midpoint
+        # Get option marks — prefer Alpaca current_price, fall back to FMP midpoint
         occ_syms = [p.symbol for p in bmg_open if getattr(p, "option_type", None)]
-        marks_c = fetch_option_marks_cents(occ_syms) if occ_syms else {}
+        marks_c: dict = {}
+        need_fallback = [s for s in occ_syms if s not in alpaca_price_by_sym]
+        if need_fallback:
+            marks_c = fetch_option_marks_cents(need_fallback) or {}
+        for _s in occ_syms:
+            if _s in alpaca_price_by_sym:
+                marks_c[_s] = int(round(alpaca_price_by_sym[_s] * 100))
 
-        # Get equity/crypto prices from live cache
+        # Get equity/crypto prices — prefer Alpaca current_price, fall
+        # back to live_prices for equity Alpaca doesn't hold.
         eq_syms = [p.symbol for p in bmg_open if not getattr(p, "option_type", None)]
-        prices: dict[str, float] = {}
-        if eq_syms:
+        prices: dict[str, float] = {s: alpaca_price_by_sym[s] for s in eq_syms if s in alpaca_price_by_sym}
+        need_eq_fallback = [s for s in eq_syms if s not in prices]
+        if need_eq_fallback:
             try:
                 from app.services.live_prices import fetch_live_prices
-                prices = fetch_live_prices(eq_syms) or {}
+                prices.update(fetch_live_prices(need_eq_fallback) or {})
             except Exception:
                 pass
 
