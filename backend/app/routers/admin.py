@@ -1389,6 +1389,54 @@ def reconcile_user1_to_alpaca(
     }
 
 
+@router.post("/pause-bot")
+def pause_bot(
+    profile_name: str = Query(...),
+    reason: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Pause every user_1 allocation for a given profile — sets
+    enabled=False, paused_reason=<reason>. Bot runner reads this on
+    the next cycle and skips execution."""
+    from app.db.models.bots import BotAllocation, BotProfile
+    prof = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not prof:
+        return {"error": f"profile_not_found: {profile_name}"}
+    allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == 1)
+        .filter(BotAllocation.profile_id == prof.id)
+        .all()
+    )
+    for a in allocs:
+        a.enabled = False
+        a.paused_reason = reason[:400]
+    db.commit()
+    return {
+        "profile": profile_name,
+        "affected_allocations": [a.id for a in allocs],
+        "paused_reason": reason,
+    }
+
+
+@router.get("/risk-gate-config")
+def risk_gate_config(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Report the ACTUALLY-ENFORCED risk gate values from the running
+    process (env vars + code defaults). PM Claude spec: prove the gate
+    values, not what the repo says."""
+    import os
+    keys = [
+        "GROSS_EXPOSURE_MAX_PCT_NAV", "NET_EXPOSURE_MAX_PCT_NAV",
+        "OPTIONS_MAX_NOTIONAL_PCT", "OPTIONS_MAX_CONTRACTS_PER_TRADE",
+        "OPTIONS_SLEEVE_MAX_PCT", "LEAPS_MIN_DTE",
+        "OPTIONS_RISK_GATES_ENABLED", "INVARIANT_ENGINE_ENABLED",
+    ]
+    return {k: os.getenv(k, "<unset>") for k in keys}
+
+
 @router.get("/audit-users")
 def audit_users(
     db: Session = Depends(get_db),
