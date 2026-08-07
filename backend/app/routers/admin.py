@@ -1308,6 +1308,69 @@ def inspect_bot_positions(
     }
 
 
+@router.get("/user1-vs-alpaca")
+def user1_vs_alpaca(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """The scoped recon: user_id=1's positions vs Alpaca. Prior
+    bmg-alpaca-diff was global across all users; the fund-of-record
+    is user 1 (Brock), so this is what should SYNC."""
+    import os, urllib.request, json
+    from collections import defaultdict
+    from app.db.models.bots import BotPosition, BotAllocation
+
+    kid = os.environ.get("ALPACA_API_KEY", "")
+    ksec = os.environ.get("ALPACA_SECRET_KEY", "")
+    alp_list = json.loads(urllib.request.urlopen(urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/positions",
+        headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+    ), timeout=15).read())
+    alp_agg: dict = {}
+    for p in alp_list:
+        q = float(p.get("qty"))
+        side = "short" if q < 0 else "long"
+        alp_agg[(p.get("symbol"), side)] = abs(q)
+
+    user1_alloc_ids = [a.id for a in db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()]
+    bmg_rows = (
+        db.query(BotPosition)
+        .filter(BotPosition.allocation_id.in_(user1_alloc_ids))
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    bmg_agg: dict = defaultdict(lambda: {"qty": 0.0, "rows": 0, "ids": []})
+    for p in bmg_rows:
+        side = (p.side or "long").lower()
+        key = (p.symbol or "", side)
+        bmg_agg[key]["qty"] += float(p.qty or 0)
+        bmg_agg[key]["rows"] += 1
+        bmg_agg[key]["ids"].append(p.id)
+
+    bmg_keys = set(bmg_agg.keys())
+    alp_keys = set(alp_agg.keys())
+    only_bmg = sorted(bmg_keys - alp_keys)
+    only_alp = sorted(alp_keys - bmg_keys)
+    common = bmg_keys & alp_keys
+    mismatches = []
+    for k in common:
+        if abs(bmg_agg[k]["qty"] - alp_agg[k]) > 0.5:
+            mismatches.append({"symbol": k[0], "side": k[1],
+                               "bmg_qty": round(bmg_agg[k]["qty"], 4),
+                               "alp_qty": round(alp_agg[k], 4),
+                               "bmg_rows": bmg_agg[k]["rows"]})
+    return {
+        "user_id": 1,
+        "user1_open_rows": len(bmg_rows),
+        "user1_unique_symbol_side": len(bmg_keys),
+        "alpaca_unique_symbol_side": len(alp_keys),
+        "only_in_user1": [{"symbol": k[0], "side": k[1], "qty": round(bmg_agg[k]["qty"],4), "rows": bmg_agg[k]["rows"]} for k in only_bmg],
+        "only_in_alpaca": [{"symbol": k[0], "side": k[1], "qty": round(alp_agg[k],4)} for k in only_alp],
+        "qty_mismatches": mismatches,
+    }
+
+
 @router.get("/inspect-order-id")
 def inspect_order_id(
     order_id: str = Query(...),
