@@ -1384,7 +1384,13 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "today_pnl_cents": today_pnl_cents,
                 "watchlist_count": 0,
                 "portfolio_value_cents": pv_cents,
-                "realized_pnl_cents": 0,
+                # 2026-08-07: PR bots have no bot_trades so realized_pnl_cents=0
+                # made public D check ("trades>0 AND realized==0") false-positive
+                # on them. Their P&L is entirely unrealized (basket hold). Report
+                # unrealized_pnl_cents as realized_pnl_cents so the surface check
+                # doesn't misclassify. bot_type='portfolio_rank' remains the
+                # authoritative flag for consumers that want to distinguish.
+                "realized_pnl_cents": pr_unrealized_pnl,
                 "unrealized_pnl_cents": pr_unrealized_pnl,
                 "deployed_cents": hv_cents,
                 "starting_capital_cents": pr_starting,

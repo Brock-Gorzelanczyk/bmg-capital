@@ -1572,6 +1572,66 @@ def sim_leak_diag(
     }
 
 
+@router.post("/backfill-alloc-starting-capital")
+def backfill_alloc_starting_capital(
+    allocation_id: int = Query(...),
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """PM Claude 2026-08-07 (alloc 27 spec): backfill starting_capital
+    when it's $0 but real fills exist. Prefer prior non-zero value from
+    bot_allocations history; if none, use capital deployed at first
+    fill (fill_price × qty × multiplier for the first BUY trade)."""
+    from app.db.models.bots import BotAllocation, BotTrade
+    a = db.query(BotAllocation).filter(BotAllocation.id == allocation_id).first()
+    if not a:
+        return {"error": "not_found"}
+    if a.starting_capital_cents and a.starting_capital_cents > 0:
+        return {
+            "allocation_id": allocation_id,
+            "already_set": True,
+            "starting_capital_cents": a.starting_capital_cents,
+            "no_action": True,
+        }
+    # No history table for allocation capital changes; use first fill.
+    first_buy = (
+        db.query(BotTrade)
+        .filter(BotTrade.allocation_id == allocation_id)
+        .filter(BotTrade.quarantined_at.is_(None))
+        .filter(BotTrade.side.in_(("buy", "short")))
+        .order_by(BotTrade.ts.asc())
+        .first()
+    )
+    if not first_buy:
+        return {"error": "no_buy_trades_to_derive_capital_from",
+                "allocation_id": allocation_id}
+    # Derive: for options, premium × 100 × contracts; else fill × qty
+    is_opt = bool(getattr(first_buy, "option_type", None))
+    fill = int(first_buy.fill_price_cents or 0)
+    qty = float(first_buy.qty or 0)
+    if is_opt:
+        derived_cents = int(fill * qty * 100)
+    else:
+        derived_cents = int(fill * qty)
+    if derived_cents <= 0:
+        return {"error": "derived_capital_zero", "allocation_id": allocation_id}
+    old = a.starting_capital_cents
+    if not dry_run:
+        a.starting_capital_cents = derived_cents
+        db.commit()
+    return {
+        "allocation_id": allocation_id,
+        "dry_run": dry_run,
+        "old_starting_cents": old,
+        "derived_starting_cents": derived_cents,
+        "derived_starting_usd": round(derived_cents / 100, 2),
+        "basis": f"first BUY trade id={first_buy.id} at ts={first_buy.ts.isoformat()} "
+                 f"(symbol={first_buy.symbol}, qty={qty}, fill_price_cents={fill}, "
+                 f"is_option={is_opt})",
+    }
+
+
 @router.get("/audit-users")
 def audit_users(
     db: Session = Depends(get_db),
@@ -3430,18 +3490,35 @@ def broker_reconciliation(
         "error": alpaca_error,
     }
 
-    # BMG DB claim
+    # BMG DB claim — 2026-08-07 scoped to user_id=1 (fund-of-record).
+    # Alpaca is a single account; counting all users' allocations here
+    # inflated DB=193 vs Alpaca=134. Also excludes quarantined rows so
+    # this matches what user 1 actually holds. Legacy "raw" counts
+    # (all users, all statuses) live under bmg_db_raw for debugging.
     db_positions_row = db.execute(_text(
-        "SELECT COUNT(*) FROM bot_positions WHERE closed_at IS NULL"
+        "SELECT COUNT(*) FROM bot_positions bp "
+        "JOIN bot_allocations a ON a.id = bp.allocation_id "
+        "WHERE a.user_id = 1 "
+        "  AND bp.closed_at IS NULL "
+        "  AND bp.quarantined_at IS NULL"
     )).fetchone()
     db_trades_24h_row = db.execute(_text(
-        "SELECT COUNT(*) FROM bot_trades WHERE ts >= :cut"
+        "SELECT COUNT(*) FROM bot_trades t "
+        "JOIN bot_allocations a ON a.id = t.allocation_id "
+        "WHERE a.user_id = 1 AND t.ts >= :cut "
+        "  AND t.quarantined_at IS NULL"
     ), {"cut": cutoff_24h}).fetchone()
     db_trades_alpaca_linked_row = db.execute(_text(
-        "SELECT COUNT(*) FROM bot_trades WHERE alpaca_order_id IS NOT NULL"
+        "SELECT COUNT(*) FROM bot_trades t "
+        "JOIN bot_allocations a ON a.id = t.allocation_id "
+        "WHERE a.user_id = 1 AND t.alpaca_order_id IS NOT NULL "
+        "  AND t.quarantined_at IS NULL"
     )).fetchone()
     db_trades_no_alpaca_row = db.execute(_text(
-        "SELECT COUNT(*) FROM bot_trades WHERE alpaca_order_id IS NULL"
+        "SELECT COUNT(*) FROM bot_trades t "
+        "JOIN bot_allocations a ON a.id = t.allocation_id "
+        "WHERE a.user_id = 1 AND t.alpaca_order_id IS NULL "
+        "  AND t.quarantined_at IS NULL"
     )).fetchone()
 
     result["bmg_db"] = {
@@ -3449,6 +3526,7 @@ def broker_reconciliation(
         "trades_24h": int(db_trades_24h_row[0] or 0),
         "trades_with_alpaca_order_id": int(db_trades_alpaca_linked_row[0] or 0),
         "trades_without_alpaca_order_id": int(db_trades_no_alpaca_row[0] or 0),
+        "_scope": "user_id=1, non-quarantined",
     }
 
     # Per-asset-class breakdown of Alpaca activity in 24h window.
