@@ -1389,6 +1389,38 @@ def reconcile_user1_to_alpaca(
     }
 
 
+@router.post("/reset-reconstructed-pnl-user1")
+def reset_reconstructed_pnl_user1(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Clear pnl_cents on user 1 bot_trades tagged pnl_source='reconstructed'.
+    Provisional-by-definition per iter-2 spec; keeping them polluted the
+    P&L rollup. Exact (R7 client_order_id) pairings retained."""
+    from app.db.models.bots import BotTrade, BotAllocation
+    user1_alloc_ids = [a.id for a in db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()]
+    rows = (
+        db.query(BotTrade)
+        .filter(BotTrade.allocation_id.in_(user1_alloc_ids))
+        .filter(BotTrade.pnl_source == "reconstructed")
+        .filter(BotTrade.pnl_cents.isnot(None))
+        .all()
+    )
+    total_pnl_wiped_cents = sum(int(r.pnl_cents or 0) for r in rows)
+    if not dry_run:
+        for r in rows:
+            r.pnl_cents = None
+            r.pnl_source = None
+        db.commit()
+    return {
+        "dry_run": dry_run,
+        "rows_affected": len(rows),
+        "total_pnl_wiped_cents": total_pnl_wiped_cents,
+        "total_pnl_wiped_usd": round(total_pnl_wiped_cents / 100, 2),
+    }
+
+
 @router.get("/user1-vs-alpaca")
 def user1_vs_alpaca(
     db: Session = Depends(get_db),
