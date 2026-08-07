@@ -152,6 +152,10 @@ async def get_portfolio_summary(
         data = compute_strategy_lab_aggregate(current_user.id, db)
         return {
             "total_value_cents": data.get("total_value_cents", 0),
+            "total_value_source": data.get("total_value_source"),
+            "bot_sum_pv_cents": data.get("bot_sum_pv_cents", 0),
+            "unattributed_cents": data.get("unattributed_cents", 0),
+            "unattributed_usd": data.get("unattributed_usd", 0.0),
             "today_pnl_cents": data.get("today_pnl_cents", 0),
             "today_pnl_pct": data.get("today_pnl_pct", 0.0),
             "return_all_time_pct": data.get("return_all_time_pct", 0.0),

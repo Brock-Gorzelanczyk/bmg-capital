@@ -1063,7 +1063,12 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             fallback_value_by_alloc[a.id] = int(a.starting_capital_cents or 0)
             fallback_starting_by_alloc[a.id] = int(a.starting_capital_cents or 0)
 
-    total_value = (
+    # ── Sum bot pvs — kept for ATTRIBUTION only (not fund valuation) ─────
+    # Per 2026-08-07 architectural decision: fund total_value is Alpaca's
+    # portfolio_value (broker is master for valuation). Bot-level sums stay
+    # for attribution — how the fund's result splits across strategies.
+    # Attribution may be imperfect; fund total is exact by construction.
+    bot_sum_pv_cents = (
         sum(s.portfolio_value_cents or 0 for s in bot_snap_by_alloc.values())
         + sum(fallback_value_by_alloc.values())
     )
@@ -1071,8 +1076,37 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         sum(s.starting_capital_cents or 0 for s in bot_snap_by_alloc.values())
         + sum(fallback_starting_by_alloc.values())
     )
-    total_today_pnl = sum(s.today_pnl_cents or 0 for s in bot_snap_by_alloc.values())
+    bot_sum_today_pnl_cents = sum(s.today_pnl_cents or 0 for s in bot_snap_by_alloc.values())
     total_open_positions = sum(s.open_positions_count or 0 for s in bot_snap_by_alloc.values())
+
+    # ── Alpaca-authoritative fund valuation (Option 2 landed 2026-08-07) ─
+    # Fund total_value_cents = Alpaca account portfolio_value. today_pnl =
+    # equity − last_equity from the same account payload. Sum of bot PVs
+    # is retained as bot_sum_pv_cents; the delta = unattributed_cents is
+    # displayed, not hidden. Doctrine: shrinking unattributed is ongoing
+    # attribution work; it never blocks fund_total accuracy.
+    total_value = bot_sum_pv_cents  # fallback if Alpaca fetch fails
+    total_today_pnl = bot_sum_today_pnl_cents  # fallback
+    _alpaca_source = "bot_sum_fallback"
+    try:
+        import os as _os_ac, urllib.request as _ur_ac, json as _j_ac
+        _kid = _os_ac.environ.get("ALPACA_API_KEY", "")
+        _ks = _os_ac.environ.get("ALPACA_SECRET_KEY", "")
+        if _kid and _ks:
+            _acct = _j_ac.loads(_ur_ac.urlopen(_ur_ac.Request(
+                "https://paper-api.alpaca.markets/v2/account",
+                headers={"APCA-API-KEY-ID": _kid, "APCA-API-SECRET-KEY": _ks},
+            ), timeout=8).read())
+            _pv = float(_acct.get("portfolio_value") or 0)
+            _last = float(_acct.get("last_equity") or 0)
+            _eq = float(_acct.get("equity") or 0)
+            if _pv > 0:
+                total_value = int(round(_pv * 100))
+                total_today_pnl = int(round((_eq - _last) * 100))
+                _alpaca_source = "alpaca_account"
+    except Exception as _acct_exc:
+        logger.warning("[canonical] Alpaca fund PV fetch failed, using bot sum: %s", _acct_exc)
+    unattributed_cents = bot_sum_pv_cents - total_value
 
     # ── Per-portfolio snapshots (response breakdown only) ──────────────────
     portfolio_snapshots = []
@@ -1533,7 +1567,16 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         }
 
     return {
+        # 2026-08-07 Option 2 landed: total_value_cents is Alpaca-authoritative.
+        # bot_sum_pv_cents kept for attribution. unattributed_cents is the
+        # honest delta (positive → bots claim more than fund holds; negative →
+        # broker holds positions no bot claims). Doctrine: shrinking this
+        # is ongoing attribution work; it never blocks fund_total accuracy.
         "total_value_cents": total_value,
+        "total_value_source": _alpaca_source,
+        "bot_sum_pv_cents": bot_sum_pv_cents,
+        "unattributed_cents": unattributed_cents,
+        "unattributed_usd": round(unattributed_cents / 100, 2),
         # Alias for callers that read portfolio_value_cents at the aggregate
         # level (mirrors the per-portfolio shape). Always populated — never None.
         "portfolio_value_cents": total_value,

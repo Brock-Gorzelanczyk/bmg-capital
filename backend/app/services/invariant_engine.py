@@ -586,6 +586,31 @@ def _check_i10_signal_funnel(db) -> Result:
         return _amber("I10", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i16_unattributed_tracker(db) -> Result:
+    """PM Claude 2026-08-07 Option 2: fund total_value reads from Alpaca
+    (broker is master for valuation). Bot-level sums are attribution.
+    Unattributed = sum(bot pv) - fund pv. Target: |delta| < $1,000.
+    Not a P0 gate — a progress tracker. Doctrine: shrinking is
+    ongoing attribution work; never blocks fund_total accuracy."""
+    try:
+        from app.core.canonical import compute_strategy_lab_aggregate
+        agg = compute_strategy_lab_aggregate(user_id=1, db=db) or {}
+        u_cents = int(agg.get("unattributed_cents") or 0)
+        u_usd = round(u_cents / 100, 2)
+        actual = {
+            "unattributed_usd": u_usd,
+            "bot_sum_pv_usd": round((agg.get("bot_sum_pv_cents") or 0) / 100, 2),
+            "fund_pv_usd": round((agg.get("total_value_cents") or 0) / 100, 2),
+            "fund_pv_source": agg.get("total_value_source"),
+        }
+        if abs(u_cents) < 100_000:  # < $1,000
+            return _ok("I16", actual, None, f"|unattributed| ${abs(u_usd):.2f} < $1,000")
+        return _amber("I16", actual, {"unattributed_max_usd": 1000.0}, float(abs(u_usd)),
+                      f"unattributed ${u_usd:+,.2f} — attribution work ongoing (not a gate)")
+    except Exception as exc:
+        return _amber("I16", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i15_starting_capital_vs_funded(db) -> Result:
     """PM Claude 2026-08-07 acceptance B structural fix: fund PV inflates
     by exactly the excess of sum(starting_capital) over the actual
@@ -666,6 +691,7 @@ CHECKS: dict[str, Callable] = {
     "I10": _check_i10_signal_funnel,
     "I14": _check_i14_breach_remediation,
     "I15": _check_i15_starting_capital_vs_funded,
+    "I16": _check_i16_unattributed_tracker,
 }
 
 
