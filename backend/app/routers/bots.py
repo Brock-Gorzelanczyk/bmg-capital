@@ -234,17 +234,17 @@ def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
                 alloc.portfolio_id = existing.id
                 alloc.updated_at = now
 
-            # Re-enable if accidentally disabled — paper bots should always be
-            # active UNLESS explicitly halted (health/admin) OR they were demoted
-            # by the m021 dedup migration (paused_reason starts with
-            # 'merged_into_'). Re-enabling a merged dupe would resurrect the
-            # split-capital problem the migration just fixed.
-            HARD_PAUSE_REASONS = {"health_halt", "admin_lock"}
-            paused_reason = (alloc.paused_reason or "")
-            is_merged_dupe = paused_reason.startswith("merged_into_")
-            if not alloc.enabled and paused_reason not in HARD_PAUSE_REASONS and not is_merged_dupe:
+            # 2026-08-07 rewrite: any non-empty paused_reason is respected as
+            # deliberate. The previous allowlist ({"health_halt","admin_lock"} +
+            # "merged_into_") let dashboard loads silently re-enable bots that
+            # the operator had explicitly paused via /api/admin/pause-bot —
+            # 12 crypto pauses tonight were reverted this way, same trap that
+            # bit crypto_day per migration.py:2800. Auto-re-enable now only
+            # applies to allocs that were never explicitly paused (paused_reason
+            # is None or empty).
+            paused_reason = (alloc.paused_reason or "").strip()
+            if not alloc.enabled and not paused_reason:
                 alloc.enabled = True
-                alloc.paused_reason = None
                 alloc.updated_at = now
 
         portfolios.append(existing)
