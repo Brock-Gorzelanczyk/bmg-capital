@@ -334,22 +334,21 @@ def _check_i6_position_mark_freshness(db) -> Result:
 
 
 def _check_i7_exposure_caps(db) -> Result:
-    """Fleet exposure caps (4c 2026-08-07 max-loss rewrite):
-    max-loss leverage is the honest metric — net debit for debit
-    spreads (long premium), margin req for short options (strike ×
-    100 × contracts, cash-secured basis), notional for equity.
-    Per-position concentration kept on market value.
+    """Fleet exposure caps (4c 2026-08-07 max-loss + 2026-08-07 spread-aware
+    per-position rewrite):
+    max-loss leverage is the honest metric — net debit for debit spreads
+    (long premium), margin req for short options (strike × 100 × contracts,
+    cash-secured basis), notional for equity.
+
+    Per-position concentration is measured at the UNDERLYING level with
+    the same spread-detection logic as the fleet calc. Naked-leg |MV|
+    measurement is a bug (see ledger #19 and #29) — a short leg hedged
+    by a long leg above it has spread max-loss << leg |MV|.
     """
     try:
         alp = _alp_positions()
         gross = sum(abs(float(p.get("market_value") or 0)) for p in alp)
 
-        # 4c max-loss compute per position:
-        #   equity: |market_value| (long can drop to 0; short capped at 2x entry)
-        #   long option: premium paid = avg_entry × 100 × contracts (max loss)
-        #   short option: cash-secured margin = strike × 100 × contracts
-        #   long option + short option same underlying/expiry → spread pair
-        #     with max_loss = spread_width × contracts × 100 (net debit basis)
         from collections import defaultdict
 
         def _parse_occ_root(sym: str):
@@ -359,8 +358,11 @@ def _check_i7_exposure_caps(db) -> Result:
                 else: break
             return root
 
+        # Group options by (root, expiration, right) — same as spread detect.
+        # Track max_loss per underlying as we sum group contributions, so we
+        # can also enforce per-position concentration on the honest metric.
         max_loss_total = 0.0
-        # Group options by (root, expiration, right) to detect spread pairs
+        max_loss_by_root: dict = defaultdict(float)
         opt_pairs: dict = defaultdict(list)
         for p in alp:
             sym = p.get("symbol") or ""
@@ -370,7 +372,6 @@ def _check_i7_exposure_caps(db) -> Result:
             asset_class = p.get("asset_class") or ""
             if asset_class == "us_option":
                 # Parse: {ROOT}{YYMMDD}{C|P}{strike*1000}
-                # Get root, expiry (chars 6..12), right (12), strike
                 try:
                     root = _parse_occ_root(sym)
                     rest = sym[len(root):]
@@ -381,38 +382,40 @@ def _check_i7_exposure_caps(db) -> Result:
                     opt_pairs[key].append({"qty": qty, "strike": strike, "avg_entry": avg_entry, "mv": mv})
                 except Exception:
                     max_loss_total += abs(mv)  # fallback
+                    max_loss_by_root[sym] += abs(mv)
             else:
                 # Equity: |MV| approximates worst-case drawdown to 0
                 max_loss_total += abs(mv)
+                max_loss_by_root[sym] += abs(mv)
 
         # For each option (root, expiry, right) group, detect spread pairs
+        # and attribute the group's max_loss to the underlying root.
         for key, legs in opt_pairs.items():
+            root = key[0]
             longs = [l for l in legs if l["qty"] > 0]
             shorts = [l for l in legs if l["qty"] < 0]
+            group_max_loss = 0.0
             if longs and shorts:
-                # Spread — max loss = sum of long premiums - sum of short premiums received
-                # (approximated net debit at entry)
                 long_prem = sum(l["avg_entry"] * abs(l["qty"]) * 100 for l in longs)
                 short_prem = sum(l["avg_entry"] * abs(l["qty"]) * 100 for l in shorts)
                 net_debit = max(0, long_prem - short_prem)
-                # Cap max loss at spread width (for well-formed verticals)
-                # spread_width × contracts × 100
                 if len(longs) == 1 and len(shorts) == 1:
                     width_dollars = abs(longs[0]["strike"] - shorts[0]["strike"])
                     contracts = min(abs(longs[0]["qty"]), abs(shorts[0]["qty"]))
                     width_max_loss = width_dollars * contracts * 100
-                    max_loss_total += min(net_debit, width_max_loss) if net_debit > 0 else width_max_loss
+                    group_max_loss = min(net_debit, width_max_loss) if net_debit > 0 else width_max_loss
                 else:
-                    max_loss_total += net_debit
+                    group_max_loss = net_debit
             else:
-                # Unpaired legs
                 for leg in legs:
                     if leg["qty"] > 0:
                         # Long: max loss = premium paid
-                        max_loss_total += leg["avg_entry"] * abs(leg["qty"]) * 100
+                        group_max_loss += leg["avg_entry"] * abs(leg["qty"]) * 100
                     else:
-                        # Short: cash-secured margin
-                        max_loss_total += leg["strike"] * abs(leg["qty"]) * 100
+                        # Short unpaired: cash-secured margin (naked short)
+                        group_max_loss += leg["strike"] * abs(leg["qty"]) * 100
+            max_loss_total += group_max_loss
+            max_loss_by_root[root] += group_max_loss
 
         # Legacy "net by underlying" kept for compatibility reporting
         net_by_root: dict = defaultdict(float)
@@ -438,8 +441,6 @@ def _check_i7_exposure_caps(db) -> Result:
             except Exception:
                 pass
 
-        # 4c 2026-08-07 max-loss rewrite: max_loss_total is the honest
-        # leverage figure. Gross / net kept for reporting context only.
         max_loss_max_pct = float(os.getenv("MAX_LOSS_MAX_PCT_NAV", "1.0"))
         per_max_pct = float(os.getenv("OPTIONS_MAX_NOTIONAL_PCT", "0.20"))
         actual = {
@@ -453,27 +454,34 @@ def _check_i7_exposure_caps(db) -> Result:
         }
         if nav <= 0:
             return _amber("I7", actual, None, None, "no NAV — cannot enforce")
-        # Primary trigger: max_loss > 100% NAV (spec R7 acceptance A)
+        # Primary trigger: fleet max_loss > 100% NAV (spec R7 acceptance A)
         if max_loss_total > nav * max_loss_max_pct:
             return _red("I7", actual,
                         {"max_loss_max_pct_nav": max_loss_max_pct * 100},
                         max_loss_total - nav * max_loss_max_pct,
                         f"fleet max_loss ${max_loss_total:,.0f} = {max_loss_total/nav*100:.0f}% NAV > {max_loss_max_pct*100:.0f}% cap")
-        # Per-position check
-        worst = None
-        worst_pct = 0.0
-        for p in alp:
-            mv = abs(float(p.get("market_value") or 0))
-            pct = mv / nav
-            if pct > worst_pct:
-                worst_pct = pct
-                worst = (p.get("symbol"), mv)
-        if worst and worst_pct > per_max_pct:
-            return _red("I7", {**actual, "worst_position": worst, "worst_pct_nav": round(worst_pct * 100, 1)},
+        # Per-underlying max_loss check — spread-aware, honest metric.
+        worst_root = None
+        worst_max_loss = 0.0
+        for root, ml in max_loss_by_root.items():
+            if ml > worst_max_loss:
+                worst_max_loss = ml
+                worst_root = root
+        worst_pct = (worst_max_loss / nav) if nav else 0.0
+        if worst_root and worst_pct > per_max_pct:
+            return _red("I7",
+                        {**actual, "worst_underlying": worst_root,
+                         "worst_max_loss_usd": round(worst_max_loss, 2),
+                         "worst_pct_nav": round(worst_pct * 100, 1)},
                         {"per_position_max_pct_nav": per_max_pct * 100},
                         worst_pct - per_max_pct,
-                        f"position {worst[0]} = {worst_pct*100:.1f}% NAV > {per_max_pct*100:.0f}% cap")
-        return _ok("I7", actual, None, "within caps")
+                        f"underlying {worst_root} max_loss ${worst_max_loss:,.0f} = "
+                        f"{worst_pct*100:.1f}% NAV > {per_max_pct*100:.0f}% cap")
+        return _ok("I7", {**actual,
+                          "worst_underlying": worst_root,
+                          "worst_max_loss_usd": round(worst_max_loss, 2),
+                          "worst_pct_nav": round(worst_pct * 100, 1) if nav else None},
+                   None, "within caps")
     except Exception as exc:
         return _amber("I7", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
