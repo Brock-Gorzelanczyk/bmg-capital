@@ -334,34 +334,93 @@ def _check_i6_position_mark_freshness(db) -> Result:
 
 
 def _check_i7_exposure_caps(db) -> Result:
-    """Fleet exposure caps: NET exposure by underlying (bull-call spreads
-    offset), plus per-position notional. Gross is reported for context
-    but NOT the trigger — a matched spread should not read as leverage.
+    """Fleet exposure caps (4c 2026-08-07 max-loss rewrite):
+    max-loss leverage is the honest metric — net debit for debit
+    spreads (long premium), margin req for short options (strike ×
+    100 × contracts, cash-secured basis), notional for equity.
+    Per-position concentration kept on market value.
     """
     try:
         alp = _alp_positions()
         gross = sum(abs(float(p.get("market_value") or 0)) for p in alp)
 
-        # Compute NET exposure by underlying: for options, group by root
-        # symbol (BABA260828C00111000 → BABA). Sum signed MV per group,
-        # then take absolute value. Bull-call spreads (long+short same
-        # underlying) cancel to their spread width, not double-count.
+        # 4c max-loss compute per position:
+        #   equity: |market_value| (long can drop to 0; short capped at 2x entry)
+        #   long option: premium paid = avg_entry × 100 × contracts (max loss)
+        #   short option: cash-secured margin = strike × 100 × contracts
+        #   long option + short option same underlying/expiry → spread pair
+        #     with max_loss = spread_width × contracts × 100 (net debit basis)
         from collections import defaultdict
+
+        def _parse_occ_root(sym: str):
+            root = ""
+            for ch in sym:
+                if ch.isalpha(): root += ch
+                else: break
+            return root
+
+        max_loss_total = 0.0
+        # Group options by (root, expiration, right) to detect spread pairs
+        opt_pairs: dict = defaultdict(list)
+        for p in alp:
+            sym = p.get("symbol") or ""
+            qty = float(p.get("qty") or 0)
+            avg_entry = float(p.get("avg_entry_price") or 0)
+            mv = float(p.get("market_value") or 0)
+            asset_class = p.get("asset_class") or ""
+            if asset_class == "us_option":
+                # Parse: {ROOT}{YYMMDD}{C|P}{strike*1000}
+                # Get root, expiry (chars 6..12), right (12), strike
+                try:
+                    root = _parse_occ_root(sym)
+                    rest = sym[len(root):]
+                    yymmdd = rest[:6]
+                    right = rest[6]
+                    strike = int(rest[7:]) / 1000.0
+                    key = (root, yymmdd, right)
+                    opt_pairs[key].append({"qty": qty, "strike": strike, "avg_entry": avg_entry, "mv": mv})
+                except Exception:
+                    max_loss_total += abs(mv)  # fallback
+            else:
+                # Equity: |MV| approximates worst-case drawdown to 0
+                max_loss_total += abs(mv)
+
+        # For each option (root, expiry, right) group, detect spread pairs
+        for key, legs in opt_pairs.items():
+            longs = [l for l in legs if l["qty"] > 0]
+            shorts = [l for l in legs if l["qty"] < 0]
+            if longs and shorts:
+                # Spread — max loss = sum of long premiums - sum of short premiums received
+                # (approximated net debit at entry)
+                long_prem = sum(l["avg_entry"] * abs(l["qty"]) * 100 for l in longs)
+                short_prem = sum(l["avg_entry"] * abs(l["qty"]) * 100 for l in shorts)
+                net_debit = max(0, long_prem - short_prem)
+                # Cap max loss at spread width (for well-formed verticals)
+                # spread_width × contracts × 100
+                if len(longs) == 1 and len(shorts) == 1:
+                    width_dollars = abs(longs[0]["strike"] - shorts[0]["strike"])
+                    contracts = min(abs(longs[0]["qty"]), abs(shorts[0]["qty"]))
+                    width_max_loss = width_dollars * contracts * 100
+                    max_loss_total += min(net_debit, width_max_loss) if net_debit > 0 else width_max_loss
+                else:
+                    max_loss_total += net_debit
+            else:
+                # Unpaired legs
+                for leg in legs:
+                    if leg["qty"] > 0:
+                        # Long: max loss = premium paid
+                        max_loss_total += leg["avg_entry"] * abs(leg["qty"]) * 100
+                    else:
+                        # Short: cash-secured margin
+                        max_loss_total += leg["strike"] * abs(leg["qty"]) * 100
+
+        # Legacy "net by underlying" kept for compatibility reporting
         net_by_root: dict = defaultdict(float)
         for p in alp:
             sym = p.get("symbol") or ""
             mv = float(p.get("market_value") or 0)
-            # Strip OCC option chars to get underlying (best-effort)
             if len(sym) > 10 and any(c in sym for c in ("C0","P0","C1","P1")):
-                # OCC format: <ROOT><YYMMDD><C|P><STRIKE*1000>
-                # Take the alphabetic prefix as root.
-                root = ""
-                for ch in sym:
-                    if ch.isalpha():
-                        root += ch
-                    else:
-                        break
-                net_by_root[root] += mv
+                net_by_root[_parse_occ_root(sym)] += mv
             else:
                 net_by_root[sym] += mv
         net_exposure = sum(abs(v) for v in net_by_root.values())
@@ -379,14 +438,13 @@ def _check_i7_exposure_caps(db) -> Result:
             except Exception:
                 pass
 
-        # Net cap defaults to 250% NAV (was gross cap — now applied to net).
-        # Gross cap for informational bar at 500% (rarely trips).
-        # 2026-08-06 PM Claude spec Step 5.1: tightened from 2.5/5.0.
-        # 100% NAV net is the honest cap; 200% gross allows spread pairs.
-        net_max_pct = float(os.getenv("NET_EXPOSURE_MAX_PCT_NAV", "1.0"))
-        gross_max_pct = float(os.getenv("GROSS_EXPOSURE_MAX_PCT_NAV", "2.0"))
+        # 4c 2026-08-07 max-loss rewrite: max_loss_total is the honest
+        # leverage figure. Gross / net kept for reporting context only.
+        max_loss_max_pct = float(os.getenv("MAX_LOSS_MAX_PCT_NAV", "1.0"))
         per_max_pct = float(os.getenv("OPTIONS_MAX_NOTIONAL_PCT", "0.20"))
         actual = {
+            "max_loss_usd": round(max_loss_total, 2),
+            "max_loss_pct_nav": round(max_loss_total / nav * 100, 1) if nav else None,
             "gross_usd": round(gross, 2),
             "net_usd": round(net_exposure, 2),
             "nav_usd": round(nav, 2),
@@ -395,19 +453,12 @@ def _check_i7_exposure_caps(db) -> Result:
         }
         if nav <= 0:
             return _amber("I7", actual, None, None, "no NAV — cannot enforce")
-        # Primary trigger: NET exposure > 250% NAV
-        if net_exposure > nav * net_max_pct:
+        # Primary trigger: max_loss > 100% NAV (spec R7 acceptance A)
+        if max_loss_total > nav * max_loss_max_pct:
             return _red("I7", actual,
-                        {"net_max_pct_nav": net_max_pct * 100},
-                        net_exposure - nav * net_max_pct,
-                        f"fleet net ${net_exposure:,.0f} = {net_exposure/nav*100:.0f}% NAV > {net_max_pct*100:.0f}% cap")
-        # Secondary trigger: gross > 500% NAV (would mean a lot of
-        # unmatched exposure)
-        if gross > nav * gross_max_pct:
-            return _amber("I7", actual,
-                          {"gross_max_pct_nav": gross_max_pct * 100},
-                          gross - nav * gross_max_pct,
-                          f"fleet gross ${gross:,.0f} = {gross/nav*100:.0f}% NAV > {gross_max_pct*100:.0f}% cap (net is within)")
+                        {"max_loss_max_pct_nav": max_loss_max_pct * 100},
+                        max_loss_total - nav * max_loss_max_pct,
+                        f"fleet max_loss ${max_loss_total:,.0f} = {max_loss_total/nav*100:.0f}% NAV > {max_loss_max_pct*100:.0f}% cap")
         # Per-position check
         worst = None
         worst_pct = 0.0
