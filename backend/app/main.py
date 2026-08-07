@@ -1341,6 +1341,15 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] daily_report scheduler FAILED (non-fatal): %s",
                      _dr_exc, exc_info=True)
 
+    # 2026-08-07: 9:15am ET pre-market validation. Standing morning ritual.
+    # Morning = will it behave; evening (4:15pm) = did it behave.
+    try:
+        from app.jobs.premarket_report import setup_premarket_report_scheduler
+        setup_premarket_report_scheduler(scheduler)
+    except Exception as _pm_exc:
+        logger.error("[startup] premarket_report scheduler FAILED (non-fatal): %s",
+                     _pm_exc, exc_info=True)
+
     # PAUSED 2026-07-16 (cost): threshold experiment daemon
     # try:
     #     from app.services.threshold_experiment import setup_threshold_experiment_scheduler

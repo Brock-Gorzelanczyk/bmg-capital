@@ -1749,6 +1749,27 @@ def daily_report_run_now(
     return {"ok": True, "report": report}
 
 
+@router.get("/premarket-report")
+def premarket_report(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """On-demand pre-market report — same content as the 9:15am ET cron."""
+    from app.jobs.premarket_report import build_premarket_report
+    return {"report": build_premarket_report(db)}
+
+
+@router.post("/premarket-report/run")
+def premarket_report_run_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Fire the pre-market report + persist to vault (same as the 9:15am ET cron)."""
+    from app.jobs.premarket_report import run_premarket_report_job
+    report = run_premarket_report_job(db)
+    return {"ok": True, "report": report}
+
+
 @router.get("/round-trips-per-bot")
 def round_trips_per_bot(
     db: Session = Depends(get_db),
