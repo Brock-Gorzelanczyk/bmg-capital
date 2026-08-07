@@ -1549,8 +1549,15 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             _pr_pnl_today += _bot_pnl
     except Exception as _pr_exc:
         logger.warning("[canonical] portfolio_rank PV rollup failed: %s", _pr_exc)
-    total_value += _pr_extra
-    total_today_pnl += _pr_pnl_today
+    # 2026-08-07: When total_value is Alpaca-authoritative, PR bots are
+    # already included in the broker's portfolio_value. Adding _pr_extra
+    # would double-count. Also keep bot_sum_pv aware of PR contribution
+    # so attribution math balances.
+    bot_sum_pv_cents += _pr_extra
+    if _alpaca_source != "alpaca_account":
+        total_value += _pr_extra
+        total_today_pnl += _pr_pnl_today
+    unattributed_cents = bot_sum_pv_cents - total_value
 
     # 5-col header windows: All-Time / MTD / WTD / Today $ + %.
     try:
