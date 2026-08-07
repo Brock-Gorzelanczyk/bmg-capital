@@ -1448,6 +1448,55 @@ def risk_gate_config(
     return {k: os.getenv(k, "<unset>") for k in keys}
 
 
+@router.get("/sim-leak-diag")
+def sim_leak_diag(
+    lookback_hours: int = Query(48),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """4a: identify sim-leak fills (alpaca_order_id IS NULL) since
+    the m078 real-only-mode block. Report per-bot which paths wrote
+    them so we can find the bypass."""
+    from datetime import datetime, timezone, timedelta
+    from app.db.models.bots import BotTrade, BotAllocation, BotProfile
+    from collections import defaultdict
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    rows = (
+        db.query(BotTrade)
+        .filter(BotTrade.ts >= cutoff)
+        .filter(BotTrade.alpaca_order_id.is_(None))
+        .filter(BotTrade.quarantined_at.is_(None))
+        .order_by(BotTrade.ts.desc())
+        .all()
+    )
+    alloc_to_user: dict = {}
+    alloc_to_profile: dict = {}
+    for a in db.query(BotAllocation).all():
+        alloc_to_user[a.id] = a.user_id
+    for p in db.query(BotProfile).all():
+        pass
+    profs_by_id = {p.id: p.name for p in db.query(BotProfile).all()}
+    alloc_to_prof_name = {}
+    for a in db.query(BotAllocation).all():
+        alloc_to_prof_name[a.id] = profs_by_id.get(a.profile_id)
+
+    by_bot: dict = defaultdict(list)
+    for r in rows:
+        prof = alloc_to_prof_name.get(r.allocation_id, "?")
+        by_bot[prof].append({
+            "id": r.id, "ts": r.ts.isoformat() if r.ts else None,
+            "symbol": r.symbol, "side": r.side, "qty": float(r.qty or 0),
+            "fill_price_cents": r.fill_price_cents,
+            "user_id": alloc_to_user.get(r.allocation_id),
+            "allocation_id": r.allocation_id,
+        })
+    return {
+        "lookback_hours": lookback_hours,
+        "total_sim_rows": len(rows),
+        "by_bot": [{"bot": k, "count": len(v), "rows": v} for k, v in sorted(by_bot.items(), key=lambda x: -len(x[1]))],
+    }
+
+
 @router.get("/audit-users")
 def audit_users(
     db: Session = Depends(get_db),
