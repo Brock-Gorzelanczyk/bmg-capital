@@ -11,6 +11,7 @@ REQUIRED reads every session (non-negotiable):
 - context/05-known-issues.md (recurring bugs and traps — READ IN FULL)
 - context/06-decision-history.md (standing decisions, don't reopen)
 - context/08-conflict-log.md (open theory-vs-data disputes)
+- context/09-realized-pnl-rebuild-spec.md (approved active spec — read if session task is realized-P&L or leaderboard math)
 
 Task-specific reads:
 - Writing a paste-ready → skills/01-paste-ready-format.md
