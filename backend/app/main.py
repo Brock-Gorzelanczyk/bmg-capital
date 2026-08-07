@@ -1095,6 +1095,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m096_add_realized_pnl_to_bot_trades FAILED: %s",
                      _m096_exc, exc_info=True)
 
+    # m097: unique partial index on active bot_positions — prevents the
+    # 2026-08-07 restart-drift duplicate-insert class. Would have blocked
+    # the ~30 phantom rows the runner wrote during the PITR-enable redeploy.
+    try:
+        from app.db.migrations.m097_bot_positions_active_uniq import run as _run_m097
+        with engine.begin() as _m097_conn:
+            _m097_result = _run_m097(_m097_conn)
+        logger.warning("[startup] m097 status: %s", _m097_result)
+    except Exception as _m097_exc:
+        logger.error("[startup] m097_bot_positions_active_uniq FAILED: %s",
+                     _m097_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
