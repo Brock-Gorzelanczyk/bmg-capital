@@ -1400,6 +1400,10 @@ def rebuild_realized_pnl(
     reconstructed_count = 0
     unattributed_count = 0
 
+    # Iteration 2 (2026-08-07): constrained Tier-2 reconstruction.
+    # A close can only attribute to bots whose open lots (a) predate the
+    # close ts and (b) actually cover qty. Distribution across bots is
+    # PROPORTIONAL to open-lot size, not first-key FIFO.
     for o in filled:
         sym = o.get("symbol")
         side = (o.get("side") or "").lower()
@@ -1409,58 +1413,76 @@ def rebuild_realized_pnl(
         client_oid = o.get("client_order_id")
         asset_class = o.get("asset_class") or ""
         mult = 100 if asset_class == "us_option" else 1
+        close_ts = o.get("filled_at") or o.get("submitted_at") or ""
         if not sym or qty <= 0 or px <= 0:
             continue
 
         alloc_id = order_id_to_alloc.get(oid) or order_id_to_alloc.get(client_oid)
 
         if side == "buy":
-            # Open a long lot for the attributed bot (or unattributed sentinel None)
-            lots[(sym, alloc_id)].append([qty, int(round(px * 100)), oid])
+            # Open a long lot for the attributed bot (or unattributed sentinel None).
+            # Each lot carries the open ts for the postdating guard.
+            lots[(sym, alloc_id)].append([qty, int(round(px * 100)), oid, close_ts])
         elif side in ("sell",):
-            # Close FIFO. Prefer within-bot lots first; fallback pro-rata across bots holding sym.
             remaining = qty
-            # First try exact-bot pairing if alloc_id known
+            # Tier 1 — exact: within-bot FIFO if alloc_id known
             if alloc_id is not None:
                 q = lots.get((sym, alloc_id))
                 while q and remaining > 0.001:
                     lot = q[0]
+                    if lot[3] > close_ts:  # can't close a future open
+                        break
                     take = min(lot[0], remaining)
-                    lot_cost = lot[1]
-                    pnl_cents = int(round((px - lot_cost / 100.0) * take * mult * 100))
+                    pnl_cents = int(round((px - lot[1] / 100.0) * take * mult * 100))
                     realized_by_order[oid].append((pnl_cents, alloc_id, "exact"))
                     exact_count += 1
                     lot[0] -= take
                     remaining -= take
                     if lot[0] <= 0.001:
                         q.popleft()
-            # Anything left → FIFO across ALL alloc buckets for this symbol (reconstructed)
+            # Tier 2 — reconstructed: PROPORTIONAL across all bots holding
+            # eligible (predates-close) open lots for this symbol.
             if remaining > 0.001:
-                bucket_keys = [k for k in lots.keys() if k[0] == sym]
-                for bk in bucket_keys:
-                    q = lots[bk]
-                    while q and remaining > 0.001:
-                        lot = q[0]
-                        take = min(lot[0], remaining)
+                # Sum eligible per-bot open qty (attributed bots only —
+                # unattributed sentinel None can't take reconstruction)
+                per_bot_open: dict = defaultdict(float)
+                per_bot_lots: dict = defaultdict(list)
+                for bk, q in lots.items():
+                    if bk[0] != sym: continue
+                    if bk[1] is None: continue  # skip unattributed sentinel
+                    for lot in q:
+                        if lot[3] > close_ts: continue
+                        per_bot_open[bk[1]] += lot[0]
+                        per_bot_lots[bk[1]].append(lot)
+                total_eligible = sum(per_bot_open.values())
+                if total_eligible <= 0.001:
+                    # No eligible open lots. Skip — can't reconstruct honestly.
+                    unattributed_count += int(remaining)
+                    continue
+                # Cap the reconstructable qty by what's actually available
+                take_total = min(remaining, total_eligible)
+                # Distribute proportionally to each bot's open share
+                for target_alloc, bot_open_qty in per_bot_open.items():
+                    if bot_open_qty <= 0: continue
+                    share = (bot_open_qty / total_eligible) * take_total
+                    # Walk this bot's own lots FIFO for the share
+                    bot_remaining = share
+                    for lot in per_bot_lots[target_alloc]:
+                        if bot_remaining <= 0.001: break
+                        take = min(lot[0], bot_remaining)
                         pnl_cents = int(round((px - lot[1] / 100.0) * take * mult * 100))
-                        target_alloc = bk[1] if bk[1] is not None else alloc_id
-                        if target_alloc is not None:
-                            realized_by_order[oid].append((pnl_cents, target_alloc, "reconstructed"))
-                            reconstructed_count += 1
-                        else:
-                            unattributed_count += 1
+                        realized_by_order[oid].append((pnl_cents, target_alloc, "reconstructed"))
+                        reconstructed_count += 1
                         lot[0] -= take
-                        remaining -= take
+                        bot_remaining -= take
                         if lot[0] <= 0.001:
-                            q.popleft()
-                    if remaining <= 0.001:
-                        break
-        # Note: short opens ('sell_short') and covers ('buy_to_cover') aren't a
-        # separate Alpaca side — Alpaca uses buy/sell only. Short entries via
-        # BMG appear as 'sell' on Alpaca (opening a short) and covers as 'buy'.
-        # For a paper-account long-first-then-flat book this FIFO handles the
-        # dominant case; a follow-up pass can add long-short split for bots
-        # that trade both sides of the same underlying.
+                            # remove from source deque
+                            src_key = (sym, target_alloc)
+                            if lots.get(src_key) and lots[src_key][0] is lot:
+                                lots[src_key].popleft()
+                remaining -= take_total
+                if remaining > 0.001:
+                    unattributed_count += int(remaining)
 
     # UPDATE existing close-side rows, and INSERT new ones for Alpaca
     # fills BMG doesn't have (the 66 quarantined closes on stock_quant_day_momentum
@@ -1554,6 +1576,44 @@ def rebuild_realized_pnl(
             reconcile_updates += 1
         db.commit()
 
+    # Iteration 2 R5d: per-bot exact vs reconstructed $ split, and
+    # provisional flag when reconstructed dominates or |realized| exceeds
+    # 30% of starting_capital.
+    from app.db.models.bots import BotAllocation as _BA
+    per_bot_exact_c: dict = defaultdict(int)
+    per_bot_recon_c: dict = defaultdict(int)
+    for oid, pnls in realized_by_order.items():
+        for pc, aid, src in pnls:
+            if src == "exact":
+                per_bot_exact_c[aid] += pc
+            else:
+                per_bot_recon_c[aid] += pc
+    alloc_starting = {a.id: int(a.starting_capital_cents or 0) for a in db.query(_BA).all()}
+    per_bot_report = []
+    for aid in set(list(per_bot_exact_c.keys()) + list(per_bot_recon_c.keys())):
+        exact_c = per_bot_exact_c.get(aid, 0)
+        recon_c = per_bot_recon_c.get(aid, 0)
+        total_c = exact_c + recon_c
+        starting_c = alloc_starting.get(aid, 0)
+        recon_pct = (abs(recon_c) / abs(total_c) * 100) if total_c else 0.0
+        realized_pct_of_start = (abs(total_c) / starting_c * 100) if starting_c else 0.0
+        flag = None
+        if realized_pct_of_start > 30:
+            flag = "SANITY_BREACH_realized_>30pct_of_starting"
+        elif recon_pct > 50:
+            flag = "MOSTLY_RECONSTRUCTED_pnl_provisional"
+        per_bot_report.append({
+            "allocation_id": aid,
+            "starting_cents": starting_c,
+            "exact_pnl_cents": exact_c,
+            "reconstructed_pnl_cents": recon_c,
+            "total_pnl_cents": total_c,
+            "reconstructed_pct_of_total": round(recon_pct, 1),
+            "realized_pct_of_starting": round(realized_pct_of_start, 1),
+            "provisional_flag": flag,
+        })
+    per_bot_report.sort(key=lambda r: -abs(r["total_pnl_cents"]))
+
     return {
         "dry_run": dry_run,
         "lookback_days": lookback_days,
@@ -1564,6 +1624,150 @@ def rebuild_realized_pnl(
         "bot_trade_rows_updated": updates,
         "bot_trade_rows_inserted": inserts,
         "reconcile_close_rows_updated": reconcile_updates,
+        "per_bot": per_bot_report,
+        "sanity_flagged_bots": [r for r in per_bot_report if r["provisional_flag"]],
+    }
+
+
+@router.get("/alpaca-realized-truth")
+def alpaca_realized_truth(
+    lookback_days: int = Query(45),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """A2 comparator per iteration 2 R3: walk /v2/account/activities
+    (FILL type) and compute Alpaca-truth realized via FIFO per symbol.
+    portfolio/history.profit_loss includes unrealized swings and is not
+    the correct comparator."""
+    import os, urllib.request, urllib.parse, json
+    from datetime import datetime, timezone, timedelta
+    from collections import defaultdict, deque
+
+    kid = os.environ.get("ALPACA_API_KEY", "")
+    ksec = os.environ.get("ALPACA_SECRET_KEY", "")
+    after = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).date().isoformat()
+
+    fills: list[dict] = []
+    page_after = after
+    for _ in range(30):
+        qs = urllib.parse.urlencode({
+            "activity_types": "FILL", "after": page_after,
+            "page_size": 100, "direction": "asc",
+        })
+        req = urllib.request.Request(
+            f"https://paper-api.alpaca.markets/v2/account/activities?{qs}",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        )
+        batch = json.loads(urllib.request.urlopen(req, timeout=30).read()) or []
+        if not batch:
+            break
+        fills.extend(batch)
+        if len(batch) < 100:
+            break
+        # activities API paginates by 'page_token' but we can use the last
+        # transaction_time as the next 'after' if page_token isn't returned.
+        last_ts = batch[-1].get("transaction_time") or batch[-1].get("timestamp")
+        if not last_ts or last_ts == page_after:
+            break
+        page_after = last_ts
+
+    # FIFO per symbol across all fills
+    lots: dict = defaultdict(deque)
+    realized_total = 0
+    realized_by_symbol: dict = defaultdict(int)
+    for f in fills:
+        sym = f.get("symbol")
+        side = (f.get("side") or "").lower()
+        qty = float(f.get("qty") or 0)
+        px = float(f.get("price") or 0)
+        # Alpaca returns type='fill' for opening fills, 'partial_fill' too.
+        # For realized we only care buy vs sell direction; equity assumed.
+        if not sym or qty <= 0 or px <= 0:
+            continue
+        mult = 100 if len(sym) > 10 else 1  # option OCC heuristic
+        if side == "buy":
+            lots[sym].append([qty, px])
+        elif side == "sell":
+            remaining = qty
+            while lots[sym] and remaining > 0.001:
+                lot = lots[sym][0]
+                take = min(lot[0], remaining)
+                pnl = int(round((px - lot[1]) * take * mult * 100))
+                realized_total += pnl
+                realized_by_symbol[sym] += pnl
+                lot[0] -= take
+                remaining -= take
+                if lot[0] <= 0.001:
+                    lots[sym].popleft()
+
+    top = sorted(realized_by_symbol.items(), key=lambda x: -abs(x[1]))[:10]
+    return {
+        "lookback_days": lookback_days,
+        "since": after,
+        "fills_processed": len(fills),
+        "alpaca_realized_total_cents": realized_total,
+        "alpaca_realized_total_usd": round(realized_total / 100, 2),
+        "top_symbols_by_realized": [{"symbol": s, "pnl_cents": pc, "pnl_usd": round(pc/100,2)} for s, pc in top],
+    }
+
+
+@router.get("/spot-check-pnl-pairs")
+def spot_check_pnl_pairs(
+    n_each: int = Query(3),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """A4 spot-check per iteration 2 R4: sample N exact + N reconstructed
+    close-side bot_trades. For each, show qty/entry/exit/pnl vs Alpaca
+    order pair. Reconstructed pairs are where the phantom lives."""
+    import os, urllib.request, json
+    from app.db.models.bots import BotTrade
+
+    kid = os.environ.get("ALPACA_API_KEY", "")
+    ksec = os.environ.get("ALPACA_SECRET_KEY", "")
+
+    def alp_order(oid: str):
+        try:
+            req = urllib.request.Request(
+                f"https://paper-api.alpaca.markets/v2/orders/{oid}",
+                headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+            )
+            return json.loads(urllib.request.urlopen(req, timeout=15).read())
+        except Exception as e:
+            return {"error": str(e)}
+
+    def sample(src: str):
+        rows = (
+            db.query(BotTrade)
+            .filter(BotTrade.pnl_source == src)
+            .filter(BotTrade.pnl_cents.isnot(None))
+            .filter(BotTrade.alpaca_order_id.isnot(None))
+            .order_by(BotTrade.ts.desc())
+            .limit(n_each)
+            .all()
+        )
+        out = []
+        for r in rows:
+            alp = alp_order(r.alpaca_order_id)
+            out.append({
+                "bmg_id": r.id, "allocation_id": r.allocation_id,
+                "symbol": r.symbol, "side": r.side, "qty": float(r.qty or 0),
+                "bmg_fill_price_cents": r.fill_price_cents,
+                "bmg_fill_price_usd": (r.fill_price_cents or 0) / 100,
+                "bmg_pnl_cents": r.pnl_cents,
+                "bmg_pnl_usd": round((r.pnl_cents or 0)/100, 2),
+                "bmg_pnl_source": r.pnl_source,
+                "alpaca_id": r.alpaca_order_id,
+                "alpaca_side": alp.get("side"),
+                "alpaca_filled_qty": alp.get("filled_qty"),
+                "alpaca_filled_avg_price": alp.get("filled_avg_price"),
+                "alpaca_symbol": alp.get("symbol"),
+                "alpaca_status": alp.get("status"),
+            })
+        return out
+
+    return {
+        "exact_samples": sample("exact"),
+        "reconstructed_samples": sample("reconstructed"),
     }
 
 
