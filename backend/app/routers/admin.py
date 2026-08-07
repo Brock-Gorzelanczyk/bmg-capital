@@ -1147,6 +1147,25 @@ def reconcile_qty_mismatches(
     }
 
 
+@router.get("/db-driver")
+def db_driver(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """P0 accountability: what DB is prod actually connected to right now?
+    Returns driver scheme + database name + host (no creds)."""
+    from app.db.session import engine
+    from sqlalchemy import inspect
+    url = engine.url
+    return {
+        "driver": url.get_backend_name(),          # 'sqlite' | 'postgresql' | ...
+        "dialect_driver": url.get_driver_name(),   # 'pysqlite' | 'psycopg2' | ...
+        "database": url.database,                  # file path for sqlite, dbname for pg
+        "host": url.host,                          # None for sqlite
+        "port": url.port,
+        "table_count": len(inspect(engine).get_table_names()),
+    }
+
+
 @router.get("/inspect-allocation")
 def inspect_allocation(
     allocation_id: int = Query(...),
