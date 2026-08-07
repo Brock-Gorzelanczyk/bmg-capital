@@ -1448,6 +1448,78 @@ def risk_gate_config(
     return {k: os.getenv(k, "<unset>") for k in keys}
 
 
+@router.get("/legacy-simulator-damage")
+def legacy_simulator_damage(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """ADD 2 (Brock 2026-08-07): how much of BMG's recorded history
+    was written by bot_executor.py's random-fill simulator.
+
+    Fingerprint (heuristic, high precision — bot_executor is the only
+    module known to combine all three):
+      - alpaca_order_id IS NULL
+      - signal_id IS NULL (bot_executor doesn't reference signals)
+      - fees_cents = 0 (bot_executor sets fees=0; real broker fills
+        get a friction model)
+    """
+    from app.db.models.bots import BotTrade, BotAllocation, BotProfile
+    from sqlalchemy import func
+    from collections import defaultdict
+
+    q = (
+        db.query(BotTrade)
+        .filter(BotTrade.alpaca_order_id.is_(None))
+        .filter(BotTrade.signal_id.is_(None))
+        .filter(BotTrade.fees_cents == 0)
+    )
+    total = q.count()
+    survived = q.filter(BotTrade.quarantined_at.is_(None)).count()
+    quarantined = total - survived
+
+    date_range = db.query(func.min(BotTrade.ts), func.max(BotTrade.ts)).filter(
+        BotTrade.alpaca_order_id.is_(None),
+        BotTrade.signal_id.is_(None),
+        BotTrade.fees_cents == 0,
+    ).first()
+
+    # Per-bot breakdown (survived only — those still contributing to P&L)
+    profs_by_id = {p.id: p.name for p in db.query(BotProfile).all()}
+    alloc_to_prof = {a.id: profs_by_id.get(a.profile_id) for a in db.query(BotAllocation).all()}
+    per_bot: dict = defaultdict(lambda: {"survived": 0, "quarantined": 0, "total": 0, "sum_qty": 0.0, "sum_notional_cents": 0})
+    for r in q.all():
+        prof = alloc_to_prof.get(r.allocation_id, "?")
+        pb = per_bot[prof]
+        pb["total"] += 1
+        pb["sum_qty"] += float(r.qty or 0)
+        pb["sum_notional_cents"] += int((r.fill_price_cents or 0) * (r.qty or 0))
+        if r.quarantined_at:
+            pb["quarantined"] += 1
+        else:
+            pb["survived"] += 1
+
+    top = sorted(per_bot.items(), key=lambda x: -x[1]["survived"])
+    return {
+        "fingerprint": "alpaca_order_id IS NULL AND signal_id IS NULL AND fees_cents = 0",
+        "total_rows_ever": total,
+        "quarantined_by_prior_sweeps": quarantined,
+        "surviving_in_current_ledger": survived,
+        "date_range": {
+            "first": date_range[0].isoformat() if date_range[0] else None,
+            "last": date_range[1].isoformat() if date_range[1] else None,
+        },
+        "top_bots_by_surviving_sim_rows": [
+            {
+                "bot": k,
+                "survived": v["survived"],
+                "quarantined": v["quarantined"],
+                "total": v["total"],
+                "sum_notional_usd": round(v["sum_notional_cents"] / 100, 2),
+            } for k, v in top[:15]
+        ],
+    }
+
+
 @router.get("/sim-leak-diag")
 def sim_leak_diag(
     lookback_hours: int = Query(48),
