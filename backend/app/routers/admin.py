@@ -1728,6 +1728,65 @@ def backfill_alloc_starting_capital(
     }
 
 
+@router.get("/round-trips-per-bot")
+def round_trips_per_bot(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Autonomy readiness: how many Alpaca-verified closed round trips
+    per bot right now. Round trip = matched (buy→sell) or (short→cover)
+    pair, both sides having alpaca_order_id set (real broker fills)."""
+    from app.db.models.bots import BotTrade, BotAllocation, BotProfile
+    from collections import defaultdict, deque
+
+    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()
+    profs = {p.id: p.name for p in db.query(BotProfile).all()}
+    alloc_to_prof = {a.id: profs.get(a.profile_id) for a in allocs}
+    alloc_ids = [a.id for a in allocs]
+
+    trades = (
+        db.query(BotTrade)
+        .filter(BotTrade.allocation_id.in_(alloc_ids))
+        .filter(BotTrade.quarantined_at.is_(None))
+        .filter(BotTrade.alpaca_order_id.isnot(None))
+        .order_by(BotTrade.ts.asc())
+        .all()
+    )
+
+    # FIFO pair per (bot, symbol) — buy→sell = long RT, short→cover = short RT
+    open_positions_by_key: dict = defaultdict(deque)
+    round_trips_by_bot: dict = defaultdict(int)
+    for t in trades:
+        bot = alloc_to_prof.get(t.allocation_id, "?")
+        key = (bot, t.symbol)
+        side = (t.side or "").lower()
+        if side in ("buy", "short"):
+            open_positions_by_key[key].append((side, float(t.qty or 0)))
+        elif side in ("sell", "cover", "close"):
+            q = open_positions_by_key.get(key)
+            need_qty = float(t.qty or 0)
+            while q and need_qty > 0.001:
+                open_side, open_qty = q[0]
+                # matched round trip when opposite-side closes an open
+                take = min(open_qty, need_qty)
+                if (open_side == "buy" and side == "sell") or (open_side == "short" and side in ("cover", "close")):
+                    round_trips_by_bot[bot] += 1
+                if take >= open_qty - 0.001:
+                    q.popleft()
+                else:
+                    q[0] = (open_side, open_qty - take)
+                need_qty -= take
+
+    return {
+        "target_round_trips_per_bot": 50,
+        "round_trips": [
+            {"bot": k, "round_trips": v} for k, v in sorted(round_trips_by_bot.items(), key=lambda x: -x[1])
+        ],
+        "bots_at_or_over_50": sum(1 for v in round_trips_by_bot.values() if v >= 50),
+        "bots_with_zero_round_trips": len([a for a in allocs if a.enabled]) - len(round_trips_by_bot),
+    }
+
+
 @router.get("/audit-users")
 def audit_users(
     db: Session = Depends(get_db),
