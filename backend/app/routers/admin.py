@@ -1190,6 +1190,30 @@ def inspect_bot_positions(
     }
 
 
+@router.get("/inspect-order-id")
+def inspect_order_id(
+    order_id: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Show every BMG bot_trades row with a matching alpaca_order_id, no
+    filters. Used to debug why rebuild pairing isn't finding matches."""
+    from app.db.models.bots import BotTrade
+    rows = db.query(BotTrade).filter(BotTrade.alpaca_order_id == order_id).all()
+    return {
+        "order_id": order_id,
+        "count": len(rows),
+        "rows": [{
+            "id": r.id, "allocation_id": r.allocation_id, "symbol": r.symbol,
+            "side": r.side, "qty": float(r.qty or 0),
+            "fill_price_cents": r.fill_price_cents,
+            "ts": r.ts.isoformat() if r.ts else None,
+            "quarantined_at": r.quarantined_at.isoformat() if r.quarantined_at else None,
+            "pnl_cents": r.pnl_cents, "pnl_source": r.pnl_source,
+        } for r in rows],
+    }
+
+
 @router.get("/order-id-overlap")
 def order_id_overlap(
     lookback_days: int = Query(60),
