@@ -1186,6 +1186,25 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     except Exception as _cnt_exc:
         logger.warning("[leaderboard] 24h signal/trade count query failed: %s", _cnt_exc)
 
+    # 2026-08-07 (Brock D-check fix): closing_trades_count so the public
+    # "trades > 0 AND realized == 0" scan can filter out bots with only
+    # open-side fills (correctly $0 realized). Payload consumers should
+    # use closing_trades_count > 0 AND realized_pnl_cents == 0 as the
+    # honest zero-realized filter.
+    closing_trades_by_alloc: dict[int, int] = {}
+    try:
+        for aid, cnt in db.execute(
+            text(
+                "SELECT allocation_id, COUNT(*) FROM bot_trades "
+                "WHERE quarantined_at IS NULL "
+                "  AND LOWER(side) IN ('sell', 'close', 'cover') "
+                "GROUP BY allocation_id"
+            )
+        ).fetchall():
+            closing_trades_by_alloc[int(aid)] = int(cnt)
+    except Exception as _cnt_exc:
+        logger.warning("[leaderboard] closing_trades count query failed: %s", _cnt_exc)
+
     # 2026-07-07: which allocations currently hold at least one open position.
     # Drives the "live in trade" green dot on the leaderboard so Brock can see
     # at a glance which strategies are actively in the market vs waiting.
@@ -1228,6 +1247,7 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "signals_24h": signals_24h_by_alloc.get(bot.allocation_id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(bot.allocation_id, 0),
                 "total_trades": total_trades_by_alloc.get(bot.allocation_id, 0),
+                "closing_trades_count": closing_trades_by_alloc.get(bot.allocation_id, 0),
                 "open_positions_count": open_positions_by_alloc.get(bot.allocation_id, 0),
                 "has_open_position": open_positions_by_alloc.get(bot.allocation_id, 0) > 0,
             })
@@ -1264,6 +1284,7 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "signals_24h": signals_24h_by_alloc.get(a.id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
                 "total_trades": total_trades_by_alloc.get(a.id, 0),
+                "closing_trades_count": closing_trades_by_alloc.get(a.id, 0),
                 "open_positions_count": open_positions_by_alloc.get(a.id, 0),
                 "has_open_position": open_positions_by_alloc.get(a.id, 0) > 0,
             })
@@ -1286,6 +1307,7 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "signals_24h": signals_24h_by_alloc.get(a.id, 0),
                 "trades_24h":  trades_24h_by_alloc.get(a.id, 0),
                 "total_trades": total_trades_by_alloc.get(a.id, 0),
+                "closing_trades_count": closing_trades_by_alloc.get(a.id, 0),
                 "open_positions_count": open_positions_by_alloc.get(a.id, 0),
                 "has_open_position": open_positions_by_alloc.get(a.id, 0) > 0,
             })
@@ -1397,6 +1419,10 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 "signals_24h": 0,
                 "trades_24h":  0,
                 "total_trades": pr_rebalance_count,
+                # PR bots have no bot_trades; their P&L is basket-hold not
+                # round-trip. Report closing_trades_count = 0 so the public
+                # "closing_trades > 0 AND realized == 0" check skips them.
+                "closing_trades_count": 0,
                 "rebalance_schedule": pr[4],
                 "last_rebalanced_at": str(pr[5]) if pr[5] else None,
                 "paper_citation": pr[6],

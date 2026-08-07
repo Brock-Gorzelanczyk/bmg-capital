@@ -1572,6 +1572,102 @@ def sim_leak_diag(
     }
 
 
+@router.get("/user1-capital-vs-funded")
+def user1_capital_vs_funded(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Structural report for acceptance B: sum(user_1 starting_capital)
+    vs the actual Alpaca-funded base. If sum > funded, fund PV inflates
+    by exactly that excess (fund PV = sum(starting + realized + unrealized))."""
+    import os, urllib.request, json
+    from app.db.models.bots import BotAllocation
+
+    kid = os.environ.get("ALPACA_API_KEY", "")
+    ksec = os.environ.get("ALPACA_SECRET_KEY", "")
+    acct = json.loads(urllib.request.urlopen(urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/account",
+        headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+    ), timeout=15).read())
+    funded = float(acct.get("portfolio_value") or 0)
+
+    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()
+    enabled = [a for a in allocs if a.enabled]
+    all_sum_cents = sum(int(a.starting_capital_cents or 0) for a in allocs)
+    en_sum_cents = sum(int(a.starting_capital_cents or 0) for a in enabled)
+    return {
+        "alpaca_funded_base_usd": round(funded, 2),
+        "user1_alloc_count_all": len(allocs),
+        "user1_alloc_count_enabled": len(enabled),
+        "sum_starting_capital_all_usd": round(all_sum_cents / 100, 2),
+        "sum_starting_capital_enabled_usd": round(en_sum_cents / 100, 2),
+        "excess_enabled_usd": round(en_sum_cents / 100 - funded, 2),
+        "target_scale_factor": round(funded / (en_sum_cents / 100), 4) if en_sum_cents > 0 else None,
+    }
+
+
+@router.post("/rescale-user1-allocations")
+def rescale_user1_allocations(
+    dry_run: bool = Query(True),
+    target_base_usd: Optional[float] = Query(None, description="Override funded base; default = Alpaca equity"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Structural B-fix per PM 2026-08-07: rescale enabled user_1
+    allocations proportionally so sum(starting_capital) == funded base.
+    Same operation as m077 rescale (July $1M→$100K)."""
+    import os, urllib.request, json
+    from app.db.models.bots import BotAllocation
+
+    kid = os.environ.get("ALPACA_API_KEY", "")
+    ksec = os.environ.get("ALPACA_SECRET_KEY", "")
+    if target_base_usd is None:
+        acct = json.loads(urllib.request.urlopen(urllib.request.Request(
+            "https://paper-api.alpaca.markets/v2/account",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        ), timeout=15).read())
+        target_base_usd = float(acct.get("portfolio_value") or 0)
+
+    target_base_cents = int(round(target_base_usd * 100))
+    enabled = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == 1)
+        .filter(BotAllocation.enabled == True)
+        .all()
+    )
+    current_sum = sum(int(a.starting_capital_cents or 0) for a in enabled)
+    if current_sum <= 0:
+        return {"error": "current_sum_zero"}
+    scale = target_base_cents / current_sum
+    actions = []
+    new_sum = 0
+    for a in enabled:
+        old = int(a.starting_capital_cents or 0)
+        new = int(round(old * scale))
+        new_sum += new
+        actions.append({
+            "allocation_id": a.id, "profile_id": a.profile_id,
+            "old_starting_cents": old, "new_starting_cents": new,
+            "old_usd": round(old/100, 2), "new_usd": round(new/100, 2),
+        })
+        if not dry_run:
+            a.starting_capital_cents = new
+    if not dry_run:
+        db.commit()
+    return {
+        "dry_run": dry_run,
+        "target_base_cents": target_base_cents,
+        "target_base_usd": target_base_usd,
+        "current_sum_cents": current_sum,
+        "current_sum_usd": round(current_sum/100, 2),
+        "scale_factor": round(scale, 6),
+        "new_sum_cents": new_sum,
+        "new_sum_usd": round(new_sum/100, 2),
+        "rescaled_alloc_count": len(actions),
+        "sample_actions": actions[:10],
+    }
+
+
 @router.post("/backfill-alloc-starting-capital")
 def backfill_alloc_starting_capital(
     allocation_id: int = Query(...),

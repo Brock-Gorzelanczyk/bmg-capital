@@ -586,6 +586,46 @@ def _check_i10_signal_funnel(db) -> Result:
         return _amber("I10", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i15_starting_capital_vs_funded(db) -> Result:
+    """PM Claude 2026-08-07 acceptance B structural fix: fund PV inflates
+    by exactly the excess of sum(starting_capital) over the actual
+    Alpaca-funded base. Guard: |sum(starting) - funded| < $100."""
+    try:
+        import os as _os, urllib.request as _ur, json as _json
+        from app.db.models.bots import BotAllocation
+        kid = _os.environ.get("ALPACA_API_KEY", "")
+        ksec = _os.environ.get("ALPACA_SECRET_KEY", "")
+        if not kid or not ksec:
+            return _amber("I15", None, None, None, "no Alpaca creds")
+        try:
+            acct = _json.loads(_ur.urlopen(_ur.Request(
+                "https://paper-api.alpaca.markets/v2/account",
+                headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+            ), timeout=8).read())
+        except Exception as exc:
+            return _amber("I15", None, None, None, f"alpaca_fetch:{exc}")
+        funded_cents = int(round(float(acct.get("portfolio_value") or 0) * 100))
+        sum_cents = sum(
+            int(a.starting_capital_cents or 0)
+            for a in db.query(BotAllocation)
+                       .filter(BotAllocation.user_id == 1)
+                       .filter(BotAllocation.enabled == True)
+                       .all()
+        )
+        drift = abs(sum_cents - funded_cents)
+        actual = {
+            "sum_starting_capital_usd": round(sum_cents / 100, 2),
+            "funded_base_usd": round(funded_cents / 100, 2),
+            "drift_usd": round(drift / 100, 2),
+        }
+        if drift < 10000:  # <$100 in cents
+            return _ok("I15", actual, None, f"within $100 (drift ${drift/100:.2f})")
+        return _red("I15", actual, {"drift_max_usd": 100.0}, float(drift / 100),
+                    f"sum(starting_capital) ${sum_cents/100:,.2f} vs funded ${funded_cents/100:,.2f} — drift ${drift/100:,.2f}")
+    except Exception as exc:
+        return _amber("I15", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i14_breach_remediation(db) -> Result:
     """PM Claude 2026-08-07 P0-1: every breach_on_adopt=True row must
     carry a remediation_ticket_id. Unrmediated breach = violation."""
@@ -625,6 +665,7 @@ CHECKS: dict[str, Callable] = {
     "I9": _check_i9_position_ownership,
     "I10": _check_i10_signal_funnel,
     "I14": _check_i14_breach_remediation,
+    "I15": _check_i15_starting_capital_vs_funded,
 }
 
 

@@ -506,6 +506,10 @@ def get_dashboard_v2(
             # the Strategy Lab leaderboard's yellow TRADES column shows real
             # numbers instead of 0. StrategyLabV2 reads this via /api/dashboard/v2.
             "total_trades": int(e.get("total_trades") or 0),
+            # 2026-08-07: propagate closing_trades_count so the public
+            # zero-realized check can filter out legitimately open-only bots.
+            "closing_trades_count": int(e.get("closing_trades_count") or 0),
+            "realized_pnl_cents": int(e.get("realized_pnl_cents") or 0),
         })
     # Append orphan-allocation bots not represented in canonical's leaderboard.
     # 2026-07-06: previously we skipped allocs whose bot_snap was None (silent
