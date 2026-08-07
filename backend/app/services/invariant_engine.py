@@ -594,6 +594,49 @@ def _check_i10_signal_funnel(db) -> Result:
         return _amber("I10", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i17_cash_positive(db) -> Result:
+    """PM Claude 2026-08-07: cash < 0 == RED. Discovered post-Option-2
+    landing when the options sleeve blew -$15,849 in one day, driving
+    cash to -$2,643 and options_BP + crypto_BP both to $0 (Alpaca
+    margin engine). This must not recur silently — the first thing
+    that goes wrong when a sleeve over-deploys is the cash line."""
+    try:
+        import os as _os, urllib.request as _ur, json as _json
+        kid = _os.environ.get("ALPACA_API_KEY", "")
+        ksec = _os.environ.get("ALPACA_SECRET_KEY", "")
+        if not kid or not ksec:
+            return _amber("I17", None, None, None, "no Alpaca creds")
+        try:
+            acct = _json.loads(_ur.urlopen(_ur.Request(
+                "https://paper-api.alpaca.markets/v2/account",
+                headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+            ), timeout=8).read())
+        except Exception as exc:
+            return _amber("I17", None, None, None, f"alpaca_fetch:{exc}")
+        cash = float(acct.get("cash") or 0)
+        bp = float(acct.get("buying_power") or 0)
+        opts_bp = float(acct.get("options_buying_power") or 0)
+        crypto_bp = float(acct.get("crypto_buying_power") or 0)
+        actual = {
+            "cash_usd": round(cash, 2),
+            "buying_power_usd": round(bp, 2),
+            "options_buying_power_usd": round(opts_bp, 2),
+            "crypto_buying_power_usd": round(crypto_bp, 2),
+        }
+        if cash < 0:
+            return _red("I17", actual, {"cash_min_usd": 0.0}, float(-cash),
+                        f"cash ${cash:,.2f} — fund is deployed beyond its cash "
+                        f"(options_BP=${opts_bp:,.2f}, crypto_BP=${crypto_bp:,.2f})")
+        # Amber warning if cash > 0 but BP is starved on either side
+        if opts_bp <= 0 and crypto_bp <= 0:
+            return _amber("I17", actual, None, None,
+                          f"cash ${cash:,.2f} positive but BP starved on both sides "
+                          f"(opts=${opts_bp:.2f}, crypto=${crypto_bp:.2f})")
+        return _ok("I17", actual, None, f"cash ${cash:,.2f} positive")
+    except Exception as exc:
+        return _amber("I17", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i16_unattributed_tracker(db) -> Result:
     """PM Claude 2026-08-07 Option 2: fund total_value reads from Alpaca
     (broker is master for valuation). Bot-level sums are attribution.
@@ -700,6 +743,7 @@ CHECKS: dict[str, Callable] = {
     "I14": _check_i14_breach_remediation,
     "I15": _check_i15_starting_capital_vs_funded,
     "I16": _check_i16_unattributed_tracker,
+    "I17": _check_i17_cash_positive,
 }
 
 
