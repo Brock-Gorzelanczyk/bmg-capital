@@ -1147,6 +1147,47 @@ def reconcile_qty_mismatches(
     }
 
 
+@router.get("/inspect-allocation")
+def inspect_allocation(
+    allocation_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Deep dive on a single allocation: trades, pnl breakdown, positions."""
+    from app.db.models.bots import BotTrade, BotPosition, BotAllocation, BotProfile
+    a = db.query(BotAllocation).filter(BotAllocation.id == allocation_id).first()
+    if not a:
+        return {"error": "not found"}
+    prof = db.query(BotProfile).filter(BotProfile.id == a.profile_id).first()
+    trades = db.query(BotTrade).filter(BotTrade.allocation_id == allocation_id).filter(BotTrade.quarantined_at.is_(None)).all()
+    positions = db.query(BotPosition).filter(BotPosition.allocation_id == allocation_id).all()
+    from collections import Counter
+    sides = Counter(t.side.lower() for t in trades)
+    pnl_sum = sum(int(t.pnl_cents or 0) for t in trades)
+    pnl_by_source: dict = {}
+    for t in trades:
+        if t.pnl_cents is None: continue
+        pnl_by_source.setdefault(t.pnl_source or "none", 0)
+        pnl_by_source[t.pnl_source or "none"] += int(t.pnl_cents)
+    open_pos_open_cost = sum(int(p.avg_cost_cents or 0) * float(p.qty or 0) for p in positions if not p.closed_at and not p.quarantined_at)
+    return {
+        "allocation_id": allocation_id,
+        "user_id": a.user_id,
+        "profile_name": prof.name if prof else None,
+        "enabled": a.enabled,
+        "starting_capital_cents": a.starting_capital_cents,
+        "trades_active_count": len(trades),
+        "sides": dict(sides),
+        "sum_pnl_cents_active_trades": pnl_sum,
+        "sum_pnl_dollars": round(pnl_sum/100, 2),
+        "pnl_by_source_cents": pnl_by_source,
+        "positions_open_active": sum(1 for p in positions if not p.closed_at and not p.quarantined_at),
+        "positions_closed_only": sum(1 for p in positions if p.closed_at and not p.quarantined_at),
+        "positions_quarantined": sum(1 for p in positions if p.quarantined_at),
+        "open_position_entry_notional_cents": int(open_pos_open_cost),
+    }
+
+
 @router.get("/inspect-bot-positions")
 def inspect_bot_positions(
     profile: str = Query(...),
