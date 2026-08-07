@@ -1308,6 +1308,87 @@ def inspect_bot_positions(
     }
 
 
+@router.post("/reconcile-user1-to-alpaca")
+def reconcile_user1_to_alpaca(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Iter 3 close-out per Brock: SYNC user 1 to Alpaca. Alpaca wins.
+    Two ops: (a) quarantine only_in_user1 phantoms, (b) proportionally
+    scale user 1's rows down where sum(qty) > Alpaca's qty. Scoped to
+    user 1 only — leaves other users' simulated allocs untouched."""
+    import os, urllib.request, json
+    from datetime import datetime, timezone
+    from collections import defaultdict
+    from app.db.models.bots import BotPosition, BotAllocation
+
+    now = datetime.now(timezone.utc)
+    kid = os.environ.get("ALPACA_API_KEY", "")
+    ksec = os.environ.get("ALPACA_SECRET_KEY", "")
+    alp_list = json.loads(urllib.request.urlopen(urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/positions",
+        headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+    ), timeout=15).read())
+    alp_qty_by_key: dict = {}
+    for p in alp_list:
+        q = float(p.get("qty"))
+        side = "short" if q < 0 else "long"
+        alp_qty_by_key[(p.get("symbol"), side)] = abs(q)
+
+    user1_alloc_ids = [a.id for a in db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()]
+    bmg_rows = (
+        db.query(BotPosition)
+        .filter(BotPosition.allocation_id.in_(user1_alloc_ids))
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    bmg_by_key: dict = defaultdict(list)
+    for p in bmg_rows:
+        key = (p.symbol or "", (p.side or "long").lower())
+        bmg_by_key[key].append(p)
+
+    quarantined = []
+    scaled = []
+
+    # (a) Quarantine phantoms — keys BMG has that Alpaca doesn't
+    for key, group in bmg_by_key.items():
+        if key in alp_qty_by_key: continue
+        for p in group:
+            quarantined.append({"id": p.id, "symbol": p.symbol, "side": p.side, "qty": float(p.qty or 0)})
+            if not dry_run:
+                p.quarantined_at = now
+                p.quarantine_reason = "phantom_not_at_alpaca_2026_08_07"
+
+    # (b) Scale qty mismatches down proportionally
+    for key, alp_qty in alp_qty_by_key.items():
+        group = bmg_by_key.get(key, [])
+        bmg_total = sum(float(p.qty or 0) for p in group)
+        if bmg_total <= alp_qty + 0.001: continue
+        if bmg_total <= 0.001: continue
+        ratio = alp_qty / bmg_total
+        for p in group:
+            old = float(p.qty or 0)
+            new = old * ratio
+            scaled.append({"id": p.id, "symbol": p.symbol, "side": p.side,
+                          "old_qty": round(old, 6), "new_qty": round(new, 6),
+                          "allocation_id": p.allocation_id})
+            if not dry_run:
+                p.qty = new
+
+    if not dry_run and (quarantined or scaled):
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "phantoms_quarantined": len(quarantined),
+        "qty_rows_scaled": len(scaled),
+        "phantoms_preview": quarantined[:10],
+        "scaled_preview": scaled[:10],
+    }
+
+
 @router.get("/user1-vs-alpaca")
 def user1_vs_alpaca(
     db: Session = Depends(get_db),
