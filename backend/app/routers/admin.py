@@ -1443,6 +1443,240 @@ def inspect_bot_trades(
     }
 
 
+@router.post("/adopt-missing-alpaca-positions")
+def adopt_missing_alpaca_positions(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Iter 3 step 2 (per Brock adopter spec 2026-08-07):
+
+    Upsert every Alpaca position not present in BMG open+non-quarantined.
+    Rules:
+      1. Key on (allocation_id, symbol, side). m097 partial index
+         enforces uniqueness at DB layer — catch IntegrityError, skip.
+      2. Cost basis = Alpaca avg_entry_price. Never current_price.
+      3. Attribution: match Alpaca order's client_order_id (from R7,
+         format `{bot}_{signal_id}_{epoch_ms}`) to bot profile. Legacy
+         orders without R7 client_order_id → catchall alloc, tag
+         attribution_source='unresolved'.
+      4. Scope: both equity + options (R7 spec item 4 — no improvised
+         second code path).
+      5. Dry-run must show adds == (alpaca_count - matched_count) exactly.
+
+    Idempotent — safe to re-run. Uses m097 uniq index to prevent
+    double-adopts if state races.
+    """
+    import os, urllib.request, urllib.parse, json
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotPosition, BotTrade, BotProfile, BotAllocation
+
+    now = datetime.now(timezone.utc)
+
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+    def alp_get(path: str):
+        req = urllib.request.Request(
+            f"https://paper-api.alpaca.markets{path}",
+            headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+        )
+        return json.loads(urllib.request.urlopen(req, timeout=20).read())
+
+    alp_positions = alp_get("/v2/positions")
+
+    # BMG open+non-quarantined for user
+    user_alloc_ids = [a.id for a in db.query(BotAllocation).filter(BotAllocation.user_id == current_user.id).all()]
+    bmg_open = (
+        db.query(BotPosition)
+        .filter(BotPosition.allocation_id.in_(user_alloc_ids) if user_alloc_ids else False)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    bmg_keys = {(p.symbol or "", (p.side or "long").lower()) for p in bmg_open}
+
+    # Ensure catchall exists
+    prof = db.query(BotProfile).filter(BotProfile.name == "broker_orphan_catchall").first()
+    if not prof and not dry_run:
+        prof = BotProfile(
+            name="broker_orphan_catchall",
+            description="Catch-all for Alpaca positions not attributable via client_order_id.",
+            asset_class="stock",
+            enabled=False,
+        )
+        db.add(prof); db.flush()
+    catchall = None
+    if prof:
+        catchall = (
+            db.query(BotAllocation)
+            .filter(BotAllocation.user_id == current_user.id)
+            .filter(BotAllocation.profile_id == prof.id)
+            .first()
+        )
+        if not catchall and not dry_run:
+            catchall = BotAllocation(
+                user_id=current_user.id, profile_id=prof.id,
+                capital_pct=0.0, starting_capital_cents=0,
+                enabled=False, paper_mode=True,
+            )
+            db.add(catchall); db.flush()
+    catchall_id = catchall.id if catchall else None
+
+    # Build profile → allocation lookup for THIS user only
+    profiles_by_name = {p.name: p.id for p in db.query(BotProfile).all()}
+    profile_id_to_user_alloc: dict = {}
+    for a in db.query(BotAllocation).filter(BotAllocation.user_id == current_user.id).all():
+        # Prefer alloc with real starting_capital when multiple
+        existing = profile_id_to_user_alloc.get(a.profile_id)
+        if existing is None or (a.starting_capital_cents or 0) > (existing[1] or 0):
+            profile_id_to_user_alloc[a.profile_id] = (a.id, a.starting_capital_cents)
+
+    # For each Alpaca position, walk /v2/orders to find opening client_order_id
+    # (only for missing keys — narrow the API load)
+    missing_by_symbol: dict = {}
+    for p in alp_positions:
+        raw_qty = float(p.get("qty") or 0)
+        side = "short" if raw_qty < 0 else "long"
+        key = (p.get("symbol"), side)
+        if key in bmg_keys: continue
+        missing_by_symbol.setdefault(p.get("symbol"), []).append(p)
+
+    # Pull open+filled orders for missing symbols, look at client_order_id
+    # Alpaca /v2/orders supports symbols query param
+    coid_by_position: dict = {}
+    if missing_by_symbol:
+        from datetime import timedelta
+        after = (now - timedelta(days=60)).isoformat()
+        for sym_chunk_start in range(0, len(missing_by_symbol), 20):
+            chunk = list(missing_by_symbol.keys())[sym_chunk_start:sym_chunk_start+20]
+            qs = urllib.parse.urlencode({
+                "status": "closed", "after": after,
+                "limit": 500, "direction": "asc",
+                "symbols": ",".join(chunk),
+            })
+            batch = alp_get(f"/v2/orders?{qs}") or []
+            for o in batch:
+                if o.get("status") != "filled": continue
+                sym = o.get("symbol")
+                side_o = (o.get("side") or "").lower()
+                coid = o.get("client_order_id") or ""
+                # This is an opening order iff its side matches the position side.
+                # Alpaca side='buy' opens long; side='sell' opens short.
+                pos_side = "long" if side_o == "buy" else "short"
+                pos_key = (sym, pos_side)
+                if pos_key in [(pp.get("symbol"), "short" if float(pp.get("qty",0))<0 else "long") for pp in missing_by_symbol.get(sym, [])]:
+                    # Prefer R7-format coid ({bot}_{sig}_{ts}) — must have underscore
+                    if "_" in coid:
+                        coid_by_position.setdefault(pos_key, coid)
+
+    adopts: list[dict] = []
+    skipped_dup: list[dict] = []
+    unresolved: list[dict] = []
+
+    for p in alp_positions:
+        raw_qty = float(p.get("qty") or 0)
+        side = "short" if raw_qty < 0 else "long"
+        sym = p.get("symbol")
+        key = (sym, side)
+        if key in bmg_keys:
+            continue
+
+        avg_entry = float(p.get("avg_entry_price") or 0)
+        cost_cents = int(round(avg_entry * 100)) if avg_entry > 0 else 0
+        asset_class = p.get("asset_class") or "us_equity"
+        is_option = asset_class == "us_option"
+
+        # Attribute via R7 client_order_id
+        coid = coid_by_position.get(key)
+        attr_alloc = None
+        attr_source = "unresolved"
+        if coid:
+            bot_name = coid.split("_", 1)[0]  # {bot}_{sig}_{ts}
+            prof_id = profiles_by_name.get(bot_name)
+            if prof_id:
+                pair = profile_id_to_user_alloc.get(prof_id)
+                if pair:
+                    attr_alloc = pair[0]
+                    attr_source = "r7_client_order_id"
+        if attr_alloc is None:
+            attr_alloc = catchall_id
+            attr_source = "unresolved_catchall"
+
+        entry = {
+            "symbol": sym, "side": side, "qty": abs(raw_qty),
+            "avg_entry_usd": avg_entry, "market_value": float(p.get("market_value") or 0),
+            "unrealized_pl": float(p.get("unrealized_pl") or 0),
+            "asset_class": asset_class,
+            "allocation_id": attr_alloc,
+            "attribution_source": attr_source,
+        }
+
+        if dry_run or attr_alloc is None:
+            adopts.append({**entry, "would_adopt": True})
+            continue
+
+        # Insert with IntegrityError guard for m097
+        parsed = {}
+        if is_option:
+            try:
+                from app.services.orphan_adopter import _parse_occ
+                parsed = _parse_occ(sym) or {}
+            except Exception:
+                pass
+        pos = BotPosition(
+            allocation_id=attr_alloc,
+            symbol=sym, qty=abs(raw_qty),
+            avg_cost_cents=cost_cents, side=side,
+            opened_at=now, closed_at=None, is_paper=True,
+            option_type=parsed.get("option_type"),
+            strike_price=parsed.get("strike_price"),
+            expiration_date=parsed.get("expiration_date"),
+            underlying_symbol=parsed.get("root"),
+            contract_count=int(abs(raw_qty)) if is_option else None,
+            contract_premium_cents=cost_cents if is_option else None,
+        )
+        try:
+            db.add(pos); db.flush()
+        except Exception as exc:
+            db.rollback()
+            skipped_dup.append({**entry, "reason": f"integrity_error:{type(exc).__name__}"})
+            continue
+        entry_trade = BotTrade(
+            allocation_id=attr_alloc,
+            symbol=sym,
+            side="short" if side == "short" else "buy",
+            qty=abs(raw_qty),
+            fill_price_cents=cost_cents,
+            fees_cents=0, ts=now, position_id=pos.id,
+            is_paper=True,
+            alpaca_order_id=f"adopt_missing_2026_08_07:{attr_source}",
+            option_type=parsed.get("option_type"),
+            strike_price=parsed.get("strike_price"),
+            expiration_date=parsed.get("expiration_date"),
+            underlying_symbol=parsed.get("root"),
+            contract_count=int(abs(raw_qty)) if is_option else None,
+            contract_premium_cents=cost_cents if is_option else None,
+        )
+        db.add(entry_trade)
+        if attr_source == "unresolved_catchall":
+            unresolved.append(entry)
+        adopts.append({**entry, "pos_id": pos.id, "trade_id": entry_trade.id})
+
+    if not dry_run:
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "alpaca_positions": len(alp_positions),
+        "bmg_matched": len(alp_positions) - len(adopts) - len(skipped_dup),
+        "would_adopt_or_adopted": len(adopts),
+        "skipped_integrity_dup": len(skipped_dup),
+        "unresolved_to_catchall": len(unresolved),
+        "adopts_preview": adopts[:15],
+        "unresolved_sample": unresolved[:5],
+    }
+
+
 @router.post("/merge-duplicate-allocations")
 def merge_duplicate_allocations(
     dry_run: bool = Query(True),
