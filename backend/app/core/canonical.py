@@ -394,23 +394,54 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     symbols_needed = list({p.symbol for p in equity_positions})
     live_prices = _cached_live_prices(symbols_needed)
 
-    # Fetch live option marks (60s cached) for open option positions.
+    # Fetch live option marks. 2026-08-06 (PM Claude spec Step 3): prefer
+    # Alpaca's current_price directly for open option positions — it's the
+    # broker's authoritative mark and matches Alpaca's UPL number by
+    # construction. Falls back to FMP midpoint via option_marks only for
+    # positions Alpaca doesn't report (rare after rebuild).
     option_marks_cents: dict[int, Optional[int]] = {}
     if option_positions:
+        alpaca_price_by_occ: dict[str, float] = {}
+        try:
+            import os as _os, urllib.request as _ur, json as _jj
+            _kid = _os.environ.get("ALPACA_API_KEY", "")
+            _kse = _os.environ.get("ALPACA_SECRET_KEY", "")
+            if _kid and _kse:
+                _req = _ur.Request(
+                    "https://paper-api.alpaca.markets/v2/positions",
+                    headers={"APCA-API-KEY-ID": _kid, "APCA-API-SECRET-KEY": _kse},
+                )
+                _alp = _jj.loads(_ur.urlopen(_req, timeout=8).read())
+                for _p in _alp:
+                    _sym = _p.get("symbol")
+                    _px = float(_p.get("current_price") or 0)
+                    if _sym and _px > 0:
+                        alpaca_price_by_occ[_sym] = _px
+        except Exception as exc:
+            logger.warning("[canonical] Alpaca option-price fetch failed: %s", exc)
+
         try:
             from app.services.option_marks import occ_for_position, fetch_option_marks_cents
             occ_by_pos: dict[int, str] = {}
+            need_fallback: list[str] = []
             for p in option_positions:
                 occ = occ_for_position(p)
-                if occ:
-                    occ_by_pos[p.id] = occ
-                else:
+                if not occ:
                     logger.info(
                         "options:mtm:composite symbol=%s type=%s pos_id=%d (no single-leg OCC)",
                         p.symbol, p.option_type, p.id,
                     )
-            mark_by_occ = fetch_option_marks_cents(list(set(occ_by_pos.values())))
-            option_marks_cents = {pid: mark_by_occ.get(occ) for pid, occ in occ_by_pos.items()}
+                    continue
+                occ_by_pos[p.id] = occ
+                if occ in alpaca_price_by_occ:
+                    option_marks_cents[p.id] = int(round(alpaca_price_by_occ[occ] * 100))
+                else:
+                    need_fallback.append(occ)
+            if need_fallback:
+                mark_by_occ = fetch_option_marks_cents(list(set(need_fallback)))
+                for pid, occ in occ_by_pos.items():
+                    if pid not in option_marks_cents and occ in mark_by_occ:
+                        option_marks_cents[pid] = mark_by_occ.get(occ)
         except Exception as exc:
             logger.warning("[canonical] option mark fetch failed (non-fatal): %s", exc)
 
