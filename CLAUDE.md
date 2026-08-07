@@ -78,3 +78,22 @@ The helper reads JWT_SECRET from env or the Railway CLI *inside the script*, pip
 ### S2. "Shipped" claims require post-state verification in the same message.
 Every "shipped" / "retired" / "disabled" / "closed" claim must include the verifying query output in the same reply. Not the intent, not the endpoint call — the returned state after the change. "Alloc 67 tombstoned" is not evidence; `SELECT enabled FROM bot_allocations WHERE id=67 → 0` is.
 Reason: 2026-08-07 pre-market report showed `crypto_quant_scalp_1m` still enabled despite a previous session's "retired" claim. Structural fix: state must be observed, not asserted.
+
+## OPTIONS RISK MEASUREMENT (added 2026-08-07 — third instance of the class)
+
+### O1. Any risk metric on options must net hedged legs before measuring.
+Naked-leg measurement is a bug, not conservatism. A short leg with a long leg above/below it on the same underlying + expiry is a defined-risk spread; measuring the short leg's `|market_value|` in isolation over-reports the position's true max loss by 10-100×.
+
+**Confirmed instances:**
+1. Ledger #19 (2026-08-06) — `deployed_cents` summed gross leg abs, double-counting bull spreads.
+2. m082 span-aware margin (2026-08-07 audit patch) — sleeve deployed used per-leg notional.
+3. Ledger #29 (2026-08-07) — I7 per-position concentration used per-leg `|market_value|`, false-red'd BABA at 28.4% NAV on a defined-risk 111/112 vertical whose true max loss was 1.6% NAV.
+
+**Rule:** before you compute *any* risk aggregate (exposure, deployed, margin, concentration, max loss, VaR, sleeve total), group option legs by `(underlying_root, expiration, right)` and:
+- Long/short pair on same key → net debit for spread, or width × contracts × 100 (capped for verticals).
+- Unpaired long → premium paid = `avg_entry × abs(qty) × 100`.
+- Unpaired short → cash-secured margin = `strike × abs(qty) × 100`.
+
+Then attribute to the underlying. The `_check_i7_exposure_caps` function in `services/invariant_engine.py:336` is the reference implementation — copy its structure for any new risk metric.
+
+**Failure mode to watch:** the naked measurement produces conservative-looking numbers (higher risk shown than exists). It looks defensible and gets shipped. It then triggers wasteful de-risking trades that reduce a hedged position's already-low max loss at the cost of real slippage. If you're about to recommend trimming an options position, first verify the metric is spread-aware.
