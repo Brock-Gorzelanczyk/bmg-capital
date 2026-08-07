@@ -1332,6 +1332,15 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] pr_daily_mark scheduler FAILED (non-fatal): %s",
                      _pr_mark_exc, exc_info=True)
 
+    # 2026-08-07: 4:15pm ET daily report. Replaces Brock's manual auditing
+    # during the 10-14 day autonomy-readiness window per PM Claude spec.
+    try:
+        from app.jobs.daily_report import setup_daily_report_scheduler
+        setup_daily_report_scheduler(scheduler)
+    except Exception as _dr_exc:
+        logger.error("[startup] daily_report scheduler FAILED (non-fatal): %s",
+                     _dr_exc, exc_info=True)
+
     # PAUSED 2026-07-16 (cost): threshold experiment daemon
     # try:
     #     from app.services.threshold_experiment import setup_threshold_experiment_scheduler

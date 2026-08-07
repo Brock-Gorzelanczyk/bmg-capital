@@ -1728,6 +1728,27 @@ def backfill_alloc_starting_capital(
     }
 
 
+@router.get("/daily-report")
+def daily_report(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """On-demand daily report — same content as the 4:15pm ET cron."""
+    from app.jobs.daily_report import build_daily_report
+    return {"report": build_daily_report(db)}
+
+
+@router.post("/daily-report/run")
+def daily_report_run_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Fire the report + persist to vault (same as the 4:15pm ET cron)."""
+    from app.jobs.daily_report import run_daily_report_job
+    report = run_daily_report_job(db)
+    return {"ok": True, "report": report}
+
+
 @router.get("/round-trips-per-bot")
 def round_trips_per_bot(
     db: Session = Depends(get_db),
