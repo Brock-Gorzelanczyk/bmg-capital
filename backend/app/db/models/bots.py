@@ -100,6 +100,14 @@ class BotPosition(Base):
     underlying_symbol: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     contract_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     contract_premium_cents: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # per-contract premium × 100
+    # m098 (2026-08-07) — chokepoint accountability for the four position-
+    # write paths (runner, orphan_adopter, catchall_adopter, rebuild). If
+    # any path admits a position that breaches the pre-write risk gates,
+    # the row is accepted but flagged for remediation. I14 asserts every
+    # breach has an open ticket.
+    breach_on_adopt: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
+    breach_reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    remediation_ticket_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class BotTrade(Base):

@@ -1107,6 +1107,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m097_bot_positions_active_uniq FAILED: %s",
                      _m097_exc, exc_info=True)
 
+    # m098: breach_on_adopt + remediation_ticket_id on bot_positions.
+    # Chokepoint accountability for the four position-write paths
+    # (runner, orphan_adopter, catchall_adopter, rebuild).
+    try:
+        from app.db.migrations.m098_breach_on_adopt import run as _run_m098
+        with engine.begin() as _m098_conn:
+            _m098_result = _run_m098(_m098_conn)
+        logger.warning("[startup] m098 status: %s", _m098_result)
+    except Exception as _m098_exc:
+        logger.error("[startup] m098_breach_on_adopt FAILED: %s",
+                     _m098_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

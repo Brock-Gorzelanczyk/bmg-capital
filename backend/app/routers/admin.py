@@ -965,6 +965,14 @@ def rebuild_positions_from_alpaca(
             is_option = a["asset_class"] == "us_option"
             parsed = _parse_occ(sym) if is_option else {}
             cost_cents = int(round(a["avg_entry"] * 100)) if a["avg_entry"] > 0 else 0
+            from app.services.position_write_gate import check_position_pre_write
+            _rebuild_gate = check_position_pre_write(
+                symbol=sym, qty=a["qty"], side=a["side"],
+                avg_cost_cents=cost_cents, is_option=is_option,
+                strike_price=parsed.get("strike_price"),
+                expiration_date=parsed.get("expiration_date"),
+                entry_path="rebuild",
+            )
             pos = BotPosition(
                 allocation_id=a["allocation_id"],
                 symbol=sym,
@@ -973,6 +981,9 @@ def rebuild_positions_from_alpaca(
                 side=a["side"],
                 opened_at=now,
                 closed_at=None,
+                breach_on_adopt=_rebuild_gate.breach,
+                breach_reason=_rebuild_gate.reason if _rebuild_gate.breach else None,
+                remediation_ticket_id=_rebuild_gate.ticket_id if _rebuild_gate.breach else None,
                 is_paper=True,
                 option_type=parsed.get("option_type"),
                 strike_price=parsed.get("strike_price"),
@@ -1952,6 +1963,15 @@ def adopt_missing_alpaca_positions(
                 parsed = _parse_occ(sym) or {}
             except Exception:
                 pass
+        # m098 chokepoint: check risk gates, accept + flag if breach
+        from app.services.position_write_gate import check_position_pre_write
+        gate = check_position_pre_write(
+            symbol=sym, qty=abs(raw_qty), side=side,
+            avg_cost_cents=cost_cents, is_option=is_option,
+            strike_price=parsed.get("strike_price"),
+            expiration_date=parsed.get("expiration_date"),
+            entry_path="catchall_adopter",
+        )
         pos = BotPosition(
             allocation_id=attr_alloc,
             symbol=sym, qty=abs(raw_qty),
@@ -1963,6 +1983,9 @@ def adopt_missing_alpaca_positions(
             underlying_symbol=parsed.get("root"),
             contract_count=int(abs(raw_qty)) if is_option else None,
             contract_premium_cents=cost_cents if is_option else None,
+            breach_on_adopt=gate.breach,
+            breach_reason=gate.reason if gate.breach else None,
+            remediation_ticket_id=gate.ticket_id if gate.breach else None,
         )
         try:
             db.add(pos); db.flush()

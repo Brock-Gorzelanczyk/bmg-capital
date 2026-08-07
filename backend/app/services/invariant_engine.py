@@ -535,6 +535,31 @@ def _check_i10_signal_funnel(db) -> Result:
         return _amber("I10", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i14_breach_remediation(db) -> Result:
+    """PM Claude 2026-08-07 P0-1: every breach_on_adopt=True row must
+    carry a remediation_ticket_id. Unrmediated breach = violation."""
+    try:
+        from app.db.models.bots import BotPosition
+        try:
+            unremediated = (
+                db.query(BotPosition)
+                .filter(BotPosition.breach_on_adopt.is_(True))
+                .filter(BotPosition.remediation_ticket_id.is_(None))
+                .filter(BotPosition.closed_at.is_(None))
+                .filter(BotPosition.quarantined_at.is_(None))
+                .count()
+            )
+        except Exception:
+            # m098 not yet applied
+            return _amber("I14", None, None, None, "m098 not yet applied")
+        if unremediated == 0:
+            return _ok("I14", 0, 0, "no unrmediated breach-on-adopt rows")
+        return _red("I14", unremediated, 0, float(unremediated),
+                    f"{unremediated} open positions breached at adopt with no remediation ticket")
+    except Exception as exc:
+        return _amber("I14", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 # ── Runner + persistence ────────────────────────────────────────────────────
 
 CHECKS: dict[str, Callable] = {
@@ -548,6 +573,7 @@ CHECKS: dict[str, Callable] = {
     "I8": _check_i8_sleeve_sanity,
     "I9": _check_i9_position_ownership,
     "I10": _check_i10_signal_funnel,
+    "I14": _check_i14_breach_remediation,
 }
 
 
