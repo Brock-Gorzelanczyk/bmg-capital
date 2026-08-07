@@ -1471,7 +1471,6 @@ def legacy_simulator_damage(
         db.query(BotTrade)
         .filter(BotTrade.alpaca_order_id.is_(None))
         .filter(BotTrade.signal_id.is_(None))
-        .filter(BotTrade.fees_cents == 0)
     )
     total = q.count()
     survived = q.filter(BotTrade.quarantined_at.is_(None)).count()
@@ -1480,7 +1479,6 @@ def legacy_simulator_damage(
     date_range = db.query(func.min(BotTrade.ts), func.max(BotTrade.ts)).filter(
         BotTrade.alpaca_order_id.is_(None),
         BotTrade.signal_id.is_(None),
-        BotTrade.fees_cents == 0,
     ).first()
 
     # Per-bot breakdown (survived only — those still contributing to P&L)
@@ -1500,7 +1498,7 @@ def legacy_simulator_damage(
 
     top = sorted(per_bot.items(), key=lambda x: -x[1]["survived"])
     return {
-        "fingerprint": "alpaca_order_id IS NULL AND signal_id IS NULL AND fees_cents = 0",
+        "fingerprint": "alpaca_order_id IS NULL AND signal_id IS NULL",
         "total_rows_ever": total,
         "quarantined_by_prior_sweeps": quarantined,
         "surviving_in_current_ledger": survived,
