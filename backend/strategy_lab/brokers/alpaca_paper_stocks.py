@@ -60,7 +60,7 @@ class PaperStocksAdapter(BrokerAdapter):
 
     # ── BrokerAdapter interface ───────────────────────────────────────────
 
-    def submit_order(self, symbol: str, qty: float, side: str) -> dict:
+    def submit_order(self, symbol: str, qty: float, side: str, client_order_id: str = None) -> dict:
         payload = {
             "symbol": symbol,
             "qty": str(qty),
@@ -68,9 +68,14 @@ class PaperStocksAdapter(BrokerAdapter):
             "type": "market",
             "time_in_force": "day",
         }
+        if client_order_id:
+            # 2026-08-07 iter 2 R7: attach {bot}_{signal_id} so future
+            # Tier-1 pairing is exact by construction, no reconstruction
+            # required. See vault/context/09-realized-pnl-rebuild-spec.md.
+            payload["client_order_id"] = client_order_id[:128]  # Alpaca cap
         data = self._post("/orders", payload)
-        logger.info("[PAPER-STOCKS] Order submitted: %s %s x%.4f → id=%s", side, symbol, qty, data.get("id"))
-        return {"order_id": data.get("id"), "raw": data}
+        logger.info("[PAPER-STOCKS] Order submitted: %s %s x%.4f → id=%s coid=%s", side, symbol, qty, data.get("id"), client_order_id)
+        return {"order_id": data.get("id"), "client_order_id": data.get("client_order_id"), "raw": data}
 
     def get_positions(self) -> list[dict]:
         data = self._get("/positions")
@@ -104,6 +109,7 @@ class PaperStocksAdapter(BrokerAdapter):
         side: str,
         limit_price: float,
         time_in_force: str = "day",
+        client_order_id: str = None,
     ) -> dict:
         """Submit a single-leg options limit order to Alpaca paper.
 
@@ -119,6 +125,8 @@ class PaperStocksAdapter(BrokerAdapter):
             "limit_price": str(limit_price),
             "order_class": "simple",
         }
+        if client_order_id:
+            payload["client_order_id"] = client_order_id[:128]
         resp = requests.post(
             f"{_PAPER_BASE}/orders",
             json=payload,
@@ -134,6 +142,7 @@ class PaperStocksAdapter(BrokerAdapter):
         qty: int,
         limit_price: float,
         time_in_force: str = "day",
+        client_order_id: str = None,
     ) -> dict:
         """Submit an Alpaca multi-leg options order (order_class="mleg").
 
@@ -157,6 +166,7 @@ class PaperStocksAdapter(BrokerAdapter):
             "type": "limit",
             "time_in_force": time_in_force,
             "limit_price": str(round(abs(limit_price), 2)),
+            **({"client_order_id": client_order_id[:128]} if client_order_id else {}),
             "legs": [
                 {
                     "symbol": leg["symbol"],

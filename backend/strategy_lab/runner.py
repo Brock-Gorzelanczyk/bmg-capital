@@ -2341,12 +2341,17 @@ def _execute_options_signal(
                 _limit_price = round(_mid * 1.20, 2)  # walk up toward ask
             else:
                 _limit_price = round(_mid * 0.85, 2)  # walk down toward bid
+            # 2026-08-07 iter 2 R7: attach {bot}_{signal_id}_{epoch_ms} so
+            # every future close's Tier-1 pairing is exact by construction.
+            import time as _time
+            _coid = f"{profile_name}_{getattr(sig,'id','nosig')}_{int(_time.time()*1000)}"
             _opt_resp = _opt_broker.submit_options_order(
                 contract_symbol=occ_symbol,
                 contracts=int(contract_count),
                 side=_opt_side_str,
                 limit_price=_limit_price,
                 time_in_force="day",
+                client_order_id=_coid,
             )
             if _opt_resp.get("status_code") in (200, 201):
                 # 2026-08-05 FIX: same fill-vs-accepted bug as mleg path above.
@@ -2654,11 +2659,14 @@ def _auto_flatten_option_legs(leg_rows: list[dict], position_side: str) -> str:
         # To CLOSE: opposite of the opening trade side.
         close_side = "sell" if leg_trade_side == "buy" else "buy"
         try:
+            import time as _time_af
+            _coid_af = f"autoflatten_{occ[:20]}_{int(_time_af.time()*1000)}"
             resp = broker.submit_options_order(
                 contract_symbol=occ,
                 contracts=int(lr.get("qty", 1) or 1),
                 side=close_side,
                 limit_price=0.01,   # market-like — accept anything for exit
+                client_order_id=_coid_af,
                 time_in_force="day",
             )
             status = resp.get("status_code") if isinstance(resp, dict) else None
