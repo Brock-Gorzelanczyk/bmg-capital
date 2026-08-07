@@ -2304,6 +2304,15 @@ def setup_bot_scheduler(scheduler) -> None:
                                     trailing_stop_activated=False,
                                 )
                                 _db.add(pos); _db.flush()
+                            # 2026-08-07 sim-leak sweep: gate before write
+                            from app.services.trade_write_gate import check_trade_write as _ctw_sched
+                            _sched_gate = _ctw_sched(alpaca_order_id=None, source_path="bot_scheduler.cash_floor_rebalance")
+                            if _sched_gate.blocked:
+                                logger.warning(
+                                    "[bot_scheduler.cash_floor_rebalance] WRITE BLOCKED %s reason=%s",
+                                    symbol, _sched_gate.reason,
+                                )
+                                continue
                             from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
                             _rt_sched = _regime_tag_dict(_db, source="bot_scheduler.cash_floor_rebalance")
                             _db.add(BotTrade(

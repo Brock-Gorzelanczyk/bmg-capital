@@ -3972,6 +3972,16 @@ def debug_force_trade(
     except RuntimeError as _acr_exc:
         raise HTTPException(status_code=422, detail=str(_acr_exc))
     # ── end asset-class gate ─────────────────────────────────────────────────
+    # 2026-08-07 sim-leak sweep: gate before write. Upstream sets
+    # alpaca_order_id from Alpaca submit response — if the submit
+    # failed and alpaca_order_id is None, the gate blocks (no
+    # BOT_EXECUTOR_LEGACY_SIM_ENABLED).
+    from app.services.trade_write_gate import check_trade_write as _ctw_bots
+    _bots_gate = _ctw_bots(alpaca_order_id=alpaca_order_id, source_path="bots.manual_crypto_swing_btc")
+    if _bots_gate.blocked:
+        logger.warning("[bots.manual_crypto_swing_btc] WRITE BLOCKED reason=%s", _bots_gate.reason)
+        steps["f_trade"] = {"ok": False, "blocked": _bots_gate.reason}
+        raise HTTPException(status_code=502, detail=f"trade_write_gate blocked: {_bots_gate.reason}")
     from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
     _rt_btc = _regime_tag_dict(db, source="bots.manual_crypto_swing_btc")
     trade_row = BotTrade(

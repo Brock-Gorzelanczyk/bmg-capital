@@ -206,6 +206,15 @@ def rebalance(
                 )
                 db.add(pos)
                 db.flush()
+            # 2026-08-07 sim-leak sweep: trade_write_gate before every
+            # BotTrade insert. cash_floor path writes with alpaca_order_id=NULL
+            # by design (paper-only rebalance simulator).
+            from app.services.trade_write_gate import check_trade_write
+            _cf_gate = check_trade_write(alpaca_order_id=None, source_path="cash_floor.buy")
+            if _cf_gate.blocked:
+                logger.warning("[cash_floor.buy] WRITE BLOCKED %s reason=%s", symbol, _cf_gate.reason)
+                written_trades.append({"symbol": symbol, "side": "buy", "status": "blocked_sim_write"})
+                continue
             from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
             _rt_cf_buy = _regime_tag_dict(db, source="cash_floor.buy")
             db.add(BotTrade(
@@ -251,6 +260,12 @@ def rebalance(
                 existing.exit_reason = "cash_floor_rebalance"
             else:
                 existing.qty = float(existing.qty) - trim_qty
+            from app.services.trade_write_gate import check_trade_write as _ctw_cfsell
+            _cfsell_gate = _ctw_cfsell(alpaca_order_id=None, source_path="cash_floor.sell")
+            if _cfsell_gate.blocked:
+                logger.warning("[cash_floor.sell] WRITE BLOCKED %s reason=%s", symbol, _cfsell_gate.reason)
+                written_trades.append({"symbol": symbol, "side": "sell", "status": "blocked_sim_write"})
+                continue
             from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
             _rt_cf_sell = _regime_tag_dict(db, source="cash_floor.sell")
             db.add(BotTrade(
