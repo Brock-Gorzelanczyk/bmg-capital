@@ -1467,18 +1467,22 @@ def legacy_simulator_damage(
     from sqlalchemy import func
     from collections import defaultdict
 
-    q = (
-        db.query(BotTrade)
-        .filter(BotTrade.alpaca_order_id.is_(None))
-        .filter(BotTrade.signal_id.is_(None))
-    )
+    # Multiple candidate fingerprints so we can report the total damage
+    # regardless of which write path missed a field.
+    q_null_oid = db.query(BotTrade).filter(BotTrade.alpaca_order_id.is_(None))
+    q_strict = q_null_oid.filter(BotTrade.signal_id.is_(None))
+    fp_counts = {
+        "alpaca_order_id_null_only": q_null_oid.count(),
+        "alpaca_order_id_null_AND_signal_id_null": q_strict.count(),
+    }
+    # Use the broader filter as the working set for the damage report
+    q = q_null_oid
     total = q.count()
     survived = q.filter(BotTrade.quarantined_at.is_(None)).count()
     quarantined = total - survived
 
     date_range = db.query(func.min(BotTrade.ts), func.max(BotTrade.ts)).filter(
         BotTrade.alpaca_order_id.is_(None),
-        BotTrade.signal_id.is_(None),
     ).first()
 
     # Per-bot breakdown (survived only — those still contributing to P&L)
@@ -1498,7 +1502,8 @@ def legacy_simulator_damage(
 
     top = sorted(per_bot.items(), key=lambda x: -x[1]["survived"])
     return {
-        "fingerprint": "alpaca_order_id IS NULL AND signal_id IS NULL",
+        "fingerprint_counts": fp_counts,
+        "using_fingerprint": "alpaca_order_id IS NULL (broader net)",
         "total_rows_ever": total,
         "quarantined_by_prior_sweeps": quarantined,
         "surviving_in_current_ledger": survived,
