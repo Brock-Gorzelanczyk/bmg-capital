@@ -116,11 +116,20 @@ def _sim_exit_price(entry: float, rng: random.Random, bot_name: str) -> float:
 
 async def run_bot_execution_job() -> None:
     """
-    Daily execution job for all user bots.
-    Runs at 10:00 AM ET on weekdays.
-    - Closes positions past their hold period
-    - Opens new positions up to the position cap
+    LEGACY SIMULATOR — DISABLED by default (2026-08-07).
+
+    This module is a random-fill simulator that predates the real Alpaca
+    integration (commit aa5ebb5f m078). It was still scheduled but never
+    talks to a broker — every BotTrade it writes has alpaca_order_id=NULL.
+    That's the source of the I3 sim-leak Brock caught 2026-08-07.
+
+    Kill switch: BOT_EXECUTOR_LEGACY_SIM_ENABLED (default 'false'). To
+    re-enable for dev/testing set env var to 'true'.
     """
+    import os
+    if os.getenv("BOT_EXECUTOR_LEGACY_SIM_ENABLED", "false").strip().lower() != "true":
+        logger.warning("[bot_executor] SKIPPED — legacy simulator; set BOT_EXECUTOR_LEGACY_SIM_ENABLED=true to re-enable")
+        return
     logger.info("Bot execution job starting...")
     try:
         from app.db.session import SessionLocal
@@ -161,6 +170,11 @@ async def run_bot_execution_job() -> None:
 
 
 def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -> None:
+    """LEGACY simulator — see run_bot_execution_job kill switch."""
+    import os as _os
+    if _os.getenv("BOT_EXECUTOR_LEGACY_SIM_ENABLED", "false").strip().lower() != "true":
+        logger.warning("[bot_executor._execute_bot] SKIPPED for %s — legacy sim disabled", getattr(profile, "name", "?"))
+        return
     from app.db.models.bots import BotPosition, BotTrade, BotDailyPnL
 
     bot_name = profile.name
