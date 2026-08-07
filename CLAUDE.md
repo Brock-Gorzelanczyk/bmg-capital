@@ -12,6 +12,7 @@ REQUIRED reads every session (non-negotiable):
 - context/06-decision-history.md (standing decisions, don't reopen)
 - context/08-conflict-log.md (open theory-vs-data disputes)
 - context/09-realized-pnl-rebuild-spec.md (approved active spec — read if session task is realized-P&L or leaderboard math)
+- context/10-roadmap.md (goals, standing decisions, strategy pipeline — WHY the ledger looks the way it does)
 
 Task-specific reads:
 - Writing a paste-ready → skills/01-paste-ready-format.md
