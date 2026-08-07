@@ -1084,6 +1084,17 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m095_add_composite_score_at_execution FAILED: %s",
                      _m095_exc, exc_info=True)
 
+    # m096: add pnl_cents + pnl_source to bot_trades for the C6-extension
+    # realized-P&L rebuild (vault/context/09-realized-pnl-rebuild-spec.md).
+    try:
+        from app.db.migrations.m096_add_realized_pnl_to_bot_trades import run as _run_m096
+        with engine.begin() as _m096_conn:
+            _m096_result = _run_m096(_m096_conn)
+        logger.warning("[startup] m096 status: %s", _m096_result)
+    except Exception as _m096_exc:
+        logger.error("[startup] m096_add_realized_pnl_to_bot_trades FAILED: %s",
+                     _m096_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
