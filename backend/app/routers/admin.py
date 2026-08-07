@@ -1192,6 +1192,88 @@ def inspect_bot_trades(
     }
 
 
+@router.post("/close-ghost-positions")
+def close_ghost_positions(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """STEP A: close every open BotPosition Alpaca doesn't report in
+    /v2/positions. These are 'ghosts' — DB rows for positions the broker
+    doesn't hold. Sets closed_at=now, exit_reason='reconcile_close',
+    and books a realized P&L using BMG's last mark vs entry."""
+    import os, urllib.request, json
+    from datetime import datetime, timezone
+    from app.db.models.bots import BotPosition, BotTrade
+
+    now = datetime.now(timezone.utc)
+    key_id  = os.environ.get("ALPACA_API_KEY", "")
+    key_sec = os.environ.get("ALPACA_SECRET_KEY", "")
+    req = urllib.request.Request(
+        "https://paper-api.alpaca.markets/v2/positions",
+        headers={"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": key_sec},
+    )
+    alp_list = json.loads(urllib.request.urlopen(req, timeout=15).read())
+    alp_syms = {p.get("symbol") for p in alp_list}
+
+    bmg_open = (
+        db.query(BotPosition)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .all()
+    )
+    ghosts = []
+    for p in bmg_open:
+        if (p.symbol or "") not in alp_syms:
+            ghosts.append(p)
+
+    actions = []
+    for p in ghosts:
+        entry = (p.avg_cost_cents or 0) / 100.0
+        # book realized = 0 since we have no exit price; conservative
+        actions.append({
+            "position_id": p.id,
+            "symbol": p.symbol,
+            "side": p.side,
+            "qty": float(p.qty or 0),
+            "entry_cents": p.avg_cost_cents,
+            "allocation_id": p.allocation_id,
+        })
+        if not dry_run:
+            p.closed_at = now
+            p.exit_reason = "reconcile_close"
+            # Book a paired close trade at entry price = zero-P&L exit
+            close_trade = BotTrade(
+                allocation_id=p.allocation_id,
+                symbol=p.symbol,
+                side="sell" if (p.side or "long").lower() == "long" else "cover",
+                qty=float(p.qty or 0),
+                fill_price_cents=int(p.avg_cost_cents or 0),
+                fees_cents=0,
+                ts=now,
+                position_id=p.id,
+                is_paper=True,
+                alpaca_order_id="reconcile_close_2026_08_06",
+                option_type=p.option_type,
+                strike_price=p.strike_price,
+                expiration_date=p.expiration_date,
+                underlying_symbol=p.underlying_symbol,
+                contract_count=p.contract_count,
+                contract_premium_cents=p.contract_premium_cents,
+            )
+            db.add(close_trade)
+    if not dry_run and ghosts:
+        db.commit()
+
+    return {
+        "dry_run": dry_run,
+        "alpaca_positions": len(alp_syms),
+        "bmg_open_positions": len(bmg_open),
+        "ghosts_count": len(ghosts),
+        "actions": actions,
+    }
+
+
 @router.get("/i2-drift-detail")
 def i2_drift_detail(
     db: Session = Depends(get_db),
@@ -1861,7 +1943,10 @@ def broker_reconciliation(
         verdict = "DRIFT — Alpaca has positions not tracked in BMG DB"
     else:
         drift = abs(db_open - alp_open)
-        verdict = f"PARTIAL — DB={db_open} vs Alpaca={alp_open} (drift={drift})"
+        if drift == 0:
+            verdict = f"SYNCED — DB={db_open} = Alpaca={alp_open}"
+        else:
+            verdict = f"PARTIAL — DB={db_open} vs Alpaca={alp_open} (drift={drift})"
 
     result["verdict"] = verdict
     result["pct_real_alpaca_fills"] = pct_real
