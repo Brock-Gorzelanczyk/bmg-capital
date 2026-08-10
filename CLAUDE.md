@@ -52,6 +52,20 @@ One line per day appended to `daily-audits/YYYY-MM-DD.md`:
 `invariants=red/amber/green | open_issues=N | vault_mtime=YYYY-MM-DD HH:MM`
 A missing day is itself a V1 fail.
 
+### V0. Destructive ops require a recent OFF-VOLUME backup (added 2026-08-09)
+Any endpoint that destroys, quarantines-at-scale, migrates data, VACUUMs, or otherwise touches the DB in a way that could lose state MUST verify a fresh off-volume backup exists first. **An on-volume `.bak` does NOT count** — the 2026-08-09 P0 (Railway alerted /data at 98% before BMG's own invariants; 3.85 GB of backups on the same 4.6 GB volume as the live DB) proved backups on the same volume die with the disk.
+
+Verification pattern:
+```
+scripts/bmg_admin.sh GET /admin/offvolume-backup-status
+# must return { exists: true, age_hours: < 24 (or task-appropriate) }
+```
+
+Endpoints that ship the backup off-volume:
+- `POST /admin/backup-sqlite-offvolume` — gzips fresh snapshot, PUTs to `OFFVOLUME_BACKUP_URL_TEMPLATE` env URL (R2/B2/Backblaze/MinIO/pre-signed S3). Writes `/data/last_offvolume_backup.json` marker.
+
+Ledger #16 (no backup on the *actual* prod DB) stays OPEN until the marker exists and a first off-volume dump has been verified round-trip.
+
 ## Growth-through-vault-loop acceptance
 A fresh session with no pasted context must be able to open its first message with: (a) the top 3 open issues by severity, and (b) the prevention rule from the most recent postmortem. If it can't, the vault is broken — fix the vault before touching code.
 

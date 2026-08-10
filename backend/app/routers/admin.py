@@ -1238,6 +1238,233 @@ def backup_sqlite(
     }
 
 
+@router.post("/backup-sqlite-offvolume")
+def backup_sqlite_offvolume(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Ship a gzipped SQLite snapshot to configured off-volume storage.
+
+    Closes ledger #16 properly: an on-volume .bak dies with the disk.
+    This endpoint takes a fresh snapshot, gzips it, and PUTs it to a
+    URL provided via env var. Local temp files are cleaned before return.
+
+    Required env:
+      OFFVOLUME_BACKUP_URL_TEMPLATE — full URL with {ts} placeholder.
+        Example: https://bucket.r2.cloudflarestorage.com/backups/{ts}.db.gz?<pre-signed-query>
+        Works with any S3-compatible pre-signed URL, R2, B2, Backblaze,
+        MinIO, or a self-hosted receiver. {ts} is replaced with UTC
+        YYYYMMDD-HHMMSS.
+
+    Optional env:
+      OFFVOLUME_BACKUP_AUTH_HEADER — literal "Header: Value" string.
+        Example: 'Authorization: Bearer sk_live_...' — added to the PUT.
+
+    On success writes /data/last_offvolume_backup.json marker used by
+    the V0 discipline gate (destructive ops require recent off-volume
+    backup).
+    """
+    import os, sqlite3, gzip, json
+    import urllib.request, urllib.error
+    from datetime import datetime, timezone
+    from app.db.session import engine
+
+    template = os.getenv("OFFVOLUME_BACKUP_URL_TEMPLATE", "").strip()
+    if not template:
+        return {"error": "not_configured", "hint": "set OFFVOLUME_BACKUP_URL_TEMPLATE env var"}
+    if "{ts}" not in template:
+        return {"error": "url_template_missing_ts_placeholder"}
+    auth_header = os.getenv("OFFVOLUME_BACKUP_AUTH_HEADER", "").strip()
+
+    url = engine.url
+    if url.get_backend_name() != "sqlite":
+        return {"error": "not_sqlite", "driver": url.get_backend_name()}
+    src_path = url.database
+    if not src_path or not os.path.exists(src_path):
+        return {"error": "src_not_found", "path": src_path}
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    snap_path = f"{src_path}.offv_{ts}.tmp"
+    gz_path = f"{snap_path}.gz"
+
+    result: dict = {"ts_utc": ts, "url": template.replace("{ts}", ts)}
+    started = datetime.now(timezone.utc)
+    try:
+        # 1) Snapshot to /data
+        src_conn = sqlite3.connect(src_path)
+        dst_conn = sqlite3.connect(snap_path)
+        with dst_conn:
+            src_conn.backup(dst_conn)
+        src_conn.close()
+        dst_conn.close()
+        snap_size = os.path.getsize(snap_path)
+        result["snapshot_bytes"] = snap_size
+
+        # 2) Gzip snapshot
+        with open(snap_path, "rb") as f_in, gzip.open(gz_path, "wb", compresslevel=6) as f_out:
+            while True:
+                chunk = f_in.read(1024 * 1024)
+                if not chunk:
+                    break
+                f_out.write(chunk)
+        gz_size = os.path.getsize(gz_path)
+        result["gzip_bytes"] = gz_size
+
+        # 3) Free snapshot before upload — reduces peak disk use
+        try:
+            os.unlink(snap_path)
+        except Exception:
+            pass
+
+        # 4) PUT to configured URL
+        put_url = template.replace("{ts}", ts)
+        with open(gz_path, "rb") as f_gz:
+            payload = f_gz.read()
+        req = urllib.request.Request(put_url, data=payload, method="PUT")
+        req.add_header("Content-Type", "application/gzip")
+        if auth_header:
+            k, _, v = auth_header.partition(":")
+            if k and v:
+                req.add_header(k.strip(), v.strip())
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                result["http_status"] = resp.status
+                result["http_reason"] = resp.reason
+        except urllib.error.HTTPError as httpe:
+            result["error"] = "http_error"
+            result["http_status"] = httpe.code
+            result["http_reason"] = httpe.reason
+            try:
+                result["http_body"] = httpe.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                pass
+            raise
+        except Exception as ue:
+            result["error"] = f"upload_failed:{type(ue).__name__}"
+            result["upload_exception"] = str(ue)[:200]
+            raise
+
+        # 5) Success — write marker
+        finished = datetime.now(timezone.utc)
+        marker = {
+            "ts_utc": ts,
+            "started_utc": started.isoformat(),
+            "finished_utc": finished.isoformat(),
+            "duration_seconds": round((finished - started).total_seconds(), 2),
+            "gzip_bytes": gz_size,
+            "gzip_mb": round(gz_size / (1024*1024), 2),
+            "snapshot_bytes": snap_size,
+            "snapshot_mb": round(snap_size / (1024*1024), 2),
+            "url": put_url.split("?")[0],  # store base URL only, not signed query
+            "http_status": result.get("http_status"),
+        }
+        try:
+            with open("/data/last_offvolume_backup.json", "w") as f_m:
+                json.dump(marker, f_m)
+            result["marker_written"] = True
+        except Exception as me:
+            result["marker_write_error"] = str(me)[:200]
+        result.update({k: v for k, v in marker.items() if k not in result})
+        result["ok"] = True
+        return result
+    finally:
+        # Always clean local temp files, even on failure
+        for p in (snap_path, gz_path):
+            try:
+                if os.path.exists(p):
+                    os.unlink(p)
+            except Exception:
+                pass
+
+
+@router.get("/offvolume-backup-status")
+def offvolume_backup_status(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Read the marker /data/last_offvolume_backup.json — returns last
+    off-volume backup ts, age, size. Powers the V0 gate check ("recent
+    off-volume backup exists before destructive op")."""
+    import os, json
+    from datetime import datetime, timezone
+    p = "/data/last_offvolume_backup.json"
+    if not os.path.exists(p):
+        return {"exists": False, "hint": "no off-volume backup taken yet; run POST /admin/backup-sqlite-offvolume"}
+    try:
+        with open(p) as f:
+            data = json.load(f)
+    except Exception as exc:
+        return {"exists": True, "error": f"read_failed:{exc}"}
+    try:
+        fin_ts = data.get("finished_utc")
+        if fin_ts:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(fin_ts.replace("Z", "+00:00"))).total_seconds()
+            data["age_seconds"] = round(age, 1)
+            data["age_hours"] = round(age / 3600, 2)
+    except Exception:
+        pass
+    data["exists"] = True
+    return data
+
+
+@router.post("/vacuum-sqlite")
+def vacuum_sqlite(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """VACUUM the live SQLite DB to reclaim page-level free space.
+
+    VACUUM rebuilds the DB file in-place using ~2x temporary disk while
+    running. Caller must confirm sufficient volume headroom via
+    /admin/data-usage first. Serial (no parallel writes allowed) — safe
+    to call during off-hours."""
+    import os, sqlite3
+    from datetime import datetime, timezone
+    from app.db.session import engine
+    url = engine.url
+    if url.get_backend_name() != "sqlite":
+        return {"error": "not_sqlite", "driver": url.get_backend_name()}
+    src_path = url.database
+    if not src_path or not os.path.exists(src_path):
+        return {"error": "src_not_found", "path": src_path}
+    # Verify headroom — refuse to run if free < 2× DB size
+    src_size = os.path.getsize(src_path)
+    st = os.statvfs(os.path.dirname(src_path) or "/")
+    free = st.f_bavail * st.f_frsize
+    if free < 2 * src_size:
+        return {
+            "error": "insufficient_free_space",
+            "src_size_bytes": src_size,
+            "src_size_mb": round(src_size / (1024*1024), 2),
+            "free_bytes": free,
+            "free_mb": round(free / (1024*1024), 2),
+            "required_bytes": 2 * src_size,
+            "hint": "VACUUM needs ~2× DB size scratch. Prune backups first.",
+        }
+    started = datetime.now(timezone.utc)
+    conn = sqlite3.connect(src_path)
+    try:
+        conn.isolation_level = None  # VACUUM cannot run inside a transaction
+        conn.execute("VACUUM")
+    finally:
+        conn.close()
+    ended = datetime.now(timezone.utc)
+    new_size = os.path.getsize(src_path)
+    st_after = os.statvfs(os.path.dirname(src_path) or "/")
+    free_after = st_after.f_bavail * st_after.f_frsize
+    return {
+        "started_utc": started.isoformat(),
+        "ended_utc": ended.isoformat(),
+        "duration_seconds": round((ended - started).total_seconds(), 2),
+        "size_before_bytes": src_size,
+        "size_before_mb": round(src_size / (1024*1024), 2),
+        "size_after_bytes": new_size,
+        "size_after_mb": round(new_size / (1024*1024), 2),
+        "reclaimed_bytes": src_size - new_size,
+        "reclaimed_mb": round((src_size - new_size) / (1024*1024), 2),
+        "reclaimed_pct": round((src_size - new_size) / src_size * 100, 2) if src_size else 0,
+        "volume_free_mb_before": round(free / (1024*1024), 2),
+        "volume_free_mb_after": round(free_after / (1024*1024), 2),
+    }
+
+
 @router.get("/data-usage")
 def data_usage(
     min_size_mb: float = Query(0.0, description="Only list files >= this size."),
@@ -1333,6 +1560,25 @@ def prune_backups(
     entries.sort(key=lambda x: -x["mtime"])
     keep_paths = {e["path"] for e in entries[:max(0, keep)]}
     to_delete = [e for e in entries if e["path"] not in keep_paths]
+    # Also sweep orphan .bak-journal files. A journal is only valid while
+    # its parent .bak exists. If the parent is gone (or being deleted this
+    # run), the journal is inert leftover from an earlier prune.
+    existing_bak_names = {e["name"] for e in entries if e["path"] in keep_paths}
+    for name in os.listdir(root):
+        if not name.endswith(".bak-journal"):
+            continue
+        parent_bak = name[:-len("-journal")]
+        if parent_bak in existing_bak_names:
+            continue  # legit journal for a kept .bak
+        p = os.path.join(root, name)
+        if not os.path.isfile(p):
+            continue
+        try:
+            sz = os.path.getsize(p)
+            mt = os.path.getmtime(p)
+            to_delete.append({"path": p, "name": name, "size_bytes": sz, "mtime": mt})
+        except Exception:
+            continue
     deleted: list[dict] = []
     delete_errors: list[dict] = []
     freed_bytes = 0

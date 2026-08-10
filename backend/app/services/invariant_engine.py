@@ -707,6 +707,47 @@ def _check_i14_breach_remediation(db) -> Result:
         return _amber("I14", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i18_data_volume_headroom(db) -> Result:
+    """/data volume must never fill to Railway's alert threshold.
+    Green < 60%, Amber 60-80%, Red >80%. At >90% attempt auto-prune
+    to keep only the most recent backup (handled by _maybe_auto_action).
+
+    Reason: 2026-08-09 P0 emergency — Railway email alerted 98% full
+    before any BMG invariant fired. Backups on same volume consumed
+    3.85 GB of a 4.6 GB volume. This check ensures we detect the
+    condition ourselves (and act on it) rather than depending on
+    upstream infra alerts."""
+    try:
+        import os as _os
+        root = "/data"
+        if not _os.path.isdir(root):
+            return _amber("I18", None, None, None, "no /data dir")
+        st = _os.statvfs(root)
+        total = st.f_blocks * st.f_frsize
+        avail = st.f_bavail * st.f_frsize
+        used = total - avail
+        pct_used = round(used / total * 100, 2) if total else 0.0
+        actual = {
+            "volume_total_mb": round(total / (1024*1024), 2),
+            "volume_used_mb": round(used / (1024*1024), 2),
+            "volume_free_mb": round(avail / (1024*1024), 2),
+            "volume_pct_used": pct_used,
+        }
+        if pct_used > 90:
+            return _red("I18", actual, {"max_pct_used": 80.0}, pct_used,
+                        f"/data {pct_used:.1f}% used (>90% — auto-prune triggered)")
+        if pct_used > 80:
+            return _red("I18", actual, {"max_pct_used": 80.0}, pct_used,
+                        f"/data {pct_used:.1f}% used (>80% — prune backups now)")
+        if pct_used > 60:
+            return _amber("I18", actual, {"amber_threshold": 60.0}, pct_used,
+                          f"/data {pct_used:.1f}% used (>60% — watch growth)")
+        return _ok("I18", actual, {"max_pct_used": 80.0},
+                   f"/data {pct_used:.1f}% used")
+    except Exception as exc:
+        return _amber("I18", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 # ── Runner + persistence ────────────────────────────────────────────────────
 
 CHECKS: dict[str, Callable] = {
@@ -724,6 +765,7 @@ CHECKS: dict[str, Callable] = {
     "I15": _check_i15_starting_capital_vs_funded,
     "I16": _check_i16_unattributed_tracker,
     "I17": _check_i17_cash_positive,
+    "I18": _check_i18_data_volume_headroom,
 }
 
 
@@ -839,6 +881,57 @@ def _maybe_auto_action(r: Result, db) -> None:
         # separately via /api/admin/orphan-adopter/run.
         logger.error("[invariant:AUTO-ACTION] I9 red — %s", r.detail)
 
+    if r.check_id == "I18":
+        # /data volume exhaustion. At >90% we auto-prune backups to keep=1.
+        # Between 80-90% we just alert — Brock decides whether to VACUUM
+        # or ship an off-volume backup. Idempotent: prune with keep=1 is a
+        # no-op when only 1 backup exists.
+        pct = None
+        try:
+            pct = float((r.actual or {}).get("volume_pct_used") or 0)
+        except Exception:
+            pass
+        logger.error("[invariant:AUTO-ACTION] I18 red — %s", r.detail)
+        try:
+            from app.services.discord import send_ops_alert
+            send_ops_alert(
+                title=f"[invariant] I18 disk headroom breached ({pct:.1f}%)" if pct else "[invariant] I18 disk headroom breached",
+                message=r.detail,
+                severity="critical",
+                source="invariant_engine",
+            )
+        except Exception:
+            pass
+        if pct is not None and pct > 90:
+            try:
+                import os as _os
+                root = "/data"
+                if _os.path.isdir(root):
+                    entries = []
+                    for name in _os.listdir(root):
+                        if not name.endswith(".bak"):
+                            continue
+                        p = _os.path.join(root, name)
+                        if not _os.path.isfile(p):
+                            continue
+                        try:
+                            entries.append((_os.path.getmtime(p), p, _os.path.getsize(p), name))
+                        except Exception:
+                            continue
+                    entries.sort(key=lambda x: -x[0])
+                    freed = 0
+                    for mtime, path, size, name in entries[1:]:  # keep newest
+                        try:
+                            _os.unlink(path)
+                            freed += size
+                            logger.error("[invariant:AUTO-ACTION] I18 auto-prune deleted %s (%d bytes)", name, size)
+                        except Exception as _e:
+                            logger.warning("[invariant:AUTO-ACTION] I18 auto-prune failed on %s: %s", name, _e)
+                    if freed:
+                        logger.error("[invariant:AUTO-ACTION] I18 auto-prune freed %.1f MB", freed / (1024*1024))
+            except Exception as _px:
+                logger.warning("[invariant:AUTO-ACTION] I18 auto-prune raised: %s", _px)
+
 
 # ── Scheduler ───────────────────────────────────────────────────────────────
 
@@ -900,4 +993,63 @@ def setup_invariant_engine(scheduler) -> None:
         replace_existing=True,
         max_instances=1,
     )
-    logger.warning("[invariant] scheduler registered — 15 min intraday + 05:30 UTC nightly + 30 min 24/7")
+
+    # Brock item 7 (2026-08-09): weekly prune on Sunday 09:00 UTC (04:00 CT).
+    # Deletes /data/*.bak files keeping only the most recent. Prevents the
+    # 2026-08-09 P0 (backups accumulating to 3.85 GB / 85% of volume) from
+    # recurring regardless of ops discipline. Belt-and-suspenders for I18.
+    def _weekly_prune() -> None:
+        try:
+            import os as _os
+            root = "/data"
+            if not _os.path.isdir(root):
+                return
+            entries = []
+            for name in _os.listdir(root):
+                if not name.endswith(".bak"):
+                    continue
+                p = _os.path.join(root, name)
+                if not _os.path.isfile(p):
+                    continue
+                try:
+                    entries.append((_os.path.getmtime(p), p, _os.path.getsize(p), name))
+                except Exception:
+                    continue
+            entries.sort(key=lambda x: -x[0])
+            freed = 0
+            for _mt, path, size, name in entries[1:]:  # keep newest
+                try:
+                    _os.unlink(path)
+                    freed += size
+                    logger.warning("[weekly-prune] deleted %s (%d bytes)", name, size)
+                except Exception as _e:
+                    logger.warning("[weekly-prune] failed on %s: %s", name, _e)
+            # Also sweep orphan .bak-journal files (parent .bak gone).
+            existing_bak_names = {name for _mt, _p, _sz, name in entries[:1]}
+            for name in _os.listdir(root):
+                if not name.endswith(".bak-journal"):
+                    continue
+                parent = name[:-len("-journal")]
+                if parent in existing_bak_names:
+                    continue
+                p = _os.path.join(root, name)
+                try:
+                    sz = _os.path.getsize(p)
+                    _os.unlink(p)
+                    freed += sz
+                    logger.warning("[weekly-prune] deleted orphan journal %s", name)
+                except Exception as _je:
+                    logger.warning("[weekly-prune] journal cleanup failed on %s: %s", name, _je)
+            logger.warning("[weekly-prune] cycle complete — freed %.1f MB", freed / (1024*1024))
+        except Exception as exc:
+            logger.error("[weekly-prune] job raised: %s", exc, exc_info=True)
+
+    scheduler.add_job(
+        _weekly_prune,
+        CronTrigger(day_of_week="sun", hour=9, minute=0, timezone="UTC"),
+        id="weekly_prune_backups",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    logger.warning("[invariant] scheduler registered — 15 min intraday + 05:30 UTC nightly + 30 min 24/7 + weekly prune Sun 09:00 UTC")
