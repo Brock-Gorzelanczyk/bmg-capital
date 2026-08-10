@@ -283,11 +283,16 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
     pos_side_map: dict[int, str] = {p.id: getattr(p, "side", "long") or "long" for p in all_positions}
 
     # ── All trades (excluding quarantined) ───────────────────────────────────
+    # m099: filter to origin='BROKER_FILL' (real live fills only).
+    # Adopter/reconcile/rebuild rows represent history reconstruction and
+    # must not be treated as trade events for realized P&L / win-rate / etc.
+    # See context/13-provenance-spec.md and ledger #32.
     all_trades = (
         db.query(BotTrade)
         .filter(
             BotTrade.allocation_id == alloc.id,
             BotTrade.quarantined_at.is_(None),
+            BotTrade.origin == "BROKER_FILL",
         )
         .order_by(BotTrade.ts)
         .all()
@@ -1116,6 +1121,16 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     total_value = bot_sum_pv_cents  # fallback if Alpaca fetch fails
     total_today_pnl = bot_sum_today_pnl_cents  # fallback
     _alpaca_source = "bot_sum_fallback"
+    # m099 (2026-08-10): today_pnl must be session-honest. Outside RTH,
+    # returning Alpaca's equity-vs-last_equity is a live number for a
+    # session that isn't open — Brock flagged this five times. Instead:
+    #   during RTH → live (equity - last_equity)
+    #   outside RTH → today_pnl_cents = None, today_pnl_label = "as_of_<last_close_date>"
+    # Frontend renders "—" when today_pnl_cents is None (NULL≠$0 rule).
+    from app.services.market_hours import is_market_open as _is_market_open
+    _rth_now = _is_market_open()
+    today_pnl_source = "unavailable"
+    today_pnl_label = "unavailable"
     try:
         from app.services.alpaca_account_cache import get_alpaca_account
         _acct = get_alpaca_account()
@@ -1125,8 +1140,19 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             _eq = float(_acct.get("equity") or 0)
             if _pv > 0:
                 total_value = int(round(_pv * 100))
-                total_today_pnl = int(round((_eq - _last) * 100))
                 _alpaca_source = "alpaca_account"
+                if _rth_now:
+                    total_today_pnl = int(round((_eq - _last) * 100))
+                    today_pnl_source = "alpaca_rth"
+                    today_pnl_label = "live"
+                else:
+                    # Outside RTH: the (eq - last_eq) diff is not a "today"
+                    # number in any honest sense. Set to None so callers show "—"
+                    # per NULL≠$0. Optionally include the last-session close diff
+                    # as a labeled figure.
+                    total_today_pnl = None  # type: ignore[assignment]
+                    today_pnl_source = "market_closed"
+                    today_pnl_label = "market_closed"
     except Exception as _acct_exc:
         logger.warning("[canonical] Alpaca fund PV fetch failed, using bot sum: %s", _acct_exc)
     unattributed_cents = bot_sum_pv_cents - total_value
@@ -1288,8 +1314,13 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         all_time_pct = round(_fleet_realized / _fleet_inception * 100, 2) if _fleet_inception else 0.0
     else:
         all_time_pct = 0.0
-    yesterday_total = total_value - total_today_pnl
-    today_pct = round(total_today_pnl / yesterday_total * 100, 2) if yesterday_total > 0 else 0.0
+    # m099: outside RTH total_today_pnl is None (session-honest); guard downstream math.
+    if total_today_pnl is None:
+        yesterday_total = total_value
+        today_pct = 0.0
+    else:
+        yesterday_total = total_value - total_today_pnl
+        today_pct = round(total_today_pnl / yesterday_total * 100, 2) if yesterday_total > 0 else 0.0
 
     # 30d return: weighted average across portfolios
     return_30d_pct = 0.0
@@ -1685,7 +1716,8 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     bot_sum_pv_cents += _pr_extra
     if _alpaca_source != "alpaca_account":
         total_value += _pr_extra
-        total_today_pnl += _pr_pnl_today
+        if total_today_pnl is not None:
+            total_today_pnl += _pr_pnl_today
     unattributed_cents = bot_sum_pv_cents - total_value
 
     # 5-col header windows: All-Time / MTD / WTD / Today $ + %.
@@ -1744,7 +1776,9 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         "orphan_value_cents": orphan_value_diag,
         "portfolio_rank_value_cents": _pr_extra,
         "yesterday_value_cents": yesterday_total,
-        "today_pnl_cents": total_today_pnl,
+        "today_pnl_cents": total_today_pnl,  # m099: None outside RTH — see today_pnl_source/label
+        "today_pnl_source": today_pnl_source,  # "alpaca_rth" | "market_closed" | "unavailable"
+        "today_pnl_label": today_pnl_label,    # "live" | "market_closed" | "unavailable"
         "today_pnl_pct": today_pct,
         "return_30d_pct": return_30d_pct,
         "return_30d_value_cents": total_value - total_starting,

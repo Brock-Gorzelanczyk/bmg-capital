@@ -156,8 +156,10 @@ async def get_portfolio_summary(
             "bot_sum_pv_cents": data.get("bot_sum_pv_cents", 0),
             "unattributed_cents": data.get("unattributed_cents", 0),
             "unattributed_usd": data.get("unattributed_usd", 0.0),
-            "today_pnl_cents": data.get("today_pnl_cents", 0),
+            "today_pnl_cents": data.get("today_pnl_cents"),  # m099: None outside RTH (frontend renders "—")
             "today_pnl_pct": data.get("today_pnl_pct", 0.0),
+            "today_pnl_source": data.get("today_pnl_source"),  # m099
+            "today_pnl_label": data.get("today_pnl_label"),    # m099
             "return_all_time_pct": data.get("return_all_time_pct", 0.0),
             "return_30d_pct": data.get("return_30d_pct", 0.0),
             "open_positions": data.get("total_open_positions", 0),
