@@ -106,6 +106,19 @@ def run_watchlist_stale_sweep() -> dict:
 def _run_and_log(profile_name: str) -> None:
     """Thin wrapper so APScheduler job invocations appear in Railway logs."""
     import sentry_sdk
+
+    # Ledger #22 kill switch: consult scans_gate before doing any DB work
+    # or emitting a scan. Fails open on gate errors — safety comes from
+    # env vars if the file-based gate misbehaves.
+    try:
+        from app.services.scans_gate import is_scans_enabled
+        _ok, _reason = is_scans_enabled(profile_name)
+        if not _ok:
+            logger.warning("[scan-gate] SKIP %s — %s", profile_name, _reason)
+            return
+    except Exception as _gate_exc:
+        logger.warning("[scan-gate] check raised (fail-open): %s", _gate_exc)
+
     logger.warning("[scheduled] %s scan START", profile_name)
     from app.db.session import SessionLocal
     from strategy_lab.scan_and_execute import scan_and_execute

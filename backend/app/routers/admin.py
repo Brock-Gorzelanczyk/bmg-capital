@@ -1238,6 +1238,55 @@ def backup_sqlite(
     }
 
 
+@router.get("/scans/status")
+def scans_status(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Current scan-gate state: env overrides, runtime state, effective per-sleeve.
+
+    Ledger #22 kill switch (2026-08-09). Effective = env_master AND env_sleeve
+    AND state_global AND state_sleeve — all must be true for scans to run."""
+    from app.services.scans_gate import status_summary
+    return status_summary()
+
+
+@router.post("/scans/pause")
+def scans_pause(
+    sleeve: str = Query("all", description="all|global|stocks|crypto|options|quant|pr"),
+    reason: str = Query(..., description="Human-readable reason (required, goes to log + history)"),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Pause bot scans globally or per-sleeve. Runtime-only — no redeploy.
+
+    Ledger #22 kill switch. Consult /admin/scans/status after to confirm
+    the state took effect. Verify halt by watching Railway logs for
+    '[scan-gate] SKIP <profile>' on the next scan tick."""
+    from app.services.scans_gate import set_paused
+    try:
+        new_state = set_paused(sleeve=sleeve, paused=True,
+                               muted_by=f"user_{current_user.id}",
+                               muted_reason=reason)
+    except ValueError as ve:
+        return {"error": str(ve)}
+    return {"ok": True, "sleeve": sleeve, "reason": reason, "state": new_state}
+
+
+@router.post("/scans/resume")
+def scans_resume(
+    sleeve: str = Query("all", description="all|global|stocks|crypto|options|quant|pr"),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Resume bot scans globally or per-sleeve."""
+    from app.services.scans_gate import set_paused
+    try:
+        new_state = set_paused(sleeve=sleeve, paused=False,
+                               muted_by=f"user_{current_user.id}",
+                               muted_reason=None)
+    except ValueError as ve:
+        return {"error": str(ve)}
+    return {"ok": True, "sleeve": sleeve, "state": new_state}
+
+
 @router.post("/backup-sqlite-offvolume")
 def backup_sqlite_offvolume(
     current_user: User = Depends(require_admin),
