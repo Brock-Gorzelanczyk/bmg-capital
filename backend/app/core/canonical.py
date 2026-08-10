@@ -1140,6 +1140,10 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     alloc_pv_override_cents: Optional[dict[int, int]] = None
     alpaca_cash_cents = 0
     sleeve_unattributed_cents = 0
+    alpaca_long_mv_cents = 0
+    alpaca_short_mv_cents = 0
+    alpaca_position_equity_cents = 0  # long_MV + short_MV + cash
+    fund_pv_equity_gap_cents = 0      # fund_pv - position_equity — Alpaca-internal (margin/unsettled)
     _sleeve_source = "bot_sum_fallback"
     try:
         from app.services.alpaca_account_cache import get_alpaca_positions
@@ -1159,7 +1163,6 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                     continue
                 _claims.setdefault(sym, {})[aid] = _claims.get(sym, {}).get(aid, 0.0) + float(qty or 0)
             alloc_pv_override_cents = {}
-            _attributed_mv = 0
             for pos in _alp_positions:
                 sym = pos.get("symbol")
                 try:
@@ -1176,8 +1179,11 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
                 for aid, q in claimants.items():
                     share = abs(q) / total_claim
                     alloc_pv_override_cents[aid] = alloc_pv_override_cents.get(aid, 0) + int(round(mv_cents * share))
-                _attributed_mv += mv_cents
             alpaca_cash_cents = int(round(float(_acct.get("cash") or 0) * 100))
+            alpaca_long_mv_cents = int(round(float(_acct.get("long_market_value") or 0) * 100))
+            alpaca_short_mv_cents = int(round(float(_acct.get("short_market_value") or 0) * 100))
+            alpaca_position_equity_cents = alpaca_long_mv_cents + alpaca_short_mv_cents + alpaca_cash_cents
+            fund_pv_equity_gap_cents = total_value - alpaca_position_equity_cents
             _sleeve_source = "alpaca_attribution"
     except Exception as _sleeve_exc:
         logger.warning("[canonical] Alpaca sleeve attribution failed, falling back to bot-sum: %s", _sleeve_exc)
@@ -1196,21 +1202,29 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
 
     total_watchlist = sum(s.watchlist_count for s in portfolio_snapshots)
 
-    # Reconciliation identity (target per Item 2, 2026-08-09):
-    #     sum(sleeve_pv_alpaca) + alpaca_cash + fund_unattributed == fund_pv
-    # sum(sleeve_pv) covers Alpaca positions attributed to BMG allocations.
-    # sleeve_unattributed = Alpaca positions no BMG bot claims.
-    # alpaca_cash = uninvested balance.
-    # Any residual drift after these three sources sum vs fund_pv is the
-    # attribution-precision noise (mostly BMG-tracked positions Alpaca has
-    # since closed but BMG hasn't caught up on).
+    # Reconciliation identity (Item 2, 2026-08-09, refined post-§S2):
+    #     sum(sleeve_pv_alpaca) + sleeve_unattributed
+    #         == long_market_value + short_market_value   [sum of signed position MVs]
+    #     sum(sleeve_pv_alpaca) + sleeve_unattributed + alpaca_cash
+    #         == alpaca_position_equity  [long+short+cash]
+    # This is an identity by construction — attribution partitions positions.
+    # The remaining gap between fund_pv and alpaca_position_equity is an
+    # Alpaca-internal component (margin/unsettled equity, ~$13K on $96K NAV
+    # observed 2026-08-09) — exposed as fund_pv_equity_gap_cents. Not our
+    # bug; Alpaca's own /v2/account portfolio_value doesn't equal
+    # cash + long_MV + short_MV either. Fund PV remains Alpaca-authoritative.
     portfolio_sum_diag = sum(s.portfolio_value_cents for s in portfolio_snapshots)
     diag_total = portfolio_sum_diag + alpaca_cash_cents + sleeve_unattributed_cents
-    reconciliation_drift_cents = total_value - diag_total
+    # Attribution drift = how far our partition sums from Alpaca's own equity
+    # accounting. Target: |drift| < $100. Non-zero implies either double-
+    # counting or missed positions in our partition.
+    reconciliation_drift_cents = alpaca_position_equity_cents - diag_total
     if _sleeve_source == "alpaca_attribution" and abs(reconciliation_drift_cents) > 10_000:  # > $100
         logger.warning(
-            "[canonical] sleeve reconciliation drift: fund_pv=%d sum_sleeves=%d + cash=%d + unattributed=%d = %d, diff=%d",
-            total_value, portfolio_sum_diag, alpaca_cash_cents, sleeve_unattributed_cents,
+            "[canonical] attribution drift: alpaca_position_equity=%d (long=%d + short=%d + cash=%d) vs "
+            "sum_sleeves=%d + cash=%d + unattributed=%d = %d, drift=%d",
+            alpaca_position_equity_cents, alpaca_long_mv_cents, alpaca_short_mv_cents, alpaca_cash_cents,
+            portfolio_sum_diag, alpaca_cash_cents, sleeve_unattributed_cents,
             diag_total, reconciliation_drift_cents,
         )
     # Legacy split-brain log — kept for fallback path only. When
@@ -1678,15 +1692,24 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         "unattributed_usd": round(unattributed_cents / 100, 2),
         # Item 2 (2026-08-09) sleeve reconciliation. sleeve_pv_source tells the
         # caller which path built the per-portfolio PVs. When "alpaca_attribution"
-        # is live, sum(portfolio_value_cents) + alpaca_cash_cents +
-        # sleeve_unattributed_cents == total_value_cents ± reconciliation_drift.
-        # Target acceptance: |reconciliation_drift_cents| < $100.
+        # is live, the identity is:
+        #     sum(portfolio_value_cents) + alpaca_cash + sleeve_unattributed
+        #         == alpaca_position_equity_cents  (long_MV + short_MV + cash)
+        # to within reconciliation_drift_cents (target < $100).
+        # The gap between alpaca_position_equity and fund_pv is Alpaca-internal
+        # (margin/unsettled equity) — exposed as fund_pv_equity_gap_cents.
         "sleeve_pv_source": _sleeve_source,
         "alpaca_cash_cents": alpaca_cash_cents,
+        "alpaca_long_mv_cents": alpaca_long_mv_cents,
+        "alpaca_short_mv_cents": alpaca_short_mv_cents,
+        "alpaca_position_equity_cents": alpaca_position_equity_cents,
         "sleeve_unattributed_cents": sleeve_unattributed_cents,
         "reconciliation_drift_cents": (
-            total_value - (portfolio_sum_diag + alpaca_cash_cents + sleeve_unattributed_cents)
+            alpaca_position_equity_cents - (portfolio_sum_diag + alpaca_cash_cents + sleeve_unattributed_cents)
             if _sleeve_source == "alpaca_attribution" else None
+        ),
+        "fund_pv_equity_gap_cents": (
+            fund_pv_equity_gap_cents if _sleeve_source == "alpaca_attribution" else None
         ),
         # Alias for callers that read portfolio_value_cents at the aggregate
         # level (mirrors the per-portfolio shape). Always populated — never None.

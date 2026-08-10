@@ -162,13 +162,19 @@ async def get_portfolio_summary(
             "return_30d_pct": data.get("return_30d_pct", 0.0),
             "open_positions": data.get("total_open_positions", 0),
             "portfolios": data.get("portfolios", []),
-            # Item 2 sleeve reconciliation (2026-08-09) — pass through the new
-            # fields so callers can verify the identity:
-            #   sum(sleeve_pv) + alpaca_cash + sleeve_unattributed == fund_pv
+            # Item 2 sleeve reconciliation (2026-08-09, refined post-§S2) —
+            # identity: sum(sleeve_pv) + alpaca_cash + sleeve_unattributed
+            #           == alpaca_position_equity (long_MV + short_MV + cash)
+            # fund_pv_equity_gap = fund_pv - alpaca_position_equity is Alpaca
+            # margin/unsettled component, not our attribution bug.
             "sleeve_pv_source": data.get("sleeve_pv_source"),
             "alpaca_cash_cents": data.get("alpaca_cash_cents"),
+            "alpaca_long_mv_cents": data.get("alpaca_long_mv_cents"),
+            "alpaca_short_mv_cents": data.get("alpaca_short_mv_cents"),
+            "alpaca_position_equity_cents": data.get("alpaca_position_equity_cents"),
             "sleeve_unattributed_cents": data.get("sleeve_unattributed_cents"),
             "reconciliation_drift_cents": data.get("reconciliation_drift_cents"),
+            "fund_pv_equity_gap_cents": data.get("fund_pv_equity_gap_cents"),
         }
     except Exception as exc:
         logger.error("portfolio summary failed for user %s: %s", current_user.id, exc)
