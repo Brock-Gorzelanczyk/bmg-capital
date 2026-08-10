@@ -146,7 +146,7 @@ def run(conn) -> dict:
             WHEN NEW.origin IS NULL OR NEW.origin NOT IN ({allowed_sql})
             BEGIN
                 SELECT RAISE(ABORT,
-                    '{table}: origin must be one of {allowed_sql} (m099)');
+                    '{table}: origin must be a valid provenance enum value (m099)');
             END
         """))
         conn.execute(text(f"""
@@ -156,7 +156,7 @@ def run(conn) -> dict:
             WHEN NEW.origin IS NULL OR NEW.origin NOT IN ({allowed_sql})
             BEGIN
                 SELECT RAISE(ABORT,
-                    '{table}: origin update must be one of {allowed_sql} (m099)');
+                    '{table}: origin update must be a valid provenance enum value (m099)');
             END
         """))
         result["steps"].append(f"installed {table}_require_origin_insert/update triggers")
