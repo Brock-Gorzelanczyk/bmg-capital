@@ -219,6 +219,12 @@ class PortfolioSnapshot:
     bots_active: int
     bots_total: int
 
+    # Provenance: "alpaca_attribution" (ledger #26 doctrine, Item 2 2026-08-09)
+    # or "bot_sum_fallback" (legacy — used when Alpaca fetch fails or no attribution
+    # is available). Fund-level payload also exposes an "unattributed" line so
+    # any divergence between sum-of-sleeves and Alpaca fund PV is visible.
+    pv_source: str = "bot_sum_fallback"
+
     bots: list = field(default_factory=list)  # list[BotSnapshot]
     equity_curve: list = field(default_factory=list)
 
@@ -778,7 +784,8 @@ def compute_bot_snapshot(alloc, profile, db: Session) -> BotSnapshot:
 # ── Portfolio-level computation ───────────────────────────────────────────────
 
 def compute_portfolio_snapshot(
-    port, allocs_with_profiles: list[tuple], db: Session
+    port, allocs_with_profiles: list[tuple], db: Session,
+    alloc_pv_override_cents: Optional[dict[int, int]] = None,
 ) -> PortfolioSnapshot:
     """
     Canonical computation for one StrategyPortfolio.
@@ -793,6 +800,13 @@ def compute_portfolio_snapshot(
     and can drift from the sum of its allocations (e.g. a new bot is added
     without updating the parent). Trusting the children keeps the rollup
     consistent with bot-detail pages and eliminates the discrepancy log.
+
+    Item 2 (2026-08-09): when `alloc_pv_override_cents` is provided (built
+    from Alpaca /v2/positions attribution), portfolio_value_cents is derived
+    from broker truth per-allocation instead of the bot-sum rollup. This
+    matches the ledger #26 doctrine that fixed fund PV: Alpaca is master
+    for any number it knows. The bot-sum path remains as a fallback for
+    when Alpaca is unreachable.
     """
     bot_snapshots = [compute_bot_snapshot(alloc, profile, db) for alloc, profile in allocs_with_profiles]
 
@@ -807,7 +821,20 @@ def compute_portfolio_snapshot(
     # Fallback to port.starting_capital_cents when there are no allocations.
     bot_starting_sum = sum(s.starting_capital_cents for s in bot_snapshots)
     starting_capital_cents = bot_starting_sum if bot_snapshots else int(port.starting_capital_cents or 0)
-    portfolio_value_cents = sum(s.portfolio_value_cents for s in bot_snapshots) if bot_snapshots else starting_capital_cents
+
+    _pv_source = "bot_sum_fallback"
+    if alloc_pv_override_cents is not None and bot_snapshots:
+        # Alpaca-derived per-allocation attribution. Missing allocs (no positions
+        # in Alpaca) contribute 0 to sleeve PV — legitimate for idle/flat allocs.
+        portfolio_value_cents = sum(
+            int(alloc_pv_override_cents.get(alloc.id, 0))
+            for alloc, _prof in allocs_with_profiles
+        )
+        _pv_source = "alpaca_attribution"
+    elif bot_snapshots:
+        portfolio_value_cents = sum(s.portfolio_value_cents for s in bot_snapshots)
+    else:
+        portfolio_value_cents = starting_capital_cents
 
     # Surface drift between the StrategyPortfolio row and its allocations so
     # data ops can reconcile, but do not let it change the reported value.
@@ -886,6 +913,7 @@ def compute_portfolio_snapshot(
         watchlist_count=watchlist_count,
         bots_active=bots_active,
         bots_total=len(bot_snapshots),
+        pv_source=_pv_source,
         bots=bot_snapshots,
     )
 
@@ -1089,14 +1117,9 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     total_today_pnl = bot_sum_today_pnl_cents  # fallback
     _alpaca_source = "bot_sum_fallback"
     try:
-        import os as _os_ac, urllib.request as _ur_ac, json as _j_ac
-        _kid = _os_ac.environ.get("ALPACA_API_KEY", "")
-        _ks = _os_ac.environ.get("ALPACA_SECRET_KEY", "")
-        if _kid and _ks:
-            _acct = _j_ac.loads(_ur_ac.urlopen(_ur_ac.Request(
-                "https://paper-api.alpaca.markets/v2/account",
-                headers={"APCA-API-KEY-ID": _kid, "APCA-API-SECRET-KEY": _ks},
-            ), timeout=8).read())
+        from app.services.alpaca_account_cache import get_alpaca_account
+        _acct = get_alpaca_account()
+        if _acct:
             _pv = float(_acct.get("portfolio_value") or 0)
             _last = float(_acct.get("last_equity") or 0)
             _eq = float(_acct.get("equity") or 0)
@@ -1108,6 +1131,58 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         logger.warning("[canonical] Alpaca fund PV fetch failed, using bot sum: %s", _acct_exc)
     unattributed_cents = bot_sum_pv_cents - total_value
 
+    # ── Alpaca-derived per-allocation PV attribution (Item 2, 2026-08-09) ──
+    # Same doctrine as Option 2 (fund PV): Alpaca is master for any number it
+    # knows. Each sleeve's PV is now derived from Alpaca /v2/positions
+    # partitioned by which BMG allocation currently holds the symbol. This
+    # replaces the summing-of-child-bot-PVs path that was overstating sleeves
+    # by 25× (see ledger #26 for the fund-level version of this bug).
+    alloc_pv_override_cents: Optional[dict[int, int]] = None
+    alpaca_cash_cents = 0
+    sleeve_unattributed_cents = 0
+    _sleeve_source = "bot_sum_fallback"
+    try:
+        from app.services.alpaca_account_cache import get_alpaca_positions
+        _alp_positions = get_alpaca_positions()
+        if _alp_positions is not None and _acct is not None:
+            from app.db.models.bots import BotPosition
+            _open_rows = (
+                db.query(BotPosition.allocation_id, BotPosition.symbol, BotPosition.qty)
+                .filter(BotPosition.closed_at.is_(None))
+                .filter(BotPosition.quarantined_at.is_(None))
+                .all()
+            )
+            # symbol → { allocation_id → bmg_qty }
+            _claims: dict[str, dict[int, float]] = {}
+            for aid, sym, qty in _open_rows:
+                if not sym:
+                    continue
+                _claims.setdefault(sym, {})[aid] = _claims.get(sym, {}).get(aid, 0.0) + float(qty or 0)
+            alloc_pv_override_cents = {}
+            _attributed_mv = 0
+            for pos in _alp_positions:
+                sym = pos.get("symbol")
+                try:
+                    mv_cents = int(round(float(pos.get("market_value") or 0) * 100))
+                except Exception:
+                    mv_cents = 0
+                claimants = _claims.get(sym, {})
+                total_claim = sum(abs(v) for v in claimants.values())
+                if not claimants or total_claim <= 0:
+                    # Alpaca holds it, no BMG bot claims it → fund-level unattributed
+                    sleeve_unattributed_cents += mv_cents
+                    continue
+                # Prorate by claimed BMG qty share
+                for aid, q in claimants.items():
+                    share = abs(q) / total_claim
+                    alloc_pv_override_cents[aid] = alloc_pv_override_cents.get(aid, 0) + int(round(mv_cents * share))
+                _attributed_mv += mv_cents
+            alpaca_cash_cents = int(round(float(_acct.get("cash") or 0) * 100))
+            _sleeve_source = "alpaca_attribution"
+    except Exception as _sleeve_exc:
+        logger.warning("[canonical] Alpaca sleeve attribution failed, falling back to bot-sum: %s", _sleeve_exc)
+        alloc_pv_override_cents = None
+
     # ── Per-portfolio snapshots (response breakdown only) ──────────────────
     portfolio_snapshots = []
     accounted_alloc_ids: set[int] = set()
@@ -1115,27 +1190,44 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         port_allocs = [a for a in all_allocs if a.portfolio_id == port.id]
         pairs = [(a, profile_map[a.profile_id]) for a in port_allocs if a.profile_id in profile_map]
         accounted_alloc_ids.update(a.id for a, _ in pairs)
-        portfolio_snapshots.append(compute_portfolio_snapshot(port, pairs, db))
+        portfolio_snapshots.append(
+            compute_portfolio_snapshot(port, pairs, db, alloc_pv_override_cents=alloc_pv_override_cents)
+        )
 
     total_watchlist = sum(s.watchlist_count for s in portfolio_snapshots)
 
-    # Diagnostic: surface any drift between the per-alloc sum (authoritative)
-    # and the portfolio_snapshots + orphan path. Useful for spotting cases
-    # where _ensure_portfolios_for_user binds an alloc into a portfolio with
-    # a sleeve mismatch, etc.
+    # Reconciliation identity (target per Item 2, 2026-08-09):
+    #     sum(sleeve_pv_alpaca) + alpaca_cash + fund_unattributed == fund_pv
+    # sum(sleeve_pv) covers Alpaca positions attributed to BMG allocations.
+    # sleeve_unattributed = Alpaca positions no BMG bot claims.
+    # alpaca_cash = uninvested balance.
+    # Any residual drift after these three sources sum vs fund_pv is the
+    # attribution-precision noise (mostly BMG-tracked positions Alpaca has
+    # since closed but BMG hasn't caught up on).
+    portfolio_sum_diag = sum(s.portfolio_value_cents for s in portfolio_snapshots)
+    diag_total = portfolio_sum_diag + alpaca_cash_cents + sleeve_unattributed_cents
+    reconciliation_drift_cents = total_value - diag_total
+    if _sleeve_source == "alpaca_attribution" and abs(reconciliation_drift_cents) > 10_000:  # > $100
+        logger.warning(
+            "[canonical] sleeve reconciliation drift: fund_pv=%d sum_sleeves=%d + cash=%d + unattributed=%d = %d, diff=%d",
+            total_value, portfolio_sum_diag, alpaca_cash_cents, sleeve_unattributed_cents,
+            diag_total, reconciliation_drift_cents,
+        )
+    # Legacy split-brain log — kept for fallback path only. When
+    # alpaca_attribution is live the reconciliation drift above is the
+    # authoritative check.
     orphan_alloc_ids = [a.id for a in all_allocs if a.id not in accounted_alloc_ids]
     orphan_value_diag = sum(
         (bot_snap_by_alloc[aid].portfolio_value_cents or 0) if aid in bot_snap_by_alloc
         else fallback_value_by_alloc.get(aid, 0)
         for aid in orphan_alloc_ids
     )
-    portfolio_sum_diag = sum(s.portfolio_value_cents for s in portfolio_snapshots)
-    diag_total = portfolio_sum_diag + orphan_value_diag
-    if abs(total_value - diag_total) > 100:  # > $1 drift
+    diag_total_fallback = portfolio_sum_diag + orphan_value_diag
+    if _sleeve_source == "bot_sum_fallback" and abs(total_value - diag_total_fallback) > 100:
         logger.error(
-            "[canonical] split-brain drift: per_alloc=%d portfolio_sum=%d orphan=%d diag_total=%d diff=%d allocs=%d",
-            total_value, portfolio_sum_diag, orphan_value_diag, diag_total,
-            total_value - diag_total, len(all_allocs),
+            "[canonical] split-brain drift (fallback path): per_alloc=%d portfolio_sum=%d orphan=%d diag_total=%d diff=%d allocs=%d",
+            total_value, portfolio_sum_diag, orphan_value_diag, diag_total_fallback,
+            total_value - diag_total_fallback, len(all_allocs),
         )
 
     # SHIP 3: fleet all-time % = SUM(bot_daily_pnl.realized_cents) / SUM(inception_capital_cents)
@@ -1584,6 +1676,18 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         "bot_sum_pv_cents": bot_sum_pv_cents,
         "unattributed_cents": unattributed_cents,
         "unattributed_usd": round(unattributed_cents / 100, 2),
+        # Item 2 (2026-08-09) sleeve reconciliation. sleeve_pv_source tells the
+        # caller which path built the per-portfolio PVs. When "alpaca_attribution"
+        # is live, sum(portfolio_value_cents) + alpaca_cash_cents +
+        # sleeve_unattributed_cents == total_value_cents ± reconciliation_drift.
+        # Target acceptance: |reconciliation_drift_cents| < $100.
+        "sleeve_pv_source": _sleeve_source,
+        "alpaca_cash_cents": alpaca_cash_cents,
+        "sleeve_unattributed_cents": sleeve_unattributed_cents,
+        "reconciliation_drift_cents": (
+            total_value - (portfolio_sum_diag + alpaca_cash_cents + sleeve_unattributed_cents)
+            if _sleeve_source == "alpaca_attribution" else None
+        ),
         # Alias for callers that read portfolio_value_cents at the aggregate
         # level (mirrors the per-portfolio shape). Always populated — never None.
         "portfolio_value_cents": total_value,
