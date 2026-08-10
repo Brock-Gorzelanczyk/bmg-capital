@@ -43,6 +43,9 @@ from app.db.models.bots import (
 
 logger = logging.getLogger(__name__)
 
+# Ledger #32 §W1
+from app.services.position_write_gate import check_position_pre_write  # noqa: F401
+
 router = APIRouter(prefix="/api/bots", tags=["bots"])
 
 
@@ -3597,6 +3600,7 @@ def migrate_legacy_positions(
                 closed_at=None,
                 exit_reason=None,
                 is_paper=True,
+                origin="BACKFILL",  # m099 — one-shot legacy StrategyTrade migration
             )
             db.add(pos)
             existing_symbols.add(t.symbol)
@@ -3955,6 +3959,7 @@ def debug_force_trade(
         opened_at=now,
         closed_at=None,
         is_paper=True,
+        origin="BROKER_FILL",  # m099 — manual crypto_swing BTC smoke-test path
     )
     db.add(pos_row)
     db.flush()
@@ -3997,6 +4002,7 @@ def debug_force_trade(
         alpaca_order_id=alpaca_order_id,
         expected_fill_cents=fill_price_cents,
         slippage_bps=0.0,
+        origin="BROKER_FILL",  # m099 — manual crypto_swing BTC
         **_rt_btc,
     )
     db.add(trade_row)

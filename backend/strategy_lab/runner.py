@@ -23,6 +23,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Ledger #32 §W1: any file constructing BotTrade/BotPosition must import its gate.
+from app.services.trade_write_gate import check_trade_write  # noqa: F401
+from app.services.position_write_gate import check_position_pre_write  # noqa: F401
+
 
 def _current_et_session() -> str:
     """Return the current US equity trading session based on ET clock.
@@ -2510,6 +2514,7 @@ def _execute_options_signal(
                 underlying_symbol=_lr["underlying_symbol"],
                 contract_count=contract_count,
                 contract_premium_cents=_lr["premium_cents"],
+                origin="BROKER_FILL",  # m099
             )
             db.add(_lr_pos)
             db.flush()
@@ -2540,6 +2545,7 @@ def _execute_options_signal(
                 composite_score_at_execution=getattr(
                     sig, "composite_score_at_execution", None
                 ),
+                origin="BROKER_FILL",  # m099 — real Alpaca fill via runner
                 **_rt_options,
             )
             db.add(_lr_trade)
@@ -3465,6 +3471,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             stop_price_usd=stop_price,
             target_price_usd=target_price,
             trailing_stop_activated=False,
+            origin="BROKER_FILL",  # m099
         )
         db.add(pos)
         db.flush()  # get pos.id
@@ -3522,6 +3529,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             composite_score_at_execution=getattr(
                 sig, "composite_score_at_execution", None
             ),
+            origin="BROKER_FILL",  # m099 — equity runner path
             **_rt_equity,
         )
         db.add(trade)

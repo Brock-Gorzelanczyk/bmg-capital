@@ -34,6 +34,10 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Ledger #32 §W1: any file constructing BotTrade/BotPosition must import its gate.
+from app.services.trade_write_gate import check_trade_write  # noqa: F401
+from app.services.position_write_gate import check_position_pre_write  # noqa: F401
+
 _ALPACA_BASE = "https://paper-api.alpaca.markets"
 
 
@@ -287,6 +291,7 @@ def adopt_orphans(db, dry_run: bool = False) -> dict:
                 underlying_symbol=parsed.get("root"),
                 contract_count=int(abs(qty)),
                 contract_premium_cents=cost_cents,
+                origin="ADOPTED",  # m099
             )
             db.add(pos)
             db.flush()  # get pos.id
@@ -310,6 +315,7 @@ def adopt_orphans(db, dry_run: bool = False) -> dict:
                 underlying_symbol=parsed.get("root"),
                 contract_count=int(abs(qty)),
                 contract_premium_cents=cost_cents,
+                origin="ADOPTED",  # m099
             )
             db.add(entry_trade)
             db.commit()

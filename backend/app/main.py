@@ -1119,6 +1119,20 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m098_breach_on_adopt FAILED: %s",
                      _m098_exc, exc_info=True)
 
+    # m099: provenance origin column on bot_trades + bot_positions.
+    # Structural fix for "BMG-generated rows impersonate broker facts"
+    # (Brock 2026-08-10). Adds origin ENUM enforced by SQLite trigger.
+    # Backfills existing rows by inference from alpaca_order_id.
+    # See context/13-provenance-spec.md for the full design.
+    try:
+        from app.db.migrations.m099_provenance_column import run as _run_m099
+        with engine.begin() as _m099_conn:
+            _m099_result = _run_m099(_m099_conn)
+        logger.warning("[startup] m099 status: %s", _m099_result)
+    except Exception as _m099_exc:
+        logger.error("[startup] m099_provenance_column FAILED: %s",
+                     _m099_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

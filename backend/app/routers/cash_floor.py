@@ -25,6 +25,9 @@ from app.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
+# Ledger #32 §W1
+from app.services.position_write_gate import check_position_pre_write  # noqa: F401
+
 router = APIRouter(prefix="/api/admin/cash-floor", tags=["admin"])
 
 
@@ -203,6 +206,7 @@ def rebalance(
                     stop_price_usd=None,    # passive: no stop
                     target_price_usd=None,  # passive: no target
                     trailing_stop_activated=False,
+                    origin="BROKER_FILL",  # m099 — cash_floor.buy
                 )
                 db.add(pos)
                 db.flush()
@@ -230,6 +234,7 @@ def rebalance(
                 expected_fill_cents=fill_cents,
                 slippage_bps=3.0,
                 strategy="cash_floor",
+                origin="BROKER_FILL",  # m099 — cash_floor.buy
                 **_rt_cf_buy,
             ))
             written_trades.append({
@@ -281,6 +286,7 @@ def rebalance(
                 expected_fill_cents=fill_cents,
                 slippage_bps=3.0,
                 strategy="cash_floor",
+                origin="BROKER_FILL",  # m099 — cash_floor.sell
                 **_rt_cf_sell,
             ))
             written_trades.append({

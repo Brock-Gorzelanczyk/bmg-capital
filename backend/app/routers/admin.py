@@ -727,6 +727,7 @@ def adopt_all_alpaca_orphans(
             underlying_symbol=parsed.get("root"),
             contract_count=int(missing_qty) if is_option else None,
             contract_premium_cents=cost_cents if is_option else None,
+            origin="ADOPTED",  # m099 — catchall adopter
         )
         db.add(pos); db.flush()
         entry_trade = BotTrade(
@@ -746,6 +747,7 @@ def adopt_all_alpaca_orphans(
             underlying_symbol=parsed.get("root"),
             contract_count=int(missing_qty) if is_option else None,
             contract_premium_cents=cost_cents if is_option else None,
+            origin="ADOPTED",  # m099 — catchall adopter
         )
         db.add(entry_trade)
         adopted.append({**entry, "pos_id": pos.id, "trade_id": entry_trade.id})
@@ -1013,6 +1015,7 @@ def rebuild_positions_from_alpaca(
                 underlying_symbol=parsed.get("root"),
                 contract_count=int(a["qty"]) if is_option else None,
                 contract_premium_cents=cost_cents if is_option else None,
+                origin="REBUILD",  # m099 — rebuild-positions-from-alpaca
             )
             db.add(pos); db.flush()
             t = BotTrade(
@@ -1032,6 +1035,7 @@ def rebuild_positions_from_alpaca(
                 underlying_symbol=parsed.get("root"),
                 contract_count=int(a["qty"]) if is_option else None,
                 contract_premium_cents=cost_cents if is_option else None,
+                origin="REBUILD",  # m099 — rebuild-positions-from-alpaca
             )
             db.add(t)
             inserted_ids.append(pos.id)
@@ -2301,11 +2305,14 @@ def round_trips_per_bot(
     alloc_to_prof = {a.id: profs.get(a.profile_id) for a in allocs}
     alloc_ids = [a.id for a in allocs]
 
+    # m099: round-trips count only BROKER_FILL rows (real live fills).
+    # Adopter/reconcile/rebuild rows represent history reconstruction, not new
+    # broker events, and must not inflate the round-trip count.
     trades = (
         db.query(BotTrade)
         .filter(BotTrade.allocation_id.in_(alloc_ids))
         .filter(BotTrade.quarantined_at.is_(None))
-        .filter(BotTrade.alpaca_order_id.isnot(None))
+        .filter(BotTrade.origin == "BROKER_FILL")
         .order_by(BotTrade.ts.asc())
         .all()
     )
@@ -2882,6 +2889,7 @@ def adopt_missing_alpaca_positions(
             breach_on_adopt=gate.breach,
             breach_reason=gate.reason if gate.breach else None,
             remediation_ticket_id=gate.ticket_id if gate.breach else None,
+            origin="ADOPTED",  # m099 — adopt_missing_2026_08_07
         )
         try:
             db.add(pos); db.flush()
@@ -2904,6 +2912,7 @@ def adopt_missing_alpaca_positions(
             underlying_symbol=parsed.get("root"),
             contract_count=int(abs(raw_qty)) if is_option else None,
             contract_premium_cents=cost_cents if is_option else None,
+            origin="ADOPTED",  # m099 — adopt_missing_2026_08_07
         )
         db.add(entry_trade)
         if attr_source == "unresolved_catchall":
@@ -3315,6 +3324,7 @@ def rebuild_realized_pnl(
                 alpaca_order_id=oid,
                 pnl_cents=total_cents,
                 pnl_source=src,
+                origin="REBUILD",  # m099 — rebuild-from-alpaca-order-history job
             )
             if is_opt:
                 new_t.option_type = "call" if "C" in (o.get("symbol") or "")[10:] else "put"
@@ -3612,6 +3622,7 @@ def close_ghost_positions(
                 underlying_symbol=p.underlying_symbol,
                 contract_count=p.contract_count,
                 contract_premium_cents=p.contract_premium_cents,
+                origin="RECONCILE",  # m099 — reconcile-close ghost positions
             )
             db.add(close_trade)
     if not dry_run and ghosts:
@@ -4223,11 +4234,14 @@ def broker_reconciliation(
         "  AND bp.closed_at IS NULL "
         "  AND bp.quarantined_at IS NULL"
     )).fetchone()
+    # m099: trades_24h counts BROKER_FILL only (adopter/reconcile/rebuild
+    # rows are BMG-generated, not fills).
     db_trades_24h_row = db.execute(_text(
         "SELECT COUNT(*) FROM bot_trades t "
         "JOIN bot_allocations a ON a.id = t.allocation_id "
         "WHERE a.user_id = 1 AND t.ts >= :cut "
-        "  AND t.quarantined_at IS NULL"
+        "  AND t.quarantined_at IS NULL "
+        "  AND t.origin = 'BROKER_FILL'"
     ), {"cut": cutoff_24h}).fetchone()
     db_trades_alpaca_linked_row = db.execute(_text(
         "SELECT COUNT(*) FROM bot_trades t "
@@ -5425,6 +5439,7 @@ def synthetic_fill_test(
             contract_count=_SYN_CONTRACTS,
             contract_premium_cents=_SYN_ENTRY_CENTS,
             quarantine_reason=_SYNTHETIC_TAG,
+            origin="BACKFILL",  # m099 — synthetic test position (quarantined)
         )
         db.add(pos)
         db.flush()
@@ -5446,6 +5461,7 @@ def synthetic_fill_test(
             contract_count=_SYN_CONTRACTS,
             contract_premium_cents=_SYN_ENTRY_CENTS,
             quarantine_reason=_SYNTHETIC_TAG,
+            origin="BACKFILL",  # m099 — synthetic test trade
         )
         db.add(trade)
         db.commit()
@@ -7687,7 +7703,8 @@ def get_bot_diagnostics(
                (SELECT COUNT(*) FROM bot_trades bt
                  WHERE bt.allocation_id = a.id
                    AND bt.ts >= :cutoff
-                   AND bt.quarantined_at IS NULL) AS trades_window,
+                   AND bt.quarantined_at IS NULL
+                   AND bt.origin = 'BROKER_FILL') AS trades_window,
                (SELECT MAX(bt.ts) FROM bot_trades bt
                  WHERE bt.allocation_id = a.id
                    AND bt.quarantined_at IS NULL) AS trades_last_ts
@@ -7923,7 +7940,8 @@ def get_bot_diagnostic_singular(
                (SELECT COUNT(*) FROM bot_trades bt
                  WHERE bt.allocation_id = a.id
                    AND bt.ts >= :cutoff
-                   AND bt.quarantined_at IS NULL) AS trades_window,
+                   AND bt.quarantined_at IS NULL
+                   AND bt.origin = 'BROKER_FILL') AS trades_window,
                (SELECT MAX(bt.ts) FROM bot_trades bt
                  WHERE bt.allocation_id = a.id
                    AND bt.quarantined_at IS NULL) AS trades_last_ts
@@ -8016,7 +8034,8 @@ def compute_bot_diagnostics(db: Session, user_id: int = 1) -> list[dict]:
                (SELECT COUNT(*) FROM bot_trades bt
                  WHERE bt.allocation_id = a.id
                    AND bt.ts >= :cutoff
-                   AND bt.quarantined_at IS NULL) AS trades_window,
+                   AND bt.quarantined_at IS NULL
+                   AND bt.origin = 'BROKER_FILL') AS trades_window,
                (SELECT MAX(bt.ts) FROM bot_trades bt
                  WHERE bt.allocation_id = a.id
                    AND bt.quarantined_at IS NULL) AS trades_last_ts
@@ -9579,17 +9598,20 @@ def get_conversion_24h(db: Session = Depends(get_db)) -> dict:
         "JOIN bot_allocations a ON a.id = s.allocation_id "
         "WHERE a.user_id = 1 AND s.ts >= :cut"
     ), {"cut": cut}).fetchone()
+    # m099: fleet + per-bot trades_24h counts BROKER_FILL only.
     trd_row = db.execute(text(
         "SELECT COUNT(*) FROM bot_trades t "
         "JOIN bot_allocations a ON a.id = t.allocation_id "
-        "WHERE a.user_id = 1 AND t.ts >= :cut AND t.quarantined_at IS NULL"
+        "WHERE a.user_id = 1 AND t.ts >= :cut "
+        "  AND t.quarantined_at IS NULL AND t.origin = 'BROKER_FILL'"
     ), {"cut": cut}).fetchone()
     sigs = int(sig_row[0] or 0)
     trds = int(trd_row[0] or 0)
     per_bot = db.execute(text(
         "SELECT p.name, "
         "  (SELECT COUNT(*) FROM bot_signals s WHERE s.allocation_id = a.id AND s.ts >= :cut) AS sigs, "
-        "  (SELECT COUNT(*) FROM bot_trades t WHERE t.allocation_id = a.id AND t.ts >= :cut AND t.quarantined_at IS NULL) AS trds "
+        "  (SELECT COUNT(*) FROM bot_trades t WHERE t.allocation_id = a.id AND t.ts >= :cut "
+        "    AND t.quarantined_at IS NULL AND t.origin = 'BROKER_FILL') AS trds "
         "FROM bot_allocations a JOIN bot_profiles p ON p.id = a.profile_id "
         "WHERE a.user_id = 1 AND a.starting_capital_cents > 0"
     ), {"cut": cut}).fetchall()

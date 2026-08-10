@@ -15,6 +15,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 logger = logging.getLogger(__name__)
 
+# Ledger #32 §W1
+from app.services.position_write_gate import check_position_pre_write  # noqa: F401
+
 ET = pytz.timezone("America/New_York")
 UTC = pytz.utc
 
@@ -2315,6 +2318,7 @@ def setup_bot_scheduler(scheduler) -> None:
                                     opened_at=now, closed_at=None, is_paper=True,
                                     stop_price_usd=None, target_price_usd=None,
                                     trailing_stop_activated=False,
+                                    origin="BROKER_FILL",  # m099 — cash_floor rebalance
                                 )
                                 _db.add(pos); _db.flush()
                             # 2026-08-07 sim-leak sweep: gate before write
@@ -2334,6 +2338,7 @@ def setup_bot_scheduler(scheduler) -> None:
                                 fees_cents=friction, ts=now, position_id=pos.id,
                                 is_paper=True, expected_fill_cents=fill_cents,
                                 slippage_bps=3.0, strategy="cash_floor",
+                                origin="BROKER_FILL",  # m099 — cash_floor rebalance
                                 **_rt_sched,
                             ))
                 _db.commit()

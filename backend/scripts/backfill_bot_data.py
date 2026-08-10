@@ -24,6 +24,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 os.environ.setdefault("DATABASE_URL", "sqlite:////data/bmg_capital.db")
 
+# Ledger #32 §W1
+from app.services.trade_write_gate import check_trade_write  # noqa: F401
+from app.services.position_write_gate import check_position_pre_write  # noqa: F401
+
 # ── Production guard ──────────────────────────────────────────────────────────
 # Railway sets RAILWAY_ENVIRONMENT=production automatically.
 # To run this script in production deliberately, set FORCE_SEED=1.
@@ -303,6 +307,7 @@ def main() -> None:
                             opened_at=opened_at,
                             closed_at=None,
                             is_paper=True,
+                            origin="BACKFILL",  # m099
                         )
                         db.add(pos)
                         db.flush()
@@ -318,6 +323,7 @@ def main() -> None:
                             is_paper=True,
                             expected_fill_cents=int(entry * 100),
                             slippage_bps=pos_rng.uniform(0, 2),
+                            origin="BACKFILL",  # m099
                         ))
 
                 # ── Signals (2-3 per week for 30 days) ───────────────────────

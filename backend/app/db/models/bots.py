@@ -108,6 +108,10 @@ class BotPosition(Base):
     breach_on_adopt: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=False)
     breach_reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     remediation_ticket_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # m099 (2026-08-10) — provenance ENUM. NOT NULL enforced by SQLite trigger,
+    # not by SQLAlchemy nullable=False (trigger surfaces at INSERT/UPDATE time
+    # with a clearer error). Values in app.services.provenance.ALLOWED_ORIGINS.
+    origin: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
 
 
 class BotTrade(Base):
@@ -124,6 +128,8 @@ class BotTrade(Base):
     alpaca_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     position_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("bot_positions.id"), nullable=True)
     signal_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("bot_signals.id"), nullable=True, index=True)
+    # m099 (2026-08-10) — provenance ENUM. See BotPosition.origin note.
+    origin: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     is_paper: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expected_fill_cents: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     slippage_bps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

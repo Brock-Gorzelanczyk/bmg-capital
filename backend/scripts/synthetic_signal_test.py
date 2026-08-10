@@ -19,6 +19,10 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Ledger #32 §W1
+from app.services.trade_write_gate import check_trade_write  # noqa: F401
+from app.services.position_write_gate import check_position_pre_write  # noqa: F401
+
 bot_name  = sys.argv[1] if len(sys.argv) > 1 else "options_income"
 symbol    = sys.argv[2] if len(sys.argv) > 2 else "SPY"
 side      = sys.argv[3] if len(sys.argv) > 3 else "sell_put"
@@ -128,6 +132,7 @@ try:
             side="long" if side in ("long", "buy") else "short",
             opened_at=now,
             is_paper=True,
+            origin="BACKFILL",  # m099 — dev synthetic test
         )
         db.add(pos)
         db.flush()
@@ -144,6 +149,7 @@ try:
             is_paper=True,
             expected_fill_cents=fill_cents,
             slippage_bps=0.0,
+            origin="BACKFILL",  # m099 — dev synthetic test
         )
         db.add(trade)
         db.flush()

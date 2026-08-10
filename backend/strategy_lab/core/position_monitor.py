@@ -206,6 +206,7 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
         is_paper=True,
         expected_fill_cents=fill_cents,
         slippage_bps=0.0,
+        origin="BROKER_FILL",  # m099 — real Alpaca exit (gated by check_trade_write)
         **_rt_exit,
     )
     db.add(exit_trade)

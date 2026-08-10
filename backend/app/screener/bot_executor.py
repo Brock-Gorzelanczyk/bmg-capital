@@ -15,6 +15,10 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Ledger #32 §W1
+from app.services.position_write_gate import check_position_pre_write  # noqa: F401
+from app.services.trade_write_gate import check_trade_write  # noqa: F401
+
 # ── Per-bot trading universes ─────────────────────────────────────────────────
 
 _UNIVERSES: dict[str, list[str]] = {
@@ -281,6 +285,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 is_paper=True,
                 expected_fill_cents=int(exit_price * 100),
                 slippage_bps=rng.uniform(-2, 2),
+                origin="BACKFILL",  # m099 — dead legacy sim path (env-gated)
                 **_rt_exit,
             ))
             realized_cents += pnl_cents
@@ -334,6 +339,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 is_paper=True,
                 stop_price_usd=round(entry_price * (1 - stop_pct), 4),
                 target_price_usd=round(entry_price * (1 + target_pct), 4),
+                origin="BACKFILL",  # m099 — dead legacy sim path (env-gated)
             )
             _assert_not_options_profile()
             # ── SHIP 2 asset-class gate (path #12, entry) ────────────────────
@@ -364,6 +370,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 is_paper=True,
                 expected_fill_cents=int(entry_price * 100),
                 slippage_bps=rng.uniform(0, 3),
+                origin="BACKFILL",  # m099 — dead legacy sim path (env-gated)
                 **_rt_entry,
             ))
 

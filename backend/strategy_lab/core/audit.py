@@ -12,6 +12,9 @@ from strategy_lab.core.signals import Signal
 
 logger = logging.getLogger(__name__)
 
+# Ledger #32 §W1: any file constructing BotTrade must import trade_write_gate.
+from app.services.trade_write_gate import check_trade_write  # noqa: F401
+
 
 def _write_to_bridge_postgres(
     signal_id: int,
@@ -410,6 +413,7 @@ def log_fill(
     # ── end asset-class gate ─────────────────────────────────────────────────
 
     from app.services.regime_tag import regime_tag_dict as _regime_tag_dict
+    from app.services.provenance import infer_origin_from_alpaca_order_id
     _rt_fill = _regime_tag_dict(db, source="audit.log_fill")
     row = BotTrade(
         allocation_id=allocation_id,
@@ -422,6 +426,7 @@ def log_fill(
         alpaca_order_id=alpaca_order_id,
         position_id=position_id,
         is_paper=is_paper,
+        origin=infer_origin_from_alpaca_order_id(alpaca_order_id),  # m099
         **_rt_fill,
     )
     db.add(row)
