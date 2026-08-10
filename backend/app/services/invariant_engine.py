@@ -715,6 +715,87 @@ def _check_i14_breach_remediation(db) -> Result:
         return _amber("I14", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i19_broker_fill_has_uuid(db) -> Result:
+    """m099 (2026-08-10): every row with origin='BROKER_FILL' must have a
+    real Alpaca UUID in alpaca_order_id. A NULL alpaca_order_id on a
+    BROKER_FILL row is a contradiction — either the write site tagged the
+    wrong origin or the UUID was dropped."""
+    try:
+        from sqlalchemy import text
+        row = db.execute(text(
+            "SELECT COUNT(*) FROM bot_trades "
+            "WHERE origin = 'BROKER_FILL' AND (alpaca_order_id IS NULL OR alpaca_order_id = '')"
+        )).fetchone()
+        n = int(row[0] or 0)
+        if n == 0:
+            return _ok("I19", 0, 0, "no BROKER_FILL rows missing alpaca_order_id")
+        return _red("I19", n, 0, float(n),
+                    f"{n} BROKER_FILL trade row(s) have NULL alpaca_order_id — write-site provenance bug")
+    except Exception as exc:
+        return _amber("I19", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
+def _check_i20_phantom_trades_while_market_closed(db) -> Result:
+    """m099 (2026-08-10): if the market is closed and any bot_trade in the
+    last 24h has origin != 'BROKER_FILL', that's an "activity" row leaking
+    into trade counts. Detects the exact symptom Brock flagged five times."""
+    try:
+        from app.services.market_hours import is_market_open
+        from sqlalchemy import text
+        if is_market_open():
+            return _ok("I20", "market_open", None, "check n/a — market open")
+        row_broker = db.execute(text(
+            "SELECT COUNT(*) FROM bot_trades "
+            "WHERE ts >= datetime('now','-24 hours') "
+            "  AND quarantined_at IS NULL "
+            "  AND origin = 'BROKER_FILL'"
+        )).fetchone()
+        row_other = db.execute(text(
+            "SELECT COUNT(*) FROM bot_trades "
+            "WHERE ts >= datetime('now','-24 hours') "
+            "  AND quarantined_at IS NULL "
+            "  AND (origin != 'BROKER_FILL' OR origin IS NULL)"
+        )).fetchone()
+        broker = int(row_broker[0] or 0)
+        other = int(row_other[0] or 0)
+        actual = {"broker_fill_24h": broker, "other_origin_24h": other}
+        if broker == 0 and other == 0:
+            return _ok("I20", actual, None, "no bot_trade rows in last 24h (market closed)")
+        if broker == 0 and other > 0:
+            return _red("I20", actual, None, float(other),
+                        f"market closed AND 0 BROKER_FILL rows but {other} other-origin rows in 24h — phantom-trades leak")
+        # broker > 0 while market closed → afterhours or in-flight
+        return _ok("I20", actual, None,
+                   f"market closed but {broker} broker fills in 24h (afterhours/in-flight, non-leak)")
+    except Exception as exc:
+        return _amber("I20", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
+def _check_i21_origin_not_null(db) -> Result:
+    """m099 (2026-08-10): every bot_trade and bot_position must have a valid
+    origin. The trigger enforces this at INSERT/UPDATE; this invariant
+    catches any migration bypass (e.g., a raw UPDATE bypassing the trigger)."""
+    try:
+        from sqlalchemy import text
+        allowed = ("BROKER_FILL", "ADOPTED", "RECONCILE", "REBUILD", "BACKFILL")
+        allowed_sql = ", ".join(f"'{v}'" for v in allowed)
+        actual = {}
+        n_bad_trades = int(db.execute(text(
+            f"SELECT COUNT(*) FROM bot_trades WHERE origin IS NULL OR origin NOT IN ({allowed_sql})"
+        )).fetchone()[0] or 0)
+        n_bad_positions = int(db.execute(text(
+            f"SELECT COUNT(*) FROM bot_positions WHERE origin IS NULL OR origin NOT IN ({allowed_sql})"
+        )).fetchone()[0] or 0)
+        actual = {"bad_trades": n_bad_trades, "bad_positions": n_bad_positions}
+        total = n_bad_trades + n_bad_positions
+        if total == 0:
+            return _ok("I21", actual, None, "every row has a valid origin")
+        return _red("I21", actual, 0, float(total),
+                    f"{n_bad_trades} bot_trades + {n_bad_positions} bot_positions rows have NULL/invalid origin (trigger bypass)")
+    except Exception as exc:
+        return _amber("I21", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i18_data_volume_headroom(db) -> Result:
     """/data volume must never fill to Railway's alert threshold.
     Green < 60%, Amber 60-80%, Red >80%. At >90% attempt auto-prune
@@ -774,6 +855,9 @@ CHECKS: dict[str, Callable] = {
     "I16": _check_i16_unattributed_tracker,
     "I17": _check_i17_cash_positive,
     "I18": _check_i18_data_volume_headroom,
+    "I19": _check_i19_broker_fill_has_uuid,
+    "I20": _check_i20_phantom_trades_while_market_closed,
+    "I21": _check_i21_origin_not_null,
 }
 
 
