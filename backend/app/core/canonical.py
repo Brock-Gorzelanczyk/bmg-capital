@@ -1150,12 +1150,20 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         _alp_positions = get_alpaca_positions()
         if _alp_positions is not None and _acct is not None:
             from app.db.models.bots import BotPosition
+            # Scope claim-detection to allocations owned by this user. Positions
+            # claimed by tombstoned/other-user allocs would otherwise attribute
+            # to alloc_ids we don't sum in either the sleeve loop or the orphan
+            # bucket (all_allocs is user-scoped), silently dropping them from
+            # the reconciliation. Scoping the claim query fixes that: such
+            # positions fall correctly to sleeve_unattributed.
+            _user_alloc_ids = [a.id for a in all_allocs]
             _open_rows = (
                 db.query(BotPosition.allocation_id, BotPosition.symbol, BotPosition.qty)
+                .filter(BotPosition.allocation_id.in_(_user_alloc_ids))
                 .filter(BotPosition.closed_at.is_(None))
                 .filter(BotPosition.quarantined_at.is_(None))
                 .all()
-            )
+            ) if _user_alloc_ids else []
             # symbol → { allocation_id → bmg_qty }
             _claims: dict[str, dict[int, float]] = {}
             for aid, sym, qty in _open_rows:
