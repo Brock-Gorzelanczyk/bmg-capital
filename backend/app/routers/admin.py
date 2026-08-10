@@ -1238,6 +1238,145 @@ def backup_sqlite(
     }
 
 
+@router.get("/data-usage")
+def data_usage(
+    min_size_mb: float = Query(0.0, description="Only list files >= this size."),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """List every file under /data with size + mtime + free-space totals.
+
+    Item P0 (2026-08-09): Railway alerted /data volume 98% full. This
+    endpoint tells us the file breakdown so we can prune safely. Also
+    checks the live SQLite WAL/SHM sizes — a large WAL indicates
+    checkpointing isn't happening and can balloon disk usage."""
+    import os
+    from datetime import datetime, timezone
+    root = "/data"
+    if not os.path.isdir(root):
+        return {"error": "no_data_dir", "path": root}
+    try:
+        st = os.statvfs(root)
+        total = st.f_blocks * st.f_frsize
+        avail = st.f_bavail * st.f_frsize
+        used = total - avail
+        pct_used = round(used / total * 100, 2) if total else None
+    except Exception as exc:
+        total = avail = used = pct_used = None
+    files: list[dict] = []
+    for entry in os.listdir(root):
+        p = os.path.join(root, entry)
+        try:
+            if not os.path.isfile(p):
+                continue
+            sz = os.path.getsize(p)
+            if sz < min_size_mb * 1024 * 1024:
+                continue
+            mt = datetime.fromtimestamp(os.path.getmtime(p), tz=timezone.utc).isoformat()
+            files.append({
+                "name": entry,
+                "size_bytes": sz,
+                "size_mb": round(sz / (1024*1024), 2),
+                "mtime_utc": mt,
+                "is_backup": entry.endswith(".bak"),
+                "is_wal": entry.endswith("-wal"),
+                "is_shm": entry.endswith("-shm"),
+            })
+        except Exception:
+            continue
+    files.sort(key=lambda x: -x["size_bytes"])
+    return {
+        "volume_total_bytes": total,
+        "volume_used_bytes": used,
+        "volume_free_bytes": avail,
+        "volume_total_mb": round(total / (1024*1024), 2) if total else None,
+        "volume_used_mb": round(used / (1024*1024), 2) if used else None,
+        "volume_free_mb": round(avail / (1024*1024), 2) if avail else None,
+        "volume_pct_used": pct_used,
+        "file_count": len(files),
+        "total_listed_bytes": sum(f["size_bytes"] for f in files),
+        "files": files,
+    }
+
+
+@router.post("/prune-backups")
+def prune_backups(
+    keep: int = Query(1, description="Number of most recent .bak files to keep."),
+    dry_run: bool = Query(True, description="Preview by default. Set false to delete."),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Delete /data/*.bak files, keeping the N most recent.
+
+    Item P0 (2026-08-09): /data volume 98% full — backups on same volume
+    as the live DB are consuming space. Backups on the same volume are
+    not backups anyway (they die with the disk); ledger #16 remains open
+    until backups live off-volume. Interim: keep at most `keep` recent
+    ones to prevent volume exhaustion."""
+    import os
+    from datetime import datetime, timezone
+    root = "/data"
+    if not os.path.isdir(root):
+        return {"error": "no_data_dir", "path": root}
+    entries: list[dict] = []
+    for name in os.listdir(root):
+        if not name.endswith(".bak"):
+            continue
+        p = os.path.join(root, name)
+        if not os.path.isfile(p):
+            continue
+        try:
+            sz = os.path.getsize(p)
+            mt = os.path.getmtime(p)
+            entries.append({"path": p, "name": name, "size_bytes": sz, "mtime": mt})
+        except Exception:
+            continue
+    # Sort newest-first by mtime
+    entries.sort(key=lambda x: -x["mtime"])
+    keep_paths = {e["path"] for e in entries[:max(0, keep)]}
+    to_delete = [e for e in entries if e["path"] not in keep_paths]
+    deleted: list[dict] = []
+    delete_errors: list[dict] = []
+    freed_bytes = 0
+    if not dry_run:
+        for e in to_delete:
+            try:
+                os.unlink(e["path"])
+                freed_bytes += e["size_bytes"]
+                deleted.append({
+                    "name": e["name"],
+                    "size_mb": round(e["size_bytes"] / (1024*1024), 2),
+                    "mtime_utc": datetime.fromtimestamp(e["mtime"], tz=timezone.utc).isoformat(),
+                })
+            except Exception as exc:
+                delete_errors.append({"name": e["name"], "error": f"{type(exc).__name__}: {exc}"})
+    # Post-delete free space
+    try:
+        st = os.statvfs(root)
+        avail_after = st.f_bavail * st.f_frsize
+    except Exception:
+        avail_after = None
+    return {
+        "dry_run": dry_run,
+        "keep": keep,
+        "backup_count_before": len(entries),
+        "keep_names": sorted([e["name"] for e in entries[:max(0, keep)]]),
+        "delete_candidates": [
+            {
+                "name": e["name"],
+                "size_mb": round(e["size_bytes"] / (1024*1024), 2),
+                "mtime_utc": datetime.fromtimestamp(e["mtime"], tz=timezone.utc).isoformat(),
+            }
+            for e in to_delete
+        ],
+        "delete_candidate_count": len(to_delete),
+        "delete_candidate_total_mb": round(sum(e["size_bytes"] for e in to_delete) / (1024*1024), 2),
+        "deleted": deleted,
+        "delete_errors": delete_errors,
+        "freed_bytes": freed_bytes,
+        "freed_mb": round(freed_bytes / (1024*1024), 2),
+        "volume_free_mb_after": round(avail_after / (1024*1024), 2) if avail_after else None,
+    }
+
+
 @router.get("/db-driver")
 def db_driver(
     current_user: User = Depends(require_admin),
