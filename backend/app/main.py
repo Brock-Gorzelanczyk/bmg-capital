@@ -1839,6 +1839,64 @@ async def health():
     return {"status": "ok", "llm_relay": llm_relay}
 
 
+@app.get("/health/deep", tags=["health"])
+@app.get("/api/health/deep", tags=["health"])
+async def health_deep():
+    """Deeper health snapshot — distinguishes "scheduler dead" from "request slow".
+
+    Item 3.2 (2026-08-09): the /admin/invariants/run 502s made it hard to
+    tell whether scans were still running. This endpoint reports:
+      - most recent BotSignal.created_at (last scan cycle to write anything)
+      - most recent BotTrade.ts (last executed trade)
+      - alpaca account+positions cache ages (freshness of broker state)
+      - uses cached Alpaca payload if present — never issues a fresh call,
+        so /health/deep itself can't be slow-because-Alpaca-is-slow.
+
+    Never raises; always 200. Errors surface as string fields, not HTTP status.
+    """
+    from datetime import datetime, timezone
+    result: dict = {"status": "ok", "as_of": datetime.now(timezone.utc).isoformat()}
+
+    try:
+        from app.db.session import SessionLocal
+        from app.db.models.bots import BotSignal, BotTrade
+        _db = SessionLocal()
+        try:
+            _last_signal = _db.query(BotSignal.created_at).order_by(BotSignal.created_at.desc()).limit(1).first()
+            _last_trade = _db.query(BotTrade.ts).order_by(BotTrade.ts.desc()).limit(1).first()
+            now = datetime.now(timezone.utc)
+            result["scheduler"] = {
+                "last_signal_ts": _last_signal[0].isoformat() if _last_signal and _last_signal[0] else None,
+                "last_signal_age_seconds": (
+                    (now - _last_signal[0].replace(tzinfo=timezone.utc)).total_seconds()
+                    if _last_signal and _last_signal[0] else None
+                ),
+                "last_trade_ts": _last_trade[0].isoformat() if _last_trade and _last_trade[0] else None,
+                "last_trade_age_seconds": (
+                    (now - _last_trade[0].replace(tzinfo=timezone.utc)).total_seconds()
+                    if _last_trade and _last_trade[0] else None
+                ),
+            }
+        finally:
+            _db.close()
+    except Exception as exc:
+        result["scheduler"] = {"check_error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+
+    try:
+        from app.services.alpaca_account_cache import (
+            alpaca_account_cache_age_seconds,
+            alpaca_positions_cache_age_seconds,
+        )
+        result["alpaca_cache"] = {
+            "account_age_seconds": alpaca_account_cache_age_seconds(),
+            "positions_age_seconds": alpaca_positions_cache_age_seconds(),
+        }
+    except Exception as exc:
+        result["alpaca_cache"] = {"check_error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+
+    return result
+
+
 # Serve the Vite frontend build (production only — skipped if dist/ doesn't exist)
 _STATIC_DIR = Path(__file__).parent.parent / "static"
 if _STATIC_DIR.exists():

@@ -428,18 +428,14 @@ def _check_i7_exposure_caps(db) -> Result:
                 net_by_root[sym] += mv
         net_exposure = sum(abs(v) for v in net_by_root.values())
 
-        c = _creds()
         nav = 0.0
-        if c:
-            req = urllib.request.Request(
-                "https://paper-api.alpaca.markets/v2/account",
-                headers={"APCA-API-KEY-ID": c[0], "APCA-API-SECRET-KEY": c[1]},
-            )
-            try:
-                a = json.loads(urllib.request.urlopen(req, timeout=8).read())
+        try:
+            from app.services.alpaca_account_cache import get_alpaca_account
+            a = get_alpaca_account()
+            if a:
                 nav = float(a.get("portfolio_value") or 0)
-            except Exception:
-                pass
+        except Exception:
+            pass
 
         max_loss_max_pct = float(os.getenv("MAX_LOSS_MAX_PCT_NAV", "1.0"))
         per_max_pct = float(os.getenv("OPTIONS_MAX_NOTIONAL_PCT", "0.20"))
@@ -601,18 +597,10 @@ def _check_i17_cash_positive(db) -> Result:
     margin engine). This must not recur silently — the first thing
     that goes wrong when a sleeve over-deploys is the cash line."""
     try:
-        import os as _os, urllib.request as _ur, json as _json
-        kid = _os.environ.get("ALPACA_API_KEY", "")
-        ksec = _os.environ.get("ALPACA_SECRET_KEY", "")
-        if not kid or not ksec:
-            return _amber("I17", None, None, None, "no Alpaca creds")
-        try:
-            acct = _json.loads(_ur.urlopen(_ur.Request(
-                "https://paper-api.alpaca.markets/v2/account",
-                headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
-            ), timeout=8).read())
-        except Exception as exc:
-            return _amber("I17", None, None, None, f"alpaca_fetch:{exc}")
+        from app.services.alpaca_account_cache import get_alpaca_account
+        acct = get_alpaca_account()
+        if acct is None:
+            return _amber("I17", None, None, None, "alpaca_fetch_failed_or_no_creds")
         cash = float(acct.get("cash") or 0)
         bp = float(acct.get("buying_power") or 0)
         opts_bp = float(acct.get("options_buying_power") or 0)
@@ -667,19 +655,11 @@ def _check_i15_starting_capital_vs_funded(db) -> Result:
     by exactly the excess of sum(starting_capital) over the actual
     Alpaca-funded base. Guard: |sum(starting) - funded| < $100."""
     try:
-        import os as _os, urllib.request as _ur, json as _json
         from app.db.models.bots import BotAllocation
-        kid = _os.environ.get("ALPACA_API_KEY", "")
-        ksec = _os.environ.get("ALPACA_SECRET_KEY", "")
-        if not kid or not ksec:
-            return _amber("I15", None, None, None, "no Alpaca creds")
-        try:
-            acct = _json.loads(_ur.urlopen(_ur.Request(
-                "https://paper-api.alpaca.markets/v2/account",
-                headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
-            ), timeout=8).read())
-        except Exception as exc:
-            return _amber("I15", None, None, None, f"alpaca_fetch:{exc}")
+        from app.services.alpaca_account_cache import get_alpaca_account
+        acct = get_alpaca_account()
+        if acct is None:
+            return _amber("I15", None, None, None, "alpaca_fetch_failed_or_no_creds")
         funded_cents = int(round(float(acct.get("portfolio_value") or 0) * 100))
         sum_cents = sum(
             int(a.starting_capital_cents or 0)
@@ -909,4 +889,15 @@ def setup_invariant_engine(scheduler) -> None:
         replace_existing=True,
         max_instances=1,
     )
-    logger.warning("[invariant] scheduler registered — 15 min intraday + 05:30 UTC nightly")
+    # Item 3.3 (2026-08-09): every 30 min 24/7 so snapshot stays warm
+    # outside market hours. Cheap now that Alpaca /v2/account is memoized
+    # (see services/alpaca_account_cache.py). Ensures /admin/invariants/run
+    # never has to compute on-request.
+    scheduler.add_job(
+        _cycle,
+        CronTrigger(minute="*/30", timezone="UTC"),
+        id="invariant_engine_24_7",
+        replace_existing=True,
+        max_instances=1,
+    )
+    logger.warning("[invariant] scheduler registered — 15 min intraday + 05:30 UTC nightly + 30 min 24/7")
