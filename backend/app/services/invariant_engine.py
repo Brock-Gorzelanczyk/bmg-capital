@@ -239,22 +239,30 @@ def _check_i2_unrealized_pl(db) -> Result:
 
 
 def _check_i3_sim_fills(db) -> Result:
-    """Zero bot_trade rows in last 24h with NULL alpaca_order_id."""
+    """Zero bot_trade rows in last 24h with NULL alpaca_order_id.
+
+    Enhanced 2026-08-09 to expose per-alloc counts so the I3 auto-action
+    can pause the offending bots individually."""
     try:
         from app.db.models.bots import BotTrade
-        from sqlalchemy import or_
+        from sqlalchemy import or_, func
+        from collections import Counter
         cut = datetime.now(timezone.utc) - timedelta(hours=24)
-        sim_count = (
-            db.query(BotTrade)
+        sim_rows = (
+            db.query(BotTrade.allocation_id)
             .filter(BotTrade.ts >= cut)
             .filter(BotTrade.quarantined_at.is_(None))
             .filter(or_(BotTrade.alpaca_order_id.is_(None), BotTrade.alpaca_order_id == ""))
-            .count()
+            .all()
         )
+        sim_count = len(sim_rows)
+        by_alloc = Counter(r[0] for r in sim_rows if r[0] is not None)
+        actual = {"sim_count": sim_count, "by_alloc": dict(by_alloc)}
         if sim_count == 0:
-            return _ok("I3", 0, 0, "no sim fills in 24h")
-        return _red("I3", sim_count, 0, float(sim_count),
-                    f"{sim_count} bot_trade rows in 24h have no alpaca_order_id")
+            return _ok("I3", actual, 0, "no sim fills in 24h")
+        return _red("I3", actual, 0, float(sim_count),
+                    f"{sim_count} bot_trade rows in 24h have no alpaca_order_id "
+                    f"(allocs: {dict(by_alloc)})")
     except Exception as exc:
         return _amber("I3", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
@@ -880,6 +888,85 @@ def _maybe_auto_action(r: Result, db) -> None:
         # Log for now; the orphan_adopter (when idempotent) can be triggered
         # separately via /api/admin/orphan-adopter/run.
         logger.error("[invariant:AUTO-ACTION] I9 red — %s", r.detail)
+
+    if r.check_id == "I3":
+        # Sim fill detected. Set paused_reason on the offending allocation(s)
+        # so those bots stop scanning until a human clears the pause. Uses the
+        # ledger #30 semantics: any non-empty paused_reason is a durable state.
+        # Idempotent: sets paused_reason only if currently NULL.
+        try:
+            by_alloc = (r.actual or {}).get("by_alloc") or {}
+            if not by_alloc:
+                return
+            from app.db.models.bots import BotAllocation
+            paused_count = 0
+            for aid_str, count in by_alloc.items():
+                try:
+                    aid = int(aid_str)
+                except Exception:
+                    continue
+                alloc = db.query(BotAllocation).filter(BotAllocation.id == aid).first()
+                if not alloc:
+                    continue
+                if alloc.paused_reason:  # already paused for some reason
+                    continue
+                alloc.paused_reason = f"auto_pause_i3_sim_fill:{count}_rows_in_24h"
+                paused_count += 1
+            if paused_count:
+                db.commit()
+                logger.error(
+                    "[invariant:AUTO-ACTION] I3 red — paused %d alloc(s) with paused_reason=auto_pause_i3_sim_fill",
+                    paused_count,
+                )
+                try:
+                    from app.services.discord import send_ops_alert
+                    send_ops_alert(
+                        title=f"[invariant] I3 auto-pause: {paused_count} alloc(s) sim-fills",
+                        message=r.detail,
+                        severity="critical",
+                        source="invariant_engine.I3_auto_action",
+                    )
+                except Exception:
+                    pass
+        except Exception as _i3_exc:
+            logger.warning("[invariant:AUTO-ACTION] I3 auto-pause failed: %s", _i3_exc)
+
+    if r.check_id == "I2":
+        # P&L drift auto-action: only trigger at >$500 (Brock's threshold,
+        # far above the current red threshold of $50). Uses the scans_gate
+        # kill switch (ledger #22) to pause ALL scans globally — this halts
+        # entries AND exits. Justification: at $500 drift we don't know if
+        # we're accurately tracking, so freeze the fleet until human
+        # intervention. Better than continuing to trade with broken accounting.
+        try:
+            drift = float(r.delta or 0)
+            if drift > 500:
+                from app.services.scans_gate import set_paused, read_state
+                cur = read_state()
+                if cur.get("global") is False:
+                    return  # already paused, skip
+                set_paused(
+                    sleeve="all",
+                    paused=True,
+                    muted_by="invariant_engine.I2_auto_action",
+                    muted_reason=f"auto_pause_i2_drift_${drift:,.2f}",
+                )
+                logger.error(
+                    "[invariant:AUTO-ACTION] I2 red drift=$%.2f > $500 — paused all scans",
+                    drift,
+                )
+                try:
+                    from app.services.discord import send_ops_alert
+                    send_ops_alert(
+                        title=f"[invariant] I2 auto-pause: P&L drift ${drift:,.2f} > $500",
+                        message=r.detail + " — all scans paused. Investigate and POST /admin/scans/resume when resolved.",
+                        severity="critical",
+                        source="invariant_engine.I2_auto_action",
+                    )
+                except Exception:
+                    pass
+        except Exception as _i2_exc:
+            logger.warning("[invariant:AUTO-ACTION] I2 auto-pause failed: %s", _i2_exc)
 
     if r.check_id == "I18":
         # /data volume exhaustion. At >90% we auto-prune backups to keep=1.
