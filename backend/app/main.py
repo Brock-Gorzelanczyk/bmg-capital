@@ -1862,7 +1862,7 @@ async def health_deep():
         from app.db.models.bots import BotSignal, BotTrade
         _db = SessionLocal()
         try:
-            _last_signal = _db.query(BotSignal.created_at).order_by(BotSignal.created_at.desc()).limit(1).first()
+            _last_signal = _db.query(BotSignal.ts).order_by(BotSignal.ts.desc()).limit(1).first()
             _last_trade = _db.query(BotTrade.ts).order_by(BotTrade.ts.desc()).limit(1).first()
             now = datetime.now(timezone.utc)
             result["scheduler"] = {
