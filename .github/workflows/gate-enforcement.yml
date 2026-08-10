@@ -1,0 +1,19 @@
+name: gate-enforcement
+
+# Ledger #32 Layer 2 (Brock 2026-08-10): fail the build if any BotTrade /
+# BotPosition constructor site doesn't import the corresponding gate.
+# Rationale in scripts/ci_check_gates.sh and context/13-provenance-spec.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run gate-enforcement grep
+        run: bash scripts/ci_check_gates.sh
