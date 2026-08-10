@@ -109,10 +109,24 @@ def run(conn) -> dict:
             result["steps"].append(f"{table}.origin already exists (skipping ALTER)")
 
     # ── 2. Backfill via inference ────────────────────────────────────────
+    # bot_trades has alpaca_order_id — use CASE inference.
+    conn.execute(text(
+        f"UPDATE bot_trades SET origin = ({_BACKFILL_SQL}) WHERE origin IS NULL"
+    ))
+    # bot_positions has no alpaca_order_id column. Best signal: inherit from
+    # the earliest linked bot_trade (via bot_trades.position_id = bot_positions.id).
+    # Fall back to BACKFILL for orphan positions (no linked trade).
+    conn.execute(text("""
+        UPDATE bot_positions
+           SET origin = COALESCE(
+               (SELECT origin FROM bot_trades
+                 WHERE bot_trades.position_id = bot_positions.id
+                 ORDER BY bot_trades.ts ASC LIMIT 1),
+               'BACKFILL'
+           )
+         WHERE origin IS NULL
+    """))
     for table in ("bot_trades", "bot_positions"):
-        conn.execute(text(
-            f"UPDATE {table} SET origin = ({_BACKFILL_SQL}) WHERE origin IS NULL"
-        ))
         counts_rows = conn.execute(text(
             f"SELECT origin, COUNT(*) FROM {table} GROUP BY origin ORDER BY 2 DESC"
         )).fetchall()
