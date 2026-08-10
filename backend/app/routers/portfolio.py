@@ -173,6 +173,7 @@ async def get_portfolio_summary(
             "alpaca_short_mv_cents": data.get("alpaca_short_mv_cents"),
             "alpaca_position_equity_cents": data.get("alpaca_position_equity_cents"),
             "sleeve_unattributed_cents": data.get("sleeve_unattributed_cents"),
+            "orphan_alloc_attributed_cents": data.get("orphan_alloc_attributed_cents"),
             "reconciliation_drift_cents": data.get("reconciliation_drift_cents"),
             "fund_pv_equity_gap_cents": data.get("fund_pv_equity_gap_cents"),
         }

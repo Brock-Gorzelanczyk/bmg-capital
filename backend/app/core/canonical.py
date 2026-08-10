@@ -1214,17 +1214,32 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
     # bug; Alpaca's own /v2/account portfolio_value doesn't equal
     # cash + long_MV + short_MV either. Fund PV remains Alpaca-authoritative.
     portfolio_sum_diag = sum(s.portfolio_value_cents for s in portfolio_snapshots)
-    diag_total = portfolio_sum_diag + alpaca_cash_cents + sleeve_unattributed_cents
+    # Orphan-alloc bucket: allocs not bound to any returned portfolio snapshot
+    # (missing portfolio_id, or in a portfolio outside `portfolios`). Their
+    # attribution IS computed above but doesn't land in any sleeve — must be
+    # surfaced as its own line to close the reconciliation identity.
+    orphan_attribution_cents = 0
+    if alloc_pv_override_cents is not None:
+        orphan_ids = [a.id for a in all_allocs if a.id not in accounted_alloc_ids]
+        orphan_attribution_cents = sum(
+            int(alloc_pv_override_cents.get(aid, 0)) for aid in orphan_ids
+        )
+    diag_total = (
+        portfolio_sum_diag
+        + orphan_attribution_cents
+        + alpaca_cash_cents
+        + sleeve_unattributed_cents
+    )
     # Attribution drift = how far our partition sums from Alpaca's own equity
     # accounting. Target: |drift| < $100. Non-zero implies either double-
-    # counting or missed positions in our partition.
+    # counting, missed positions, or missed alloc buckets.
     reconciliation_drift_cents = alpaca_position_equity_cents - diag_total
     if _sleeve_source == "alpaca_attribution" and abs(reconciliation_drift_cents) > 10_000:  # > $100
         logger.warning(
             "[canonical] attribution drift: alpaca_position_equity=%d (long=%d + short=%d + cash=%d) vs "
-            "sum_sleeves=%d + cash=%d + unattributed=%d = %d, drift=%d",
+            "sum_sleeves=%d + orphan_attr=%d + cash=%d + unattributed=%d = %d, drift=%d",
             alpaca_position_equity_cents, alpaca_long_mv_cents, alpaca_short_mv_cents, alpaca_cash_cents,
-            portfolio_sum_diag, alpaca_cash_cents, sleeve_unattributed_cents,
+            portfolio_sum_diag, orphan_attribution_cents, alpaca_cash_cents, sleeve_unattributed_cents,
             diag_total, reconciliation_drift_cents,
         )
     # Legacy split-brain log — kept for fallback path only. When
@@ -1704,9 +1719,9 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
         "alpaca_short_mv_cents": alpaca_short_mv_cents,
         "alpaca_position_equity_cents": alpaca_position_equity_cents,
         "sleeve_unattributed_cents": sleeve_unattributed_cents,
+        "orphan_alloc_attributed_cents": orphan_attribution_cents,
         "reconciliation_drift_cents": (
-            alpaca_position_equity_cents - (portfolio_sum_diag + alpaca_cash_cents + sleeve_unattributed_cents)
-            if _sleeve_source == "alpaca_attribution" else None
+            reconciliation_drift_cents if _sleeve_source == "alpaca_attribution" else None
         ),
         "fund_pv_equity_gap_cents": (
             fund_pv_equity_gap_cents if _sleeve_source == "alpaca_attribution" else None
