@@ -114,3 +114,61 @@ Naked-leg measurement is a bug, not conservatism. A short leg with a long leg ab
 Then attribute to the underlying. The `_check_i7_exposure_caps` function in `services/invariant_engine.py:336` is the reference implementation — copy its structure for any new risk metric.
 
 **Failure mode to watch:** the naked measurement produces conservative-looking numbers (higher risk shown than exists). It looks defensible and gets shipped. It then triggers wasteful de-risking trades that reduce a hedged position's already-low max loss at the cost of real slippage. If you're about to recommend trimming an options position, first verify the metric is spread-aware.
+
+## PRE-FLIGHT DISCIPLINE (added 2026-08-10 — Claude self-named failure class)
+
+### M1. Write the expected-state artifact BEFORE writing code that produces state.
+
+Applies to any change touching:
+- (a) accounting math or aggregations
+- (b) DB queries against a model
+- (c) response payloads consumed by a downstream route
+- (d) multi-source partitioning
+
+Cost: 2–10 min of thinking before the first Edit. Return: catches a class of failures that otherwise ship and are found only by §S2 / Brock's audits / recurrence.
+
+**Artifact by change type:**
+
+- **Accounting / aggregation:** write the identity in cents on paper.
+  ```
+  # expected: sum(A) + sum(B) + cash + unattributed == long_MV + short_MV + cash
+  # buckets in A: portfolio_snapshots.pv (allocs in returned portfolios)
+  # buckets in B: orphan_alloc.pv (allocs not in any returned portfolio)
+  # unattributed: alpaca positions no user-scoped alloc claims
+  ```
+  Then write code to satisfy it. Post-deploy §S2 compares the code output to the written identity.
+
+- **DB queries:** open the model file and quote every field name you'll use.
+  ```
+  # BotSignal fields (backend/app/db/models/bots.py:56):
+  #   id, allocation_id, ts, symbol, side, confidence,
+  #   size_hint, reason, strategy, entry_price, stop_price,
+  #   target_price, discord_posted_at, discord_message_id,
+  #   is_test, executed_at
+  # NOTE: no created_at. Use ts.
+  ```
+  Same for the sample row shape you expect the query to return.
+
+- **Response payloads:** trace the end-consumer route. If handler explicitly whitelists fields (like `/portfolio/summary`), the pass-through list must be updated too.
+  ```
+  # canonical.compute_strategy_lab_aggregate returns {..., new_field: X}
+  # /portfolio/summary handler at routers/portfolio.py:144 whitelists response —
+  #   MUST add new_field to the return dict there too or it's silently dropped.
+  ```
+
+- **Partitions:** enumerate every bucket before summing. Prove exhaustiveness on paper.
+  ```
+  # partition of all_allocs:
+  #   1. allocs in a returned portfolio_snapshot → sleeve_sum
+  #   2. allocs NOT in any returned portfolio → orphan_alloc bucket
+  # UNION = all_allocs. INTERSECTION = ∅. verified.
+  ```
+
+**Self-honesty check:** if the "artifact" is just the code without the paper step, the discipline was skipped. Retrospective §S2 will surface the miss; that's a discipline failure, not a §S2 win.
+
+**Reference incidents this rule closes (2026-08-09 session):**
+- `BotSignal.created_at` — a schema quote would have shown only `ts` exists.
+- `/portfolio/summary` field passthrough — a consumer trace would have shown the handler whitelist.
+- Sleeve reconciliation drift (3 iterations) — an identity-in-cents artifact would have shown fund_pv includes Alpaca margin/unsettled and doesn't equal position_sum + cash; would have listed orphan_allocs as a required bucket; would have shown user-scoping of the claim query as required for the partition to be exhaustive.
+
+**When NOT to invoke this rule:** trivial single-field UI edits, cosmetic renames, comment-only changes. Anything that touches money math or a scheduled job's behavior counts.
