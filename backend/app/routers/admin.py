@@ -491,13 +491,35 @@ def get_invariants(
 
 @router.post("/invariants/run")
 def run_invariants(
+    fresh: bool = Query(False, description="Force fresh recompute. Default False = read latest scheduler snapshot."),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """Trigger a fresh invariant sweep on-demand. Same code the scheduler
-    runs. Returns green/amber/red summary + per-check details."""
-    from app.services.invariant_engine import run_all_invariants
-    return run_all_invariants(db)
+    """Serve invariants. Default = latest scheduler snapshot (fast, cached).
+    Pass ?fresh=true to force an on-request recompute.
+
+    Item 3.3 (2026-08-09, class fix): the scheduler owns invariant freshness.
+    A request no longer forces a re-run — so a slow Alpaca call inside an
+    invariant check can't cause a request timeout (502) that leaves the
+    fund unmonitored. The scheduler runs invariants every 15 min during
+    market hours + 05:30 UTC nightly (see setup_invariant_engine).
+
+    Payload shape: when fresh=false and a snapshot exists, response is
+    {as_of, results: [...]} from the JSON file. When fresh=true, response
+    is the full {summary, red, amber, all} from run_all_invariants.
+    Callers that need the summary counts can either compute from `results`
+    or opt in with fresh=true.
+    """
+    from app.services.invariant_engine import run_all_invariants, read_latest_snapshot
+    if fresh:
+        return run_all_invariants(db)
+    snap = read_latest_snapshot()
+    # Fallback: if no snapshot yet (fresh deploy, empty /data), compute inline
+    # once so callers see real data instead of {"error": "no_snapshot_yet"}.
+    # After this run the scheduler takes over.
+    if isinstance(snap, dict) and snap.get("error") == "no_snapshot_yet":
+        return run_all_invariants(db)
+    return snap
 
 
 @router.post("/rollback-adopter-inserts")
@@ -3569,17 +3591,25 @@ def quarantine_non_broker_trades(
     for a in allocs:
         alloc_to_bot[a.id] = profs.get(a.profile_id, f"alloc_{a.id}")
 
+    from app.services.trade_write_gate import is_admin_marker
+
     per_bot: dict[str, dict] = {}
     ids_to_quarantine_trade: list[int] = []
     ids_to_quarantine_position: set[int] = set()
     now_dt = datetime.now(timezone.utc)
+    skipped_admin_marker = 0
 
     for t in trades:
         bot = alloc_to_bot.get(t.allocation_id, "unknown")
-        stats = per_bot.setdefault(bot, {"kept": 0, "phantom": 0, "sim": 0})
+        stats = per_bot.setdefault(bot, {"kept": 0, "phantom": 0, "sim": 0, "admin_marker": 0})
         oid = getattr(t, "alpaca_order_id", None)
         if oid and oid in alpaca_filled_ids:
             stats["kept"] += 1
+            continue
+        # Adopter/rebuild/reconcile markers are legitimate — see ledger #31.
+        if is_admin_marker(oid):
+            stats["admin_marker"] += 1
+            skipped_admin_marker += 1
             continue
         if oid:
             stats["phantom"] += 1
@@ -3613,6 +3643,7 @@ def quarantine_non_broker_trades(
         "alpaca_filled_ids_in_window": len(alpaca_filled_ids),
         "bmg_trades_in_window": len(trades),
         "trades_to_quarantine": len(ids_to_quarantine_trade),
+        "skipped_admin_marker": skipped_admin_marker,
         "positions_to_quarantine": len(ids_to_quarantine_position),
         "per_bot": dict(sorted(per_bot.items(), key=lambda x: -(x[1]["phantom"] + x[1]["sim"]))),
     }

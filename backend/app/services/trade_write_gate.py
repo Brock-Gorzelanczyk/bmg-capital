@@ -47,6 +47,16 @@ _ADMIN_MARKER_PREFIXES = (
 )
 
 
+def is_admin_marker(alpaca_order_id: Optional[str]) -> bool:
+    """True if the id is a known admin/adopter marker (not a real Alpaca UUID).
+    Shared with daily_reconciler so a marker-tagged trade isn't re-quarantined
+    every night (which then triggers a re-adopt, forever)."""
+    if not alpaca_order_id:
+        return False
+    oid = str(alpaca_order_id).strip()
+    return any(oid.startswith(p) for p in _ADMIN_MARKER_PREFIXES)
+
+
 @dataclass
 class TradeWriteResult:
     blocked: bool

@@ -161,6 +161,8 @@ def _run_quarantine_inline(db, lookback_days: int = 7) -> dict[str, Any]:
         until = new_until - timedelta(seconds=1)
         if len(batch) < 500: break
 
+    from app.services.trade_write_gate import is_admin_marker
+
     trades = (
         db.query(BotTrade)
         .filter(BotTrade.ts >= cutoff)
@@ -168,11 +170,21 @@ def _run_quarantine_inline(db, lookback_days: int = 7) -> dict[str, Any]:
         .all()
     )
     quarantined = 0
+    skipped_admin_marker = 0
     pos_ids: set[int] = set()
     now = datetime.now(timezone.utc)
     for t in trades:
         oid = getattr(t, "alpaca_order_id", None)
         if oid and oid in filled_ids:
+            continue
+        # Adopter/rebuild/reconcile markers legitimately don't map to Alpaca
+        # UUIDs — they represent Alpaca-authoritative positions BMG reconciled
+        # to. Quarantining them creates the daily churn loop: quarantine at
+        # 05:00 → adopter step re-creates seconds later → quarantine tomorrow.
+        # See ledger #31 (META 655/660 daily re-materialization, 273 quarantined
+        # rows on alloc 22).
+        if is_admin_marker(oid):
+            skipped_admin_marker += 1
             continue
         t.quarantined_at = now
         t.quarantine_reason = (
@@ -195,6 +207,7 @@ def _run_quarantine_inline(db, lookback_days: int = 7) -> dict[str, Any]:
     return {
         "trades_in_window": len(trades),
         "quarantined": quarantined,
+        "skipped_admin_marker": skipped_admin_marker,
         "positions_quarantined": len(pos_ids),
         "alpaca_filled_ids": len(filled_ids),
     }
