@@ -1321,6 +1321,10 @@ def admin_close_limit(
         "type": "limit",
         "limit_price": str(round(float(limit_price), 2)),
         "time_in_force": tif,
+        # position_intent tells Alpaca this closes an existing long — without
+        # it the account-level options approval defaults to "uncovered short
+        # open" and rejects (40310000). This endpoint is close-only by design.
+        "position_intent": "sell_to_close",
     }
     body = _json.dumps(payload).encode()
     req = _ur.Request(
@@ -1463,6 +1467,7 @@ def admin_close_reprice(
         "type": "limit",
         "limit_price": str(new_limit),
         "time_in_force": order.get("time_in_force") or "day",
+        "position_intent": order.get("position_intent") or "sell_to_close",
     }
     body = _json.dumps(payload).encode()
     try:
