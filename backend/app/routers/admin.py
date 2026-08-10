@@ -1271,6 +1271,255 @@ def ack_endpoint(
             "note": "ok:false = already acked or not found"}
 
 
+@router.post("/admin-close-limit")
+def admin_close_limit(
+    symbol: str = Query(..., description="Alpaca symbol (OCC for options)"),
+    qty: float = Query(..., description="Contracts to sell"),
+    limit_price: float = Query(..., description="Limit price per share (options: per share, ×100 for contract)"),
+    reason: str = Query(..., description="Human-readable remediation reason (goes to alpaca client_order_id and BMG log)"),
+    tif: str = Query("day", description="day|gtc"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Submit an admin remediation SELL LIMIT to Alpaca. Not a bot trade.
+
+    Records a pending BotTrade with origin=BACKFILL and a
+    admin_remediation_<date>:<reason> alpaca_order_id marker until the
+    real Alpaca UUID lands. Once Alpaca returns the order id, the BMG row
+    is patched with the real UUID.
+
+    On fill, the position_monitor or daily reconciler will update BMG
+    close-side state as usual. For now this endpoint's job is: submit +
+    record intent, and return the Alpaca order id."""
+    import os as _os, json as _json, urllib.request as _ur, urllib.error as _urerr
+    from datetime import datetime as _dt, timezone as _tz
+    from app.db.models.bots import BotPosition, BotTrade
+
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    if not kid or not ksec:
+        return {"error": "no_alpaca_creds"}
+
+    # Locate BMG open position for this symbol so we can log against the right alloc
+    pos = (
+        db.query(BotPosition)
+        .filter(BotPosition.symbol == symbol)
+        .filter(BotPosition.closed_at.is_(None))
+        .filter(BotPosition.quarantined_at.is_(None))
+        .order_by(BotPosition.opened_at.desc())
+        .first()
+    )
+    if not pos:
+        return {"error": f"no_open_bmg_position_for_{symbol}",
+                "hint": "check /admin/inspect-symbol; the position may be quarantined"}
+
+    today = _dt.now(_tz.utc).strftime("%Y%m%d")
+    payload = {
+        "symbol": symbol,
+        "qty": str(qty),
+        "side": "sell",
+        "type": "limit",
+        "limit_price": str(round(float(limit_price), 2)),
+        "time_in_force": tif,
+    }
+    body = _json.dumps(payload).encode()
+    req = _ur.Request(
+        "https://paper-api.alpaca.markets/v2/orders",
+        data=body,
+        headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec,
+                 "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with _ur.urlopen(req, timeout=15) as resp:
+            order = _json.loads(resp.read())
+    except _urerr.HTTPError as httpe:
+        try:
+            err_body = httpe.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = str(httpe)
+        return {"error": "alpaca_http_error", "status": httpe.code, "body": err_body[:500]}
+    except Exception as exc:
+        return {"error": f"alpaca_submit_failed:{type(exc).__name__}", "detail": str(exc)[:200]}
+
+    order_id = order.get("id")
+    if not order_id:
+        return {"error": "no_order_id_from_alpaca", "response": order}
+
+    # Log to BMG as BACKFILL admin remediation.
+    trade_row = BotTrade(
+        allocation_id=pos.allocation_id,
+        symbol=symbol,
+        side="sell" if (pos.side or "long") == "long" else "cover",
+        qty=qty,
+        fill_price_cents=int(round(float(limit_price) * 100)),
+        fees_cents=0,
+        ts=_dt.now(_tz.utc),
+        position_id=pos.id,
+        is_paper=True,
+        alpaca_order_id=order_id,
+        origin="BACKFILL",  # admin remediation — not attributed to a bot per §W1
+        strategy=f"admin_remediation:{reason}",
+    )
+    db.add(trade_row)
+    db.commit()
+
+    return {
+        "ok": True,
+        "alpaca_order_id": order_id,
+        "status": order.get("status"),
+        "symbol": symbol,
+        "qty": qty,
+        "limit_price": float(limit_price),
+        "expected_proceeds_usd": round(float(limit_price) * float(qty) * 100, 2),
+        "bmg_trade_id": trade_row.id,
+        "reason": reason,
+        "note": "Order queued. Monitor via GET /admin/alpaca-order-status?order_id=<id>. "
+                "Reprice via POST /admin/admin-close-reprice.",
+    }
+
+
+@router.post("/admin-close-reprice")
+def admin_close_reprice(
+    alpaca_order_id: str = Query(..., description="Existing Alpaca order id"),
+    tick: float = Query(0.01, description="Tick step in dollars (default $0.01 penny pilot)"),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Cancel + resubmit an unfilled SELL LIMIT one tick lower toward bid.
+    Floors at current NBBO bid — never goes below bid.
+
+    Returns diagnostic: prior limit, new limit, current bid/ask, floored?"""
+    import os as _os, json as _json, urllib.request as _ur, urllib.error as _urerr
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    if not kid or not ksec:
+        return {"error": "no_alpaca_creds"}
+    headers = {"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec}
+
+    # 1. Fetch current order
+    try:
+        order = _json.loads(_ur.urlopen(_ur.Request(
+            f"https://paper-api.alpaca.markets/v2/orders/{alpaca_order_id}",
+            headers=headers,
+        ), timeout=10).read())
+    except Exception as exc:
+        return {"error": f"fetch_order_failed:{type(exc).__name__}", "detail": str(exc)[:200]}
+
+    status = order.get("status")
+    if status not in ("new", "accepted", "pending_new", "partially_filled"):
+        return {"error": "order_not_repriceable", "status": status,
+                "hint": "only unfilled/accepted orders can be repriced"}
+
+    symbol = order.get("symbol")
+    side = order.get("side")
+    qty = float(order.get("qty") or 0)
+    current_limit = float(order.get("limit_price") or 0)
+    if side != "sell":
+        return {"error": "reprice_only_supports_sell_orders"}
+
+    # 2. Get current NBBO
+    try:
+        snap = _json.loads(_ur.urlopen(_ur.Request(
+            f"https://data.alpaca.markets/v1beta1/options/snapshots?symbols={symbol}",
+            headers=headers,
+        ), timeout=10).read())
+        q = snap.get("snapshots", {}).get(symbol, {}).get("latestQuote", {})
+        bid = float(q.get("bp") or 0)
+        ask = float(q.get("ap") or 0)
+    except Exception as exc:
+        return {"error": f"fetch_nbbo_failed:{type(exc).__name__}", "detail": str(exc)[:200]}
+    if bid <= 0:
+        return {"error": "no_bid_available", "current_limit": current_limit}
+
+    # 3. Compute new limit: current - 1 tick, floor at bid
+    new_limit = round(current_limit - tick, 2)
+    floored = False
+    if new_limit < bid:
+        new_limit = bid
+        floored = True
+
+    if new_limit >= current_limit:
+        return {"error": "no_downward_room",
+                "current_limit": current_limit, "bid": bid, "ask": ask}
+
+    # 4. Cancel existing order
+    try:
+        _ur.urlopen(_ur.Request(
+            f"https://paper-api.alpaca.markets/v2/orders/{alpaca_order_id}",
+            headers=headers, method="DELETE",
+        ), timeout=10)
+    except _urerr.HTTPError as httpe:
+        # 204 or 422 (already-filled) — check status again
+        if httpe.code == 422:
+            return {"error": "cancel_failed_maybe_filled", "status_code": httpe.code}
+    except Exception as exc:
+        return {"error": f"cancel_failed:{type(exc).__name__}", "detail": str(exc)[:200]}
+
+    # 5. Submit new limit at new_limit
+    payload = {
+        "symbol": symbol,
+        "qty": str(qty),
+        "side": side,
+        "type": "limit",
+        "limit_price": str(new_limit),
+        "time_in_force": order.get("time_in_force") or "day",
+    }
+    body = _json.dumps(payload).encode()
+    try:
+        with _ur.urlopen(_ur.Request(
+            "https://paper-api.alpaca.markets/v2/orders",
+            data=body, headers={**headers, "Content-Type": "application/json"},
+            method="POST",
+        ), timeout=15) as resp:
+            new_order = _json.loads(resp.read())
+    except _urerr.HTTPError as httpe:
+        try:
+            err_body = httpe.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = str(httpe)
+        return {"error": "resubmit_http_error", "status": httpe.code, "body": err_body[:500],
+                "note": "OLD ORDER ALREADY CANCELLED — re-submit manually via /admin/admin-close-limit"}
+
+    return {
+        "ok": True,
+        "prior_alpaca_order_id": alpaca_order_id,
+        "new_alpaca_order_id": new_order.get("id"),
+        "symbol": symbol,
+        "qty": qty,
+        "prior_limit": current_limit,
+        "new_limit": new_limit,
+        "bid": bid,
+        "ask": ask,
+        "floored_at_bid": floored,
+        "expected_proceeds_usd": round(new_limit * qty * 100, 2),
+    }
+
+
+@router.get("/alpaca-order-status")
+def alpaca_order_status(
+    order_id: str = Query(..., description="Alpaca order id"),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Fetch current status of an Alpaca order. Non-mutating."""
+    import os as _os, json as _json, urllib.request as _ur
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    if not kid or not ksec:
+        return {"error": "no_alpaca_creds"}
+    try:
+        order = _json.loads(_ur.urlopen(_ur.Request(
+            f"https://paper-api.alpaca.markets/v2/orders/{order_id}",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        ), timeout=10).read())
+    except Exception as exc:
+        return {"error": f"fetch_failed:{type(exc).__name__}", "detail": str(exc)[:200]}
+    return {k: order.get(k) for k in [
+        "id", "symbol", "side", "qty", "type", "limit_price", "status",
+        "filled_qty", "filled_avg_price", "submitted_at", "filled_at",
+        "canceled_at", "time_in_force",
+    ]}
+
+
 @router.post("/fire-test-critical-alert")
 def fire_test_critical_alert(
     note: str = Query("test", description="Optional note appended to the alert"),
