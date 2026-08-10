@@ -271,16 +271,21 @@ def run_premarket_report_job(db=None) -> str:
     finally:
         if close_after:
             db.close()
+    # Ledger #22 audit sink: /data/audits (persistent Railway volume).
+    # Prior versions wrote to ~/Documents/BMG-Capital-Vault/daily-audits
+    # which only exists on Brock's laptop, not on Railway. On Railway ~ is
+    # /root and there's no vault mount, so reports vanished. Retrieval via
+    # GET /admin/audits/list + GET /admin/audits/{filename}.
     try:
-        vault = os.path.expanduser("~/Documents/BMG-Capital-Vault/daily-audits")
-        os.makedirs(vault, exist_ok=True)
+        audit_dir = os.getenv("BMG_AUDIT_DIR", "/data/audits")
+        os.makedirs(audit_dir, exist_ok=True)
         d = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        path = f"{vault}/premarket-{d}.md"
+        path = f"{audit_dir}/premarket-{d}.md"
         with open(path, "w") as f:
             f.write(report)
-        logger.warning("[premarket-report] wrote %s", path)
+        logger.warning("[premarket-report] wrote %s (%d bytes)", path, len(report))
     except Exception as exc:
-        logger.warning("[premarket-report] vault write failed: %s", exc)
+        logger.warning("[premarket-report] audit write failed: %s", exc)
     return report
 
 

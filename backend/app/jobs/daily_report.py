@@ -215,19 +215,21 @@ def run_daily_report_job(db=None) -> str:
     finally:
         if close_after:
             db.close()
-    # Persist to vault (best-effort; if the vault path doesn't exist we skip)
+    # Ledger #22 audit sink: /data/audits (persistent Railway volume).
+    # Prior version wrote to ~/Documents/BMG-Capital-Vault/daily-audits
+    # which only exists on Brock's laptop, not Railway.
     try:
-        vault = os.path.expanduser("~/Documents/BMG-Capital-Vault/daily-audits")
-        os.makedirs(vault, exist_ok=True)
+        audit_dir = os.getenv("BMG_AUDIT_DIR", "/data/audits")
+        os.makedirs(audit_dir, exist_ok=True)
         d = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        path = f"{vault}/{d}.md"
+        path = f"{audit_dir}/close-{d}.md"
         with open(path, "a") as f:
             f.write("\n\n---\n\n")
             f.write(report)
             f.write("\n")
-        logger.warning("[daily-report] wrote %s", path)
+        logger.warning("[daily-report] wrote %s (%d bytes)", path, len(report))
     except Exception as exc:
-        logger.warning("[daily-report] vault write failed (non-fatal): %s", exc)
+        logger.warning("[daily-report] audit write failed (non-fatal): %s", exc)
     return report
 
 

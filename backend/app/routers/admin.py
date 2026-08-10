@@ -1238,6 +1238,65 @@ def backup_sqlite(
     }
 
 
+@router.get("/audits/list")
+def audits_list(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """List all audit reports in /data/audits (or BMG_AUDIT_DIR env override).
+    Returns filename, size, mtime. Fetch content via /admin/audits/{filename}."""
+    import os
+    from datetime import datetime, timezone
+    root = os.getenv("BMG_AUDIT_DIR", "/data/audits")
+    if not os.path.isdir(root):
+        return {"exists": False, "dir": root, "files": []}
+    files = []
+    for name in sorted(os.listdir(root), reverse=True):
+        p = os.path.join(root, name)
+        if not os.path.isfile(p):
+            continue
+        try:
+            sz = os.path.getsize(p)
+            mt = datetime.fromtimestamp(os.path.getmtime(p), tz=timezone.utc).isoformat()
+            files.append({"name": name, "size_bytes": sz, "mtime_utc": mt})
+        except Exception:
+            continue
+    return {"exists": True, "dir": root, "count": len(files), "files": files}
+
+
+@router.get("/audits/{filename}")
+def audits_get(
+    filename: str,
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Return content of one audit report. Filename must not contain path
+    separators (basic anti-traversal)."""
+    import os
+    if "/" in filename or ".." in filename or "\\" in filename:
+        return {"error": "invalid_filename"}
+    root = os.getenv("BMG_AUDIT_DIR", "/data/audits")
+    path = os.path.join(root, filename)
+    if not os.path.isfile(path):
+        return {"error": "not_found", "path": path}
+    try:
+        with open(path) as f:
+            content = f.read()
+        return {"name": filename, "size_bytes": len(content), "content": content}
+    except Exception as exc:
+        return {"error": f"read_failed:{exc}"}
+
+
+@router.post("/audits/run-premarket-now")
+def audits_run_premarket_now(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Force the pre-market report to run now (bypassing the 9:15 ET cron).
+    Useful for pre-Monday verification and any time you want the latest."""
+    from app.jobs.premarket_report import run_premarket_report_job
+    report = run_premarket_report_job(db=db)
+    return {"ok": True, "bytes": len(report), "preview": report[:500]}
+
+
 @router.get("/scans/status")
 def scans_status(
     current_user: User = Depends(require_admin),
