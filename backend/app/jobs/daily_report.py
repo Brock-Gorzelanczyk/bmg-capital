@@ -167,6 +167,34 @@ def build_daily_report(db) -> str:
     lines = []
     lines.append(f"BMG FUND • {date_str} • 4:15 PM ET")
     lines.append("")
+
+    # ── HALT / ACK BANNER (Brock 2026-08-10): lead with halt state + unacked items ─
+    try:
+        from app.services.scans_gate import status_summary as _scan_status
+        from app.services.human_ack import list_unacked
+        _scans = _scan_status()
+        _eff = _scans.get("effective", {})
+        _st = _scans.get("state", {})
+        _global_paused = _st.get("global") is False
+        _paused_sleeves = [s for s, v in _eff.items() if not v]
+        _unacked = list_unacked(db)
+        if _global_paused or _paused_sleeves or _unacked:
+            lines.append("⚠ HALT / ACK REQUIRED — leads all downstream sections ⚠")
+            if _global_paused:
+                lines.append(f"  TRADING HALTED (global pause) since {_st.get('muted_at')} "
+                             f"by {_st.get('muted_by')} — reason: {_st.get('muted_reason')}")
+            elif _paused_sleeves:
+                lines.append(f"  Sleeves paused: {', '.join(_paused_sleeves)}")
+            if _unacked:
+                lines.append(f"  UNACKED items ({len(_unacked)}): resume blocked until AUTO_PAUSE acks cleared")
+                for a in _unacked[:5]:
+                    lines.append(f"    - [{a['category']}] {a['title']}  (id={a['id']}, {a['created_at'][:19]})")
+                if len(_unacked) > 5:
+                    lines.append(f"    ... +{len(_unacked)-5} more; GET /admin/pending-acks")
+            lines.append("")
+    except Exception as _halt_exc:
+        lines.append(f"  (HALT banner check raised: {_halt_exc})")
+
     lines.append("BROKER (Alpaca, single-source-of-truth):")
     lines.append(f"  PV: ${pv:,.2f}     (Δ today: {'+' if today_delta >= 0 else ''}${today_delta:,.2f} / {'+' if today_pct >= 0 else ''}{today_pct:.2f}%)")
     lines.append(f"  Cash: ${cash:,.2f}    Buying power: ${bp:,.2f}")
@@ -199,7 +227,13 @@ def build_daily_report(db) -> str:
     lines.append("")
     lines.append(f"UNATTRIBUTED: ${unattr:,.2f} (target < $1,000)")
     lines.append("")
-    lines.append("NO ACTION TAKEN AUTONOMOUSLY (all invariants display-only until #22 kill switch ships)")
+    # Auto-action status (Brock 2026-08-10 — replaces stale "until #22 ships" line).
+    lines.append("AUTO-ACTIONS ACTIVE:")
+    lines.append("  I2 (P&L drift > $500 → pause all scans)")
+    lines.append("  I3 (sim fill in 24h → pause offending alloc via paused_reason)")
+    lines.append("  I18 (/data > 90% → auto-prune backups keep=1)")
+    lines.append("  Alerts route via critical_alert (CRITICAL_ALERTS_ENABLED, independent of DISCORD_OPS_ALERTS_ENABLED)")
+    lines.append("  Resume blocked while any AUTO_PAUSE ack is unacked (GET /admin/pending-acks)")
     return "\n".join(lines)
 
 

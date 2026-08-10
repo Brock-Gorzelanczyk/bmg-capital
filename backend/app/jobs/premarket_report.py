@@ -78,6 +78,34 @@ def build_premarket_report(db) -> str:
     lines.append(f"BMG PRE-MARKET • {date_str} • {et_now.strftime('%H:%M')} ET")
     lines.append("=" * 60)
 
+    # ── HALT / ACK BANNER (Brock 2026-08-10): lead with halt state + unacked items ─
+    try:
+        from app.services.scans_gate import status_summary as _scan_status
+        from app.services.human_ack import list_unacked
+        _scans = _scan_status()
+        _eff = _scans.get("effective", {})
+        _st = _scans.get("state", {})
+        _global_paused = _st.get("global") is False
+        _paused_sleeves = [s for s, v in _eff.items() if not v]
+        _unacked = list_unacked(db)
+        if _global_paused or _paused_sleeves or _unacked:
+            lines.append("")
+            lines.append("⚠ HALT / ACK REQUIRED — leads all downstream sections ⚠")
+            if _global_paused:
+                lines.append(f"  TRADING HALTED (global pause) since {_st.get('muted_at')} "
+                             f"by {_st.get('muted_by')} — reason: {_st.get('muted_reason')}")
+            elif _paused_sleeves:
+                lines.append(f"  Sleeves paused: {', '.join(_paused_sleeves)}")
+            if _unacked:
+                lines.append(f"  UNACKED items ({len(_unacked)}): scans_gate resume BLOCKED until AUTO_PAUSE acks cleared")
+                for a in _unacked[:5]:
+                    lines.append(f"    - [{a['category']}] {a['title']}  (id={a['id']}, {a['created_at'][:19]})")
+                if len(_unacked) > 5:
+                    lines.append(f"    ... +{len(_unacked)-5} more; GET /admin/pending-acks")
+            lines.append("=" * 60)
+    except Exception as _halt_exc:
+        lines.append(f"  (HALT banner check raised: {_halt_exc})")
+
     # ── CHECK 1: Dry-run scan (proxy) ─────────────────────────────────────
     lines.append("")
     lines.append("CHECK 1 — DRY-RUN OPEN (proxy: 24h signals + gate config)")

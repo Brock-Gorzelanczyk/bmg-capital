@@ -1242,6 +1242,64 @@ def backup_sqlite(
     }
 
 
+@router.get("/pending-acks")
+def pending_acks(
+    category: Optional[str] = Query(None, description="Filter by category (AUTO_PAUSE|DISK_HIGH|SIM_FILL_DETECTED|INVARIANT_RED_STALE|MANUAL_TEST)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """List unacknowledged human_ack_required records. Auto-actions create
+    these; scans_gate resume is blocked until AUTO_PAUSE rows are acked."""
+    from app.services.human_ack import list_unacked
+    rows = list_unacked(db, category=category)
+    return {"count": len(rows), "category": category, "unacked": rows}
+
+
+@router.post("/ack")
+def ack_endpoint(
+    ack_id: int = Query(..., description="Row ID from /admin/pending-acks"),
+    by: str = Query(..., description="Human identifier (e.g. 'brock', 'user_1')"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Acknowledge a human_ack_required row. Once acked, any resume gates
+    it was blocking will release. Idempotent — acking an already-acked
+    row returns ok:false."""
+    from app.services.human_ack import acknowledge
+    ok = acknowledge(db, ack_id=ack_id, by=by)
+    return {"ok": ok, "ack_id": ack_id, "by": by,
+            "note": "ok:false = already acked or not found"}
+
+
+@router.post("/fire-test-critical-alert")
+def fire_test_critical_alert(
+    note: str = Query("test", description="Optional note appended to the alert"),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Fire a MANUAL_TEST critical alert via the critical-alert channel.
+    Brock 2026-08-10: 'until Brock confirms he received it, treat the fund
+    as unmonitored.' Use this endpoint to validate the alert path end-to-end
+    after any Discord/webhook config change."""
+    from app.services.critical_alert import send_critical
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).isoformat()
+    delivered = send_critical(
+        category="MANUAL_TEST",
+        title=f"Test alert ({note})",
+        message=(
+            f"Manual test fired at {ts} by user_{current_user.id}. "
+            f"If you see this in Discord, the critical-alert channel is "
+            f"reaching you. If NOT, the fund is unmonitored — "
+            f"CRITICAL_ALERTS_ENABLED / ALERT_WEBHOOK_URL / Discord webhook "
+            f"config is broken."
+        ),
+        source="admin.fire_test_critical_alert",
+    )
+    return {"delivered": delivered, "note": note, "fired_at": ts,
+            "next_step": "Brock must confirm receipt in Discord. "
+                         "Until confirmed, fund is UNMONITORED."}
+
+
 @router.get("/audits/list")
 def audits_list(
     current_user: User = Depends(require_admin),
@@ -1337,17 +1395,24 @@ def scans_pause(
 @router.post("/scans/resume")
 def scans_resume(
     sleeve: str = Query("all", description="all|global|stocks|crypto|options|quant|pr"),
+    force: bool = Query(False, description="Override the unacked-auto-pause gate. Logged."),
     current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """Resume bot scans globally or per-sleeve."""
+    """Resume bot scans globally or per-sleeve.
+
+    RESUME GATE (Brock 2026-08-10): refuses when any AUTO_PAUSE record in
+    human_ack_required is unacknowledged. Use force=true to override
+    (logged; do not use casually)."""
     from app.services.scans_gate import set_paused
     try:
-        new_state = set_paused(sleeve=sleeve, paused=False,
-                               muted_by=f"user_{current_user.id}",
-                               muted_reason=None)
+        result = set_paused(sleeve=sleeve, paused=False,
+                            muted_by=f"user_{current_user.id}",
+                            muted_reason=None, force=force)
     except ValueError as ve:
         return {"error": str(ve)}
-    return {"ok": True, "sleeve": sleeve, "state": new_state}
+    if isinstance(result, dict) and result.get("error"):
+        return result  # resume blocked — pass through the diagnostic
+    return {"ok": True, "sleeve": sleeve, "force": force, "state": result}
 
 
 @router.post("/backup-sqlite-offvolume")

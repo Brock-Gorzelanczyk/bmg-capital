@@ -1119,6 +1119,15 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m098_breach_on_adopt FAILED: %s",
                      _m098_exc, exc_info=True)
 
+    # human_ack_required table (Brock 2026-08-10 loop-failure fix).
+    try:
+        from app.services.human_ack import ensure_table as _ensure_ack_table
+        with engine.begin() as _ack_conn:
+            _ensure_ack_table(_ack_conn)
+        logger.warning("[startup] human_ack_required table ensured")
+    except Exception as _ack_exc:
+        logger.error("[startup] human_ack table create FAILED: %s", _ack_exc, exc_info=True)
+
     # m099: provenance origin column on bot_trades + bot_positions.
     # Structural fix for "BMG-generated rows impersonate broker facts"
     # (Brock 2026-08-10). Adds origin ENUM enforced by SQLite trigger.

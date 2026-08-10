@@ -168,6 +168,13 @@ Cost: 2–10 min of thinking before the first Edit. Return: catches a class of f
 
 **Honesty clause (added 2026-08-10):** if the paper artifact was NOT written before the code, say so explicitly in the change report. Do not retrofit the artifact after the fact and claim §M1 was followed. Format: `§M1: SKIPPED (reason)` or `§M1: applied — artifact: <link/quote>`. Retrofitting hides the discipline gap and prevents the class from being detected + closed.
 
+**Mechanical enforcement (added 2026-08-10, Brock #5):** every §S2 report — every claim of "shipped" that verifies state — MUST include a `§M1 artifact:` line as its first or second field. Values:
+- `§M1 artifact: <link to spec / vault path / inline identity quote>` — applied cleanly
+- `§M1 artifact: PARTIAL — <what was done, what was skipped>` — honest partial
+- `§M1 artifact: NONE — <reason>` — skipped, e.g. "trivial 1-line comment change" or "hotfix for prod incident, no time"
+
+A §S2 report without the field is itself a discipline violation. This is stronger than the honesty clause: a missing artifact is a knowable gap; an UNSTATED absence is worse because it hides the gap. First-session tracking will show my compliance rate.
+
 **Reference incidents this rule closes (2026-08-09 session):**
 - `BotSignal.created_at` — a schema quote would have shown only `ts` exists.
 - `/portfolio/summary` field passthrough — a consumer trace would have shown the handler whitelist.

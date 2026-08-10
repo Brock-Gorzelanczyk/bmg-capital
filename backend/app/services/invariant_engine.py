@@ -992,7 +992,7 @@ def _maybe_auto_action(r: Result, db) -> None:
                 alloc = db.query(BotAllocation).filter(BotAllocation.id == aid).first()
                 if not alloc:
                     continue
-                if alloc.paused_reason:  # already paused for some reason
+                if alloc.paused_reason:
                     continue
                 alloc.paused_reason = f"auto_pause_i3_sim_fill:{count}_rows_in_24h"
                 paused_count += 1
@@ -1002,33 +1002,38 @@ def _maybe_auto_action(r: Result, db) -> None:
                     "[invariant:AUTO-ACTION] I3 red — paused %d alloc(s) with paused_reason=auto_pause_i3_sim_fill",
                     paused_count,
                 )
+                # 2026-08-10 loop-failure fix: critical alert + ack instead of send_ops_alert
+                # (which was silently muted by DISCORD_OPS_ALERTS_ENABLED=false).
                 try:
-                    from app.services.discord import send_ops_alert
-                    send_ops_alert(
-                        title=f"[invariant] I3 auto-pause: {paused_count} alloc(s) sim-fills",
-                        message=r.detail,
-                        severity="critical",
+                    from app.services.critical_alert import send_critical
+                    from app.services.human_ack import create as ack_create
+                    from datetime import datetime as _dt, timezone as _tz
+                    _title = f"I3 auto-pause: {paused_count} alloc(s) with sim fills"
+                    _body = r.detail + "\nAllocs paused via paused_reason. Investigate + clear paused_reason to resume individual bots."
+                    send_critical(
+                        category="SIM_FILL_DETECTED",
+                        title=_title,
+                        message=_body,
                         source="invariant_engine.I3_auto_action",
                     )
-                except Exception:
-                    pass
+                    _ref = f"I3:{_dt.now(_tz.utc).strftime('%Y-%m-%d')}"
+                    ack_create(db, category="SIM_FILL_DETECTED", ref_key=_ref,
+                               title=_title, body=_body,
+                               created_by="invariant_engine.I3_auto_action")
+                except Exception as _alert_exc:
+                    logger.warning("[invariant:AUTO-ACTION] I3 alert/ack failed: %s", _alert_exc)
         except Exception as _i3_exc:
             logger.warning("[invariant:AUTO-ACTION] I3 auto-pause failed: %s", _i3_exc)
 
     if r.check_id == "I2":
-        # P&L drift auto-action: only trigger at >$500 (Brock's threshold,
-        # far above the current red threshold of $50). Uses the scans_gate
-        # kill switch (ledger #22) to pause ALL scans globally — this halts
-        # entries AND exits. Justification: at $500 drift we don't know if
-        # we're accurately tracking, so freeze the fleet until human
-        # intervention. Better than continuing to trade with broken accounting.
+        # P&L drift auto-action: only trigger at >$500.
         try:
             drift = float(r.delta or 0)
             if drift > 500:
                 from app.services.scans_gate import set_paused, read_state
                 cur = read_state()
                 if cur.get("global") is False:
-                    return  # already paused, skip
+                    return  # already paused
                 set_paused(
                     sleeve="all",
                     paused=True,
@@ -1039,16 +1044,27 @@ def _maybe_auto_action(r: Result, db) -> None:
                     "[invariant:AUTO-ACTION] I2 red drift=$%.2f > $500 — paused all scans",
                     drift,
                 )
+                # Critical alert + ack (loop-failure fix — was send_ops_alert, muted).
                 try:
-                    from app.services.discord import send_ops_alert
-                    send_ops_alert(
-                        title=f"[invariant] I2 auto-pause: P&L drift ${drift:,.2f} > $500",
-                        message=r.detail + " — all scans paused. Investigate and POST /admin/scans/resume when resolved.",
-                        severity="critical",
+                    from app.services.critical_alert import send_critical
+                    from app.services.human_ack import create as ack_create
+                    from datetime import datetime as _dt, timezone as _tz
+                    _title = f"I2 auto-pause: P&L drift ${drift:,.2f} > $500"
+                    _body = (r.detail + "\n\nAll scans paused. Fund is halted. "
+                             "Diagnose drift, then POST /admin/scans/resume?sleeve=all after ack. "
+                             "Resume is blocked until this ack is cleared.")
+                    send_critical(
+                        category="AUTO_PAUSE",
+                        title=_title,
+                        message=_body,
                         source="invariant_engine.I2_auto_action",
                     )
-                except Exception:
-                    pass
+                    _ref = f"I2:{_dt.now(_tz.utc).strftime('%Y-%m-%d')}"
+                    ack_create(db, category="AUTO_PAUSE", ref_key=_ref,
+                               title=_title, body=_body,
+                               created_by="invariant_engine.I2_auto_action")
+                except Exception as _alert_exc:
+                    logger.warning("[invariant:AUTO-ACTION] I2 alert/ack failed: %s", _alert_exc)
         except Exception as _i2_exc:
             logger.warning("[invariant:AUTO-ACTION] I2 auto-pause failed: %s", _i2_exc)
 
@@ -1063,16 +1079,21 @@ def _maybe_auto_action(r: Result, db) -> None:
         except Exception:
             pass
         logger.error("[invariant:AUTO-ACTION] I18 red — %s", r.detail)
+        # Critical alert + ack (loop-failure fix — was send_ops_alert, muted).
         try:
-            from app.services.discord import send_ops_alert
-            send_ops_alert(
-                title=f"[invariant] I18 disk headroom breached ({pct:.1f}%)" if pct else "[invariant] I18 disk headroom breached",
-                message=r.detail,
-                severity="critical",
-                source="invariant_engine",
-            )
-        except Exception:
-            pass
+            from app.services.critical_alert import send_critical
+            from app.services.human_ack import create as ack_create
+            from datetime import datetime as _dt, timezone as _tz
+            _title = f"I18 disk headroom breached ({pct:.1f}%)" if pct else "I18 disk headroom breached"
+            _body = r.detail + "\n\nAuto-prune runs above 90%. Investigate root cause of growth."
+            send_critical(category="DISK_HIGH", title=_title, message=_body,
+                          source="invariant_engine.I18_auto_action")
+            _ref = f"I18:{_dt.now(_tz.utc).strftime('%Y-%m-%d')}"
+            ack_create(db, category="DISK_HIGH", ref_key=_ref,
+                       title=_title, body=_body,
+                       created_by="invariant_engine.I18_auto_action")
+        except Exception as _alert_exc:
+            logger.warning("[invariant:AUTO-ACTION] I18 alert/ack failed: %s", _alert_exc)
         if pct is not None and pct > 90:
             try:
                 import os as _os

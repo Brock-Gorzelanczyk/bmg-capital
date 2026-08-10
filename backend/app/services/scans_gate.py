@@ -120,16 +120,50 @@ def set_paused(
     paused: bool,
     muted_by: str = "admin",
     muted_reason: Optional[str] = None,
+    force: bool = False,
 ) -> dict:
     """Set a sleeve (or 'all'/'global') to paused/resumed.
 
     sleeve values: 'global'/'all' (master), or one of SLEEVES.
     paused=True → sleeve blocked. paused=False → sleeve allowed.
-    Returns the new state dict.
+
+    RESUME GATE (Brock 2026-08-10): if there are any unacknowledged
+    AUTO_PAUSE records in human_ack_required, resume is REFUSED unless
+    force=True. Prevents the "silently resumed a fund the auto-action
+    halted" failure class.
+
+    Returns the new state dict OR {"error": "..."} when blocked.
     """
     sleeve_key = "global" if sleeve in ("all", "global") else sleeve
     if sleeve_key not in (_ALL_KEY,) + SLEEVES:
         raise ValueError(f"unknown sleeve: {sleeve!r}; valid: global|{'|'.join(SLEEVES)}")
+
+    # Resume gate: block if any unacked auto-pause exists.
+    if not paused and not force:
+        try:
+            from app.services.human_ack import list_unacked
+            from app.db.session import SessionLocal as _SL
+            _db = _SL()
+            try:
+                unacked = list_unacked(_db, category="AUTO_PAUSE")
+            finally:
+                _db.close()
+            if unacked:
+                logger.warning(
+                    "[scan-gate] RESUME BLOCKED for %s — %d unacked auto-pause(s): %s",
+                    sleeve_key, len(unacked),
+                    ", ".join(a["ref_key"] for a in unacked[:5])
+                )
+                return {
+                    "error": "resume_blocked_unacked_auto_pauses",
+                    "unacked_count": len(unacked),
+                    "unacked": unacked[:10],
+                    "hint": "POST /admin/ack?ack_id=<id>&by=<user> for each, "
+                            "then retry resume. Or pass force=true to override "
+                            "(logged; consider carefully).",
+                }
+        except Exception as _rg_exc:
+            logger.warning("[scan-gate] resume gate check failed (allowing resume): %s", _rg_exc)
     with _write_lock:
         st = read_state()
         prior = st.get(sleeve_key)
