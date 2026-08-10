@@ -796,6 +796,51 @@ def _check_i21_origin_not_null(db) -> Result:
         return _amber("I21", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i23_pnl_windows_exact_zero(db) -> Result:
+    """Any exact-zero P&L window on a funded live fund > 1 day old is a
+    bug, never a value. Regression guard for the 2026-08-10 session-aware
+    today_pnl leak that zeroed all_time/mtd/wtd downstream.
+
+    Rules (all must hold):
+      - fund funded_capital > 0 (fund exists)
+      - all_time == 0 → RED (a live fund can't be exactly flat since inception)
+      - mtd == 0 on any day past month-start → RED
+      - wtd == 0 on any day past Monday RTH → RED
+      - today == 0 during RTH → RED
+      - today = None outside RTH → GREEN (session-honest, per W2)
+    """
+    try:
+        from app.core.canonical import compute_strategy_lab_aggregate
+        from datetime import datetime as _dt, timezone as _tz
+        agg = compute_strategy_lab_aggregate(user_id=1, db=db) or {}
+        fund_pv = int(agg.get("total_value_cents") or 0)
+        if fund_pv <= 0:
+            return _amber("I23", None, None, None, "no fund_pv — skip")
+        pnl = agg.get("pnl", {}) or {}
+        violations = []
+        for k in ("all_time", "mtd", "wtd"):
+            entry = pnl.get(k) or {}
+            cents = entry.get("cents")
+            if cents == 0:  # exact zero — never a value on a live fund
+                violations.append(f"{k}.cents == 0 exactly (impossible for a funded fund)")
+        # today: exact-zero is a red only during RTH.
+        today = pnl.get("today") or {}
+        if today.get("cents") == 0:
+            try:
+                from app.services.market_hours import is_market_open
+                if is_market_open():
+                    violations.append("today.cents == 0 during RTH")
+            except Exception:
+                pass
+        actual = {"pnl": pnl, "violations": violations}
+        if not violations:
+            return _ok("I23", actual, None, "no exact-zero P&L windows on live fund")
+        return _red("I23", actual, 0, float(len(violations)),
+                    f"P&L window regression: {'; '.join(violations)[:200]}")
+    except Exception as exc:
+        return _amber("I23", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i18_data_volume_headroom(db) -> Result:
     """/data volume must never fill to Railway's alert threshold.
     Green < 60%, Amber 60-80%, Red >80%. At >90% attempt auto-prune
@@ -858,6 +903,7 @@ CHECKS: dict[str, Callable] = {
     "I19": _check_i19_broker_fill_has_uuid,
     "I20": _check_i20_phantom_trades_while_market_closed,
     "I21": _check_i21_origin_not_null,
+    "I23": _check_i23_pnl_windows_exact_zero,
 }
 
 

@@ -998,21 +998,23 @@ def _compute_pnl_windows(
     db: Session,
     alloc_ids: list[int],
     total_value_cents: int,
-    today_pnl_cents: int,
+    today_pnl_cents: Optional[int],
 ) -> dict:
     """Return the 5-col header P&L dict: all_time / mtd / wtd / today.
 
-    Each entry: {"cents": int, "pct": float}. Percentage is signed, expressed
+    Each entry: {"cents": int|None, "pct": float}. Percentage is signed, expressed
     as a decimal fraction (0.011 = +1.1%). Frontend multiplies by 100 for display.
+
+    Session-honest scope (2026-08-10 regression fix): ONLY the today window
+    is session-dependent. all_time / mtd / wtd are period-baselined and
+    independent of whether the market is open. If today_pnl_cents is None
+    (market closed), today.cents = None; other periods still compute.
     """
     today = _fund_today()
 
     all_time_cents = total_value_cents - _FUND_INCEPTION_CENTS
     all_time_pct = round(all_time_cents / _FUND_INCEPTION_CENTS, 6) if _FUND_INCEPTION_CENTS else 0.0
 
-    # MTD: anchor to last biz-day of prior month. Fallback to earliest
-    # snapshot in current month (bots are ~30 days old — we may lack a
-    # June-30 snapshot but have July-1 rollup). Fallback to inception.
     mtd_anchor = _last_biz_day_of_prior_month(today)
     mtd_baseline = _sum_eod_snapshot_on(db, alloc_ids, mtd_anchor)
     if mtd_baseline is None or mtd_baseline <= 0:
@@ -1023,7 +1025,6 @@ def _compute_pnl_windows(
     mtd_cents = total_value_cents - mtd_baseline
     mtd_pct = round(mtd_cents / mtd_baseline, 6) if mtd_baseline else 0.0
 
-    # WTD: anchor to last Sunday. Fallback to earliest snapshot this week.
     wtd_anchor = _last_sunday_before(today)
     wtd_baseline = _sum_eod_snapshot_on(db, alloc_ids, wtd_anchor)
     if wtd_baseline is None or wtd_baseline <= 0:
@@ -1033,14 +1034,19 @@ def _compute_pnl_windows(
     wtd_cents = total_value_cents - wtd_baseline
     wtd_pct = round(wtd_cents / wtd_baseline, 6) if wtd_baseline else 0.0
 
-    today_baseline = total_value_cents - today_pnl_cents
-    today_pct = round(today_pnl_cents / today_baseline, 6) if today_baseline > 0 else 0.0
+    # today is None-safe (market_closed → None), never crashes downstream.
+    if today_pnl_cents is None:
+        today_entry = {"cents": None, "pct": 0.0}
+    else:
+        today_baseline = total_value_cents - today_pnl_cents
+        today_pct = round(today_pnl_cents / today_baseline, 6) if today_baseline > 0 else 0.0
+        today_entry = {"cents": today_pnl_cents, "pct": today_pct}
 
     return {
         "all_time": {"cents": all_time_cents, "pct": all_time_pct},
         "mtd":      {"cents": mtd_cents,      "pct": mtd_pct},
         "wtd":      {"cents": wtd_cents,      "pct": wtd_pct},
-        "today":    {"cents": today_pnl_cents, "pct": today_pct},
+        "today":    today_entry,
     }
 
 
@@ -1726,12 +1732,16 @@ def compute_strategy_lab_aggregate(user_id: int, db: Session) -> dict:
             db, _fleet_alloc_ids, total_value, total_today_pnl,
         )
     except Exception as _pnl_exc:
+        # NULL-not-zero fallback (Brock 2026-08-10 regression rule):
+        # a zero on a live fund is always a bug, never a value. Every
+        # unavailable cents field returns None; frontend renders "—".
         logger.warning("[canonical] pnl windows failed: %s", _pnl_exc)
         pnl_windows = {
-            "all_time": {"cents": 0, "pct": 0.0},
-            "mtd":      {"cents": 0, "pct": 0.0},
-            "wtd":      {"cents": 0, "pct": 0.0},
-            "today":    {"cents": total_today_pnl, "pct": 0.0},
+            "all_time": {"cents": None, "pct": None, "reason": "compute_failed"},
+            "mtd":      {"cents": None, "pct": None, "reason": "compute_failed"},
+            "wtd":      {"cents": None, "pct": None, "reason": "compute_failed"},
+            "today":    {"cents": total_today_pnl, "pct": None,
+                         "reason": "compute_failed" if total_today_pnl is None else None},
         }
 
     return {

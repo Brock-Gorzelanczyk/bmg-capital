@@ -208,3 +208,11 @@ Each one deleted rows without preventing the category. This rule prevents the ca
 Outside RTH, `today_pnl_cents` is `None` (frontend renders "—" per NULL≠$0). Inside RTH, `today_pnl_cents = alpaca.equity - alpaca.last_equity`. The `today_pnl_label` field on `/portfolio/summary` says `"live"` | `"market_closed"` | `"unavailable"`.
 
 **Ban:** never show a numeric today_pnl outside RTH. At 3 AM Monday with markets closed, a −$5,161 today_pnl reading is a §W2 violation.
+
+**Scope discipline (added 2026-08-10 after regression):** session-honest applies to **`today` only**. `all_time`, `mtd`, `wtd` are period-baselined and independent of session state — they compute regardless of whether the market is open. Do NOT extend session-nulling to other periods; if you do, you'll silently zero the fund's historical P&L any time the market is closed.
+
+## MONEY-MATH ACCEPTANCE (added 2026-08-10, Brock regression rule)
+
+Any change touching P&L, valuation, or period-return math must include a **post-deploy acceptance print** of `pnl.{all_time, mtd, wtd, today}` and confirm each field is either a plausible number OR an explicit `null` with a `reason` field. **Zero is neither** — a `.cents == 0` on a live funded fund is always a bug, never a value.
+
+Enforced structurally by invariant **I23**: any exact-zero pnl window on a fund with `funded_capital > 0` and `age > 1 day` → RED. Applies to `all_time`, `mtd`, `wtd` always; to `today` only during RTH.
