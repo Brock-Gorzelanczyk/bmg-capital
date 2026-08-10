@@ -1027,38 +1027,44 @@ def _maybe_auto_action(r: Result, db) -> None:
 
     if r.check_id == "I2":
         # P&L drift auto-action: only trigger at >$500.
+        # Ack + alert ALWAYS fire when drift > $500 (idempotent via UNIQUE
+        # category+ref_key), even if scans already paused. Reason: prior code
+        # skipped ack creation when already-paused, leaving the resume gate
+        # unenforceable for pre-existing pauses.
         try:
             drift = float(r.delta or 0)
             if drift > 500:
                 from app.services.scans_gate import set_paused, read_state
                 cur = read_state()
-                if cur.get("global") is False:
-                    return  # already paused
-                set_paused(
-                    sleeve="all",
-                    paused=True,
-                    muted_by="invariant_engine.I2_auto_action",
-                    muted_reason=f"auto_pause_i2_drift_${drift:,.2f}",
-                )
-                logger.error(
-                    "[invariant:AUTO-ACTION] I2 red drift=$%.2f > $500 — paused all scans",
-                    drift,
-                )
-                # Critical alert + ack (loop-failure fix — was send_ops_alert, muted).
+                already_paused = cur.get("global") is False
+                if not already_paused:
+                    set_paused(
+                        sleeve="all",
+                        paused=True,
+                        muted_by="invariant_engine.I2_auto_action",
+                        muted_reason=f"auto_pause_i2_drift_${drift:,.2f}",
+                    )
+                    logger.error(
+                        "[invariant:AUTO-ACTION] I2 red drift=$%.2f > $500 — paused all scans",
+                        drift,
+                    )
+                # Ack + alert regardless (idempotent). Ref_key is date-scoped
+                # so a new ack lands per day; same-day re-fire is deduped.
                 try:
                     from app.services.critical_alert import send_critical
                     from app.services.human_ack import create as ack_create
                     from datetime import datetime as _dt, timezone as _tz
                     _title = f"I2 auto-pause: P&L drift ${drift:,.2f} > $500"
                     _body = (r.detail + "\n\nAll scans paused. Fund is halted. "
-                             "Diagnose drift, then POST /admin/scans/resume?sleeve=all after ack. "
-                             "Resume is blocked until this ack is cleared.")
-                    send_critical(
-                        category="AUTO_PAUSE",
-                        title=_title,
-                        message=_body,
-                        source="invariant_engine.I2_auto_action",
-                    )
+                             "Diagnose drift, then POST /admin/ack?ack_id=<id>&by=<user> "
+                             "before POST /admin/scans/resume?sleeve=all.")
+                    if not already_paused:
+                        send_critical(
+                            category="AUTO_PAUSE",
+                            title=_title,
+                            message=_body,
+                            source="invariant_engine.I2_auto_action",
+                        )
                     _ref = f"I2:{_dt.now(_tz.utc).strftime('%Y-%m-%d')}"
                     ack_create(db, category="AUTO_PAUSE", ref_key=_ref,
                                title=_title, body=_body,
