@@ -79,15 +79,18 @@ The helper reads JWT_SECRET from env or the Railway CLI *inside the script*, pip
 Every "shipped" / "retired" / "disabled" / "closed" claim must include the verifying query output in the same reply. Not the intent, not the endpoint call — the returned state after the change. "Alloc 67 tombstoned" is not evidence; `SELECT enabled FROM bot_allocations WHERE id=67 → 0` is.
 Reason: 2026-08-07 pre-market report showed `crypto_quant_scalp_1m` still enabled despite a previous session's "retired" claim. Structural fix: state must be observed, not asserted.
 
-## OPTIONS RISK MEASUREMENT (added 2026-08-07 — third instance of the class)
+## OPTIONS RISK MEASUREMENT (added 2026-08-07 — fourth instance of the class)
 
 ### O1. Any risk metric on options must net hedged legs before measuring.
 Naked-leg measurement is a bug, not conservatism. A short leg with a long leg above/below it on the same underlying + expiry is a defined-risk spread; measuring the short leg's `|market_value|` in isolation over-reports the position's true max loss by 10-100×.
+
+**This rule applies to PM Claude's analysis as well.** Any options risk claim in a paste-ready, dashboard alert, or human-facing report must show the netted structure BEFORE the number. "5 long calls, −$25,300, 26% NAV" without naming the paired short is a §O1 violation regardless of who wrote it.
 
 **Confirmed instances:**
 1. Ledger #19 (2026-08-06) — `deployed_cents` summed gross leg abs, double-counting bull spreads.
 2. m082 span-aware margin (2026-08-07 audit patch) — sleeve deployed used per-leg notional.
 3. Ledger #29 (2026-08-07) — I7 per-position concentration used per-leg `|market_value|`, false-red'd BABA at 28.4% NAV on a defined-risk 111/112 vertical whose true max loss was 1.6% NAV.
+4. Ledger #31 (2026-08-09) — PM Claude report flagged META 260828C00655000 as "5 naked long calls, −$25,300 unrealized, 26% NAV". Actually a 655/660 bull call spread × 5. Real max loss $3,875 (4% NAV). Brock's own escalation self-classified as the 4th instance.
 
 **Rule:** before you compute *any* risk aggregate (exposure, deployed, margin, concentration, max loss, VaR, sleeve total), group option legs by `(underlying_root, expiration, right)` and:
 - Long/short pair on same key → net debit for spread, or width × contracts × 100 (capped for verticals).
