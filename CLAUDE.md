@@ -166,9 +166,38 @@ Cost: 2–10 min of thinking before the first Edit. Return: catches a class of f
 
 **Self-honesty check:** if the "artifact" is just the code without the paper step, the discipline was skipped. Retrospective §S2 will surface the miss; that's a discipline failure, not a §S2 win.
 
+**Honesty clause (added 2026-08-10):** if the paper artifact was NOT written before the code, say so explicitly in the change report. Do not retrofit the artifact after the fact and claim §M1 was followed. Format: `§M1: SKIPPED (reason)` or `§M1: applied — artifact: <link/quote>`. Retrofitting hides the discipline gap and prevents the class from being detected + closed.
+
 **Reference incidents this rule closes (2026-08-09 session):**
 - `BotSignal.created_at` — a schema quote would have shown only `ts` exists.
 - `/portfolio/summary` field passthrough — a consumer trace would have shown the handler whitelist.
 - Sleeve reconciliation drift (3 iterations) — an identity-in-cents artifact would have shown fund_pv includes Alpaca margin/unsettled and doesn't equal position_sum + cash; would have listed orphan_allocs as a required bucket; would have shown user-scoping of the claim query as required for the partition to be exhaustive.
 
 **When NOT to invoke this rule:** trivial single-field UI edits, cosmetic renames, comment-only changes. Anything that touches money math or a scheduled job's behavior counts.
+
+## PROVENANCE (added 2026-08-10 — ledger #32)
+
+### W1. BMG never writes a row that impersonates a broker fact.
+Any row BMG generates must be labeled AT THE SCHEMA LEVEL as generated. If a bug requires deleting rows to fix, the real fix is preventing that row category from being created — **deletion is triage, not a fix.**
+
+**Enforcement (three layers):**
+
+1. **Schema (m099)** — `bot_trades.origin` and `bot_positions.origin` are ENUM-constrained by SQLite trigger. Values: `BROKER_FILL` | `ADOPTED` | `RECONCILE` | `REBUILD` | `BACKFILL`. Any INSERT/UPDATE without a valid origin fails at the DB layer. See `app/services/provenance.py` for the single source of truth.
+
+2. **Consumers** — trade counts, round-trips, win rate, Sharpe, realized P&L filter to `origin='BROKER_FILL'`. Position / exposure / valuation include ALL origins (they're real holdings regardless of who wrote the row). UI trade blotter defaults to BROKER_FILL with a separate "system activity" view.
+
+3. **CI (`scripts/ci_check_gates.sh`)** — any file constructing `BotTrade(...)` or `BotPosition(...)` must import the corresponding gate (`trade_write_gate` / `position_write_gate`). Grep-based. Fails the build. Run via `.github/workflows/gate-enforcement.yml`. Self-test at `scripts/ci_check_gates_selftest.sh` proves the guard catches an ungated commit.
+
+**Reference incidents (five deletions before this rule):**
+- Sim quarantine (ledger #26)
+- Phantom purge (ledger #2)
+- Adopter rollback (ledger #23)
+- Reconcile close (multiple)
+- Restart dupes (ledger #21, #23)
+
+Each one deleted rows without preventing the category. This rule prevents the category.
+
+### W2. today_pnl must be session-honest.
+Outside RTH, `today_pnl_cents` is `None` (frontend renders "—" per NULL≠$0). Inside RTH, `today_pnl_cents = alpaca.equity - alpaca.last_equity`. The `today_pnl_label` field on `/portfolio/summary` says `"live"` | `"market_closed"` | `"unavailable"`.
+
+**Ban:** never show a numeric today_pnl outside RTH. At 3 AM Monday with markets closed, a −$5,161 today_pnl reading is a §W2 violation.
