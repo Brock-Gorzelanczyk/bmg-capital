@@ -1242,6 +1242,109 @@ def backup_sqlite(
     }
 
 
+@router.post("/quarantine-catchall-dupes")
+def quarantine_catchall_dupes(
+    since_hours: int = Query(24, description="Only touch catchall rows opened within N hours"),
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Quarantine bot_positions on 'catchall' or 'unresolved' allocations
+    when the same (symbol, side) is ALREADY held on a DIFFERENT allocation
+    as active. Cleans up over-adopts where attribution fell back to catchall
+    for positions real bots already own.
+
+    Reason (Brock 2026-08-10 overnight): the adopt-missing endpoint added
+    83 rows all attributed to catchall; N of them duplicated existing
+    bot-owned positions, inflating bot_sum_pv by ~$11K.
+
+    Idempotent. Refuses to touch anything older than since_hours to avoid
+    accidentally quarantining legitimate historical catchall attribution.
+    """
+    from sqlalchemy import text as _t
+    from datetime import datetime, timezone, timedelta
+    cut = (datetime.now(timezone.utc) - timedelta(hours=since_hours)).isoformat()
+
+    # Find catchall / unresolved allocations
+    catchall_allocs = db.execute(_t(
+        "SELECT a.id, p.name FROM bot_allocations a "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id = 1 "
+        "  AND (p.name LIKE '%catchall%' OR p.name LIKE '%unresolved%')"
+    )).fetchall()
+    catchall_alloc_ids = [int(r[0]) for r in catchall_allocs]
+    if not catchall_alloc_ids:
+        return {"error": "no_catchall_allocs_found", "hint": "check bot_profiles.name"}
+
+    # Find catchall positions opened in the window, with same (symbol, side)
+    # already active on a non-catchall alloc.
+    catchall_ph = ",".join([":a" + str(i) for i in range(len(catchall_alloc_ids))])
+    params = {"cut": cut, **{f"a{i}": v for i, v in enumerate(catchall_alloc_ids)}}
+    candidates = db.execute(_t(
+        f"SELECT bp.id, bp.symbol, bp.side, bp.qty, bp.avg_cost_cents, bp.opened_at, bp.allocation_id "
+        f"FROM bot_positions bp "
+        f"WHERE bp.allocation_id IN ({catchall_ph}) "
+        f"  AND bp.closed_at IS NULL "
+        f"  AND bp.quarantined_at IS NULL "
+        f"  AND bp.opened_at >= :cut"
+    ), params).fetchall()
+
+    dupes: list[dict] = []
+    for r in candidates:
+        pos_id, sym, side, qty, avg_c, opened, alloc_id = r
+        # Is same (symbol, side) held on a NON-catchall active row?
+        other = db.execute(_t(
+            f"SELECT id, allocation_id FROM bot_positions "
+            f"WHERE symbol = :s AND (side = :side OR (side IS NULL AND :side = 'long')) "
+            f"  AND closed_at IS NULL "
+            f"  AND quarantined_at IS NULL "
+            f"  AND allocation_id NOT IN ({catchall_ph}) "
+            f"  AND id != :self_id "
+            f"LIMIT 1"
+        ), {"s": sym, "side": side or "long", "self_id": pos_id, **{f"a{i}": v for i, v in enumerate(catchall_alloc_ids)}}).fetchone()
+        if other:
+            dupes.append({
+                "catchall_position_id": pos_id,
+                "symbol": sym,
+                "side": side,
+                "qty": float(qty or 0),
+                "avg_cost_cents": int(avg_c or 0),
+                "opened_at": str(opened),
+                "catchall_alloc_id": alloc_id,
+                "other_position_id": int(other[0]),
+                "other_alloc_id": int(other[1]),
+            })
+
+    quarantined = 0
+    if not dry_run and dupes:
+        now = datetime.now(timezone.utc)
+        dupe_ids = [d["catchall_position_id"] for d in dupes]
+        ph = ",".join([":i" + str(i) for i in range(len(dupe_ids))])
+        db.execute(_t(
+            f"UPDATE bot_positions "
+            f"SET quarantined_at = :now, quarantine_reason = 'catchall_dupe_of_bot_alloc' "
+            f"WHERE id IN ({ph})"
+        ), {"now": now.isoformat(), **{f"i{i}": v for i, v in enumerate(dupe_ids)}})
+        # Also quarantine the paired BotTrade rows (if any) for these positions
+        db.execute(_t(
+            f"UPDATE bot_trades "
+            f"SET quarantined_at = :now, quarantine_reason = 'catchall_dupe_of_bot_alloc' "
+            f"WHERE position_id IN ({ph}) AND quarantined_at IS NULL"
+        ), {"now": now.isoformat(), **{f"i{i}": v for i, v in enumerate(dupe_ids)}})
+        db.commit()
+        quarantined = len(dupe_ids)
+
+    return {
+        "dry_run": dry_run,
+        "since_hours": since_hours,
+        "catchall_alloc_ids": catchall_alloc_ids,
+        "catchall_candidates_in_window": len(candidates),
+        "dupes_found": len(dupes),
+        "quarantined": quarantined,
+        "dupes_sample": dupes[:20],
+    }
+
+
 @router.get("/diag/i2-hypothesis")
 def diag_i2_hypothesis(
     db: Session = Depends(get_db),
