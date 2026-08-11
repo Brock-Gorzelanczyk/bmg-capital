@@ -1242,6 +1242,44 @@ def backup_sqlite(
     }
 
 
+@router.get("/diag/multi-owned")
+def diag_multi_owned(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """List (symbol, side) tuples held by 2+ active allocations. These are
+    the I9 multi-owned that inflate BMG's aggregate exposure vs Alpaca."""
+    from sqlalchemy import text as _t
+    rows = db.execute(_t(
+        "SELECT bp.symbol, COALESCE(bp.side,'long') AS s, "
+        "       GROUP_CONCAT(bp.id) AS position_ids, "
+        "       GROUP_CONCAT(bp.allocation_id) AS alloc_ids, "
+        "       GROUP_CONCAT(bp.qty) AS qtys, "
+        "       GROUP_CONCAT(bp.avg_cost_cents) AS avg_costs, "
+        "       GROUP_CONCAT(bp.origin) AS origins, "
+        "       COUNT(*) AS n "
+        "FROM bot_positions bp "
+        "JOIN bot_allocations a ON a.id = bp.allocation_id "
+        "WHERE bp.closed_at IS NULL AND bp.quarantined_at IS NULL AND a.user_id = 1 "
+        "GROUP BY bp.symbol, COALESCE(bp.side,'long') "
+        "HAVING COUNT(*) >= 2 "
+        "ORDER BY COUNT(*) DESC"
+    )).fetchall()
+    out = []
+    for r in rows:
+        out.append({
+            "symbol": r[0],
+            "side": r[1],
+            "position_ids": r[2],
+            "allocation_ids": r[3],
+            "qtys": r[4],
+            "avg_cost_cents": r[5],
+            "origins": r[6],
+            "n_copies": int(r[7]),
+        })
+    return {"multi_owned_count": len(out), "details": out}
+
+
 @router.post("/quarantine-catchall-dupes")
 def quarantine_catchall_dupes(
     since_hours: int = Query(24, description="Only touch catchall rows opened within N hours"),
