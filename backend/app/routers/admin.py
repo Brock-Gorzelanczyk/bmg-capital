@@ -1242,6 +1242,183 @@ def backup_sqlite(
     }
 
 
+@router.get("/diag/i2-hypothesis")
+def diag_i2_hypothesis(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """I2 drift diagnostic per Brock 2026-08-10 PM.
+
+    Signature: BMG says $10K more unrealized loss than Alpaca despite
+    tracking fewer positions (57 vs 137). Wrong rows counted, not missing.
+
+    Primary: quarantined-in-sum-but-not-in-count. Groups open bot_positions
+    by active vs quarantined; if the quarantined group has non-zero
+    aggregate unrealized fed into some display path, that's the bug.
+    """
+    from sqlalchemy import text as _t
+    result: Dict[str, Any] = {}
+
+    # ── Primary: does any query sum unrealized WITHOUT filtering quarantined? ──
+    # Note bot_positions doesn't store unrealized directly; it lives in
+    # per-bot snapshot compute. So the direct hypothesis is: some path
+    # sums per-position (avg_cost, mark, qty) INCLUDING quarantined rows.
+    # We approximate by comparing counts + notional exposure between the
+    # two groups; the diff = how much quarantined rows could be inflating.
+    rows = db.execute(_t(
+        "SELECT (quarantined_at IS NULL) AS active, "
+        "       COUNT(*)                 AS n, "
+        "       COALESCE(SUM(qty * avg_cost_cents), 0) AS sum_notional_cents, "
+        "       COALESCE(SUM(CASE WHEN option_type IS NOT NULL THEN 1 ELSE 0 END), 0) AS n_options "
+        "FROM bot_positions "
+        "WHERE closed_at IS NULL "
+        "GROUP BY 1"
+    )).fetchall()
+    result["primary_open_by_quarantine_status"] = [
+        {
+            "active_flag": bool(r[0]),
+            "count": int(r[1] or 0),
+            "sum_notional_cents": int(r[2] or 0),
+            "sum_notional_dollars": round(int(r[2] or 0) / 100, 2),
+            "options_count": int(r[3] or 0),
+        }
+        for r in rows
+    ]
+
+    # For user_1 fleet specifically (matches canonical / leaderboard scope)
+    user_rows = db.execute(_t(
+        "SELECT (bp.quarantined_at IS NULL) AS active, "
+        "       COUNT(*) AS n, "
+        "       COALESCE(SUM(bp.qty * bp.avg_cost_cents), 0) AS sum_notional_cents, "
+        "       COALESCE(SUM(CASE WHEN bp.option_type IS NOT NULL THEN 1 ELSE 0 END), 0) AS n_options "
+        "FROM bot_positions bp "
+        "JOIN bot_allocations a ON a.id = bp.allocation_id "
+        "WHERE bp.closed_at IS NULL AND a.user_id = 1 "
+        "GROUP BY 1"
+    )).fetchall()
+    result["primary_user1_open_by_quarantine_status"] = [
+        {"active_flag": bool(r[0]), "count": int(r[1] or 0),
+         "sum_notional_cents": int(r[2] or 0),
+         "sum_notional_dollars": round(int(r[2] or 0) / 100, 2),
+         "options_count": int(r[3] or 0)}
+        for r in rows
+    ]
+
+    # ── Secondary: fetch canonical's per-position unrealized and compare per-symbol to Alpaca ──
+    try:
+        import os as _os, urllib.request as _ur, json as _j
+        from app.db.models.bots import BotPosition
+        from app.services.option_marks import fetch_option_marks_cents
+        kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+        ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+        alp = _j.loads(_ur.urlopen(_ur.Request(
+            "https://paper-api.alpaca.markets/v2/positions",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        ), timeout=10).read()) or []
+        alp_upl_by_sym: dict[str, float] = {}
+        alp_price_by_sym: dict[str, float] = {}
+        for p in alp:
+            sym = p.get("symbol")
+            if not sym:
+                continue
+            alp_upl_by_sym[sym] = float(p.get("unrealized_pl") or 0)
+            alp_price_by_sym[sym] = float(p.get("current_price") or 0)
+
+        # BMG open + non-quarantined for user 1
+        bmg_open = (
+            db.query(BotPosition)
+            .join(_ap_model(), BotPosition.allocation_id == _ap_model().id)
+            .filter(_ap_model().user_id == 1)
+            .filter(BotPosition.closed_at.is_(None))
+            .filter(BotPosition.quarantined_at.is_(None))
+            .all()
+        )
+        # Get option marks
+        occ_syms = [p.symbol for p in bmg_open if getattr(p, "option_type", None)]
+        marks: dict = {}
+        need_fmp = [s for s in occ_syms if s not in alp_price_by_sym]
+        if need_fmp:
+            marks = fetch_option_marks_cents(need_fmp) or {}
+        for s in occ_syms:
+            if s in alp_price_by_sym:
+                marks[s] = int(round(alp_price_by_sym[s] * 100))
+
+        per_sym_diffs = []
+        bmg_total_upl_cents = 0
+        for p in bmg_open:
+            is_opt = bool(getattr(p, "option_type", None))
+            is_short = getattr(p, "side", "long") == "short"
+            mult = 100 if is_opt else 1
+            entry_c = float(p.avg_cost_cents or 0)
+            if is_opt:
+                mark_c = marks.get(p.symbol)
+                cur_c = float(mark_c) if mark_c is not None else entry_c
+            else:
+                cur_c = alp_price_by_sym.get(p.symbol, 0) * 100
+                if cur_c == 0:
+                    cur_c = entry_c
+            if is_short:
+                bmg_upl_c = int((entry_c - cur_c) * (p.qty or 0) * mult)
+            else:
+                bmg_upl_c = int((cur_c - entry_c) * (p.qty or 0) * mult)
+            bmg_total_upl_cents += bmg_upl_c
+            alp_upl = alp_upl_by_sym.get(p.symbol, 0.0)
+            diff_dollars = round(bmg_upl_c / 100 - alp_upl, 2)
+            per_sym_diffs.append({
+                "symbol": p.symbol,
+                "bmg_upl_dollars": round(bmg_upl_c / 100, 2),
+                "alp_upl_dollars": round(alp_upl, 2),
+                "diff_dollars": diff_dollars,
+                "abs_diff": abs(diff_dollars),
+                "in_alpaca": p.symbol in alp_upl_by_sym,
+                "bmg_qty": float(p.qty or 0),
+                "bmg_avg_cost_cents": entry_c,
+            })
+        per_sym_diffs.sort(key=lambda x: -x["abs_diff"])
+        result["secondary_top_10_per_symbol_diff"] = per_sym_diffs[:10]
+        result["secondary_bmg_only_symbols"] = [d for d in per_sym_diffs if not d["in_alpaca"]][:20]
+        result["secondary_total"] = {
+            "bmg_upl_dollars": round(bmg_total_upl_cents / 100, 2),
+            "alp_upl_dollars_summed_from_dict": round(sum(alp_upl_by_sym.values()), 2),
+            "bmg_positions": len(bmg_open),
+            "alp_positions": len(alp),
+        }
+
+        # ── Tertiary: cost-basis drift on adopted positions ──────────────
+        alp_avg_by_sym: dict[str, float] = {p.get("symbol"): float(p.get("avg_entry_price") or 0) for p in alp}
+        adopted_drift = []
+        for p in bmg_open:
+            if getattr(p, "origin", None) != "ADOPTED":
+                continue
+            alp_avg = alp_avg_by_sym.get(p.symbol)
+            if alp_avg is None:
+                continue
+            bmg_avg = (p.avg_cost_cents or 0) / 100.0
+            drift = round(bmg_avg - alp_avg, 4)
+            if abs(drift) > 0.005:  # >0.5c per share
+                adopted_drift.append({
+                    "symbol": p.symbol,
+                    "bmg_avg": round(bmg_avg, 4),
+                    "alp_avg": round(alp_avg, 4),
+                    "drift_dollars_per_share": drift,
+                    "position_id": p.id,
+                    "qty": float(p.qty or 0),
+                })
+        adopted_drift.sort(key=lambda x: -abs(x["drift_dollars_per_share"]))
+        result["tertiary_adopted_cost_basis_drift"] = adopted_drift[:20]
+
+    except Exception as exc:
+        result["secondary_tertiary_error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+
+    return result
+
+
+def _ap_model():
+    """Lazy import BotAllocation for join."""
+    from app.db.models.bots import BotAllocation
+    return BotAllocation
+
+
 @router.get("/pending-acks")
 def pending_acks(
     category: Optional[str] = Query(None, description="Filter by category (AUTO_PAUSE|DISK_HIGH|SIM_FILL_DETECTED|INVARIANT_RED_STALE|MANUAL_TEST)"),
