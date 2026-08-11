@@ -1410,6 +1410,12 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.invariant_engine import setup_invariant_engine
         setup_invariant_engine(scheduler)
+        # One-shot IWM trim scheduled for 2026-08-11 13:31 UTC (Brock overnight pre-auth)
+        try:
+            from app.jobs.iwm_trim_2026_08_11 import register_iwm_trim_job
+            register_iwm_trim_job(scheduler)
+        except Exception as _iwm_exc:
+            logger.error("[startup] iwm_trim registration FAILED: %s", _iwm_exc, exc_info=True)
     except Exception as _ie_exc:
         logger.error("[startup] invariant_engine scheduler FAILED (non-fatal): %s",
                      _ie_exc, exc_info=True)

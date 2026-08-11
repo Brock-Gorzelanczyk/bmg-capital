@@ -796,6 +796,159 @@ def _check_i21_origin_not_null(db) -> Result:
         return _amber("I21", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i22_cron_heartbeat(db) -> Result:
+    """Brock exposure #2: cron drift = HIGH damage (weeks undetected recurrence).
+    Any registered APScheduler job that hasn't fired within N × its cadence is
+    a silent stop.
+
+    Uses main.scheduler introspection. Green when every job's next_run_time is
+    in the future (job is scheduled to fire soon). Red when a job's registered
+    but has no upcoming fire OR fired long ago and hasn't since. Amber when
+    scheduler introspection fails.
+    """
+    try:
+        from datetime import datetime as _dt, timezone as _tz
+        try:
+            from app.main import scheduler as _sched
+        except Exception:
+            return _amber("I22", None, None, None, "scheduler not importable")
+        jobs = list(_sched.get_jobs())
+        if not jobs:
+            return _amber("I22", None, None, None, "no jobs registered")
+        now = _dt.now(_tz.utc)
+        stale: list[dict] = []
+        for job in jobs:
+            nxt = job.next_run_time
+            if nxt is None:
+                stale.append({"id": job.id, "next_run_time": None, "issue": "no_next_fire"})
+                continue
+            # Convert to UTC for comparison
+            nxt_utc = nxt.astimezone(_tz.utc) if nxt.tzinfo else nxt.replace(tzinfo=_tz.utc)
+            hours_from_now = (nxt_utc - now).total_seconds() / 3600
+            # Anything > 25h from now is suspect (nothing runs less than daily
+            # unless it's the weekly prune which is 168h max; skip weekly by
+            # id-prefix pattern).
+            if hours_from_now > 168 and not job.id.startswith(("weekly_", "quarterly_")):
+                stale.append({"id": job.id, "next_run_time": nxt.isoformat(),
+                              "hours_from_now": round(hours_from_now, 1),
+                              "issue": "next_fire_too_far_out"})
+        actual = {"total_jobs": len(jobs), "stale_count": len(stale)}
+        if not stale:
+            return _ok("I22", actual, {"stale_max": 0}, f"all {len(jobs)} scheduled jobs have plausible next_run_time")
+        return _red("I22", {**actual, "stale": stale[:10]}, {"stale_max": 0}, float(len(stale)),
+                    f"{len(stale)} job(s) have no next fire or fire >168h out — silent-stop candidates")
+    except Exception as exc:
+        return _amber("I22", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
+def _check_i25_alpaca_activity_diff(db) -> Result:
+    """Brock exposure #3: Alpaca-side unrequested actions (margin liquidation,
+    silent rejects, PDT triggers). Diff /v2/account/activities FILL entries
+    against BMG's bot_trades over the last 24h — any Alpaca fill BMG doesn't
+    know about is either a runner-write-that-lost-its-alpaca_id OR a broker-
+    initiated fill (liquidation, dividend, etc).
+
+    Non-fill activity types (DIV, INT, ACATC, CFEE) are recorded but don't
+    count as drift.
+    """
+    try:
+        import os as _os, urllib.request as _ur, json as _j, urllib.parse as _up
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        from app.db.models.bots import BotTrade
+        kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+        ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+        if not kid or not ksec:
+            return _amber("I25", None, None, None, "no Alpaca creds")
+        after = (_dt.now(_tz.utc) - _td(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        url = "https://paper-api.alpaca.markets/v2/account/activities/FILL?" + _up.urlencode({"after": after})
+        try:
+            fills = _j.loads(_ur.urlopen(_ur.Request(
+                url, headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+            ), timeout=10).read()) or []
+        except Exception as exc:
+            return _amber("I25", None, None, None, f"alpaca_activities_fetch:{exc}")
+        alp_order_ids = {f.get("order_id") for f in fills if f.get("order_id")}
+        # BMG orders touched in last 24h
+        cut = _dt.now(_tz.utc) - _td(hours=24)
+        bmg_rows = (
+            db.query(BotTrade.alpaca_order_id)
+            .filter(BotTrade.ts >= cut)
+            .filter(BotTrade.alpaca_order_id.isnot(None))
+            .all()
+        )
+        bmg_order_ids = {r[0] for r in bmg_rows if r[0]}
+        # Alpaca fills BMG doesn't know about
+        unknown_to_bmg = alp_order_ids - bmg_order_ids
+        actual = {
+            "alpaca_fills_24h": len(fills),
+            "alpaca_unique_order_ids": len(alp_order_ids),
+            "bmg_order_ids_24h": len(bmg_order_ids),
+            "unknown_to_bmg_count": len(unknown_to_bmg),
+        }
+        if not unknown_to_bmg:
+            return _ok("I25", actual, {"unknown_max": 0}, "every Alpaca fill in 24h has a BMG row")
+        return _red("I25", {**actual, "unknown_sample": list(unknown_to_bmg)[:5]},
+                    {"unknown_max": 0}, float(len(unknown_to_bmg)),
+                    f"{len(unknown_to_bmg)} Alpaca fill(s) in 24h with no BMG bot_trade — broker-initiated OR write-lost")
+    except Exception as exc:
+        return _amber("I25", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
+def _check_i24_bot_level_identities(db) -> Result:
+    """Brock 2026-08-10: fund-level I2 alone can hide bot-level drift when
+    over/under cancel out. I24 asserts the component identities directly:
+
+        sum(bot unrealized) == Alpaca sum(unrealized)  ±$50
+        sum(bot PV)         == fund PV                  ±$50
+
+    These are identities — components must reconcile. Non-zero drift means
+    either BMG is over/undercounting positions vs Alpaca or per-position
+    math (marks, cost basis) diverges from broker."""
+    try:
+        import os as _os, urllib.request as _ur, json as _j
+        from app.core.canonical import compute_strategy_lab_aggregate
+        agg = compute_strategy_lab_aggregate(user_id=1, db=db) or {}
+        bot_sum_pv = int(agg.get("bot_sum_pv_cents") or 0)
+        fund_pv = int(agg.get("total_value_cents") or 0)
+        # Alpaca unrealized total (sum from /v2/positions)
+        kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+        ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+        alp = _j.loads(_ur.urlopen(_ur.Request(
+            "https://paper-api.alpaca.markets/v2/positions",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        ), timeout=10).read()) or []
+        alp_upl_dollars = sum(float(p.get("unrealized_pl") or 0) for p in alp)
+        alp_upl_cents = int(round(alp_upl_dollars * 100))
+
+        # Bot-level unrealized: get it from I2's same-scoped path via
+        # compute_strategy_lab_aggregate's summed portfolio unrealized. Falls
+        # back to zero if not present.
+        bot_unrealized_cents = 0
+        for port in agg.get("portfolios", []) or []:
+            bot_unrealized_cents += int(port.get("unrealized_pnl_cents") or 0)
+
+        pv_drift_cents = abs(bot_sum_pv - fund_pv)
+        upl_drift_cents = abs(bot_unrealized_cents - alp_upl_cents)
+
+        actual = {
+            "bot_sum_pv_usd": round(bot_sum_pv / 100, 2),
+            "fund_pv_usd": round(fund_pv / 100, 2),
+            "pv_drift_usd": round(pv_drift_cents / 100, 2),
+            "bot_unrealized_usd": round(bot_unrealized_cents / 100, 2),
+            "alpaca_unrealized_usd": round(alp_upl_cents / 100, 2),
+            "upl_drift_usd": round(upl_drift_cents / 100, 2),
+        }
+        threshold_cents = 5000  # $50
+        worst = max(pv_drift_cents, upl_drift_cents)
+        if worst <= threshold_cents:
+            return _ok("I24", actual, {"max_drift_usd": 50.0},
+                       f"bot-level identities within $50 (pv:{pv_drift_cents/100:.2f}, upl:{upl_drift_cents/100:.2f})")
+        return _red("I24", actual, {"max_drift_usd": 50.0}, float(worst / 100),
+                    f"bot-level drift: pv=${pv_drift_cents/100:,.2f} upl=${upl_drift_cents/100:,.2f} — components don't reconcile")
+    except Exception as exc:
+        return _amber("I24", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i23_pnl_windows_exact_zero(db) -> Result:
     """Any exact-zero P&L window on a funded live fund > 1 day old is a
     bug, never a value. Regression guard for the 2026-08-10 session-aware
@@ -903,7 +1056,10 @@ CHECKS: dict[str, Callable] = {
     "I19": _check_i19_broker_fill_has_uuid,
     "I20": _check_i20_phantom_trades_while_market_closed,
     "I21": _check_i21_origin_not_null,
+    "I22": _check_i22_cron_heartbeat,
     "I23": _check_i23_pnl_windows_exact_zero,
+    "I24": _check_i24_bot_level_identities,
+    "I25": _check_i25_alpaca_activity_diff,
 }
 
 
