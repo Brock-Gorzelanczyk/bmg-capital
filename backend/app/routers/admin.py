@@ -1772,24 +1772,10 @@ def admin_close_limit(
     if not order_id:
         return {"error": "no_order_id_from_alpaca", "response": order}
 
-    # Log to BMG as BACKFILL admin remediation.
-    trade_row = BotTrade(
-        allocation_id=pos.allocation_id,
-        symbol=symbol,
-        side="sell" if (pos.side or "long") == "long" else "cover",
-        qty=qty,
-        fill_price_cents=int(round(float(limit_price) * 100)),
-        fees_cents=0,
-        ts=_dt.now(_tz.utc),
-        position_id=pos.id,
-        is_paper=True,
-        alpaca_order_id=order_id,
-        origin="BACKFILL",  # admin remediation — not attributed to a bot per §W1
-        strategy=f"admin_remediation:{reason}",
-    )
-    db.add(trade_row)
-    db.commit()
-
+    # Ledger #33 (Brock 2026-08-11): DO NOT write BotTrade at submit time
+    # using limit_price. Fill price is only known after Alpaca confirms.
+    # Caller must invoke POST /admin/confirm-alpaca-fill-and-close?order_id=X
+    # after fill to book the trade + close the BMG position.
     return {
         "ok": True,
         "alpaca_order_id": order_id,
@@ -1797,11 +1783,116 @@ def admin_close_limit(
         "symbol": symbol,
         "qty": qty,
         "limit_price": float(limit_price),
-        "expected_proceeds_usd": round(float(limit_price) * float(qty) * 100, 2),
-        "bmg_trade_id": trade_row.id,
+        "expected_proceeds_usd_at_limit": round(float(limit_price) * float(qty) * 100, 2),
+        "bmg_position_id_targeted": pos.id,
         "reason": reason,
-        "note": "Order queued. Monitor via GET /admin/alpaca-order-status?order_id=<id>. "
-                "Reprice via POST /admin/admin-close-reprice.",
+        "note": (
+            "Order queued at Alpaca. No BMG trade written yet — actual fill "
+            "price is unknown until Alpaca fills. Once filled, invoke:\n"
+            f"  POST /admin/confirm-alpaca-fill-and-close?order_id={order_id}"
+            f"&position_id={pos.id}&reason={reason}\n"
+            "That endpoint polls Alpaca for filled_avg_price and books the "
+            "BotTrade with the REAL fill (never the limit). Reprice via "
+            "POST /admin/admin-close-reprice?alpaca_order_id={order_id}."
+        ),
+    }
+
+
+@router.post("/confirm-alpaca-fill-and-close")
+def confirm_alpaca_fill_and_close(
+    order_id: str = Query(..., description="Alpaca order id"),
+    position_id: int = Query(..., description="BMG position_id to close on fill"),
+    reason: str = Query(..., description="Admin-remediation reason string"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Book a BotTrade + close the BMG position from Alpaca's FILL event
+    (never from the submitted limit). Idempotent — refuses if a trade row
+    for this order_id already exists.
+
+    Structural rule per Brock 2026-08-11: any trade write must use the
+    fill_avg_price from the broker's fill confirmation, not the limit
+    from the order request. Same family as sim/phantom/adopter (BMG's
+    record diverging from what the broker did)."""
+    import os as _os, json as _j, urllib.request as _ur
+    from datetime import datetime as _dt, timezone as _tz
+    from app.db.models.bots import BotPosition, BotTrade
+
+    # 1. Fetch order status
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    if not kid or not ksec:
+        return {"error": "no_alpaca_creds"}
+    try:
+        order = _j.loads(_ur.urlopen(_ur.Request(
+            f"https://paper-api.alpaca.markets/v2/orders/{order_id}",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        ), timeout=10).read())
+    except Exception as exc:
+        return {"error": f"fetch_order_failed:{type(exc).__name__}", "detail": str(exc)[:200]}
+
+    status = order.get("status")
+    if status != "filled":
+        return {"error": "order_not_filled", "status": status,
+                "hint": "wait for fill, then re-invoke"}
+
+    filled_avg = float(order.get("filled_avg_price") or 0)
+    filled_qty = float(order.get("filled_qty") or 0)
+    symbol = order.get("symbol")
+    side_alpaca = order.get("side")
+    if filled_avg <= 0 or filled_qty <= 0:
+        return {"error": "fill_price_or_qty_missing", "response": order}
+
+    # 2. Idempotency guard
+    existing = db.query(BotTrade).filter(BotTrade.alpaca_order_id == order_id).first()
+    if existing:
+        return {"already_booked": True, "existing_trade_id": existing.id,
+                "existing_fill_price_cents": existing.fill_price_cents,
+                "existing_fill_price_usd": (existing.fill_price_cents or 0) / 100,
+                "hint": "trade already logged — no-op"}
+
+    # 3. Load position + verify
+    pos = db.query(BotPosition).filter(BotPosition.id == position_id).first()
+    if not pos:
+        return {"error": "position_not_found", "position_id": position_id}
+    if pos.symbol != symbol:
+        return {"error": "symbol_mismatch", "bmg_symbol": pos.symbol, "alpaca_symbol": symbol}
+    if pos.closed_at is not None:
+        return {"error": "position_already_closed",
+                "closed_at": pos.closed_at.isoformat() if pos.closed_at else None}
+
+    # 4. Book the trade with REAL fill price + close the position
+    bmg_side_close = "sell" if (pos.side or "long") == "long" else "cover"
+    now = _dt.now(_tz.utc)
+    trade_row = BotTrade(
+        allocation_id=pos.allocation_id,
+        symbol=symbol,
+        side=bmg_side_close,
+        qty=filled_qty,
+        fill_price_cents=int(round(filled_avg * 100)),  # REAL FILL
+        fees_cents=0,
+        ts=now,
+        position_id=pos.id,
+        is_paper=True,
+        alpaca_order_id=order_id,
+        origin="BACKFILL",
+        strategy=f"admin_remediation:{reason}",
+    )
+    db.add(trade_row)
+    pos.closed_at = now
+    pos.exit_reason = f"admin_remediation:{reason}"
+    db.commit()
+
+    return {
+        "ok": True,
+        "trade_id": trade_row.id,
+        "position_id": pos.id,
+        "symbol": symbol,
+        "filled_qty": filled_qty,
+        "filled_avg_price": filled_avg,
+        "fill_price_cents_written": trade_row.fill_price_cents,
+        "position_closed_at": now.isoformat(),
+        "reason": reason,
     }
 
 

@@ -92,8 +92,13 @@ def _cancel_order(order_id: str) -> bool:
         return False
 
 
-def _log_bmg_trade(alpaca_order_id: str, limit_price: float, note: str) -> None:
-    """Log to BMG with origin=BACKFILL (admin remediation, not bot-attributed)."""
+def _book_bmg_fill(alpaca_order_id: str, filled_avg_price: float, filled_qty: float, note: str) -> None:
+    """Book the BMG trade + close position AFTER Alpaca fill confirms.
+
+    Ledger #33 rule (Brock 2026-08-11): use fill_avg_price from the fill
+    event, never the limit_price from the submit request. Same family as
+    sim/phantom/adopter — BMG record must match what the broker actually did.
+    """
     try:
         from app.db.session import SessionLocal
         from app.db.models.bots import BotPosition, BotTrade
@@ -108,16 +113,22 @@ def _log_bmg_trade(alpaca_order_id: str, limit_price: float, note: str) -> None:
                 .first()
             )
             if not pos:
-                logger.error("[iwm-trim] no open BMG position for %s — trade not logged", _SYMBOL)
+                logger.error("[iwm-trim] no open BMG position for %s — trade not booked", _SYMBOL)
                 return
+            # Idempotency: same alpaca_order_id already logged?
+            existing = _db.query(BotTrade).filter(BotTrade.alpaca_order_id == alpaca_order_id).first()
+            if existing:
+                logger.warning("[iwm-trim] trade for order %s already booked (id=%s)", alpaca_order_id, existing.id)
+                return
+            now = datetime.now(timezone.utc)
             row = BotTrade(
                 allocation_id=pos.allocation_id,
                 symbol=_SYMBOL,
                 side="sell",
-                qty=_QTY,
-                fill_price_cents=int(round(limit_price * 100)),
+                qty=filled_qty,
+                fill_price_cents=int(round(filled_avg_price * 100)),  # REAL FILL
                 fees_cents=0,
-                ts=datetime.now(timezone.utc),
+                ts=now,
                 position_id=pos.id,
                 is_paper=True,
                 alpaca_order_id=alpaca_order_id,
@@ -125,12 +136,15 @@ def _log_bmg_trade(alpaca_order_id: str, limit_price: float, note: str) -> None:
                 strategy=f"admin_remediation:{_REASON}:{note}",
             )
             _db.add(row)
+            pos.closed_at = now
+            pos.exit_reason = f"admin_remediation:{_REASON}"
             _db.commit()
-            logger.warning("[iwm-trim] BMG trade logged id=%s", row.id)
+            logger.warning("[iwm-trim] BMG trade booked id=%s @ $%s + position %s closed",
+                           row.id, filled_avg_price, pos.id)
         finally:
             _db.close()
     except Exception as exc:
-        logger.error("[iwm-trim] BMG log failed: %s", exc)
+        logger.error("[iwm-trim] BMG book failed: %s", exc)
 
 
 def _alert(title: str, message: str) -> None:
@@ -168,8 +182,8 @@ def run_trim() -> dict:
     if not order_id:
         _alert("IWM trim SUBMIT FAILED — no order_id", f"response: {order}")
         return {"error": "no_order_id", "response": order}
-    logger.warning("[iwm-trim] submitted %s @ $%s", order_id, initial_mid)
-    _log_bmg_trade(order_id, initial_mid, "initial_submit_at_mid")
+    logger.warning("[iwm-trim] submitted %s @ $%s (BMG book DEFERRED until fill)", order_id, initial_mid)
+    # Ledger #33: do NOT book BMG trade at submit — book only after fill confirms real avg_price.
     _alert(f"IWM trim submitted @ $%s" % initial_mid,
            f"order_id={order_id} qty={_QTY} limit=${initial_mid} bid=${bid} ask=${ask}")
 
@@ -195,6 +209,8 @@ def run_trim() -> dict:
     outcome, info = _poll_until_filled_or(WAIT_BEFORE_REPRICE, order_id)
     if outcome == "filled":
         fill_price = float(info.get("filled_avg_price") or 0)
+        filled_qty = float(info.get("filled_qty") or _QTY)
+        _book_bmg_fill(order_id, fill_price, filled_qty, "initial_fill")
         savings = round((fill_price - bid) * _QTY * 100, 2)  # vs. worst-case bid
         _alert("IWM trim FILLED at initial mid",
                f"order={order_id} filled @ ${fill_price} (initial mid ${initial_mid}, savings vs bid=${savings})")
@@ -230,12 +246,14 @@ def run_trim() -> dict:
                     "reprices_done": reprice_i - 1}
         current_id = new_order.get("id")
         current_limit = new_limit
-        logger.warning("[iwm-trim] reprice #%d @ $%s (bid $%s, floored=%s) → new order %s",
+        logger.warning("[iwm-trim] reprice #%d @ $%s (bid $%s, floored=%s) → new order %s (BMG book DEFERRED until fill)",
                        reprice_i, current_limit, fresh_bid, floored, current_id)
-        _log_bmg_trade(current_id, current_limit, f"reprice_{reprice_i}_at_${current_limit}")
+        # Ledger #33: no BMG write at submit
         outcome, info = _poll_until_filled_or(REPRICE_INTERVAL, current_id)
         if outcome == "filled":
             fill_price = float(info.get("filled_avg_price") or 0)
+            filled_qty = float(info.get("filled_qty") or _QTY)
+            _book_bmg_fill(current_id, fill_price, filled_qty, f"reprice_{reprice_i}_fill")
             _alert(f"IWM trim FILLED after {reprice_i} reprice(s)",
                    f"filled @ ${fill_price} (initial mid ${initial_mid}, final limit ${current_limit})")
             return {"ok": True, "outcome": f"filled_after_reprice_{reprice_i}",
