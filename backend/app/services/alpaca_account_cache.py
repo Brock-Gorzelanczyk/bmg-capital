@@ -27,7 +27,24 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-_TTL_SECONDS = float(os.getenv("ALPACA_ACCOUNT_CACHE_TTL_SECONDS", "30"))
+_TTL_SECONDS_DEFAULT = float(os.getenv("ALPACA_ACCOUNT_CACHE_TTL_SECONDS", "30"))
+_TTL_SECONDS_PAUSED = float(os.getenv("ALPACA_ACCOUNT_CACHE_TTL_PAUSED_SECONDS", "300"))
+
+
+def _effective_ttl() -> float:
+    """Cost cut 2026-08-12 (Brock): while globally paused, extend TTL to 5min.
+    Data is slightly staler but nothing's trading, so it doesn't matter."""
+    try:
+        from app.services.scans_gate import read_state as _rs
+        if _rs().get("global") is False:
+            return _TTL_SECONDS_PAUSED
+    except Exception:
+        pass
+    return _TTL_SECONDS_DEFAULT
+
+
+# Legacy name — some callers may still reference it; keep as default value.
+_TTL_SECONDS = _TTL_SECONDS_DEFAULT
 _FETCH_TIMEOUT_SECONDS = float(os.getenv("ALPACA_ACCOUNT_FETCH_TIMEOUT_SECONDS", "8"))
 
 _acct_lock = threading.Lock()
@@ -82,7 +99,7 @@ def _fetch_positions() -> Optional[list[dict[str, Any]]]:
 def get_alpaca_account(max_age_seconds: Optional[float] = None) -> Optional[dict[str, Any]]:
     """Return cached Alpaca /v2/account payload or fetch fresh if stale."""
     global _acct_payload, _acct_fetched_at
-    ttl = max_age_seconds if max_age_seconds is not None else _TTL_SECONDS
+    ttl = max_age_seconds if max_age_seconds is not None else _effective_ttl()
     now = time.time()
     if _acct_payload is not None and (now - _acct_fetched_at) <= ttl:
         return _acct_payload
@@ -103,7 +120,7 @@ def get_alpaca_positions(max_age_seconds: Optional[float] = None) -> Optional[li
     doctrine — Alpaca is master for any number it knows).
     """
     global _pos_payload, _pos_fetched_at
-    ttl = max_age_seconds if max_age_seconds is not None else _TTL_SECONDS
+    ttl = max_age_seconds if max_age_seconds is not None else _effective_ttl()
     now = time.time()
     if _pos_payload is not None and (now - _pos_fetched_at) <= ttl:
         return _pos_payload

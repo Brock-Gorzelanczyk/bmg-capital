@@ -1120,10 +1120,36 @@ CHECKS: dict[str, Callable] = {
 }
 
 
-def run_all_invariants(db) -> dict[str, Any]:
-    """Execute every check, persist results, return summary."""
+_LOW_POWER_CHECKS = ("I1", "I2", "I17", "I24", "I25")  # money-critical only
+
+
+def run_all_invariants(db, low_power_override: Optional[bool] = None) -> dict[str, Any]:
+    """Execute every check, persist results, return summary.
+
+    RAILWAY_LOW_POWER (Brock cost-cut 2026-08-12): when env var is 'true'
+    AND scans are globally paused, only run the 5 money-critical checks
+    (I1, I2, I17, I24, I25) each cycle. Full board runs on the 05:30 UTC
+    nightly pass (bypassed via low_power_override=False).
+    """
+    low_power = False
+    if low_power_override is not None:
+        low_power = bool(low_power_override)
+    elif os.getenv("RAILWAY_LOW_POWER", "true").strip().lower() == "true":
+        try:
+            from app.services.scans_gate import read_state as _rs
+            if _rs().get("global") is False:
+                low_power = True
+        except Exception:
+            pass
+    checks_to_run = (
+        {k: v for k, v in CHECKS.items() if k in _LOW_POWER_CHECKS}
+        if low_power else CHECKS
+    )
+    if low_power:
+        logger.warning("[invariant] LOW_POWER mode — running %d/%d checks (money-critical only)",
+                       len(checks_to_run), len(CHECKS))
     results: list[Result] = []
-    for cid, fn in CHECKS.items():
+    for cid, fn in checks_to_run.items():
         try:
             r = fn(db)
         except Exception as exc:
@@ -1437,25 +1463,32 @@ def setup_invariant_engine(scheduler) -> None:
         replace_existing=True,
         max_instances=1,
     )
-    # Nightly deep pass
+    # Nightly deep pass — force full board (bypass low_power)
+    def _nightly_full():
+        enabled = os.getenv("INVARIANT_ENGINE_ENABLED", "true").strip().lower() == "true"
+        if not enabled:
+            return
+        db = SessionLocal()
+        try:
+            run_all_invariants(db, low_power_override=False)  # full board
+        except Exception as exc:
+            logger.error("[invariant] nightly full pass raised: %s", exc, exc_info=True)
+        finally:
+            db.close()
     scheduler.add_job(
-        _cycle,
+        _nightly_full,
         CronTrigger(hour=5, minute=30, timezone="UTC"),
         id="invariant_engine_nightly",
         replace_existing=True,
         max_instances=1,
     )
-    # Item 3.3 (2026-08-09): every 30 min 24/7 so snapshot stays warm
-    # outside market hours. Cheap now that Alpaca /v2/account is memoized
-    # (see services/alpaca_account_cache.py). Ensures /admin/invariants/run
-    # never has to compute on-request.
-    scheduler.add_job(
-        _cycle,
-        CronTrigger(minute="*/30", timezone="UTC"),
-        id="invariant_engine_24_7",
-        replace_existing=True,
-        max_instances=1,
-    )
+    # Cost cut 2026-08-12 (Brock): 24/7 30-min cron REMOVED. Off-hours runs
+    # were 48/day of pure compute waste while halted. Kept: 15-min market
+    # hours + 05:30 UTC nightly. During halts the snapshot goes stale off-
+    # hours (fine — no scans are running to consume it).
+    # Prior job id 'invariant_engine_24_7' will be dropped from the scheduler
+    # by APScheduler on next start (no explicit remove needed since we don't
+    # register it).
 
     # Brock item 7 (2026-08-09): weekly prune on Sunday 09:00 UTC (04:00 CT).
     # Deletes /data/*.bak files keeping only the most recent. Prevents the

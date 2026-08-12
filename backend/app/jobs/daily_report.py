@@ -227,6 +227,26 @@ def build_daily_report(db) -> str:
     lines.append("")
     lines.append(f"UNATTRIBUTED: ${unattr:,.2f} (target < $1,000)")
     lines.append("")
+    # Cost line (Brock 2026-08-12 — was invisible, treat like every other
+    # invariant: if nobody measures it, it drifts until something breaks).
+    lines.append("")
+    lines.append("RAILWAY COST (last 24h):")
+    try:
+        import os as _os
+        if _os.path.exists("/tmp/bmg_cost.log"):
+            with open("/tmp/bmg_cost.log") as _f:
+                _cost_lines = _f.readlines()[-24:]  # last 24 hourly samples
+            if _cost_lines:
+                lines.append(f"  {len(_cost_lines)} hourly samples logged")
+                lines.append(f"  latest: {_cost_lines[-1].strip()[:80]}")
+            else:
+                lines.append("  no samples yet — bmg_cost_watch.sh may still be starting")
+        else:
+            lines.append("  /tmp/bmg_cost.log missing — start scripts/bmg_cost_watch.sh")
+    except Exception as _cost_exc:
+        lines.append(f"  cost read failed: {_cost_exc}")
+    lines.append("")
+
     # Auto-action status (Brock 2026-08-10 — replaces stale "until #22 ships" line).
     lines.append("AUTO-ACTIONS ACTIVE:")
     lines.append("  I2 (P&L drift > $500 → pause all scans)")

@@ -209,6 +209,16 @@ def adopt_orphans(db, dry_run: bool = False) -> dict:
     if not enabled:
         return {"skipped": "disabled_by_env"}
 
+    # Cost cut 2026-08-12 (Brock): skip during global halt. Adopter has caused
+    # more drift than it fixed (§ADOPT-BOUND exists because of it). No new
+    # positions land during halt, so nothing to adopt.
+    try:
+        from app.services.scans_gate import read_state as _rs
+        if _rs().get("global") is False:
+            return {"skipped": "global_scans_paused"}
+    except Exception:
+        pass
+
     from app.db.models.bots import BotPosition, BotTrade
 
     hours = int(os.getenv("ORPHAN_ATTRIBUTION_WINDOW_HOURS", "72"))

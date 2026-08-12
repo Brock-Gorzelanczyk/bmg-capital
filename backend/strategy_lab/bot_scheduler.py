@@ -340,14 +340,18 @@ def setup_bot_scheduler(scheduler) -> None:
         except Exception as exc:
             logger.error("position_monitor job failed: %s", exc)
 
+    # Cost cut 2026-08-12 (Brock): 2-min → 15-min. Same protection on the
+    # book (stops/targets/expiry checks) at 1/7 the compute. Bot-specific
+    # monitors below stay at their per-bot cadence; this is the fleet-wide
+    # sweep.
     scheduler.add_job(
         _run_position_monitor,
-        CronTrigger(minute="*/2"),
+        CronTrigger(minute="*/15"),
         id="position_monitor",
         replace_existing=True,
         next_run_time=datetime.now(UTC),
         max_instances=1,
-        misfire_grace_time=120,
+        misfire_grace_time=300,
         coalesce=True,
     )
 
