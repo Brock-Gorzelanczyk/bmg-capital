@@ -1242,6 +1242,110 @@ def backup_sqlite(
     }
 
 
+@router.get("/diag/realized-breakdown")
+def diag_realized_breakdown(
+    include_all_origins: bool = Query(False, description="If true, include ALL origins (not just BROKER_FILL) — useful for finding legacy pnl_cents leaks"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Per-bot realized P&L breakdown (Brock 2026-08-11 Tuesday close diagnosis).
+
+    Sums bot_trades.pnl_cents grouped by bot for closing trades (side in
+    sell/close/cover). Filters to origin='BROKER_FILL' by default to match
+    canonical's realized calc — pass include_all_origins=true to see legacy
+    pnl_cents on ADOPTED/RECONCILE/REBUILD/BACKFILL rows.
+
+    Also computes an Alpaca-derived realized via the identity:
+        alpaca_realized = fund_pv - inception - alpaca_unrealized
+
+    Returns per-bot rows sorted by absolute realized. The bot with the
+    largest realized magnitude is the first suspect if bot_total differs
+    from alpaca_derived by >$50.
+    """
+    from sqlalchemy import text as _t
+    origin_filter = "" if include_all_origins else "AND t.origin = 'BROKER_FILL'"
+    rows = db.execute(_t(
+        f"SELECT p.name AS bot, "
+        f"       COUNT(t.id) AS n_closes, "
+        f"       COALESCE(SUM(t.pnl_cents), 0) AS sum_pnl_cents, "
+        f"       COUNT(DISTINCT t.symbol) AS distinct_syms "
+        f"FROM bot_trades t "
+        f"JOIN bot_allocations a ON a.id = t.allocation_id "
+        f"JOIN bot_profiles p ON p.id = a.profile_id "
+        f"WHERE a.user_id = 1 "
+        f"  AND t.side IN ('sell','close','cover') "
+        f"  AND t.quarantined_at IS NULL "
+        f"  {origin_filter} "
+        f"GROUP BY p.name "
+        f"HAVING SUM(t.pnl_cents) IS NOT NULL "
+        f"ORDER BY ABS(COALESCE(SUM(t.pnl_cents), 0)) DESC"
+    )).fetchall()
+    per_bot = [
+        {"bot": r[0], "close_count": int(r[1]), "sum_pnl_cents": int(r[2] or 0),
+         "sum_pnl_usd": round(int(r[2] or 0) / 100, 2), "distinct_symbols": int(r[3])}
+        for r in rows
+    ]
+    total_pnl_cents = sum(x["sum_pnl_cents"] for x in per_bot)
+
+    # Also break down by origin to see if the m099 filter is the source of drift
+    origin_rows = db.execute(_t(
+        "SELECT COALESCE(t.origin, 'NULL') AS origin, "
+        "       COUNT(*) AS n_closes, "
+        "       COALESCE(SUM(t.pnl_cents), 0) AS sum_pnl_cents "
+        "FROM bot_trades t "
+        "JOIN bot_allocations a ON a.id = t.allocation_id "
+        "WHERE a.user_id = 1 "
+        "  AND t.side IN ('sell','close','cover') "
+        "  AND t.quarantined_at IS NULL "
+        "GROUP BY COALESCE(t.origin, 'NULL')"
+    )).fetchall()
+    by_origin = [
+        {"origin": r[0], "n_closes": int(r[1]), "sum_pnl_cents": int(r[2] or 0),
+         "sum_pnl_usd": round(int(r[2] or 0) / 100, 2)}
+        for r in origin_rows
+    ]
+
+    # Alpaca-derived realized via identity
+    alpaca_derived = {"error": None}
+    try:
+        import os as _os, urllib.request as _ur, json as _j
+        from app.services.alpaca_account_cache import get_alpaca_account, get_alpaca_positions
+        _acct = get_alpaca_account()
+        _pos = get_alpaca_positions() or []
+        if _acct:
+            fund_pv = int(round(float(_acct.get("portfolio_value") or 0) * 100))
+            alpaca_upl = sum(float(p.get("unrealized_pl") or 0) for p in _pos)
+            alpaca_upl_cents = int(round(alpaca_upl * 100))
+            INCEPTION = 9_734_000  # $97,340 from canonical._FUND_INCEPTION_CENTS
+            alpaca_realized_cents = fund_pv - INCEPTION - alpaca_upl_cents
+            alpaca_derived = {
+                "fund_pv_cents": fund_pv,
+                "inception_cents": INCEPTION,
+                "alpaca_unrealized_cents": alpaca_upl_cents,
+                "alpaca_realized_cents": alpaca_realized_cents,
+                "alpaca_realized_usd": round(alpaca_realized_cents / 100, 2),
+                "formula": "fund_pv - inception - alpaca_unrealized",
+            }
+    except Exception as exc:
+        alpaca_derived = {"error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+
+    drift_cents = None
+    if alpaca_derived.get("alpaca_realized_cents") is not None:
+        drift_cents = total_pnl_cents - alpaca_derived["alpaca_realized_cents"]
+
+    return {
+        "origin_filter": "BROKER_FILL only" if not include_all_origins else "ALL origins",
+        "bot_total_realized_cents": total_pnl_cents,
+        "bot_total_realized_usd": round(total_pnl_cents / 100, 2),
+        "alpaca_derived": alpaca_derived,
+        "drift_cents": drift_cents,
+        "drift_usd": round(drift_cents / 100, 2) if drift_cents is not None else None,
+        "by_origin": by_origin,
+        "per_bot_top20": per_bot[:20],
+        "n_bots_reporting": len(per_bot),
+    }
+
+
 @router.get("/diag/multi-owned")
 def diag_multi_owned(
     db: Session = Depends(get_db),
