@@ -1242,6 +1242,105 @@ def backup_sqlite(
     }
 
 
+@router.post("/quarantine-pre-verification-era")
+def quarantine_pre_verification_era(
+    cutoff_iso: str = Query("2026-08-09T00:00:00", description="ISO UTC; trades strictly BEFORE this are 'pre-verification era'"),
+    profile: Optional[str] = Query(None, description="If set, restrict to one bot profile. Default: all bots."),
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Clean-line rule per attribution spec (approved 2026-08-09).
+
+    Sets quarantine_reason='pre_verification_era_legacy_backfill' on
+    BROKER_FILL closing trades (side in sell/close/cover) with
+    ts < cutoff_iso. Not deleted — quarantined so consumers exclude
+    them from realized sums (canonical filter is
+    quarantined_at IS NULL) without losing history.
+
+    Reason (Brock 2026-08-11): crypto_quant_aggressive July 7-8 backfill
+    populated pnl_cents from broken sub-penny fills; those +$10K
+    'realized' rows are the reason I2 drift is $1,687 and I24
+    realized_drift is $3,670. Quarantining is the approved fix,
+    not rebuilding.
+    """
+    from sqlalchemy import text as _t
+    from datetime import datetime as _dt, timezone as _tz
+    now = _dt.now(_tz.utc).isoformat()
+
+    profile_filter = ""
+    params = {"cutoff": cutoff_iso, "now": now}
+    if profile:
+        profile_filter = "  AND p.name = :profile"
+        params["profile"] = profile
+
+    # 1. Count target rows
+    count_row = db.execute(_t(
+        f"SELECT COUNT(*), COALESCE(SUM(t.pnl_cents), 0) FROM bot_trades t "
+        f"JOIN bot_allocations a ON a.id = t.allocation_id "
+        f"JOIN bot_profiles p ON p.id = a.profile_id "
+        f"WHERE a.user_id = 1 "
+        f"  AND t.origin = 'BROKER_FILL' "
+        f"  AND t.side IN ('sell','close','cover') "
+        f"  AND t.quarantined_at IS NULL "
+        f"  AND t.ts < :cutoff "
+        f"  {profile_filter}"
+    ), params).fetchone()
+    target_count = int(count_row[0] or 0)
+    target_pnl_cents = int(count_row[1] or 0)
+
+    # 2. Per-bot breakdown
+    per_bot_rows = db.execute(_t(
+        f"SELECT p.name, COUNT(t.id), COALESCE(SUM(t.pnl_cents), 0) FROM bot_trades t "
+        f"JOIN bot_allocations a ON a.id = t.allocation_id "
+        f"JOIN bot_profiles p ON p.id = a.profile_id "
+        f"WHERE a.user_id = 1 "
+        f"  AND t.origin = 'BROKER_FILL' "
+        f"  AND t.side IN ('sell','close','cover') "
+        f"  AND t.quarantined_at IS NULL "
+        f"  AND t.ts < :cutoff "
+        f"  {profile_filter} "
+        f"GROUP BY p.name ORDER BY ABS(COALESCE(SUM(t.pnl_cents), 0)) DESC"
+    ), params).fetchall()
+    per_bot = [
+        {"bot": r[0], "n": int(r[1]), "pnl_cents": int(r[2] or 0),
+         "pnl_usd": round(int(r[2] or 0) / 100, 2)}
+        for r in per_bot_rows
+    ]
+
+    quarantined = 0
+    if not dry_run and target_count > 0:
+        result = db.execute(_t(
+            f"UPDATE bot_trades SET "
+            f"  quarantined_at = :now, "
+            f"  quarantine_reason = 'pre_verification_era_legacy_backfill' "
+            f"WHERE id IN ( "
+            f"  SELECT t.id FROM bot_trades t "
+            f"  JOIN bot_allocations a ON a.id = t.allocation_id "
+            f"  JOIN bot_profiles p ON p.id = a.profile_id "
+            f"  WHERE a.user_id = 1 "
+            f"    AND t.origin = 'BROKER_FILL' "
+            f"    AND t.side IN ('sell','close','cover') "
+            f"    AND t.quarantined_at IS NULL "
+            f"    AND t.ts < :cutoff "
+            f"    {profile_filter} "
+            f")"
+        ), params)
+        db.commit()
+        quarantined = result.rowcount or 0
+
+    return {
+        "dry_run": dry_run,
+        "cutoff_iso": cutoff_iso,
+        "profile_filter": profile,
+        "target_trade_count": target_count,
+        "target_pnl_cents": target_pnl_cents,
+        "target_pnl_usd": round(target_pnl_cents / 100, 2),
+        "quarantined": quarantined,
+        "per_bot_breakdown": per_bot,
+    }
+
+
 @router.get("/diag/realized-breakdown")
 def diag_realized_breakdown(
     include_all_origins: bool = Query(False, description="If true, include ALL origins (not just BROKER_FILL) — useful for finding legacy pnl_cents leaks"),

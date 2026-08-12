@@ -841,6 +841,39 @@ def _check_i22_cron_heartbeat(db) -> Result:
         return _amber("I22", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i26_sub_penny_fill_zero(db) -> Result:
+    """Any BROKER_FILL trade with fill_price_cents=0 AND qty>0 == RED.
+    (Brock 2026-08-11 ledger #34.)
+
+    Root cause: fill_price_cents is an int; sub-penny assets (SHIB, BONK,
+    PEPE, any $<0.01 token) round to 0. Then realized P&L math treats
+    those entries as free — inflating bot realized without touching Alpaca.
+
+    Structural fix (column migration to higher precision) is separate
+    ledger work. This invariant is the interim gate — any recurrence
+    lands red on the very next 30-min invariant cycle.
+    """
+    try:
+        from sqlalchemy import text as _t
+        row = db.execute(_t(
+            "SELECT COUNT(*), COALESCE(GROUP_CONCAT(DISTINCT symbol), '') "
+            "FROM bot_trades "
+            "WHERE origin = 'BROKER_FILL' "
+            "  AND (fill_price_cents = 0 OR fill_price_cents IS NULL) "
+            "  AND qty > 0 "
+            "  AND quarantined_at IS NULL"
+        )).fetchone()
+        n = int(row[0] or 0)
+        syms = (row[1] or "").split(",") if row[1] else []
+        actual = {"count": n, "symbols_sample": syms[:20]}
+        if n == 0:
+            return _ok("I26", 0, 0, "no BROKER_FILL rows with fill_price=0")
+        return _red("I26", actual, 0, float(n),
+                    f"{n} BROKER_FILL trade row(s) have fill_price_cents=0 (sub-penny asset rounding — ledger #34)")
+    except Exception as exc:
+        return _amber("I26", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i25_alpaca_activity_diff(db) -> Result:
     """Brock exposure #3: Alpaca-side unrequested actions (margin liquidation,
     silent rejects, PDT triggers). Diff /v2/account/activities FILL entries
@@ -1083,6 +1116,7 @@ CHECKS: dict[str, Callable] = {
     "I23": _check_i23_pnl_windows_exact_zero,
     "I24": _check_i24_bot_level_identities,
     "I25": _check_i25_alpaca_activity_diff,
+    "I26": _check_i26_sub_penny_fill_zero,
 }
 
 
