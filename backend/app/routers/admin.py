@@ -1876,7 +1876,7 @@ def confirm_alpaca_fill_and_close(
         is_paper=True,
         alpaca_order_id=order_id,
         origin="BACKFILL",
-        strategy=f"admin_remediation:{reason}",
+        # reason goes on the position's exit_reason (BotTrade has no strategy col)
     )
     db.add(trade_row)
     pos.closed_at = now

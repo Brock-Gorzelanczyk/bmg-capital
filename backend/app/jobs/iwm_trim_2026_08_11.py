@@ -133,7 +133,7 @@ def _book_bmg_fill(alpaca_order_id: str, filled_avg_price: float, filled_qty: fl
                 is_paper=True,
                 alpaca_order_id=alpaca_order_id,
                 origin="BACKFILL",
-                strategy=f"admin_remediation:{_REASON}:{note}",
+                # reason on position.exit_reason (BotTrade has no strategy col)
             )
             _db.add(row)
             pos.closed_at = now
