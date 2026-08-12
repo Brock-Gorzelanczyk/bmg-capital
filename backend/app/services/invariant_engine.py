@@ -930,6 +930,26 @@ def _check_i24_bot_level_identities(db) -> Result:
         pv_drift_cents = abs(bot_sum_pv - fund_pv)
         upl_drift_cents = abs(bot_unrealized_cents - alp_upl_cents)
 
+        # Third identity (Brock 2026-08-11 (f)): bot realized reconciles to
+        # Alpaca-derived realized (algebra: fund_pv - inception - unrealized).
+        # Bot realized: sum(bot_trades.pnl_cents) for BROKER_FILL closes.
+        from sqlalchemy import text as _t
+        from app.core.canonical import _FUND_INCEPTION_CENTS  # type: ignore
+        try:
+            _br_row = db.execute(_t(
+                "SELECT COALESCE(SUM(t.pnl_cents), 0) FROM bot_trades t "
+                "JOIN bot_allocations a ON a.id = t.allocation_id "
+                "WHERE a.user_id = 1 "
+                "  AND t.side IN ('sell','close','cover') "
+                "  AND t.quarantined_at IS NULL "
+                "  AND t.origin = 'BROKER_FILL'"
+            )).fetchone()
+            bot_realized_cents = int(_br_row[0] or 0)
+        except Exception:
+            bot_realized_cents = 0
+        alpaca_realized_cents = fund_pv - _FUND_INCEPTION_CENTS - alp_upl_cents
+        realized_drift_cents = abs(bot_realized_cents - alpaca_realized_cents)
+
         actual = {
             "bot_sum_pv_usd": round(bot_sum_pv / 100, 2),
             "fund_pv_usd": round(fund_pv / 100, 2),
@@ -937,14 +957,17 @@ def _check_i24_bot_level_identities(db) -> Result:
             "bot_unrealized_usd": round(bot_unrealized_cents / 100, 2),
             "alpaca_unrealized_usd": round(alp_upl_cents / 100, 2),
             "upl_drift_usd": round(upl_drift_cents / 100, 2),
+            "bot_realized_usd": round(bot_realized_cents / 100, 2),
+            "alpaca_realized_usd": round(alpaca_realized_cents / 100, 2),
+            "realized_drift_usd": round(realized_drift_cents / 100, 2),
         }
         threshold_cents = 5000  # $50
-        worst = max(pv_drift_cents, upl_drift_cents)
+        worst = max(pv_drift_cents, upl_drift_cents, realized_drift_cents)
         if worst <= threshold_cents:
             return _ok("I24", actual, {"max_drift_usd": 50.0},
-                       f"bot-level identities within $50 (pv:{pv_drift_cents/100:.2f}, upl:{upl_drift_cents/100:.2f})")
+                       f"bot-level identities within $50 (pv:{pv_drift_cents/100:.2f}, upl:{upl_drift_cents/100:.2f}, realized:{realized_drift_cents/100:.2f})")
         return _red("I24", actual, {"max_drift_usd": 50.0}, float(worst / 100),
-                    f"bot-level drift: pv=${pv_drift_cents/100:,.2f} upl=${upl_drift_cents/100:,.2f} — components don't reconcile")
+                    f"bot-level drift: pv=${pv_drift_cents/100:,.2f} upl=${upl_drift_cents/100:,.2f} realized=${realized_drift_cents/100:,.2f}")
     except Exception as exc:
         return _amber("I24", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
@@ -1351,6 +1374,12 @@ def setup_invariant_engine(scheduler) -> None:
         db = SessionLocal()
         try:
             res = run_all_invariants(db)
+            # Refresh pause reason from latest unacked AUTO_PAUSE ack (Brock 2026-08-11)
+            try:
+                from app.services.scans_gate import refresh_pause_reason_from_latest_ack
+                refresh_pause_reason_from_latest_ack()
+            except Exception as _ref_exc:
+                logger.warning("[invariant] pause-reason refresh failed: %s", _ref_exc)
             s = res["summary"]
             if s["red"]:
                 logger.error(

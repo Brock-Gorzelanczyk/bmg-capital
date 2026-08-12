@@ -227,6 +227,47 @@ def is_scans_enabled(profile_name: str) -> tuple[bool, str]:
     return True, ""
 
 
+def refresh_pause_reason_from_latest_ack() -> Optional[str]:
+    """Update state.muted_reason to reflect the CURRENT triggering cause,
+    derived from the newest unacked AUTO_PAUSE record. Idempotent.
+
+    Called by the invariant scheduler each cycle so the pause_reason string
+    on GET /admin/scans/status auto-updates as conditions change (Brock
+    2026-08-11 fix — stale 'options_bp_zero_pre_monday_prep_pending_iwm_trim_decision'
+    string persisted for 35 hours after the triggering condition changed).
+
+    Returns the new reason, or None on error / no unacked / already paused.
+    """
+    try:
+        from app.services.human_ack import list_unacked
+        from app.db.session import SessionLocal as _SL
+        _db = _SL()
+        try:
+            unacked = list_unacked(_db, category="AUTO_PAUSE")
+        finally:
+            _db.close()
+        with _lock:
+            st = read_state()
+            if st.get(_ALL_KEY) is not False:
+                # Not globally paused — nothing to refresh
+                return None
+            if not unacked:
+                # Paused but no ack — leave the stored reason as-is
+                return None
+            # Newest first (list_unacked already orders by created_at DESC)
+            latest = unacked[0]
+            new_reason = f"unacked_{latest['category']}_id{latest['id']}: {latest['title']}"
+            if st.get("muted_reason") == new_reason:
+                return new_reason  # already current
+            st["muted_reason"] = new_reason
+            _write_state_atomic(st)
+            logger.warning("[scan-gate] muted_reason refreshed: %r", new_reason[:100])
+            return new_reason
+    except Exception as exc:
+        logger.warning("[scan-gate] refresh_pause_reason failed: %s", exc)
+        return None
+
+
 def status_summary() -> dict:
     """Compact snapshot for the admin GET endpoint."""
     st = read_state()

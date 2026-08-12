@@ -211,6 +211,42 @@ Outside RTH, `today_pnl_cents` is `None` (frontend renders "—" per NULL≠$0).
 
 **Scope discipline (added 2026-08-10 after regression):** session-honest applies to **`today` only**. `all_time`, `mtd`, `wtd` are period-baselined and independent of session state — they compute regardless of whether the market is open. Do NOT extend session-nulling to other periods; if you do, you'll silently zero the fund's historical P&L any time the market is closed.
 
+## §ADOPT-BOUND (added 2026-08-11, Brock overnight #5)
+
+### An adopter run is bounded by its own dry-run diff. No adopter may exceed its predicted delta.
+
+**Rule:** if dry_run says N adds, the live run adds exactly N or it aborts. Additionally, before creating a catchall/unresolved-attribution row for (symbol, side), the adopter MUST check whether ANY active BMG allocation already owns that (symbol, side). If yes, SKIP (don't create the duplicate). No "we'll dedupe later."
+
+**Reason (2026-08-10 overnight):** adopt-missing-alpaca-positions added 83 catchall rows overnight, 20 of which duplicated positions already owned by real bots. Result: bot_sum_pv inflated $16K vs fund_pv, I24 red for a day, position drift 17.
+
+**Reference implementation:** `admin.py::adopt_missing_alpaca_positions` — the `_already_owned` pre-check at the top of the per-position loop.
+
+**Family:** same class as ledger #32 provenance and §W1 — BMG's record must match broker reality, not create parallel truth on catchall allocs.
+
+## §LEDGER-33 (added 2026-08-11, Brock overnight #1)
+
+### Trades book from FILL confirmation, never from submitted limit.
+
+Any code path that writes a BotTrade with `fill_price_cents = int(limit_price * 100)` at submit time is a bug of the same family as sim/phantom/adopter. The trade must be written from the Alpaca fill event's `filled_avg_price`, after status='filled'.
+
+**Reference implementation:** `admin.py::confirm_alpaca_fill_and_close` — polls Alpaca, refuses if not filled, uses `filled_avg_price` for the write.
+
+**Prohibited pattern:**
+```python
+BotTrade(..., fill_price_cents=int(round(limit_price * 100)), alpaca_order_id=submitted_id)
+```
+This encodes intent, not fact. If the order fills at a different price (e.g., opening auction), the recorded fill price is wrong.
+
+**Required pattern:**
+```python
+# 1. Submit → get order_id
+# 2. Poll status until filled|canceled|rejected
+# 3. If filled: read filled_avg_price + filled_qty from the response
+# 4. THEN write BotTrade with those fill values
+```
+
+Detected callers (fixed): `admin.py::admin_close_limit` (removed the write; caller must invoke `/admin/confirm-alpaca-fill-and-close`); `jobs/iwm_trim_2026_08_11.py::_book_bmg_fill` (only called from filled-branch with `filled_avg_price`).
+
 ## MONEY-MATH ACCEPTANCE (added 2026-08-10, Brock regression rule)
 
 Any change touching P&L, valuation, or period-return math must include a **post-deploy acceptance print** of `pnl.{all_time, mtd, wtd, today}` and confirm each field is either a plausible number OR an explicit `null` with a `reason` field. **Zero is neither** — a `.cents == 0` on a live funded fund is always a bug, never a value.

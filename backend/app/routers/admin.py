@@ -3698,6 +3698,25 @@ def adopt_missing_alpaca_positions(
                 parsed = _parse_occ(sym) or {}
             except Exception:
                 pass
+        # §ADOPT-BOUND (Brock 2026-08-11): if BMG already tracks this
+        # (symbol, side) on ANY active alloc, don't create a catchall
+        # duplicate. This is the specific bug from 2026-08-10 overnight:
+        # 20 of 83 catchall adopts duplicated positions real bots owned,
+        # inflating bot_sum_pv by $16K.
+        _already_owned = (
+            db.query(BotPosition)
+            .filter(BotPosition.symbol == sym)
+            .filter((BotPosition.side == side) | (BotPosition.side.is_(None) if side == "long" else False))
+            .filter(BotPosition.closed_at.is_(None))
+            .filter(BotPosition.quarantined_at.is_(None))
+            .first()
+        )
+        if _already_owned:
+            skipped_dup.append({**entry, "reason": "already_owned_by_alloc",
+                                "existing_pos_id": _already_owned.id,
+                                "existing_alloc_id": _already_owned.allocation_id})
+            continue
+
         # m098 chokepoint: check risk gates, accept + flag if breach
         from app.services.position_write_gate import check_position_pre_write
         gate = check_position_pre_write(
