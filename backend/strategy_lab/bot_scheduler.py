@@ -514,36 +514,37 @@ def setup_bot_scheduler(scheduler) -> None:
     logger.warning("[startup-trace] registered job quant_daily_summary (4:00 PM ET daily)")
 
     # ------------------------------------------------------------------
-    # crypto_quant_scalper: every 1 min, 24/7
-    # 1m scalper — tight R/R, liquid majors only.
+    # crypto_quant_scalper: every 15 min, 24/7 (was 1min — cost cut 2026-08-13)
+    # 15× reduction. Scalper strategy loses edge at 15min but fund is halted;
+    # bump back down to */1 when unhalted if bot is still funded.
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: _run_and_log("crypto_quant_scalper"),
-        CronTrigger(minute="*/1"),
+        CronTrigger(minute="*/15"),
         id="bot_crypto_quant_scalper",
         replace_existing=True,
         next_run_time=datetime.now(UTC),
         max_instances=1,
-        misfire_grace_time=120,
+        misfire_grace_time=300,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job bot_crypto_quant_scalper (*/1 min, fires immediately)")
+    logger.warning("[startup-trace] registered job bot_crypto_quant_scalper (*/15 min, fires immediately)")
 
     # ------------------------------------------------------------------
-    # crypto_quant_mean_reversion: every 3 min, 24/7
-    # 5m mean-reversion bot — 4h holds, wider stops.
+    # crypto_quant_mean_reversion: every 15 min, 24/7 (was 3min — cost cut 2026-08-13)
+    # 5× reduction; 4h holds are unaffected by scan cadence.
     # ------------------------------------------------------------------
     scheduler.add_job(
         lambda: _run_and_log("crypto_quant_mean_reversion"),
-        CronTrigger(minute="*/3"),
+        CronTrigger(minute="*/15"),
         id="bot_crypto_quant_mean_reversion",
         replace_existing=True,
         next_run_time=datetime.now(UTC),
         max_instances=1,
-        misfire_grace_time=180,
+        misfire_grace_time=300,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job bot_crypto_quant_mean_reversion (*/3 min, fires immediately)")
+    logger.warning("[startup-trace] registered job bot_crypto_quant_mean_reversion (*/15 min, fires immediately)")
 
     # ------------------------------------------------------------------
     # 2026-07-01 NEW BOTS (funded by m052 reallocation from halted bots)
@@ -563,18 +564,18 @@ def setup_bot_scheduler(scheduler) -> None:
     )
     logger.warning("[startup-trace] registered job bot_crypto_quant_alt_focus (*/5 min, fires immediately)")
 
-    # crypto_quant_scalp_1m: every 2 min, 24/7. 1m bars, tight R/R, majors only.
+    # crypto_quant_scalp_1m: every 15 min, 24/7 (was 2min — cost cut 2026-08-13).
     scheduler.add_job(
         lambda: _run_and_log("crypto_quant_scalp_1m"),
-        CronTrigger(minute="*/2"),
+        CronTrigger(minute="*/15"),
         id="bot_crypto_quant_scalp_1m",
         replace_existing=True,
         next_run_time=datetime.now(UTC),
         max_instances=1,
-        misfire_grace_time=120,
+        misfire_grace_time=300,
         coalesce=True,
     )
-    logger.warning("[startup-trace] registered job bot_crypto_quant_scalp_1m (*/2 min, fires immediately)")
+    logger.warning("[startup-trace] registered job bot_crypto_quant_scalp_1m (*/15 min, fires immediately)")
 
     # crypto_dca_btc_eth: Monday 10:00 UTC, weekly. Boring DCA baseline.
     scheduler.add_job(
@@ -1682,16 +1683,17 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Cost cut 2026-08-13: 60s → 15min. 15× reduction. No pending proposals need per-minute scan.
     scheduler.add_job(
         _run_proposal_handler,
-        IntervalTrigger(seconds=60),
+        IntervalTrigger(minutes=15),
         id="proposal_reaction_handler",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
         next_run_time=datetime.now(UTC),
     )
-    logger.warning("[startup-trace] registered job proposal_reaction_handler (every 60s)")
+    logger.warning("[startup-trace] registered job proposal_reaction_handler (every 15min)")
 
     # ------------------------------------------------------------------
     # Auto-defer check: every 5 minutes — proposals pending > 6h get deferred
@@ -1743,16 +1745,18 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Cost cut 2026-08-13: 30s → 30min. 60× reduction in heartbeat writes.
+    # Dashboard "alive" tick doesn't need per-30s granularity while fund is halted.
     scheduler.add_job(
         _fleet_heartbeat,
-        IntervalTrigger(seconds=30),
+        IntervalTrigger(minutes=30),
         id="fleet_heartbeat",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
         next_run_time=datetime.now(UTC),
     )
-    logger.warning("[startup-trace] registered job fleet_heartbeat (every 30s, fires immediately)")
+    logger.warning("[startup-trace] registered job fleet_heartbeat (every 30min, fires immediately)")
 
     # ------------------------------------------------------------------
     # Deploy 4.5.E — Defensive halt check: every 15 minutes
@@ -1860,13 +1864,16 @@ def setup_bot_scheduler(scheduler) -> None:
         finally:
             db.close()
 
+    # Cost cut 2026-08-13: */1 min → */15 min. 15× reduction. Price alerts
+    # aren't triggering real trades while fund is halted; 15min still catches
+    # any relevant threshold cross for a paused alert queue.
     scheduler.add_job(
         _run_price_alert_monitor,
-        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/1", timezone=ET),
+        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/15", timezone=ET),
         id="price_alert_monitor_market",
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=60,
+        misfire_grace_time=300,
         coalesce=True,
     )
     scheduler.add_job(

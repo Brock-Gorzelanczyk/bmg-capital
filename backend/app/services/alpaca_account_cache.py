@@ -27,19 +27,13 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-_TTL_SECONDS_DEFAULT = float(os.getenv("ALPACA_ACCOUNT_CACHE_TTL_SECONDS", "30"))
-_TTL_SECONDS_PAUSED = float(os.getenv("ALPACA_ACCOUNT_CACHE_TTL_PAUSED_SECONDS", "300"))
+# Cost cut 2026-08-13: default TTL 30s → 300s always (was 30s active / 300s paused).
+# Removed lazy scans_gate import — safer & simpler. Fund can absorb 5-min-stale
+# account snapshot during normal ops; hot data path is Alpaca push, not this cache.
+_TTL_SECONDS_DEFAULT = float(os.getenv("ALPACA_ACCOUNT_CACHE_TTL_SECONDS", "300"))
 
 
 def _effective_ttl() -> float:
-    """Cost cut 2026-08-12 (Brock): while globally paused, extend TTL to 5min.
-    Data is slightly staler but nothing's trading, so it doesn't matter."""
-    try:
-        from app.services.scans_gate import read_state as _rs
-        if _rs().get("global") is False:
-            return _TTL_SECONDS_PAUSED
-    except Exception:
-        pass
     return _TTL_SECONDS_DEFAULT
 
 
