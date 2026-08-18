@@ -266,3 +266,6 @@ Detected callers (fixed): `admin.py::admin_close_limit` (removed the write; call
 Any change touching P&L, valuation, or period-return math must include a **post-deploy acceptance print** of `pnl.{all_time, mtd, wtd, today}` and confirm each field is either a plausible number OR an explicit `null` with a `reason` field. **Zero is neither** — a `.cents == 0` on a live funded fund is always a bug, never a value.
 
 Enforced structurally by invariant **I23**: any exact-zero pnl window on a fund with `funded_capital > 0` and `age > 1 day` → RED. Applies to `all_time`, `mtd`, `wtd` always; to `today` only during RTH.
+
+# 2026-08-18: deploy-probe commit (whitespace only) — test whether any
+# new deploy succeeds vs 2f957065 specifically. See ledger #36 investigation.
