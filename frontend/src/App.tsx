@@ -82,6 +82,7 @@ const StrategyLabLive = lazy(() => import("@/pages/StrategyLabLive"));
 const FactorScorecardPage = lazy(() => import("@/pages/FactorScorecardPage"));
 const DashboardMirofish = lazy(() => import("@/pages/DashboardMirofish"));
 const PortfolioV2 = lazy(() => import("@/pages/PortfolioV2"));
+const VaultArchivedStub = lazy(() => import("@/pages/VaultArchivedStub"));
 const AutopilotPage = lazy(() => import("@/pages/AutopilotPage"));
 const AutopilotPromisePage = lazy(() => import("@/pages/AutopilotPromisePage"));
 const PlaybookPage = lazy(() => import("@/pages/PlaybookPage"));
@@ -403,7 +404,7 @@ function AppInner() {
       <Route element={<AppShell />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/chart" element={<ChartPage />} />
-        <Route path="/screener" element={<Screener />} />
+        <Route path="/screener" element={<VaultArchivedStub pageName="Screener" />} />
         <Route path="/strategy" element={<Page component={StrategyLabV2} />} />
         <Route path="/strategy/legacy" element={<Page component={StrategyLab} />} />
         <Route path="/strategy/live" element={<Page component={StrategyLabLive} />} />
@@ -412,25 +413,25 @@ function AppInner() {
         <Route path="/dashboard/legacy" element={<Page component={Dashboard} />} />
         <Route path="/strategy/candidates" element={<Page component={StrategyCandidates} />} />
         <Route path="/signals" element={<SignalsFeedPage />} />
-        <Route path="/strategy/scout" element={<StrategyScoutPage />} />
+        <Route path="/strategy/scout" element={<VaultArchivedStub pageName="Strategy Scout" />} />
         <Route path="/strategy/scout/chart/:ticker/:strategyId" element={<ScoutChartPage />} />
-        <Route path="/strategy/workshop" element={<Page component={StrategyWorkshopPage} />} />
-        <Route path="/strategy/forge" element={<ForgeBuilderPage />} />
-        <Route path="/fund" element={<FundPage />} />
+        <Route path="/strategy/workshop" element={<VaultArchivedStub pageName="Workshop" />} />
+        <Route path="/strategy/forge" element={<VaultArchivedStub pageName="The Forge" />} />
+        <Route path="/fund" element={<VaultArchivedStub pageName="Fund Team" />} />
         <Route path="/fund/tear-sheet" element={<FundTearSheet />} />
-        <Route path="/fund/floor" element={<Page component={FundFloorIframePage} />} />
-        <Route path="/fund/desk" element={<Page component={TradingDeskIframePage} />} />
+        <Route path="/fund/floor" element={<VaultArchivedStub pageName="Fund Floor" />} />
+        <Route path="/fund/desk" element={<VaultArchivedStub pageName="Trading Desk" />} />
         <Route path="/strategy/performance" element={<PerformancePage />} />
         <Route path="/strategy/leaderboard" element={<StrategyLeaderboardPage />} />
-        <Route path="/markets" element={<MarketsPage />} />
+        <Route path="/markets" element={<VaultArchivedStub pageName="Markets" />} />
         <Route path="/strategy/library" element={<StrategyLibraryPage />} />
         <Route path="/strategy-library" element={<Navigate to="/strategy/library" replace />} />
         <Route path="/strategy/library/custom-bot" element={<Navigate to="/strategy/forge" replace />} />
         <Route path="/strategy/analyst" element={<AnalystPage />} />
         <Route path="/strategy/portfolio/:assetClass" element={<PortfolioDetailPage />} />
         <Route path="/portfolio/factor-attribution" element={<FactorAttributionPage />} />
-        <Route path="/strategy/hypotheses" element={<HypothesesPage />} />
-        <Route path="/strategy/brain" element={<AdminRoute><BrainGraphPage /></AdminRoute>} />
+        <Route path="/strategy/hypotheses" element={<VaultArchivedStub pageName="Hypotheses" />} />
+        <Route path="/strategy/brain" element={<VaultArchivedStub pageName="Brain Graph" />} />
         <Route path="/strategy/trade/:tradeId" element={<TradeDetailPage />} />
         <Route path="/strategy/bot/:botName" element={<BotDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
@@ -445,21 +446,21 @@ function AppInner() {
         <Route path="/portfolio" element={<Page component={PortfolioV2} />} />
         <Route path="/portfolio/legacy" element={<Page component={Portfolio} />} />
         <Route path="/alerts" element={<Alerts />} />
-        <Route path="/news" element={<News />} />
+        <Route path="/news" element={<VaultArchivedStub pageName="News" />} />
         <Route path="/earnings" element={<Earnings />} />
-        <Route path="/research" element={<Research />} />
-        <Route path="/research-feed" element={<ResearchFeedPage />} />
+        <Route path="/research" element={<VaultArchivedStub pageName="Research" />} />
+        <Route path="/research-feed" element={<VaultArchivedStub pageName="Research Feed" />} />
         <Route path="/paper" element={<Navigate to="/portfolio" replace />} />
         <Route path="/options" element={<OptionsLab />} />
         <Route path="/crypto" element={<CryptoLab />} />
         <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/discovery" element={<Discovery />} />
+        <Route path="/discovery" element={<VaultArchivedStub pageName="Discovery" />} />
         <Route path="/defi" element={<DeFi />} />
         <Route path="/security" element={<Security />} />
         <Route path="/learn" element={<Navigate to="/learn/tracks" replace />} />
         <Route path="/learn/lesson/:lessonId" element={<LearnLesson />} />
         {/* IMCP Learning Center — canonical path */}
-        <Route path="/learn/tracks" element={<IMCPLearnPage />} />
+        <Route path="/learn/tracks" element={<VaultArchivedStub pageName="Learning Center" />} />
         <Route path="/learn/tracks/:trackSlug" element={<IMCPLearnTrackPage />} />
         <Route path="/learn/tracks/:trackSlug/:moduleSlug" element={<IMCPLearnModulePage />} />
         <Route path="/learn/tracks/:trackSlug/:moduleSlug/:lessonSlug" element={<IMCPLearnLessonPage />} />
@@ -471,18 +472,18 @@ function AppInner() {
         <Route path="/admin/bots/:botId" element={<AdminRoute><AdminBotDetailPage /></AdminRoute>} />
         <Route path="/admin/monitoring"  element={<AdminRoute><MonitoringPage /></AdminRoute>} />
         <Route path="/admin/heatmap"     element={<AdminRoute><HeatMapPage /></AdminRoute>} />
-        <Route path="/admin/flow"        element={<AdminRoute><OptionsFlowPage /></AdminRoute>} />
-        <Route path="/admin/macro"       element={<AdminRoute><MacroDashboardPage /></AdminRoute>} />
+        <Route path="/admin/flow"        element={<VaultArchivedStub pageName="Options Flow" />} />
+        <Route path="/admin/macro"       element={<VaultArchivedStub pageName="Macro Dashboard" />} />
         <Route path="/admin/backtest"    element={<AdminRoute><BacktestLabPage /></AdminRoute>} />
-        <Route path="/admin/candidates"  element={<AdminRoute><CandidatesPage /></AdminRoute>} />
+        <Route path="/admin/candidates"  element={<VaultArchivedStub pageName="Candidates" />} />
         <Route path="/admin/scanners"    element={<AdminRoute><ScannersPage /></AdminRoute>} />
-        <Route path="/admin/smart-money" element={<AdminRoute><SmartMoneyPage /></AdminRoute>} />
+        <Route path="/admin/smart-money" element={<VaultArchivedStub pageName="Smart Money" />} />
         <Route path="/admin/sentinel"    element={<AdminRoute><SentinelDashboardPage /></AdminRoute>} />
         <Route path="/admin/bot-health"           element={<AdminRoute><BotHealthPage /></AdminRoute>} />
         <Route path="/admin/bot-health/:botId"    element={<AdminRoute><AdminBotDetailPage /></AdminRoute>} />
-        <Route path="/admin/discipline-report"    element={<AdminRoute><DisciplineReportPage /></AdminRoute>} />
-        <Route path="/admin/tuning"               element={<AdminRoute><TuningPage /></AdminRoute>} />
-        <Route path="/admin/diagnostics"          element={<AdminRoute><AdminDiagnosticsPage /></AdminRoute>} />
+        <Route path="/admin/discipline-report"    element={<VaultArchivedStub pageName="Discipline Report" />} />
+        <Route path="/admin/tuning"               element={<VaultArchivedStub pageName="Tuning Advisor" />} />
+        <Route path="/admin/diagnostics"          element={<VaultArchivedStub pageName="Diagnostics" />} />
         <Route path="/admin/migrations"           element={<AdminRoute><AdminMigrationStatusPage /></AdminRoute>} />
         <Route path="/social" element={<Social />} />
         <Route path="/upgrade" element={<UpgradePage />} />
@@ -504,20 +505,20 @@ function AppInner() {
         <Route path="/robo/quiz" element={<RiskQuizPage />} />
         <Route path="/robo/goals" element={<GoalsPage />} />
         <Route path="/robo/direct-index" element={<DirectIndexingPage />} />
-        <Route path="/mission-control" element={<Page component={MissionControlPage} />} />
+        <Route path="/mission-control" element={<VaultArchivedStub pageName="Mission Control" />} />
         <Route path="/mission" element={<Navigate to="/mission-control" replace />} />
         <Route path="/smart-money" element={<Navigate to="/admin/smart-money" replace />} />
         <Route path="/brain" element={<Navigate to="/strategy/brain" replace />} />
         <Route path="/discipline" element={<Navigate to="/admin/discipline-report" replace />} />
         <Route path="/hypotheses" element={<Navigate to="/strategy/hypotheses" replace />} />
-        <Route path="/risk-console" element={<Page component={RiskConsolePage} />} />
+        <Route path="/risk-console" element={<VaultArchivedStub pageName="Risk Console" />} />
         <Route path="/risk" element={<Page component={RiskLivePage} />} />
         <Route path="/trades" element={<Page component={TradeJournalPage} />} />
         <Route path="/strategy-v2" element={<Navigate to="/strategy" replace />} />
         <Route path="/portfolio-v2" element={<Navigate to="/portfolio" replace />} />
         <Route path="/autopilot" element={<Page component={AutopilotPage} />} />
         <Route path="/autopilot/activity" element={<AutopilotPage />} />
-        <Route path="/activity" element={<Page component={ActivityPage} />} />
+        <Route path="/activity" element={<VaultArchivedStub pageName="Activity" />} />
         <Route path="/autopilot/promise" element={<AutopilotPromisePage />} />
         <Route path="/settings/pitch/playbook" element={<PlaybookPage />} />
         <Route path="/settings/pitch/playbook/decisions" element={<PlaybookDecisionsPage />} />
@@ -530,7 +531,7 @@ function AppInner() {
         <Route path="/learn/earn" element={<LearnEarnPage />} />
         <Route path="/learn/exam" element={<Page component={ExamPage} />} />
         <Route path="/learn/exam/result" element={<Page component={ExamResultPage} />} />
-        <Route path="/learn/certificates" element={<Page component={CertificatesPage} />} />
+        <Route path="/learn/certificates" element={<VaultArchivedStub pageName="Certificates" />} />
         <Route path="/ipo" element={<IPOAccessPage />} />
         <Route path="/settings/cfp" element={<CFPBookingPage />} />
         <Route path="/staking" element={<StakingPage />} />

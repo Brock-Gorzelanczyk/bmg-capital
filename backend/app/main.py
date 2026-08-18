@@ -1753,6 +1753,13 @@ app.include_router(portfolio_rank_router)
 from app.routers.strategy_journal_stub import router as _sj_stub_router
 app.include_router(_sj_stub_router)
 
+# ─── 2026-08-18 Leaderboard v2 — explicit state badges + NULL≠0 + unattributed row
+# One batched endpoint (/api/leaderboard/bots) consuming canonical. Replaces
+# the ambiguous $0.00-for-unknowns rendering that has been Brock's longest
+# recurring complaint. See backend/app/routers/leaderboard_v2.py docstring.
+from app.routers.leaderboard_v2 import router as _leaderboard_v2_router
+app.include_router(_leaderboard_v2_router)
+
 # ─── PAUSED 2026-07-16 (cost) — uncomment to restore any single router ──────
 # app.include_router(screener.router)
 # app.include_router(watchlist.router)
