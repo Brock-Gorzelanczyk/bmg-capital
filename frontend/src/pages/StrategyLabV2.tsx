@@ -467,7 +467,132 @@ interface LBRow {
   openPositionsCount?: number;
 }
 
-function BotLeaderboard({ rows }: { rows: LBRow[] }) {
+// 2026-08-18 Brock item 2: state-badge leaderboard using /api/leaderboard/bots.
+// NULL rendering: any null value shows "—" with a tooltip explaining why.
+// Never a $0.00 for an unknown. Unattributed row is separate, never absorbed.
+interface LBBotV2 {
+  profile: string;
+  display_name: string;
+  state: "TRADING" | "HOLDING" | "IDLE" | "PAUSED" | "RETIRED";
+  sub_reason?: string | null;
+  pause_reason?: string | null;
+  has_bug: boolean;
+  bug_reason?: string | null;
+  trades_round_trips: number | null;
+  win_rate: number | null;
+  realized_cents: number | null;
+  unrealized_cents: number | null;
+  deployed_cents: number | null;
+  return_30d_pct: number | null;
+  realized_source?: string | null;
+  unrealized_source?: string | null;
+  deployed_source?: string | null;
+  portfolio_value_cents: number | null;
+  starting_capital_cents: number;
+  signals_24h: number;
+  trades_24h: number;
+  open_positions_count: number;
+}
+interface LBResponseV2 {
+  bots: LBBotV2[];
+  unattributed: { value_cents: number; value_source: string; note: string } | null;
+  fund_pv_cents: number;
+  fund_pv_source: string;
+  bot_sum_pv_cents: number;
+  sum_bot_deployed_cents: number;
+  counts_by_state: Record<string, number>;
+  acceptance_flags: {
+    no_zero_dollar_unknowns: boolean;
+    deployed_le_fund_equity: boolean;
+    unattributed_matches_delta: boolean;
+  };
+}
+
+const STATE_STYLE: Record<LBBotV2["state"], { bg: string; fg: string; label: string }> = {
+  TRADING: { bg: "rgba(74,222,128,0.14)", fg: "#4ade80", label: "TRADING" },
+  HOLDING: { bg: "rgba(59,130,246,0.14)", fg: "#60a5fa", label: "HOLDING" },
+  IDLE:    { bg: "rgba(148,163,184,0.12)", fg: "#94a3b8", label: "IDLE" },
+  PAUSED:  { bg: "rgba(250,204,21,0.14)", fg: "#facc15", label: "PAUSED" },
+  RETIRED: { bg: "rgba(100,116,139,0.10)", fg: "#64748b", label: "RETIRED" },
+};
+
+function StateBadge({ bot }: { bot: LBBotV2 }) {
+  const s = STATE_STYLE[bot.state];
+  const detail =
+    bot.state === "IDLE" ? bot.sub_reason :
+    bot.state === "PAUSED" ? bot.pause_reason :
+    null;
+  const tooltip = detail ? `${s.label}: ${detail}` : s.label;
+  return (
+    <span
+      title={tooltip}
+      style={{
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 9,
+        letterSpacing: "0.1em",
+        color: s.fg,
+        background: s.bg,
+        border: `1px solid ${s.fg}33`,
+        padding: "2px 6px",
+        borderRadius: 3,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {s.label}
+      {detail && bot.state === "IDLE" && (
+        <span style={{ opacity: 0.7, marginLeft: 4 }}>· {detail}</span>
+      )}
+    </span>
+  );
+}
+
+function BugBadge({ reason }: { reason: string }) {
+  return (
+    <span
+      title={`DATA BUG: ${reason}. Realized is 0 but there are closing trades — expected a real number. See invariant I27/I26 family.`}
+      style={{
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 9,
+        letterSpacing: "0.05em",
+        color: "#f87171",
+        background: "rgba(248,113,113,0.14)",
+        border: "1px solid rgba(248,113,113,0.4)",
+        padding: "2px 6px",
+        borderRadius: 3,
+        whiteSpace: "nowrap",
+      }}
+    >
+      ⚠ BUG
+    </span>
+  );
+}
+
+function CellDash({ tooltip }: { tooltip: string }) {
+  return (
+    <span
+      title={tooltip}
+      style={{
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 12,
+        color: "#4a5a4a",
+        textAlign: "right",
+        cursor: "help",
+      }}
+    >
+      —
+    </span>
+  );
+}
+
+function BotLeaderboardV2() {
+  const q = useQuery({
+    queryKey: ["leaderboard-v2"],
+    queryFn: async () => (await client.get<LBResponseV2>("/leaderboard/bots")).data,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const data = q.data;
+
   return (
     <>
       <div className="flex items-center gap-3 mt-[26px]">
@@ -481,6 +606,330 @@ function BotLeaderboard({ rows }: { rows: LBRow[] }) {
           }}
         >
           // BOT LEADERBOARD
+        </span>
+        <span
+          className="flex-1"
+          style={{
+            height: 1,
+            background: "linear-gradient(90deg,rgba(74,222,128,0.2),transparent)",
+          }}
+        />
+        <span
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10,
+            color: "#50604f",
+          }}
+        >
+          src: {data?.fund_pv_source ?? "…"} · state counts:{" "}
+          {data?.counts_by_state
+            ? Object.entries(data.counts_by_state)
+                .filter(([, n]) => n > 0)
+                .map(([s, n]) => `${s}=${n}`)
+                .join(" ")
+            : "…"}
+        </span>
+      </div>
+
+      {data && !data.acceptance_flags.no_zero_dollar_unknowns && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "6px 12px",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10,
+            color: "#f87171",
+            background: "rgba(248,113,113,0.10)",
+            border: "1px solid rgba(248,113,113,0.3)",
+            borderRadius: 4,
+          }}
+          title="At least one TRADING row has realized_cents=null. Endpoint acceptance flag failed."
+        >
+          ⚠ acceptance failed: no_zero_dollar_unknowns
+        </div>
+      )}
+
+      <div
+        className="rounded-[10px] mt-3 overflow-hidden"
+        style={{
+          border: `1px solid ${DIM_GREEN}`,
+          background: "#0a100a",
+        }}
+      >
+        <div
+          className="grid items-center"
+          style={{
+            gridTemplateColumns: "150px 1fr 60px 60px 100px 100px 100px 80px",
+            padding: "9px 18px",
+            borderBottom: `1px solid ${DIM_GREEN}`,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 9,
+            letterSpacing: "0.1em",
+            color: MUTED,
+          }}
+        >
+          <span>STATUS</span>
+          <span>BOT</span>
+          <span style={{ textAlign: "right", color: "#facc15" }}>TRADES</span>
+          <span style={{ textAlign: "right" }}>WIN%</span>
+          <span style={{ textAlign: "right" }}>REALIZED</span>
+          <span style={{ textAlign: "right" }}>UNREALIZED</span>
+          <span style={{ textAlign: "right" }}>DEPLOYED</span>
+          <span style={{ textAlign: "right" }}>30D</span>
+        </div>
+        {(data?.bots ?? []).map((b) => {
+          const featured = false;
+          const isRetired = b.state === "RETIRED";
+          const rowStyle: React.CSSProperties = {
+            gridTemplateColumns: "150px 1fr 60px 60px 100px 100px 100px 80px",
+            padding: "9px 18px",
+            borderBottom: "1px solid rgba(74,222,128,0.05)",
+            background: "transparent",
+            opacity: isRetired ? 0.4 : 1,
+            textDecoration: "none",
+            color: "inherit",
+            cursor: "pointer",
+          };
+          return (
+            <Link
+              key={b.profile}
+              to={`/strategy/bot/${b.profile}`}
+              className="grid items-center"
+              style={rowStyle}
+              onMouseEnter={(e) => {
+                if (!isRetired) e.currentTarget.style.background = "rgba(74,222,128,0.04)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <span className="flex items-center gap-1">
+                <StateBadge bot={b} />
+                {b.has_bug && b.bug_reason && <BugBadge reason={b.bug_reason} />}
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#f4f8f4",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {b.display_name}
+              </span>
+              {/* TRADES (round trips) */}
+              {b.trades_round_trips !== null && b.trades_round_trips > 0 ? (
+                <span
+                  title={`${b.trades_round_trips} closing trade${b.trades_round_trips === 1 ? "" : "s"} (round trips)`}
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    color: "#facc15",
+                    textAlign: "right",
+                    fontWeight: 600,
+                  }}
+                >
+                  {b.trades_round_trips.toLocaleString()}
+                </span>
+              ) : b.trades_round_trips === 0 ? (
+                <span
+                  title="Zero closing trades — bot has no round trips yet"
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    color: MUTED,
+                    textAlign: "right",
+                  }}
+                >
+                  0
+                </span>
+              ) : (
+                <CellDash tooltip="trades count unavailable" />
+              )}
+              {/* WIN% */}
+              {b.win_rate !== null ? (
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    color: "#9fb0a0",
+                    textAlign: "right",
+                  }}
+                >
+                  {(b.win_rate * 100).toFixed(0)}%
+                </span>
+              ) : (
+                <CellDash tooltip="win rate not yet computed" />
+              )}
+              {/* REALIZED */}
+              {b.realized_cents !== null ? (
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    color: b.realized_cents >= 0 ? GREEN : RED,
+                    textAlign: "right",
+                  }}
+                  title={`source: ${b.realized_source ?? "unknown"}`}
+                >
+                  {fmtSignedUsd(b.realized_cents)}
+                </span>
+              ) : (
+                <CellDash
+                  tooltip={
+                    b.state === "HOLDING"
+                      ? "no closing trades yet — realized unknown"
+                      : b.state === "IDLE"
+                      ? "bot idle — no realized P&L"
+                      : "realized unavailable"
+                  }
+                />
+              )}
+              {/* UNREALIZED */}
+              {b.unrealized_cents !== null ? (
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    color: b.unrealized_cents >= 0 ? GREEN : RED,
+                    textAlign: "right",
+                  }}
+                  title={`source: ${b.unrealized_source ?? "unknown"}`}
+                >
+                  {fmtSignedUsd(b.unrealized_cents)}
+                </span>
+              ) : (
+                <CellDash tooltip="no open positions to mark" />
+              )}
+              {/* DEPLOYED */}
+              {b.deployed_cents !== null ? (
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    color: "#9fb0a0",
+                    textAlign: "right",
+                  }}
+                  title={`source: ${b.deployed_source ?? "unknown"}`}
+                >
+                  {fmtUsd(b.deployed_cents)}
+                </span>
+              ) : (
+                <CellDash tooltip="nothing deployed" />
+              )}
+              {/* 30D */}
+              {b.return_30d_pct !== null ? (
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    color: b.return_30d_pct >= 0 ? GREEN : RED,
+                    textAlign: "right",
+                  }}
+                >
+                  {(b.return_30d_pct >= 0 ? "+" : "") + b.return_30d_pct.toFixed(2)}%
+                </span>
+              ) : (
+                <CellDash tooltip="30d return unavailable" />
+              )}
+            </Link>
+          );
+        })}
+
+        {/* Unattributed row — separate, never absorbed into a bot row. */}
+        {data?.unattributed && data.unattributed.value_cents !== 0 && (
+          <div
+            className="grid items-center"
+            style={{
+              gridTemplateColumns: "150px 1fr 60px 60px 100px 100px 100px 80px",
+              padding: "11px 18px",
+              borderTop: `1px solid ${DIM_GREEN}`,
+              background: "rgba(250,204,21,0.04)",
+            }}
+            title={data.unattributed.note}
+          >
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 9,
+                letterSpacing: "0.1em",
+                color: "#facc15",
+                background: "rgba(250,204,21,0.14)",
+                border: "1px solid rgba(250,204,21,0.3)",
+                padding: "2px 6px",
+                borderRadius: 3,
+                whiteSpace: "nowrap",
+              }}
+            >
+              UNATTRIBUTED
+            </span>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: "#facc15",
+                fontStyle: "italic",
+              }}
+            >
+              broker positions no bot claims
+            </span>
+            <CellDash tooltip="n/a" />
+            <CellDash tooltip="n/a" />
+            <CellDash tooltip="not attributable" />
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 12,
+                color: "#facc15",
+                textAlign: "right",
+                fontWeight: 600,
+              }}
+              title={`source: ${data.unattributed.value_source}`}
+            >
+              {fmtSignedUsd(data.unattributed.value_cents)}
+            </span>
+            <CellDash tooltip="n/a" />
+            <CellDash tooltip="n/a" />
+          </div>
+        )}
+      </div>
+
+      {q.isError && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "6px 12px",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10,
+            color: "#f87171",
+          }}
+        >
+          ⚠ leaderboard fetch failed
+        </div>
+      )}
+    </>
+  );
+}
+
+// Legacy row-based leaderboard — kept for backwards-compat callers only.
+// New code should use BotLeaderboardV2 above. If nothing calls this after
+// StrategyLabV2 swap lands, delete in a follow-up.
+function BotLeaderboardLegacy({ rows }: { rows: LBRow[] }) {
+  return (
+    <>
+      <div className="flex items-center gap-3 mt-[26px]">
+        <span
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            letterSpacing: "0.16em",
+            color: GREEN,
+            opacity: 0.8,
+          }}
+        >
+          // BOT LEADERBOARD (legacy)
         </span>
         <span
           className="flex-1"
@@ -1322,7 +1771,7 @@ export default function StrategyLabV2() {
           ))}
         </div>
 
-        <BotLeaderboard rows={leaders} />
+        <BotLeaderboardV2 />
 
         <GateExperimentPanel />
 
