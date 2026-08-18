@@ -181,7 +181,12 @@ const useTradeStream = () =>
 interface DashV2 {
   portfolio: {
     total_value_cents: number;
+    total_value_source?: string;    // 2026-08-18: I27 provenance
+    bot_sum_pv_cents?: number;
+    unattributed_cents?: number;
     today_pnl_cents: number;
+    today_pnl_source?: string;
+    today_pnl_label?: string;
     today_pnl_pct: number;
     return_30d_pct: number;
     return_all_time_pct?: number;
@@ -804,6 +809,11 @@ function Ridge({ label, points }: { label: string; points: RidgeSlice[] }) {
 
 function PortfolioValueHero({ v2 }: { v2?: DashV2 }) {
   const pv = v2?.portfolio.total_value_cents ?? 0;
+  const src = v2?.portfolio.total_value_source;
+  const botSum = v2?.portfolio.bot_sum_pv_cents;
+  const unattr = v2?.portfolio.unattributed_cents;
+  const todaySrc = v2?.portfolio.today_pnl_source;
+  const todayLabel = v2?.portfolio.today_pnl_label;
   const allTimePct = v2?.portfolio.return_all_time_pct;
   const allTimeUsd =
     v2?.portfolio.total_value_cents && v2?.portfolio.return_all_time_pct !== undefined
@@ -811,15 +821,38 @@ function PortfolioValueHero({ v2 }: { v2?: DashV2 }) {
         (v2.portfolio.return_all_time_pct / (100 + v2.portfolio.return_all_time_pct))
       : null;
   const positive = (allTimePct ?? 0) >= 0;
+
+  // 2026-08-18 (Brock item 1): provenance tooltip — if the frontend and backend
+  // disagree about where PV came from, hovering the value reveals it. Also
+  // shows bot_sum vs canonical drift so any recurrence of the /dashboard/v2
+  // straggler bug is visible on the page itself (not just I27's audit).
+  const tooltip = [
+    `source: ${src ?? "unknown"}`,
+    botSum != null ? `bot_sum: $${(botSum / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : null,
+    unattr != null ? `unattributed: $${(unattr / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : null,
+    todaySrc ? `today source: ${todaySrc}` : null,
+    todayLabel ? `today label: ${todayLabel}` : null,
+  ].filter(Boolean).join(" · ");
+
   return (
     <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/10 p-5">
       <div className="flex items-center justify-between text-[10px] uppercase tracking-widest">
-        <span className="text-emerald-400/80">Portfolio Value · Paper</span>
+        <span className="text-emerald-400/80">
+          Portfolio Value · {src === "alpaca_account" ? "Broker" : "Paper"}
+        </span>
         <span className="text-slate-500">All Systems Normal</span>
       </div>
-      <div className="mt-2 text-4xl font-mono tabular-nums text-emerald-300">
+      <div
+        className="mt-2 text-4xl font-mono tabular-nums text-emerald-300 cursor-help"
+        title={tooltip}
+      >
         ${(pv / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </div>
+      {src && (
+        <div className="mt-0.5 text-[9px] uppercase tracking-widest text-slate-500 font-mono">
+          src: {src}
+        </div>
+      )}
       <div className={`mt-1 text-xs font-mono ${positive ? "text-emerald-400" : "text-red-400"}`}>
         {positive ? "▲" : "▼"}{" "}
         {allTimeUsd !== null
