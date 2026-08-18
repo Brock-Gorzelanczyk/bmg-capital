@@ -5626,7 +5626,8 @@ def dedupe_positions_by_symbol_bot(
     """
     from app.db.models.bots import BotPosition
 
-    now = datetime.now(timezone.utc).isoformat()
+    # 2026-08-18: was .isoformat() str, which SQLite DateTime column rejected.
+    now_dt = datetime.now(timezone.utc)
 
     open_positions = (
         db.query(BotPosition)
@@ -5644,15 +5645,115 @@ def dedupe_positions_by_symbol_bot(
         else:
             seen.add(key)
 
+    quarantined_ids = []
     for pos in to_quarantine:
-        pos.quarantined_at = now
+        pos.quarantined_at = now_dt
         pos.quarantine_reason = "dedupe_duplicate_open_position"
+        quarantined_ids.append(pos.id)
     db.commit()
 
     return {
         "ok": True,
         "positions_quarantined": len(to_quarantine),
         "unique_positions_kept": len(seen),
+        "quarantined_position_ids": quarantined_ids,
+    }
+
+
+@router.post("/positions/quarantine-bmg-only-phantoms")
+def quarantine_bmg_only_phantoms(
+    dry_run: bool = Query(True, description="If true, list-only; do not mutate."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Quarantine BMG-active non-option positions that have no matching Alpaca position.
+
+    2026-08-18 Brock surgical: I1 = 17 (position drift). After dedupe removes
+    3 dupes, ~14 phantoms remain — BMG holds a position record for a symbol
+    the broker does not. Reason 'phantom_no_broker_match_2026_08_18'.
+    Non-option only (options come and go with expiries).
+
+    §ADOPT-BOUND: dry_run enumerates + returns the exact list; live run
+    quarantines exactly that list or aborts.
+    """
+    import os as _os, urllib.request as _ur, json as _j
+    from datetime import datetime as _dt, timezone as _tz
+    from app.db.models.bots import BotPosition, BotAllocation
+
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    if not kid or not ksec:
+        return {"error": "no_alpaca_creds"}
+
+    try:
+        alp = _j.loads(_ur.urlopen(_ur.Request(
+            "https://paper-api.alpaca.markets/v2/positions",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        ), timeout=10).read()) or []
+    except Exception as exc:
+        return {"error": f"alpaca_fetch_failed: {str(exc)[:200]}"}
+
+    alp_symbols = {p.get("symbol") for p in alp if p.get("symbol")}
+
+    # BMG active non-option positions for user_1
+    rows = (
+        db.query(BotPosition, BotAllocation)
+        .join(BotAllocation, BotAllocation.id == BotPosition.allocation_id)
+        .filter(
+            BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
+            BotAllocation.user_id == 1,
+            BotPosition.option_type.is_(None),  # stocks/crypto only
+        )
+        .all()
+    )
+
+    phantoms = []
+    for pos, alloc in rows:
+        sym = pos.symbol or ""
+        if sym in alp_symbols:
+            continue
+        phantoms.append({
+            "position_id": int(pos.id),
+            "symbol": sym,
+            "allocation_id": int(pos.allocation_id),
+            "qty": float(pos.qty or 0),
+            "avg_cost_cents": int(pos.avg_cost_cents or 0),
+            "origin": pos.origin,
+            "opened_at": pos.opened_at.isoformat() if pos.opened_at else None,
+            "alpaca_order_id": pos.alpaca_order_id,
+        })
+
+    n_phantoms = len(phantoms)
+    if dry_run:
+        return {
+            "dry_run": True,
+            "alpaca_symbol_count": len(alp_symbols),
+            "bmg_active_nonopt_count": len(rows),
+            "phantom_count": n_phantoms,
+            "phantoms": phantoms,
+            "hint": "run again with ?dry_run=false to quarantine exactly these rows",
+        }
+
+    # Live: quarantine exactly the identified rows.
+    now_dt = _dt.now(_tz.utc)
+    reason = "phantom_no_broker_match_2026_08_18"
+    quarantined_ids = []
+    for pos, _ in rows:
+        if pos.symbol in alp_symbols:
+            continue
+        pos.quarantined_at = now_dt
+        pos.quarantine_reason = reason
+        quarantined_ids.append(int(pos.id))
+    db.commit()
+
+    return {
+        "dry_run": False,
+        "reason": reason,
+        "phantoms_quarantined": len(quarantined_ids),
+        "quarantined_position_ids": quarantined_ids,
+        "expected_from_dry_run": n_phantoms,
+        "match": len(quarantined_ids) == n_phantoms,
     }
 
 
