@@ -492,6 +492,7 @@ def get_invariants(
 @router.post("/invariants/run")
 def run_invariants(
     fresh: bool = Query(False, description="Force fresh recompute. Default False = read latest scheduler snapshot."),
+    full_board: bool = Query(False, description="Bypass RAILWAY_LOW_POWER filter — run every registered check regardless of env."),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -511,8 +512,11 @@ def run_invariants(
     or opt in with fresh=true.
     """
     from app.services.invariant_engine import run_all_invariants, read_latest_snapshot
-    if fresh:
-        return run_all_invariants(db)
+    if fresh or full_board:
+        # full_board=true forces low_power_override=False regardless of env
+        # (e.g., run I3 explicitly during halt when LOW_POWER filter skips it).
+        _lpo = False if full_board else None
+        return run_all_invariants(db, low_power_override=_lpo)
     snap = read_latest_snapshot()
     # Fallback: if no snapshot yet (fresh deploy, empty /data), compute inline
     # once so callers see real data instead of {"error": "no_snapshot_yet"}.
@@ -5657,6 +5661,134 @@ def dedupe_positions_by_symbol_bot(
         "positions_quarantined": len(to_quarantine),
         "unique_positions_kept": len(seen),
         "quarantined_position_ids": quarantined_ids,
+    }
+
+
+@router.post("/positions/re-adopt-symbol")
+def re_adopt_symbol(
+    symbol: str = Query(..., description="Exact Alpaca symbol to sync (e.g. JNJ)"),
+    dry_run: bool = Query(True, description="If true, show planned change without writing."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Surgical single-symbol re-adopt: sync BMG's position qty + avg_cost
+    to Alpaca truth for one specific symbol.
+
+    Brock 2026-08-18 resume step 1: JNJ shows BMG qty=1.71 vs Alpaca ~92
+    (under-adopted). This endpoint fixes ONE symbol at a time — no fleet
+    sweep, no ADOPT-BOUND surprise.
+
+    Rules:
+      - Fetches Alpaca position for symbol. If Alpaca doesn't hold it,
+        return error (nothing to adopt).
+      - Finds active (open, non-quarantined) BotPositions for symbol under
+        user_1. If 0 or >1, return error with the count (manual dedupe or
+        insert needed first).
+      - If exactly 1 row: update qty + avg_cost_cents to Alpaca truth.
+      - dry_run=true shows the planned before/after values.
+    """
+    import os as _os, urllib.request as _ur, json as _j
+    from datetime import datetime as _dt, timezone as _tz
+    from app.db.models.bots import BotPosition, BotAllocation
+
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    if not kid or not ksec:
+        return {"error": "no_alpaca_creds"}
+
+    # Fetch Alpaca position for this specific symbol
+    try:
+        req = _ur.Request(
+            f"https://paper-api.alpaca.markets/v2/positions/{symbol}",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        )
+        alp = _j.loads(_ur.urlopen(req, timeout=10).read())
+    except Exception as exc:
+        return {"error": f"alpaca_fetch_failed: {str(exc)[:200]}",
+                "symbol": symbol}
+
+    alp_qty = float(alp.get("qty") or 0)
+    alp_avg = float(alp.get("avg_entry_price") or 0)
+    alp_side = alp.get("side")  # 'long' or 'short'
+
+    # BMG active rows for this symbol under user_1
+    rows = (
+        db.query(BotPosition, BotAllocation)
+        .join(BotAllocation, BotAllocation.id == BotPosition.allocation_id)
+        .filter(
+            BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
+            BotAllocation.user_id == 1,
+            BotPosition.symbol == symbol,
+        )
+        .all()
+    )
+    if len(rows) == 0:
+        return {"error": "no_bmg_row_for_symbol", "symbol": symbol,
+                "hint": "insert new row via a full adopter run, not this endpoint"}
+    if len(rows) > 1:
+        return {
+            "error": "multiple_bmg_rows_for_symbol",
+            "symbol": symbol,
+            "count": len(rows),
+            "rows": [
+                {"position_id": p.id, "alloc_id": p.allocation_id,
+                 "qty": float(p.qty or 0), "avg_cost_cents": p.avg_cost_cents}
+                for p, _ in rows
+            ],
+            "hint": "dedupe first via /admin/positions/dedupe-by-symbol-bot",
+        }
+
+    pos, alloc = rows[0]
+    before = {
+        "position_id": pos.id,
+        "alloc_id": pos.allocation_id,
+        "qty": float(pos.qty or 0),
+        "avg_cost_cents": int(pos.avg_cost_cents or 0),
+    }
+    after = {
+        "qty": alp_qty,
+        "avg_cost_cents": int(round(alp_avg * 100)),
+        "side": alp_side,
+    }
+    delta_qty = alp_qty - before["qty"]
+    delta_avg = after["avg_cost_cents"] - before["avg_cost_cents"]
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "symbol": symbol,
+            "before": before,
+            "after": after,
+            "delta_qty": delta_qty,
+            "delta_avg_cents": delta_avg,
+            "alpaca_side": alp_side,
+            "hint": "run again with ?dry_run=false to write",
+        }
+
+    # Live update
+    pos.qty = alp_qty
+    pos.avg_cost_cents = int(round(alp_avg * 100))
+    # Preserve origin (this is a re-adopt of an existing broker-filled row);
+    # add a reason tag so history knows why the qty jumped.
+    _note = f"re-adopt {symbol} to Alpaca truth 2026-08-18 (was qty={before['qty']} → {alp_qty})"
+    try:
+        # Some BotPosition schemas have a `notes` or `reason` column; skip if not present.
+        if hasattr(pos, "notes"):
+            pos.notes = (pos.notes or "") + f" | {_note}"
+    except Exception:
+        pass
+    db.commit()
+
+    return {
+        "dry_run": False,
+        "symbol": symbol,
+        "position_id": pos.id,
+        "before": before,
+        "after": after,
+        "delta_qty": delta_qty,
+        "delta_avg_cents": delta_avg,
+        "committed_at": _dt.now(_tz.utc).isoformat(),
     }
 
 
