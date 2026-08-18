@@ -61,6 +61,22 @@ class PaperStocksAdapter(BrokerAdapter):
     # ── BrokerAdapter interface ───────────────────────────────────────────
 
     def submit_order(self, symbol: str, qty: float, side: str, client_order_id: str = None) -> dict:
+        # 2026-08-18 Brock resume-guard: block entries into symbols already
+        # held at Alpaca but untracked by BMG (under-adoption double-exposure).
+        # Sells/covers pass through unconditionally. Fails OPEN on gate errors.
+        try:
+            from app.services.pre_trade_gate import check_untracked_broker_position
+            ok, reason = check_untracked_broker_position(symbol=symbol, side=side)
+            if not ok:
+                logger.error(
+                    "[PAPER-STOCKS] BLOCKED %s %s x%.4f — %s (coid=%s)",
+                    side, symbol, qty, reason, client_order_id,
+                )
+                return {"order_id": None, "client_order_id": None,
+                        "blocked": True, "block_reason": reason}
+        except Exception as _gate_exc:
+            logger.warning("[PAPER-STOCKS] pre-trade gate raised (fail-open): %s", _gate_exc)
+
         payload = {
             "symbol": symbol,
             "qty": str(qty),
