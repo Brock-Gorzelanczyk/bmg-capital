@@ -6,7 +6,7 @@ import {
   Filter, Newspaper, Microscope, Compass,
   Activity,
   GraduationCap, Award,
-  Search, LogOut, HelpCircle, ChevronUp, Inbox, Settings, Crown,
+  Search, LogOut, HelpCircle, ChevronUp, ChevronRight, Inbox, Settings, Crown,
   Building2,
   Gamepad2,
   Zap, Globe, Eye, Cpu, Beaker,
@@ -53,56 +53,50 @@ const PREFETCH_MAP: Record<string, (qc: QueryClient) => void> = {
 
 // ─── Nav item definitions ─────────────────────────────────────────────────────
 
-// ─── 6-section nav layout ─────────────────────────────────────────────────────
+// 2026-08-18 (Brock): consolidated to 3 primary items + collapsed VAULT
+// section. Fewer surfaces = fewer places for numbers to disagree. Nothing
+// deleted — all VAULT routes stay live, just one click away in the sidebar.
 
-const NAV_TRADE = [
-  { to: "/",          label: "Dashboard", Icon: LayoutDashboard },
-  { to: "/portfolio", label: "Portfolio", Icon: Briefcase       },
+const NAV_BMG = [
+  { to: "/",          label: "Dashboard",    Icon: LayoutDashboard },
+  { to: "/portfolio", label: "Portfolio",    Icon: Briefcase       },
+  { to: "/strategy",  label: "Strategy Lab", Icon: FlaskConical    },
 ];
 
-const NAV_STRATEGY = [
-  { to: "/strategy",          label: "Strategy Lab",   Icon: FlaskConical },
+// Everything below stays routable — this is a demotion, not a removal.
+const NAV_VAULT = [
+  // Strategy family (minus Strategy Lab which is now a primary)
   { to: "/strategy/scout",    label: "Strategy Scout", Icon: Radar        },
   { to: "/strategy/workshop", label: "Workshop",       Icon: ClipboardPen },
   { to: "/strategy/forge",    label: "The Forge",      Icon: Hammer       },
-];
-
-const NAV_MARKETS = [
+  { to: "/strategy/hypotheses", label: "Hypotheses",   Icon: Beaker       },
+  { to: "/strategy/brain",    label: "Brain Graph",    Icon: Cpu          },
+  // Markets family
   { to: "/markets",   label: "Markets",   Icon: Globe      },
   { to: "/screener",  label: "Screener",  Icon: Filter     },
   { to: "/news",      label: "News",      Icon: Newspaper  },
   { to: "/research",  label: "Research",  Icon: Microscope },
   { to: "/discovery", label: "Discovery", Icon: Compass    },
-];
-
-const NAV_INTEL = [
+  // Intel family (admin-only historically — kept visible in Vault regardless)
   { to: "/admin/smart-money", label: "Smart Money",     Icon: Eye    },
   { to: "/admin/flow",        label: "Options Flow",    Icon: Zap    },
   { to: "/admin/macro",       label: "Macro Dashboard", Icon: Globe  },
   { to: "/admin/candidates",  label: "Candidates",      Icon: Beaker },
-];
-
-const NAV_FUND = [
+  // Fund family
   { to: "/fund",          label: "Fund Team",     Icon: Building2  },
   { to: "/fund/floor",    label: "Fund Floor",    Icon: Gamepad2   },
   { to: "/fund/desk",     label: "Trading Desk",  Icon: Gamepad2   },
   { to: "/research-feed", label: "Research Feed", Icon: BookMarked },
-];
-
-const NAV_LEARN = [
-  { to: "/learn/tracks",      label: "Learning Center", Icon: GraduationCap },
-  { to: "/learn/certificates",label: "Certificates",    Icon: Award         },
-];
-
-const NAV_INTERNAL = [
+  // Learn family
+  { to: "/learn/tracks",       label: "Learning Center", Icon: GraduationCap },
+  { to: "/learn/certificates", label: "Certificates",    Icon: Award         },
+  // Internal / ops family
   { to: "/mission-control",         label: "Mission Control",   Icon: Cpu          },
   { to: "/risk-console",            label: "Risk Console",      Icon: ShieldAlert  },
   { to: "/activity",                label: "Activity",          Icon: Activity     },
   { to: "/admin/tuning",            label: "Tuning Advisor",    Icon: Gauge        },
   { to: "/admin/diagnostics",       label: "Diagnostics",       Icon: Cpu          },
   { to: "/admin/discipline-report", label: "Discipline Report", Icon: ShieldAlert  },
-  { to: "/strategy/hypotheses",     label: "Hypotheses",        Icon: Beaker       },
-  { to: "/strategy/brain",          label: "Brain Graph",       Icon: Cpu          },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -227,6 +221,87 @@ function NavSection({
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+// ─── CollapsibleNavSection ────────────────────────────────────────────────────
+// 2026-08-18: default-collapsed variant for the demoted VAULT section.
+// State persists in localStorage so a user's preference survives reload.
+function CollapsibleNavSection({
+  label,
+  items,
+  expanded,
+  storageKey,
+  defaultOpen = false,
+}: {
+  label: string;
+  items: { to: string; label: string; Icon: React.ComponentType<{ size?: number; className?: string }> }[];
+  expanded: boolean;
+  storageKey: string;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState<boolean>(() => {
+    try {
+      const v = window.localStorage.getItem(storageKey);
+      return v === null ? defaultOpen : v === "1";
+    } catch {
+      return defaultOpen;
+    }
+  });
+  const qc = useQueryClient();
+
+  const toggle = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem(storageKey, next ? "1" : "0"); } catch { /* noop */ }
+      return next;
+    });
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className={cn(
+          "w-full px-3 mb-1 flex items-center justify-between text-left cursor-pointer",
+          "hover:opacity-100 opacity-80 transition-opacity",
+          show(expanded),
+        )}
+      >
+        <span
+          style={{
+            fontFamily: "var(--font-mono-t)",
+            fontSize: 9,
+            letterSpacing: "0.15em",
+            color: "var(--text-dim)",
+            textTransform: "uppercase",
+          }}
+        >
+          // {label}
+        </span>
+        <span style={{ color: "var(--text-dim)" }}>
+          {open ? <ChevronUp size={12} /> : <ChevronRight size={12} />}
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-0.5">
+          {items.map(({ to, label: itemLabel, Icon }) => (
+            <NavItem
+              key={to}
+              to={to}
+              label={itemLabel}
+              Icon={Icon}
+              expanded={expanded}
+              prefetchFn={() => {
+                chunkPrefetch[to]?.();
+                PREFETCH_MAP[to]?.(qc);
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -465,39 +540,23 @@ export default function Sidebar({ onOpenPalette, onClose, expanded = false }: Pr
         </button>
       </div>
 
-      {/* Nav sections */}
+      {/* Nav sections — 2026-08-18 Brock: 3 primary + collapsed VAULT */}
       <nav className="flex-1 overflow-y-auto min-h-0 px-2 space-y-4 pb-2">
         <NavSection
-          label="Trade"
-          items={NAV_TRADE}
+          label="BMG"
+          items={NAV_BMG}
           expanded={expanded}
           itemDots={{
             "/": { static: showDigestDot },
           }}
         />
 
-        <NavSection label="Strategy" items={NAV_STRATEGY} expanded={expanded} />
-
-        <NavSection label="Markets" items={NAV_MARKETS} expanded={expanded} />
-
-        {isAdmin && <NavSection label="Intel" items={NAV_INTEL} expanded={expanded} />}
-
-        <NavSection label="Fund" items={NAV_FUND} expanded={expanded} />
-
-        <NavSection
-          label="Learn"
-          items={NAV_LEARN}
+        <CollapsibleNavSection
+          label="Vault"
+          items={NAV_VAULT}
           expanded={expanded}
-          headerRight={streak > 0 ? <StreakBadge streak={streak} size="sm" /> : undefined}
-        />
-
-        <NavSection
-          label="Internal"
-          items={NAV_INTERNAL}
-          expanded={expanded}
-          itemDots={{
-            "/mission-control": { pulse: showAutonomousDot },
-          }}
+          storageKey="bmg.sidebar.vault.open"
+          defaultOpen={false}
         />
       </nav>
 
