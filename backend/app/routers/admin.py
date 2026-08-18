@@ -10672,6 +10672,51 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
     }
 
 
+# ─── 2026-08-18 Brock: vault sync ping — real freshness signal for I28 ─────
+# Called by scripts/bmg_vault_sync.sh after each successful pull. This is
+# what I28 checks. Ping absence = the Mac cron isn't firing = vault stale
+# even though /data/audits looks fresh.
+@router.post("/vault-sync-ping")
+def vault_sync_ping(
+    request: Request,
+    payload: Dict[str, Any] = Body(default={}),
+    _admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Record that bmg_vault_sync.sh just completed successfully.
+    Optional payload fields:
+      - git_commit_sha (str)
+      - git_pushed (bool)
+    """
+    try:
+        from app.services.vault_writer import record_vault_sync_ping, read_vault_sync_ping
+        src_ip = None
+        try:
+            src_ip = request.client.host if request.client else None
+        except Exception:
+            pass
+        record_vault_sync_ping(
+            git_commit_sha=payload.get("git_commit_sha"),
+            git_pushed=payload.get("git_pushed"),
+            source_ip=src_ip,
+        )
+        return {"ok": True, "ping": read_vault_sync_ping()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:500]}
+
+
+@router.get("/vault-sync-last")
+def vault_sync_last(_admin: User = Depends(require_admin)) -> Dict[str, Any]:
+    """Return the last-ping payload + age-in-hours (what I28 reads)."""
+    try:
+        from app.services.vault_writer import read_vault_sync_ping, last_vault_sync_ping_age_hours
+        return {
+            "ping": read_vault_sync_ping(),
+            "age_hours": last_vault_sync_ping_age_hours(),
+        }
+    except Exception as exc:
+        return {"error": str(exc)[:500]}
+
+
 # ─── 2026-08-18 Brock: vault sync endpoints (§V8 automation of §V7) ────────
 @router.get("/audits/list")
 def audits_list(_admin: User = Depends(require_admin)) -> Dict[str, Any]:

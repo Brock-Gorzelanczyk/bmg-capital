@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 AUDIT_DIR = Path(os.getenv("VAULT_AUDIT_DIR", "/data/audits"))
 POSTMORTEM_STUB_DIR = Path(os.getenv("VAULT_POSTMORTEM_STUB_DIR", "/data/postmortems-stub"))
 
+# 2026-08-18 Brock: I28 was checking /data/audits/*.md freshness, but that
+# lies — the container auto-writes those. Real question is "did Brock's Mac
+# actually pull them into the vault repo?" This file records the last time
+# bmg_vault_sync.sh POSTed /admin/vault-sync-ping. I28 reads THIS timestamp.
+SYNC_PING_PATH = Path(os.getenv("VAULT_SYNC_PING_PATH", "/data/vault_sync_last_ping.json"))
+
 
 def _ensure_dirs() -> None:
     try:
@@ -153,7 +159,12 @@ def write_postmortem_stub(
 
 
 def newest_audit_age_hours() -> Optional[float]:
-    """Return the age (hours) of the newest /data/audits/*.md file, or None if empty."""
+    """Return the age (hours) of the newest /data/audits/*.md file, or None if empty.
+
+    NOTE: this is NOT the invariant metric. Container auto-writes audits daily
+    so this stays fresh whether the vault is being pulled or not. I28 uses
+    last_vault_sync_ping_age_hours() below — that's the real signal.
+    """
     try:
         if not AUDIT_DIR.exists():
             return None
@@ -167,6 +178,56 @@ def newest_audit_age_hours() -> Optional[float]:
         return (datetime.now(timezone.utc).timestamp() - newest_mtime) / 3600.0
     except Exception as exc:
         logger.warning("[vault_writer] newest_audit_age query failed: %s", exc)
+        return None
+
+
+def record_vault_sync_ping(*, git_commit_sha: Optional[str] = None,
+                           git_pushed: Optional[bool] = None,
+                           source_ip: Optional[str] = None) -> Optional[str]:
+    """Called by POST /admin/vault-sync-ping after bmg_vault_sync.sh pulls
+    successfully. Records timestamp + optional git provenance so we know
+    the vault repo is actually being kept in sync.
+    """
+    try:
+        import json as _json
+        SYNC_PING_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "last_ping_iso": datetime.now(timezone.utc).isoformat(),
+            "last_ping_epoch": datetime.now(timezone.utc).timestamp(),
+            "git_commit_sha": git_commit_sha,
+            "git_pushed": git_pushed,
+            "source_ip": source_ip,
+        }
+        SYNC_PING_PATH.write_text(_json.dumps(payload, indent=2))
+        return str(SYNC_PING_PATH)
+    except Exception as exc:
+        logger.warning("[vault_writer] sync ping write failed: %s", exc)
+        return None
+
+
+def read_vault_sync_ping() -> Optional[dict[str, Any]]:
+    try:
+        import json as _json
+        if not SYNC_PING_PATH.exists():
+            return None
+        return _json.loads(SYNC_PING_PATH.read_text())
+    except Exception as exc:
+        logger.warning("[vault_writer] sync ping read failed: %s", exc)
+        return None
+
+
+def last_vault_sync_ping_age_hours() -> Optional[float]:
+    """Hours since bmg_vault_sync.sh last checked in. This is what I28 checks.
+
+    Returns None if never pinged (fresh install / never ran) — surfaced as
+    AMBER, not RED, so a first-time install doesn't fire a false alarm.
+    """
+    p = read_vault_sync_ping()
+    if not p or "last_ping_epoch" not in p:
+        return None
+    try:
+        return (datetime.now(timezone.utc).timestamp() - float(p["last_ping_epoch"])) / 3600.0
+    except Exception:
         return None
 
 

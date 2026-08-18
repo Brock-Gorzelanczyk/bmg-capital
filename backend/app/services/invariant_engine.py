@@ -1193,28 +1193,44 @@ CHECKS: dict[str, Callable] = {
 
 
 def _check_i28_vault_freshness(db) -> Result:
-    """Vault must have a daily audit within the last 48h.
+    """Brock's Mac vault must have been synced within the last 72h.
 
-    Ledger #39 / CLAUDE.md §V8: §V7 (nightly audit) failed 11+ times in
-    August because it required a human/Claude to remember. This check makes
-    the discipline structural: if the newest /data/audits/*.md is > 48h old,
-    the daily_report cron isn't running (or the writer is broken) — RED.
+    2026-08-18 revision: this check was originally looking at
+    /data/audits/*.md mtime, which lied — the container auto-writes those
+    daily so the age is always fresh regardless of whether Brock's laptop
+    ever pulled them. The real question is "did the Mac-side sync actually
+    run?" bmg_vault_sync.sh POSTs /admin/vault-sync-ping after each
+    successful pull; that timestamp is what this check reads.
 
-    Threshold 48h (not 24h) accommodates the daily cron firing 4:15 PM ET;
-    a fresh audit written yesterday is ~24-28h old today, still green.
+    72h threshold accommodates a weekend + one day of "laptop off." Longer
+    and the vault stops being useful to a fresh Claude session.
+
+    NULL (never pinged) → AMBER, not RED, to avoid false alarms on fresh
+    installs where the cron hasn't been wired yet.
     """
     try:
-        from app.services.vault_writer import newest_audit_age_hours
-        age_h = newest_audit_age_hours()
+        from app.services.vault_writer import (
+            last_vault_sync_ping_age_hours,
+            read_vault_sync_ping,
+        )
+        age_h = last_vault_sync_ping_age_hours()
+        ping = read_vault_sync_ping() or {}
         if age_h is None:
-            return _amber("I28", None, None, None,
-                          "/data/audits is empty — audit writer may not have run yet")
-        actual = {"newest_audit_age_hours": round(age_h, 2)}
-        if age_h <= 48.0:
-            return _ok("I28", actual, {"max_hours": 48.0},
-                       f"newest audit {age_h:.1f}h old (≤48h)")
-        return _red("I28", actual, {"max_hours": 48.0}, float(age_h),
-                    f"newest /data/audits/*.md is {age_h:.1f}h old — daily audit writer not running")
+            return _amber("I28", ping, {"max_hours": 72.0},
+                          None,
+                          "no vault sync ping recorded — bmg_vault_sync.sh has never run "
+                          "(install the cron on Brock's Mac)")
+        actual = {
+            "last_ping_age_hours": round(age_h, 2),
+            "last_ping_iso": ping.get("last_ping_iso"),
+            "git_commit_sha": ping.get("git_commit_sha"),
+            "git_pushed": ping.get("git_pushed"),
+        }
+        if age_h <= 72.0:
+            return _ok("I28", actual, {"max_hours": 72.0},
+                       f"vault synced {age_h:.1f}h ago (≤72h)")
+        return _red("I28", actual, {"max_hours": 72.0}, float(age_h),
+                    f"vault hasn't been synced in {age_h:.1f}h — bmg_vault_sync.sh cron isn't firing on Brock's Mac")
     except Exception as exc:
         return _amber("I28", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 

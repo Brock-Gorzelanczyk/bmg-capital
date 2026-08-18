@@ -1,13 +1,18 @@
 #!/bin/bash
 # Vault sync — pulls /data/audits/*.md + /data/postmortems-stub/*.md
-# from the Railway container to ~/Documents/BMG-Capital-Vault/.
+# from the Railway container to ~/Documents/BMG-Capital-Vault/, then
+# commits + pushes to the vault GitHub repo, then POSTs a ping to the
+# container so I28 knows the sync actually ran.
 #
-# Runs on Brock's Mac via cron/launchd. Ledger #39 / §V8 — replaces
-# "human writes the daily audit line" with an automatic pull.
+# 2026-08-18 Brock: vault repo is the durable copy — laptop failure or
+# missed cron won't lose history. I28's freshness signal is the ping
+# timestamp, not the container's /data/audits mtime (which lies because
+# the container auto-writes those daily regardless).
 #
 # Usage:
-#   scripts/bmg_vault_sync.sh          # one-shot pull
-#   scripts/bmg_vault_sync.sh --dry    # show what would be pulled
+#   scripts/bmg_vault_sync.sh          # one-shot pull + push + ping
+#   scripts/bmg_vault_sync.sh --dry    # show what would be pulled, no writes/push/ping
+#   scripts/bmg_vault_sync.sh --no-push  # pull + ping, skip git push
 #
 # Suggested launchd (once/day at noon local):
 #   ~/Library/LaunchAgents/com.bmg.vault-sync.plist
@@ -22,15 +27,22 @@ AUDIT_DEST="$VAULT_DIR/daily-audits"
 STUB_DEST="$VAULT_DIR/postmortems-stub-inbox"  # separate from postmortems/ so Brock reviews before promoting
 
 DRY=""
-if [[ "${1:-}" == "--dry" ]]; then DRY="1"; fi
+NO_PUSH=""
+for arg in "$@"; do
+  case "$arg" in
+    --dry)     DRY="1" ;;
+    --no-push) NO_PUSH="1" ;;
+  esac
+done
 
 mkdir -p "$AUDIT_DEST" "$STUB_DEST"
 
 echo "[vault-sync] pulling audits list..."
 AUDITS_JSON=$(scripts/bmg_admin.sh GET /admin/audits/list)
-NEW=0
+NEW_FILES=0
 if command -v jq >/dev/null 2>&1; then
-  echo "$AUDITS_JSON" | jq -r '.audits[]?.date // empty' | while read -r date; do
+  # Use process substitution not pipe so NEW_FILES survives.
+  while read -r date; do
     [ -z "$date" ] && continue
     dest="$AUDIT_DEST/${date}.md"
     if [ -f "$dest" ]; then
@@ -45,9 +57,9 @@ if command -v jq >/dev/null 2>&1; then
     if [ -n "$content" ]; then
       echo "$content" > "$dest"
       echo "  [pulled] $date -> $dest"
-      NEW=$((NEW+1))
+      NEW_FILES=$((NEW_FILES+1))
     fi
-  done
+  done < <(echo "$AUDITS_JSON" | jq -r '.audits[]?.date // empty')
 else
   echo "[vault-sync] jq not installed — skipping audit sync"
 fi
@@ -55,36 +67,69 @@ fi
 echo "[vault-sync] pulling postmortem stubs..."
 STUBS_JSON=$(scripts/bmg_admin.sh GET /admin/postmortem-stubs/list)
 if command -v jq >/dev/null 2>&1; then
-  echo "$STUBS_JSON" | jq -r '.stubs[]?.filename // empty' | while read -r name; do
+  while read -r name; do
     [ -z "$name" ] && continue
     dest="$STUB_DEST/$name"
-    if [ -f "$dest" ]; then
-      # Overwrite: stubs are append-only server-side, always take latest.
-      :
-    fi
     if [ -n "$DRY" ]; then
       echo "  [dry] would fetch stub $name"
       continue
     fi
     content=$(scripts/bmg_admin.sh GET "/admin/postmortem-stubs/${name}" | jq -r '.content // empty')
     if [ -n "$content" ]; then
-      echo "$content" > "$dest"
-      echo "  [pulled stub] $name -> $dest"
+      # Only bump NEW_FILES if the file didn't exist before OR content changed.
+      if [ ! -f "$dest" ] || [ "$(cat "$dest")" != "$content" ]; then
+        echo "$content" > "$dest"
+        echo "  [pulled stub] $name -> $dest"
+        NEW_FILES=$((NEW_FILES+1))
+      fi
     fi
-  done
+  done < <(echo "$STUBS_JSON" | jq -r '.stubs[]?.filename // empty')
 else
   echo "[vault-sync] jq not installed — skipping stub sync"
 fi
 
-# Freshness check — surface I28 status locally too.
-NEWEST_HOURS=$(echo "$AUDITS_JSON" | jq -r '.newest_age_hours // "n/a"' 2>/dev/null || echo "n/a")
-echo "[vault-sync] newest audit age: ${NEWEST_HOURS}h"
-if [ "$NEWEST_HOURS" != "n/a" ] && [ "$NEWEST_HOURS" != "null" ]; then
-  # bash float compare via awk
-  IS_STALE=$(awk -v v="$NEWEST_HOURS" 'BEGIN { print (v+0 > 48) ? "1" : "0" }')
-  if [ "$IS_STALE" = "1" ]; then
-    echo "[vault-sync] WARN: newest audit is ${NEWEST_HOURS}h old (>48h → I28 RED)"
+# Commit + push to vault repo (durable copy). Only if there are changes.
+COMMIT_SHA=""
+PUSHED="false"
+if [ -z "$DRY" ] && [ -d "$VAULT_DIR/.git" ]; then
+  ( cd "$VAULT_DIR"
+    if [ -n "$(git status --porcelain)" ]; then
+      git add -A
+      MSG="vault-sync $(date -u +%Y-%m-%dT%H:%MZ) — $NEW_FILES new/changed"
+      git commit -m "$MSG" >/dev/null 2>&1 || true
+      if [ -z "$NO_PUSH" ]; then
+        # Only push if there's a remote configured; failure non-fatal.
+        if git remote get-url origin >/dev/null 2>&1; then
+          if git push origin HEAD 2>&1 | tail -3; then
+            echo "  [git] pushed to origin"
+          else
+            echo "  [git] push failed (non-fatal — commit still local)"
+          fi
+        else
+          echo "  [git] no 'origin' remote configured — commit stayed local"
+        fi
+      fi
+    fi
+  )
+  COMMIT_SHA=$(cd "$VAULT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "")
+  if [ -z "$NO_PUSH" ] && [ -n "$COMMIT_SHA" ]; then
+    # Check if HEAD is on origin (proxy for "pushed")
+    if (cd "$VAULT_DIR" && git branch --contains HEAD -r 2>/dev/null | grep -q origin); then
+      PUSHED="true"
+    fi
   fi
 fi
 
-echo "[vault-sync] done."
+# Report the ping to the container. This is what I28 reads.
+if [ -z "$DRY" ]; then
+  echo "[vault-sync] pinging /admin/vault-sync-ping..."
+  PING_PAYLOAD=$(printf '{"git_commit_sha":"%s","git_pushed":%s}' "$COMMIT_SHA" "$PUSHED")
+  # bmg_admin.sh POST forwards extra args to curl; use -d for JSON body.
+  scripts/bmg_admin.sh POST /admin/vault-sync-ping \
+      -H "Content-Type: application/json" \
+      -d "$PING_PAYLOAD" >/dev/null 2>&1 && \
+    echo "  [ping] recorded (commit=$COMMIT_SHA pushed=$PUSHED)" || \
+    echo "  [ping] failed — I28 will still see last successful ping (non-fatal)"
+fi
+
+echo "[vault-sync] done. new_files=$NEW_FILES"
