@@ -2315,11 +2315,28 @@ def backup_sqlite_offvolume(
     from datetime import datetime, timezone
     from app.db.session import engine
 
+    # 2026-08-18 Brock: two config modes.
+    #  Mode A (S3-compatible): OFFVOLUME_BACKUP_S3_* env vars — sign PUT
+    #    with AWS Signature Version 4. Works with R2, AWS S3, MinIO, B2.
+    #    Preferred: uses long-lived credentials, no URL expiration.
+    #  Mode B (pre-signed URL): OFFVOLUME_BACKUP_URL_TEMPLATE with {ts}
+    #    placeholder. Legacy; needs periodic re-signing.
+    s3_ak = os.getenv("OFFVOLUME_BACKUP_S3_ACCESS_KEY_ID", "").strip()
+    s3_sk = os.getenv("OFFVOLUME_BACKUP_S3_SECRET_ACCESS_KEY", "").strip()
+    s3_endpoint = os.getenv("OFFVOLUME_BACKUP_S3_ENDPOINT", "").strip().rstrip("/")
+    s3_bucket = os.getenv("OFFVOLUME_BACKUP_S3_BUCKET", "").strip().strip("/")
+    s3_region = os.getenv("OFFVOLUME_BACKUP_S3_REGION", "auto").strip()
+    s3_prefix = os.getenv("OFFVOLUME_BACKUP_S3_PREFIX", "bmg-backups").strip().strip("/")
+
+    use_s3 = bool(s3_ak and s3_sk and s3_endpoint and s3_bucket)
+
     template = os.getenv("OFFVOLUME_BACKUP_URL_TEMPLATE", "").strip()
-    if not template:
-        return {"error": "not_configured", "hint": "set OFFVOLUME_BACKUP_URL_TEMPLATE env var"}
-    if "{ts}" not in template:
-        return {"error": "url_template_missing_ts_placeholder"}
+    if not use_s3:
+        if not template:
+            return {"error": "not_configured",
+                    "hint": "set OFFVOLUME_BACKUP_S3_* env vars (preferred) OR OFFVOLUME_BACKUP_URL_TEMPLATE"}
+        if "{ts}" not in template:
+            return {"error": "url_template_missing_ts_placeholder"}
     auth_header = os.getenv("OFFVOLUME_BACKUP_AUTH_HEADER", "").strip()
 
     url = engine.url
@@ -2362,16 +2379,41 @@ def backup_sqlite_offvolume(
         except Exception:
             pass
 
-        # 4) PUT to configured URL
-        put_url = template.replace("{ts}", ts)
+        # 4) PUT to configured destination
         with open(gz_path, "rb") as f_gz:
             payload = f_gz.read()
-        req = urllib.request.Request(put_url, data=payload, method="PUT")
-        req.add_header("Content-Type", "application/gzip")
-        if auth_header:
-            k, _, v = auth_header.partition(":")
-            if k and v:
-                req.add_header(k.strip(), v.strip())
+
+        if use_s3:
+            # S3-compatible v4-signed PUT
+            from app.services.s3_sigv4 import sign_request
+            object_key = f"{s3_prefix}/{ts}.db.gz" if s3_prefix else f"{ts}.db.gz"
+            put_url = f"{s3_endpoint}/{s3_bucket}/{object_key}"
+            headers = sign_request(
+                method="PUT",
+                url=put_url,
+                payload=payload,
+                access_key=s3_ak,
+                secret_key=s3_sk,
+                region=s3_region,
+                service="s3",
+                extra_headers={"Content-Type": "application/gzip"},
+            )
+            req = urllib.request.Request(put_url, data=payload, method="PUT")
+            for k, v in headers.items():
+                req.add_header(k, v)
+            result["mode"] = "s3_v4"
+            result["object_key"] = object_key
+            result["bucket"] = s3_bucket
+        else:
+            put_url = template.replace("{ts}", ts)
+            req = urllib.request.Request(put_url, data=payload, method="PUT")
+            req.add_header("Content-Type", "application/gzip")
+            if auth_header:
+                k, _, v = auth_header.partition(":")
+                if k and v:
+                    req.add_header(k.strip(), v.strip())
+            result["mode"] = "url_template"
+
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 result["http_status"] = resp.status
@@ -2450,6 +2492,121 @@ def offvolume_backup_status(
         pass
     data["exists"] = True
     return data
+
+
+@router.post("/offvolume-restore-test")
+def offvolume_restore_test(
+    object_key: Optional[str] = Query(None, description="Optional S3 object key to test; default = latest from marker"),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Round-trip verify the most recent off-volume backup.
+
+    Brock 2026-08-18: "A backup nobody has restored is a hypothesis, not
+    a backup." This endpoint:
+      1. GETs the object from S3 (default = latest backup per marker)
+      2. Gunzips into a tmp file on /data
+      3. Opens as SQLite, counts rows in bot_positions + bot_trades
+      4. Compares to LIVE DB row counts
+      5. Deletes the tmp file
+      6. Returns match / mismatch verdict
+
+    Only supports S3 mode (Mode A). URL-template mode has no LIST/GET path.
+    """
+    import os, sqlite3, gzip, json
+    import urllib.request, urllib.error
+    from datetime import datetime, timezone
+    from app.db.session import engine
+
+    s3_ak = os.getenv("OFFVOLUME_BACKUP_S3_ACCESS_KEY_ID", "").strip()
+    s3_sk = os.getenv("OFFVOLUME_BACKUP_S3_SECRET_ACCESS_KEY", "").strip()
+    s3_endpoint = os.getenv("OFFVOLUME_BACKUP_S3_ENDPOINT", "").strip().rstrip("/")
+    s3_bucket = os.getenv("OFFVOLUME_BACKUP_S3_BUCKET", "").strip().strip("/")
+    s3_region = os.getenv("OFFVOLUME_BACKUP_S3_REGION", "auto").strip()
+
+    if not (s3_ak and s3_sk and s3_endpoint and s3_bucket):
+        return {"error": "s3_not_configured", "hint": "restore-test only supports S3 mode"}
+
+    # Determine object_key: use provided, else marker
+    if not object_key:
+        marker_path = "/data/last_offvolume_backup.json"
+        if not os.path.exists(marker_path):
+            return {"error": "no_marker", "hint": "run /admin/backup-sqlite-offvolume first"}
+        try:
+            with open(marker_path) as f:
+                marker = json.load(f)
+            object_key = marker.get("object_key")
+        except Exception as exc:
+            return {"error": f"marker_read_failed:{exc}"}
+        if not object_key:
+            return {"error": "marker_missing_object_key",
+                    "hint": "marker predates S3 mode; run /admin/backup-sqlite-offvolume again"}
+
+    from app.services.s3_sigv4 import sign_request
+    get_url = f"{s3_endpoint}/{s3_bucket}/{object_key}"
+    headers = sign_request(
+        method="GET", url=get_url, payload=b"",
+        access_key=s3_ak, secret_key=s3_sk, region=s3_region, service="s3",
+    )
+    req = urllib.request.Request(get_url, method="GET")
+    for k, v in headers.items():
+        req.add_header(k, v)
+
+    result: Dict[str, Any] = {"object_key": object_key, "url": get_url.split("?")[0]}
+    tmp_gz = f"/data/restore_test.{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.tmp.gz"
+    tmp_db = f"{tmp_gz}.db"
+    try:
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                data = resp.read()
+                result["downloaded_bytes"] = len(data)
+                result["http_status"] = resp.status
+        except urllib.error.HTTPError as he:
+            result["error"] = "download_failed"
+            result["http_status"] = he.code
+            try:
+                result["http_body"] = he.read().decode("utf-8", errors="replace")[:400]
+            except Exception:
+                pass
+            return result
+        with open(tmp_gz, "wb") as f:
+            f.write(data)
+        # Gunzip
+        with gzip.open(tmp_gz, "rb") as gz_in, open(tmp_db, "wb") as db_out:
+            while True:
+                chunk = gz_in.read(1024 * 1024)
+                if not chunk:
+                    break
+                db_out.write(chunk)
+        result["gunzipped_bytes"] = os.path.getsize(tmp_db)
+
+        # Open as SQLite, count rows
+        conn = sqlite3.connect(tmp_db)
+        cur = conn.cursor()
+        bk_bp = cur.execute("SELECT COUNT(*) FROM bot_positions").fetchone()[0]
+        bk_bt = cur.execute("SELECT COUNT(*) FROM bot_trades").fetchone()[0]
+        conn.close()
+
+        # Compare to live
+        from sqlalchemy import text as _t
+        with engine.connect() as c:
+            live_bp = c.execute(_t("SELECT COUNT(*) FROM bot_positions")).scalar() or 0
+            live_bt = c.execute(_t("SELECT COUNT(*) FROM bot_trades")).scalar() or 0
+
+        result["backup_bot_positions"] = int(bk_bp)
+        result["backup_bot_trades"] = int(bk_bt)
+        result["live_bot_positions"] = int(live_bp)
+        result["live_bot_trades"] = int(live_bt)
+        # Match if backup <= live (live may have grown since backup)
+        result["counts_match_or_grew"] = (int(bk_bp) <= int(live_bp) and int(bk_bt) <= int(live_bt))
+        result["ok"] = result["counts_match_or_grew"] and int(bk_bp) > 0
+        return result
+    finally:
+        for p in (tmp_gz, tmp_db):
+            try:
+                if os.path.exists(p):
+                    os.unlink(p)
+            except Exception:
+                pass
 
 
 @router.post("/vacuum-sqlite")
