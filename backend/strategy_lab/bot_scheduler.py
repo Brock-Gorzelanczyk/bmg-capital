@@ -23,9 +23,33 @@ UTC = pytz.utc
 
 
 def _run_bot_position_monitor(bot_name: str) -> None:
+    """Per-bot position monitor. Cost cut 2026-08-13: skip if this bot has
+    no open positions (no work to do; skips the whole DB + broker call chain).
+    """
     try:
+        from app.db.session import SessionLocal
+        from sqlalchemy import text as _sql
+        db = SessionLocal()
+        try:
+            row = db.execute(
+                _sql(
+                    "SELECT 1 FROM bot_positions bp "
+                    "JOIN bot_allocations ba ON ba.id = bp.allocation_id "
+                    "JOIN bot_profiles bpf ON bpf.id = ba.profile_id "
+                    "WHERE bp.closed_at IS NULL AND bpf.name = :n LIMIT 1"
+                ),
+                {"n": bot_name},
+            ).first()
+        finally:
+            db.close()
+        if not row:
+            return  # no open positions for this bot — skip
         from strategy_lab.core.position_monitor import monitor_bot_positions
-        monitor_bot_positions(bot_name)
+        try:
+            from app.services.mem_probe import probe_job
+            probe_job(f"bot_pos_mon:{bot_name}", monitor_bot_positions, bot_name)
+        except Exception:
+            monitor_bot_positions(bot_name)
     except Exception as exc:
         logger.error("bot_position_monitor[%s] failed: %s", bot_name, exc)
 
@@ -107,7 +131,12 @@ def run_watchlist_stale_sweep() -> dict:
 
 
 def _run_and_log(profile_name: str) -> None:
-    """Thin wrapper so APScheduler job invocations appear in Railway logs."""
+    """Thin wrapper so APScheduler job invocations appear in Railway logs.
+
+    2026-08-13: RSS probe added around the scan body. Deltas > 5MB emit
+    WARN; cumulative deltas surface via /admin/mem-probe/snapshot to find
+    the ~12min-lifespan container leak.
+    """
     import sentry_sdk
 
     # Ledger #22 kill switch: consult scans_gate before doing any DB work
@@ -121,6 +150,13 @@ def _run_and_log(profile_name: str) -> None:
             return
     except Exception as _gate_exc:
         logger.warning("[scan-gate] check raised (fail-open): %s", _gate_exc)
+
+    # RSS probe entry — pair with matching exit in the finally block.
+    try:
+        from app.services.mem_probe import _rss_mb, _tally, _lock  # type: ignore
+        _mp_before = _rss_mb()
+    except Exception:
+        _mp_before = -1.0
 
     logger.warning("[scheduled] %s scan START", profile_name)
     from app.db.session import SessionLocal
@@ -159,6 +195,25 @@ def _run_and_log(profile_name: str) -> None:
         #   heartbeat stays stale → scheduler doesn't fire (job never registered
         #                           OR APScheduler dropped it; grep for
         #                           "[startup-trace] registered job bot_X")
+        # RSS probe exit — record delta into per-job tally.
+        try:
+            from app.services.mem_probe import _rss_mb, _tally, _lock  # type: ignore
+            _mp_after = _rss_mb()
+            _mp_delta = _mp_after - _mp_before if _mp_before >= 0 else 0.0
+            _key = f"scan:{profile_name}"
+            with _lock:
+                _row = _tally[_key]
+                _row[0] += 1
+                _row[1] += _mp_delta
+                if _mp_delta > _row[2]:
+                    _row[2] = _mp_delta
+                _row[3] = _mp_after
+            if _mp_delta >= 5.0:
+                logger.warning("[mem-probe] scan:%s +%.1fMB rss=%.0fMB",
+                               profile_name, _mp_delta, _mp_after)
+        except Exception:
+            pass
+
         try:
             from sqlalchemy import text as _hb_text
             from datetime import datetime as _hb_dt, timezone as _hb_tz
@@ -1757,6 +1812,72 @@ def setup_bot_scheduler(scheduler) -> None:
         next_run_time=datetime.now(UTC),
     )
     logger.warning("[startup-trace] registered job fleet_heartbeat (every 30min, fires immediately)")
+
+    # ------------------------------------------------------------------
+    # 2026-08-13 Brock: nightly restart @ 04:30 UTC as interim mitigation for
+    # the ~12min-lifespan container leak. os._exit(0) exits cleanly; Railway
+    # auto-restarts. This keeps the service up while RSS instrumentation
+    # gathers 24h of data to locate the leak.
+    # ------------------------------------------------------------------
+    def _nightly_restart():
+        import os as _os
+        import time as _t
+        logger.warning(
+            "[nightly-restart] scheduled restart firing — os._exit(0). "
+            "Railway will auto-restart the container.")
+        _t.sleep(1)  # flush stdout
+        _os._exit(0)
+
+    scheduler.add_job(
+        _nightly_restart,
+        CronTrigger(hour=4, minute=30, timezone=UTC),
+        id="nightly_restart",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job nightly_restart (04:30 UTC daily)")
+
+    # ------------------------------------------------------------------
+    # 2026-08-13 Brock: Alpaca WS held-symbols sync — every 15 min.
+    # Narrows StockDataStream subscription to only symbols we currently
+    # hold. Was: 30-slot buffer filled by frontend subscribe calls.
+    # Now: only tickers in open Alpaca positions.
+    # ------------------------------------------------------------------
+    def _sync_ws_to_held():
+        try:
+            from app.alpaca.stream import stream_manager
+            from app.services.held_symbols import get_held_stock_symbols
+            import asyncio as _asy
+            held = get_held_stock_symbols()
+            # Fire-and-forget async sync (won't block the scheduler thread)
+            _loop = None
+            try:
+                _loop = _asy.get_event_loop()
+            except RuntimeError:
+                pass
+            if _loop and _loop.is_running():
+                # Schedule on the running loop
+                _asy.run_coroutine_threadsafe(
+                    stream_manager.sync_to_held(held), _loop
+                )
+            else:
+                logger.debug("[ws-sync] no event loop running; skip")
+        except Exception as exc:
+            logger.warning("[ws-sync] failed: %s", exc)
+
+    scheduler.add_job(
+        _sync_ws_to_held,
+        CronTrigger(minute="*/15"),
+        id="alpaca_ws_sync_held",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        misfire_grace_time=300,
+        coalesce=True,
+    )
+    logger.warning("[startup-trace] registered job alpaca_ws_sync_held (*/15 min)")
 
     # ------------------------------------------------------------------
     # Deploy 4.5.E — Defensive halt check: every 15 minutes

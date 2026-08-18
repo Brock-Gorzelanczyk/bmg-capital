@@ -1674,6 +1674,48 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
 
+# ─── 2026-08-13 Concurrency guard for heavy endpoints (Brock OOM mitigation).
+# A single dashboard load fanning out 40 parallel heavy queries can OOM the
+# container. Cap concurrent processing of matching paths at 4.
+# Also probes RSS around each matched request so we know which path is heavy.
+import asyncio as _cg_asyncio
+from starlette.middleware.base import BaseHTTPMiddleware as _CG_BaseHTTPMiddleware
+_HEAVY_SEM = _cg_asyncio.Semaphore(4)
+_HEAVY_PATH_MARKERS = ("/rolling/", "/leaderboard", "/strategy-journal", "/portfolio_rank")
+
+
+class HeavyEndpointGuard(_CG_BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+        is_heavy = any(m in path for m in _HEAVY_PATH_MARKERS)
+        if not is_heavy:
+            return await call_next(request)
+        # Serialize heavy requests via semaphore; probe RSS around handling.
+        try:
+            from app.services.mem_probe import _rss_mb, _tally, _lock  # type: ignore
+            _before = _rss_mb()
+        except Exception:
+            _before = -1.0
+        async with _HEAVY_SEM:
+            response = await call_next(request)
+        try:
+            from app.services.mem_probe import _rss_mb, _tally, _lock  # type: ignore
+            _after = _rss_mb()
+            _delta = _after - _before if _before >= 0 else 0.0
+            key = f"http:{path}"
+            with _lock:
+                row = _tally[key]
+                row[0] += 1
+                row[1] += _delta
+                if _delta > row[2]:
+                    row[2] = _delta
+                row[3] = _after
+        except Exception:
+            pass
+        return response
+
+
+app.add_middleware(HeavyEndpointGuard)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AgentReadOnlyMiddleware)
@@ -1704,6 +1746,12 @@ app.include_router(allocation_router)
 app.include_router(performance_router)
 app.include_router(leaderboard_router)
 app.include_router(portfolio_rank_router)
+
+# ─── 2026-08-13 strategy-journal STUB — endpoint was disabled 2026-07-16 but
+# callers still hit the paths and were falling through to the SPA catchall,
+# getting HTML back. Stub returns {disabled: true} JSON instead. Cheap, no DB.
+from app.routers.strategy_journal_stub import router as _sj_stub_router
+app.include_router(_sj_stub_router)
 
 # ─── PAUSED 2026-07-16 (cost) — uncomment to restore any single router ──────
 # app.include_router(screener.router)

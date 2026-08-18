@@ -10670,3 +10670,21 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
         "phantom_candidates": phantoms,
         "all_bots": rows,
     }
+
+
+# ─── 2026-08-13 Brock: mem-probe read endpoint (RSS-per-job + top leakers) ──
+@router.get("/mem-probe/snapshot")
+def mem_probe_snapshot(_admin: User = Depends(require_admin)) -> Dict[str, Any]:
+    """Return RSS-delta tally per scheduled job + per heavy HTTP path.
+
+    Use after 24h uptime to identify the leak: the job with the largest
+    positive cumulative_delta_mb is the suspect. Container OOMs at
+    ~12min-lifespan (2026-08-13 investigation).
+    """
+    try:
+        from app.services.mem_probe import snapshot, apscheduler_job_count
+        snap = snapshot()
+        snap["apscheduler_job_count"] = apscheduler_job_count()
+        return snap
+    except Exception as exc:
+        return {"error": str(exc)[:500]}

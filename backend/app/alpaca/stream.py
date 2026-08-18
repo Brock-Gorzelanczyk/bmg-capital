@@ -86,6 +86,20 @@ class StreamManager:
             except Exception as e:
                 logger.error(f"Unsubscribe error: {e}", exc_info=True)
 
+    async def sync_to_held(self, held_symbols: List[str]) -> None:
+        """2026-08-13 Brock: restrict WS subscription to symbols we currently hold.
+
+        Adds any held symbols not already subscribed; removes any subscribed
+        symbols we no longer hold. Bounded by MAX_SYMBOLS.
+        """
+        held_set = set(s for s in held_symbols if s)
+        to_remove = list(self._subscribed - held_set)
+        if to_remove:
+            await self.unsubscribe(to_remove)
+        to_add = list(held_set - self._subscribed)
+        if to_add:
+            await self.subscribe(to_add)
+
     def on_quote(self, cb: Callable) -> None:
         if cb not in self._quote_callbacks:
             self._quote_callbacks.append(cb)
