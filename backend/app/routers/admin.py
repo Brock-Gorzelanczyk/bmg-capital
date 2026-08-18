@@ -10672,6 +10672,59 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
     }
 
 
+# ─── 2026-08-18 Brock: vault sync endpoints (§V8 automation of §V7) ────────
+@router.get("/audits/list")
+def audits_list(_admin: User = Depends(require_admin)) -> Dict[str, Any]:
+    """List /data/audits/*.md — one row per daily audit file.
+
+    Consumed by scripts/bmg_vault_sync.sh on Brock's Mac to pull audits
+    into ~/Documents/BMG-Capital-Vault/daily-audits/ automatically.
+    """
+    try:
+        from app.services.vault_writer import list_audits, newest_audit_age_hours
+        return {
+            "audits": list_audits(),
+            "newest_age_hours": newest_audit_age_hours(),
+        }
+    except Exception as exc:
+        return {"error": str(exc)[:500]}
+
+
+@router.get("/audits/{name}")
+def audits_get(name: str, _admin: User = Depends(require_admin)) -> Dict[str, Any]:
+    """Read one audit file by date-string (e.g. 2026-08-18)."""
+    try:
+        from app.services.vault_writer import read_artifact
+        content = read_artifact("audit", name)
+        if content is None:
+            return {"error": "not_found", "name": name}
+        return {"name": name, "content": content}
+    except Exception as exc:
+        return {"error": str(exc)[:500]}
+
+
+@router.get("/postmortem-stubs/list")
+def postmortem_stubs_list(_admin: User = Depends(require_admin)) -> Dict[str, Any]:
+    """List /data/postmortems-stub/*.md — auto-generated on auto_pause/outage."""
+    try:
+        from app.services.vault_writer import list_postmortem_stubs
+        return {"stubs": list_postmortem_stubs()}
+    except Exception as exc:
+        return {"error": str(exc)[:500]}
+
+
+@router.get("/postmortem-stubs/{name}")
+def postmortem_stubs_get(name: str, _admin: User = Depends(require_admin)) -> Dict[str, Any]:
+    try:
+        from app.services.vault_writer import read_artifact
+        content = read_artifact("postmortem_stub", name)
+        if content is None:
+            return {"error": "not_found", "name": name}
+        return {"name": name, "content": content}
+    except Exception as exc:
+        return {"error": str(exc)[:500]}
+
+
 # ─── 2026-08-13 Brock: mem-probe read endpoint (RSS-per-job + top leakers) ──
 @router.get("/mem-probe/snapshot")
 def mem_probe_snapshot(_admin: User = Depends(require_admin)) -> Dict[str, Any]:

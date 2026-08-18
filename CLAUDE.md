@@ -52,6 +52,20 @@ One line per day appended to `daily-audits/YYYY-MM-DD.md`:
 `invariants=red/amber/green | open_issues=N | vault_mtime=YYYY-MM-DD HH:MM`
 A missing day is itself a V1 fail.
 
+### V8. Twice-failed disciplines become automation, not stronger rules (added 2026-08-18)
+
+**Any discipline in this file that has failed twice becomes automation, not a stronger rule.**
+
+Adding a stronger rule to a discipline that has already failed twice is doing the same thing and expecting a different result. The failure is not "the rule was too weak" — it's "the rule required a human/Claude to remember," and remembering is not a reliable prevention mechanism (see §V5).
+
+**Test:** if the closing prevention entry for a ledger issue is a §V-style rule OR a "standing rule" that requires reading and remembering, and the class has recurred, escalate to automation (invariant, DB constraint, pre-execution gate, CI check, cron-generated artifact) before the third recurrence.
+
+**Reference cases:**
+- §V7 nightly self-audit failed 11+ times in the month of August — replaced by container-side `/data/audits/*.md` writer + host-side sync + I28 freshness invariant (Aug 2026-08-18, ledger #39).
+- §S2 "shipped means observed" was already restated once (§M1 mechanical clause) — the "M1 artifact: NONE / PARTIAL / applied" field is the automation.
+
+Rules that are load-bearing on human memory are technical debt. Convert them.
+
 ### V0. Destructive ops require a recent OFF-VOLUME backup (added 2026-08-09)
 Any endpoint that destroys, quarantines-at-scale, migrates data, VACUUMs, or otherwise touches the DB in a way that could lose state MUST verify a fresh off-volume backup exists first. **An on-volume `.bak` does NOT count** — the 2026-08-09 P0 (Railway alerted /data at 98% before BMG's own invariants; 3.85 GB of backups on the same 4.6 GB volume as the live DB) proved backups on the same volume die with the disk.
 

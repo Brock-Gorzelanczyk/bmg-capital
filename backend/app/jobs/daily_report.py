@@ -284,6 +284,45 @@ def run_daily_report_job(db=None) -> str:
         logger.warning("[daily-report] wrote %s (%d bytes)", path, len(report))
     except Exception as exc:
         logger.warning("[daily-report] audit write failed (non-fatal): %s", exc)
+
+    # Ledger #39 / §V8: also write the §V7 one-line audit format so
+    # scripts/bmg_vault_sync.sh can pull it to the Mac vault. Format:
+    #   HH:MM UTC | invariants=… | open_issues=N | vault_mtime=…
+    # This replaces the "human types the audit line" discipline that
+    # failed 11+ times in August.
+    try:
+        from app.services.vault_writer import write_daily_audit_line
+        # Roll up invariant summary from the last run.
+        inv_summary = "unknown"
+        open_issues_n = 0
+        try:
+            from app.services.invariant_engine import run_all_invariants
+            snap = run_all_invariants(db) or {}
+            results = snap.get("results", []) or []
+            red = sum(1 for r in results if r.get("level") == "red")
+            amb = sum(1 for r in results if r.get("level") == "amber")
+            grn = sum(1 for r in results if r.get("level") == "green")
+            inv_summary = f"{red}red/{amb}amber/{grn}green"
+            open_issues_n = red + amb
+        except Exception:
+            pass
+        # Ledger mtime — best-effort, we're inside the container so we can only
+        # report our own artifact age.
+        try:
+            from app.services.vault_writer import newest_audit_age_hours
+            age_h = newest_audit_age_hours()
+            mtime_str = f"audits_newest_age_h={age_h:.1f}" if age_h is not None else "audits_newest_age_h=n/a"
+        except Exception:
+            mtime_str = "audits_newest_age_h=n/a"
+        write_daily_audit_line(
+            invariants_summary=inv_summary,
+            open_issues=open_issues_n,
+            ledger_mtime_iso=mtime_str,
+            notes="auto-written by daily_report cron",
+        )
+    except Exception as _v7_exc:
+        logger.warning("[daily-report] §V7 audit line failed (non-fatal): %s", _v7_exc)
+
     return report
 
 

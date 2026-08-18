@@ -75,6 +75,33 @@ def send_critical(
         logger.warning("[critical-alert] rejected — unknown category %r (allowed: %s)",
                        category, ", ".join(CATEGORIES))
         return False
+
+    # Ledger #39 / §V8 — auto-create a postmortem stub for real incidents.
+    # Fired on valid category BEFORE the _enabled()/webhook gates: even if
+    # Discord is muted (which is now the default per #37), we still want
+    # the vault stub. That's the whole point — the stub is what survives
+    # when notifications don't. Skips MANUAL_TEST (not a real event).
+    if category != "MANUAL_TEST":
+        try:
+            from app.services.vault_writer import write_postmortem_stub
+            _stub_context = {
+                "category": category,
+                "source": source,
+                "title": title,
+                "message": message[:500],
+            }
+            if fields:
+                for f in fields[:10]:
+                    if isinstance(f, dict) and "name" in f and "value" in f:
+                        _stub_context[str(f["name"])[:40]] = str(f["value"])[:200]
+            write_postmortem_stub(
+                trigger=category.lower(),
+                title=title,
+                context=_stub_context,
+            )
+        except Exception as _stub_exc:
+            logger.warning("[critical-alert] postmortem stub write failed: %s", _stub_exc)
+
     if not _enabled():
         logger.warning("[critical-alert] SUPPRESSED (CRITICAL_ALERTS_ENABLED=false): [%s] %s",
                        category, title)

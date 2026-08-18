@@ -1188,7 +1188,35 @@ CHECKS: dict[str, Callable] = {
     "I25": _check_i25_alpaca_activity_diff,
     "I26": _check_i26_sub_penny_fill_zero,
     "I27": _check_i27_pv_endpoint_agreement,
+    "I28": lambda db: _check_i28_vault_freshness(db),
 }
+
+
+def _check_i28_vault_freshness(db) -> Result:
+    """Vault must have a daily audit within the last 48h.
+
+    Ledger #39 / CLAUDE.md §V8: §V7 (nightly audit) failed 11+ times in
+    August because it required a human/Claude to remember. This check makes
+    the discipline structural: if the newest /data/audits/*.md is > 48h old,
+    the daily_report cron isn't running (or the writer is broken) — RED.
+
+    Threshold 48h (not 24h) accommodates the daily cron firing 4:15 PM ET;
+    a fresh audit written yesterday is ~24-28h old today, still green.
+    """
+    try:
+        from app.services.vault_writer import newest_audit_age_hours
+        age_h = newest_audit_age_hours()
+        if age_h is None:
+            return _amber("I28", None, None, None,
+                          "/data/audits is empty — audit writer may not have run yet")
+        actual = {"newest_audit_age_hours": round(age_h, 2)}
+        if age_h <= 48.0:
+            return _ok("I28", actual, {"max_hours": 48.0},
+                       f"newest audit {age_h:.1f}h old (≤48h)")
+        return _red("I28", actual, {"max_hours": 48.0}, float(age_h),
+                    f"newest /data/audits/*.md is {age_h:.1f}h old — daily audit writer not running")
+    except Exception as exc:
+        return _amber("I28", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
 _LOW_POWER_CHECKS = ("I1", "I2", "I17", "I24", "I25")  # money-critical only
