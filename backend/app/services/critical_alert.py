@@ -40,7 +40,9 @@ CATEGORIES = (
 
 
 def _enabled() -> bool:
-    return os.getenv("CRITICAL_ALERTS_ENABLED", "true").strip().lower() != "false"
+    # 2026-08-18 Brock: default DISABLED. Was default enabled. To restore
+    # the critical channel, set CRITICAL_ALERTS_ENABLED=true on Railway.
+    return os.getenv("CRITICAL_ALERTS_ENABLED", "false").strip().lower() == "true"
 
 
 def _webhook_url() -> str:

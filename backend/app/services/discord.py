@@ -53,8 +53,11 @@ def _discord_master_kill() -> bool:
     2026-07-16: added because DISCORD_OPS_ALERTS_ENABLED=false only gated
     ops alerts; per-trade signal posts (send_signal, send_daily_summary)
     kept posting. Set DISCORD_ENABLED=false and NOTHING goes to Discord.
+
+    2026-08-18 Brock: DEFAULT FLIPPED to DISABLED. To re-enable, set
+    DISCORD_ENABLED=true on Railway. Was: default enabled unless =false.
     """
-    return os.getenv("DISCORD_ENABLED", "true").strip().lower() == "false"
+    return os.getenv("DISCORD_ENABLED", "false").strip().lower() != "true"
 
 
 def _webhook_url() -> str:
@@ -74,11 +77,9 @@ def _ops_webhook_url() -> str:
 
 
 def _ops_alerts_enabled() -> bool:
-    """Return True unless explicitly disabled. Defaults to TRUE — operational
-    health alerts should always reach the operator. Set
-    DISCORD_OPS_ALERTS_ENABLED=false only when intentionally silencing
-    everything (e.g. planned maintenance window)."""
-    return os.getenv("DISCORD_OPS_ALERTS_ENABLED", "true").strip().lower() != "false"
+    """2026-08-18 Brock: DEFAULT FLIPPED to DISABLED. Ops alerts also silent
+    by default. To re-enable, set DISCORD_OPS_ALERTS_ENABLED=true on Railway."""
+    return os.getenv("DISCORD_OPS_ALERTS_ENABLED", "false").strip().lower() == "true"
 
 
 def send_ops_alert(
