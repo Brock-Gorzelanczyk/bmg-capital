@@ -10871,6 +10871,63 @@ def postmortem_stubs_get(name: str, _admin: User = Depends(require_admin)) -> Di
         return {"error": str(exc)[:500]}
 
 
+# ─── 2026-08-18 Brock: APScheduler job audit — hunt duplicates ──────────────
+# 136 jobs on a 42-bot fleet ≈ 2.4x expected. Theory: setup_bot_scheduler()
+# called twice, or add_job() without replace_existing=True on some path,
+# leading to job accumulation. Duplicates fire real work → memory climb →
+# OOM → the whole cascade. Read-only endpoint; safe alongside deploy-fix.
+@router.get("/scheduler/jobs")
+def scheduler_jobs(_admin: User = Depends(require_admin)) -> Dict[str, Any]:
+    """List all live APScheduler jobs. Groups by func for duplicate detection."""
+    try:
+        from app.main import scheduler  # type: ignore
+        jobs = scheduler.get_jobs()
+    except Exception as exc:
+        return {"error": f"scheduler_load_failed: {str(exc)[:200]}"}
+
+    def _func_name(j):
+        try:
+            f = j.func
+            return getattr(f, "__qualname__", None) or getattr(f, "__name__", None) or repr(f)[:80]
+        except Exception:
+            return "unknown"
+
+    rows = []
+    by_func: Dict[str, list] = {}
+    id_counts: Dict[str, int] = {}
+    for j in jobs:
+        fn = _func_name(j)
+        row = {
+            "id": j.id,
+            "func": fn,
+            "trigger": str(j.trigger)[:200],
+            "next_run_time": j.next_run_time.isoformat() if j.next_run_time else None,
+            "misfire_grace_time": getattr(j, "misfire_grace_time", None),
+            "max_instances": getattr(j, "max_instances", None),
+        }
+        rows.append(row)
+        by_func.setdefault(fn, []).append(j.id)
+        id_counts[j.id] = id_counts.get(j.id, 0) + 1
+
+    dup_ids = {jid: n for jid, n in id_counts.items() if n > 1}
+    func_summary = {
+        fn: {
+            "count": len(ids),
+            "sample_ids": ids[:5],
+            "likely_duplicated": len(ids) > 1 and len(set(ids)) < len(ids),
+        }
+        for fn, ids in sorted(by_func.items(), key=lambda kv: -len(kv[1]))
+    }
+
+    return {
+        "total_jobs": len(jobs),
+        "unique_ids": len(id_counts),
+        "duplicate_ids": dup_ids,
+        "by_func": func_summary,
+        "jobs": rows,
+    }
+
+
 # ─── 2026-08-13 Brock: mem-probe read endpoint (RSS-per-job + top leakers) ──
 @router.get("/mem-probe/snapshot")
 def mem_probe_snapshot(_admin: User = Depends(require_admin)) -> Dict[str, Any]:

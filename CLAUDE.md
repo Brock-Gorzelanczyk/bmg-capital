@@ -66,6 +66,25 @@ Adding a stronger rule to a discipline that has already failed twice is doing th
 
 Rules that are load-bearing on human memory are technical debt. Convert them.
 
+## DEBUGGING DISCIPLINE
+
+### DBG1. Check the provider's status page BEFORE forming hypotheses about our code (added 2026-08-18)
+
+When infrastructure behaves inexplicably — deploys failing with zero runtime logs, requests timing out, unexplained 502s, containers dying without a stack trace — **check the provider's status page first.** Before RSS instrumentation, before splitting commits, before memory-limit hypotheses, before anything.
+
+**The list, in order:**
+1. `https://status.railway.app` — Railway platform incidents
+2. `https://status.alpaca.markets` — trading + data feed
+3. GitHub status if a push/build behaves oddly
+4. Sentry status if error reporting stops
+5. Anthropic status if Claude tools misbehave
+
+**Test:** if the symptom is "worked yesterday, breaks today, our code didn't change" OR "same input, same behavior, no logs to explain it" → status page first, hypothesis second.
+
+**Reference case (2026-08-18):** three consecutive Railway deploys of the same commit failed with identical image digests and zero runtime logs. Spent ~$0.56 in build cost + built four internal hypotheses (OOM, memory limit, my commit's imports, whitespace probe) before Brock spotted the Railway dashboard's active-incident banner: "Deployments are slow to progress. We are investigating." The correct debugging step took 30 seconds; the wrong path burned an hour.
+
+**Cost math:** every retry against a live platform incident is $0.05-0.10 wasted. On a $15/mo cap, that's meaningful. Two provider-status checks per debugging session covers every plausible outage vector for < 60 seconds of human time.
+
 ### V0. Destructive ops require a recent OFF-VOLUME backup (added 2026-08-09)
 Any endpoint that destroys, quarantines-at-scale, migrates data, VACUUMs, or otherwise touches the DB in a way that could lose state MUST verify a fresh off-volume backup exists first. **An on-volume `.bak` does NOT count** — the 2026-08-09 P0 (Railway alerted /data at 98% before BMG's own invariants; 3.85 GB of backups on the same 4.6 GB volume as the live DB) proved backups on the same volume die with the disk.
 
