@@ -259,17 +259,23 @@ def get_dashboard_v2(
     for wl in wl_rows:
         profile_wl_count[wl.profile_id] = profile_wl_count.get(wl.profile_id, 0) + 1
 
-    # ── Portfolio totals — sum from per-allocation snapshots ────────────────
-    # We sum pv_by_alloc / today_pnl_by_alloc directly instead of trusting
-    # agg["total_value_cents"], because canonical's aggregate iterates
-    # StrategyPortfolio rows and silently drops orphan allocations (any
-    # BotAllocation without a portfolio_id). Those orphans still represent real
-    # bot capital — excluding them was the root cause of Dashboard showing $—
-    # / a too-low number versus Strategy Lab.
+    # ── Portfolio totals — trust the canonical aggregate ────────────────────
+    # 2026-08-18 (Brock): the earlier override that summed pv_by_alloc was
+    # from before canonical became Alpaca-authoritative. Canonical now
+    # includes orphan allocations correctly (via orphan_alloc_attributed_cents)
+    # AND anchors total_value_cents to Alpaca broker truth. Summing bot PVs
+    # here was making Dashboard show ~$107K while every other endpoint showed
+    # ~$93K (delta = unattributed drift). Fixed: use agg values directly.
     total_starting = sum(a.starting_capital_cents or 0 for a in allocs)
     total_realized = sum(total_realized_by_alloc.values())
-    total_value      = sum(pv_by_alloc.values())
-    total_today_pnl  = sum(today_pnl_by_alloc.values())
+    total_value = int(agg.get("total_value_cents") or 0)
+    total_value_source = agg.get("total_value_source") or "unknown"
+    _agg_today = agg.get("today_pnl_cents")
+    total_today_pnl = int(_agg_today or 0) if _agg_today is not None else 0
+    today_pnl_source = agg.get("today_pnl_source") or "unknown"
+    today_pnl_label = agg.get("today_pnl_label") or "unknown"
+    bot_sum_pv_cents = int(agg.get("bot_sum_pv_cents") or 0)
+    unattributed_cents = int(agg.get("unattributed_cents") or 0)
 
     # today_pnl_pct: derived from totals, not blindly copied from agg.
     # 4-decimal precision: small negative P&L (e.g. -$15 on $1M = -0.0015%)
@@ -333,10 +339,13 @@ def get_dashboard_v2(
                 "SELECT COUNT(*) FROM portfolio_rank_holdings WHERE bot_id = :bid"
             ), {"bid": _pr_id}).fetchone()
             pr_open_positions += int(_cnt_row[0] or 0) if _cnt_row else 0
-        # Roll into fund PV total so the header hero stat matches m067's
-        # $1M invariant.
-        total_value += pr_value_cents
-        total_today_pnl += pr_pnl_cents
+        # 2026-08-18: only fold PR into total_value if canonical did NOT
+        # already include it. When total_value_source == "alpaca_account"
+        # (broker truth), Alpaca already contains PR positions and adding
+        # here would double-count. Mirrors canonical.py:1723 guard.
+        if total_value_source != "alpaca_account":
+            total_value += pr_value_cents
+            total_today_pnl += pr_pnl_cents
     except Exception as _pr_exc:
         logger.warning("[dashboard/v2] portfolio_rank rollup failed: %s", _pr_exc)
 
@@ -596,7 +605,12 @@ def get_dashboard_v2(
     return {
         "portfolio": {
             "total_value_cents": total_value,
+            "total_value_source": total_value_source,           # 2026-08-18: I26 requirement
+            "bot_sum_pv_cents": bot_sum_pv_cents,               # attribution (informational)
+            "unattributed_cents": unattributed_cents,           # bot_sum - total_value drift
             "today_pnl_cents": total_today_pnl,
+            "today_pnl_source": today_pnl_source,
+            "today_pnl_label": today_pnl_label,
             "today_pnl_pct": today_pct,
             "return_30d_pct": return_30d_pct,
             "leaderboard": leaderboard,
