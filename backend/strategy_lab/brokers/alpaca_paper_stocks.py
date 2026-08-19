@@ -286,8 +286,24 @@ class PaperStocksAdapter(BrokerAdapter):
         # "take_profit.limit_price must be < stop_loss.stop_price".
         # Server-side position_monitor handles exits at stop_price /
         # target_price. Same fix pattern as crypto adapter.
+        # 2026-08-18 (ledger #34 sibling — SUBMIT-side sub-penny fix):
+        # Alpaca rejects limit_price with sub-penny fractions for stocks
+        # priced >= $1 (penny-pilot rule). Was: round(..., 4) which produced
+        # e.g. SPY 763.5132 or MARA 8.9152 → 422 Unprocessable Entity.
+        # Fix: round to 2 decimals for anything >= $1; keep 4 decimals only
+        # for sub-$1 penny-pilot names. Same rule for the non-extended path
+        # below where a caller may pass limit_price with sub-penny.
+        def _round_stock_tick(px: float) -> float:
+            try:
+                p = float(px)
+            except (TypeError, ValueError):
+                return 0.0
+            if p >= 1.0:
+                return round(p, 2)
+            return round(p, 4)  # penny-pilot / sub-$1 stocks allowed finer tick
+
         if extended_hours:
-            entry_limit = limit_price or round((stop_price + target_price) / 2, 4)
+            entry_limit = _round_stock_tick(limit_price or (stop_price + target_price) / 2)
             payload: dict = {
                 "symbol": symbol,
                 "qty": str(qty),
@@ -312,7 +328,7 @@ class PaperStocksAdapter(BrokerAdapter):
         }
         if limit_price is not None:
             payload["type"] = "limit"
-            payload["limit_price"] = str(limit_price)
+            payload["limit_price"] = str(_round_stock_tick(limit_price))
         else:
             payload["type"] = "market"
 
