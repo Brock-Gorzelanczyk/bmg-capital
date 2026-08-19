@@ -112,7 +112,7 @@ def _recent_activity(db: Session, hours: int = 24) -> dict:
         "FROM bot_signals s "
         "JOIN bot_allocations a ON a.id = s.allocation_id "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 AND s.ts >= :cut "
+        "WHERE s.ts >= :cut "
         "GROUP BY p.name ORDER BY COUNT(*) DESC LIMIT 8"
     ), {"cut": cut}).fetchall()
     trd_rows = db.execute(text(
@@ -120,7 +120,7 @@ def _recent_activity(db: Session, hours: int = 24) -> dict:
         "FROM bot_trades t "
         "JOIN bot_allocations a ON a.id = t.allocation_id "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 AND t.ts >= :cut AND t.quarantined_at IS NULL "
+        "WHERE t.ts >= :cut AND t.quarantined_at IS NULL "
         "GROUP BY p.name ORDER BY COUNT(*) DESC LIMIT 8"
     ), {"cut": cut}).fetchall()
     return {

@@ -117,7 +117,7 @@ def build_premarket_report(db) -> str:
                 "SELECT COUNT(*) FROM bot_signals bs "
                 "JOIN bot_allocations a ON a.id = bs.allocation_id "
                 "JOIN bot_profiles p ON p.id = a.profile_id "
-                "WHERE a.user_id = 1 AND bs.ts >= :cut "
+                "WHERE bs.ts >= :cut "
                 "AND (p.asset_class = :ac OR (:ac = 'crypto' AND p.asset_class = 'quant'))"
             ), {"cut": cut, "ac": "stock" if asset == "equity" else asset}).fetchone()
             sig_ct = int(sig_row[0] or 0) if sig_row else 0
@@ -125,7 +125,7 @@ def build_premarket_report(db) -> str:
                 "SELECT COUNT(*) FROM bot_trades t "
                 "JOIN bot_allocations a ON a.id = t.allocation_id "
                 "JOIN bot_profiles p ON p.id = a.profile_id "
-                "WHERE a.user_id = 1 AND t.ts >= :cut AND t.quarantined_at IS NULL "
+                "WHERE t.ts >= :cut AND t.quarantined_at IS NULL "
                 "AND (p.asset_class = :ac OR (:ac = 'crypto' AND p.asset_class = 'quant'))"
             ), {"cut": cut, "ac": "stock" if asset == "equity" else asset}).fetchone()
             trade_ct = int(trade_row[0] or 0) if trade_row else 0
@@ -221,7 +221,7 @@ def build_premarket_report(db) -> str:
     try:
         from app.db.models.bots import BotAllocation, BotProfile
         profs = {p.id: p.name for p in db.query(BotProfile).all()}
-        allocs = db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()
+        allocs = db.query(BotAllocation).all()
         enabled = [a for a in allocs if a.enabled]
         paused = [a for a in allocs if not a.enabled]
         lines.append(f"  Enabled: {len(enabled)} bots")
@@ -253,7 +253,7 @@ def build_premarket_report(db) -> str:
             side = "short" if q < 0 else "long"
             alp_keys.add((p.get("symbol"), side))
         from app.db.models.bots import BotPosition, BotAllocation
-        u1 = [a.id for a in db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()]
+        u1 = [a.id for a in db.query(BotAllocation).all()]
         bmg = (
             db.query(BotPosition)
             .filter(BotPosition.allocation_id.in_(u1))

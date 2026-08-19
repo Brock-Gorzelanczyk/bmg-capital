@@ -1285,8 +1285,7 @@ def quarantine_pre_verification_era(
         f"SELECT COUNT(*), COALESCE(SUM(t.pnl_cents), 0) FROM bot_trades t "
         f"JOIN bot_allocations a ON a.id = t.allocation_id "
         f"JOIN bot_profiles p ON p.id = a.profile_id "
-        f"WHERE a.user_id = 1 "
-        f"  AND t.origin = 'BROKER_FILL' "
+        f"WHERE t.origin = 'BROKER_FILL' "
         f"  AND t.side IN ('sell','close','cover') "
         f"  AND t.quarantined_at IS NULL "
         f"  AND t.ts < :cutoff "
@@ -1300,8 +1299,7 @@ def quarantine_pre_verification_era(
         f"SELECT p.name, COUNT(t.id), COALESCE(SUM(t.pnl_cents), 0) FROM bot_trades t "
         f"JOIN bot_allocations a ON a.id = t.allocation_id "
         f"JOIN bot_profiles p ON p.id = a.profile_id "
-        f"WHERE a.user_id = 1 "
-        f"  AND t.origin = 'BROKER_FILL' "
+        f"WHERE t.origin = 'BROKER_FILL' "
         f"  AND t.side IN ('sell','close','cover') "
         f"  AND t.quarantined_at IS NULL "
         f"  AND t.ts < :cutoff "
@@ -1324,8 +1322,7 @@ def quarantine_pre_verification_era(
             f"  SELECT t.id FROM bot_trades t "
             f"  JOIN bot_allocations a ON a.id = t.allocation_id "
             f"  JOIN bot_profiles p ON p.id = a.profile_id "
-            f"  WHERE a.user_id = 1 "
-            f"    AND t.origin = 'BROKER_FILL' "
+            f"  WHERE t.origin = 'BROKER_FILL' "
             f"    AND t.side IN ('sell','close','cover') "
             f"    AND t.quarantined_at IS NULL "
             f"    AND t.ts < :cutoff "
@@ -1377,8 +1374,7 @@ def diag_realized_breakdown(
         f"FROM bot_trades t "
         f"JOIN bot_allocations a ON a.id = t.allocation_id "
         f"JOIN bot_profiles p ON p.id = a.profile_id "
-        f"WHERE a.user_id = 1 "
-        f"  AND t.side IN ('sell','close','cover') "
+        f"WHERE t.side IN ('sell','close','cover') "
         f"  AND t.quarantined_at IS NULL "
         f"  {origin_filter} "
         f"GROUP BY p.name "
@@ -1399,8 +1395,7 @@ def diag_realized_breakdown(
         "       COALESCE(SUM(t.pnl_cents), 0) AS sum_pnl_cents "
         "FROM bot_trades t "
         "JOIN bot_allocations a ON a.id = t.allocation_id "
-        "WHERE a.user_id = 1 "
-        "  AND t.side IN ('sell','close','cover') "
+        "WHERE t.side IN ('sell','close','cover') "
         "  AND t.quarantined_at IS NULL "
         "GROUP BY COALESCE(t.origin, 'NULL')"
     )).fetchall()
@@ -1469,7 +1464,7 @@ def diag_multi_owned(
         "       COUNT(*) AS n "
         "FROM bot_positions bp "
         "JOIN bot_allocations a ON a.id = bp.allocation_id "
-        "WHERE bp.closed_at IS NULL AND bp.quarantined_at IS NULL AND a.user_id = 1 "
+        "WHERE bp.closed_at IS NULL AND bp.quarantined_at IS NULL "
         "GROUP BY bp.symbol, COALESCE(bp.side,'long') "
         "HAVING COUNT(*) >= 2 "
         "ORDER BY COUNT(*) DESC"
@@ -1516,8 +1511,7 @@ def quarantine_catchall_dupes(
     catchall_allocs = db.execute(_t(
         "SELECT a.id, p.name FROM bot_allocations a "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 "
-        "  AND (p.name LIKE '%catchall%' OR p.name LIKE '%unresolved%')"
+        "WHERE (p.name LIKE '%catchall%' OR p.name LIKE '%unresolved%')"
     )).fetchall()
     catchall_alloc_ids = [int(r[0]) for r in catchall_allocs]
     if not catchall_alloc_ids:
@@ -1643,7 +1637,7 @@ def diag_i2_hypothesis(
         "       COALESCE(SUM(CASE WHEN bp.option_type IS NOT NULL THEN 1 ELSE 0 END), 0) AS n_options "
         "FROM bot_positions bp "
         "JOIN bot_allocations a ON a.id = bp.allocation_id "
-        "WHERE bp.closed_at IS NULL AND a.user_id = 1 "
+        "WHERE bp.closed_at IS NULL "
         "GROUP BY 1"
     )).fetchall()
     result["primary_user1_open_by_quarantine_status"] = [
@@ -1675,6 +1669,9 @@ def diag_i2_hypothesis(
             alp_price_by_sym[sym] = float(p.get("current_price") or 0)
 
         # BMG open + non-quarantined for user 1
+        # §I13 note: intentional user_1 scope for the "primary_user1_*" comparison
+        # against Alpaca; leave filter in place even though I13 guarantees no
+        # non-user-1 enabled allocs exist — this is a semantic diagnostic bucket.
         bmg_open = (
             db.query(BotPosition)
             .join(_ap_model(), BotPosition.allocation_id == _ap_model().id)
@@ -2961,7 +2958,7 @@ def reconcile_user1_to_alpaca(
         side = "short" if q < 0 else "long"
         alp_qty_by_key[(p.get("symbol"), side)] = abs(q)
 
-    user1_alloc_ids = [a.id for a in db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()]
+    user1_alloc_ids = [a.id for a in db.query(BotAllocation).all()]
     bmg_rows = (
         db.query(BotPosition)
         .filter(BotPosition.allocation_id.in_(user1_alloc_ids))
@@ -3030,7 +3027,6 @@ def pause_bot(
         return {"error": f"profile_not_found: {profile_name}"}
     allocs = (
         db.query(BotAllocation)
-        .filter(BotAllocation.user_id == 1)
         .filter(BotAllocation.profile_id == prof.id)
         .all()
     )
@@ -3205,7 +3201,7 @@ def user1_capital_vs_funded(
     ), timeout=15).read())
     funded = float(acct.get("portfolio_value") or 0)
 
-    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()
+    allocs = db.query(BotAllocation).all()
     enabled = [a for a in allocs if a.enabled]
     all_sum_cents = sum(int(a.starting_capital_cents or 0) for a in allocs)
     en_sum_cents = sum(int(a.starting_capital_cents or 0) for a in enabled)
@@ -3245,7 +3241,6 @@ def rescale_user1_allocations(
     target_base_cents = int(round(target_base_usd * 100))
     enabled = (
         db.query(BotAllocation)
-        .filter(BotAllocation.user_id == 1)
         .filter(BotAllocation.enabled == True)
         .all()
     )
@@ -3395,7 +3390,7 @@ def round_trips_per_bot(
     from app.db.models.bots import BotTrade, BotAllocation, BotProfile
     from collections import defaultdict, deque
 
-    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()
+    allocs = db.query(BotAllocation).all()
     profs = {p.id: p.name for p in db.query(BotProfile).all()}
     alloc_to_prof = {a.id: profs.get(a.profile_id) for a in allocs}
     alloc_ids = [a.id for a in allocs]
@@ -3561,7 +3556,7 @@ def reset_reconstructed_pnl_user1(
     Provisional-by-definition per iter-2 spec; keeping them polluted the
     P&L rollup. Exact (R7 client_order_id) pairings retained."""
     from app.db.models.bots import BotTrade, BotAllocation
-    user1_alloc_ids = [a.id for a in db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()]
+    user1_alloc_ids = [a.id for a in db.query(BotAllocation).all()]
     rows = (
         db.query(BotTrade)
         .filter(BotTrade.allocation_id.in_(user1_alloc_ids))
@@ -3607,7 +3602,7 @@ def user1_vs_alpaca(
         side = "short" if q < 0 else "long"
         alp_agg[(p.get("symbol"), side)] = abs(q)
 
-    user1_alloc_ids = [a.id for a in db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()]
+    user1_alloc_ids = [a.id for a in db.query(BotAllocation).all()]
     bmg_rows = (
         db.query(BotPosition)
         .filter(BotPosition.allocation_id.in_(user1_alloc_ids))
@@ -5413,14 +5408,13 @@ def broker_reconciliation(
                (SELECT MAX(a2.starting_capital_cents)
                   FROM bot_allocations a2
                  WHERE a2.profile_id = p.id
-                   AND a2.user_id = 1
                    AND a2.enabled = 1) AS starting_cents,
                SUM(CASE WHEN t.alpaca_order_id IS NOT NULL THEN 1 ELSE 0 END) AS real_fills,
                SUM(CASE WHEN t.alpaca_order_id IS NULL THEN 1 ELSE 0 END) AS sim_fills
         FROM bot_trades t
         JOIN bot_allocations a ON a.id = t.allocation_id
         JOIN bot_profiles p ON p.id = a.profile_id
-        WHERE t.ts >= :cut AND a.user_id = 1
+        WHERE t.ts >= :cut
         GROUP BY p.name, p.id
         ORDER BY real_fills + sim_fills DESC
     """), {"cut": cutoff_24h}).fetchall()
@@ -5881,7 +5875,6 @@ def re_adopt_symbol(
         .filter(
             BotPosition.closed_at.is_(None),
             BotPosition.quarantined_at.is_(None),
-            BotAllocation.user_id == 1,
             BotPosition.symbol == symbol,
         )
         .all()
@@ -5997,7 +5990,6 @@ def quarantine_bmg_only_phantoms(
         .filter(
             BotPosition.closed_at.is_(None),
             BotPosition.quarantined_at.is_(None),
-            BotAllocation.user_id == 1,
             BotPosition.option_type.is_(None),  # stocks/crypto only
         )
         .all()
@@ -9871,8 +9863,7 @@ def get_fund_tear_sheet_honesty_check(
         SELECT MIN(bt.ts)
           FROM bot_trades bt
           JOIN bot_allocations a ON a.id = bt.allocation_id
-         WHERE a.user_id = 1
-           AND bt.quarantined_at IS NULL
+         WHERE bt.quarantined_at IS NULL
     """)).fetchone()
 
     earliest_ts = earliest_row[0] if earliest_row else None
@@ -10277,9 +10268,9 @@ def heartbeats_diagnostic(db: Session = Depends(get_db)) -> dict:
         "SELECT p.name, MAX(s.ts) AS last_ts, "
         "  (SELECT MAX(t.ts) FROM bot_trades t "
         "     JOIN bot_allocations aa ON aa.id = t.allocation_id "
-        "     WHERE aa.user_id = 1 AND (SELECT id FROM bot_profiles WHERE name = p.name) = aa.profile_id) AS last_trade_ts "
+        "     WHERE (SELECT id FROM bot_profiles WHERE name = p.name) = aa.profile_id) AS last_trade_ts "
         "FROM bot_profiles p "
-        "LEFT JOIN bot_allocations a ON a.profile_id = p.id AND a.user_id = 1 "
+        "LEFT JOIN bot_allocations a ON a.profile_id = p.id "
         "LEFT JOIN bot_signals s ON s.allocation_id = a.id "
         "WHERE a.starting_capital_cents > 0 "
         "GROUP BY p.name "
@@ -10331,7 +10322,6 @@ def audit13(
         "  p.enabled AS profile_enabled "
         "FROM bot_allocations a "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 "
         "ORDER BY p.name"
     )).fetchall()
     result["P1-5"] = {
@@ -10367,7 +10357,7 @@ def audit13(
             "SELECT a.id, COALESCE(a.starting_capital_cents, 0) "
             "FROM bot_allocations a "
             "JOIN bot_profiles p ON p.id = a.profile_id "
-            "WHERE p.name = :bot AND a.user_id = 1"
+            "WHERE p.name = :bot"
         ), {"bot": bot_name}).fetchone()
         if not alloc_row:
             deploy_report[bot_name] = {"error": "no allocation for user 1"}
@@ -10632,8 +10622,7 @@ def hedge_fund_audit(
         "JOIN bot_positions pos ON pos.id = t.position_id "
         "JOIN bot_allocations a ON a.id = t.allocation_id "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 "
-        "  AND t.side IN ('sell','cover','close') "
+        "WHERE t.side IN ('sell','cover','close') "
         "  AND t.quarantined_at IS NULL "
         "  AND t.ts >= :cut"
     ), {"cut": cut_30d}).fetchall()
@@ -10699,7 +10688,7 @@ def hedge_fund_audit(
         "FROM bot_positions pos "
         "JOIN bot_allocations a ON a.id = pos.allocation_id "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 AND pos.closed_at IS NULL AND pos.quarantined_at IS NULL"
+        "WHERE pos.closed_at IS NULL AND pos.quarantined_at IS NULL"
     )).fetchall()
     by_sym = _dd(lambda: {"notional": 0.0, "positions": 0, "bots": set(), "asset_class": ""})
     for r in sym_rows:
@@ -10943,13 +10932,13 @@ def get_conversion_24h(db: Session = Depends(get_db)) -> dict:
     sig_row = db.execute(text(
         "SELECT COUNT(*) FROM bot_signals s "
         "JOIN bot_allocations a ON a.id = s.allocation_id "
-        "WHERE a.user_id = 1 AND s.ts >= :cut"
+        "WHERE s.ts >= :cut"
     ), {"cut": cut}).fetchone()
     # m099: fleet + per-bot trades_24h counts BROKER_FILL only.
     trd_row = db.execute(text(
         "SELECT COUNT(*) FROM bot_trades t "
         "JOIN bot_allocations a ON a.id = t.allocation_id "
-        "WHERE a.user_id = 1 AND t.ts >= :cut "
+        "WHERE t.ts >= :cut "
         "  AND t.quarantined_at IS NULL AND t.origin = 'BROKER_FILL'"
     ), {"cut": cut}).fetchone()
     sigs = int(sig_row[0] or 0)
@@ -10960,7 +10949,7 @@ def get_conversion_24h(db: Session = Depends(get_db)) -> dict:
         "  (SELECT COUNT(*) FROM bot_trades t WHERE t.allocation_id = a.id AND t.ts >= :cut "
         "    AND t.quarantined_at IS NULL AND t.origin = 'BROKER_FILL') AS trds "
         "FROM bot_allocations a JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 AND a.starting_capital_cents > 0"
+        "WHERE a.starting_capital_cents > 0"
     ), {"cut": cut}).fetchall()
     per_bot_rows = [
         {"bot": r[0], "sigs_24h": int(r[1] or 0), "trades_24h": int(r[2] or 0),
@@ -10994,7 +10983,7 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
     from app.core.canonical import compute_bot_snapshot
     from app.db.models.bots import BotAllocation, BotProfile
 
-    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()
+    allocs = db.query(BotAllocation).all()
     profile_map = {p.id: p for p in db.query(BotProfile).all()}
 
     rows = []

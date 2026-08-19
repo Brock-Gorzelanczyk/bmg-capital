@@ -35,7 +35,7 @@ def _check_bot_count(db: Session) -> dict:
     """Verify exactly 13 enabled bots for user_id=1."""
     try:
         row = db.execute(text(
-            "SELECT COUNT(*) FROM bot_allocations WHERE enabled=1 AND user_id=1"
+            "SELECT COUNT(*) FROM bot_allocations WHERE enabled=1"
         )).fetchone()
         n = int(row[0]) if row else 0
         if n != 13:
@@ -128,7 +128,7 @@ def _check_capital_invariant(db: Session) -> dict:
         row = db.execute(text(
             "SELECT COALESCE(SUM(starting_capital_cents), 0) "
             "FROM bot_allocations "
-            "WHERE user_id=1 AND (enabled=1 OR paused_reason IS NOT NULL)"
+            "WHERE (enabled=1 OR paused_reason IS NOT NULL)"
         )).fetchone()
         total_cents = int(row[0]) if row else 0
         if total_cents == 100_000_000:
@@ -221,7 +221,6 @@ def _check_options_occ_format(db: Session) -> tuple[dict, list[str]]:
               JOIN bot_allocations a ON a.id = bt.allocation_id
               JOIN bot_profiles p ON p.id = a.profile_id
              WHERE p.name IN ('options_directional', 'options_income')
-               AND a.user_id = 1
                AND bt.ts >= datetime('now', '-24 hours')
                AND bt.quarantined_at IS NULL
         """)).fetchall()
@@ -315,7 +314,6 @@ def _check_fund_deployment(db: Session) -> dict:
               JOIN bot_allocations a ON a.id = bp.allocation_id
              WHERE bp.closed_at IS NULL
                AND bp.quarantined_at IS NULL
-               AND a.user_id = 1
         """)).fetchone()
         notional_cents = float(row[0]) if row else 0.0
         deployment_pct = notional_cents / 100_000_000 * 100

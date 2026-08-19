@@ -697,7 +697,6 @@ def _check_i15_starting_capital_vs_funded(db) -> Result:
         sum_cents = sum(
             int(a.starting_capital_cents or 0)
             for a in db.query(BotAllocation)
-                       .filter(BotAllocation.user_id == 1)
                        .filter(BotAllocation.enabled == True)
                        .all()
         )
@@ -985,7 +984,6 @@ def _check_i30_per_symbol_upl_gap(db) -> Result:
                   .join(BotAllocation, BotAllocation.id == BotPosition.allocation_id)
                   .filter(BotPosition.closed_at.is_(None))
                   .filter(BotPosition.quarantined_at.is_(None))
-                  .filter(BotAllocation.user_id == 1)
                   .all())
         alp_price_by_sym = {p["symbol"]: float(p.get("current_price") or 0) for p in alp}
         bmg_upl_by_sym: dict[str, float] = {}
@@ -1260,7 +1258,6 @@ def _check_i31_per_bot_identity(db) -> Result:
         allocs = (
             db.query(BotAllocation, BotProfile)
             .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
-            .filter(BotAllocation.user_id == 1)
             .filter(BotAllocation.enabled.is_(True))
             .all()
         )
@@ -1377,8 +1374,7 @@ def _check_i24_bot_level_identities(db) -> Result:
             _br_row = db.execute(_t(
                 "SELECT COALESCE(SUM(t.pnl_cents), 0) FROM bot_trades t "
                 "JOIN bot_allocations a ON a.id = t.allocation_id "
-                "WHERE a.user_id = 1 "
-                "  AND t.side IN ('sell','close','cover') "
+                "WHERE t.side IN ('sell','close','cover') "
                 "  AND t.quarantined_at IS NULL "
                 "  AND t.origin = 'BROKER_FILL'"
             )).fetchone()

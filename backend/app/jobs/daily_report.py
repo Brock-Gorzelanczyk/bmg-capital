@@ -33,7 +33,7 @@ def _alp_get(path: str) -> dict:
 def _round_trips_by_bot(db) -> dict:
     """FIFO-pair opens with closes per bot to count round trips."""
     from app.db.models.bots import BotTrade, BotAllocation, BotProfile
-    allocs = db.query(BotAllocation).filter(BotAllocation.user_id == 1).all()
+    allocs = db.query(BotAllocation).all()
     profs = {p.id: p.name for p in db.query(BotProfile).all()}
     alloc_to_prof = {a.id: profs.get(a.profile_id) for a in allocs}
     alloc_ids = [a.id for a in allocs]
@@ -125,7 +125,7 @@ def build_daily_report(db) -> str:
             "  SUM(CASE WHEN t.alpaca_order_id IS NULL THEN 1 ELSE 0 END) AS sim_ct "
             "FROM bot_trades t "
             "JOIN bot_allocations a ON a.id = t.allocation_id "
-            "WHERE a.user_id = 1 AND t.ts >= :cut AND t.quarantined_at IS NULL"
+            "WHERE t.ts >= :cut AND t.quarantined_at IS NULL"
         ), {"cut": cut}).fetchone()
         trades_24h = int(row[0] or 0) if row else 0
         trades_real = int(row[1] or 0) if row else 0
@@ -133,7 +133,7 @@ def build_daily_report(db) -> str:
         sig_row = db.execute(_t(
             "SELECT COUNT(*) FROM bot_signals bs "
             "JOIN bot_allocations a ON a.id = bs.allocation_id "
-            "WHERE a.user_id = 1 AND bs.ts >= :cut"
+            "WHERE bs.ts >= :cut"
         ), {"cut": cut}).fetchone()
         signals_24h = int(sig_row[0] or 0) if sig_row else 0
     except Exception as exc:
@@ -149,7 +149,7 @@ def build_daily_report(db) -> str:
         rt_1_9 = sum(1 for v in rts.values() if 1 <= v < 10)
         # Enabled user-1 bots not in rts dict = 0-RT bots
         from app.db.models.bots import BotAllocation
-        n_enabled = db.query(BotAllocation).filter(BotAllocation.user_id == 1).filter(BotAllocation.enabled == True).count()
+        n_enabled = db.query(BotAllocation).filter(BotAllocation.enabled == True).count()
         rt_0 = max(0, n_enabled - (at_50_plus + rt_10_49 + rt_1_9))
     except Exception as exc:
         logger.error("[daily-report] rts fetch failed: %s", exc)

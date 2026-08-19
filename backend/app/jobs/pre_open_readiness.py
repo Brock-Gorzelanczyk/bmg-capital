@@ -31,7 +31,7 @@ def _armed_bots(db: Session) -> list[dict]:
         "SELECT p.name, a.starting_capital_cents, p.enabled, a.enabled "
         "FROM bot_allocations a "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 AND a.starting_capital_cents > 0 "
+        "WHERE a.starting_capital_cents > 0 "
         "ORDER BY a.starting_capital_cents DESC"
     )).fetchall()
     return [{"bot": r[0], "cents": int(r[1] or 0), "profile_enabled": bool(r[2]), "alloc_enabled": bool(r[3])} for r in rows]
@@ -46,7 +46,7 @@ def _last_activity(db: Session) -> dict:
         "FROM bot_signals s "
         "JOIN bot_allocations a ON a.id = s.allocation_id "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 AND s.ts >= :cut "
+        "WHERE s.ts >= :cut "
         "GROUP BY p.name"
     ), {"cut": cut_24h}).fetchall()
 
@@ -55,7 +55,7 @@ def _last_activity(db: Session) -> dict:
         "FROM bot_trades t "
         "JOIN bot_allocations a ON a.id = t.allocation_id "
         "JOIN bot_profiles p ON p.id = a.profile_id "
-        "WHERE a.user_id = 1 AND t.ts >= :cut AND t.quarantined_at IS NULL "
+        "WHERE t.ts >= :cut AND t.quarantined_at IS NULL "
         "GROUP BY p.name"
     ), {"cut": cut_24h}).fetchall()
 
