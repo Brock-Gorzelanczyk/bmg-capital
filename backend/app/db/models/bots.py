@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, date, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, JSON, String, Text, ForeignKey, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, Integer, JSON, String, Text, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -123,6 +123,12 @@ class BotTrade(Base):
     side: Mapped[str] = mapped_column(String, nullable=False)  # buy|sell
     qty: Mapped[float] = mapped_column(Float, nullable=False)
     fill_price_cents: Mapped[float] = mapped_column(Float, nullable=False)
+    # m100 (2026-08-18) — micro-cent field (1e6 × dollars) for sub-penny precision.
+    # See ledger #34: fill_price_cents rounds SHIB/BONK/PEPE fills to 0 via
+    # int(round(px*100)); this column preserves those digits. Nullable during
+    # the writer-migration + consumer-migration window; flip to NOT NULL in
+    # m101 after 30 days green.
+    fill_price_micros: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
     fees_cents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ts: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     alpaca_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

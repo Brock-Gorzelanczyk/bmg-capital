@@ -1142,6 +1142,20 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m099_provenance_column FAILED: %s",
                      _m099_exc, exc_info=True)
 
+    # m100: fill_price_micros column on bot_trades (ledger #34).
+    # Structural fix for sub-penny fill precision — SHIB/BONK/PEPE fills
+    # were rounding to 0 via int(round(px*100)). Adds fill_price_micros
+    # BIGINT (1e6 × dollars); writer + consumer migration in follow-up
+    # commits per .pipeline/01-spec.md §S28 chokepoint sequencing.
+    try:
+        from app.db.migrations.m100_fill_price_precision import run as _run_m100
+        with engine.begin() as _m100_conn:
+            _m100_result = _run_m100(_m100_conn)
+        logger.warning("[startup] m100 status: %s", _m100_result)
+    except Exception as _m100_exc:
+        logger.error("[startup] m100_fill_price_precision FAILED: %s",
+                     _m100_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
