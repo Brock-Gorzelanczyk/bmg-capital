@@ -1179,6 +1179,114 @@ def _check_i25_alpaca_activity_diff(db) -> Result:
         return _amber("I25", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i31_per_bot_identity(db) -> Result:
+    """Per-allocation identity regression guard.
+
+    Brock 2026-08-18 (task #38): I24 asserts FUND-LEVEL identities but
+    aggregation can hide per-bot drift — bot A +$50 and bot B −$50 sums
+    to $0 (I24 green) while real drift is $100.
+
+    This check: for each active allocation, compute unrealized directly from
+    that alloc's BotPositions (using Alpaca prices), compare to what
+    canonical's compute_bot_snapshot returns for that alloc. Any bot with
+    delta > $10 gets called out by name.
+
+    Threshold $10/bot (tighter than I24's fund-level $50) — component
+    tolerance should be smaller than the aggregate, otherwise the aggregate
+    tolerance is meaningless.
+    """
+    try:
+        import os as _os, urllib.request as _ur, json as _j
+        from sqlalchemy import text as _t
+        from app.db.models.bots import BotAllocation, BotProfile
+        from app.core.canonical import compute_bot_snapshot
+
+        kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+        ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+        if not kid or not ksec:
+            return _amber("I31", None, None, None, "no_alpaca_creds")
+        alp = _j.loads(_ur.urlopen(_ur.Request(
+            "https://paper-api.alpaca.markets/v2/positions",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        ), timeout=10).read()) or []
+        alp_price_by_sym = {p["symbol"]: float(p.get("current_price") or 0) for p in alp}
+
+        # For each active alloc, compare direct-from-DB UPL vs snapshot UPL
+        allocs = (
+            db.query(BotAllocation, BotProfile)
+            .join(BotProfile, BotProfile.id == BotAllocation.profile_id)
+            .filter(BotAllocation.user_id == 1)
+            .filter(BotAllocation.enabled.is_(True))
+            .all()
+        )
+
+        offenders: list[dict] = []
+        checked = 0
+        for alloc, profile in allocs:
+            # Direct compute from BotPositions
+            rows = db.execute(_t(
+                "SELECT symbol, qty, avg_cost_cents, side, option_type "
+                "FROM bot_positions "
+                "WHERE allocation_id = :a "
+                "  AND closed_at IS NULL "
+                "  AND quarantined_at IS NULL"
+            ), {"a": alloc.id}).fetchall()
+            direct_upl_cents = 0
+            for sym, qty, avg_cents, side, opt in rows:
+                if not sym:
+                    continue
+                price = alp_price_by_sym.get(sym)
+                if price is None or price <= 0:
+                    continue
+                entry = (avg_cents or 0) / 100.0
+                mult = 100 if opt else 1
+                is_short = (side or "long") == "short"
+                if is_short:
+                    upl = (entry - price) * (qty or 0) * mult
+                else:
+                    upl = (price - entry) * (qty or 0) * mult
+                direct_upl_cents += int(round(upl * 100))
+
+            # Snapshot UPL (canonical path)
+            try:
+                snap = compute_bot_snapshot(alloc, profile, db)
+                snap_upl_cents = int(snap.unrealized_pnl_cents or 0)
+            except Exception:
+                continue  # skip bots canonical can't snapshot
+            checked += 1
+            delta_cents = direct_upl_cents - snap_upl_cents
+            if abs(delta_cents) > 1000:  # >$10
+                offenders.append({
+                    "alloc_id": alloc.id,
+                    "profile": profile.name,
+                    "direct_upl_usd": round(direct_upl_cents / 100, 2),
+                    "snapshot_upl_usd": round(snap_upl_cents / 100, 2),
+                    "delta_usd": round(delta_cents / 100, 2),
+                    "n_positions": len(rows),
+                })
+
+        actual = {
+            "allocations_checked": checked,
+            "offenders_count": len(offenders),
+            "offenders": sorted(offenders, key=lambda x: abs(x["delta_usd"]), reverse=True)[:10],
+            "threshold_usd": 10.0,
+            "metric": "per_alloc_direct_upl_vs_canonical_snapshot",
+            "note": "For each enabled alloc: compute UPL from BotPositions using "
+                    "Alpaca prices, compare to canonical.compute_bot_snapshot output. "
+                    "Any bot with |delta| > $10 shows canonical is diverging from "
+                    "raw data for that bot specifically. Fund-level I24 can't see this.",
+        }
+        if not offenders:
+            return _ok("I31", actual, {"per_bot_max_usd": 10.0},
+                       f"all {checked} bots reconcile within $10")
+        return _red("I31", actual, {"per_bot_max_usd": 10.0}, float(len(offenders)),
+                    f"{len(offenders)} bot(s) with per-alloc UPL divergence > $10 "
+                    f"(top: {offenders[0]['profile'] if offenders else '?'} "
+                    f"delta=${offenders[0]['delta_usd'] if offenders else 0:.2f})")
+    except Exception as exc:
+        return _amber("I31", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i24_bot_level_identities(db) -> Result:
     """Brock 2026-08-10: fund-level I2 alone can hide bot-level drift when
     over/under cancel out. I24 asserts the component identities directly:
@@ -1373,6 +1481,7 @@ CHECKS: dict[str, Callable] = {
     "I28": lambda db: _check_i28_vault_freshness(db),
     "I29": _check_i29_fill_price_micros_populated,
     "I30": _check_i30_per_symbol_upl_gap,
+    "I31": _check_i31_per_bot_identity,
 }
 
 
