@@ -874,6 +874,41 @@ def _check_i26_sub_penny_fill_zero(db) -> Result:
         return _amber("I26", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i29_fill_price_micros_populated(db) -> Result:
+    """Every recent BROKER_FILL must have fill_price_micros populated.
+
+    m100 (2026-08-18) added fill_price_micros for sub-penny precision.
+    Writers were migrated in one batch — this invariant catches any
+    regression where a new BROKER_FILL lands without micros.
+
+    Scope: last 24h only, so backfill lag on the 46 known-broken pre-m100
+    rows doesn't ping this. Those legacy rows are I26's territory.
+
+    Sibling of I26 (legacy fill_price_cents=0 flag). Both stay live
+    through the m101 deprecation window.
+    """
+    try:
+        from sqlalchemy import text as _t
+        row = db.execute(_t(
+            "SELECT COUNT(*), COALESCE(GROUP_CONCAT(DISTINCT symbol), '') "
+            "FROM bot_trades "
+            "WHERE origin = 'BROKER_FILL' "
+            "  AND fill_price_micros IS NULL "
+            "  AND qty > 0 "
+            "  AND quarantined_at IS NULL "
+            "  AND ts >= datetime('now','-24 hours')"
+        )).fetchone()
+        n = int(row[0] or 0)
+        syms = (row[1] or "").split(",") if row[1] else []
+        actual = {"count": n, "symbols_sample": syms[:20]}
+        if n == 0:
+            return _ok("I29", 0, 0, "no recent BROKER_FILL rows missing fill_price_micros")
+        return _red("I29", actual, 0, float(n),
+                    f"{n} recent (24h) BROKER_FILL rows have fill_price_micros IS NULL — writer regression")
+    except Exception as exc:
+        return _amber("I29", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i27_pv_endpoint_agreement(db) -> Result:
     """All portfolio-value-returning endpoints must agree within $1.
 
@@ -1189,6 +1224,7 @@ CHECKS: dict[str, Callable] = {
     "I26": _check_i26_sub_penny_fill_zero,
     "I27": _check_i27_pv_endpoint_agreement,
     "I28": lambda db: _check_i28_vault_freshness(db),
+    "I29": _check_i29_fill_price_micros_populated,
 }
 
 
