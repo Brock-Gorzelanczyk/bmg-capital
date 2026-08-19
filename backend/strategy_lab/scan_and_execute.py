@@ -215,6 +215,20 @@ def scan_and_execute(
                 }
                 for _, r in df.iterrows()
             ]
+        # 2026-08-18 leak fix (task #77): yfinance returns Dict[str, DataFrame].
+        # After conversion to plain-python bars dict, drop the pandas references
+        # explicitly so the function stack doesn't hold ~20MB of DataFrames for
+        # the rest of the scan. Measured: scan:stock_day averaging +25MB/run
+        # per /admin/mem-probe. Explicit free is the cheap surgical mitigation
+        # ahead of a proper fix on the module-level _bar_cache in
+        # backend/app/screener/runner.py (separate task).
+        try:
+            for _s in list(raw.keys()):
+                raw[_s] = None
+            raw.clear()
+        except Exception:
+            pass
+        raw = None  # sever last local ref
     except Exception as exc:
         bar_error = str(exc)
         logger.warning("[scan:%s] bar fetch failed: %s", profile_name, exc)
