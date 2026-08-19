@@ -314,6 +314,7 @@ def adopt_orphans(db, dry_run: bool = False) -> dict:
                 side="short" if broker_side == "short" else "buy",
                 qty=abs(qty),
                 fill_price_cents=cost_cents,
+                fill_price_micros=cost_cents * 10000,  # m100 — lossless from int cents
                 fees_cents=0,
                 ts=now_ts,
                 position_id=pos.id,

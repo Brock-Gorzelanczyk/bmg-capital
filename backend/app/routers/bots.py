@@ -3995,6 +3995,7 @@ def debug_force_trade(
         side="buy",
         qty=qty,
         fill_price_cents=fill_price_cents,
+        fill_price_micros=int(round(float(btc_price) * 1_000_000)),  # m100 — sub-penny precise
         fees_cents=0,
         ts=now,
         position_id=pos_row.id,

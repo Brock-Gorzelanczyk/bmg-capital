@@ -2467,6 +2467,7 @@ def setup_bot_scheduler(scheduler) -> None:
                             _db.add(BotTrade(
                                 allocation_id=alloc.id, symbol=symbol, side="buy",
                                 qty=qty, fill_price_cents=fill_cents,
+                                fill_price_micros=int(fill_cents or 0) * 10000,  # m100
                                 fees_cents=friction, ts=now, position_id=pos.id,
                                 is_paper=True, expected_fill_cents=fill_cents,
                                 slippage_bps=3.0, strategy="cash_floor",

@@ -2528,6 +2528,7 @@ def _execute_options_signal(
                 side=_lr["side_trade"],
                 qty=float(contract_count),
                 fill_price_cents=_lr["premium_cents"],
+                fill_price_micros=int(_lr["premium_cents"] or 0) * 10000,  # m100 — lossless from int cents
                 fees_cents=_opt_friction_cents,
                 ts=now,
                 position_id=_lr_pos.id,
@@ -3518,6 +3519,7 @@ def _execute_signal(db, alloc, sig, final_size_pct: float, profile: dict, profil
             side="short" if is_short else "buy",  # "short" marks entry; "cover" marks exit
             qty=qty,
             fill_price_cents=fill_cents,
+            fill_price_micros=int(fill_cents or 0) * 10000,  # m100 — lossless from int cents
             fees_cents=_friction_cents,
             ts=now,
             position_id=pos.id,

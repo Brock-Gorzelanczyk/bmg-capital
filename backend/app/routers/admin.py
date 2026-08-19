@@ -740,6 +740,7 @@ def adopt_all_alpaca_orphans(
             side="short" if side == "short" else "buy",
             qty=missing_qty,
             fill_price_cents=cost_cents,
+            fill_price_micros=cost_cents * 10000,  # m100 — lossless from int cents
             fees_cents=0,
             ts=now,
             position_id=pos.id,
@@ -1028,6 +1029,7 @@ def rebuild_positions_from_alpaca(
                 side="short" if a["side"] == "short" else "buy",
                 qty=a["qty"],
                 fill_price_cents=cost_cents,
+                fill_price_micros=cost_cents * 10000,  # m100 — lossless from int cents
                 fees_cents=0,
                 ts=now,
                 position_id=pos.id,
@@ -1973,6 +1975,7 @@ def confirm_alpaca_fill_and_close(
         side=bmg_side_close,
         qty=filled_qty,
         fill_price_cents=int(round(filled_avg * 100)),  # REAL FILL
+        fill_price_micros=int(round(float(filled_avg) * 1_000_000)),  # m100 — sub-penny precise
         fees_cents=0,
         ts=now,
         position_id=pos.id,
@@ -4014,6 +4017,7 @@ def adopt_missing_alpaca_positions(
             side="short" if side == "short" else "buy",
             qty=abs(raw_qty),
             fill_price_cents=cost_cents,
+            fill_price_micros=cost_cents * 10000,  # m100 — lossless from int cents
             fees_cents=0, ts=now, position_id=pos.id,
             is_paper=True,
             alpaca_order_id=f"adopt_missing_2026_08_07:{attr_source}",
@@ -4429,6 +4433,7 @@ def rebuild_realized_pnl(
                 side=bmg_side,
                 qty=filled_qty,
                 fill_price_cents=int(round(filled_px * 100)),
+                fill_price_micros=int(round(float(filled_px) * 1_000_000)),  # m100
                 fees_cents=0,
                 ts=ts,
                 is_paper=True,
@@ -4722,6 +4727,7 @@ def close_ghost_positions(
                 side="sell" if (p.side or "long").lower() == "long" else "cover",
                 qty=float(p.qty or 0),
                 fill_price_cents=int(p.avg_cost_cents or 0),
+                fill_price_micros=int(p.avg_cost_cents or 0) * 10000,  # m100 — lossless from int cents
                 fees_cents=0,
                 ts=now,
                 position_id=p.id,
@@ -6790,6 +6796,7 @@ def synthetic_fill_test(
             side="buy",
             qty=float(_SYN_CONTRACTS),
             fill_price_cents=_SYN_ENTRY_CENTS,
+            fill_price_micros=_SYN_ENTRY_CENTS * 10000,  # m100 — lossless from int cents
             fees_cents=0,
             ts=now,
             position_id=pos.id,

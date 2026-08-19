@@ -421,6 +421,7 @@ def log_fill(
         side=side,
         qty=qty,
         fill_price_cents=fill_price_cents,
+        fill_price_micros=int(fill_price_cents or 0) * 10000,  # m100 — lossless from int cents
         fees_cents=fees_cents,
         ts=ts or datetime.now(timezone.utc),
         alpaca_order_id=alpaca_order_id,

@@ -127,6 +127,7 @@ def _book_bmg_fill(alpaca_order_id: str, filled_avg_price: float, filled_qty: fl
                 side="sell",
                 qty=filled_qty,
                 fill_price_cents=int(round(filled_avg_price * 100)),  # REAL FILL
+                fill_price_micros=int(round(float(filled_avg_price) * 1_000_000)),  # m100
                 fees_cents=0,
                 ts=now,
                 position_id=pos.id,

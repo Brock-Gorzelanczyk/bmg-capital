@@ -199,6 +199,7 @@ def _close_position(db, pos, alloc, price_usd: float, reason: str, now: datetime
         side="cover" if is_short else "sell",  # cover = buy-to-close for shorts
         qty=pos.qty,
         fill_price_cents=fill_cents,
+        fill_price_micros=int(fill_cents or 0) * 10000,  # m100 — lossless from int cents
         fees_cents=0,
         ts=now,
         position_id=pos.id,

@@ -279,6 +279,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 side="sell",
                 qty=pos.qty,
                 fill_price_cents=int(exit_price * 100),
+                fill_price_micros=int(round(float(exit_price) * 1_000_000)),  # m100
                 fees_cents=0,
                 ts=now,
                 position_id=pos.id,
@@ -364,6 +365,7 @@ def _execute_bot(db, user_id: int, alloc, profile, today: date, now: datetime) -
                 side="buy",
                 qty=qty,
                 fill_price_cents=int(entry_price * 100),
+                fill_price_micros=int(round(float(entry_price) * 1_000_000)),  # m100
                 fees_cents=0,
                 ts=now,
                 position_id=pos.id,

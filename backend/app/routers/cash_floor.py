@@ -227,6 +227,7 @@ def rebalance(
                 side="buy",
                 qty=qty,
                 fill_price_cents=fill_cents,
+                fill_price_micros=int(fill_cents or 0) * 10000,  # m100
                 fees_cents=friction_cents,
                 ts=now,
                 position_id=pos.id,
@@ -279,6 +280,7 @@ def rebalance(
                 side="sell",
                 qty=trim_qty,
                 fill_price_cents=fill_cents,
+                fill_price_micros=int(fill_cents or 0) * 10000,  # m100
                 fees_cents=friction_cents,
                 ts=now,
                 position_id=existing.id,

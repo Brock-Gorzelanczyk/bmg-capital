@@ -55,3 +55,35 @@ def infer_origin_from_alpaca_order_id(alpaca_order_id: Optional[str]) -> str:
 
 def is_valid(origin: Optional[str]) -> bool:
     return origin in ALLOWED_ORIGINS
+
+
+# ─── Ledger #34 / m100 helpers ────────────────────────────────────────────
+# fill_price_cents rounds sub-penny fills (SHIB @ $0.000024) to 0.
+# fill_price_micros (1e6 × dollars) preserves precision. Writers must set
+# BOTH during the m100 deprecation window; the legacy cents value stays
+# populated so consumers not yet migrated still work.
+
+def price_to_micros(px_dollars: float) -> int:
+    """Convert dollar price to micro-cents (1e6 × dollars). Never returns 0
+    for a nonzero input — sub-penny is preserved. NaN/negative → 0."""
+    try:
+        v = float(px_dollars)
+    except (TypeError, ValueError):
+        return 0
+    if v != v or v <= 0:  # NaN check via v != v
+        return 0
+    return int(round(v * 1_000_000))
+
+
+def price_to_cents(px_dollars: float) -> int:
+    """Legacy dollar → cents (int). Sub-penny truncates to 0 — that's the
+    ledger #34 bug. Kept as a helper so writer sites use ONE consistent
+    coercion. Writers should always call BOTH price_to_cents AND
+    price_to_micros so both columns stay in sync during m100 window."""
+    try:
+        v = float(px_dollars)
+    except (TypeError, ValueError):
+        return 0
+    if v != v or v <= 0:
+        return 0
+    return int(round(v * 100))
