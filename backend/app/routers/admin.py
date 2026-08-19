@@ -11069,6 +11069,122 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
     }
 
 
+# ─── 2026-08-19 Brock: cross-user position enumeration (task #80 step 1) ───
+@router.get("/positions/non-user-1")
+def positions_non_user_1(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """List every active BotPosition where the owning allocation.user_id != 1.
+
+    Read-only. Cross-references each row against live Alpaca positions and
+    splits into (a) has-Alpaca-match → re-attribute candidates, (b) no
+    Alpaca match → phantom quarantine candidates.
+
+    Ledger #42 / task #80 step 1: don't act, just report the table."""
+    import os as _os, urllib.request as _ur, json as _j
+    from sqlalchemy import text as _t
+    result: Dict[str, Any] = {}
+
+    # Fetch Alpaca positions for cross-reference
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    alp_positions: list[dict] = []
+    if kid and ksec:
+        try:
+            alp_positions = _j.loads(_ur.urlopen(_ur.Request(
+                "https://paper-api.alpaca.markets/v2/positions",
+                headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+            ), timeout=10).read()) or []
+        except Exception as exc:
+            result["alpaca_fetch_error"] = str(exc)[:200]
+    alp_by_sym: dict[str, dict] = {}
+    for p in alp_positions:
+        s = p.get("symbol")
+        if s:
+            alp_by_sym.setdefault(s, []).append(p)
+
+    # Enumerate BMG active positions with user_id != 1
+    rows = db.execute(_t(
+        "SELECT bp.id, bp.symbol, bp.side, bp.qty, bp.avg_cost_cents, "
+        "  bp.opened_at, bp.closed_at, bp.quarantined_at, bp.quarantine_reason, "
+        "  bp.option_type, bp.origin, "
+        "  bp.allocation_id, a.user_id, p.name AS profile_name, a.enabled "
+        "FROM bot_positions bp "
+        "JOIN bot_allocations a ON a.id = bp.allocation_id "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id != 1 "
+        "  AND bp.closed_at IS NULL "
+        "  AND bp.quarantined_at IS NULL "
+        "ORDER BY a.user_id, a.id, bp.symbol"
+    )).fetchall()
+
+    positions = []
+    group_a_reattribute: list[dict] = []
+    group_b_phantom: list[dict] = []
+
+    # Also fetch user_1 allocations grouped by profile so re-attribute can
+    # target the matching profile's user_1 allocation
+    user1_alloc_by_profile: dict[str, int] = {}
+    try:
+        u1_rows = db.execute(_t(
+            "SELECT a.id, p.name FROM bot_allocations a "
+            "JOIN bot_profiles p ON p.id = a.profile_id "
+            "WHERE a.user_id = 1 AND a.enabled = 1"
+        )).fetchall()
+        for aid, pname in u1_rows:
+            if pname and pname not in user1_alloc_by_profile:
+                user1_alloc_by_profile[pname] = int(aid)
+    except Exception:
+        pass
+
+    for r in rows:
+        (row_id, sym, side, qty, avg_cents, opened_at, closed_at, q_at, q_reason,
+         opt_type, origin, alloc_id, user_id, profile_name, enabled) = r
+        alp_matches = alp_by_sym.get(sym or "", [])
+        alp_qty = sum(float(p.get("qty") or 0) for p in alp_matches) if alp_matches else 0.0
+        entry = {
+            "position_id": int(row_id),
+            "symbol": sym,
+            "profile": profile_name,
+            "alloc_id": int(alloc_id),
+            "user_id": int(user_id),
+            "alloc_enabled": bool(enabled),
+            "side": side,
+            "qty": float(qty or 0),
+            "avg_cost_cents": int(avg_cents or 0),
+            "opened_at": str(opened_at) if opened_at else None,
+            "option_type": opt_type,
+            "origin": origin,
+            "alpaca_holds_symbol": bool(alp_matches),
+            "alpaca_qty": alp_qty,
+            "u1_target_alloc_id": user1_alloc_by_profile.get(profile_name),
+        }
+        positions.append(entry)
+        if alp_matches:
+            group_a_reattribute.append(entry)
+        else:
+            group_b_phantom.append(entry)
+
+    # Also enumerate the distinct non-user-1 allocs that are enabled (need to disable at step 3)
+    enabled_allocs = sorted({
+        (p["alloc_id"], p["profile"], p["user_id"])
+        for p in positions if p["alloc_enabled"]
+    })
+
+    result.update({
+        "total_rows": len(positions),
+        "group_a_reattribute_count": len(group_a_reattribute),
+        "group_b_phantom_count": len(group_b_phantom),
+        "enabled_allocs_to_disable": [
+            {"alloc_id": a, "profile": p, "user_id": u} for a, p, u in enabled_allocs
+        ],
+        "user1_alloc_by_profile": user1_alloc_by_profile,
+        "positions": positions,
+    })
+    return result
+
+
 # ─── 2026-08-18 Brock: alpaca activity ledger (ledger #28 close) ────────────
 @router.get("/alpaca-activity-ledger")
 def alpaca_activity_ledger_read(
