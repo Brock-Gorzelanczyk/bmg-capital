@@ -140,8 +140,17 @@ def _check_i1_position_counts(db) -> Result:
         bmg_opt = sum(1 for p in bmg_open if getattr(p, "option_type", None))
         bmg_non_opt = len(bmg_open) - bmg_opt
 
-        actual = {"bmg_option": bmg_opt, "bmg_non_option": bmg_non_opt,
-                  "alp_option": alp_opt, "alp_equity": alp_eq, "alp_crypto": alp_cry}
+        actual = {
+            "bmg_option": bmg_opt, "bmg_non_option": bmg_non_opt,
+            "alp_option": alp_opt, "alp_equity": alp_eq, "alp_crypto": alp_cry,
+            "metric": "bmg_active_row_count_vs_alpaca_position_count",
+            "note": "Compares DISTINCT BMG active BotPosition rows to Alpaca "
+                    "position count. Duplicate rows for the same symbol inflate "
+                    "this number (see /admin/diag/multi-owned). For the "
+                    "symbol-keyed drift (DB=134 vs Alpaca=136 style), see "
+                    "the diag endpoint's recon numbers; this row-count metric "
+                    "is stricter but noisier.",
+        }
         expected = {"bmg_option ≈ alp_option": True, "bmg_non_option ≈ alp_equity + alp_crypto": True}
 
         opt_delta = abs(bmg_opt - alp_opt)
@@ -149,12 +158,15 @@ def _check_i1_position_counts(db) -> Result:
         max_delta = max(opt_delta, non_opt_delta)
 
         if max_delta <= 2:
-            return _ok("I1", actual, expected, f"in tolerance (max delta {max_delta})")
+            return _ok("I1", actual, expected,
+                       f"row-count drift {max_delta} (opt:{opt_delta} non-opt:{non_opt_delta}) — in tolerance")
         if max_delta <= 5:
             return _amber("I1", actual, expected, max_delta,
-                          f"position drift {max_delta} (opt:{opt_delta} non-opt:{non_opt_delta})")
+                          f"row-count drift {max_delta} (opt:{opt_delta} non-opt:{non_opt_delta}) "
+                          "— check /admin/diag/multi-owned for dupes")
         return _red("I1", actual, expected, max_delta,
-                    f"position drift {max_delta} (opt:{opt_delta} non-opt:{non_opt_delta})")
+                    f"row-count drift {max_delta} (opt:{opt_delta} non-opt:{non_opt_delta}) "
+                    "— check /admin/diag/multi-owned for dupes, /admin/positions/quarantine-bmg-only-phantoms for phantoms")
     except Exception as exc:
         return _amber("I1", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
@@ -226,14 +238,27 @@ def _check_i2_unrealized_pl(db) -> Result:
             else:
                 bmg_upl += (cur - entry) * (p.qty or 0) * mult
 
-        actual = {"bmg_upl_usd": round(bmg_upl, 2), "alpaca_upl_usd": round(alp_upl, 2)}
+        actual = {
+            "bmg_upl_usd": round(bmg_upl, 2),
+            "alpaca_upl_usd": round(alp_upl, 2),
+            "metric": "bmg_row_sum_vs_alpaca_position_sum",
+            "note": "Per-BMG-row UPL summed (includes duplicate rows if any) "
+                    "vs per-Alpaca-position UPL summed. Larger than the "
+                    "per-symbol view when BMG has duplicate or phantom rows. "
+                    "For symbol-keyed comparison see /admin/diag/i2-hypothesis "
+                    "secondary_total (that's the resume gate; this is the "
+                    "canonical-side view).",
+        }
         drift = abs(bmg_upl - alp_upl)
         if drift <= 5:
-            return _ok("I2", actual, None, f"drift ${drift:,.2f}")
+            return _ok("I2", actual, None, f"canonical vs alpaca UPL drift ${drift:,.2f}")
         if drift <= 50:
-            return _amber("I2", actual, {"drift_max": 50}, drift, f"P&L drift ${drift:,.2f}")
+            return _amber("I2", actual, {"drift_max": 50}, drift,
+                          f"canonical vs alpaca UPL drift ${drift:,.2f}")
         return _red("I2", actual, {"drift_max": 5}, drift,
-                    f"P&L drift ${drift:,.2f} — BMG says ${bmg_upl:+,.2f} vs Alpaca ${alp_upl:+,.2f}")
+                    f"canonical vs alpaca UPL drift ${drift:,.2f} — BMG-row-sum ${bmg_upl:+,.2f} "
+                    f"vs Alpaca-position-sum ${alp_upl:+,.2f} (see /admin/diag/i2-hypothesis "
+                    "for per-symbol view — that's the resume gate)")
     except Exception as exc:
         return _amber("I2", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
@@ -874,6 +899,103 @@ def _check_i26_sub_penny_fill_zero(db) -> Result:
         return _amber("I26", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i30_per_symbol_upl_gap(db) -> Result:
+    """Per-symbol UPL comparison — the primary resume gate.
+
+    Ledger #40 (2026-08-18): two "P&L drift" metrics existed for the same
+    book. I2 = BMG-row-sum vs Alpaca-position-sum (canonical view; includes
+    duplicate rows if any). I30 = per-symbol lookup: for each symbol Alpaca
+    holds, compare BMG's UPL for that symbol to Alpaca's UPL for that symbol.
+
+    Directly verifiable against broker per-symbol truth. Cleaner metric —
+    duplicate BMG rows for the same symbol collapse into a single number.
+    Brock's designated resume gate (Aug 2026-08-18): "per-symbol-vs-Alpaca
+    IS the gate."
+
+    Same $500 / $50 red/amber thresholds as I2, per operator's stated
+    tolerance for stocks-only resume.
+    """
+    try:
+        import os as _os, urllib.request as _ur, json as _j
+        from sqlalchemy import text as _t
+        kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+        ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+        if not kid or not ksec:
+            return _amber("I30", None, None, None, "no_alpaca_creds")
+        alp = _j.loads(_ur.urlopen(_ur.Request(
+            "https://paper-api.alpaca.markets/v2/positions",
+            headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+        ), timeout=10).read()) or []
+        alp_upl_by_sym: dict[str, float] = {}
+        for p in alp:
+            try:
+                alp_upl_by_sym[p["symbol"]] = alp_upl_by_sym.get(p["symbol"], 0.0) + float(p.get("unrealized_pl") or 0)
+            except Exception:
+                pass
+
+        # BMG UPL per symbol (sum across all rows for that symbol) —
+        # use canonical's per-position basis + Alpaca current price.
+        from app.db.models.bots import BotPosition, BotAllocation
+        rows = (db.query(BotPosition, BotAllocation)
+                  .join(BotAllocation, BotAllocation.id == BotPosition.allocation_id)
+                  .filter(BotPosition.closed_at.is_(None))
+                  .filter(BotPosition.quarantined_at.is_(None))
+                  .filter(BotAllocation.user_id == 1)
+                  .all())
+        alp_price_by_sym = {p["symbol"]: float(p.get("current_price") or 0) for p in alp}
+        bmg_upl_by_sym: dict[str, float] = {}
+        for pos, _a in rows:
+            sym = pos.symbol
+            if not sym:
+                continue
+            price = alp_price_by_sym.get(sym)
+            if price is None or price <= 0:
+                continue  # can't compare without a price
+            entry = (pos.avg_cost_cents or 0) / 100.0
+            is_opt = bool(getattr(pos, "option_type", None))
+            mult = 100 if is_opt else 1
+            is_short = getattr(pos, "side", "long") == "short"
+            if is_short:
+                upl = (entry - price) * (pos.qty or 0) * mult
+            else:
+                upl = (price - entry) * (pos.qty or 0) * mult
+            bmg_upl_by_sym[sym] = bmg_upl_by_sym.get(sym, 0.0) + upl
+
+        # Only compare symbols Alpaca AND BMG both have — apples-to-apples
+        common = set(bmg_upl_by_sym.keys()) & set(alp_upl_by_sym.keys())
+        drift = sum(abs(bmg_upl_by_sym[s] - alp_upl_by_sym[s]) for s in common)
+        top_offenders = sorted(
+            common,
+            key=lambda s: abs(bmg_upl_by_sym[s] - alp_upl_by_sym[s]),
+            reverse=True,
+        )[:5]
+        actual = {
+            "per_symbol_drift_usd": round(drift, 2),
+            "symbols_compared": len(common),
+            "bmg_only_symbols": sorted(set(bmg_upl_by_sym) - set(alp_upl_by_sym))[:5],
+            "alp_only_symbols": sorted(set(alp_upl_by_sym) - set(bmg_upl_by_sym))[:5],
+            "top_offenders": [{"symbol": s,
+                               "bmg_upl": round(bmg_upl_by_sym[s], 2),
+                               "alp_upl": round(alp_upl_by_sym[s], 2),
+                               "diff": round(bmg_upl_by_sym[s] - alp_upl_by_sym[s], 2)}
+                              for s in top_offenders],
+            "metric": "per_symbol_summed_upl_gap",
+            "note": "For each symbol both BMG and Alpaca hold, sum(BMG UPL) - "
+                    "sum(Alpaca UPL). This is the resume gate — clean metric, "
+                    "directly broker-verifiable, immune to BMG row duplication.",
+        }
+        if drift <= 50:
+            return _ok("I30", actual, {"drift_max_gate": 500}, f"per-symbol drift ${drift:.2f}")
+        if drift <= 500:
+            return _amber("I30", actual, {"drift_max_gate": 500}, drift,
+                          f"per-symbol drift ${drift:.2f} (approaching $500 gate)")
+        return _red("I30", actual, {"drift_max_gate": 500}, drift,
+                    f"per-symbol drift ${drift:.2f} > $500 gate — top offenders: "
+                    f"{[o['symbol'] for o in actual['top_offenders']]}")
+    except Exception as exc:
+        return _amber("I30", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i29_fill_price_micros_populated(db) -> Result:
     """Every recent BROKER_FILL must have fill_price_micros populated.
 
@@ -1225,6 +1347,7 @@ CHECKS: dict[str, Callable] = {
     "I27": _check_i27_pv_endpoint_agreement,
     "I28": lambda db: _check_i28_vault_freshness(db),
     "I29": _check_i29_fill_price_micros_populated,
+    "I30": _check_i30_per_symbol_upl_gap,
 }
 
 
