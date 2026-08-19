@@ -899,6 +899,51 @@ def _check_i26_sub_penny_fill_zero(db) -> Result:
         return _amber("I26", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+def _check_i13_single_tenant(db) -> Result:
+    """Single-tenant enforcement: zero enabled BotAllocations with user_id != 1.
+
+    Ledger #42 / task #80 step 4. The 2026-08-07 single_tenant_user1_only
+    migration was attempted but never completed — left user_2 + user_3 allocs
+    enabled with orphan positions that generated ghost sell signals. Every
+    cleanup endpoint I built quietly filtered user_id==1 and missed them.
+
+    This invariant makes the class impossible to recur silently. If any
+    non-user-1 allocation is enabled, RED with the exact alloc_ids named.
+
+    Doctrine: BMG is single-tenant. All bot activity flows under user_1.
+    Historical multi-user rows are OK if disabled or quarantined; only
+    ENABLED non-user-1 allocs are the alarm.
+    """
+    try:
+        from sqlalchemy import text as _t
+        rows = db.execute(_t(
+            "SELECT a.id, a.user_id, p.name AS profile "
+            "FROM bot_allocations a "
+            "JOIN bot_profiles p ON p.id = a.profile_id "
+            "WHERE a.user_id != 1 AND a.enabled = 1"
+        )).fetchall()
+        n = len(rows)
+        actual = {
+            "count": n,
+            "allocs": [
+                {"alloc_id": int(r[0]), "user_id": int(r[1]), "profile": r[2]}
+                for r in rows
+            ],
+            "note": "Any row here means the single-tenant migration is incomplete "
+                    "and every cleanup endpoint that filters user_id==1 has a "
+                    "blind spot for these allocations. Ledger #42.",
+        }
+        if n == 0:
+            return _ok("I13", actual, 0, "single-tenant clean (all enabled allocs are user_1)")
+        return _red("I13", actual, 0, float(n),
+                    f"{n} enabled allocation(s) with user_id != 1 — "
+                    f"finish single_tenant_user1_only migration via "
+                    f"/admin/positions/quarantine-non-user-1 + "
+                    f"/admin/allocations/disable-non-user-1")
+    except Exception as exc:
+        return _amber("I13", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
+
+
 def _check_i30_per_symbol_upl_gap(db) -> Result:
     """Per-symbol UPL comparison — the primary resume gate.
 
@@ -1464,6 +1509,7 @@ CHECKS: dict[str, Callable] = {
     "I8": _check_i8_sleeve_sanity,
     "I9": _check_i9_position_ownership,
     "I10": _check_i10_signal_funnel,
+    "I13": _check_i13_single_tenant,
     "I14": _check_i14_breach_remediation,
     "I15": _check_i15_starting_capital_vs_funded,
     "I16": _check_i16_unattributed_tracker,

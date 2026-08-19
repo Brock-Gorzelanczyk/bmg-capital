@@ -11069,6 +11069,113 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
     }
 
 
+# ─── 2026-08-19 Brock: single-tenant migration finish (task #80 steps 1-3) ─
+@router.post("/positions/quarantine-non-user-1")
+def quarantine_non_user_1(
+    dry_run: bool = Query(True, description="Preview only. Set false to write."),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Quarantine every active BotPosition whose owning allocation.user_id != 1.
+
+    Ledger #42 / task #80 step 1: finish the single_tenant_user1_only
+    migration attempted 2026-08-07. §ADOPT-BOUND: dry_run must equal live.
+    Uses reason 'single_tenant_user1_only_migration_incomplete_2026_08_19'.
+    """
+    from sqlalchemy import text as _t
+    from datetime import datetime as _dt, timezone as _tz
+    rows = db.execute(_t(
+        "SELECT bp.id, bp.symbol, bp.qty, a.user_id, a.id AS alloc_id, p.name AS profile "
+        "FROM bot_positions bp "
+        "JOIN bot_allocations a ON a.id = bp.allocation_id "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id != 1 "
+        "  AND bp.closed_at IS NULL "
+        "  AND bp.quarantined_at IS NULL "
+        "ORDER BY a.user_id, a.id, bp.symbol"
+    )).fetchall()
+    target_ids = [int(r[0]) for r in rows]
+    preview = [
+        {"position_id": int(r[0]), "symbol": r[1], "qty": float(r[2] or 0),
+         "user_id": int(r[3]), "alloc_id": int(r[4]), "profile": r[5]}
+        for r in rows
+    ]
+    if dry_run:
+        return {"dry_run": True, "count": len(target_ids), "positions": preview}
+
+    now_dt = _dt.now(_tz.utc)
+    reason = "single_tenant_user1_only_migration_incomplete_2026_08_19"
+    quarantined = []
+    for row_id in target_ids:
+        try:
+            db.execute(_t(
+                "UPDATE bot_positions SET quarantined_at = :ts, quarantine_reason = :r "
+                "WHERE id = :i AND closed_at IS NULL AND quarantined_at IS NULL"
+            ), {"ts": now_dt, "r": reason, "i": row_id})
+            quarantined.append(row_id)
+        except Exception:
+            pass
+    db.commit()
+    return {
+        "dry_run": False,
+        "reason": reason,
+        "count_planned": len(target_ids),
+        "count_quarantined": len(quarantined),
+        "match": len(target_ids) == len(quarantined),
+        "quarantined_ids": quarantined,
+    }
+
+
+@router.post("/allocations/disable-non-user-1")
+def disable_non_user_1_allocations(
+    dry_run: bool = Query(True, description="Preview only. Set false to write."),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Disable every enabled BotAllocation with user_id != 1.
+
+    Task #80 step 3. Run AFTER positions cleared (step 1 done) + adopter
+    re-populated user_1 rows (step 2). Sets enabled=0 + paused_reason.
+    Uses reason 'single_tenant_user1_only_migration_finished_2026_08_19'.
+    """
+    from sqlalchemy import text as _t
+    rows = db.execute(_t(
+        "SELECT a.id, a.user_id, p.name AS profile "
+        "FROM bot_allocations a "
+        "JOIN bot_profiles p ON p.id = a.profile_id "
+        "WHERE a.user_id != 1 AND a.enabled = 1 "
+        "ORDER BY a.user_id, a.id"
+    )).fetchall()
+    target_ids = [int(r[0]) for r in rows]
+    preview = [
+        {"alloc_id": int(r[0]), "user_id": int(r[1]), "profile": r[2]}
+        for r in rows
+    ]
+    if dry_run:
+        return {"dry_run": True, "count": len(target_ids), "allocations": preview}
+
+    reason = "single_tenant_user1_only_migration_finished_2026_08_19"
+    disabled = []
+    for row_id in target_ids:
+        try:
+            db.execute(_t(
+                "UPDATE bot_allocations SET enabled = 0, paused_reason = :r "
+                "WHERE id = :i AND enabled = 1"
+            ), {"r": reason, "i": row_id})
+            disabled.append(row_id)
+        except Exception:
+            pass
+    db.commit()
+    return {
+        "dry_run": False,
+        "reason": reason,
+        "count_planned": len(target_ids),
+        "count_disabled": len(disabled),
+        "match": len(target_ids) == len(disabled),
+        "disabled_ids": disabled,
+    }
+
+
 # ─── 2026-08-19 Brock: cross-user position enumeration (task #80 step 1) ───
 @router.get("/positions/non-user-1")
 def positions_non_user_1(
