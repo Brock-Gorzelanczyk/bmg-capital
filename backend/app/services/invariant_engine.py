@@ -1127,6 +1127,31 @@ def _check_i25_alpaca_activity_diff(db) -> Result:
             ), timeout=10).read()) or []
         except Exception as exc:
             return _amber("I25", None, None, None, f"alpaca_activities_fetch:{exc}")
+
+        # 2026-08-18 (ledger #28): also fetch non-FILL activity types and
+        # persist them to alpaca_activity_ledger. Dividends, margin interest,
+        # ACATS, corporate actions — broker-initiated events that don't have
+        # a BMG order but DO affect the account. Not part of I25's drift math;
+        # persisted for audit / P&L attribution / ops review.
+        try:
+            from app.services.alpaca_activity_ledger import (
+                NON_FILL_ACTIVITY_TYPES as _NFT, write_activity as _wa,
+            )
+            nf_url = "https://paper-api.alpaca.markets/v2/account/activities?" + _up.urlencode({
+                "after": after,
+                "activity_types": ",".join(_NFT),
+            })
+            try:
+                non_fills = _j.loads(_ur.urlopen(_ur.Request(
+                    nf_url, headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+                ), timeout=10).read()) or []
+                for act in non_fills:
+                    _wa(db, act)
+            except Exception as _nf_exc:
+                logger.debug("[I25] non-fill activity fetch failed (non-fatal): %s", _nf_exc)
+        except Exception:
+            pass  # ledger table may not exist yet on first deploy; safe
+
         alp_order_ids = {f.get("order_id") for f in fills if f.get("order_id")}
         # BMG orders touched in last 24h
         cut = _dt.now(_tz.utc) - _td(hours=24)

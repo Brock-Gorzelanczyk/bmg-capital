@@ -11069,6 +11069,36 @@ def get_pv_breakdown_diagnostic(db: Session = Depends(get_db)) -> dict:
     }
 
 
+# ─── 2026-08-18 Brock: alpaca activity ledger (ledger #28 close) ────────────
+@router.get("/alpaca-activity-ledger")
+def alpaca_activity_ledger_read(
+    activity_type: Optional[str] = Query(None, description="Filter by type (e.g. DIV, INT, ACATC)"),
+    since_hours: int = Query(168, description="Look-back window in hours (default 168 = 7d)"),
+    limit: int = Query(200, description="Max rows to return"),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Read persisted Alpaca-initiated activities (non-FILL types).
+
+    DIV = dividend. INT = margin interest. ACATC = ACATS transfer.
+    MA = margin adjustment. JNLC/JNLS = journal entries. REORG/SPIN/SPLIT
+    = corporate actions. See services/alpaca_activity_ledger.py for full list.
+
+    Data source: I25 invariant's non-FILL fetch loop writes to
+    alpaca_activity_ledger table on each run.
+    """
+    try:
+        from app.services.alpaca_activity_ledger import list_activities, counts_by_type
+        return {
+            "activities": list_activities(db, activity_type=activity_type,
+                                          since_hours=since_hours, limit=limit),
+            "counts_by_type": counts_by_type(db, since_hours=since_hours),
+            "since_hours": since_hours,
+        }
+    except Exception as exc:
+        return {"error": str(exc)[:500]}
+
+
 # ─── 2026-08-18 Brock: vault sync ping — real freshness signal for I28 ─────
 # Called by scripts/bmg_vault_sync.sh after each successful pull. This is
 # what I28 checks. Ping absence = the Mac cron isn't firing = vault stale

@@ -1128,6 +1128,18 @@ async def lifespan(app: FastAPI):
     except Exception as _ack_exc:
         logger.error("[startup] human_ack table create FAILED: %s", _ack_exc, exc_info=True)
 
+    # alpaca_activity_ledger table (Brock 2026-08-18 exposure #3 close).
+    # Persists non-FILL broker-initiated activities (DIV, INT, ACATC, corp
+    # actions, margin liquidation). I25 loop writes; /admin/alpaca-activity
+    # -ledger reads. Idempotent.
+    try:
+        from app.services.alpaca_activity_ledger import ensure_table as _ensure_aal_table
+        with engine.begin() as _aal_conn:
+            _ensure_aal_table(_aal_conn)
+        logger.warning("[startup] alpaca_activity_ledger table ensured")
+    except Exception as _aal_exc:
+        logger.error("[startup] alpaca_activity_ledger create FAILED: %s", _aal_exc, exc_info=True)
+
     # m099: provenance origin column on bot_trades + bot_positions.
     # Structural fix for "BMG-generated rows impersonate broker facts"
     # (Brock 2026-08-10). Adds origin ENUM enforced by SQLite trigger.
