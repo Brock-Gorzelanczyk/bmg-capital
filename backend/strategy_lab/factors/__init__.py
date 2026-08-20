@@ -124,6 +124,11 @@ def _intramonth_dashforcash(symbols: list[str], db: Session, params: dict) -> di
     return compute(symbols, db, params)
 
 
+def _vix_regime_rotation(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .vix_regime_rotation import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
@@ -187,6 +192,11 @@ _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     #                           follow-up in the runner. Migration to seed a
     #                           bot with this factor is a separate ship.
     "intramonth_dashforcash": _intramonth_dashforcash,
+    #   vix_regime_rotation: Mesicek 2026 Alpha Architect — 9-yr OOS study,
+    #                        Sharpe 1.03 net (vs 0.81 fixed 10mo), 14.09% CAGR
+    #                        (vs 9.87%). ETF rotation (SPY/VXF/EFA/AGG/BIL)
+    #                        with VIX-regime-dependent momentum lookback.
+    "vix_regime_rotation": _vix_regime_rotation,
 }
 
 
