@@ -708,9 +708,38 @@ def get_hero_stats(
         except Exception as exc:
             logger.warning("[hero-stats] realized_today query failed: %s", exc)
 
+    # 2026-08-20 Brock: hero card should show TOTAL P&L today (realized +
+    # unrealized, i.e. equity change) not realized-only. Realized-only was
+    # showing stale values from bot_daily_pnl while closed_trades=0.
+    # Session-honest per §W2: null outside RTH with label.
+    today_pnl_cents = None
+    today_pnl_label = "unavailable"
+    market_state = "closed"
+    try:
+        from app.services.alpaca_account_cache import get_alpaca_account
+        from app.services.market_hours import is_market_open as _is_market_open
+        acct = get_alpaca_account() or {}
+        _eq = float(acct.get("equity") or 0)
+        _last = float(acct.get("last_equity") or 0)
+        rth = _is_market_open()
+        if _eq > 0 and _last > 0:
+            today_pnl_cents = int(round((_eq - _last) * 100))
+            if rth:
+                today_pnl_label = "live"
+                market_state = "open"
+            else:
+                today_pnl_label = "market_closed_final"
+                market_state = "closed"
+    except Exception as exc:
+        logger.warning("[hero-stats] today_pnl fetch failed: %s", exc)
+
     return {
         "realized_pnl_cents": int(total_realized),
         "realized_pnl_today_cents": int(realized_today),
+        # 2026-08-20 addition: total P&L today = equity - last_equity from Alpaca
+        "today_pnl_cents": today_pnl_cents,
+        "today_pnl_label": today_pnl_label,
+        "market_state": market_state,
         "trades_closed_alltime": int(total_closed),
         "win_rate": round(win_rate, 4) if win_rate is not None else None,
         "sharpe_30d": round(sharpe_30d, 2) if sharpe_30d is not None else None,

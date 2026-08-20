@@ -79,6 +79,10 @@ function DotMatrix({
 interface HeroStats {
   realized_pnl_cents: number;
   realized_pnl_today_cents: number;
+  // 2026-08-20: total P&L today (equity change from Alpaca) + market state
+  today_pnl_cents: number | null;
+  today_pnl_label: string;
+  market_state: string;
   trades_closed_alltime: number;
   win_rate: number | null;
   sharpe_30d: number | null;
@@ -346,11 +350,30 @@ function nearestRebalance(map: Record<string, string | null>): string | null {
 
 // ─── Panel: Hero dot-matrix P&L ────────────────────────────────────────────
 function HeroPanel({ hero }: { hero?: HeroStats }) {
-  const cents = hero?.realized_pnl_today_cents ?? 0;
+  // 2026-08-20 Brock: show TOTAL P&L today (realized + unrealized).
+  // Prefer today_pnl_cents (equity change, live). Falls back to realized-only
+  // if the field isn't populated yet (pre-deploy) or null (before RTH).
+  const useToday =
+    hero?.today_pnl_cents !== null && hero?.today_pnl_cents !== undefined;
+  const cents = useToday
+    ? (hero!.today_pnl_cents as number)
+    : (hero?.realized_pnl_today_cents ?? 0);
   const dollars = cents / 100;
   const positive = dollars >= 0;
   const displayText = fmtUsd(cents, true);
   const color = positive ? "#4ade80" : "#f87171";
+
+  const label = useToday ? "Today's P&L" : "Realized P&L Today";
+  // Market state indicator — tells Brock when the number will move
+  const marketState = hero?.market_state ?? "closed";
+  const pnlLabel = hero?.today_pnl_label ?? "unavailable";
+  const stateHint =
+    marketState === "open"
+      ? "live · updates every 30s"
+      : pnlLabel === "market_closed_final"
+        ? "final · next update at 9:30 ET open"
+        : "no live data";
+  const stateColor = marketState === "open" ? "#4ade80" : "#7e8e7e";
 
   const winRateStr =
     hero?.win_rate !== null && hero?.win_rate !== undefined
@@ -363,8 +386,17 @@ function HeroPanel({ hero }: { hero?: HeroStats }) {
 
   return (
     <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/10 p-6">
-      <div className="text-xs uppercase tracking-widest text-emerald-400/80 mb-3">
-        Realized P&L Today
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs uppercase tracking-widest text-emerald-400/80">
+          {label}
+        </div>
+        <div
+          className="text-[10px] uppercase tracking-widest tabular-nums"
+          style={{ color: stateColor }}
+          title={pnlLabel}
+        >
+          ● {stateHint}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <DotMatrix text={displayText} colorHex={color} dotSize={9} gap={2} />
