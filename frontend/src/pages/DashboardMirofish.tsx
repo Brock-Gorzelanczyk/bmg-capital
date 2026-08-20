@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+
+// TradingView global is declared in components/AdvancedChart.tsx as `any`.
+// We re-use its widget constructor here for the modal chart.
 import client from "@/api/client";
 
 // ─── 5×7 dot-matrix font map ───────────────────────────────────────────────
@@ -226,6 +229,17 @@ interface DashV2 {
     side: string;
     strategy?: string;
     reason?: string;
+    confidence?: number;
+  }>;
+  // 2026-08-20 for click-through modal: match a signal to its open position
+  open_positions?: Array<{
+    id: number;
+    symbol: string;
+    side: string;
+    qty: number;
+    avg_cost_cents: number;
+    current_price_cents: number | null;
+    bot_name: string;
   }>;
 }
 const useDashV2 = () =>
@@ -927,12 +941,10 @@ function _extractUnderlying(symbol: string): { tv: string; note: string } {
 function TradingViewChart({ tvSymbol, containerId }: { tvSymbol: string; containerId: string }) {
   useEffect(() => {
     const buildWidget = () => {
-      // @ts-expect-error — TradingView is loaded onto window globally
       if (typeof window.TradingView === "undefined") return;
       const el = document.getElementById(containerId);
       if (!el) return;
       el.innerHTML = ""; // clear any prior widget from an earlier open
-      // @ts-expect-error — TradingView.widget constructor
       new window.TradingView.widget({
         autosize: true,
         symbol: tvSymbol,
@@ -961,7 +973,6 @@ function TradingViewChart({ tvSymbol, containerId }: { tvSymbol: string; contain
 
     // If tv.js is already loaded (second modal open, etc.), just build directly.
     // Otherwise inject the script and build in onload.
-    // @ts-expect-error — TradingView global
     if (typeof window.TradingView !== "undefined") {
       buildWidget();
       return () => {
@@ -978,7 +989,6 @@ function TradingViewChart({ tvSymbol, containerId }: { tvSymbol: string; contain
       let tries = 0;
       const iv = window.setInterval(() => {
         tries++;
-        // @ts-expect-error
         if (typeof window.TradingView !== "undefined") {
           window.clearInterval(iv);
           buildWidget();
@@ -1010,7 +1020,7 @@ function SignalDetailModal({
   signal, position, onClose,
 }: {
   signal: DashV2["recent_signals"][number];
-  position?: DashV2["open_positions"][number];
+  position?: NonNullable<DashV2["open_positions"]>[number];
   onClose: () => void;
 }) {
   const long = ["buy", "long"].includes(signal.side.toLowerCase());
@@ -1027,10 +1037,11 @@ function SignalDetailModal({
     entryUsd = position.avg_cost_cents / 100;
     markUsd = position.current_price_cents !== null ? position.current_price_cents / 100 : null;
     qty = position.qty;
-    if (markUsd !== null && entryUsd > 0) {
-      const isShort = position.side === "short" || qty < 0;
-      const mult = 1; // stocks/crypto — for options this would be 100; TODO if needed
-      unrealizedUsd = (isShort ? entryUsd - markUsd : markUsd - entryUsd) * Math.abs(qty) * mult;
+    if (markUsd !== null && entryUsd !== null && entryUsd > 0 && qty !== null) {
+      const q = qty;
+      const isShort = position.side === "short" || q < 0;
+      const mult = 1; // stocks/crypto — options would be 100 (TODO)
+      unrealizedUsd = (isShort ? entryUsd - markUsd : markUsd - entryUsd) * Math.abs(q) * mult;
     }
   }
 
@@ -1128,7 +1139,7 @@ function SignalDetailModal({
               </div>
               <div className="text-xs space-y-1.5">
                 <div>side: <span className="font-mono text-slate-200">{signal.side}</span></div>
-                <div>confidence: <span className="font-mono text-slate-200">{(signal.confidence * 100).toFixed(0)}%</span></div>
+                <div>confidence: <span className="font-mono text-slate-200">{signal.confidence !== undefined ? `${(signal.confidence * 100).toFixed(0)}%` : "—"}</span></div>
                 <div>bot: <span className="font-mono text-slate-200">{signal.bot_name}</span></div>
                 <div>strategy: <span className="font-mono text-slate-200">{signal.strategy}</span></div>
               </div>
@@ -1153,7 +1164,8 @@ function SignalDetailModal({
 function LiveFiringNow({ v2 }: { v2?: DashV2 }) {
   const signals = (v2?.recent_signals ?? []).slice(0, 6);
   const distinctBots = new Set(signals.map((s) => s.bot_name)).size;
-  const openPosBySymbol = new Map((v2?.open_positions ?? []).map((p) => [p.symbol, p]));
+  const openPositions = v2?.open_positions ?? [];
+  const positionForSignal = (sym: string) => openPositions.find((p) => p.symbol === sym);
   const [selected, setSelected] = useState<DashV2["recent_signals"][number] | null>(null);
   return (
     <>
@@ -1209,7 +1221,7 @@ function LiveFiringNow({ v2 }: { v2?: DashV2 }) {
       {selected && (
         <SignalDetailModal
           signal={selected}
-          position={openPosBySymbol.get(selected.symbol)}
+          position={positionForSignal(selected.symbol)}
           onClose={() => setSelected(null)}
         />
       )}
