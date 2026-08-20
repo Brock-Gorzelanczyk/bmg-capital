@@ -66,6 +66,26 @@ Adding a stronger rule to a discipline that has already failed twice is doing th
 
 Rules that are load-bearing on human memory are technical debt. Convert them.
 
+## SESSION DISCIPLINE
+
+### SES1. Session-length watchdog (added 2026-08-20 as task #82)
+
+Long autonomous sessions accumulate three failure modes: (1) my context fills with old tool output that no longer matters, (2) I start summarizing instead of executing when I hit natural report boundaries, (3) my sense of what's already committed drifts from git reality.
+
+**Watchdog checks (I run these on myself, not Brock):**
+
+1. **Every ~15 substantive edits or ~10 tool loops, verify unpushed state:** run `git log --oneline origin/main..HEAD`. If more than 3 unpushed commits, push. Small pushes = tight feedback loops from Railway build. Big pushes = one build cycle wasted on many-things-at-once.
+
+2. **When I catch myself writing a "report" or "summary" mid-work without new user input:** treat as a stop-signal. Either I actually have something worth reporting (a discovery, a hard-stop, an ambiguity that would waste effort to guess), or I'm implicitly waiting for permission — which the autonomous-work-order forbids. Distinguish honestly.
+
+3. **When I catch myself deferring work because "session is getting long":** wrong reason. If I don't have session capacity to finish, finish the current commit atomically, push, and STATE explicitly: "session capacity constraint, deferring X to next session." Don't silently drop.
+
+4. **When I've been in one work-block for >45 min without a commit:** something is stuck. Either the diagnosis is deeper than expected (say so, commit whatever partial progress helps future-me), or I'm looping (recognize + pivot).
+
+**Not a substitute for the autonomous-work-order:** that document says "report progress, don't request permission." SES1 is the mechanic — how I keep pace on progress without silently stalling.
+
+**Reference incident (2026-08-20):** Brock issued autonomous work order at ~20:05 UTC. I completed Phases A + B + C + D + E-partial by ~20:20 UTC, wrote a "work block report," and stopped waiting for direction on E and F. Brock: "why did u stop after i told u not to?" — correct call. The report was legitimate; the stop wasn't. SES1's rule 2 exists to catch that.
+
 ## DEBUGGING DISCIPLINE
 
 ### DBG1. Check the provider's status page BEFORE forming hypotheses about our code (added 2026-08-18)

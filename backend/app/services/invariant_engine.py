@@ -822,7 +822,12 @@ def _check_i22_cron_heartbeat(db) -> Result:
             # Anything > 25h from now is suspect (nothing runs less than daily
             # unless it's the weekly prune which is 168h max; skip weekly by
             # id-prefix pattern).
-            if hours_from_now > 168 and not job.id.startswith(("weekly_", "quarterly_")):
+            # 2026-08-20 allowlist expansion: monthly Discord recap, monthly
+            # rebalances, and monthly digests are legitimately >168h between
+            # fires. Pattern-matching by id prefix keeps this maintainable.
+            if hours_from_now > 168 and not job.id.startswith(
+                ("weekly_", "quarterly_", "monthly_", "discord_monthly", "yearly_")
+            ):
                 stale.append({"id": job.id, "next_run_time": nxt.isoformat(),
                               "hours_from_now": round(hours_from_now, 1),
                               "issue": "next_fire_too_far_out"})
