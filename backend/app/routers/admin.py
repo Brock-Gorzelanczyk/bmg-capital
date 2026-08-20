@@ -1796,27 +1796,36 @@ def diag_identity_decomposition(
     from app.core.canonical import compute_bot_snapshot
     from app.services.alpaca_account_cache import get_alpaca_account, get_alpaca_positions
 
-    result: Dict[str, Any] = {"scope": "user_id=1 enabled_allocations"}
+    result: Dict[str, Any] = {"scope": "user_id=1 ALL_allocations (enabled+paused+disabled) — must include ALL allocs to match fund_pv, since historical realized lives on disabled/paused allocs"}
 
     # ── Load allocs + snapshots ─────────────────────────────────────────
+    # NOTE 2026-08-20: initially scoped enabled-only. Diagnostic showed
+    # realized=$0 across all 21 enabled bots because every historical
+    # closed trade is attributed to a now-disabled alloc (via task #80
+    # single-tenant + prior sim quarantine + pause cycles). To compare
+    # bot rollup to fund_pv you must count ALL allocs; otherwise the sum
+    # excludes exactly the P&L that made fund_pv what it is.
     allocs = (
         db.query(BotAllocation)
         .filter(BotAllocation.user_id == 1)
-        .filter(BotAllocation.enabled == True)
         .all()
     )
     profile_map = {p.id: p for p in db.query(BotProfile).all()}
     per_bot: list[dict] = []
     sum_start = sum_real = sum_unreal = sum_pv = 0
+    sum_start_enabled = sum_real_enabled = sum_unreal_enabled = sum_pv_enabled = 0
+    n_enabled = n_disabled = 0
     for a in allocs:
         prof = profile_map.get(a.profile_id)
         if prof is None:
             continue
+        is_enabled = bool(a.enabled)
         try:
             snap = compute_bot_snapshot(a, prof, db)
         except Exception as exc:
             per_bot.append({
-                "alloc_id": a.id, "bot": prof.name, "snap_error": str(exc)[:150],
+                "alloc_id": a.id, "bot": prof.name, "enabled": is_enabled,
+                "snap_error": str(exc)[:150],
             })
             continue
         st = int(snap.starting_capital_cents or 0)
@@ -1827,6 +1836,7 @@ def diag_identity_decomposition(
         per_bot.append({
             "alloc_id": a.id,
             "bot": prof.name,
+            "enabled": is_enabled,
             "starting_usd": round(st / 100, 2),
             "realized_usd": round(rl / 100, 2),
             "unrealized_usd": round(un / 100, 2),
@@ -1838,6 +1848,14 @@ def diag_identity_decomposition(
         sum_real += rl
         sum_unreal += un
         sum_pv += pv
+        if is_enabled:
+            n_enabled += 1
+            sum_start_enabled += st
+            sum_real_enabled += rl
+            sum_unreal_enabled += un
+            sum_pv_enabled += pv
+        else:
+            n_disabled += 1
 
     # ── Alpaca fund + positions ─────────────────────────────────────────
     kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
@@ -1867,7 +1885,8 @@ def diag_identity_decomposition(
 
     # ── Realized cross-check: canonical vs direct bot_trades sum ────────
     # Σ(bot.realized) via compute_bot_snapshot should equal Σ(bot_trades.pnl_cents)
-    # over BROKER_FILL non-quarantined rows for user_1 enabled allocs.
+    # over BROKER_FILL non-quarantined rows across ALL user_1 allocs (not
+    # just enabled — historical trades are on now-disabled allocs).
     direct_realized_cents = 0
     try:
         alloc_ids = [a.id for a in allocs]
@@ -1883,6 +1902,27 @@ def diag_identity_decomposition(
             direct_realized_cents = int(row[0] or 0) if row else 0
     except Exception as exc:
         result["direct_realized_error"] = str(exc)[:150]
+
+    # ── Cash-basis check: fund cash + sum(bot cost basis) vs sum(starting) ──
+    # If starting was rebased at rescale, this identity should hold:
+    #   Σ(alloc.starting) ≈ broker_cash + Σ(open_position.cost_basis)
+    # Divergence reveals ghost cost basis (rows BMG has that broker doesn't)
+    # or missing cost basis (broker holds positions BMG doesn't claim).
+    total_bmg_cost_basis_cents = 0
+    try:
+        from app.db.models.bots import BotPosition
+        alloc_ids = [a.id for a in allocs]
+        if alloc_ids:
+            placeholders = ",".join(str(i) for i in alloc_ids)
+            row = db.execute(_t(
+                f"SELECT COALESCE(SUM(qty * avg_cost_cents), 0) FROM bot_positions "
+                f"WHERE allocation_id IN ({placeholders}) "
+                f"  AND closed_at IS NULL "
+                f"  AND quarantined_at IS NULL"
+            )).fetchone()
+            total_bmg_cost_basis_cents = int(row[0] or 0) if row else 0
+    except Exception as exc:
+        result["cost_basis_error"] = str(exc)[:150]
 
     # ── Residuals ────────────────────────────────────────────────────────
     # R1: rescale drift (I15 domain). Sign +ve means starting inflated.
@@ -1911,8 +1951,18 @@ def diag_identity_decomposition(
         "sum_realized_usd": round(sum_real / 100, 2),
         "sum_unrealized_usd": round(sum_unreal / 100, 2),
         "sum_pv_usd": round(sum_pv / 100, 2),
+        "sum_bmg_cost_basis_usd": round(total_bmg_cost_basis_cents / 100, 2),
         "direct_realized_bot_trades_usd": round(direct_realized_cents / 100, 2),
-        "bot_count": len(allocs),
+        "bot_count_total": len(allocs),
+        "bot_count_enabled": n_enabled,
+        "bot_count_disabled": n_disabled,
+    }
+    result["bot_sums_enabled_only"] = {
+        "sum_starting_usd": round(sum_start_enabled / 100, 2),
+        "sum_realized_usd": round(sum_real_enabled / 100, 2),
+        "sum_unrealized_usd": round(sum_unreal_enabled / 100, 2),
+        "sum_pv_usd": round(sum_pv_enabled / 100, 2),
+        "note": "For contrast: enabled-only rollup. Historical realized P&L lives on disabled allocs; this scope excludes it.",
     }
     result["residuals"] = {
         "R1_starting_vs_funded_usd": round(r1_cents / 100, 2),
