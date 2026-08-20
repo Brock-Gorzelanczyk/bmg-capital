@@ -1766,6 +1766,108 @@ def _ap_model():
     return BotAllocation
 
 
+@router.post("/backfill-fill-price-micros")
+def backfill_fill_price_micros(
+    limit: int = Query(200, description="Max rows to process per call"),
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Backfill fill_price_micros for BROKER_FILL rows where micros IS NULL.
+
+    Ledger #34 close: legacy sub-penny fills have fill_price_cents=0 (int
+    round-down); m100 added fill_price_micros (BIGINT, 1e-6 precision).
+    This endpoint runs the same logic as scripts/backfill_fill_price_micros.py
+    but from within the container so it can talk to Alpaca + DB directly.
+
+    Idempotent: skips rows already having micros. Rate-limited internally
+    (0.25s between Alpaca fetches → ~4 req/sec).
+
+    dry_run=true → count matches, no writes. dry_run=false → writes.
+    """
+    import os as _os, urllib.request as _ur, json as _j, time as _t
+    from sqlalchemy import text as _sqt
+
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    if not kid or not ksec:
+        return {"error": "missing_alpaca_creds"}
+
+    def _is_uuid(s):
+        return isinstance(s, str) and len(s) == 36 and s.count("-") == 4
+
+    def _fetch_order(order_id):
+        try:
+            req = _ur.Request(
+                f"https://paper-api.alpaca.markets/v2/orders/{order_id}",
+                headers={"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": ksec},
+            )
+            return _j.loads(_ur.urlopen(req, timeout=10).read())
+        except Exception:
+            return None
+
+    rows = db.execute(_sqt(
+        "SELECT id, alpaca_order_id, symbol, qty, ts FROM bot_trades "
+        "WHERE fill_price_micros IS NULL "
+        "  AND origin = 'BROKER_FILL' "
+        "  AND qty > 0 "
+        "ORDER BY ts DESC "
+        "LIMIT :n"
+    ), {"n": int(limit)}).fetchall()
+
+    updated = 0
+    skipped_no_match = 0
+    errors = 0
+    sample_updates = []
+    for r in rows:
+        row_id, order_id, symbol, qty, ts = r
+        price = None
+        if order_id and _is_uuid(order_id):
+            data = _fetch_order(order_id)
+            if data and data.get("filled_avg_price"):
+                try:
+                    price = float(data["filled_avg_price"])
+                except (TypeError, ValueError):
+                    pass
+        if price is None or price <= 0:
+            skipped_no_match += 1
+            continue
+        micros = int(round(price * 1_000_000))
+        if not dry_run:
+            try:
+                db.execute(_sqt(
+                    "UPDATE bot_trades SET fill_price_micros = :m WHERE id = :i"
+                ), {"m": micros, "i": row_id})
+                updated += 1
+                if len(sample_updates) < 10:
+                    sample_updates.append({
+                        "row_id": row_id, "symbol": symbol, "qty": float(qty or 0),
+                        "price": price, "micros": micros,
+                    })
+            except Exception as exc:
+                errors += 1
+                if len(sample_updates) < 10:
+                    sample_updates.append({"row_id": row_id, "err": str(exc)[:120]})
+        else:
+            updated += 1
+            if len(sample_updates) < 10:
+                sample_updates.append({
+                    "row_id": row_id, "symbol": symbol, "qty": float(qty or 0),
+                    "price": price, "micros": micros, "dry": True,
+                })
+        _t.sleep(0.25)
+    if not dry_run and updated > 0:
+        db.commit()
+    return {
+        "dry_run": dry_run,
+        "row_candidates": len(rows),
+        "updated": updated,
+        "skipped_no_alpaca_match": skipped_no_match,
+        "errors": errors,
+        "sample": sample_updates,
+    }
+
+
 @router.get("/diag/identity-decomposition")
 def diag_identity_decomposition(
     db: Session = Depends(get_db),

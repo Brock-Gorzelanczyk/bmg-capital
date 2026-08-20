@@ -656,7 +656,14 @@ def _check_i16_unattributed_tracker(db) -> Result:
 def _check_i15_starting_capital_vs_funded(db) -> Result:
     """PM Claude 2026-08-07 acceptance B structural fix: fund PV inflates
     by exactly the excess of sum(starting_capital) over the actual
-    Alpaca-funded base. Guard: |sum(starting) - funded| < $100."""
+    Alpaca-funded base. Guard: |sum(starting) - funded| < $100.
+
+    2026-08-20 scope fix (ledger #42 followup): single-tenant fund.
+    Previously summed all enabled allocs cross-user, which inflated
+    by $7M when the 44 non-user-1 legacy allocs were re-enabled by
+    the churn cycle. Now scoped to user_id=1 to match single-tenant
+    doctrine. If non-user-1 allocs sneak back in, that's I13's job
+    (they're config-level; this check is money-math)."""
     try:
         from app.db.models.bots import BotAllocation
         from app.services.alpaca_account_cache import get_alpaca_account
@@ -667,6 +674,7 @@ def _check_i15_starting_capital_vs_funded(db) -> Result:
         sum_cents = sum(
             int(a.starting_capital_cents or 0)
             for a in db.query(BotAllocation)
+                       .filter(BotAllocation.user_id == 1)
                        .filter(BotAllocation.enabled == True)
                        .all()
         )
@@ -675,6 +683,7 @@ def _check_i15_starting_capital_vs_funded(db) -> Result:
             "sum_starting_capital_usd": round(sum_cents / 100, 2),
             "funded_base_usd": round(funded_cents / 100, 2),
             "drift_usd": round(drift / 100, 2),
+            "scope": "user_id=1 enabled allocations",
         }
         if drift < 10000:  # <$100 in cents
             return _ok("I15", actual, None, f"within $100 (drift ${drift/100:.2f})")
@@ -841,16 +850,15 @@ def _check_i22_cron_heartbeat(db) -> Result:
 
 
 def _check_i26_sub_penny_fill_zero(db) -> Result:
-    """Any BROKER_FILL trade with fill_price_cents=0 AND qty>0 == RED.
-    (Brock 2026-08-11 ledger #34.)
+    """Any BROKER_FILL trade with BOTH fill_price_cents=0/NULL AND
+    fill_price_micros IS NULL AND qty>0 == RED.
 
-    Root cause: fill_price_cents is an int; sub-penny assets (SHIB, BONK,
-    PEPE, any $<0.01 token) round to 0. Then realized P&L math treats
-    those entries as free — inflating bot realized without touching Alpaca.
-
-    Structural fix (column migration to higher precision) is separate
-    ledger work. This invariant is the interim gate — any recurrence
-    lands red on the very next 30-min invariant cycle.
+    2026-08-20 update (ledger #34 close): m100 added fill_price_micros
+    as the sub-penny-safe column. Legacy rows still have fill_price_cents=0
+    for sub-penny tokens (SHIB, BONK etc rounded to 0). Those rows are
+    ACCEPTABLE if fill_price_micros is populated (m100 backfill script:
+    scripts/backfill_fill_price_micros.py). Only rows with BOTH NULL are
+    truly unrecoverable and warrant red.
     """
     try:
         from sqlalchemy import text as _t
@@ -859,16 +867,31 @@ def _check_i26_sub_penny_fill_zero(db) -> Result:
             "FROM bot_trades "
             "WHERE origin = 'BROKER_FILL' "
             "  AND (fill_price_cents = 0 OR fill_price_cents IS NULL) "
+            "  AND fill_price_micros IS NULL "
             "  AND qty > 0 "
             "  AND quarantined_at IS NULL"
         )).fetchone()
         n = int(row[0] or 0)
         syms = (row[1] or "").split(",") if row[1] else []
-        actual = {"count": n, "symbols_sample": syms[:20]}
+        # Also report legacy-only rows (cents=0, micros populated) for visibility
+        legacy_row = db.execute(_t(
+            "SELECT COUNT(*) FROM bot_trades "
+            "WHERE origin = 'BROKER_FILL' "
+            "  AND (fill_price_cents = 0 OR fill_price_cents IS NULL) "
+            "  AND fill_price_micros IS NOT NULL "
+            "  AND qty > 0 "
+            "  AND quarantined_at IS NULL"
+        )).fetchone()
+        legacy_n = int(legacy_row[0] or 0) if legacy_row else 0
+        actual = {"count_unrecoverable": n, "symbols_sample": syms[:20],
+                  "legacy_backfilled_count": legacy_n}
         if n == 0:
-            return _ok("I26", 0, 0, "no BROKER_FILL rows with fill_price=0")
+            return _ok("I26", actual, 0,
+                       f"no BROKER_FILL rows lack both cents and micros "
+                       f"({legacy_n} legacy rows have micros only — OK per m100)")
         return _red("I26", actual, 0, float(n),
-                    f"{n} BROKER_FILL trade row(s) have fill_price_cents=0 (sub-penny asset rounding — ledger #34)")
+                    f"{n} BROKER_FILL trade row(s) missing BOTH fill_price_cents "
+                    f"and fill_price_micros — unrecoverable (ledger #34)")
     except Exception as exc:
         return _amber("I26", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
