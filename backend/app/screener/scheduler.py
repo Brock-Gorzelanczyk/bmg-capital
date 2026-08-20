@@ -91,7 +91,12 @@ async def run_daily_recap_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             user_ids = [u.id for u in users]
         finally:
             db.close()
@@ -120,7 +125,12 @@ async def run_daily_automation_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             user_ids = [u.id for u in users]
         finally:
             db.close()
@@ -166,7 +176,12 @@ async def run_offhours_check() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             today = date.today()
 
             for user in users:
@@ -216,7 +231,12 @@ async def run_options_scan_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             for user in users:
                 positions = db.query(PaperPosition).filter_by(user_id=user.id).all()
                 for pos in positions:
@@ -270,7 +290,12 @@ async def run_ta_pattern_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             today_str = str(date.today())
             for user in users:
                 # WatchlistItem belongs to a Watchlist which has user_id
@@ -311,7 +336,12 @@ async def run_autonomous_digest_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             for user in users:
                 await generate_autonomous_digest(user.id, db)
         finally:
@@ -525,7 +555,12 @@ async def run_strategy_signal_scan_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             if not users:
                 logger.debug("Strategy signal scan: no active users")
                 return
@@ -607,7 +642,12 @@ async def run_morning_brief_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             if not users:
                 logger.info("Morning brief: no active users, skipping")
                 return
@@ -696,7 +736,12 @@ async def run_daily_autonomous_recap_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             if not users:
                 logger.info("Autonomous recap: no active users")
                 return
@@ -769,7 +814,12 @@ async def run_crypto_automation_job() -> None:
 
         db = SessionLocal()
         try:
-            users = db.query(User).filter(User.is_active.is_(True)).all()
+            # 2026-08-20 single-tenant enforcement (ledger #42): scheduler
+            # jobs iterate active users, but the fund is single-tenant. Cross-
+            # user iteration + downstream _ensure_portfolios_for_user was the
+            # re-enable trap that kept resurrecting user_2..8 allocs. Hard-
+            # filter to user_id=1.
+            users = db.query(User).filter(User.is_active.is_(True), User.id == 1).all()
             user_ids = [u.id for u in users]
         finally:
             db.close()
