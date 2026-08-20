@@ -168,7 +168,26 @@ _PORTFOLIO_DEFS = [
 
 
 def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
-    """Create missing StrategyPortfolio rows, create/activate BotAllocations, bind them."""
+    """Create missing StrategyPortfolio rows, create/activate BotAllocations, bind them.
+
+    2026-08-20 (ledger #42 followup + Brock work order Phase A): single-tenant
+    fund. Non-user-1 users must NOT get allocations created/enabled by
+    dashboard visits. The 2026-08-07 single_tenant decision + task #80
+    cleanup disabled 44 non-user-1 allocs; observed 44 back enabled 40h
+    later — traced to this function firing on user_2..8 app visits and
+    auto-re-enabling their allocs regardless of paused_reason (bind loop
+    reads paused_reason from BotAllocation, but for CREATE path a fresh
+    row lands with enabled=True). Early-return prevents the class.
+    """
+    if user_id != 1:
+        # Return existing portfolios read-only; do NOT create or enable.
+        from app.db.models.bots import StrategyPortfolio as _SP
+        return list(
+            db.query(_SP)
+            .filter(_SP.user_id == user_id)
+            .all()
+        )
+
     from app.db.models.bots import StrategyPortfolio
     now = datetime.now(timezone.utc)
     portfolios = []
