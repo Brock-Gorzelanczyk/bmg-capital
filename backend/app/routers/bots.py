@@ -656,7 +656,15 @@ def resume_all_bots(
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
-    """Resume all of the current user's BotAllocations (clears paused_reason)."""
+    """Resume all of the current user's BotAllocations (clears paused_reason).
+
+    2026-08-20 (ledger #42 final closure): single-tenant fund. Even if a
+    non-user-1 admin hits this route, they can't resume their allocs —
+    that just recreates the re-enable churn that took 3 codepaths to
+    close. Only user_1 can bulk-resume."""
+    if current_user.id != 1:
+        return {"status": "refused", "reason": "single_tenant_user1_only",
+                "allocations_resumed": 0}
     allocs = (
         db.query(BotAllocation)
         .filter(
@@ -686,7 +694,13 @@ def activate_all_bots(
     """Ensure every enabled BotProfile has an active allocation for this user.
 
     Creates missing allocations and re-enables any that were disabled.
-    """
+
+    2026-08-20 (ledger #42 final closure): single-tenant. Non-user-1 users
+    cannot activate; they'd just recreate the disabled allocs. Refuses
+    for user_id != 1."""
+    if current_user.id != 1:
+        return {"status": "refused", "reason": "single_tenant_user1_only",
+                "activated": 0}
     profiles = db.query(BotProfile).filter(BotProfile.enabled.is_(True)).all()
     now = datetime.now(timezone.utc)
     activated = 0
