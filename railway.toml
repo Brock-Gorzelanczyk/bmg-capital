@@ -4,6 +4,9 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+# 2026-08-20: BMG cold boot registers 130+ APScheduler crons + runs startup
+# migrations. Measured 45-90s on cool container. 30s was too tight and
+# caused false-fail healthchecks after Railway edge rerouted post-config.
+healthcheckTimeout = 180
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
