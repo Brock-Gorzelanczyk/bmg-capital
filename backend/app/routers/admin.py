@@ -1766,6 +1766,177 @@ def _ap_model():
     return BotAllocation
 
 
+@router.get("/diag/identity-decomposition")
+def diag_identity_decomposition(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """PM Claude 2026-08-20 P1: decompose bot_sum_pv vs fund_pv drift.
+
+    The identity bot.pv = starting + realized + unrealized holds per-bot
+    by construction (canonical.py:483). The DRIFT lives at the sum level:
+
+        Σ(bot.starting) + Σ(bot.realized) + Σ(bot.unrealized) - fund_pv = ?
+
+    which decomposes into three sub-residuals:
+      R1 = Σ(bot.starting)     - funded_base                    (rescale drift)
+      R2 = Σ(bot.realized)     - broker_realized_since_inception (attribution drift)
+      R3 = Σ(bot.unrealized)   - Σ(alpaca_pos.unrealized_pl)    (mark/claim drift)
+
+    Total drift = R1 + R2 + R3 (should sum, deviation itself is a fourth
+    residual meaning a component is being counted somewhere neither this
+    endpoint nor the identity model captures).
+
+    Also reports per-bot rows so the largest drift contributors are visible.
+    Called by ledger workflow when I2 auto-pauses the fund.
+    """
+    import os as _os, urllib.request as _ur, json as _j
+    from sqlalchemy import text as _t
+    from app.db.models.bots import BotAllocation, BotProfile
+    from app.core.canonical import compute_bot_snapshot
+    from app.services.alpaca_account_cache import get_alpaca_account, get_alpaca_positions
+
+    result: Dict[str, Any] = {"scope": "user_id=1 enabled_allocations"}
+
+    # ── Load allocs + snapshots ─────────────────────────────────────────
+    allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == 1)
+        .filter(BotAllocation.enabled == True)
+        .all()
+    )
+    profile_map = {p.id: p for p in db.query(BotProfile).all()}
+    per_bot: list[dict] = []
+    sum_start = sum_real = sum_unreal = sum_pv = 0
+    for a in allocs:
+        prof = profile_map.get(a.profile_id)
+        if prof is None:
+            continue
+        try:
+            snap = compute_bot_snapshot(a, prof, db)
+        except Exception as exc:
+            per_bot.append({
+                "alloc_id": a.id, "bot": prof.name, "snap_error": str(exc)[:150],
+            })
+            continue
+        st = int(snap.starting_capital_cents or 0)
+        rl = int(snap.realized_pnl_cents or 0)
+        un = int(snap.unrealized_pnl_cents or 0)
+        pv = int(snap.portfolio_value_cents or 0)
+        internal = st + rl + un
+        per_bot.append({
+            "alloc_id": a.id,
+            "bot": prof.name,
+            "starting_usd": round(st / 100, 2),
+            "realized_usd": round(rl / 100, 2),
+            "unrealized_usd": round(un / 100, 2),
+            "pv_usd": round(pv / 100, 2),
+            "internal_identity_gap_usd": round((pv - internal) / 100, 2),
+            "open_positions": int(snap.open_positions_count or 0),
+        })
+        sum_start += st
+        sum_real += rl
+        sum_unreal += un
+        sum_pv += pv
+
+    # ── Alpaca fund + positions ─────────────────────────────────────────
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    fund_pv_cents = 0
+    broker_cash_cents = 0
+    broker_long_mv_cents = 0
+    broker_short_mv_cents = 0
+    broker_unrealized_cents = 0
+    try:
+        acct = get_alpaca_account() or {}
+        fund_pv_cents = int(round(float(acct.get("portfolio_value") or 0) * 100))
+        broker_cash_cents = int(round(float(acct.get("cash") or 0) * 100))
+        broker_long_mv_cents = int(round(float(acct.get("long_market_value") or 0) * 100))
+        broker_short_mv_cents = int(round(float(acct.get("short_market_value") or 0) * 100))
+    except Exception as exc:
+        result["alpaca_acct_error"] = str(exc)[:150]
+    try:
+        alp_pos = get_alpaca_positions() or []
+        for p in alp_pos:
+            try:
+                broker_unrealized_cents += int(round(float(p.get("unrealized_pl") or 0) * 100))
+            except Exception:
+                pass
+    except Exception as exc:
+        result["alpaca_positions_error"] = str(exc)[:150]
+
+    # ── Realized cross-check: canonical vs direct bot_trades sum ────────
+    # Σ(bot.realized) via compute_bot_snapshot should equal Σ(bot_trades.pnl_cents)
+    # over BROKER_FILL non-quarantined rows for user_1 enabled allocs.
+    direct_realized_cents = 0
+    try:
+        alloc_ids = [a.id for a in allocs]
+        if alloc_ids:
+            placeholders = ",".join(str(i) for i in alloc_ids)
+            row = db.execute(_t(
+                f"SELECT COALESCE(SUM(pnl_cents), 0) FROM bot_trades "
+                f"WHERE allocation_id IN ({placeholders}) "
+                f"  AND quarantined_at IS NULL "
+                f"  AND origin = 'BROKER_FILL' "
+                f"  AND side IN ('sell','close','cover')"
+            )).fetchone()
+            direct_realized_cents = int(row[0] or 0) if row else 0
+    except Exception as exc:
+        result["direct_realized_error"] = str(exc)[:150]
+
+    # ── Residuals ────────────────────────────────────────────────────────
+    # R1: rescale drift (I15 domain). Sign +ve means starting inflated.
+    r1_cents = sum_start - fund_pv_cents
+    # R2: attribution drift (canonical vs direct trades). If snapshot's
+    # realized adds something bot_trades sum doesn't have, R2 non-zero.
+    r2_canonical_vs_direct_cents = sum_real - direct_realized_cents
+    # R3: mark/claim drift. bmg unrealized vs broker unrealized.
+    r3_cents = sum_unreal - broker_unrealized_cents
+
+    # Total drift as observed by I2:
+    total_drift_cents = sum_pv - fund_pv_cents
+    # Sum of residuals — must equal total_drift up to rounding if identity holds
+    sum_residuals_cents = r1_cents + r2_canonical_vs_direct_cents + r3_cents
+    unexplained_cents = total_drift_cents - sum_residuals_cents
+
+    result["fund"] = {
+        "fund_pv_usd": round(fund_pv_cents / 100, 2),
+        "broker_cash_usd": round(broker_cash_cents / 100, 2),
+        "broker_long_mv_usd": round(broker_long_mv_cents / 100, 2),
+        "broker_short_mv_usd": round(broker_short_mv_cents / 100, 2),
+        "broker_unrealized_usd": round(broker_unrealized_cents / 100, 2),
+    }
+    result["bot_sums"] = {
+        "sum_starting_usd": round(sum_start / 100, 2),
+        "sum_realized_usd": round(sum_real / 100, 2),
+        "sum_unrealized_usd": round(sum_unreal / 100, 2),
+        "sum_pv_usd": round(sum_pv / 100, 2),
+        "direct_realized_bot_trades_usd": round(direct_realized_cents / 100, 2),
+        "bot_count": len(allocs),
+    }
+    result["residuals"] = {
+        "R1_starting_vs_funded_usd": round(r1_cents / 100, 2),
+        "R1_note": "Σ(alloc.starting_capital) - fund_pv. Non-zero when rescale is stale (I15 domain).",
+        "R2_canonical_realized_vs_direct_usd": round(r2_canonical_vs_direct_cents / 100, 2),
+        "R2_note": "Σ(snap.realized) - Σ(bot_trades.pnl_cents). Non-zero when snapshot pulls realized from a different source than the trade ledger.",
+        "R3_unrealized_vs_broker_usd": round(r3_cents / 100, 2),
+        "R3_note": "Σ(snap.unrealized) - Σ(alpaca_pos.unrealized_pl). Non-zero when BMG marks differ from Alpaca marks OR when position-claim partition is not exhaustive.",
+        "total_drift_usd": round(total_drift_cents / 100, 2),
+        "sum_of_residuals_usd": round(sum_residuals_cents / 100, 2),
+        "unexplained_usd": round(unexplained_cents / 100, 2),
+        "unexplained_note": "Non-zero here means some component of the drift is neither R1 nor R2 nor R3 — hidden source needs finding.",
+    }
+
+    # Top-N residual contributors (descending by |contribution|)
+    per_bot_sorted = sorted(
+        per_bot,
+        key=lambda r: -abs(r.get("unrealized_usd", 0) + r.get("realized_usd", 0)),
+    )
+    result["per_bot_top10_by_pnl_magnitude"] = per_bot_sorted[:10]
+    result["per_bot_full"] = per_bot
+    return result
+
+
 @router.get("/pending-acks")
 def pending_acks(
     category: Optional[str] = Query(None, description="Filter by category (AUTO_PAUSE|DISK_HIGH|SIM_FILL_DETECTED|INVARIANT_RED_STALE|MANUAL_TEST)"),
