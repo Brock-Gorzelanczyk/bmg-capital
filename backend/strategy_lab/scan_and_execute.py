@@ -139,11 +139,22 @@ def scan_and_execute(
         return _empty_result(profile_name, "profile disabled or not found in DB")
 
     # ── 3. Find allocations ───────────────────────────────────────────────────
+    # 2026-08-20 (ledger #42 followup): scheduler path (user_id=None) used
+    # to enumerate ALL enabled+paper_mode allocs cross-user. That's why
+    # every scan post-task-#80 kept picking up user_3's allocs and trading
+    # them despite disable-non-user-1 runs. Root cause of the re-enable
+    # symptom PM Claude flagged 2026-08-20. Fix: hardcode user_id=1 in the
+    # scheduler path (single-tenant fund; nothing else should ever trade).
+    # Admin diagnostic path (explicit user_id arg) remains unchanged.
     alloc_q = db.query(_BA).filter(_BA.profile_id == bp.id)
     if user_id is not None:
         alloc_q = alloc_q.filter(_BA.user_id == user_id)
     else:
-        alloc_q = alloc_q.filter(_BA.enabled.is_(True), _BA.paper_mode.is_(True))
+        alloc_q = alloc_q.filter(
+            _BA.user_id == 1,
+            _BA.enabled.is_(True),
+            _BA.paper_mode.is_(True),
+        )
     allocations = alloc_q.all()
 
     if not allocations:
