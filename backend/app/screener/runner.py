@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -14,6 +15,12 @@ from app.screener.filters import apply_filters, build_filters
 logger = logging.getLogger(__name__)
 
 # ── In-memory bar cache (1-hour TTL) ─────────────────────────────────────────
+# 2026-08-20 (task #77 followup): keep TTL at 1h but add explicit dereferences
+# in cache-refresh + fetch loop. fb61b408 fixed scan_and_execute's local `raw`;
+# this file's module-level cache also needs an explicit clear-before-replace
+# so the old DataFrames drop refcount to 0 immediately, not just when GC feels
+# like it. Combined with per-chunk `raw = None` in _fetch_bars_sync, closes
+# the +25MB/run leak that PM Claude's 2026-08-20 audit still flagged as P2.
 _bar_cache: Optional[Dict[str, pd.DataFrame]] = None
 _bar_cache_ts: float = 0.0
 _BAR_CACHE_TTL = 3600  # seconds
@@ -35,6 +42,7 @@ def _fetch_bars_sync(symbols: List[str], period: str = "1y", interval: str = "1d
 
     for i in range(0, len(symbols), batch_size):
         chunk = symbols[i : i + batch_size]
+        raw = None
         try:
             raw = yf.download(
                 tickers=chunk,
@@ -46,7 +54,7 @@ def _fetch_bars_sync(symbols: List[str], period: str = "1y", interval: str = "1d
                 progress=False,
                 prepost=False,  # exclude pre/post market bars (critical for intraday strategies)
             )
-            if raw.empty:
+            if raw is None or raw.empty:
                 continue
 
             single = len(chunk) == 1
@@ -57,10 +65,16 @@ def _fetch_bars_sync(symbols: List[str], period: str = "1y", interval: str = "1d
                     df = df[["open", "high", "low", "close", "volume"]].dropna()
                     if len(df) > 1:
                         result[sym] = df
+                    df = None
                 except Exception:
                     continue
         except Exception as e:
             logger.error(f"yfinance batch fetch error at {chunk[0]}: {e}")
+        finally:
+            # 2026-08-20 leak fix: sever chunk-scope refs to raw MultiIndex
+            # frame before next iteration. Combined with fb61b408, closes
+            # the yfinance-buffer leak that survived the scan_and_execute fix.
+            raw = None
 
         # Brief pause between chunks — not needed with threads=True but be polite
         if i + batch_size < len(symbols):
@@ -77,6 +91,20 @@ async def _get_cached_bars() -> Dict[str, pd.DataFrame]:
             logger.info("Screener: serving bars from cache")
             return _bar_cache  # type: ignore[return-value]
         logger.info("Screener: downloading bars (cache miss or expired)")
+        # Explicit clear-before-replace: without this, Python's GC decides
+        # when to release the old ~30-50MB cache. On a 512MB container that
+        # matters. Clearing the dict first drops the DataFrame refcounts to
+        # 0 immediately, then we rebind to the fresh cache and gc.collect
+        # to reclaim the space before scans start hitting the new cache.
+        if _bar_cache is not None:
+            try:
+                for _s in list(_bar_cache.keys()):
+                    _bar_cache[_s] = None
+                _bar_cache.clear()
+            except Exception:
+                pass
+            _bar_cache = None
+            gc.collect()
         universe = get_universe()
         loop = asyncio.get_running_loop()
         bars = await loop.run_in_executor(None, lambda: _fetch_bars_sync(universe))
