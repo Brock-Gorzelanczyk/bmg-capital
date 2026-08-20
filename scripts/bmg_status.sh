@@ -28,12 +28,13 @@ REPO="$(cd "$HERE/.." && pwd)"
 ADMIN="$HERE/bmg_admin.sh"
 BASE="${BMG_API_BASE_PUBLIC:-https://bmg-capital-production.up.railway.app}"
 
-# Sourced only for Alpaca creds. bmg_admin.sh mints JWT separately.
+# Load ONLY the Alpaca creds from .env; whole-file source breaks on any
+# value containing shell metacharacters (URLs, etc).
 if [[ -f "$REPO/backend/.env" ]]; then
-    set +u
-    # shellcheck disable=SC1091
-    source "$REPO/backend/.env"
-    set -u
+    for k in ALPACA_API_KEY ALPACA_SECRET_KEY ALPACA_PAPER_KEY ALPACA_PAPER_SECRET; do
+        v=$(/usr/bin/grep -E "^${k}=" "$REPO/backend/.env" 2>/dev/null | /usr/bin/head -1 | /usr/bin/cut -d= -f2- | /usr/bin/tr -d '"' | /usr/bin/tr -d "'")
+        if [[ -n "$v" ]]; then export "$k=$v"; fi
+    done
 fi
 
 _hdr() { [[ "$JSON_MODE" == "1" ]] || echo "=== $1 ==="; }
