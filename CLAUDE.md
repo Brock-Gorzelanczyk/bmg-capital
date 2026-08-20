@@ -66,6 +66,25 @@ Adding a stronger rule to a discipline that has already failed twice is doing th
 
 Rules that are load-bearing on human memory are technical debt. Convert them.
 
+## ATTRIBUTION DOCTRINE
+
+### A1. broker_orphan_catchall is legitimate design — do not remove (added 2026-08-20)
+
+The `broker_orphan_catchall` allocation (currently alloc 102) holds BotPosition rows for Alpaca positions that no real bot has claimed. By construction it has:
+- `starting_capital_cents = 0`
+- variable unrealized (marks tick on the positions it holds)
+- appears in `bot_sum_pv` as: `starting (0) + realized (0) + unrealized (variable)`
+
+Some auditors misread this as an accrual bug — "why does an alloc with $0 basis have $6K unrealized?" The answer: because it's a sleeve designed to catch Alpaca-side positions that need SOMEWHERE to live in BMG's bot rollup while their real attribution is being worked out. The alternative is `sleeve_unattributed_cents` (positions Alpaca holds with no BMG claim at all) — both are displayed labels, not hidden numbers. The catchall reduces sleeve_unattributed by claiming positions it can hold.
+
+**Doctrine:**
+- Its accrual pattern (unrealized changing with marks) is CORRECT.
+- Its contribution to `bot_sum_pv - fund_pv` drift is expected and offset elsewhere.
+- Do NOT quarantine broker_orphan_catchall to "fix" drift — that just moves the same dollars from unattributed→sleeve_unattributed with no net win.
+- The only legitimate fix is re-attributing catchall positions to real bots (identity work).
+
+Reference: PM Claude 2026-08-20 audit flagged catchall as a drift source. Not wrong observation, but wrong prescription — the fix is attribution progress, not catchall removal.
+
 ## SESSION DISCIPLINE
 
 ### SES1. Session-length watchdog (added 2026-08-20 as task #82)
