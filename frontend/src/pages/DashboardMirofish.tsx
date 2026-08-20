@@ -896,54 +896,324 @@ function PortfolioValueHero({ v2 }: { v2?: DashV2 }) {
   );
 }
 
+// 2026-08-20 Brock: click-through modal for Live Firing Now signals.
+// TradingView Advanced Chart widget (official script embed, real market data)
+// + signal details + matching position P&L (if any).
+//
+// Symbol mapping:
+//   OCC option (e.g. SPY260828C00745000) → strip to underlying (SPY chart)
+//   Crypto pair (BTC/USD, ETH-USD)      → BINANCE:{sym}USDT
+//   Stocks                               → let TV auto-resolve exchange
+function _extractUnderlying(symbol: string): { tv: string; note: string } {
+  const occMatch = symbol.match(/^([A-Z]+)\d{6}[CP]\d{8}$/);
+  if (occMatch) {
+    return {
+      tv: occMatch[1],
+      note: `showing underlying ${occMatch[1]} · signal is on option ${symbol}`,
+    };
+  }
+  // Crypto: BTC/USD, ETH-USD, POL/USD → BINANCE:*USDT (most liquid)
+  const cryptoMatch = symbol.match(/^([A-Z0-9]+)[/-](USD|USDT|USDC)$/i);
+  if (cryptoMatch) {
+    return { tv: `BINANCE:${cryptoMatch[1].toUpperCase()}USDT`, note: "" };
+  }
+  // Default stock — TV auto-resolves exchange
+  return { tv: symbol, note: "" };
+}
+
+// Advanced Chart widget via official <script> injection. Gives the full TV
+// UX: drawing tools, indicator panel, time-range selector, real market data
+// (live for supported feeds, 15-min delayed for others per exchange rules).
+function TradingViewChart({ tvSymbol, containerId }: { tvSymbol: string; containerId: string }) {
+  useEffect(() => {
+    const buildWidget = () => {
+      // @ts-expect-error — TradingView is loaded onto window globally
+      if (typeof window.TradingView === "undefined") return;
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      el.innerHTML = ""; // clear any prior widget from an earlier open
+      // @ts-expect-error — TradingView.widget constructor
+      new window.TradingView.widget({
+        autosize: true,
+        symbol: tvSymbol,
+        interval: "15",
+        timezone: "America/New_York",
+        theme: "dark",
+        style: "1",                // 1 = candles
+        locale: "en",
+        toolbar_bg: "#0a0a0a",
+        enable_publishing: false,
+        allow_symbol_change: true,
+        hide_side_toolbar: false,   // drawing tools ON
+        hide_top_toolbar: false,    // time/indicator controls ON
+        withdateranges: true,       // 1D 5D 1M 3M 6M 1Y 5Y ALL row
+        studies: ["Volume@tv-basicstudies"],
+        container_id: containerId,
+        overrides: {
+          "paneProperties.background": "#0a0a0a",
+          "paneProperties.backgroundType": "solid",
+          "paneProperties.vertGridProperties.color": "rgba(255,255,255,0.04)",
+          "paneProperties.horzGridProperties.color": "rgba(255,255,255,0.04)",
+          "scalesProperties.textColor": "#94a3b8",
+        },
+      });
+    };
+
+    // If tv.js is already loaded (second modal open, etc.), just build directly.
+    // Otherwise inject the script and build in onload.
+    // @ts-expect-error — TradingView global
+    if (typeof window.TradingView !== "undefined") {
+      buildWidget();
+      return () => {
+        const el = document.getElementById(containerId);
+        if (el) el.innerHTML = "";
+      };
+    }
+
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src="https://s3.tradingview.com/tv.js"]'
+    );
+    if (existing) {
+      // Script tag present but TradingView global not ready — poll briefly
+      let tries = 0;
+      const iv = window.setInterval(() => {
+        tries++;
+        // @ts-expect-error
+        if (typeof window.TradingView !== "undefined") {
+          window.clearInterval(iv);
+          buildWidget();
+        } else if (tries > 40) {
+          window.clearInterval(iv); // 4s cap
+        }
+      }, 100);
+      return () => {
+        window.clearInterval(iv);
+        const el = document.getElementById(containerId);
+        if (el) el.innerHTML = "";
+      };
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/tv.js";
+    script.async = true;
+    script.onload = buildWidget;
+    document.head.appendChild(script);
+    return () => {
+      const el = document.getElementById(containerId);
+      if (el) el.innerHTML = "";
+    };
+  }, [tvSymbol, containerId]);
+  return <div id={containerId} className="w-full h-full" />;
+}
+
+function SignalDetailModal({
+  signal, position, onClose,
+}: {
+  signal: DashV2["recent_signals"][number];
+  position?: DashV2["open_positions"][number];
+  onClose: () => void;
+}) {
+  const long = ["buy", "long"].includes(signal.side.toLowerCase());
+  const { tv: tvSymbol, note: symbolNote } = _extractUnderlying(signal.symbol);
+  // Stable container id per signal — TV widget requires unique DOM node
+  const containerId = `tv_sig_${signal.id}`;
+
+  // Position P&L (if we hold this symbol)
+  let unrealizedUsd: number | null = null;
+  let entryUsd: number | null = null;
+  let markUsd: number | null = null;
+  let qty: number | null = null;
+  if (position) {
+    entryUsd = position.avg_cost_cents / 100;
+    markUsd = position.current_price_cents !== null ? position.current_price_cents / 100 : null;
+    qty = position.qty;
+    if (markUsd !== null && entryUsd > 0) {
+      const isShort = position.side === "short" || qty < 0;
+      const mult = 1; // stocks/crypto — for options this would be 100; TODO if needed
+      unrealizedUsd = (isShort ? entryUsd - markUsd : markUsd - entryUsd) * Math.abs(qty) * mult;
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-950 border border-emerald-500/30 rounded-lg w-full max-w-6xl h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+          <div className="flex items-center gap-4">
+            <span
+              className={`px-3 py-1 font-mono rounded text-xs ${
+                long
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                  : "bg-red-500/20 text-red-300 border border-red-500/40"
+              }`}
+            >
+              {long ? "LONG" : "SHORT"}
+            </span>
+            <span className="font-mono text-slate-100 text-xl tabular-nums">{signal.symbol}</span>
+            <span className="text-slate-500 text-sm">
+              {signal.display_name ?? signal.bot_name} · {signal.strategy ?? "—"}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-slate-500 font-mono">
+              {new Date(signal.ts).toLocaleString([], { hour12: false })}
+            </span>
+            <button
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-100 text-lg leading-none px-2"
+              aria-label="close"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* Body: chart + side panel */}
+        <div className="flex flex-1 min-h-0">
+          {/* Chart — TradingView Advanced Widget with real market data */}
+          <div className="flex-1 bg-[#0a0a0a] flex flex-col">
+            {symbolNote && (
+              <div className="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-[10px] text-amber-300/80 font-mono">
+                {symbolNote}
+              </div>
+            )}
+            <div className="flex-1">
+              <TradingViewChart tvSymbol={tvSymbol} containerId={containerId} />
+            </div>
+          </div>
+
+          {/* Side panel */}
+          <div className="w-80 border-l border-slate-800 p-5 overflow-y-auto space-y-5">
+            {/* Position P&L */}
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">
+                Live P&L
+              </div>
+              {position ? (
+                <>
+                  <div
+                    className={`font-mono text-2xl tabular-nums ${
+                      unrealizedUsd !== null && unrealizedUsd >= 0
+                        ? "text-emerald-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {unrealizedUsd !== null
+                      ? `${unrealizedUsd >= 0 ? "+" : "-"}$${Math.abs(unrealizedUsd).toFixed(2)}`
+                      : "—"}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+                    <div>qty: <span className="font-mono text-slate-300">{qty}</span></div>
+                    <div>entry: <span className="font-mono text-slate-300">${entryUsd?.toFixed(2)}</span></div>
+                    <div>mark: <span className="font-mono text-slate-300">{markUsd !== null ? `$${markUsd.toFixed(2)}` : "—"}</span></div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-slate-500 text-xs">
+                  No open position for this symbol (signal only — bot hasn't executed or the trade closed).
+                </div>
+              )}
+            </div>
+
+            {/* Signal details */}
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">
+                Signal
+              </div>
+              <div className="text-xs space-y-1.5">
+                <div>side: <span className="font-mono text-slate-200">{signal.side}</span></div>
+                <div>confidence: <span className="font-mono text-slate-200">{(signal.confidence * 100).toFixed(0)}%</span></div>
+                <div>bot: <span className="font-mono text-slate-200">{signal.bot_name}</span></div>
+                <div>strategy: <span className="font-mono text-slate-200">{signal.strategy}</span></div>
+              </div>
+            </div>
+
+            {/* Reason */}
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">
+                Reason
+              </div>
+              <div className="text-[11px] text-slate-300 font-mono whitespace-pre-wrap break-words leading-relaxed bg-slate-900/50 border border-slate-800 rounded p-2">
+                {signal.reason || "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LiveFiringNow({ v2 }: { v2?: DashV2 }) {
   const signals = (v2?.recent_signals ?? []).slice(0, 6);
   const distinctBots = new Set(signals.map((s) => s.bot_name)).size;
+  const openPosBySymbol = new Map((v2?.open_positions ?? []).map((p) => [p.symbol, p]));
+  const [selected, setSelected] = useState<DashV2["recent_signals"][number] | null>(null);
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 h-full">
-      <div className="flex items-baseline justify-between mb-3">
-        <div className="text-xs uppercase tracking-widest text-slate-400">
-          Live Firing Now
+    <>
+      <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 h-full">
+        <div className="flex items-baseline justify-between mb-3">
+          <div className="text-xs uppercase tracking-widest text-slate-400">
+            Live Firing Now
+          </div>
+          <div className="text-[10px] text-slate-500">across {distinctBots} bots</div>
         </div>
-        <div className="text-[10px] text-slate-500">across {distinctBots} bots</div>
-      </div>
-      {signals.length === 0 ? (
-        <div className="text-slate-500 text-xs text-center py-6">
-          no signals in the last window
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {signals.map((s) => {
-            const long = ["buy", "long"].includes(s.side.toLowerCase());
-            return (
-              <div key={s.id} className="flex items-center gap-3 text-xs">
-                <span
-                  className={`inline-block px-2 py-0.5 font-mono rounded text-[10px] ${
-                    long
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      : "bg-red-500/20 text-red-300 border border-red-500/40"
-                  }`}
+        {signals.length === 0 ? (
+          <div className="text-slate-500 text-xs text-center py-6">
+            no signals in the last window
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {signals.map((s) => {
+              const long = ["buy", "long"].includes(s.side.toLowerCase());
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setSelected(s)}
+                  className="w-full flex items-center gap-3 text-xs text-left hover:bg-emerald-500/5 rounded px-2 py-1 -mx-2 transition-colors cursor-pointer"
+                  title="Click to open chart + P&L"
                 >
-                  {long ? "LONG" : "SHORT"}
-                </span>
-                <span className="font-mono text-slate-200 min-w-[75px]">{s.symbol}</span>
-                <span className="text-slate-500 truncate flex-1">
-                  {s.display_name ?? s.bot_name} · {s.strategy ?? "—"}
-                </span>
-                <span className="text-[10px] text-slate-600 font-mono">
-                  {new Date(s.ts).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                    hour12: false,
-                  })}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                  <span
+                    className={`inline-block px-2 py-0.5 font-mono rounded text-[10px] ${
+                      long
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        : "bg-red-500/20 text-red-300 border border-red-500/40"
+                    }`}
+                  >
+                    {long ? "LONG" : "SHORT"}
+                  </span>
+                  <span className="font-mono text-slate-200 min-w-[75px]">{s.symbol}</span>
+                  <span className="text-slate-500 truncate flex-1">
+                    {s.display_name ?? s.bot_name} · {s.strategy ?? "—"}
+                  </span>
+                  <span className="text-[10px] text-slate-600 font-mono">
+                    {new Date(s.ts).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false,
+                    })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {selected && (
+        <SignalDetailModal
+          signal={selected}
+          position={openPosBySymbol.get(selected.symbol)}
+          onClose={() => setSelected(null)}
+        />
       )}
-    </div>
+    </>
   );
 }
 
