@@ -172,93 +172,63 @@ def _check_i1_position_counts(db) -> Result:
 
 
 def _check_i2_unrealized_pl(db) -> Result:
-    """BMG total unrealized ≈ Alpaca total unrealized ±$5.
+    """RE-SCOPED 2026-08-20 (Brock work order Phase A): fund-level PV check.
 
-    Runs the same math /portfolio/open-positions uses so the tripwire
-    catches drift the UI is showing.
+    Was: sum of BMG per-position UPL vs sum of Alpaca per-position UPL.
+    That's an ATTRIBUTION metric. It halted the fund 3× in 11 days on
+    numbers that didn't threaten anything real — every drift event traced
+    back to catchall/orphan allocs with fake unrealized on $0 starting.
+
+    Now: BMG canonical fund PV vs live Alpaca portfolio_value. These
+    should match by construction (canonical sources Alpaca). Divergence
+    means canonical fell back to bot_sum (broker-connectivity outage) or
+    a caller injected a stale/wrong PV. That's a real safety event.
+
+    Attribution-level checks preserved as REPORTING (I24 bot-level identity,
+    I31 per-bot attribution, I15 rescale drift). None of those halt.
+
+    The old per-position-sum diagnostic is still available via
+    /admin/diag/i2-hypothesis for humans investigating attribution.
     """
     try:
-        from app.db.models.bots import BotPosition
-        from app.services.option_marks import fetch_option_marks_cents
+        from app.core.canonical import compute_strategy_lab_aggregate
+        from app.services.alpaca_account_cache import get_alpaca_account
+        acct = get_alpaca_account()
+        if not acct:
+            return _amber("I2", None, None, None,
+                          "alpaca_account_fetch_failed — broker connectivity down")
+        alpaca_pv_cents = int(round(float(acct.get("portfolio_value") or 0) * 100))
+        if alpaca_pv_cents <= 0:
+            return _amber("I2", None, None, None,
+                          "alpaca returned no portfolio_value")
 
-        alp = _alp_positions()
-        alp_upl = sum(float(p.get("unrealized_pl") or 0) for p in alp)
-        # 2026-08-06 PM Claude Step 3.2: use Alpaca's current_price for
-        # option marks so BMG unrealized matches broker UPL by
-        # construction. Falls back to FMP midpoint only when Alpaca
-        # doesn't report the position.
-        alpaca_price_by_sym: dict[str, float] = {}
-        for _p in alp:
-            _sym = _p.get("symbol")
-            _px = float(_p.get("current_price") or 0)
-            if _sym and _px > 0:
-                alpaca_price_by_sym[_sym] = _px
+        agg = compute_strategy_lab_aggregate(user_id=1, db=db) or {}
+        canonical_pv_cents = int(agg.get("total_value_cents") or 0)
+        canonical_source = str(agg.get("total_value_source") or "unknown")
 
-        bmg_open = (
-            db.query(BotPosition)
-            .filter(BotPosition.closed_at.is_(None))
-            .filter(BotPosition.quarantined_at.is_(None))
-            .all()
-        )
-        # Get option marks — prefer Alpaca current_price, fall back to FMP midpoint
-        occ_syms = [p.symbol for p in bmg_open if getattr(p, "option_type", None)]
-        marks_c: dict = {}
-        need_fallback = [s for s in occ_syms if s not in alpaca_price_by_sym]
-        if need_fallback:
-            marks_c = fetch_option_marks_cents(need_fallback) or {}
-        for _s in occ_syms:
-            if _s in alpaca_price_by_sym:
-                marks_c[_s] = int(round(alpaca_price_by_sym[_s] * 100))
-
-        # Get equity/crypto prices — prefer Alpaca current_price, fall
-        # back to live_prices for equity Alpaca doesn't hold.
-        eq_syms = [p.symbol for p in bmg_open if not getattr(p, "option_type", None)]
-        prices: dict[str, float] = {s: alpaca_price_by_sym[s] for s in eq_syms if s in alpaca_price_by_sym}
-        need_eq_fallback = [s for s in eq_syms if s not in prices]
-        if need_eq_fallback:
-            try:
-                from app.services.live_prices import fetch_live_prices
-                prices.update(fetch_live_prices(need_eq_fallback) or {})
-            except Exception:
-                pass
-
-        bmg_upl = 0.0
-        for p in bmg_open:
-            entry = (p.avg_cost_cents or 0) / 100.0
-            is_opt = bool(getattr(p, "option_type", None))
-            is_short = getattr(p, "side", "long") == "short"
-            mult = 100 if is_opt else 1
-            if is_opt:
-                mc = marks_c.get(p.symbol)
-                cur = mc / 100.0 if mc is not None else entry
-            else:
-                cur = float(prices.get(p.symbol) or entry)
-            if is_short:
-                bmg_upl += (entry - cur) * (p.qty or 0) * mult
-            else:
-                bmg_upl += (cur - entry) * (p.qty or 0) * mult
-
+        drift_cents = abs(canonical_pv_cents - alpaca_pv_cents)
         actual = {
-            "bmg_upl_usd": round(bmg_upl, 2),
-            "alpaca_upl_usd": round(alp_upl, 2),
-            "metric": "bmg_row_sum_vs_alpaca_position_sum",
-            "note": "Per-BMG-row UPL summed (includes duplicate rows if any) "
-                    "vs per-Alpaca-position UPL summed. Larger than the "
-                    "per-symbol view when BMG has duplicate or phantom rows. "
-                    "For symbol-keyed comparison see /admin/diag/i2-hypothesis "
-                    "secondary_total (that's the resume gate; this is the "
-                    "canonical-side view).",
+            "canonical_pv_usd": round(canonical_pv_cents / 100, 2),
+            "alpaca_pv_usd": round(alpaca_pv_cents / 100, 2),
+            "canonical_source": canonical_source,
+            "drift_usd": round(drift_cents / 100, 2),
+            "metric": "canonical_fund_pv_vs_alpaca_portfolio_value",
+            "note": "Fund-level PV check. Halts trading only when BMG's "
+                    "canonical PV diverges from Alpaca (broker-connectivity "
+                    "gap OR consumer using stale/wrong source). Attribution "
+                    "drift moved to reporting-tier (I15/I24/I31).",
         }
-        drift = abs(bmg_upl - alp_upl)
-        if drift <= 5:
-            return _ok("I2", actual, None, f"canonical vs alpaca UPL drift ${drift:,.2f}")
-        if drift <= 50:
-            return _amber("I2", actual, {"drift_max": 50}, drift,
-                          f"canonical vs alpaca UPL drift ${drift:,.2f}")
-        return _red("I2", actual, {"drift_max": 5}, drift,
-                    f"canonical vs alpaca UPL drift ${drift:,.2f} — BMG-row-sum ${bmg_upl:+,.2f} "
-                    f"vs Alpaca-position-sum ${alp_upl:+,.2f} (see /admin/diag/i2-hypothesis "
-                    "for per-symbol view — that's the resume gate)")
+        # $5 tolerance for cents-vs-dollars rounding
+        if drift_cents <= 500:
+            return _ok("I2", actual, {"drift_max_cents": 500},
+                       f"canonical fund PV matches Alpaca ±${drift_cents/100:.2f}")
+        # Anything above $5 = the canonical fund PV disagrees with the
+        # broker. That's a REAL safety event — trades would use wrong PV
+        # for sizing/risk. Halt.
+        return _red("I2", actual, {"drift_max_cents": 500}, float(drift_cents),
+                    f"fund PV drift ${drift_cents/100:,.2f} — canonical ${canonical_pv_cents/100:,.2f} "
+                    f"(source={canonical_source}) vs Alpaca ${alpaca_pv_cents/100:,.2f}. "
+                    "Investigate: is canonical falling back to bot_sum?")
     except Exception as exc:
         return _amber("I2", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
@@ -1492,6 +1462,67 @@ def _check_i18_data_volume_headroom(db) -> Result:
         return _amber("I18", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
 
+# ── Severity taxonomy (Brock 2026-08-20 autonomous work order, Phase A) ────
+#
+# SAFETY checks — auto-actions may HALT trading. Trip these ONLY when a real
+# money/state divergence exists that could cause the fund to trade against
+# wrong information (BMG thinks it owns X, broker has Y; cash exhausted;
+# exposure cap breached; sim fill detected; disk full).
+#
+# REPORTING checks — never halt. Attribution accuracy, per-bot identity,
+# unattributed remainder, mark drift below broker's own tolerance. Red on
+# these is a signal to investigate/rescale, not to stop trading. The fund
+# has halted 3× in 11 days on reporting-tier reds; that's the class this
+# taxonomy prevents.
+#
+# Semantics: `_maybe_auto_action` returns immediately without side effects
+# when the check's severity is 'reporting'. Reds still surface in /invariants
+# board + status streams — they just don't fire pauses.
+SEVERITY_CATEGORY: dict[str, str] = {
+    # Safety — auto-actions may halt scans / pause bots / write acks
+    "I1": "safety",   # position row-count drift (BMG vs broker share ownership)
+    "I2": "safety",   # RE-SCOPED to fund-level: canonical fund_pv vs Alpaca portfolio_value
+    "I3": "safety",   # sim fills detected — auto-pauses offending allocs
+    "I7": "safety",   # fleet max_loss exposure cap
+    "I9": "safety",   # broker↔bmg ownership mismatch
+    "I14": "safety",  # unremediated breach-on-adopt
+    "I17": "safety",  # cash < 0 (deployed beyond cash)
+    "I18": "safety",  # /data volume > 80/90% (auto-prune trigger)
+    "I22": "safety",  # cron heartbeat / silent-stop job detection
+    "I25": "safety",  # Alpaca fill has no matching BMG row (broker-truth gap)
+    "I27": "safety",  # PV endpoint disagreement > $1 (canonical vs consumers)
+    "I30": "safety",  # per-symbol UPL gap (resume gate — Brock's designated)
+    # Reporting — never halt. Reds are diagnostic signals for humans/PM Claude.
+    "I4": "reporting",   # closed-trade exit_reason hygiene
+    "I5": "reporting",   # option mark freshness
+    "I6": "reporting",   # PR-holdings mark freshness
+    "I8": "reporting",   # sleeve arithmetic sanity
+    "I10": "reporting",  # signals-without-trades funnel diagnosis
+    "I13": "reporting",  # single-tenant migration state (config-level)
+    "I15": "reporting",  # starting-capital rescale drift
+    "I16": "reporting",  # unattributed dollars tracker (Brock accepts non-zero)
+    "I19": "reporting",  # BROKER_FILL missing alpaca_order_id (provenance)
+    "I20": "reporting",  # market-closed origin drift
+    "I21": "reporting",  # origin ENUM validity
+    "I23": "reporting",  # exact-zero P&L windows
+    "I24": "reporting",  # bot-level identity drift (attribution)
+    "I26": "reporting",  # sub-penny fill_price_cents=0 (data quality)
+    "I28": "reporting",  # vault-freshness ping age
+    "I29": "reporting",  # BROKER_FILL missing fill_price_micros
+    "I31": "reporting",  # per-bot identity attribution drift
+}
+
+
+def is_safety_check(check_id: str) -> bool:
+    """True if a red on this check may trigger a trading halt.
+
+    Unknown checks default to 'reporting' — new checks are opt-in to
+    auto-actions, not opt-out. Prevents accidental halts when someone adds
+    an experimental check without categorizing it.
+    """
+    return SEVERITY_CATEGORY.get(check_id, "reporting") == "safety"
+
+
 # ── Runner + persistence ────────────────────────────────────────────────────
 
 CHECKS: dict[str, Callable] = {
@@ -1682,8 +1713,20 @@ def _maybe_auto_action(r: Result, db) -> None:
 
     Amber/green = no-op. Auto-actions must be idempotent — the check
     might fire every 15 min while a condition persists.
+
+    2026-08-20 (Brock work order Phase A): gated on SEVERITY_CATEGORY.
+    Reporting-tier checks (I15, I24, I31, I16, etc.) surface reds without
+    triggering halts. Only safety-tier checks route through the halting
+    auto-actions below. The fund had halted 3× in 11 days on reporting-tier
+    reds before this gate landed.
     """
     if r.level != "red":
+        return
+    if not is_safety_check(r.check_id):
+        logger.info(
+            "[invariant:AUTO-ACTION] %s red but severity=reporting — no auto-action",
+            r.check_id,
+        )
         return
 
     if r.check_id == "I7":
