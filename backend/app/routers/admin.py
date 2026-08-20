@@ -1924,6 +1924,36 @@ def diag_identity_decomposition(
     except Exception as exc:
         result["cost_basis_error"] = str(exc)[:150]
 
+    # ── PR bots (portfolio_rank_bots) — canonical INCLUDES these ─────────
+    # 2026-08-20 (PM Claude v3): my prior endpoint compared BotAllocation
+    # sum only. Canonical also adds portfolio_rank_bots contribution to
+    # its bot_sum_pv_cents (see canonical.py:1721 _pr_extra). Without it,
+    # my endpoint's "drift" is a subset of canonical's "unattributed" and
+    # the two numbers legitimately disagree by the PR sleeve size.
+    pr_bots_pv_cents = 0
+    pr_bots_row_count = 0
+    try:
+        pr_row = db.execute(_t(
+            "SELECT COALESCE(SUM(current_value_cents), COALESCE(SUM(starting_capital_cents),0)), COUNT(*) "
+            "FROM portfolio_rank_bots"
+        )).fetchone()
+        if pr_row:
+            pr_bots_pv_cents = int(pr_row[0] or 0)
+            pr_bots_row_count = int(pr_row[1] or 0)
+    except Exception:
+        try:
+            pr_row = db.execute(_t(
+                "SELECT COALESCE(SUM(starting_capital_cents), 0), COUNT(*) FROM portfolio_rank_bots"
+            )).fetchone()
+            if pr_row:
+                pr_bots_pv_cents = int(pr_row[0] or 0)
+                pr_bots_row_count = int(pr_row[1] or 0)
+        except Exception as exc:
+            result["pr_bots_error"] = str(exc)[:150]
+
+    # ── Canonical-shape bot_sum (with PR) for direct comparison ─────────
+    canonical_shape_bot_sum_cents = sum_pv + pr_bots_pv_cents
+
     # ── Residuals ────────────────────────────────────────────────────────
     # R1: rescale drift (I15 domain). Sign +ve means starting inflated.
     r1_cents = sum_start - fund_pv_cents
@@ -1953,6 +1983,11 @@ def diag_identity_decomposition(
         "sum_pv_usd": round(sum_pv / 100, 2),
         "sum_bmg_cost_basis_usd": round(total_bmg_cost_basis_cents / 100, 2),
         "direct_realized_bot_trades_usd": round(direct_realized_cents / 100, 2),
+        "pr_bots_pv_usd": round(pr_bots_pv_cents / 100, 2),
+        "pr_bots_row_count": pr_bots_row_count,
+        "canonical_shape_bot_sum_usd": round(canonical_shape_bot_sum_cents / 100, 2),
+        "canonical_shape_note": "sum_pv_usd + pr_bots_pv_usd — matches canonical.compute_strategy_lab_aggregate.bot_sum_pv_cents. Difference from fund_pv is what /portfolio/summary reports as unattributed_cents.",
+        "canonical_shape_drift_usd": round((canonical_shape_bot_sum_cents - fund_pv_cents) / 100, 2),
         "bot_count_total": len(allocs),
         "bot_count_enabled": n_enabled,
         "bot_count_disabled": n_disabled,
