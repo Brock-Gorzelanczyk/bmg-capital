@@ -1815,18 +1815,21 @@ def setup_bot_scheduler(scheduler) -> None:
 
     # ------------------------------------------------------------------
     # 2026-08-13 Brock: nightly restart @ 04:30 UTC as interim mitigation for
-    # the ~12min-lifespan container leak. os._exit(0) exits cleanly; Railway
-    # auto-restarts. This keeps the service up while RSS instrumentation
-    # gathers 24h of data to locate the leak.
+    # the ~12min-lifespan container leak.
+    # 2026-08-19 fix (ledger #43): Railway restartPolicyType=on_failure only
+    # restarts on NON-ZERO exit. os._exit(0) → Railway sees "success done" →
+    # NO restart → container dies silently every night. Confirmed 2026-08-19:
+    # 04:30 UTC exit(0) fired, service was DOWN until 05:48 UTC manual redeploy.
+    # Fix: exit(1) so Railway's on_failure policy fires.
     # ------------------------------------------------------------------
     def _nightly_restart():
         import os as _os
         import time as _t
         logger.warning(
-            "[nightly-restart] scheduled restart firing — os._exit(0). "
-            "Railway will auto-restart the container.")
+            "[nightly-restart] scheduled restart firing — os._exit(1) "
+            "(intentional non-zero for Railway on_failure auto-restart).")
         _t.sleep(1)  # flush stdout
-        _os._exit(0)
+        _os._exit(1)
 
     scheduler.add_job(
         _nightly_restart,
