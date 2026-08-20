@@ -119,6 +119,11 @@ def _smart_money_13f(symbols: list[str], db: Session, params: dict) -> dict[str,
     return compute(symbols, db, params)
 
 
+def _intramonth_dashforcash(symbols: list[str], db: Session, params: dict) -> dict[str, float]:
+    from .intramonth_dashforcash import compute
+    return compute(symbols, db, params)
+
+
 _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "alphabetical": alphabetical,
     # 2026-07-05 Phase 2 factors — both hit yfinance for data.
@@ -172,6 +177,16 @@ _REGISTRY: dict[str, Callable[[list[str], Session, dict], dict[str, float]]] = {
     "os_ratio": _os_ratio,
     "overnight_momentum": _overnight_momentum,
     "smart_money_13f": _smart_money_13f,
+    # 2026-08-20 SSRN batch 7:
+    #   intramonth_dashforcash: Nathan-Suominen-Tasa 2026 SSRN 6426026 —
+    #                           momentum profits concentrate in 6 trading days
+    #                           per month (PreTOM window). Loser-driven. Cross-
+    #                           replicates in 19 markets. Causal T+1 identification.
+    #                           This entry ships the FACTOR (12-1 rank); a
+    #                           PreTOM-aware rebalance_schedule kind is a
+    #                           follow-up in the runner. Migration to seed a
+    #                           bot with this factor is a separate ship.
+    "intramonth_dashforcash": _intramonth_dashforcash,
 }
 
 

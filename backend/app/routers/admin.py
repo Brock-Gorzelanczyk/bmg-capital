@@ -1964,17 +1964,23 @@ def diag_identity_decomposition(
         "sum_pv_usd": round(sum_pv_enabled / 100, 2),
         "note": "For contrast: enabled-only rollup. Historical realized P&L lives on disabled allocs; this scope excludes it.",
     }
+    # 2026-08-20 v3 math note: R1, R2, R3 are INDEPENDENT diagnostic axes.
+    # They do NOT sum to total_drift because R1 compares to fund_pv (an
+    # aggregate) while R3 compares to broker_unrealized (a component of that
+    # aggregate). The initial v1 had a "sum_of_residuals" and "unexplained"
+    # pair whose difference always equaled -broker_unrealized — that was a
+    # symptom of the wrong assumption that the axes are additive. Removed.
     result["residuals"] = {
+        "total_drift_usd": round(total_drift_cents / 100, 2),
+        "total_drift_note": "Σ(bot.pv) - fund_pv. The one number to zero out.",
         "R1_starting_vs_funded_usd": round(r1_cents / 100, 2),
-        "R1_note": "Σ(alloc.starting_capital) - fund_pv. Non-zero when rescale is stale (I15 domain).",
+        "R1_note": "Σ(alloc.starting_capital) - fund_pv. Ideal-case value = -(Σ realized + Σ unrealized). If starting is rebased-to-fund_pv at rescale, this equals the P&L since rescale, so R1 alone isn't diagnostic — see R1_adjusted.",
+        "R1_adjusted_usd": round((r1_cents - (0 - sum_real - sum_unreal)) / 100, 2),
+        "R1_adjusted_note": "R1 - (-(sum_realized + sum_unrealized)) = the true rescale-staleness after adjusting for accumulated P&L. This IS the rescale drift.",
         "R2_canonical_realized_vs_direct_usd": round(r2_canonical_vs_direct_cents / 100, 2),
         "R2_note": "Σ(snap.realized) - Σ(bot_trades.pnl_cents). Non-zero when snapshot pulls realized from a different source than the trade ledger.",
         "R3_unrealized_vs_broker_usd": round(r3_cents / 100, 2),
         "R3_note": "Σ(snap.unrealized) - Σ(alpaca_pos.unrealized_pl). Non-zero when BMG marks differ from Alpaca marks OR when position-claim partition is not exhaustive.",
-        "total_drift_usd": round(total_drift_cents / 100, 2),
-        "sum_of_residuals_usd": round(sum_residuals_cents / 100, 2),
-        "unexplained_usd": round(unexplained_cents / 100, 2),
-        "unexplained_note": "Non-zero here means some component of the drift is neither R1 nor R2 nor R3 — hidden source needs finding.",
     }
 
     # Top-N residual contributors (descending by |contribution|)
