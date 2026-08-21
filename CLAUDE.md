@@ -13,6 +13,7 @@ REQUIRED reads every session (non-negotiable):
 - context/08-conflict-log.md (open theory-vs-data disputes)
 - context/09-realized-pnl-rebuild-spec.md (approved active spec — read if session task is realized-P&L or leaderboard math)
 - context/10-roadmap.md (goals, standing decisions, strategy pipeline — WHY the ledger looks the way it does)
+- research/**/*.md (added 2026-08-20 per Brock: distilled academic literature; use these when reasoning about strategy, alpha sources, or bot design. Skim `00-INDEX.md`'s RESEARCH NOTES section for titles+one-liners, then deep-read anything relevant to the current task.)
 
 Task-specific reads:
 - Writing a paste-ready → skills/01-paste-ready-format.md

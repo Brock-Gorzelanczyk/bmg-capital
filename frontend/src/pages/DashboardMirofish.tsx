@@ -935,44 +935,106 @@ function _extractUnderlying(symbol: string): { tv: string; note: string } {
   return { tv: symbol, note: "" };
 }
 
-// TradingView Advanced Chart via direct iframe embed. The tv.js script-injection
-// path (2026-08-20 first attempt) rendered a blank black panel — likely a CSP,
-// adblocker, or silent init failure. The widgetembed iframe URL is officially
-// documented, sidesteps script loading entirely, and renders identically.
-function TradingViewChart({ tvSymbol }: { tvSymbol: string; containerId?: string }) {
-  const src = useMemo(() => {
-    const params = new URLSearchParams({
-      symbol: tvSymbol,
-      interval: "15",
-      theme: "dark",
-      style: "1",             // candles
-      timezone: "America/New_York",
-      locale: "en",
-      toolbarbg: "0a0a0a",
-      studies: "Volume@tv-basicstudies",
-      hide_side_toolbar: "0",   // drawing tools ON
-      allow_symbol_change: "1",
-      save_image: "0",
-      withdateranges: "1",
-      details: "1",
-      hotlist: "0",
-      calendar: "0",
-      // widgetembed refuses to render without an origin whitelisted; use current host
-      utm_source: window.location.hostname,
-      utm_medium: "widget",
-      utm_campaign: "chart",
+// TradingView Advanced Chart. Two prior attempts failed:
+//   1. tv.js + autosize:true → rendered black. Root cause: `flex-1` chart
+//      wrapper inside `flex-col` had no bounded height, so autosize computed
+//      0px. The script + widget WERE fine — the container had zero size.
+//   2. widgetembed iframe URL → TradingView returned X-Frame-Options DENY.
+//      Their direct-iframe endpoint requires the tv.js message-passing
+//      handshake, not raw iframe embedding.
+// Fix: tv.js script + explicit fixed width/height (not autosize). The wrapper
+// uses ResizeObserver to keep the widget matching its container.
+function TradingViewChart({ tvSymbol, containerId }: { tvSymbol: string; containerId: string }) {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const widgetRef = useRef<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const buildWidget = () => {
+      if (cancelled) return;
+      if (typeof window.TradingView === "undefined") return;
+      const wrapper = wrapperRef.current;
+      if (!wrapper) return;
+      const rect = wrapper.getBoundingClientRect();
+      const width = Math.max(320, Math.floor(rect.width));
+      const height = Math.max(300, Math.floor(rect.height));
+      // Clear any prior widget
+      wrapper.innerHTML = `<div id="${containerId}" style="width:${width}px;height:${height}px"></div>`;
+      widgetRef.current = new window.TradingView.widget({
+        width,
+        height,
+        symbol: tvSymbol,
+        interval: "15",
+        timezone: "America/New_York",
+        theme: "dark",
+        style: "1",                // candles
+        locale: "en",
+        toolbar_bg: "#0a0a0a",
+        enable_publishing: false,
+        allow_symbol_change: true,
+        hide_side_toolbar: false,
+        withdateranges: true,
+        studies: ["Volume@tv-basicstudies"],
+        container_id: containerId,
+      });
+    };
+
+    const ensureScriptAndBuild = () => {
+      if (typeof window.TradingView !== "undefined") {
+        buildWidget();
+        return;
+      }
+      const existing = document.querySelector<HTMLScriptElement>(
+        'script[src="https://s3.tradingview.com/tv.js"]'
+      );
+      if (existing) {
+        // Script tag exists but global not ready yet — poll briefly
+        let tries = 0;
+        const iv = window.setInterval(() => {
+          tries++;
+          if (typeof window.TradingView !== "undefined") {
+            window.clearInterval(iv);
+            buildWidget();
+          } else if (tries > 40) {
+            window.clearInterval(iv);
+          }
+        }, 100);
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.async = true;
+      script.onload = buildWidget;
+      document.head.appendChild(script);
+    };
+
+    ensureScriptAndBuild();
+
+    // Rebuild widget if container resizes materially (window resize, etc.)
+    let lastW = 0;
+    let lastH = 0;
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[0];
+      if (!e) return;
+      const w = Math.floor(e.contentRect.width);
+      const h = Math.floor(e.contentRect.height);
+      if (Math.abs(w - lastW) > 40 || Math.abs(h - lastH) > 40) {
+        lastW = w;
+        lastH = h;
+        buildWidget();
+      }
     });
-    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-  }, [tvSymbol]);
-  return (
-    <iframe
-      src={src}
-      title={`TradingView chart ${tvSymbol}`}
-      className="w-full h-full border-0"
-      allow="clipboard-write"
-      allowFullScreen
-    />
-  );
+    if (wrapperRef.current) ro.observe(wrapperRef.current);
+
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+      if (wrapperRef.current) wrapperRef.current.innerHTML = "";
+    };
+  }, [tvSymbol, containerId]);
+
+  return <div ref={wrapperRef} className="w-full h-full" />;
 }
 
 function SignalDetailModal({
@@ -1047,13 +1109,13 @@ function SignalDetailModal({
         {/* Body: chart + side panel */}
         <div className="flex flex-1 min-h-0">
           {/* Chart — TradingView Advanced Widget with real market data */}
-          <div className="flex-1 bg-[#0a0a0a] flex flex-col">
+          <div className="flex-1 min-w-0 bg-[#0a0a0a] flex flex-col">
             {symbolNote && (
               <div className="px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-[10px] text-amber-300/80 font-mono">
                 {symbolNote}
               </div>
             )}
-            <div className="flex-1">
+            <div className="flex-1 min-h-0">
               <TradingViewChart tvSymbol={tvSymbol} containerId={containerId} />
             </div>
           </div>
