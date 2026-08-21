@@ -80,6 +80,7 @@ from app.routers.performance import router as performance_router
 from app.routers.leaderboard import router as leaderboard_router
 from app.routers.contract_detail import router as contract_detail_router
 from app.routers.portfolio_rank import router as portfolio_rank_router
+from app.routers.confluence import router as confluence_router
 
 # ─── PAUSED 2026-07-16 (cost) — restore by uncommenting the block you want ──
 # from app.routers import (
@@ -1168,6 +1169,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m100_fill_price_precision FAILED: %s",
                      _m100_exc, exc_info=True)
 
+    # m101: confluence_picks table (Brock 2026-08-20).
+    # Thesis journal for the confluence stock-selection framework.
+    # See research/2026-08-20-confluence-selection-framework.md
+    try:
+        from app.db.migrations.m101_confluence_picks import run as _run_m101
+        with engine.begin() as _m101_conn:
+            _m101_result = _run_m101(_m101_conn)
+        logger.warning("[startup] m101 status: %s", _m101_result)
+    except Exception as _m101_exc:
+        logger.error("[startup] m101_confluence_picks FAILED: %s",
+                     _m101_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
@@ -1771,6 +1784,7 @@ app.include_router(contract_detail_router)
 app.include_router(bots.router)
 app.include_router(strategy_lab.router)
 app.include_router(admin.router)
+app.include_router(confluence_router)
 app.include_router(admin_bots_router)
 app.include_router(dashboard_router)
 app.include_router(pnl_router)
