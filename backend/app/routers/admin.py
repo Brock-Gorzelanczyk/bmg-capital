@@ -11846,3 +11846,125 @@ def mem_probe_snapshot(_admin: User = Depends(require_admin)) -> Dict[str, Any]:
         return snap
     except Exception as exc:
         return {"error": str(exc)[:500]}
+
+
+@router.post("/factory-reset")
+def factory_reset(
+    confirm: str = Query(..., description="Must be exactly 'RESET_TO_100K'"),
+    starting_capital_dollars: int = Query(100000, gt=0, description="New starting capital"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """One-time destructive reset: wipes transactional tables + disables all
+    existing bot_allocations + resets user_1 starting/funded capital.
+
+    **Requires:** `confirm=RESET_TO_100K` (exact literal) to protect against
+    accidental invocation. Records the reset in schema_migrations with a
+    timestamped marker so we know when it happened.
+
+    Does NOT touch:
+      - vault research notes
+      - postmortems
+      - bot_allocations rows themselves (just enabled=0)
+      - schema (no ALTER, no DROP)
+      - Alpaca positions (must be handled separately via dashboard reset
+        or DELETE /v2/positions — this endpoint only touches the BMG DB)
+
+    Preservation: this is Brock's authorized 2026-08-20 strategic reset.
+    Local archive of the pre-reset DB lives at
+    ~/Documents/BMG-Capital-Vault/archives/ per §V0.
+    """
+    if confirm != "RESET_TO_100K":
+        raise HTTPException(
+            status_code=400,
+            detail="confirm must be exactly 'RESET_TO_100K'",
+        )
+
+    from sqlalchemy import text as _sqltext
+    from datetime import datetime as _dt, timezone as _tz
+
+    started_at = _dt.now(_tz.utc)
+    starting_cents = starting_capital_dollars * 100
+
+    # Row counts before
+    before_counts = {}
+    for t in ("bot_trades", "bot_positions", "portfolio_snapshots",
+              "alpaca_orders", "bot_signals", "confluence_picks",
+              "bot_allocations"):
+        try:
+            row = db.execute(_sqltext(f"SELECT COUNT(*) FROM {t}")).fetchone()
+            before_counts[t] = int(row[0]) if row else 0
+        except Exception:
+            before_counts[t] = None  # table may not exist
+
+    # Wipe transactional tables
+    wiped = {}
+    for t in ("bot_trades", "bot_positions", "portfolio_snapshots",
+              "alpaca_orders", "bot_signals", "confluence_picks"):
+        try:
+            r = db.execute(_sqltext(f"DELETE FROM {t}"))
+            wiped[t] = r.rowcount if r.rowcount is not None else "?"
+        except Exception as e:
+            wiped[t] = f"error: {str(e)[:100]}"
+
+    # Disable all bot allocations (preserve rows for archaeological reference)
+    try:
+        r = db.execute(_sqltext("UPDATE bot_allocations SET enabled = 0"))
+        wiped["bot_allocations_disabled"] = r.rowcount
+    except Exception as e:
+        wiped["bot_allocations_disabled"] = f"error: {str(e)[:100]}"
+
+    # Reset user_1 starting/funded capital
+    try:
+        r = db.execute(
+            _sqltext(
+                "UPDATE users SET starting_capital_cents = :c, "
+                "funded_base_cents = :c WHERE id = 1"
+            ),
+            {"c": starting_cents},
+        )
+        wiped["user_1_starting_capital_cents"] = starting_cents
+        wiped["user_1_updated"] = r.rowcount
+    except Exception as e:
+        wiped["user_1_starting_capital_cents"] = f"error: {str(e)[:100]}"
+
+    # Record the reset in schema_migrations
+    reset_marker = f"factory_reset_{started_at.strftime('%Y%m%d_%H%M%S')}"
+    try:
+        db.execute(_sqltext(
+            "CREATE TABLE IF NOT EXISTS schema_migrations "
+            "(name TEXT PRIMARY KEY, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)"
+        ))
+        db.execute(
+            _sqltext("INSERT OR IGNORE INTO schema_migrations (name) VALUES (:n)"),
+            {"n": reset_marker},
+        )
+    except Exception:
+        pass
+
+    db.commit()
+
+    finished_at = _dt.now(_tz.utc)
+    logger.warning(
+        "[factory-reset] applied by=%s starting_capital=$%d duration=%.2fs marker=%s",
+        current_user.email if hasattr(current_user, "email") else "?",
+        starting_capital_dollars,
+        (finished_at - started_at).total_seconds(),
+        reset_marker,
+    )
+
+    return {
+        "status": "ok",
+        "confirm": confirm,
+        "started_utc": started_at.isoformat(),
+        "finished_utc": finished_at.isoformat(),
+        "starting_capital_dollars": starting_capital_dollars,
+        "before_counts": before_counts,
+        "wiped": wiped,
+        "marker": reset_marker,
+        "next_steps": [
+            "Verify: scripts/bmg_admin.sh GET /admin/premarket-report",
+            "Alpaca paper reset must be done via dashboard button separately",
+            "confluence_executor allocation will auto-create on first pick arm",
+        ],
+    }

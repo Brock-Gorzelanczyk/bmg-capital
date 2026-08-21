@@ -288,6 +288,97 @@ def get_confluence_journal(
     }
 
 
+class ConfluenceArm(BaseModel):
+    play_a_trigger_price_cents: Optional[int] = Field(None, gt=0)
+    play_a_stop_price_cents: Optional[int] = Field(None, gt=0)
+    play_a_volume_multiple: Optional[float] = Field(1.2, gt=0, le=10)
+    play_b_trigger_price_cents: Optional[int] = Field(None, gt=0)
+    play_b_stop_price_cents: Optional[int] = Field(None, gt=0)
+    target_1_cents: int = Field(..., gt=0)
+    target_2_cents: Optional[int] = Field(None, gt=0)
+    size_dollars: int = Field(5000, gt=0, le=1000000)
+    arm_mode: str = Field(..., pattern="^(play_a_only|play_b_only|either)$")
+    arm_expires_at: Optional[str] = None  # ISO datetime UTC
+
+
+@router.post("/arm/{pick_id}")
+def arm_confluence_pick(
+    pick_id: int,
+    payload: ConfluenceArm,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Arm a logged pick for auto-execution. Executor tick will watch it."""
+    pick = db.query(ConfluencePick).filter(ConfluencePick.id == pick_id).first()
+    if not pick:
+        raise HTTPException(status_code=404, detail=f"pick {pick_id} not found")
+    if pick.closed_date is not None:
+        raise HTTPException(status_code=400, detail="pick already closed — cannot arm")
+    if pick.arm_state in ("FILLED_A", "FILLED_B"):
+        raise HTTPException(status_code=400, detail=f"pick already {pick.arm_state}")
+
+    # Validate mode-vs-fields
+    if payload.arm_mode in ("play_a_only", "either") and not payload.play_a_trigger_price_cents:
+        raise HTTPException(status_code=400, detail="play_a mode requires play_a_trigger_price_cents")
+    if payload.arm_mode in ("play_b_only", "either") and not payload.play_b_trigger_price_cents:
+        raise HTTPException(status_code=400, detail="play_b mode requires play_b_trigger_price_cents")
+
+    pick.arm_state = "ARMED"
+    pick.arm_mode = payload.arm_mode
+    pick.arm_expires_at = payload.arm_expires_at
+    pick.size_dollars_cents = payload.size_dollars * 100
+    pick.play_a_trigger_price_cents = payload.play_a_trigger_price_cents
+    pick.play_a_stop_price_cents = payload.play_a_stop_price_cents
+    pick.play_a_volume_multiple = payload.play_a_volume_multiple
+    pick.play_b_trigger_price_cents = payload.play_b_trigger_price_cents
+    pick.play_b_stop_price_cents = payload.play_b_stop_price_cents
+    pick.target_1_cents = payload.target_1_cents
+    pick.target_2_cents = payload.target_2_cents
+    db.commit()
+
+    logger.info(
+        "[confluence] armed pick=%d %s mode=%s size=$%d target=%s",
+        pick.id, pick.ticker, payload.arm_mode, payload.size_dollars, payload.target_1_cents,
+    )
+    return {
+        "id": pick.id,
+        "ticker": pick.ticker,
+        "arm_state": pick.arm_state,
+        "arm_mode": pick.arm_mode,
+        "size_dollars": payload.size_dollars,
+        "status": "armed",
+    }
+
+
+@router.post("/disarm/{pick_id}")
+def disarm_confluence_pick(
+    pick_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disarm an armed pick without firing. Does not cancel any Alpaca orders."""
+    pick = db.query(ConfluencePick).filter(ConfluencePick.id == pick_id).first()
+    if not pick:
+        raise HTTPException(status_code=404, detail=f"pick {pick_id} not found")
+    if pick.arm_state != "ARMED":
+        raise HTTPException(status_code=400, detail=f"pick state is {pick.arm_state}, not ARMED")
+
+    pick.arm_state = "DISARMED"
+    db.commit()
+
+    logger.info("[confluence] disarmed pick=%d %s", pick.id, pick.ticker)
+    return {"id": pick.id, "ticker": pick.ticker, "arm_state": pick.arm_state, "status": "disarmed"}
+
+
+@router.post("/tick")
+def confluence_tick_manual(
+    current_user: User = Depends(get_current_user),
+):
+    """Manually run one executor tick. Same as the cron does."""
+    from app.services.confluence_executor import tick
+    return tick()
+
+
 @router.get("/pick/{pick_id}")
 def get_confluence_pick(
     pick_id: int,

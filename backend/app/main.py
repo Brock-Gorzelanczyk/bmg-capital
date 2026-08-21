@@ -1181,6 +1181,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m101_confluence_picks FAILED: %s",
                      _m101_exc, exc_info=True)
 
+    # m102: arm-state fields on confluence_picks (Brock 2026-08-20).
+    # Adds Play A/B trigger prices, sizes, arm_state, alpaca order tracking.
+    # Enables the confluence executor to auto-fire bracket orders.
+    try:
+        from app.db.migrations.m102_confluence_arm import run as _run_m102
+        with engine.begin() as _m102_conn:
+            _m102_result = _run_m102(_m102_conn)
+        logger.warning("[startup] m102 status: %s", _m102_result)
+    except Exception as _m102_exc:
+        logger.error("[startup] m102_confluence_arm FAILED: %s",
+                     _m102_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:
@@ -1458,6 +1470,15 @@ async def lifespan(app: FastAPI):
     except Exception as _ie_exc:
         logger.error("[startup] invariant_engine scheduler FAILED (non-fatal): %s",
                      _ie_exc, exc_info=True)
+    # Confluence executor — 5-min RTH tick that fires bracket orders for
+    # armed picks. Brock 2026-08-20 reset: this is the ONLY active strategy.
+    try:
+        from app.services.confluence_executor import setup_confluence_executor
+        setup_confluence_executor(scheduler)
+    except Exception as _ce_exc:
+        logger.error("[startup] confluence_executor scheduler FAILED (non-fatal): %s",
+                     _ce_exc, exc_info=True)
+
     scheduler.start()
 
     # PAUSED 2026-07-16 (cost): startup strategy scan ran full universe on every

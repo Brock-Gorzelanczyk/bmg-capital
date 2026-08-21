@@ -56,3 +56,19 @@ class ConfluencePick(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=func.now(),
     )
+
+    # m102 arm state — makes a pick executable, not just journaled
+    arm_state: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="LOGGED")
+    arm_mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    arm_expires_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    size_dollars_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=500000)
+    play_a_trigger_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    play_a_stop_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    play_a_volume_multiple: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=1.2)
+    play_b_trigger_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    play_b_stop_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    target_1_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    target_2_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    alpaca_bracket_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    filled_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    filled_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
