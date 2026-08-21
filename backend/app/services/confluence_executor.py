@@ -94,25 +94,51 @@ def _get_last_price(symbol: str) -> Optional[float]:
 
 
 def _ensure_alloc(db: Session) -> int:
-    """Get or create the confluence_executor bot_allocations row."""
+    """Get or create the confluence_executor bot_allocations row.
+    Requires bot_profiles row with name='confluence_executor' (factory-reset creates it)."""
     row = db.execute(
-        text("SELECT id FROM bot_allocations WHERE bot_name = :n AND user_id = 1"),
+        text(
+            "SELECT a.id FROM bot_allocations a "
+            "JOIN bot_profiles p ON p.id = a.profile_id "
+            "WHERE p.name = :n AND a.user_id = 1"
+        ),
         {"n": CONFLUENCE_ALLOC_NAME},
     ).fetchone()
     if row:
         return int(row[0])
 
+    # Lazy-create — bootstrap the profile then the allocation.
+    # Only reached if factory-reset was skipped; alloc starts at $0 capital.
+    prof_row = db.execute(
+        text("SELECT id FROM bot_profiles WHERE name = :n"),
+        {"n": CONFLUENCE_ALLOC_NAME},
+    ).fetchone()
+    if prof_row:
+        profile_id = int(prof_row[0])
+    else:
+        r_prof = db.execute(
+            text(
+                "INSERT INTO bot_profiles (name, description, asset_class, enabled) "
+                "VALUES (:n, 'confluence framework executor', 'stock', 1)"
+            ),
+            {"n": CONFLUENCE_ALLOC_NAME},
+        )
+        profile_id = int(r_prof.lastrowid)
+
     result = db.execute(
         text(
             "INSERT INTO bot_allocations "
-            "(user_id, bot_name, starting_capital_cents, enabled, created_at) "
-            "VALUES (1, :n, 0, 1, CURRENT_TIMESTAMP)"
+            "(user_id, profile_id, capital_pct, risk_profile, paper_mode, "
+            " go_live_requested, enabled, starting_capital_cents, tier, "
+            " created_at, updated_at) "
+            "VALUES (1, :p, 100.0, 'standard', 1, 0, 1, 0, 'T0', "
+            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
         ),
-        {"n": CONFLUENCE_ALLOC_NAME},
+        {"p": profile_id},
     )
     db.commit()
     aid = int(result.lastrowid)
-    logger.info("[confluence_executor] created allocation id=%d name=%s",
+    logger.info("[confluence_executor] created allocation id=%d profile=%s",
                 aid, CONFLUENCE_ALLOC_NAME)
     return aid
 

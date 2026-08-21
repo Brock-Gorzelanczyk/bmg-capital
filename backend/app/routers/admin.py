@@ -11932,24 +11932,44 @@ def factory_reset(
 
     # Create/update the confluence_executor allocation with the new $100K.
     # This becomes the ONLY funded allocation, hence fund total = $100K.
+    # Requires a bot_profiles row named 'confluence_executor' (created here if missing).
     try:
-        # If it exists, update; else insert.
-        existing = db.execute(_sqltext(
-            "SELECT id FROM bot_allocations WHERE bot_name = 'confluence_executor' AND user_id = 1"
+        # 1. Ensure the profile exists.
+        prof = db.execute(_sqltext(
+            "SELECT id FROM bot_profiles WHERE name = 'confluence_executor'"
         )).fetchone()
+        if prof:
+            profile_id = int(prof[0])
+        else:
+            r_prof = db.execute(_sqltext(
+                "INSERT INTO bot_profiles (name, description, asset_class, enabled) "
+                "VALUES ('confluence_executor', "
+                "'Confluence framework executor — auto-fires bracket orders on ARMED confluence_picks', "
+                "'stock', 1)"
+            ))
+            profile_id = int(r_prof.lastrowid)
+            wiped["confluence_profile_created"] = profile_id
+
+        # 2. Ensure the allocation exists.
+        existing = db.execute(_sqltext(
+            "SELECT id FROM bot_allocations WHERE profile_id = :p AND user_id = 1"
+        ), {"p": profile_id}).fetchone()
         if existing:
             db.execute(_sqltext(
-                "UPDATE bot_allocations SET starting_capital_cents = :c, enabled = 1 "
-                "WHERE id = :id"
+                "UPDATE bot_allocations SET starting_capital_cents = :c, "
+                "enabled = 1, paper_mode = 1, tier = 'T0' WHERE id = :id"
             ), {"c": starting_cents, "id": existing[0]})
             wiped["confluence_alloc_updated"] = existing[0]
         else:
-            r2 = db.execute(_sqltext(
+            r_alloc = db.execute(_sqltext(
                 "INSERT INTO bot_allocations "
-                "(user_id, bot_name, starting_capital_cents, enabled, created_at) "
-                "VALUES (1, 'confluence_executor', :c, 1, CURRENT_TIMESTAMP)"
-            ), {"c": starting_cents})
-            wiped["confluence_alloc_created"] = r2.lastrowid
+                "(user_id, profile_id, capital_pct, risk_profile, paper_mode, "
+                " go_live_requested, enabled, starting_capital_cents, tier, "
+                " created_at, updated_at) "
+                "VALUES (1, :p, 100.0, 'standard', 1, 0, 1, :c, 'T0', "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            ), {"p": profile_id, "c": starting_cents})
+            wiped["confluence_alloc_created"] = r_alloc.lastrowid
         wiped["confluence_alloc_starting_capital_cents"] = starting_cents
     except Exception as e:
         wiped["confluence_alloc_error"] = f"error: {str(e)[:200]}"
