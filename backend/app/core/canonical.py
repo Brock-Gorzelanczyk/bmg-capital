@@ -934,7 +934,7 @@ def compute_portfolio_snapshot(
 # portfolio_value_eod_cents) on the anchor date across all user_1 allocations.
 # If the anchor snapshot is missing, we fall back to the rebased inception.
 
-_FUND_INCEPTION_CENTS = 9_734_000  # $97,340 — post-m077 mirror-Alpaca baseline
+_FUND_INCEPTION_CENTS = 1_000_000  # $10,000 — post-2026-08-21 strategic reset baseline
 
 
 def _last_biz_day_of_prior_month(anchor: date) -> date:

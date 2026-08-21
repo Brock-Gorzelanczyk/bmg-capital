@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/risk", tags=["risk"])
 
-_FUND_INCEPTION_CENTS = 100_000_000  # $1,000,000
+_FUND_INCEPTION_CENTS = 1_000_000  # $10,000 — post-2026-08-21 strategic reset baseline
 
 
 def _open_positions_with_live_price(db: Session, user_id: int) -> list[dict]:
