@@ -935,85 +935,44 @@ function _extractUnderlying(symbol: string): { tv: string; note: string } {
   return { tv: symbol, note: "" };
 }
 
-// Advanced Chart widget via official <script> injection. Gives the full TV
-// UX: drawing tools, indicator panel, time-range selector, real market data
-// (live for supported feeds, 15-min delayed for others per exchange rules).
-function TradingViewChart({ tvSymbol, containerId }: { tvSymbol: string; containerId: string }) {
-  useEffect(() => {
-    const buildWidget = () => {
-      if (typeof window.TradingView === "undefined") return;
-      const el = document.getElementById(containerId);
-      if (!el) return;
-      el.innerHTML = ""; // clear any prior widget from an earlier open
-      new window.TradingView.widget({
-        autosize: true,
-        symbol: tvSymbol,
-        interval: "15",
-        timezone: "America/New_York",
-        theme: "dark",
-        style: "1",                // 1 = candles
-        locale: "en",
-        toolbar_bg: "#0a0a0a",
-        enable_publishing: false,
-        allow_symbol_change: true,
-        hide_side_toolbar: false,   // drawing tools ON
-        hide_top_toolbar: false,    // time/indicator controls ON
-        withdateranges: true,       // 1D 5D 1M 3M 6M 1Y 5Y ALL row
-        studies: ["Volume@tv-basicstudies"],
-        container_id: containerId,
-        overrides: {
-          "paneProperties.background": "#0a0a0a",
-          "paneProperties.backgroundType": "solid",
-          "paneProperties.vertGridProperties.color": "rgba(255,255,255,0.04)",
-          "paneProperties.horzGridProperties.color": "rgba(255,255,255,0.04)",
-          "scalesProperties.textColor": "#94a3b8",
-        },
-      });
-    };
-
-    // If tv.js is already loaded (second modal open, etc.), just build directly.
-    // Otherwise inject the script and build in onload.
-    if (typeof window.TradingView !== "undefined") {
-      buildWidget();
-      return () => {
-        const el = document.getElementById(containerId);
-        if (el) el.innerHTML = "";
-      };
-    }
-
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="https://s3.tradingview.com/tv.js"]'
-    );
-    if (existing) {
-      // Script tag present but TradingView global not ready — poll briefly
-      let tries = 0;
-      const iv = window.setInterval(() => {
-        tries++;
-        if (typeof window.TradingView !== "undefined") {
-          window.clearInterval(iv);
-          buildWidget();
-        } else if (tries > 40) {
-          window.clearInterval(iv); // 4s cap
-        }
-      }, 100);
-      return () => {
-        window.clearInterval(iv);
-        const el = document.getElementById(containerId);
-        if (el) el.innerHTML = "";
-      };
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/tv.js";
-    script.async = true;
-    script.onload = buildWidget;
-    document.head.appendChild(script);
-    return () => {
-      const el = document.getElementById(containerId);
-      if (el) el.innerHTML = "";
-    };
-  }, [tvSymbol, containerId]);
-  return <div id={containerId} className="w-full h-full" />;
+// TradingView Advanced Chart via direct iframe embed. The tv.js script-injection
+// path (2026-08-20 first attempt) rendered a blank black panel — likely a CSP,
+// adblocker, or silent init failure. The widgetembed iframe URL is officially
+// documented, sidesteps script loading entirely, and renders identically.
+function TradingViewChart({ tvSymbol }: { tvSymbol: string; containerId?: string }) {
+  const src = useMemo(() => {
+    const params = new URLSearchParams({
+      symbol: tvSymbol,
+      interval: "15",
+      theme: "dark",
+      style: "1",             // candles
+      timezone: "America/New_York",
+      locale: "en",
+      toolbarbg: "0a0a0a",
+      studies: "Volume@tv-basicstudies",
+      hide_side_toolbar: "0",   // drawing tools ON
+      allow_symbol_change: "1",
+      save_image: "0",
+      withdateranges: "1",
+      details: "1",
+      hotlist: "0",
+      calendar: "0",
+      // widgetembed refuses to render without an origin whitelisted; use current host
+      utm_source: window.location.hostname,
+      utm_medium: "widget",
+      utm_campaign: "chart",
+    });
+    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
+  }, [tvSymbol]);
+  return (
+    <iframe
+      src={src}
+      title={`TradingView chart ${tvSymbol}`}
+      className="w-full h-full border-0"
+      allow="clipboard-write"
+      allowFullScreen
+    />
+  );
 }
 
 function SignalDetailModal({
