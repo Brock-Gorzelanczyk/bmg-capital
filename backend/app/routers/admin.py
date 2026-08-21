@@ -11907,26 +11907,52 @@ def factory_reset(
         except Exception as e:
             wiped[t] = f"error: {str(e)[:100]}"
 
-    # Disable all bot allocations (preserve rows for archaeological reference)
+    # Disable ALL existing bot allocations AND zero their starting_capital.
+    # Fund total capital = SUM(bot_allocations.starting_capital_cents), so
+    # leaving disabled allocs with their old capital would keep the fund
+    # size at $1M+. Zeroing is required.
     try:
-        r = db.execute(_sqltext("UPDATE bot_allocations SET enabled = 0"))
-        wiped["bot_allocations_disabled"] = r.rowcount
+        r = db.execute(_sqltext(
+            "UPDATE bot_allocations SET enabled = 0, starting_capital_cents = 0"
+        ))
+        wiped["bot_allocations_disabled_and_zeroed"] = r.rowcount
     except Exception as e:
-        wiped["bot_allocations_disabled"] = f"error: {str(e)[:100]}"
+        wiped["bot_allocations_disabled_and_zeroed"] = f"error: {str(e)[:100]}"
 
-    # Reset user_1 starting/funded capital
+    # Also zero inception_capital_cents where the column exists (some rollups
+    # fall back to it if starting_capital is null/0).
     try:
-        r = db.execute(
-            _sqltext(
-                "UPDATE users SET starting_capital_cents = :c, "
-                "funded_base_cents = :c WHERE id = 1"
-            ),
-            {"c": starting_cents},
-        )
-        wiped["user_1_starting_capital_cents"] = starting_cents
-        wiped["user_1_updated"] = r.rowcount
+        r = db.execute(_sqltext(
+            "UPDATE bot_allocations SET inception_capital_cents = 0 "
+            "WHERE inception_capital_cents IS NOT NULL"
+        ))
+        wiped["bot_allocations_inception_zeroed"] = r.rowcount
+    except Exception:
+        pass  # column may not exist
+
+    # Create/update the confluence_executor allocation with the new $100K.
+    # This becomes the ONLY funded allocation, hence fund total = $100K.
+    try:
+        # If it exists, update; else insert.
+        existing = db.execute(_sqltext(
+            "SELECT id FROM bot_allocations WHERE bot_name = 'confluence_executor' AND user_id = 1"
+        )).fetchone()
+        if existing:
+            db.execute(_sqltext(
+                "UPDATE bot_allocations SET starting_capital_cents = :c, enabled = 1 "
+                "WHERE id = :id"
+            ), {"c": starting_cents, "id": existing[0]})
+            wiped["confluence_alloc_updated"] = existing[0]
+        else:
+            r2 = db.execute(_sqltext(
+                "INSERT INTO bot_allocations "
+                "(user_id, bot_name, starting_capital_cents, enabled, created_at) "
+                "VALUES (1, 'confluence_executor', :c, 1, CURRENT_TIMESTAMP)"
+            ), {"c": starting_cents})
+            wiped["confluence_alloc_created"] = r2.lastrowid
+        wiped["confluence_alloc_starting_capital_cents"] = starting_cents
     except Exception as e:
-        wiped["user_1_starting_capital_cents"] = f"error: {str(e)[:100]}"
+        wiped["confluence_alloc_error"] = f"error: {str(e)[:200]}"
 
     # Record the reset in schema_migrations
     reset_marker = f"factory_reset_{started_at.strftime('%Y%m%d_%H%M%S')}"
