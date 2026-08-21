@@ -11897,10 +11897,24 @@ def factory_reset(
         except Exception:
             before_counts[t] = None  # table may not exist
 
-    # Wipe transactional tables
+    # Wipe transactional + fleet-state tables that leak into dashboard rollups.
+    # bot_daily_pnl is CRITICAL: source of leaked realized $ in fund_pv view.
+    # portfolio_rank_bots is CRITICAL: feeds the "Portfolio Rank" sleeve tile.
     wiped = {}
-    for t in ("bot_trades", "bot_positions", "portfolio_snapshots",
-              "alpaca_orders", "bot_signals", "confluence_picks"):
+    for t in (
+        # Position / trade / signal state
+        "bot_trades", "bot_positions", "portfolio_snapshots",
+        "alpaca_orders", "bot_signals", "confluence_picks",
+        # P&L / stats aggregations (leaked $87K realized)
+        "bot_daily_pnl", "bot_performance_stats", "portfolio_daily_pnl",
+        "bot_daily_journals",
+        # Ranking / leaderboard state (leaked $13,789 sleeve)
+        "portfolio_rank_bots", "strategy_weights",
+        # Fleet auxiliary state
+        "bot_health", "bot_watchlist", "cross_bot_positions",
+        "catalyst_events", "discord_signal_posts", "shadow_trades",
+        "bot_config_overrides", "bot_config_audit",
+    ):
         try:
             r = db.execute(_sqltext(f"DELETE FROM {t}"))
             wiped[t] = r.rowcount if r.rowcount is not None else "?"
