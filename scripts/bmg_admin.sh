@@ -49,7 +49,12 @@ _mint_jwt() {
     fi
     # Sign via python stdin — secret is passed on stdin, not argv,
     # so it never appears in `ps auxwww`.
-    printf '%s' "$secret" | python3 -c '
+    # 2026-08-20: pin to /usr/bin/python3 (system python 3.9). Homebrew
+    # installed python@3.14 as a pipx dependency and re-linked python3,
+    # but 3.14 doesn't have python-jose. System python 3.9 does.
+    local _py="/usr/bin/python3"
+    [[ -x "$_py" ]] || _py="python3"
+    printf '%s' "$secret" | "$_py" -c '
 import sys, time
 from jose import jwt
 secret = sys.stdin.read()

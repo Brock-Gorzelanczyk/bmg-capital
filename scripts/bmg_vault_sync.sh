@@ -22,6 +22,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# 2026-08-20 Brock: Obsidian on his Mac opens the iCloud-synced vault by default,
+# not the ~/Documents/BMG-Capital-Vault git-tracked one. To avoid two disconnected
+# vaults (empty iCloud + populated local), sync targets the iCloud vault which
+# also gets his Obsidian mobile sync for free.
+_ICLOUD_VAULT="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/BMG Capital"
+if [ -z "${VAULT_DIR:-}" ] && [ -d "$_ICLOUD_VAULT" ]; then
+    VAULT_DIR="$_ICLOUD_VAULT"
+fi
 VAULT_DIR="${VAULT_DIR:-$HOME/Documents/BMG-Capital-Vault}"
 AUDIT_DEST="$VAULT_DIR/daily-audits"
 STUB_DEST="$VAULT_DIR/postmortems-stub-inbox"  # separate from postmortems/ so Brock reviews before promoting
