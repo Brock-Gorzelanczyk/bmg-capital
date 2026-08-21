@@ -1685,13 +1685,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Content-Security-Policy — allows same-origin JS/CSS, inline styles
         # (Tailwind + shadcn use them), data: URIs for images, and websocket
         # + https connections for the API. Blocks arbitrary third-party JS.
+        # 2026-08-20: TradingView Advanced Chart widget requires loading
+        # tv.js from s3.tradingview.com and embedding an iframe from
+        # s.tradingview.com / www.tradingview-widget.com. All three prior
+        # chart-fix attempts failed silently until this CSP was traced as
+        # the root cause. Real fix per §DBG1 (diagnose, don't guess).
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' https://s3.tradingview.com https://s.tradingview.com https://www.tradingview-widget.com; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: https:; "
             "font-src 'self' data:; "
             "connect-src 'self' wss: https:; "
+            "frame-src 'self' https://s.tradingview.com https://www.tradingview-widget.com https://www.tradingview.com; "
             "frame-ancestors 'self'; "
             "base-uri 'self'; "
             "form-action 'self'"
