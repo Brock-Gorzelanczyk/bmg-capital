@@ -3238,6 +3238,7 @@ def inspect_allocation(
         "user_id": a.user_id,
         "profile_name": prof.name if prof else None,
         "enabled": a.enabled,
+        "paused_reason": a.paused_reason,
         "starting_capital_cents": a.starting_capital_cents,
         "trades_active_count": len(trades),
         "sides": dict(sides),
