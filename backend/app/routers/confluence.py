@@ -272,6 +272,20 @@ def get_confluence_journal(
             "excess_vs_spy_pct": p.excess_vs_spy_pct,
             "hit": p.hit_win_criterion,
             "notes": p.notes,
+            # Arm state (m102) — was silently omitted, made "is my pick armed?" unanswerable via API
+            "arm_state": p.arm_state,
+            "arm_mode": p.arm_mode,
+            "arm_expires_at": p.arm_expires_at,
+            "size_dollars": (p.size_dollars_cents / 100) if p.size_dollars_cents else None,
+            "play_a_trigger_price": (p.play_a_trigger_price_cents / 100.0) if p.play_a_trigger_price_cents else None,
+            "play_a_stop_price": (p.play_a_stop_price_cents / 100.0) if p.play_a_stop_price_cents else None,
+            "play_b_trigger_price": (p.play_b_trigger_price_cents / 100.0) if p.play_b_trigger_price_cents else None,
+            "play_b_stop_price": (p.play_b_stop_price_cents / 100.0) if p.play_b_stop_price_cents else None,
+            "target_1": (p.target_1_cents / 100.0) if p.target_1_cents else None,
+            "target_2": (p.target_2_cents / 100.0) if p.target_2_cents else None,
+            "filled_at": p.filled_at,
+            "filled_price": (p.filled_price_cents / 100.0) if p.filled_price_cents else None,
+            "alpaca_bracket_order_id": p.alpaca_bracket_order_id,
         }
 
     return {

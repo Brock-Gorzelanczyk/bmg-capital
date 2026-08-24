@@ -3910,6 +3910,49 @@ def quarantine_non_user1_allocations(
     }
 
 
+@router.post("/quarantine-non-confluence-user1-allocations")
+def quarantine_non_confluence_user1_allocations(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Post-2026-08-21 reset: fund is $10K stocks-only via confluence_executor.
+    Every other user_1 allocation left enabled=1 with starting_capital=0 is
+    dead compute — it runs scans every cycle, generates signals, then fails
+    gates. Disable them so scan cost goes away.
+
+    Confluence executor allocation is preserved (profile.name='confluence_executor').
+
+    Data-only, reversible: sets enabled=False and paused_reason='post_reset_...'.
+    Does not touch positions or trades (nothing to quarantine — the reset
+    already wiped them)."""
+    from app.db.models.bots import BotAllocation, BotProfile
+    conf_prof = (
+        db.query(BotProfile).filter(BotProfile.name == "confluence_executor").first()
+    )
+    conf_pid = conf_prof.id if conf_prof else -1
+    allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.user_id == 1)
+        .filter(BotAllocation.enabled.is_(True))
+        .filter(BotAllocation.profile_id != conf_pid)
+        .all()
+    )
+    alloc_ids = [a.id for a in allocs]
+    if not dry_run and alloc_ids:
+        for a in allocs:
+            a.enabled = False
+            a.paused_reason = "post_reset_stocks_only_confluence_v1_2026_08_24"
+        db.commit()
+    return {
+        "dry_run": dry_run,
+        "confluence_profile_id": conf_pid,
+        "affected_alloc_count": len(alloc_ids),
+        "affected_alloc_ids": alloc_ids,
+        "note": "confluence_executor allocation preserved",
+    }
+
+
 @router.post("/reset-reconstructed-pnl-user1")
 def reset_reconstructed_pnl_user1(
     dry_run: bool = Query(True),
