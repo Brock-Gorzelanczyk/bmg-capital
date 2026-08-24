@@ -21,3 +21,9 @@ frontend/dist/
 /tmp/
 .claude/worktrees/
 graphify-out/
+
+# Playwright artifacts (transient browser snapshots)
+.playwright-mcp/
+# Mockups + one-off screenshots (never intended for repo)
+mock_dashboard.png
+nav-restructure-collapsed.png
