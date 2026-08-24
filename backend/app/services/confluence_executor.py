@@ -152,11 +152,15 @@ def _submit_bracket_buy(
     stop_price: float,
     client_order_id: str,
 ) -> Tuple[int, Dict[str, Any]]:
+    # 2026-08-24 fix: swing trades hold for weeks/months — TIF must be GTC
+    # so bracket legs survive end-of-day. Prior 'day' setting silently expired
+    # take-profit + stop-loss for HOG on 2026-08-21 (entry filled but exit
+    # legs died at 4pm ET same day, leaving the position naked until refill).
     body: Dict[str, Any] = {
         "symbol": symbol,
         "qty": str(qty),
         "side": "buy",
-        "time_in_force": "day",
+        "time_in_force": "gtc",
         "order_class": "bracket",
         "take_profit": {"limit_price": f"{target_price:.2f}"},
         "stop_loss": {"stop_price": f"{stop_price:.2f}"},
