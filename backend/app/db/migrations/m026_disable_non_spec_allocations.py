@@ -59,6 +59,12 @@ SPEC_BOT_NAMES = frozenset({
     "tsmom_multi_asset",
     "macro_faber_gtaa",
     "spy_iron_condor_weekly",
+    # 2026-08-24 post-strategic-reset (m102 confluence framework):
+    #   confluence_executor — auto-fires bracket orders on ARMED
+    #   confluence_picks. Post-2026-08-21 reset this is the ONLY funded
+    #   allocation ($10K). m026 was stomping it on every boot (setting
+    #   paused_reason='m026_non_spec') — full-audit 2026-08-24 caught it.
+    "confluence_executor",
 })
 # NOTE: this frozenset is the "known-good bot names" for the fund's
 # user_id=1 allocations. m026 runs EVERY boot (not just once) — it disables
