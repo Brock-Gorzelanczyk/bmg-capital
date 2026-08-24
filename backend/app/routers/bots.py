@@ -714,7 +714,14 @@ def activate_all_bots(
             .first()
         )
         if existing:
-            if not existing.enabled and existing.paused_reason not in {"health_halt", "admin_lock"}:
+            # 2026-08-24 (ledger #43 fix, ledger #30 sibling): respect ANY non-empty
+            # paused_reason as deliberate. The old allowlist ({"health_halt","admin_lock"})
+            # let StrategyLab's auto-activate useEffect silently reenable
+            # deliberately-paused allocs — reverting the 2026-08-24 post-reset cleanup
+            # every time Brock loaded the Strategy Lab page. Symmetric with the
+            # _ensure_portfolios_for_user fix in ledger #30.
+            paused_reason = (existing.paused_reason or "").strip()
+            if not existing.enabled and not paused_reason:
                 existing.enabled = True
                 existing.paused_reason = None
                 existing.updated_at = now

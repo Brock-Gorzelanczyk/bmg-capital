@@ -2005,14 +2005,19 @@ export default function StrategyLab() {
     onError: () => toast.error("Failed to activate bots"),
   });
 
-  // Auto-activate: whenever any bot has no active allocation, call activate-all.
-  // Uses isSuccess to prevent repeat calls within the same page session.
+  // Auto-activate: whenever any bot has no active allocation AND was never
+  // explicitly paused (paused_reason is null/empty), call activate-all.
+  //
+  // 2026-08-24 (ledger #43 fix): previously this fired whenever any bot was
+  // disabled unless paused_reason was literally "coming_soon" — which meant
+  // opening the Strategy Lab page reverted every deliberate cleanup Brock or
+  // Claude Code did. Now respects ANY non-empty paused_reason as deliberate.
   useEffect(() => {
     if (!data?.bots || isLoading || activateAllMut.isPending || activateAllMut.isSuccess) return;
-    const anyDisabled = data.bots.some(
-      (b: BotListItem) => !b.allocation?.enabled && b.allocation?.paused_reason !== "coming_soon"
+    const anyDisabledWithoutReason = data.bots.some(
+      (b: BotListItem) => !b.allocation?.enabled && !((b.allocation?.paused_reason || "").trim()),
     );
-    if (anyDisabled) {
+    if (anyDisabledWithoutReason) {
       activateAllMut.mutate();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
