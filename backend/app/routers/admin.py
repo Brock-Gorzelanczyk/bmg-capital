@@ -3910,6 +3910,39 @@ def quarantine_non_user1_allocations(
     }
 
 
+@router.post("/enable-bot-by-profile")
+def enable_bot_by_profile(
+    profile_name: str = Query(...),
+    clear_paused_reason: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Re-enable every user_1 allocation for a given profile. Inverse of
+    pause-bot. Clears paused_reason by default (see ledger #30 —
+    _ensure_portfolios_for_user only auto-re-enables when paused_reason
+    IS NULL; leaving a stale reason set means the enable can revert)."""
+    from app.db.models.bots import BotAllocation, BotProfile
+    prof = db.query(BotProfile).filter(BotProfile.name == profile_name).first()
+    if not prof:
+        return {"error": f"profile_not_found: {profile_name}"}
+    allocs = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.profile_id == prof.id)
+        .filter(BotAllocation.user_id == 1)
+        .all()
+    )
+    for a in allocs:
+        a.enabled = True
+        if clear_paused_reason:
+            a.paused_reason = None
+    db.commit()
+    return {
+        "profile": profile_name,
+        "affected_allocation_ids": [a.id for a in allocs],
+        "clear_paused_reason": clear_paused_reason,
+    }
+
+
 @router.post("/quarantine-non-confluence-user1-allocations")
 def quarantine_non_confluence_user1_allocations(
     dry_run: bool = Query(True),

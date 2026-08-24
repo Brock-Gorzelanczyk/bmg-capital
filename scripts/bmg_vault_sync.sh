@@ -49,25 +49,27 @@ echo "[vault-sync] pulling audits list..."
 AUDITS_JSON=$(scripts/bmg_admin.sh GET /admin/audits/list)
 NEW_FILES=0
 if command -v jq >/dev/null 2>&1; then
-  # Use process substitution not pipe so NEW_FILES survives.
-  while read -r date; do
-    [ -z "$date" ] && continue
-    dest="$AUDIT_DEST/${date}.md"
+  # Endpoint returns {"files":[{"name": "...md", ...}]}. Prior version
+  # queried .audits[].date which never matched — silent no-op that kept
+  # the vault stale for 6+ days (only 2 files locally vs 13 in container).
+  while read -r fname; do
+    [ -z "$fname" ] && continue
+    dest="$AUDIT_DEST/${fname}"
     if [ -f "$dest" ]; then
       # Skip if local exists (assume same content; audits are append-only per day).
       continue
     fi
     if [ -n "$DRY" ]; then
-      echo "  [dry] would fetch $date"
+      echo "  [dry] would fetch $fname"
       continue
     fi
-    content=$(scripts/bmg_admin.sh GET "/admin/audits/${date}" | jq -r '.content // empty')
+    content=$(scripts/bmg_admin.sh GET "/admin/audits/${fname}" | jq -r '.content // empty')
     if [ -n "$content" ]; then
       echo "$content" > "$dest"
-      echo "  [pulled] $date -> $dest"
+      echo "  [pulled] $fname -> $dest"
       NEW_FILES=$((NEW_FILES+1))
     fi
-  done < <(echo "$AUDITS_JSON" | jq -r '.audits[]?.date // empty')
+  done < <(echo "$AUDITS_JSON" | jq -r '.files[]?.name // empty')
 else
   echo "[vault-sync] jq not installed — skipping audit sync"
 fi

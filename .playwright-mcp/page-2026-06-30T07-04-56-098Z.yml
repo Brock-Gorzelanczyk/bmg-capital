@@ -1,0 +1,61 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e7]: BMG Capital
+      - generic [ref=e8]: // TERMINAL
+      - generic [ref=e9]: 09:32:07 EDT
+      - generic [ref=e10]: ENGINE LIVE
+      - generic [ref=e12]: PAPER
+    - generic [ref=e15]:
+      - generic [ref=e16]: NVDA 142.18 ▲1.29%
+      - generic [ref=e17]: BTC/USD 63,047 ▲0.84%
+      - generic [ref=e18]: TSLA 238.90 ▼1.01%
+      - generic [ref=e19]: ETH/USD 3,388 ▼0.42%
+      - generic [ref=e20]: SOL/USD 147.20 ▲2.10%
+      - generic [ref=e21]: SPY 541.30 ▲0.21%
+      - generic [ref=e22]: QQQ 468.10 ▲0.34%
+      - generic [ref=e23]: AAPL 229.80 ▲0.55%
+      - generic [ref=e24]: NVDA 142.18 ▲1.29%
+      - generic [ref=e25]: BTC/USD 63,047 ▲0.84%
+      - generic [ref=e26]: TSLA 238.90 ▼1.01%
+      - generic [ref=e27]: ETH/USD 3,388 ▼0.42%
+      - generic [ref=e28]: SOL/USD 147.20 ▲2.10%
+      - generic [ref=e29]: SPY 541.30 ▲0.21%
+      - generic [ref=e30]: QQQ 468.10 ▲0.34%
+      - generic [ref=e31]: AAPL 229.80 ▲0.55%
+    - generic [ref=e32]:
+      - generic [ref=e40]:
+        - generic [ref=e41]: NVDA
+        - generic [ref=e42]: NASDAQ · 1m
+        - generic [ref=e43]: "140.96"
+        - generic [ref=e44]: +0.40%
+        - generic [ref=e45]: "bot: Stock Swing · momentum breakout"
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - generic [ref=e50]: SESSION P&L · PAPER
+          - generic [ref=e51]: +$0.00
+          - generic [ref=e52]: 0 trades · 0 wins
+        - generic [ref=e54]:
+          - generic [ref=e55]: ORDER BOOK
+          - generic [ref=e56]: DEPTH
+        - generic [ref=e58]:
+          - generic [ref=e59]: BUY
+          - generic [ref=e60]: SELL
+    - generic [ref=e61]:
+      - generic [ref=e62]: EXPOSURE 85.7%
+      - generic [ref=e63]: SHARPE 2.31
+      - generic [ref=e64]: LATENCY 142ms
+      - generic [ref=e65]: FILLS 0
+      - generic [ref=e66]: // DISCIPLINE IS THE EDGE
+  - generic:
+    - img
+  - button "♪ SOUND" [ref=e68] [cursor=pointer]
+  - generic [ref=e69]:
+    - generic [ref=e72]: BMG Capital
+    - generic [ref=e74]: QUANTITATIVE TRADING SYSTEM
+    - generic [ref=e75]: // INITIALIZING TERMINAL ▮
+  - generic:
+    - generic: ›
+    - generic: session complete · +$4,433.28 realized · 9 bots firing
+    - link "ENTER TERMINAL →":
+      - /url: /dashboard

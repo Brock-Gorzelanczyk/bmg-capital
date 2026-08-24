@@ -419,4 +419,18 @@ def get_confluence_pick(
         "absolute_return_pct": pick.absolute_return_pct,
         "excess_vs_spy_pct": pick.excess_vs_spy_pct,
         "hit_win_criterion": pick.hit_win_criterion,
+        # Arm state (m102) — was silently omitted from the pick GET
+        "arm_state": pick.arm_state,
+        "arm_mode": pick.arm_mode,
+        "arm_expires_at": pick.arm_expires_at,
+        "size_dollars_cents": pick.size_dollars_cents,
+        "play_a_trigger_price_cents": pick.play_a_trigger_price_cents,
+        "play_a_stop_price_cents": pick.play_a_stop_price_cents,
+        "play_b_trigger_price_cents": pick.play_b_trigger_price_cents,
+        "play_b_stop_price_cents": pick.play_b_stop_price_cents,
+        "target_1_cents": pick.target_1_cents,
+        "target_2_cents": pick.target_2_cents,
+        "alpaca_bracket_order_id": pick.alpaca_bracket_order_id,
+        "filled_at": pick.filled_at,
+        "filled_price_cents": pick.filled_price_cents,
     }
