@@ -12,7 +12,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { getDashboardV2 } from "@/api/dashboard";
-import { getStrategyLabPortfolio } from "@/api/bots";
+import { getStrategyLabPortfolio, getOpenPositions, type OpenPosition } from "@/api/bots";
 import client from "@/api/client";
 
 // ─── Types + constants ────────────────────────────────────────────────────────
@@ -243,6 +243,191 @@ interface SleeveVals {
   bots_total: number;
   deploy_pct: number;
   asset_class: string;
+}
+
+// ─── FundPositionsCard: Robinhood-style position table (replaces 5 sleeve cards) ───
+// Brock 2026-08-24: fund is single-portfolio (post-reset $10K stocks-only via
+// confluence framework). 5-sleeve breakdown was misleading. One card = fund;
+// positions table shows symbol / qty / avg cost / current price / market value /
+// unrealized P&L $ / unrealized P&L %.
+
+function fmtDollars(n: number, digits = 2): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function fmtSignedDollarsPlain(n: number): string {
+  const sign = n >= 0 ? "+" : "−";
+  return `${sign}$${fmtDollars(Math.abs(n))}`;
+}
+
+function fmtSignedPct(pct: number): string {
+  const sign = pct >= 0 ? "+" : "−";
+  return `${sign}${Math.abs(pct).toFixed(2)}%`;
+}
+
+function PositionRow({ p }: { p: OpenPosition }) {
+  const isUp = p.unrealized_pnl_usd >= 0;
+  const color = isUp ? GREEN : RED;
+  const cells: React.ReactNode[] = [
+    // Symbol + side badge
+    <div key="sym" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ color: "#f4f8f4", fontWeight: 700, fontSize: 14 }}>{p.symbol}</span>
+      <span style={{
+        fontSize: 9,
+        fontFamily: "'JetBrains Mono', monospace",
+        color: p.side === "short" ? RED : MUTED,
+        border: `1px solid ${p.side === "short" ? RED : "rgba(158,175,158,0.25)"}`,
+        borderRadius: 3,
+        padding: "1px 4px",
+        textTransform: "uppercase",
+      }}>{p.side}</span>
+    </div>,
+    // Qty
+    <span key="qty" style={{ color: "#c9d1c9", fontVariantNumeric: "tabular-nums" }}>{p.qty.toLocaleString("en-US", { maximumFractionDigits: 4 })}</span>,
+    // Avg cost
+    <span key="avg" style={{ color: MUTED, fontVariantNumeric: "tabular-nums" }}>${fmtDollars(p.entry_price)}</span>,
+    // Current price
+    <span key="cur" style={{ color: "#c9d1c9", fontVariantNumeric: "tabular-nums" }}>${fmtDollars(p.current_price)}</span>,
+    // Market value
+    <span key="mv" style={{ color: "#f4f8f4", fontVariantNumeric: "tabular-nums" }}>${fmtDollars(p.current_value_usd)}</span>,
+    // Unrealized P&L $
+    <span key="upl" style={{ color, fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+      {fmtSignedDollarsPlain(p.unrealized_pnl_usd)}
+    </span>,
+    // Unrealized P&L %
+    <span key="uplp" style={{ color, fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+      {fmtSignedPct(p.unrealized_pnl_pct)}
+    </span>,
+    // Bot
+    <span key="bot" style={{ color: MUTED, fontSize: 11 }} title={p.bot_name}>{p.bot_display}</span>,
+  ];
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1.2fr 1.2fr 0.9fr 1.4fr",
+        gap: 12,
+        padding: "12px 16px",
+        borderTop: "1px solid rgba(74,222,128,0.06)",
+        alignItems: "center",
+        fontSize: 13,
+        fontFamily: "'JetBrains Mono', monospace",
+      }}
+    >
+      {cells}
+    </div>
+  );
+}
+
+function FundPositionsCard() {
+  const q = useQuery({
+    queryKey: ["strategy-lab-open-positions"],
+    queryFn: getOpenPositions,
+    refetchInterval: 30_000, // 30s during market hours
+    staleTime: 15_000,
+  });
+  const positions = q.data?.positions ?? [];
+  const totalMV = positions.reduce((sum, p) => sum + p.current_value_usd, 0);
+  const totalUnreal = q.data?.total_unrealized_usd ?? 0;
+  const totalUnrealPct = totalMV > 0 ? (totalUnreal / (totalMV - totalUnreal)) * 100 : 0;
+
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        border: "1px solid rgba(74,222,128,0.14)",
+        borderRadius: 8,
+        background: "rgba(10,15,10,0.55)",
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: "16px 20px",
+          borderBottom: "1px solid rgba(74,222,128,0.10)",
+          display: "flex",
+          alignItems: "center",
+          gap: 20,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            color: MUTED,
+            letterSpacing: "0.08em",
+          }}>// FUND · OPEN POSITIONS</div>
+          <div style={{ marginTop: 4, fontSize: 20, fontWeight: 700, color: "#f4f8f4" }}>
+            {positions.length} {positions.length === 1 ? "position" : "positions"}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 10, color: MUTED, fontFamily: "'JetBrains Mono', monospace" }}>MARKET VALUE</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "#f4f8f4", fontVariantNumeric: "tabular-nums" }}>
+            ${fmtDollars(totalMV)}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 10, color: MUTED, fontFamily: "'JetBrains Mono', monospace" }}>UNREALIZED P&amp;L</div>
+          <div style={{
+            fontSize: 20,
+            fontWeight: 700,
+            color: totalUnreal >= 0 ? GREEN : RED,
+            fontVariantNumeric: "tabular-nums",
+          }}>
+            {fmtSignedDollarsPlain(totalUnreal)}
+            <span style={{ fontSize: 12, marginLeft: 8, fontWeight: 500 }}>
+              ({fmtSignedPct(totalUnrealPct)})
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Column headers */}
+      {positions.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1.2fr 1.2fr 0.9fr 1.4fr",
+            gap: 12,
+            padding: "8px 16px",
+            fontSize: 10,
+            fontFamily: "'JetBrains Mono', monospace",
+            color: MUTED,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            background: "rgba(74,222,128,0.03)",
+          }}
+        >
+          <span>Symbol</span>
+          <span>Qty</span>
+          <span>Avg Cost</span>
+          <span>Current</span>
+          <span>Market Value</span>
+          <span>Unreal P&amp;L</span>
+          <span>%</span>
+          <span>Bot</span>
+        </div>
+      )}
+
+      {/* Rows */}
+      {q.isLoading && (
+        <div style={{ padding: "20px", color: MUTED, textAlign: "center", fontSize: 13 }}>
+          Loading positions...
+        </div>
+      )}
+      {!q.isLoading && positions.length === 0 && (
+        <div style={{ padding: "24px 20px", color: MUTED, textAlign: "center", fontSize: 13 }}>
+          No open positions. Confluence executor is scanning for triggers — positions will appear here after fills.
+        </div>
+      )}
+      {positions.map((p) => (
+        <PositionRow key={p.position_id} p={p} />
+      ))}
+    </div>
+  );
 }
 
 function SleeveCard({ s, seed, lastSyncedAt }: { s: SleeveVals; seed: number; lastSyncedAt: number | null }) {
@@ -1706,8 +1891,8 @@ export default function StrategyLabV2() {
             maxWidth: 620,
           }}
         >
-          Four independent portfolios — Stocks, Crypto, Options, and Quant —
-          each running dedicated bots on real market data.
+          One unified fund. Confluence framework picks · every position visible.
+          Bot leaderboard below tracks contribution.
         </p>
 
         <div className="flex items-center gap-[10px] flex-wrap" style={{ marginTop: 18 }}>
@@ -1762,14 +1947,13 @@ export default function StrategyLabV2() {
 
         <PortfolioValueBand onUpdated={setLastSyncedAt} />
 
-        <div
-          className="grid gap-[14px]"
-          style={{ gridTemplateColumns: "repeat(5, 1fr)", marginTop: 16 }}
-        >
-          {sleeves.map((s, i) => (
-            <SleeveCard key={s.id} s={s} seed={7 + i * 12} lastSyncedAt={lastSyncedAt} />
-          ))}
-        </div>
+        {/* 2026-08-24 Brock: replaced 5-sleeve grid with single fund + Robinhood-style
+            position table. Sleeve rollup was misleading post-reset (fund is stocks-only,
+            $10K starting, confluence executor only). Old SleeveCard component preserved
+            for the sleeves.map() consumers elsewhere (kept import-safe) but not rendered. */}
+        <FundPositionsCard />
+        {/* Hide sleeve rollup entirely — kept as a hidden reference for now */}
+        {false && sleeves.length > 0 && <SleeveCard s={sleeves[0]} seed={7} lastSyncedAt={lastSyncedAt} />}
 
         <BotLeaderboardV2 />
 
