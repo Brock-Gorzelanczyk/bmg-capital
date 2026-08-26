@@ -12,13 +12,31 @@
  *   - Position: /portfolio/open-positions (existing)
  *   - Pick: /admin/confluence/journal (find matching ticker)
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import client from "@/api/client";
 import { getOpenPositions, type OpenPosition } from "@/api/bots";
 import { fetchBars } from "@/api/bars";
 import TradePriceChart, { type ConfluenceLevels } from "@/components/chart/TradePriceChart";
+
+// Timeframe presets — TradingView-style
+type TimeframeOption = {
+  key: string;
+  label: string;
+  timeframe: string;  // Alpaca bar timeframe: "1Day", "1Hour", "15Min", "5Min"
+  limit: number;       // number of bars
+};
+const TIMEFRAMES: TimeframeOption[] = [
+  { key: "5m",  label: "5m · 2d",  timeframe: "5Min",  limit: 156 },   // 2 trading days
+  { key: "15m", label: "15m · 5d", timeframe: "15Min", limit: 130 },   // 5 trading days
+  { key: "1h",  label: "1h · 1mo", timeframe: "1Hour", limit: 168 },   // ~1 month RTH hours
+  { key: "4h",  label: "4h · 3mo", timeframe: "4Hour", limit: 130 },   // ~3 months
+  { key: "1D",  label: "1D · 3mo", timeframe: "1Day",  limit: 63 },    // 3 months daily
+  { key: "1D-6mo",  label: "1D · 6mo", timeframe: "1Day",  limit: 126 },
+  { key: "1D-1y",  label: "1D · 1y",  timeframe: "1Day",  limit: 252 },
+];
+const DEFAULT_TIMEFRAME_KEY = "1D"; // 3 months daily = shows fill + context per Brock ask
 
 const GREEN = "#4ade80";
 const RED = "#f87171";
@@ -61,10 +79,13 @@ export default function PositionDetailPage() {
   const { symbol: rawSymbol } = useParams<{ symbol: string }>();
   const symbol = (rawSymbol || "").toUpperCase();
 
-  // 6 months of daily bars — enough for the confluence framework's holding period
+  const [tfKey, setTfKey] = useState(DEFAULT_TIMEFRAME_KEY);
+  const tf = useMemo(() => TIMEFRAMES.find(t => t.key === tfKey) || TIMEFRAMES[4], [tfKey]);
+
+  // Bars — timeframe + lookback controlled by selector
   const barsQ = useQuery({
-    queryKey: ["position-bars", symbol],
-    queryFn: () => fetchBars(symbol, "1Day", undefined, undefined, 180),
+    queryKey: ["position-bars", symbol, tf.timeframe, tf.limit],
+    queryFn: () => fetchBars(symbol, tf.timeframe, undefined, undefined, tf.limit),
     enabled: !!symbol,
   });
 
@@ -145,19 +166,49 @@ export default function PositionDetailPage() {
         )}
       </div>
 
+      {/* Timeframe selector */}
+      <div style={{
+        display: "flex",
+        gap: 4,
+        marginBottom: 8,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 11,
+      }}>
+        {TIMEFRAMES.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTfKey(t.key)}
+            style={{
+              padding: "6px 12px",
+              background: tfKey === t.key ? "rgba(74,222,128,0.14)" : "transparent",
+              color: tfKey === t.key ? "#4ade80" : MUTED,
+              border: `1px solid ${tfKey === t.key ? "rgba(74,222,128,0.35)" : "rgba(255,255,255,0.08)"}`,
+              borderRadius: 4,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "inherit",
+              letterSpacing: "0.05em",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* Chart */}
       <div style={{
         border: "1px solid rgba(74,222,128,0.14)",
         borderRadius: 8,
         background: "#18181B",
         padding: 12,
-        height: 560,
+        height: 640,
         marginBottom: 20,
       }}>
         {barsQ.isLoading && <div style={{ color: MUTED, padding: 20 }}>Loading chart...</div>}
         {barsQ.error && <div style={{ color: RED, padding: 20 }}>Chart load failed.</div>}
         {barsQ.data && barsQ.data.bars.length > 0 && (
           <TradePriceChart
+            key={`${symbol}-${tfKey}`}
             bars={barsQ.data.bars}
             entryPrice={entryPrice}
             entryTime={entryTime}
