@@ -25,6 +25,19 @@ function precisionForPrice(price: number): { precision: number; minMove: number 
   return               { precision: 8, minMove: 0.00000001 };
 }
 
+export interface ConfluenceLevels {
+  playATrigger?: number | null;
+  playAStop?: number | null;
+  playBTrigger?: number | null;
+  playBStop?: number | null;
+  invalidation?: number | null;
+  target2?: number | null;
+  // Insider cluster zone (green shaded region)
+  insiderZoneLow?: number | null;
+  insiderZoneHigh?: number | null;
+  insiderZoneLabel?: string | null;
+}
+
 export interface TradePriceChartProps {
   bars: Bar[];
   entryPrice: number;
@@ -37,6 +50,8 @@ export interface TradePriceChartProps {
   exitPrice?: number | null;
   exitTime?: string | null;
   livePrice?: number | null;
+  // Optional confluence framework overlays — Play A/B triggers, invalidation, insider zone
+  confluenceLevels?: ConfluenceLevels;
 }
 
 export default function TradePriceChart({
@@ -51,6 +66,7 @@ export default function TradePriceChart({
   exitPrice,
   exitTime,
   livePrice,
+  confluenceLevels,
 }: TradePriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -163,6 +179,89 @@ export default function TradePriceChart({
         axisLabelVisible: true,
         title: `TARGET  $${takeProfit.toFixed(precision)}`,
       });
+    }
+
+    // ── Confluence framework overlays (Play A/B triggers, invalidation, insider zone) ──
+    if (confluenceLevels) {
+      const cl = confluenceLevels;
+      if (cl.playATrigger) {
+        candles.createPriceLine({
+          price: cl.playATrigger,
+          color: "#f87171",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `PLAY A > $${cl.playATrigger.toFixed(precision)}`,
+        });
+      }
+      if (cl.playAStop) {
+        candles.createPriceLine({
+          price: cl.playAStop,
+          color: "#fb923c",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: `PLAY A STOP $${cl.playAStop.toFixed(precision)}`,
+        });
+      }
+      if (cl.playBTrigger) {
+        candles.createPriceLine({
+          price: cl.playBTrigger,
+          color: "#4ade80",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `PLAY B ≤ $${cl.playBTrigger.toFixed(precision)}`,
+        });
+      }
+      if (cl.playBStop) {
+        candles.createPriceLine({
+          price: cl.playBStop,
+          color: "#a78bfa",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: `PLAY B STOP $${cl.playBStop.toFixed(precision)}`,
+        });
+      }
+      if (cl.invalidation) {
+        candles.createPriceLine({
+          price: cl.invalidation,
+          color: "#dc2626",
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: `INVALIDATION $${cl.invalidation.toFixed(precision)}`,
+        });
+      }
+      if (cl.target2) {
+        candles.createPriceLine({
+          price: cl.target2,
+          color: "#16a34a",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: `TARGET 2 $${cl.target2.toFixed(precision)}`,
+        });
+      }
+      if (cl.insiderZoneLow && cl.insiderZoneHigh) {
+        candles.createPriceLine({
+          price: cl.insiderZoneHigh,
+          color: "#00e676",
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: `INSIDER ZONE HI $${cl.insiderZoneHigh.toFixed(precision)}`,
+        });
+        candles.createPriceLine({
+          price: cl.insiderZoneLow,
+          color: "#00e676",
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: `INSIDER ZONE LO $${cl.insiderZoneLow.toFixed(precision)}`,
+        });
+      }
     }
 
     // Exit price (closed trade) — solid amber 2px

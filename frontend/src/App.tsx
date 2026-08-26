@@ -106,6 +106,7 @@ const WfaResultPage = lazy(() => import("@/pages/WfaResultPage"));
 const TradeDetailPage = lazy(() => import("@/pages/TradeDetailPage"));
 const AnalystPage = lazy(() => import("@/pages/AnalystPage"));
 const PortfolioDetailPage = lazy(() => import("@/pages/PortfolioDetailPage"));
+const PositionDetailPage = lazy(() => import("@/pages/PositionDetailPage"));
 const FactorAttributionPage = lazy(() => import("@/pages/FactorAttributionPage"));
 const NetPortfolio = lazy(() => import("@/pages/NetPortfolio"));
 const NetWorthPage = lazy(() => import("@/pages/NetWorthPage"));
@@ -436,6 +437,7 @@ function AppInner() {
         <Route path="/strategy/bot/:botName" element={<BotDetailPage />} />
         <Route path="/strategy/:botName" element={<BotDetailPage />} />
         <Route path="/contract/:positionId" element={<ContractDetailPage />} />
+        <Route path="/positions/symbol/:symbol" element={<Page component={PositionDetailPage} />} />
         <Route path="/positions/:positionId" element={<ContractDetailPage />} />
         <Route path="/candidates" element={<CandidatesPage />} />
         <Route path="/candidates/:candidateName" element={<CandidateDetailPage />} />

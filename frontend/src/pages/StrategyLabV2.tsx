@@ -301,8 +301,11 @@ function PositionRow({ p }: { p: OpenPosition }) {
     // Bot
     <span key="bot" style={{ color: MUTED, fontSize: 11 }} title={p.bot_name}>{p.bot_display}</span>,
   ];
+  // Click row → PositionDetailPage with chart + confluence overlays (Play A/B triggers,
+  // invalidation, insider zone). 2026-08-26 Brock ask.
   return (
-    <div
+    <Link
+      to={`/positions/symbol/${p.symbol}`}
       style={{
         display: "grid",
         gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1.2fr 1.2fr 0.9fr 1.4fr",
@@ -312,10 +315,14 @@ function PositionRow({ p }: { p: OpenPosition }) {
         alignItems: "center",
         fontSize: 13,
         fontFamily: "'JetBrains Mono', monospace",
+        textDecoration: "none",
+        transition: "background 100ms ease",
       }}
+      onMouseEnter={e => (e.currentTarget.style.background = "rgba(74,222,128,0.04)")}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
     >
       {cells}
-    </div>
+    </Link>
   );
 }
 
