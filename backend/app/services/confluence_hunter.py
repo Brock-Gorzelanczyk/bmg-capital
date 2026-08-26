@@ -359,6 +359,11 @@ def run_hunt(dry_run: bool = False) -> Dict[str, Any]:
     if os.environ.get("CONFLUENCE_HUNTER_ENABLED", "true").strip().lower() == "false":
         return {"status": "disabled_by_env"}
 
+    # Force direct Anthropic API — Railway container has no local relay.
+    # call_llm will use anthropic SDK via _fallback_to_api path, still
+    # budget-capped via LLM_DAILY_FALLBACK_BUDGET_USD.
+    os.environ["FALLBACK_TO_API"] = "true"
+
     auto_arm = os.environ.get("CONFLUENCE_HUNTER_AUTO_ARM", "true").strip().lower() != "false"
     if dry_run:
         auto_arm = False
