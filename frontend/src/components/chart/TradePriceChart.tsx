@@ -9,11 +9,31 @@ import {
   createChart,
   CandlestickSeries,
   HistogramSeries,
+  LineSeries,
   ColorType,
   LineStyle,
 } from "lightweight-charts";
 import type { IChartApi, ISeriesApi, IPriceLine, UTCTimestamp } from "lightweight-charts";
 import type { Bar } from "@/types/market";
+
+// Indicator overlay colors — matches Brock's Pine editor scripts on ~/Desktop/*_Confluence_Framework.pine
+const OVERLAY_COLORS: Record<string, string> = {
+  SMA_20: "#f39c12",  // orange — matches Pine
+  SMA_50: "#9b59b6",  // purple — matches Pine
+  SMA_200: "#3498db", // blue — matches Pine
+  BB_20_upper: "rgba(243,156,18,0.6)",  // orange BB uppers/lowers
+  BB_20_lower: "rgba(243,156,18,0.6)",
+  BB_20_middle: "rgba(243,156,18,0.3)",
+  EMA_20: "#fbbf24", EMA_50: "#60a5fa", EMA_200: "#a78bfa",
+  VWAP: "#06b6d4",
+};
+
+function isOverlay(key: string): boolean {
+  return key.startsWith("SMA_") || key.startsWith("EMA_")
+    || key === "VWAP"
+    || key.startsWith("BB_")
+    || key.endsWith("_upper") || key.endsWith("_middle") || key.endsWith("_lower");
+}
 
 const toTime = (t: string) => Math.floor(new Date(t).getTime() / 1000) as UTCTimestamp;
 
@@ -52,6 +72,9 @@ export interface TradePriceChartProps {
   livePrice?: number | null;
   // Optional confluence framework overlays — Play A/B triggers, invalidation, insider zone
   confluenceLevels?: ConfluenceLevels;
+  // Optional indicator arrays keyed by name (SMA_20, SMA_50, SMA_200, BB_20_upper/middle/lower, etc.)
+  // Aligned 1:1 with bars.length
+  indicators?: Record<string, (number | null)[]>;
 }
 
 export default function TradePriceChart({
@@ -67,6 +90,7 @@ export default function TradePriceChart({
   exitTime,
   livePrice,
   confluenceLevels,
+  indicators,
 }: TradePriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -135,6 +159,32 @@ export default function TradePriceChart({
       value: b.v,
       color: b.c >= b.o ? "#22c55e28" : "#ef444428",
     })));
+
+    // ── Indicator overlays (SMAs, Bollinger Bands, etc.) — matches Pine editor scripts ──
+    if (indicators) {
+      Object.entries(indicators).forEach(([key, values]) => {
+        if (!isOverlay(key)) return;
+        if (!values || !Array.isArray(values)) return;
+        const color = OVERLAY_COLORS[key] ?? "#94a3b8";
+        const isBBBand = key.endsWith("_upper") || key.endsWith("_lower");
+        const isBBMid = key.endsWith("_middle");
+        const isSMA200 = key === "SMA_200";
+        const line = chart.addSeries(LineSeries, {
+          color,
+          lineWidth: isSMA200 ? 2 : 1,
+          lineStyle: isBBMid ? LineStyle.Dotted : LineStyle.Solid,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          crosshairMarkerVisible: false,
+          title: key.replace("_", " "),
+        });
+        const n = Math.min(bars.length, values.length);
+        const lineData = bars.slice(0, n)
+          .map((b, i) => ({ time: toTime(b.t), value: values[i] as number }))
+          .filter(d => d.value != null && !Number.isNaN(d.value));
+        if (lineData.length > 0) line.setData(lineData);
+      });
+    }
 
     // Compute precision from the smallest price in the group so the axis
     // and pill labels show the right decimal depth for low-priced assets.

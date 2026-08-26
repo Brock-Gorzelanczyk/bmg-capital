@@ -12,7 +12,7 @@
  *   - Position: /portfolio/open-positions (existing)
  *   - Pick: /admin/confluence/journal (find matching ticker)
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import client from "@/api/client";
@@ -37,6 +37,18 @@ const TIMEFRAMES: TimeframeOption[] = [
   { key: "1D-1y",  label: "1D · 1y",  timeframe: "1Day",  limit: 252 },
 ];
 const DEFAULT_TIMEFRAME_KEY = "1D"; // 3 months daily = shows fill + context per Brock ask
+
+// Indicators requested per fetchBars call — matches Pine editor scripts on ~/Desktop/*_Confluence_Framework.pine
+const CHART_INDICATORS = "SMA_20,SMA_50,SMA_200,BB_20";
+
+// Smart default timeframe based on pick's horizon_months (shorter horizon → finer bar)
+function defaultTimeframeForHorizon(horizonMonths: number | undefined): string {
+  if (!horizonMonths) return DEFAULT_TIMEFRAME_KEY;
+  if (horizonMonths <= 1) return "1h";
+  if (horizonMonths <= 3) return "4h";
+  if (horizonMonths <= 6) return "1D";        // ← default for our current 6-month picks
+  return "1D-6mo";
+}
 
 const GREEN = "#4ade80";
 const RED = "#f87171";
@@ -82,10 +94,10 @@ export default function PositionDetailPage() {
   const [tfKey, setTfKey] = useState(DEFAULT_TIMEFRAME_KEY);
   const tf = useMemo(() => TIMEFRAMES.find(t => t.key === tfKey) || TIMEFRAMES[4], [tfKey]);
 
-  // Bars — timeframe + lookback controlled by selector
+  // Bars — timeframe + lookback controlled by selector + indicators (SMA/BB matches Pine scripts)
   const barsQ = useQuery({
     queryKey: ["position-bars", symbol, tf.timeframe, tf.limit],
-    queryFn: () => fetchBars(symbol, tf.timeframe, undefined, undefined, tf.limit),
+    queryFn: () => fetchBars(symbol, tf.timeframe, CHART_INDICATORS, undefined, tf.limit),
     enabled: !!symbol,
   });
 
@@ -109,6 +121,17 @@ export default function PositionDetailPage() {
     () => journalQ.data?.open_picks.find(p => p.ticker.toUpperCase() === symbol),
     [journalQ.data, symbol],
   );
+
+  // When pick loads, apply smart-default timeframe based on horizon
+  // (only ONCE per symbol so user-selected timeframe isn't overridden on refetch)
+  const initializedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (pick && initializedRef.current !== symbol) {
+      const suggested = defaultTimeframeForHorizon(pick.horizon_months);
+      setTfKey(suggested);
+      initializedRef.current = symbol;
+    }
+  }, [pick, symbol]);
 
   const confluenceLevels: ConfluenceLevels | undefined = useMemo(() => {
     if (!pick) return undefined;
@@ -219,6 +242,7 @@ export default function PositionDetailPage() {
             takeProfit={takeProfit}
             livePrice={position?.current_price ?? null}
             confluenceLevels={confluenceLevels}
+            indicators={barsQ.data.indicators}
           />
         )}
       </div>
