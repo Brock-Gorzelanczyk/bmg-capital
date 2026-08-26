@@ -165,6 +165,15 @@ Framework signals (must score 3+/5, insider_cluster is REQUIRED):
   4. fundamental_momentum (bool) — recent EPS beat + positive trend
   5. inst_13f_net_add (bool) — institutions buying > selling recent quarter
 
+Additional v2 signals injected via candidate context (research/2026-08-25):
+  - LAZY_PRICES similarity (0-1) — low = firm rewrote 10-K/10-Q vs prior year
+    (Cohen/Malloy/Nguyen 2020 JF, 22% risk-factor L/S alpha). RED bucket <0.60
+    is a BEARISH flag; GREEN >0.85 is neutral-to-positive. WEIGHT this in your
+    scoring but do not increment the 3+/5 count — treat as a VETO overlay.
+  - DAYS_TO_COVER (days) — HIGH bucket >8 days = crowded short. Also a VETO
+    overlay: even if 3+/5 fires, HIGH DTC on a long pick should reduce
+    conviction or skip. Do NOT increment 3+/5 count from DTC alone.
+
 Anti-Goodhart rules:
   - Only pass tickers with market cap > $500M (skip micro-caps)
   - Only pass liquid names (avg vol > 500K shares/day)
@@ -172,6 +181,8 @@ Anti-Goodhart rules:
   - Skip if avg spread > 1% of price (illiquid)
   - Skip if fundamentals are broken (multiple straight EPS misses, negative cash flow)
   - Skip if insider is SOLO buyer (need 2+ named insiders)
+  - **VETO if Lazy Prices similarity < 0.60** (heavy 10-K rewriter signal — Cohen/Malloy/Nguyen)
+  - **VETO if Days-to-Cover > 8** (crowded short base — Hong et al 2015)
   - Be picky. A day with ZERO picks is fine and expected. Better to skip than force.
 
 For each pick you approve, provide:
@@ -217,11 +228,20 @@ def call_llm_for_picks(candidates: List[Dict[str, Any]], excluded_tickers: List[
     for c in candidates[:30]:  # cap prompt size
         cur = c.get("current_price")
         cur_s = f"${cur:.2f}" if cur else "unknown"
+        # v2 signals — Lazy Prices similarity + DTC (may be None if fetch failed)
+        lp_sim = c.get("lazy_prices_similarity")
+        lp_bucket = c.get("lazy_prices_bucket", "?")
+        dtc = c.get("days_to_cover")
+        dtc_bucket = c.get("dtc_bucket", "?")
+        lp_str = f"lazy_prices={lp_sim:.2f}({lp_bucket})" if isinstance(lp_sim, (int, float)) and lp_sim >= 0 else f"lazy_prices=n/a"
+        dtc_str = f"dtc={dtc:.1f}d({dtc_bucket})" if isinstance(dtc, (int, float)) and dtc >= 0 else f"dtc=n/a"
         prompt_parts.append(
             f"- {c['ticker']:6s} ({c.get('company','?')[:40]}) · "
             f"{c['insider_count']} insiders · ${c['value_usd']:,} agg · "
             f"trade date {c['trade_date']} · avg insider price ${c['price']:.2f} · "
-            f"current ${cur_s if cur else 'unknown'} · industry: {c.get('industry','?')[:40]}"
+            f"current ${cur_s if cur else 'unknown'} · "
+            f"{lp_str} · {dtc_str} · "
+            f"industry: {c.get('industry','?')[:40]}"
         )
     prompt_parts.append("")
     prompt_parts.append(
@@ -414,6 +434,11 @@ def run_hunt(dry_run: bool = False) -> Dict[str, Any]:
         result["excluded_tickers"] = sorted(existing)
 
         enriched: List[Dict[str, Any]] = []
+        # v2 (2026-08-25): enrich with Lazy Prices similarity + Days-to-Cover
+        # per research/2026-08-25-confluence-framework-v2-signal-additions.md
+        from app.services.lazy_prices import compute_lazy_prices_score
+        from app.services.days_to_cover import compute_dtc
+
         for c in candidates:
             if c["ticker"] in existing:
                 continue
@@ -421,6 +446,24 @@ def run_hunt(dry_run: bool = False) -> Dict[str, Any]:
                 continue
             cur = _fetch_latest_trade(c["ticker"])
             c["current_price"] = cur
+            # Lazy Prices — best-effort, don't block on failure (SEC parse can flake on smaller filers)
+            try:
+                lp = compute_lazy_prices_score(c["ticker"])
+                c["lazy_prices_similarity"] = lp.get("similarity")
+                c["lazy_prices_bucket"] = lp.get("similarity_bucket")
+            except Exception as _lp_exc:
+                logger.warning("[confluence_hunter] lazy_prices failed for %s: %s", c["ticker"], _lp_exc)
+                c["lazy_prices_similarity"] = None
+                c["lazy_prices_bucket"] = "ERROR"
+            # DTC — best-effort, don't block on failure (yfinance can rate-limit)
+            try:
+                dtc = compute_dtc(c["ticker"])
+                c["days_to_cover"] = dtc.get("dtc")
+                c["dtc_bucket"] = dtc.get("bucket")
+            except Exception as _dtc_exc:
+                logger.warning("[confluence_hunter] dtc failed for %s: %s", c["ticker"], _dtc_exc)
+                c["days_to_cover"] = None
+                c["dtc_bucket"] = "ERROR"
             enriched.append(c)
         result["candidates_after_filter"] = len(enriched)
 

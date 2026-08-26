@@ -3911,6 +3911,39 @@ def quarantine_non_user1_allocations(
     }
 
 
+@router.get("/lazy-prices/{symbol}")
+def get_lazy_prices(
+    symbol: str,
+    form_type: str = Query("10-K"),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Test the Lazy Prices signal (Cohen/Malloy/Nguyen 2020) for one symbol.
+    Compares current 10-K/10-Q Item 1A vs prior year, returns cosine similarity."""
+    from app.services.lazy_prices import compute_lazy_prices_score
+    return compute_lazy_prices_score(symbol, form_type=form_type)
+
+
+@router.get("/days-to-cover/{symbol}")
+def get_days_to_cover(
+    symbol: str,
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Test the Days-to-Cover signal (Hong et al 2015) for one symbol.
+    Returns DTC (days) + bucket (LOW/MEDIUM/HIGH crowded-short)."""
+    from app.services.days_to_cover import compute_dtc
+    return compute_dtc(symbol)
+
+
+@router.get("/aggregate-short-interest")
+def get_aggregate_short_interest(
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Rapach/Ringgenberg/Zhou 2016 aggregate SI regime — fund-level exposure dial.
+    Returns recommended net exposure % based on cross-sectional short interest average."""
+    from app.services.days_to_cover import aggregate_short_interest_regime
+    return aggregate_short_interest_regime()
+
+
 @router.post("/run-confluence-hunter")
 def run_confluence_hunter(
     dry_run: bool = Query(True),
