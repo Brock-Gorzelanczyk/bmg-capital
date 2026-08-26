@@ -173,6 +173,11 @@ Additional v2 signals injected via candidate context (research/2026-08-25):
   - DAYS_TO_COVER (days) — HIGH bucket >8 days = crowded short. Also a VETO
     overlay: even if 3+/5 fires, HIGH DTC on a long pick should reduce
     conviction or skip. Do NOT increment 3+/5 count from DTC alone.
+  - INSIDER_DETAIL — per-ticker list of recent insider trades with names + roles.
+    Lines starting with ★ are senior roles (CEO/CFO/Chairman/President/COO/Founder).
+    Weight senior-role BUY trades HIGHER than director/10%-owner trades (Ali/Hirshleifer
+    2017 opportunistic-insider proxy). SELLS by senior roles are BEARISH — if 2+ senior
+    insiders SELLING in the same window, treat as a strong veto on any long pick.
 
 Anti-Goodhart rules:
   - Only pass tickers with market cap > $500M (skip micro-caps)
@@ -225,7 +230,7 @@ def call_llm_for_picks(candidates: List[Dict[str, Any]], excluded_tickers: List[
         f"Candidate insider clusters (from openinsider.com, last 30d, dedup'd, >=2 insiders, >=$500K):",
         "",
     ]
-    for c in candidates[:30]:  # cap prompt size
+    for c in candidates[:20]:  # cap prompt size — 20 with insider detail is ~15-20k tokens
         cur = c.get("current_price")
         cur_s = f"${cur:.2f}" if cur else "unknown"
         # v2 signals — Lazy Prices similarity + DTC (may be None if fetch failed)
@@ -235,13 +240,14 @@ def call_llm_for_picks(candidates: List[Dict[str, Any]], excluded_tickers: List[
         dtc_bucket = c.get("dtc_bucket", "?")
         lp_str = f"lazy_prices={lp_sim:.2f}({lp_bucket})" if isinstance(lp_sim, (int, float)) and lp_sim >= 0 else f"lazy_prices=n/a"
         dtc_str = f"dtc={dtc:.1f}d({dtc_bucket})" if isinstance(dtc, (int, float)) and dtc >= 0 else f"dtc=n/a"
+        insider_summary = c.get("insider_detail_summary", "n/a")
         prompt_parts.append(
-            f"- {c['ticker']:6s} ({c.get('company','?')[:40]}) · "
-            f"{c['insider_count']} insiders · ${c['value_usd']:,} agg · "
-            f"trade date {c['trade_date']} · avg insider price ${c['price']:.2f} · "
-            f"current ${cur_s if cur else 'unknown'} · "
-            f"{lp_str} · {dtc_str} · "
-            f"industry: {c.get('industry','?')[:40]}"
+            f"\n=== {c['ticker']} ({c.get('company','?')[:60]}) ==="
+            f"\n  insider_cluster_count: {c['insider_count']}   aggregate: ${c['value_usd']:,}   trade_date: {c['trade_date']}"
+            f"\n  avg_insider_price: ${c['price']:.2f}   current: {cur_s}   industry: {c.get('industry','?')[:60]}"
+            f"\n  v2_signals: {lp_str}  {dtc_str}"
+            f"\n  insider_detail (★=senior role):"
+            f"\n{insider_summary}"
         )
     prompt_parts.append("")
     prompt_parts.append(
@@ -435,9 +441,11 @@ def run_hunt(dry_run: bool = False) -> Dict[str, Any]:
 
         enriched: List[Dict[str, Any]] = []
         # v2 (2026-08-25): enrich with Lazy Prices similarity + Days-to-Cover
+        # + per-ticker insider role detail (Ali/Hirshleifer proxy)
         # per research/2026-08-25-confluence-framework-v2-signal-additions.md
         from app.services.lazy_prices import compute_lazy_prices_score
         from app.services.days_to_cover import compute_dtc
+        from app.services.insider_enrichment import get_insider_detail, summarize_for_prompt
 
         for c in candidates:
             if c["ticker"] in existing:
@@ -464,6 +472,15 @@ def run_hunt(dry_run: bool = False) -> Dict[str, Any]:
                 logger.warning("[confluence_hunter] dtc failed for %s: %s", c["ticker"], _dtc_exc)
                 c["days_to_cover"] = None
                 c["dtc_bucket"] = "ERROR"
+            # Insider role detail — best-effort, Ali/Hirshleifer proxy
+            try:
+                insider_rows = get_insider_detail(c["ticker"], max_rows=10)
+                c["insider_detail_summary"] = summarize_for_prompt(insider_rows, max_show=6)
+                c["insider_detail_rows"] = len(insider_rows)
+            except Exception as _in_exc:
+                logger.warning("[confluence_hunter] insider_detail failed for %s: %s", c["ticker"], _in_exc)
+                c["insider_detail_summary"] = "n/a"
+                c["insider_detail_rows"] = 0
             enriched.append(c)
         result["candidates_after_filter"] = len(enriched)
 

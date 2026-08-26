@@ -3934,6 +3934,25 @@ def get_days_to_cover(
     return compute_dtc(symbol)
 
 
+@router.get("/insider-detail/{symbol}")
+def get_insider_detail_endpoint(
+    symbol: str,
+    max_rows: int = Query(15),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Per-ticker insider detail with names + roles (foundation for
+    Ali/Hirshleifer opportunistic-insider signal). Returns most-recent
+    P-Purchase and S-Sale trades from openinsider ticker detail page."""
+    from app.services.insider_enrichment import get_insider_detail, summarize_for_prompt
+    rows = get_insider_detail(symbol, max_rows=max_rows)
+    return {
+        "symbol": symbol.upper(),
+        "count": len(rows),
+        "trades": rows,
+        "prompt_summary": summarize_for_prompt(rows),
+    }
+
+
 @router.get("/aggregate-short-interest")
 def get_aggregate_short_interest(
     current_user: User = Depends(require_admin),
