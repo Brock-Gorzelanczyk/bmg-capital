@@ -1478,6 +1478,15 @@ async def lifespan(app: FastAPI):
     except Exception as _ce_exc:
         logger.error("[startup] confluence_executor scheduler FAILED (non-fatal): %s",
                      _ce_exc, exc_info=True)
+    # Confluence hunter — nightly (6:07 PM ET Mon-Fri) auto-hunt for new
+    # confluence picks. Scrapes openinsider clusters, scores with Claude,
+    # auto-arms picks that pass 3+/5. Brock 2026-08-25 zero-touch mandate.
+    try:
+        from app.services.confluence_hunter import setup_confluence_hunter
+        setup_confluence_hunter(scheduler)
+    except Exception as _ch_exc:
+        logger.error("[startup] confluence_hunter scheduler FAILED (non-fatal): %s",
+                     _ch_exc, exc_info=True)
 
     scheduler.start()
 

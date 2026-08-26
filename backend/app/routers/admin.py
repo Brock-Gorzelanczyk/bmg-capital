@@ -3911,6 +3911,17 @@ def quarantine_non_user1_allocations(
     }
 
 
+@router.post("/run-confluence-hunter")
+def run_confluence_hunter(
+    dry_run: bool = Query(True),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Manual trigger for the nightly confluence hunter. Same code path as the
+    scheduled 6:07 PM ET cron. dry_run=true = scrape + LLM but don't arm."""
+    from app.services.confluence_hunter import run_hunt
+    return run_hunt(dry_run=dry_run)
+
+
 @router.post("/backfill-confluence-trades-from-alpaca")
 def backfill_confluence_trades_from_alpaca(
     dry_run: bool = Query(True),
