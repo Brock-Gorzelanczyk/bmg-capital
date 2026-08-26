@@ -218,6 +218,14 @@ def _write_fill(
     db.add(pos)
     db.flush()
 
+    # 2026-08-25 fix: previously passed `strategy=` and `realized_pnl_cents=`
+    # kwargs — neither is a mapped column on BotTrade (see db/models/bots.py:117).
+    # SQLAlchemy raised TypeError, outer try/except in _try_fire swallowed it,
+    # BotTrade row never got written. But BotPosition write earlier in this
+    # function had already succeeded via db.flush(). Result: 4 positions, 0
+    # trades, I25 red (ledger #44 — invalid-kwarg silent-drop class).
+    # The play label is preserved in the pick record (confluence_picks.arm_state
+    # = FILLED_A / FILLED_B). PnL is computed from fill vs mark in the aggregator.
     trade = BotTrade(
         allocation_id=alloc_id,
         symbol=symbol,
@@ -230,8 +238,6 @@ def _write_fill(
         position_id=pos.id,
         is_paper=True,
         alpaca_order_id=alpaca_order_id,
-        strategy=f"confluence_{play_label}",
-        realized_pnl_cents=0,
         origin="BROKER_FILL",
     )
     db.add(trade)

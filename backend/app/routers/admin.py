@@ -3911,6 +3911,148 @@ def quarantine_non_user1_allocations(
     }
 
 
+@router.post("/backfill-confluence-trades-from-alpaca")
+def backfill_confluence_trades_from_alpaca(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Reconstruct missing BotTrade rows for confluence_executor positions.
+
+    Ledger #44: _write_fill in confluence_executor.py silently failed because
+    it passed invalid `strategy` + `realized_pnl_cents` kwargs to BotTrade().
+    Result: 4 BotPositions with 0 matching BotTrades. I25 red.
+
+    This endpoint finds every BotPosition on the confluence_executor alloc
+    that has no matching BotTrade row, fetches the fill from Alpaca activities,
+    and writes a BotTrade with the actual fill price + Alpaca order UUID.
+    """
+    import os as _os, json as _json, urllib.request as _ur
+    from datetime import datetime as _dt, timezone as _tz
+    from app.db.models.bots import BotAllocation, BotProfile, BotPosition, BotTrade
+
+    kid = _os.environ.get("ALPACA_API_KEY") or _os.environ.get("ALPACA_PAPER_KEY", "")
+    ksec = _os.environ.get("ALPACA_SECRET_KEY") or _os.environ.get("ALPACA_PAPER_SECRET", "")
+    if not kid or not ksec:
+        return {"error": "no_alpaca_creds"}
+
+    conf_prof = (
+        db.query(BotProfile).filter(BotProfile.name == "confluence_executor").first()
+    )
+    if not conf_prof:
+        return {"error": "confluence_executor_profile_not_found"}
+    conf_alloc = (
+        db.query(BotAllocation)
+        .filter(BotAllocation.profile_id == conf_prof.id, BotAllocation.user_id == 1)
+        .first()
+    )
+    if not conf_alloc:
+        return {"error": "confluence_executor_alloc_not_found"}
+
+    # Every position on confluence alloc that lacks a matching trade
+    positions = (
+        db.query(BotPosition)
+        .filter(
+            BotPosition.allocation_id == conf_alloc.id,
+            BotPosition.closed_at.is_(None),
+            BotPosition.quarantined_at.is_(None),
+        )
+        .all()
+    )
+
+    def _alpaca_get(path: str) -> Any:
+        url = f"https://paper-api.alpaca.markets{path}"
+        req = _ur.Request(url, headers={
+            "APCA-API-KEY-ID": kid,
+            "APCA-API-SECRET-KEY": ksec,
+        })
+        with _ur.urlopen(req, timeout=15) as resp:
+            return _json.loads(resp.read().decode("utf-8"))
+
+    # Pull last 7 days of BUY fills from Alpaca
+    from datetime import timedelta as _td
+    since = (_dt.now(_tz.utc) - _td(days=7)).strftime("%Y-%m-%d")
+    activities = _alpaca_get(f"/v2/account/activities?activity_types=FILL&after={since}")
+    # Group by (symbol, order_id) — take last (final) fill for cum info
+    order_fills: Dict[str, Dict[str, Any]] = {}
+    for a in activities:
+        if a.get("side") != "buy":
+            continue
+        oid = a.get("order_id", "")
+        # Keep the LATEST fill for each order_id (has the cum_qty and final price)
+        if a.get("order_status") == "filled":
+            order_fills[oid] = a
+        elif oid not in order_fills:
+            order_fills[oid] = a
+
+    plan: list[Dict[str, Any]] = []
+    for pos in positions:
+        # Skip positions that already have a BotTrade
+        existing = (
+            db.query(BotTrade)
+            .filter(BotTrade.position_id == pos.id)
+            .first()
+        )
+        if existing:
+            continue
+        # Find Alpaca fill for this symbol matching qty
+        candidates = [f for f in order_fills.values() if f.get("symbol") == pos.symbol]
+        if not candidates:
+            plan.append({"symbol": pos.symbol, "pos_id": pos.id, "action": "SKIP_no_alpaca_fill"})
+            continue
+        # Pick the one whose cum_qty matches our position qty
+        matched = None
+        for f in candidates:
+            try:
+                if float(f.get("cum_qty", 0)) == float(pos.qty):
+                    matched = f
+                    break
+            except Exception:
+                continue
+        if not matched:
+            matched = candidates[0]  # best-effort
+        fill_price = float(matched.get("price", pos.avg_cost_cents / 100.0))
+        fill_cents = int(round(fill_price * 100))
+        order_id = matched.get("order_id", "backfill_confluence_ledger44")
+        fill_ts_str = matched.get("transaction_time", "")
+        try:
+            fill_ts = _dt.fromisoformat(fill_ts_str.replace("Z", "+00:00"))
+        except Exception:
+            fill_ts = pos.opened_at or _dt.now(_tz.utc)
+        plan.append({
+            "symbol": pos.symbol,
+            "pos_id": pos.id,
+            "qty": float(pos.qty),
+            "fill_price": fill_price,
+            "alpaca_order_id": order_id,
+            "action": "INSERT",
+        })
+        if not dry_run:
+            trade = BotTrade(
+                allocation_id=conf_alloc.id,
+                symbol=pos.symbol,
+                side="buy",
+                qty=float(pos.qty),
+                fill_price_cents=fill_cents,
+                fill_price_micros=fill_cents * 10000,
+                fees_cents=0,
+                ts=fill_ts,
+                position_id=pos.id,
+                is_paper=True,
+                alpaca_order_id=order_id,
+                origin="BROKER_FILL",
+            )
+            db.add(trade)
+    if not dry_run:
+        db.commit()
+    return {
+        "dry_run": dry_run,
+        "positions_checked": len(positions),
+        "plan": plan,
+        "trades_to_insert": sum(1 for p in plan if p["action"] == "INSERT"),
+    }
+
+
 @router.post("/enable-bot-by-profile")
 def enable_bot_by_profile(
     profile_name: str = Query(...),
