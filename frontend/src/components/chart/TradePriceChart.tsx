@@ -52,10 +52,19 @@ export interface ConfluenceLevels {
   playBStop?: number | null;
   invalidation?: number | null;
   target2?: number | null;
-  // Insider cluster zone (green shaded region)
+  // Insider cluster zone (green shaded region) — price range + optional ISO time window
   insiderZoneLow?: number | null;
   insiderZoneHigh?: number | null;
   insiderZoneLabel?: string | null;
+  insiderZoneStart?: string | null;  // ISO timestamp — left edge of shaded rect
+  insiderZoneEnd?: string | null;    // ISO timestamp — right edge of shaded rect
+}
+
+// Framework score badge (top-right of chart) — signals fired / total
+export interface ScoreBadge {
+  count: number;
+  total: number;
+  label?: string;
 }
 
 export interface TradePriceChartProps {
@@ -75,6 +84,8 @@ export interface TradePriceChartProps {
   // Optional indicator arrays keyed by name (SMA_20, SMA_50, SMA_200, BB_20_upper/middle/lower, etc.)
   // Aligned 1:1 with bars.length
   indicators?: Record<string, (number | null)[]>;
+  // Optional framework score badge (rendered top-right of chart)
+  scoreBadge?: ScoreBadge;
 }
 
 export default function TradePriceChart({
@@ -91,8 +102,10 @@ export default function TradePriceChart({
   livePrice,
   confluenceLevels,
   indicators,
+  scoreBadge,
 }: TradePriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const insiderZoneRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const nowLineRef = useRef<IPriceLine | null>(null);
@@ -166,7 +179,6 @@ export default function TradePriceChart({
         if (!isOverlay(key)) return;
         if (!values || !Array.isArray(values)) return;
         const color = OVERLAY_COLORS[key] ?? "#94a3b8";
-        const isBBBand = key.endsWith("_upper") || key.endsWith("_lower");
         const isBBMid = key.endsWith("_middle");
         const isSMA200 = key === "SMA_200";
         const line = chart.addSeries(LineSeries, {
@@ -294,25 +306,60 @@ export default function TradePriceChart({
           title: `TARGET 2 $${cl.target2.toFixed(precision)}`,
         });
       }
+      // Insider zone edge lines (the shaded green rect is rendered as an HTML overlay
+      // below — the two thin lines here bookend the y-range on the axis)
       if (cl.insiderZoneLow && cl.insiderZoneHigh) {
         candles.createPriceLine({
           price: cl.insiderZoneHigh,
-          color: "#00e676",
+          color: "rgba(34, 197, 94, 0.6)",
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
-          axisLabelVisible: true,
-          title: `INSIDER ZONE HI $${cl.insiderZoneHigh.toFixed(precision)}`,
+          axisLabelVisible: false,
+          title: "",
         });
         candles.createPriceLine({
           price: cl.insiderZoneLow,
-          color: "#00e676",
+          color: "rgba(34, 197, 94, 0.6)",
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
-          axisLabelVisible: true,
-          title: `INSIDER ZONE LO $${cl.insiderZoneLow.toFixed(precision)}`,
+          axisLabelVisible: false,
+          title: "",
         });
       }
     }
+
+    // ── Insider zone shaded rectangle (HTML overlay tracking chart coords) ──
+    const positionInsiderZone = () => {
+      const el = insiderZoneRef.current;
+      const cl = confluenceLevels;
+      if (!el || !cl || !cl.insiderZoneLow || !cl.insiderZoneHigh) return;
+      const ts = chart.timeScale();
+      // Y coords from price
+      const yHigh = candles.priceToCoordinate(cl.insiderZoneHigh);
+      const yLow  = candles.priceToCoordinate(cl.insiderZoneLow);
+      if (yHigh == null || yLow == null) { el.style.display = "none"; return; }
+      // X coords: default = full visible width if no explicit window
+      const chartW = containerRef.current?.clientWidth ?? 0;
+      let x1 = 0, x2 = chartW;
+      if (cl.insiderZoneStart && cl.insiderZoneEnd) {
+        const t1 = toTime(cl.insiderZoneStart);
+        const t2 = toTime(cl.insiderZoneEnd);
+        const c1 = ts.timeToCoordinate(t1);
+        const c2 = ts.timeToCoordinate(t2);
+        if (c1 != null) x1 = c1;
+        if (c2 != null) x2 = c2;
+      }
+      el.style.display = "block";
+      el.style.left   = `${Math.min(x1, x2)}px`;
+      el.style.width  = `${Math.max(2, Math.abs(x2 - x1))}px`;
+      el.style.top    = `${Math.min(yHigh, yLow)}px`;
+      el.style.height = `${Math.max(2, Math.abs(yHigh - yLow))}px`;
+    };
+    positionInsiderZone();
+    chart.timeScale().subscribeVisibleTimeRangeChange(positionInsiderZone);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(positionInsiderZone);
+    const resizeObs = new ResizeObserver(positionInsiderZone);
+    if (containerRef.current) resizeObs.observe(containerRef.current);
 
     // Exit price (closed trade) — solid amber 2px
     if (exitPrice) {
@@ -411,6 +458,9 @@ export default function TradePriceChart({
       nowLineRef.current = null;
       candlesRef.current = null;
       chartRef.current = null;
+      try { chart.timeScale().unsubscribeVisibleTimeRangeChange(positionInsiderZone); } catch {}
+      try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(positionInsiderZone); } catch {}
+      try { resizeObs.disconnect(); } catch {}
       try { chart.remove(); } catch {}
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -434,5 +484,54 @@ export default function TradePriceChart({
     } catch {}
   }, [livePrice, entryPrice]);
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div ref={containerRef} className="w-full h-full" />
+
+      {/* Insider cluster zone — semi-transparent green rectangle positioned via chart coords */}
+      {confluenceLevels?.insiderZoneLow && confluenceLevels?.insiderZoneHigh && (
+        <div
+          ref={insiderZoneRef}
+          style={{
+            position: "absolute",
+            display: "none",
+            background: "rgba(34, 197, 94, 0.12)",
+            border: "1px solid rgba(34, 197, 94, 0.35)",
+            pointerEvents: "none",
+            zIndex: 2,
+          }}
+        >
+          <div style={{
+            position: "absolute", top: 4, left: 6,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10,
+            color: "rgba(74,222,128,0.9)",
+            letterSpacing: "0.06em",
+          }}>
+            {confluenceLevels.insiderZoneLabel || "INSIDER CLUSTER"}
+          </div>
+        </div>
+      )}
+
+      {/* Framework score badge — top-right, TradingView-style */}
+      {scoreBadge && (
+        <div style={{
+          position: "absolute",
+          top: 10, right: 66,  // leave room for the price scale
+          padding: "6px 10px",
+          background: "rgba(15, 23, 15, 0.85)",
+          border: `1px solid ${scoreBadge.count >= 3 ? "rgba(74,222,128,0.5)" : "rgba(148,163,184,0.35)"}`,
+          borderRadius: 4,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 11,
+          color: scoreBadge.count >= 3 ? "#4ade80" : "#94a3b8",
+          letterSpacing: "0.06em",
+          pointerEvents: "none",
+          zIndex: 3,
+        }}>
+          {scoreBadge.label || "SCORE"} {scoreBadge.count}/{scoreBadge.total}
+        </div>
+      )}
+    </div>
+  );
 }

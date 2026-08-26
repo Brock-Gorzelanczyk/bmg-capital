@@ -135,6 +135,20 @@ export default function PositionDetailPage() {
 
   const confluenceLevels: ConfluenceLevels | undefined = useMemo(() => {
     if (!pick) return undefined;
+    // Insider zone proxy: framework's accumulation range (play_a_stop → play_a_trigger)
+    // over the 60 days pre-entry (Cohen/Malloy/Pomorski cluster window).
+    // Only rendered when the pick has insider_cluster=true AND both play_a prices set.
+    let insiderZoneLow: number | undefined;
+    let insiderZoneHigh: number | undefined;
+    let insiderZoneStart: string | undefined;
+    let insiderZoneEnd: string | undefined;
+    if (pick.signals.insider_cluster && pick.play_a_stop_price && pick.play_a_trigger_price && pick.entry_date) {
+      insiderZoneLow  = Math.min(pick.play_a_stop_price, pick.play_a_trigger_price);
+      insiderZoneHigh = Math.max(pick.play_a_stop_price, pick.play_a_trigger_price);
+      const entryMs = new Date(pick.entry_date + "T00:00:00Z").getTime();
+      insiderZoneStart = new Date(entryMs - 60 * 86400 * 1000).toISOString();
+      insiderZoneEnd   = new Date(entryMs).toISOString();
+    }
     return {
       playATrigger: pick.play_a_trigger_price ?? undefined,
       playAStop: pick.play_a_stop_price ?? undefined,
@@ -142,7 +156,17 @@ export default function PositionDetailPage() {
       playBStop: pick.play_b_stop_price ?? undefined,
       invalidation: pick.invalidation_price ?? undefined,
       target2: pick.target_2 ?? undefined,
+      insiderZoneLow,
+      insiderZoneHigh,
+      insiderZoneStart,
+      insiderZoneEnd,
+      insiderZoneLabel: "INSIDER CLUSTER",
     };
+  }, [pick]);
+
+  const scoreBadge = useMemo(() => {
+    if (!pick) return undefined;
+    return { count: pick.signals.count, total: 5, label: "CONFLUENCE" };
   }, [pick]);
 
   const entryPrice = position?.entry_price ?? pick?.filled_price ?? pick?.entry_price ?? 0;
@@ -243,6 +267,7 @@ export default function PositionDetailPage() {
             livePrice={position?.current_price ?? null}
             confluenceLevels={confluenceLevels}
             indicators={barsQ.data.indicators}
+            scoreBadge={scoreBadge}
           />
         )}
       </div>
