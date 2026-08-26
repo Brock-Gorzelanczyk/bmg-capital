@@ -62,59 +62,66 @@ def _fetch_openinsider_html() -> str:
         return resp.read().decode("utf-8", errors="ignore")
 
 
-_ROW_RE = re.compile(
-    # OpenInsider table row: pipe-separated in the cluster table
-    # cols: X | filing_date | trade_date | ticker | company | industry | insider_count | trade_type | price | qty | owned | dOwn | value | ...
-    r"<tr[^>]*>\s*"
-    r"<td[^>]*>[^<]*</td>\s*"           # X flag col
-    r"<td[^>]*>\s*<div[^>]*>([^<]+)</div>\s*</td>\s*"  # filing date
-    r"<td[^>]*>\s*<div[^>]*>([^<]+)</div>\s*</td>\s*"  # trade date
-    r"<td[^>]*>\s*<b>\s*<a[^>]*>([A-Z\.]{1,10})</a>\s*</b>\s*</td>\s*"  # ticker
-    r"<td[^>]*>\s*<a[^>]*>([^<]+)</a>\s*</td>\s*"      # company
-    r"<td[^>]*>([^<]*)</td>\s*"                        # industry
-    r"<td[^>]*>\s*<b>(\d+)</b>\s*</td>\s*"             # insider count
-    r"<td[^>]*>([^<]+)</td>\s*"                        # trade type
-    r"<td[^>]*>\s*\$?([\d,\.]+)\s*</td>\s*"            # price
-    r"<td[^>]*>\+?([\d,]+)</td>\s*"                    # qty
-    r"<td[^>]*>[\d,]+</td>\s*"                         # owned
-    r"<td[^>]*>[+\-\d%]+</td>\s*"                      # dOwn
-    r"<td[^>]*>\+?\$([\d,]+)</td>",                    # value $
-    re.MULTILINE | re.DOTALL,
-)
-
-
 def parse_openinsider(html: str, min_insiders: int = 2, min_value_usd: int = 500_000) -> List[Dict[str, Any]]:
     """Parse openinsider cluster-buys page → list of dicts.
 
-    Returns rows with: filing_date, trade_date, ticker, company, industry,
-    insider_count, trade_type, price, qty, value_usd.
+    Uses BeautifulSoup for tolerance to layout tweaks. Returns rows with:
+    filing_date, trade_date, ticker, company, industry, insider_count,
+    price, qty, value_usd.
     """
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    # The cluster-buys page has one main data table with class "tinytable"
+    table = soup.find("table", class_="tinytable")
+    if table is None:
+        return []
+
     out: List[Dict[str, Any]] = []
-    for m in _ROW_RE.finditer(html):
-        filing_date, trade_date, ticker, company, industry, n_str, ttype, price_str, qty_str, value_str = m.groups()
-        try:
-            n = int(n_str)
-            price = float(price_str.replace(",", ""))
-            value = int(value_str.replace(",", ""))
-        except (ValueError, AttributeError):
+    tbody = table.find("tbody") or table
+    for tr in tbody.find_all("tr"):
+        tds = tr.find_all("td")
+        if len(tds) < 13:
             continue
+        # Column indices (verified 2026-08-26):
+        # 0=X flag, 1=filing_date, 2=trade_date, 3=ticker, 4=company,
+        # 5=industry, 6=insider_count, 7=trade_type, 8=price, 9=qty,
+        # 10=owned, 11=dOwn, 12=value_usd
+        try:
+            filing_date = tds[1].get_text(strip=True)
+            trade_date = tds[2].get_text(strip=True)
+            ticker = tds[3].get_text(strip=True).upper()
+            company = tds[4].get_text(strip=True)
+            industry = tds[5].get_text(strip=True)
+            n = int(tds[6].get_text(strip=True))
+            ttype = tds[7].get_text(strip=True)
+            price = float(tds[8].get_text(strip=True).replace("$", "").replace(",", ""))
+            qty_str = tds[9].get_text(strip=True).replace("+", "").replace(",", "")
+            qty = int(qty_str) if qty_str.isdigit() else 0
+            value_str = tds[12].get_text(strip=True).replace("+", "").replace("$", "").replace(",", "")
+            value = int(value_str) if value_str.isdigit() else 0
+        except (ValueError, IndexError):
+            continue
+
         if n < min_insiders:
             continue
         if value < min_value_usd:
             continue
         if "Purchase" not in ttype:
             continue
+
         out.append({
-            "filing_date": filing_date.strip(),
-            "trade_date": trade_date.strip(),
-            "ticker": ticker.upper().strip(),
-            "company": company.strip(),
-            "industry": industry.strip(),
+            "filing_date": filing_date,
+            "trade_date": trade_date,
+            "ticker": ticker,
+            "company": company,
+            "industry": industry,
             "insider_count": n,
             "price": price,
-            "qty": int(qty_str.replace(",", "")),
+            "qty": qty,
             "value_usd": value,
         })
+
     # Dedup by ticker (keep the highest-value row per ticker)
     by_ticker: Dict[str, Dict[str, Any]] = {}
     for row in out:
