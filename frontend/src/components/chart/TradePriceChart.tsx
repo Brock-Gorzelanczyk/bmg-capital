@@ -186,9 +186,9 @@ export default function TradePriceChart({
           lineWidth: isSMA200 ? 2 : 1,
           lineStyle: isBBMid ? LineStyle.Dotted : LineStyle.Solid,
           priceLineVisible: false,
-          lastValueVisible: true,
+          lastValueVisible: false,  // no y-axis label — keeps right edge readable
           crosshairMarkerVisible: false,
-          title: key.replace("_", " "),
+          title: key.replace("_", " "),  // still shows in top-left legend on hover
         });
         const n = Math.min(bars.length, values.length);
         const lineData = bars.slice(0, n)
@@ -262,8 +262,8 @@ export default function TradePriceChart({
           color: "#fb923c",
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
-          axisLabelVisible: true,
-          title: `PLAY A STOP $${cl.playAStop.toFixed(precision)}`,
+          axisLabelVisible: false,  // secondary — hidden to reduce right-edge clutter
+          title: "",
         });
       }
       if (cl.playBTrigger) {
@@ -282,8 +282,8 @@ export default function TradePriceChart({
           color: "#a78bfa",
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
-          axisLabelVisible: true,
-          title: `PLAY B STOP $${cl.playBStop.toFixed(precision)}`,
+          axisLabelVisible: false,  // secondary — hidden to reduce right-edge clutter
+          title: "",
         });
       }
       if (cl.invalidation) {
@@ -302,8 +302,8 @@ export default function TradePriceChart({
           color: "#16a34a",
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
-          axisLabelVisible: true,
-          title: `TARGET 2 $${cl.target2.toFixed(precision)}`,
+          axisLabelVisible: false,  // secondary — TARGET (primary) already shown
+          title: "",
         });
       }
       // Insider zone edge lines (the shaded green rect is rendered as an HTML overlay
