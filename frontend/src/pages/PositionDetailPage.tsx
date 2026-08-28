@@ -19,6 +19,16 @@ import client from "@/api/client";
 import { getOpenPositions, type OpenPosition } from "@/api/bots";
 import { fetchBars } from "@/api/bars";
 import TradePriceChart, { type ConfluenceLevels } from "@/components/chart/TradePriceChart";
+import TradingViewWidget from "@/components/TradingViewWidget";
+
+// Map our timeframe key → TradingView widget interval string
+function tfToTVInterval(key: string): string {
+  if (key === "5m") return "5";
+  if (key === "15m") return "15";
+  if (key === "1h") return "60";
+  if (key === "4h") return "240";
+  return "D";  // any 1D-* variant
+}
 
 // Timeframe presets — TradingView-style
 type TimeframeOption = {
@@ -93,6 +103,8 @@ export default function PositionDetailPage() {
 
   const [tfKey, setTfKey] = useState(DEFAULT_TIMEFRAME_KEY);
   const tf = useMemo(() => TIMEFRAMES.find(t => t.key === tfKey) || TIMEFRAMES[4], [tfKey]);
+  // BMG = custom lightweight-charts with confluence overlays; TV = TradingView widget w/ full drawing tools
+  const [chartMode, setChartMode] = useState<"BMG" | "TV">("BMG");
 
   // Bars — timeframe + lookback controlled by selector + indicators (SMA/BB matches Pine scripts)
   const barsQ = useQuery({
@@ -213,64 +225,132 @@ export default function PositionDetailPage() {
         )}
       </div>
 
-      {/* Timeframe selector */}
+      {/* Timeframe selector + chart-mode toggle */}
       <div style={{
         display: "flex",
-        gap: 4,
+        justifyContent: "space-between",
+        alignItems: "center",
         marginBottom: 8,
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: 11,
+        gap: 8,
+        flexWrap: "wrap",
       }}>
-        {TIMEFRAMES.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTfKey(t.key)}
-            style={{
-              padding: "6px 12px",
-              background: tfKey === t.key ? "rgba(74,222,128,0.14)" : "transparent",
-              color: tfKey === t.key ? "#4ade80" : MUTED,
-              border: `1px solid ${tfKey === t.key ? "rgba(74,222,128,0.35)" : "rgba(255,255,255,0.08)"}`,
-              borderRadius: 4,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              fontSize: "inherit",
-              letterSpacing: "0.05em",
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {TIMEFRAMES.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTfKey(t.key)}
+              disabled={chartMode === "TV" && (t.key === "1D-6mo" || t.key === "1D-1y")}
+              title={chartMode === "TV" ? "TradingView interval — use TV's own range picker for multi-year" : undefined}
+              style={{
+                padding: "6px 12px",
+                background: tfKey === t.key ? "rgba(74,222,128,0.14)" : "transparent",
+                color: tfKey === t.key ? "#4ade80" : MUTED,
+                border: `1px solid ${tfKey === t.key ? "rgba(74,222,128,0.35)" : "rgba(255,255,255,0.08)"}`,
+                borderRadius: 4,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "inherit",
+                letterSpacing: "0.05em",
+                opacity: chartMode === "TV" && (t.key === "1D-6mo" || t.key === "1D-1y") ? 0.3 : 1,
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {/* Chart mode toggle — BMG (custom w/ confluence overlays) vs TV (full drawing tools) */}
+        <div style={{ display: "flex", gap: 0, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, overflow: "hidden" }}>
+          {(["BMG", "TV"] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setChartMode(m)}
+              title={m === "BMG" ? "BMG chart — confluence overlays + SMA/BB" : "TradingView — full drawing tools, indicators, alerts"}
+              style={{
+                padding: "6px 14px",
+                background: chartMode === m ? "rgba(6,182,212,0.16)" : "transparent",
+                color: chartMode === m ? "#22d3ee" : MUTED,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "inherit",
+                letterSpacing: "0.06em",
+                fontWeight: 600,
+              }}
+            >
+              {m === "BMG" ? "OVERLAY" : "FULL TOOLS"}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Chart */}
+      {/* Chart — BMG overlay or TradingView full-tools */}
       <div style={{
         border: "1px solid rgba(74,222,128,0.14)",
         borderRadius: 8,
         background: "#18181B",
-        padding: 12,
+        padding: chartMode === "TV" ? 0 : 12,
         height: 640,
         marginBottom: 20,
+        overflow: "hidden",
       }}>
-        {barsQ.isLoading && <div style={{ color: MUTED, padding: 20 }}>Loading chart...</div>}
-        {barsQ.error && <div style={{ color: RED, padding: 20 }}>Chart load failed.</div>}
-        {barsQ.data && barsQ.data.bars.length > 0 && (
-          <TradePriceChart
-            key={`${symbol}-${tfKey}`}
-            bars={barsQ.data.bars}
-            entryPrice={entryPrice}
-            entryTime={entryTime}
-            side={position?.side || "buy"}
-            qty={position?.qty || 0}
+        {chartMode === "TV" ? (
+          <TradingViewWidget
+            key={`tv-${symbol}-${tfKey}`}
             symbol={symbol}
-            stopLoss={stopLoss}
-            takeProfit={takeProfit}
-            livePrice={position?.current_price ?? null}
-            confluenceLevels={confluenceLevels}
-            indicators={barsQ.data.indicators}
-            scoreBadge={scoreBadge}
+            interval={tfToTVInterval(tfKey)}
+            theme="dark"
           />
+        ) : (
+          <>
+            {barsQ.isLoading && <div style={{ color: MUTED, padding: 20 }}>Loading chart...</div>}
+            {barsQ.error && <div style={{ color: RED, padding: 20 }}>Chart load failed.</div>}
+            {barsQ.data && barsQ.data.bars.length > 0 && (
+              <TradePriceChart
+                key={`bmg-${symbol}-${tfKey}`}
+                bars={barsQ.data.bars}
+                entryPrice={entryPrice}
+                entryTime={entryTime}
+                side={position?.side || "buy"}
+                qty={position?.qty || 0}
+                symbol={symbol}
+                stopLoss={stopLoss}
+                takeProfit={takeProfit}
+                livePrice={position?.current_price ?? null}
+                confluenceLevels={confluenceLevels}
+                indicators={barsQ.data.indicators}
+                scoreBadge={scoreBadge}
+              />
+            )}
+          </>
         )}
       </div>
+
+      {/* Confluence levels reminder — visible when in TV mode so overlays aren't lost */}
+      {chartMode === "TV" && pick && (
+        <div style={{
+          marginTop: -12,
+          marginBottom: 20,
+          padding: "8px 12px",
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 11,
+          color: MUTED,
+          border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 4,
+          background: "rgba(15,20,15,0.4)",
+          display: "flex",
+          gap: 16,
+          flexWrap: "wrap",
+        }}>
+          <span>ENTRY <span style={{ color: "#3b82f6" }}>${entryPrice.toFixed(2)}</span></span>
+          {stopLoss != null && <span>STOP <span style={{ color: RED }}>${stopLoss.toFixed(2)}</span></span>}
+          {takeProfit != null && <span>TARGET <span style={{ color: GREEN }}>${takeProfit.toFixed(2)}</span></span>}
+          {pick.play_a_trigger_price != null && <span>PLAY A ▲ <span style={{ color: "#f87171" }}>${pick.play_a_trigger_price.toFixed(2)}</span></span>}
+          {pick.play_b_trigger_price != null && <span>PLAY B ▼ <span style={{ color: "#4ade80" }}>${pick.play_b_trigger_price.toFixed(2)}</span></span>}
+          {pick.invalidation_price != null && <span>INVALIDATION <span style={{ color: "#dc2626" }}>${pick.invalidation_price.toFixed(2)}</span></span>}
+        </div>
+      )}
 
       {/* Pick metadata panel */}
       {pick && (
