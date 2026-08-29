@@ -1,10 +1,16 @@
 /**
  * Global banner surfacing RED / AMBER invariants from Layer 3.
- * Polls /api/admin/invariants every 60s and renders a fixed strip at
- * the top of every page when any check is not green.
+ *
+ * Refresh cadence tied to portfolio state:
+ *   - Polls /api/admin/invariants every 30s (matches /portfolio/summary
+ *     30s refetch cadence, so both queries stay in sync)
+ *   - Refetches on window focus (so if user acks something on a different
+ *     tab and comes back, banner reflects it immediately)
+ *   - Watches the "portfolio-summary" query — when portfolio invalidates,
+ *     invariants refetch too (they read from the same underlying state)
  */
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import client from "@/api/client";
 
 interface InvariantResult {
@@ -25,19 +31,42 @@ interface Snapshot {
 
 export default function InvariantBanner() {
   const [dismissed, setDismissed] = useState(false);
-  const { data } = useQuery<Snapshot>({
+  const qc = useQueryClient();
+  const { data, dataUpdatedAt } = useQuery<Snapshot>({
     queryKey: ["invariants"],
     queryFn: async () => (await client.get<Snapshot>("/admin/invariants")).data,
-    refetchInterval: 60_000,
+    refetchInterval: 30_000,           // matches /portfolio/summary cadence
+    refetchOnWindowFocus: true,        // tab focus → immediate refresh
     retry: false,
-    staleTime: 30_000,
+    staleTime: 15_000,
   });
+
+  // When portfolio-summary refetches (positions / P&L change), invalidate
+  // invariants so both stay in sync with the same underlying prod state.
+  useEffect(() => {
+    const unsubscribe = qc.getQueryCache().subscribe((event) => {
+      if (event?.type === "updated"
+          && event.query.queryKey[0] === "portfolio-summary"
+          && event.action?.type === "success") {
+        qc.invalidateQueries({ queryKey: ["invariants"] });
+      }
+    });
+    return unsubscribe;
+  }, [qc]);
+
+  // Reset dismiss when a NEW breach lands (data timestamp advances past dismiss)
+  useEffect(() => {
+    setDismissed(false);
+  }, [data?.as_of]);
 
   if (dismissed) return null;
   const results = data?.results ?? [];
   const reds = results.filter((r) => r.level === "red");
   const ambers = results.filter((r) => r.level === "amber");
   if (reds.length === 0 && ambers.length === 0) return null;
+
+  // Freshness stamp: how old is the invariant snapshot?
+  const ageSec = dataUpdatedAt ? Math.round((Date.now() - dataUpdatedAt) / 1000) : null;
 
   const bg = reds.length > 0 ? "#7f1d1d" : "#78350f";
   const label = reds.length > 0
@@ -62,6 +91,12 @@ export default function InvariantBanner() {
       }}
     >
       <span style={{ fontWeight: 700, letterSpacing: "0.05em" }}>[{label}]</span>
+      {ageSec != null && (
+        <span title={`Last checked ${ageSec}s ago (auto-refresh 30s)`}
+              style={{ fontSize: 10, opacity: 0.55, fontWeight: 400 }}>
+          {ageSec < 60 ? `${ageSec}s ago` : `${Math.round(ageSec / 60)}m ago`}
+        </span>
+      )}
       <div style={{ flex: 1, display: "flex", gap: 12, overflowX: "auto" }}>
         {[...reds, ...ambers].slice(0, 6).map((r) => (
           <span
