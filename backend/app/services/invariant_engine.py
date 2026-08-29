@@ -317,21 +317,28 @@ def _check_i5_option_marks(db) -> Result:
 
 
 def _check_i6_position_mark_freshness(db) -> Result:
-    """Every open position has been marked (had a fresh price computed)
-    within 1 trading session. Class of bug: frozen PR marks."""
+    """Every open position on an ENABLED PR bot has been marked within 1
+    trading session. Class of bug: frozen PR marks.
+
+    2026-08-29 fix: previously counted stale holdings regardless of whether
+    the owning PR bot was still enabled — 327 orphan holdings on long-disabled
+    PR bots false-red'd this invariant permanently. Now JOINs to
+    portfolio_rank_bots and only counts holdings on enabled bots (holdings
+    on disabled bots aren't expected to be re-marked)."""
     try:
         from sqlalchemy import text as _text
-        # Positions haven't been touched in last 24h — likely stale marks.
         row = db.execute(_text(
-            "SELECT COUNT(*) FROM portfolio_rank_holdings "
-            "WHERE last_marked_at IS NULL OR last_marked_at < :cut"
+            "SELECT COUNT(*) FROM portfolio_rank_holdings h "
+            "JOIN portfolio_rank_bots b ON b.id = h.bot_id "
+            "WHERE b.enabled = 1 "
+            "AND (h.last_marked_at IS NULL OR h.last_marked_at < :cut)"
         ), {"cut": (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()}).fetchone()
         stale = int(row[0] or 0) if row else 0
         if stale == 0:
-            return _ok("I6", 0, 0, "all PR holdings marked in last 24h")
+            return _ok("I6", 0, 0, "all PR holdings on enabled bots marked in last 24h")
         if stale <= 10:
-            return _amber("I6", stale, 0, float(stale), f"{stale} PR holdings stale")
-        return _red("I6", stale, 0, float(stale), f"{stale} PR holdings not marked in 24h+")
+            return _amber("I6", stale, 0, float(stale), f"{stale} PR holdings stale (enabled bots)")
+        return _red("I6", stale, 0, float(stale), f"{stale} PR holdings not marked in 24h+ (enabled bots)")
     except Exception as exc:
         return _amber("I6", None, None, None, f"check_exception:{type(exc).__name__}:{exc}")
 
