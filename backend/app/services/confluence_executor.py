@@ -48,6 +48,15 @@ logger = logging.getLogger(__name__)
 
 CONFLUENCE_ALLOC_NAME = "confluence_executor"
 
+# Stale-ARM auto-fill (2026-08-29 fix — 10/16 picks stuck in dead zone between
+# Play A trigger and Play B trigger for a full week without firing). If a pick
+# has been ARMED for >= this many trading days AND current price is within this
+# tolerance of pick.entry_price, market-fill at current price and book as
+# FILLED_MKT (distinguished from FILLED_A / FILLED_B so returns can be measured
+# separately). Override via env.
+ARM_STALE_DAYS_DEFAULT = 3
+ARM_STALE_TOLERANCE_PCT_DEFAULT = 5.0
+
 
 def _alpaca_headers() -> Dict[str, str]:
     kid = os.environ.get("ALPACA_API_KEY") or os.environ.get("ALPACA_PAPER_KEY", "")
@@ -332,6 +341,101 @@ def _try_fire(db: Session, pick, last_price: float, alloc_id: int) -> Optional[s
     return fire
 
 
+def _try_stale_fill(db: Session, pick, last_price: float, alloc_id: int) -> Optional[str]:
+    """Auto-fill an ARMED pick that's stuck in the dead zone between Play A/B.
+
+    Fires if BOTH:
+      - Pick has been ARMED for >= ARM_STALE_DAYS_DEFAULT calendar days
+      - |last_price - entry_price| / entry_price <= ARM_STALE_TOLERANCE_PCT_DEFAULT %
+
+    Books as arm_state='FILLED_MKT' (distinguished from FILLED_A / FILLED_B so
+    we can measure fill-type-specific returns downstream). Uses invalidation
+    price as bracket stop (Play B stop is not applicable since we skipped
+    the pullback entry).
+    """
+    if not pick.created_at:
+        return None
+    entry_price = (pick.entry_price_cents or 0) / 100.0
+    if entry_price <= 0:
+        return None
+
+    days_env = os.environ.get("CONFLUENCE_ARM_STALE_DAYS")
+    tol_env = os.environ.get("CONFLUENCE_ARM_STALE_TOLERANCE_PCT")
+    stale_days = int(days_env) if days_env else ARM_STALE_DAYS_DEFAULT
+    tol_pct = float(tol_env) if tol_env else ARM_STALE_TOLERANCE_PCT_DEFAULT
+
+    now = datetime.now(timezone.utc)
+    created = pick.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    age_days = (now - created).total_seconds() / 86400.0
+    if age_days < stale_days:
+        return None
+
+    price_dev_pct = abs(last_price - entry_price) / entry_price * 100.0
+    if price_dev_pct > tol_pct:
+        return None
+
+    size_cents = pick.size_dollars_cents or 500000
+    qty = max(1, int(size_cents / 100.0 / max(last_price, 0.01)))
+    stop_price = (pick.invalidation_price_cents or 0) / 100.0
+    t1 = (pick.target_1_cents or 0) / 100.0
+
+    if stop_price <= 0 or t1 <= 0:
+        logger.warning(
+            "[confluence_executor] stale-fill skipped pick=%d %s — missing stop/target",
+            pick.id, pick.ticker,
+        )
+        return None
+
+    client_oid = f"conf_pick_{pick.id}_stale_mkt_{int(now.timestamp())}"
+    status, resp = _submit_bracket_buy(
+        symbol=pick.ticker,
+        qty=qty,
+        entry_type="market",
+        entry_limit_price=None,
+        target_price=t1,
+        stop_price=stop_price,
+        client_order_id=client_oid,
+    )
+    if status not in (200, 201):
+        logger.error(
+            "[confluence_executor] stale-fill bracket submit failed pick=%d status=%d body=%s",
+            pick.id, status, resp,
+        )
+        return None
+
+    order_id = resp.get("id", "")
+    try:
+        _write_fill(db, alloc_id, pick.id, pick.ticker, qty, last_price, order_id, "MKT")
+    except Exception as e:
+        logger.error("[confluence_executor] stale-fill booking failed pick=%d: %s", pick.id, e, exc_info=True)
+
+    db.execute(
+        text(
+            "UPDATE confluence_picks SET arm_state = :s, "
+            "alpaca_bracket_order_id = :o, filled_at = :t, "
+            "filled_price_cents = :p WHERE id = :id"
+        ),
+        {
+            "s": "FILLED_MKT",
+            "o": order_id,
+            "t": now.isoformat(),
+            "p": int(round(last_price * 100)),
+            "id": pick.id,
+        },
+    )
+    db.commit()
+
+    _notify(
+        f"✅ Confluence #{pick.id} {pick.ticker} STALE-ARM MKT FILL "
+        f"@ ${last_price:.2f} × {qty}. "
+        f"Age {age_days:.1f}d, dev {price_dev_pct:.2f}% from entry ${entry_price:.2f}. "
+        f"Target ${t1:.2f}, stop ${stop_price:.2f}. Bracket {order_id[:8]}."
+    )
+    return "MKT"
+
+
 def tick() -> Dict[str, Any]:
     """One tick — call from APScheduler. Idempotent."""
     from app.db.session import SessionLocal
@@ -377,6 +481,13 @@ def tick() -> Dict[str, Any]:
             fire = _try_fire(db, pick, last, alloc_id)
             if fire:
                 fires.append({"pick_id": pick.id, "ticker": pick.ticker, "play": fire})
+                continue
+
+            # Fallback: stale-ARM auto-fill for picks stuck in the dead zone
+            # between Play A and Play B triggers. See _try_stale_fill docstring.
+            stale = _try_stale_fill(db, pick, last, alloc_id)
+            if stale:
+                fires.append({"pick_id": pick.id, "ticker": pick.ticker, "play": stale})
 
         # Invalidation checks
         filled = db.query(ConfluencePick).filter(
