@@ -229,8 +229,10 @@ def _dict_to_yaml_frontmatter(d: dict) -> str:
 
 
 def main() -> int:
-    if not TOKEN:
-        sys.stderr.write("[vault-sync] BMG_USER_TOKEN env required\n")
+    try:
+        _get_token()  # smoke test: fails fast if no JWT_SECRET or legacy token
+    except Exception as exc:
+        sys.stderr.write(f"[vault-sync] no auth material available: {exc}\n")
         return 1
     if not VAULT_ROOT.exists():
         sys.stderr.write(f"[vault-sync] Vault root does not exist: {VAULT_ROOT}\n")
