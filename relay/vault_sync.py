@@ -19,9 +19,55 @@ import urllib.error
 from pathlib import Path
 
 API = os.environ.get("BMG_API_BASE", "https://disciplined-intuition-production-5207.up.railway.app")
-TOKEN = os.environ.get("BMG_USER_TOKEN", "")
 VAULT_ROOT = Path(os.environ.get("BMG_VAULT_ROOT", "/Users/brockgorzelanczyk/Documents/BMG-Capital-Vault"))
 POLL_INTERVAL = int(os.environ.get("VAULT_SYNC_INTERVAL_SECONDS", "300"))  # 5 min default
+
+# ── Token: auto-mint from JWT_SECRET at startup, refresh every 6h ─────────────
+# 2026-08-29 fix (I28 chronic): previously BMG_USER_TOKEN was hardcoded in the
+# launchd plist with a 1-year TTL. It expired 2026-07-24 and the audit endpoint
+# has been 401ing ever since — vault sync partially working (journals OK) but
+# I28 red. Now we mint a fresh admin token from JWT_SECRET at startup and
+# refresh every 6h. JWT_SECRET is read from env only; never printed.
+_TOKEN_TTL_HOURS = 12
+_last_mint_ts = 0.0
+_cached_token = ""
+
+
+def _mint_admin_token() -> str:
+    """Mint an HS256 JWT with sub=1 (admin). TTL = _TOKEN_TTL_HOURS.
+
+    Prefers env JWT_SECRET; falls back to legacy BMG_USER_TOKEN if provided
+    (backward compat for old plists that don't have JWT_SECRET yet)."""
+    secret = os.environ.get("JWT_SECRET", "")
+    if not secret:
+        legacy = os.environ.get("BMG_USER_TOKEN", "")
+        if legacy:
+            return legacy
+        raise RuntimeError("no JWT_SECRET nor BMG_USER_TOKEN in env")
+
+    import hmac, hashlib, base64, time as _time
+    header = json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode()
+    payload = json.dumps({
+        "sub": "1",
+        "exp": int(_time.time()) + _TOKEN_TTL_HOURS * 3600,
+    }, separators=(",", ":")).encode()
+    b64h = base64.urlsafe_b64encode(header).rstrip(b"=")
+    b64p = base64.urlsafe_b64encode(payload).rstrip(b"=")
+    sig = hmac.new(secret.encode(), b64h + b"." + b64p, hashlib.sha256).digest()
+    b64s = base64.urlsafe_b64encode(sig).rstrip(b"=")
+    return (b64h + b"." + b64p + b"." + b64s).decode()
+
+
+def _get_token() -> str:
+    """Return current token, minting fresh if expired or missing."""
+    global _last_mint_ts, _cached_token
+    now = time.time()
+    # Refresh every 6h (well before the 12h TTL)
+    if not _cached_token or (now - _last_mint_ts) > 6 * 3600:
+        _cached_token = _mint_admin_token()
+        _last_mint_ts = now
+        sys.stderr.write(f"[vault-sync] minted fresh admin token (ttl={_TOKEN_TTL_HOURS}h)\n")
+    return _cached_token
 
 # Canonical 13 bots — match bot_profiles.name in DB
 BOT_NAMES = [
@@ -38,7 +84,7 @@ def fetch(path: str, *, accept_404: bool = False) -> dict | None:
     req = urllib.request.Request(
         f"{API}{path}",
         headers={
-            "Authorization": f"Bearer {TOKEN}",
+            "Authorization": f"Bearer {_get_token()}",
             "User-Agent": "bmg-vault-sync/1.0",
         },
     )
