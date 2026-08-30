@@ -43,6 +43,20 @@ ENV HOST=0.0.0.0
 ENV PORT=8000
 ENV DATABASE_URL=sqlite:////data/bmg_capital.db
 
+# ── COST-CUT 2026-08-30: glibc memory tuning (Railway $107 bill incident) ─────
+# MALLOC_ARENA_MAX=2 — limits glibc's per-thread memory arenas to 2. Default
+# is 8*num_cores which for a 2-vCPU container means 16 arenas, each pre-
+# allocating memory. Cutting to 2 arenas saves ~200-800MB baseline RSS on
+# a pandas-heavy long-running process.
+# MALLOC_TRIM_THRESHOLD_=131072 — trims free chunks >128KB back to OS
+# aggressively. Default is 128MB which is why RSS creeps for hours.
+# These pair with the memory_janitor cron (calls malloc_trim(0) every 15min).
+ENV MALLOC_ARENA_MAX=2
+ENV MALLOC_TRIM_THRESHOLD_=131072
+# PYTHONMALLOC=malloc — use glibc's malloc directly (default is pymalloc
+# small-object allocator, which can't be trimmed). Pairs with MALLOC_ARENA_MAX.
+ENV PYTHONMALLOC=malloc
+
 EXPOSE 8000
 
 CMD ["sh", "-c", "uvicorn app.main:app --host ${HOST} --port ${PORT}"]

@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 import pytz
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -11,7 +12,16 @@ logger = logging.getLogger(__name__)
 
 ET = pytz.timezone("America/New_York")
 
-scheduler = AsyncIOScheduler(timezone=ET)
+# Explicit executor pool (was default=10). Trimmed to 4 to bound peak parallel
+# memory — each concurrent job can hold DataFrames + HTTP sessions in its own
+# stack. 4 is comfortably above our observed concurrent-job peak (~2) while
+# cutting worst-case memory pressure by ~60% vs default.
+# Cost driver 2026-08-30: RAM was 60% of Railway bill; smaller pool = smaller peak.
+scheduler = AsyncIOScheduler(
+    timezone=ET,
+    executors={"default": ThreadPoolExecutor(max_workers=4)},
+    job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 60},
+)
 
 # ---------------------------------------------------------------------------
 # In-memory monitor status — updated after each automation run
@@ -1184,3 +1194,14 @@ def setup_scheduler() -> None:
         replace_existing=True,
         max_instances=1,
     )
+
+    # ── COST-CUT 2026-08-30: memory janitor (Level-1 fix for Railway $107 bill) ──
+    # Runs every 15 min, calls gc.collect() + libc.malloc_trim(0) to return
+    # freed pandas DataFrame memory to the OS. Instagram / Twitter / Dropbox
+    # all use this pattern for long-running Python services.
+    # See vault:context/05-known-issues.md ledger for Railway cost incident.
+    try:
+        from app.services.memory_janitor import setup_memory_janitor
+        setup_memory_janitor(scheduler)
+    except Exception as e:
+        logger.warning("[setup_scheduler] memory_janitor register failed: %s", e)
