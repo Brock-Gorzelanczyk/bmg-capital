@@ -12,6 +12,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import client from "@/api/client";
 import { getOpenPositions, type OpenPosition } from "@/api/bots";
 
@@ -20,6 +21,21 @@ const RED = "#f87171";
 const MUTED = "#7e8e7e";
 const CARD_BG = "rgba(10,15,10,0.55)";
 const CARD_BORDER = "1px solid rgba(74,222,128,0.14)";
+
+// Distinct hues per position slice — spans blue → green → yellow → orange
+// → red → purple so up to ~10 positions have visually distinguishable slices.
+const POSITION_COLORS = [
+  "#3b82f6", // blue
+  "#22c55e", // green
+  "#eab308", // yellow
+  "#f97316", // orange
+  "#ef4444", // red
+  "#a855f7", // purple
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#84cc16", // lime
+  "#f59e0b", // amber
+];
 
 interface PortfolioSummary {
   total_value_cents: number;
@@ -115,6 +131,26 @@ export default function PortfolioMain() {
   const longMV = (s?.alpaca_long_mv_cents ?? 0) / 100;
   const deployedPct = nav > 0 ? (longMV / nav) * 100 : 0;
 
+  // Build allocation slices: one per open position + one for cash
+  const allocationSlices = useMemo(() => {
+    const posSlices = positions
+      .filter(p => (p.current_value_usd || 0) > 0)
+      .sort((a, b) => (b.current_value_usd || 0) - (a.current_value_usd || 0))
+      .map((p, i) => ({
+        name: p.symbol,
+        value: p.current_value_usd || 0,
+        color: POSITION_COLORS[i % POSITION_COLORS.length],
+        pct: nav > 0 ? ((p.current_value_usd || 0) / nav) * 100 : 0,
+      }));
+    const cashSlice = cash > 0 ? [{
+      name: "CASH",
+      value: cash,
+      color: "#71717a",
+      pct: nav > 0 ? (cash / nav) * 100 : 0,
+    }] : [];
+    return [...posSlices, ...cashSlice];
+  }, [positions, cash, nav]);
+
   return (
     <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 22px", color: "#e5e7eb" }}>
       {/* ─── Header ─── */}
@@ -137,6 +173,102 @@ export default function PortfolioMain() {
           </span>
         </h1>
       </div>
+
+      {/* ─── Allocation donut (per-position + cash) ─── */}
+      {allocationSlices.length > 0 && (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(320px, 380px) 1fr",
+          gap: 20,
+          marginBottom: 24,
+          padding: 16,
+          background: CARD_BG,
+          border: CARD_BORDER,
+          borderRadius: 8,
+        }}>
+          {/* Donut chart */}
+          <div style={{ position: "relative", height: 320 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={allocationSlices}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={78}
+                  outerRadius={130}
+                  paddingAngle={1}
+                  stroke="#0a0f0a"
+                  strokeWidth={2}
+                >
+                  {allocationSlices.map((slice, i) => (
+                    <Cell key={i} fill={slice.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    background: "#0a0a0a",
+                    border: "1px solid rgba(74,222,128,0.35)",
+                    borderRadius: 4,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                  }}
+                  formatter={(v: number, name: string, props: any) =>
+                    [`$${v.toFixed(2)} (${props.payload.pct.toFixed(1)}%)`, name]
+                  }
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            {/* Center label — total NAV */}
+            <div style={{
+              position: "absolute", top: "50%", left: "50%",
+              transform: "translate(-50%, -50%)",
+              textAlign: "center", pointerEvents: "none",
+            }}>
+              <div style={{ fontSize: 10, color: MUTED, letterSpacing: "0.08em", fontFamily: "'JetBrains Mono', monospace" }}>
+                NAV
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#f4f8f4", fontFamily: "'JetBrains Mono', monospace" }}>
+                ${nav.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </div>
+              <div style={{ fontSize: 10, color: MUTED, fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>
+                {allocationSlices.length} slices
+              </div>
+            </div>
+          </div>
+
+          {/* Legend + $ / % table */}
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <div style={{ fontSize: 11, color: MUTED, letterSpacing: "0.08em", fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
+              // ALLOCATION BREAKDOWN
+            </div>
+            <table style={{ width: "100%", fontSize: 12, fontFamily: "'JetBrains Mono', monospace", borderCollapse: "collapse" }}>
+              <tbody>
+                {allocationSlices.map((slice, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td style={{ padding: "6px 6px 6px 0", width: 16 }}>
+                      <div style={{
+                        width: 12, height: 12, borderRadius: 2,
+                        background: slice.color, display: "inline-block",
+                      }} />
+                    </td>
+                    <td style={{ padding: "6px 8px", color: slice.name === "CASH" ? MUTED : "#e5e7eb", fontWeight: 600 }}>
+                      {slice.name}
+                    </td>
+                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#e5e7eb" }}>
+                      ${slice.value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: "6px 8px", textAlign: "right", color: MUTED, width: 56 }}>
+                      {slice.pct.toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ─── Deployment stat cards ─── */}
       <div style={{
