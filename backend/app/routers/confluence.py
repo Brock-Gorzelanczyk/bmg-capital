@@ -22,6 +22,7 @@ and query the running track record.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -325,6 +326,7 @@ class ConfluenceArm(BaseModel):
     size_dollars: int = Field(5000, gt=0, le=1000000)
     arm_mode: str = Field(..., pattern="^(play_a_only|play_b_only|either)$")
     arm_expires_at: Optional[str] = None  # ISO datetime UTC
+    force: bool = Field(False, description="Override trend gate warnings (still logs them)")
 
 
 @router.post("/arm/{pick_id}")
@@ -348,6 +350,47 @@ def arm_confluence_pick(
         raise HTTPException(status_code=400, detail="play_a mode requires play_a_trigger_price_cents")
     if payload.arm_mode in ("play_b_only", "either") and not payload.play_b_trigger_price_cents:
         raise HTTPException(status_code=400, detail="play_b mode requires play_b_trigger_price_cents")
+
+    # ── Trend gates (Priority 1+2 from confluence backtest analysis 2026-08-30) ──
+    # ADVISORY mode: log the gate results into rule_compliance, warn in
+    # response, but allow arming. Once we have N≥20 picks with gate results
+    # attached, scorecard will show whether gates discriminate — if yes,
+    # promote to hard blocks.
+    trend_gate_result = None
+    trend_warnings = []
+    try:
+        from app.services.trend_gate import evaluate_trend_gates
+        # Sector lookup — best effort. If sector is unknown, sector gate untestable.
+        from app.services.symbol_meta import get_sector  # optional; may not exist
+        sector = get_sector(pick.ticker)
+    except ImportError:
+        # symbol_meta helper doesn't exist yet — leave sector None (gate untestable)
+        sector = None
+    except Exception:
+        sector = None
+
+    try:
+        from app.services.trend_gate import evaluate_trend_gates
+        trend_gate_result = evaluate_trend_gates(pick.ticker, sector)
+        if trend_gate_result.get("hard_fail"):
+            for g in trend_gate_result["gates"]:
+                if g.get("pass") is False:
+                    trend_warnings.append(f"{g['gate']}: {g['reason']}")
+            logger.warning(
+                "[confluence] ARM WARNING pick=%d %s failed trend gates: %s (force=%s)",
+                pick.id, pick.ticker, trend_warnings, payload.force,
+            )
+    except Exception as e:
+        logger.warning("[confluence] trend gate eval failed for %s: %s", pick.ticker, e)
+
+    # Merge gate results into rule_compliance JSON (append; don't overwrite)
+    if trend_gate_result and pick.rule_compliance:
+        try:
+            rc = json.loads(pick.rule_compliance)
+            rc.setdefault("trend_gates", trend_gate_result)
+            pick.rule_compliance = json.dumps(rc, separators=(",", ":"))
+        except Exception as e:
+            logger.warning("[confluence] merge trend_gate into rule_compliance failed: %s", e)
 
     pick.arm_state = "ARMED"
     pick.arm_mode = payload.arm_mode
@@ -373,6 +416,8 @@ def arm_confluence_pick(
         "arm_mode": pick.arm_mode,
         "size_dollars": payload.size_dollars,
         "status": "armed",
+        "trend_gate_warnings": trend_warnings,
+        "trend_gate_result": trend_gate_result,
     }
 
 
