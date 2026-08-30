@@ -82,6 +82,7 @@ const StrategyLabLive = lazy(() => import("@/pages/StrategyLabLive"));
 const FactorScorecardPage = lazy(() => import("@/pages/FactorScorecardPage"));
 const DashboardMirofish = lazy(() => import("@/pages/DashboardMirofish"));
 const PortfolioV2 = lazy(() => import("@/pages/PortfolioV2"));
+const PortfolioMain = lazy(() => import("@/pages/PortfolioMain"));
 const VaultArchivedStub = lazy(() => import("@/pages/VaultArchivedStub"));
 const AutopilotPage = lazy(() => import("@/pages/AutopilotPage"));
 const AutopilotPromisePage = lazy(() => import("@/pages/AutopilotPromisePage"));
@@ -445,7 +446,8 @@ function AppInner() {
         <Route path="/candidates/:candidateName/wfa/:jobId" element={<WfaResultPage />} />
         <Route path="/net-portfolio" element={<NetPortfolio />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
-        <Route path="/portfolio" element={<Page component={PortfolioV2} />} />
+        <Route path="/portfolio" element={<Page component={PortfolioMain} />} />
+        <Route path="/portfolio/v2" element={<Page component={PortfolioV2} />} />
         <Route path="/portfolio/legacy" element={<Page component={Portfolio} />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/news" element={<VaultArchivedStub pageName="News" />} />
