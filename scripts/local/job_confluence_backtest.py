@@ -61,7 +61,8 @@ from _obsidian import write_job_output  # noqa: E402
 
 CANDIDATES = [
     # (symbol, arm_date, source, thesis, sector_etf)
-    # Currently armed confluence picks
+    #
+    # ── Bucket 1: 12 currently armed confluence picks (real triggers) ──
     ("SPG",  "2026-06-15", "CURRENT_PICK", "Simon Property — REIT, insider cluster",         "XLRE"),
     ("AAT",  "2026-06-01", "CURRENT_PICK", "American Assets Trust — insider + upgrades",     "XLRE"),
     ("APTV", "2026-05-15", "CURRENT_PICK", "Aptiv plc — auto tech, insider + 13F",           "XLY"),
@@ -75,19 +76,78 @@ CANDIDATES = [
     ("PODD", "2026-05-01", "CURRENT_PICK", "Insulet — medical devices, growth",              "XLV"),
     ("TSM",  "2026-06-01", "CURRENT_PICK", "TSMC — semiconductor, institutional",            "XLK"),
 
-    # 8 additional confluence-eligible names
-    ("PLTR", "2026-04-01", "EXTRA_PROXY", "Palantir — heavy insider cluster + upgrades Q1", "XLK"),
-    ("CRM",  "2026-04-15", "EXTRA_PROXY", "Salesforce — analyst upgrades + 13F net-add",    "XLK"),
-    ("AMD",  "2026-05-01", "EXTRA_PROXY", "AMD — mixed signals, framework discrimination",  "XLK"),
-    ("NFLX", "2026-04-01", "EXTRA_PROXY", "Netflix — analyst momentum + fundamentals",      "XLC"),
-    ("PYPL", "2026-04-15", "EXTRA_PROXY", "PayPal — value turnaround, insider buying",      "XLF"),
-    ("SBUX", "2026-05-01", "EXTRA_PROXY", "Starbucks — new CEO, insider + upgrades",        "XLY"),
-    ("F",    "2026-05-15", "EXTRA_PROXY", "Ford — mixed test, cyclical",                    "XLY"),
-    ("INTC", "2026-04-15", "EXTRA_PROXY", "Intel — turnaround narrative, insider activity", "XLK"),
+    # ── Bucket 2: 20 framework-eligible names (2025 insider/analyst/13F activity) ──
+    # Common arm date 2026-04-01 for cleaner apples-to-apples (~5-month hold)
+    ("PLTR", "2026-04-01", "FRAMEWORK_ELIGIBLE", "Palantir — insider cluster + Q1 upgrades",    "XLK"),
+    ("CRM",  "2026-04-01", "FRAMEWORK_ELIGIBLE", "Salesforce — analyst upgrades + 13F",         "XLK"),
+    ("AMD",  "2026-04-01", "FRAMEWORK_ELIGIBLE", "AMD — insider + fundamentals",                "XLK"),
+    ("NFLX", "2026-04-01", "FRAMEWORK_ELIGIBLE", "Netflix — analyst momentum",                  "XLC"),
+    ("PYPL", "2026-04-01", "FRAMEWORK_ELIGIBLE", "PayPal — value turnaround, insider buying",   "XLF"),
+    ("SBUX", "2026-04-01", "FRAMEWORK_ELIGIBLE", "Starbucks — new CEO catalyst",                "XLY"),
+    ("F",    "2026-04-01", "FRAMEWORK_ELIGIBLE", "Ford — cyclical, insider activity",           "XLY"),
+    ("INTC", "2026-04-01", "FRAMEWORK_ELIGIBLE", "Intel — turnaround narrative",                "XLK"),
+    ("GM",   "2026-04-01", "FRAMEWORK_ELIGIBLE", "General Motors — buybacks + insider",         "XLY"),
+    ("BABA", "2026-04-01", "FRAMEWORK_ELIGIBLE", "Alibaba — value + institutional interest",    "XLY"),
+    ("UBER", "2026-04-01", "FRAMEWORK_ELIGIBLE", "Uber — profitability inflection",             "XLI"),
+    ("DIS",  "2026-04-01", "FRAMEWORK_ELIGIBLE", "Disney — turnaround, analyst upgrades",       "XLC"),
+    ("BA",   "2026-04-01", "FRAMEWORK_ELIGIBLE", "Boeing — turnaround, order book",             "XLI"),
+    ("NKE",  "2026-04-01", "FRAMEWORK_ELIGIBLE", "Nike — turnaround, insider + activism",       "XLY"),
+    ("WBA",  "2026-04-01", "FRAMEWORK_ELIGIBLE", "Walgreens — deep value, insider",             "XLV"),
+    ("KHC",  "2026-04-01", "FRAMEWORK_ELIGIBLE", "Kraft Heinz — value + insider activity",      "XLP"),
+    ("VZ",   "2026-04-01", "FRAMEWORK_ELIGIBLE", "Verizon — dividend + insider",                "XLC"),
+    ("T",    "2026-04-01", "FRAMEWORK_ELIGIBLE", "AT&T — deleveraging, insider",                "XLC"),
+    ("MRK",  "2026-04-01", "FRAMEWORK_ELIGIBLE", "Merck — pipeline, analyst upgrades",          "XLV"),
+    ("BMY",  "2026-04-01", "FRAMEWORK_ELIGIBLE", "Bristol-Myers — value pharma, insider",       "XLV"),
+
+    # ── Bucket 3: 10 KNOWN 2025 WINNERS (test if framework catches obvious wins) ──
+    ("NVDA", "2026-04-01", "KNOWN_WINNER",   "NVIDIA — AI leader",                          "XLK"),
+    ("META", "2026-04-01", "KNOWN_WINNER",   "Meta — AI + Reels monetization",              "XLC"),
+    ("GOOGL","2026-04-01", "KNOWN_WINNER",   "Alphabet — AI + cloud",                       "XLC"),
+    ("MSFT", "2026-04-01", "KNOWN_WINNER",   "Microsoft — Azure AI",                        "XLK"),
+    ("AVGO", "2026-04-01", "KNOWN_WINNER",   "Broadcom — AI accelerators",                  "XLK"),
+    ("LLY",  "2026-04-01", "KNOWN_WINNER",   "Eli Lilly — GLP-1 leader",                    "XLV"),
+    ("COST", "2026-04-01", "KNOWN_WINNER",   "Costco — consistent compounder",              "XLP"),
+    ("WMT",  "2026-04-01", "KNOWN_WINNER",   "Walmart — e-commerce + margin expansion",     "XLP"),
+    ("V",    "2026-04-01", "KNOWN_WINNER",   "Visa — payment volumes",                      "XLF"),
+    ("JPM",  "2026-04-01", "KNOWN_WINNER",   "JPMorgan — best-in-class bank",               "XLF"),
+
+    # ── Bucket 4: 8 KNOWN 2025 LOSERS (test if framework avoids obvious losses) ──
+    ("TSLA", "2026-04-01", "KNOWN_LOSER",    "Tesla — deliveries decline + comp risk",      "XLY"),
+    ("LULU", "2026-04-01", "KNOWN_LOSER",    "Lululemon — growth deceleration",             "XLY"),
+    ("DLTR", "2026-04-01", "KNOWN_LOSER",    "Dollar Tree — margin pressure",               "XLY"),
+    ("ETSY", "2026-04-01", "KNOWN_LOSER",    "Etsy — consumer discretionary weakness",      "XLY"),
+    ("MRNA", "2026-04-01", "KNOWN_LOSER",    "Moderna — post-COVID hangover",               "XLV"),
+    ("PARA", "2026-04-01", "KNOWN_LOSER",    "Paramount — streaming losses",                "XLC"),
+    ("SLB",  "2026-04-01", "KNOWN_LOSER",    "Schlumberger — oil services weakness",        "XLE"),
+    ("MMM",  "2026-04-01", "KNOWN_LOSER",    "3M — litigation + industrial slowdown",       "XLI"),
 ]
 
 # Unique sector ETFs to fetch once
 SECTOR_ETFS = sorted(set(c[4] for c in CANDIDATES))
+
+# Ticker → company name map for the rendered report
+COMPANY_NAMES = {
+    "SPG": "Simon Property Group", "AAT": "American Assets Trust",
+    "APTV": "Aptiv plc", "VFC": "VF Corporation", "ONON": "On Holding",
+    "HOG": "Harley-Davidson", "KMPR": "Kemper Corporation",
+    "MTDR": "Matador Resources", "ELAN": "Elanco Animal Health",
+    "REZI": "Resideo Technologies", "PODD": "Insulet Corporation",
+    "TSM": "Taiwan Semiconductor", "PLTR": "Palantir Technologies",
+    "CRM": "Salesforce", "AMD": "Advanced Micro Devices",
+    "NFLX": "Netflix", "PYPL": "PayPal Holdings", "SBUX": "Starbucks",
+    "F": "Ford Motor", "INTC": "Intel Corporation",
+    "GM": "General Motors", "BABA": "Alibaba", "UBER": "Uber",
+    "DIS": "Walt Disney", "BA": "Boeing", "NKE": "Nike",
+    "WBA": "Walgreens Boots Alliance", "KHC": "Kraft Heinz",
+    "VZ": "Verizon Communications", "T": "AT&T",
+    "MRK": "Merck", "BMY": "Bristol-Myers Squibb",
+    "NVDA": "NVIDIA", "META": "Meta Platforms", "GOOGL": "Alphabet",
+    "MSFT": "Microsoft", "AVGO": "Broadcom", "LLY": "Eli Lilly",
+    "COST": "Costco Wholesale", "WMT": "Walmart", "V": "Visa",
+    "JPM": "JPMorgan Chase", "TSLA": "Tesla", "LULU": "Lululemon Athletica",
+    "DLTR": "Dollar Tree", "ETSY": "Etsy", "MRNA": "Moderna",
+    "PARA": "Paramount Global", "SLB": "Schlumberger", "MMM": "3M Company",
+}
 
 
 def _yahoo_bars(symbol: str, start_iso: str, end_iso: str) -> Optional[dict]:
@@ -256,13 +316,24 @@ def run() -> str:
     else:
         verdict = "borderline"
 
-    # Subset splits (sector-relative)
-    current = [r for r in results if r["source"] == "CURRENT_PICK"]
-    extras = [r for r in results if r["source"] == "EXTRA_PROXY"]
-    cur_sec_avg = statistics.mean(r["excess_vs_sector_pct"] for r in current if r["excess_vs_sector_pct"] is not None) if current else None
-    ext_sec_avg = statistics.mean(r["excess_vs_sector_pct"] for r in extras if r["excess_vs_sector_pct"] is not None) if extras else None
-    cur_spy_avg = statistics.mean(r["excess_vs_spy_pct"] for r in current) if current else None
-    ext_spy_avg = statistics.mean(r["excess_vs_spy_pct"] for r in extras) if extras else None
+    # Subset splits by source bucket (sector-relative)
+    def _bucket_stats(bucket_name):
+        bucket = [r for r in results if r["source"] == bucket_name]
+        if not bucket:
+            return None
+        sec_vals = [r["excess_vs_sector_pct"] for r in bucket if r["excess_vs_sector_pct"] is not None]
+        return {
+            "n": len(bucket),
+            "sec_avg": statistics.mean(sec_vals) if sec_vals else 0,
+            "spy_avg": statistics.mean(r["excess_vs_spy_pct"] for r in bucket),
+            "sec_hits": sum(1 for r in bucket if r["hit_sector"]),
+            "sec_hit_rate": sum(1 for r in bucket if r["hit_sector"]) / len(bucket),
+        }
+
+    bucket_current = _bucket_stats("CURRENT_PICK")
+    bucket_eligible = _bucket_stats("FRAMEWORK_ELIGIBLE")
+    bucket_winners = _bucket_stats("KNOWN_WINNER")
+    bucket_losers = _bucket_stats("KNOWN_LOSER")
 
     # Rank by sector-relative excess for the detail table
     stdev_sec = statistics.stdev(excesses_sector) if len(excesses_sector) > 1 else 0.0
@@ -304,18 +375,29 @@ def run() -> str:
         "",
         f"**Framework verdict (sector-relative):** **{verdict}**",
         "",
-        "### Subset breakdown",
+        "### Subset breakdown by bucket",
         "",
-        f"- **Current picks (n={len(current)}):** vs SPY {cur_spy_avg:+.2f}% | "
-        f"**vs Sector {cur_sec_avg:+.2f}%**" if current else "",
-        f"- **Extra proxies (n={len(extras)}):** vs SPY {ext_spy_avg:+.2f}% | "
-        f"**vs Sector {ext_sec_avg:+.2f}%**" if extras else "",
+        "| Bucket | N | vs SPY | vs Sector | Hit rate |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for label, b in [
+        ("Current live picks", bucket_current),
+        ("Framework-eligible (2025 signals)", bucket_eligible),
+        ("Known 2025 winners (control)", bucket_winners),
+        ("Known 2025 losers (control)", bucket_losers),
+    ]:
+        if b:
+            lines.append(
+                f"| {label} | {b['n']} | {b['spy_avg']:+.2f}% | "
+                f"**{b['sec_avg']:+.2f}%** | {b['sec_hit_rate']:.0%} |"
+            )
+    lines.extend([
         "",
         "### Per-pick detail (ranked by sector-relative excess)",
         "",
-        "| Ticker | Sector | Days | Stock % | SPY % | Sector % | vs SPY | **vs Sector** | Hit(Sec) | Source |",
-        "|---|---|---:|---:|---:|---:|---:|---:|:---:|---|",
-    ]
+        "| Ticker | Company | Sector | Days | Stock % | Sec % | vs SPY | **vs Sec** | Hit | Src |",
+        "|---|---|---|---:|---:|---:|---:|---:|:---:|---|",
+    ])
 
     # Sort by sector-relative excess desc
     def sort_key(r):
@@ -324,10 +406,13 @@ def run() -> str:
         sec_ret = f"{r['sector_ret_pct']:+.1f}%" if r['sector_ret_pct'] is not None else "—"
         vs_sec = f"{r['excess_vs_sector_pct']:+.1f}%" if r['excess_vs_sector_pct'] is not None else "—"
         hit = ("✅" if r['hit_sector'] else "❌") if r["excess_vs_sector_pct"] is not None else "—"
+        company = COMPANY_NAMES.get(r["symbol"], "?")
+        src_short = {"CURRENT_PICK": "PICK", "FRAMEWORK_ELIGIBLE": "ELIG",
+                     "KNOWN_WINNER": "WIN", "KNOWN_LOSER": "LOSE"}.get(r["source"], r["source"])
         lines.append(
-            f"| **{r['symbol']}** | {r['sector_etf']} | {r['hold_days']} | "
-            f"{r['stock_ret_pct']:+.1f}% | {r['spy_ret_pct']:+.1f}% | {sec_ret} | "
-            f"{r['excess_vs_spy_pct']:+.1f}% | **{vs_sec}** | {hit} | {r['source']} |"
+            f"| **{r['symbol']}** | {company} | {r['sector_etf']} | {r['hold_days']} | "
+            f"{r['stock_ret_pct']:+.1f}% | {sec_ret} | "
+            f"{r['excess_vs_spy_pct']:+.1f}% | **{vs_sec}** | {hit} | {src_short} |"
         )
 
     if errors:
