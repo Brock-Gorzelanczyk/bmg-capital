@@ -124,6 +124,80 @@ def check_sector_momentum_positive(sector: str) -> Dict[str, Any]:
     }
 
 
+def check_momentum_meanreversion_regime() -> Dict[str, Any]:
+    """Detect trend-following vs mean-reversion regime.
+
+    Compares MTUM (iShares Momentum Factor ETF) vs VLUE (iShares Value Factor
+    ETF) over trailing 3 months. When VLUE beats MTUM materially, it means
+    beaten-down names are being bought aggressively — a MEAN-REVERSION regime.
+    When MTUM beats VLUE, momentum is being extended — a TREND-FOLLOWING regime.
+
+    Why this matters:
+    - Trend-following signals (like sector momentum gate) HELP in trend-following
+      regimes but HURT in mean-reversion regimes.
+    - Backtest v3 (2026-08-30) showed our sector_momentum gate DESTROYED returns
+      in the current mean-reversion regime because it excluded MU/INTC/AMD/MRNA
+      (all beaten-down names that rebounded hard).
+    - This detector lets the framework dynamically weight signals by regime.
+
+    Returns:
+        mode: "trend_following" | "mean_reversion" | "neutral"
+        spread_pct: MTUM return - VLUE return over 3mo
+        suggested_actions: which framework filters to enable/disable
+    """
+    mtum_closes = _yahoo_closes("MTUM", days_back=140)
+    vlue_closes = _yahoo_closes("VLUE", days_back=140)
+
+    if (not mtum_closes or not vlue_closes
+            or len(mtum_closes) < 60 or len(vlue_closes) < 60):
+        return {
+            "mode": "UNKNOWN",
+            "spread_pct": None,
+            "reason": "insufficient MTUM/VLUE data",
+            "suggested_actions": [],
+        }
+
+    # 3-month trailing return (~60 trading days)
+    lookback = min(60, len(mtum_closes) - 1, len(vlue_closes) - 1)
+    mtum_ret = (mtum_closes[-1] - mtum_closes[-lookback]) / mtum_closes[-lookback] * 100
+    vlue_ret = (vlue_closes[-1] - vlue_closes[-lookback]) / vlue_closes[-lookback] * 100
+    spread = mtum_ret - vlue_ret  # positive = momentum winning = trend-following
+
+    # Thresholds tuned for meaningful regime shifts:
+    # +3% spread = clear momentum leadership → trend-following regime
+    # -3% spread = clear value leadership → mean-reversion regime
+    if spread > 3.0:
+        mode = "trend_following"
+        actions = [
+            "ENABLE sector_momentum_positive gate (trend-following works)",
+            "REDUCE weight on beaten-down value picks",
+            "PREFER stocks above 200-SMA (trend confirms)",
+        ]
+    elif spread < -3.0:
+        mode = "mean_reversion"
+        actions = [
+            "DISABLE sector_momentum_positive gate (kills winners in this regime)",
+            "INCREASE weight on beaten-down value picks (they rebound)",
+            "KEEP 200-SMA gate but relax the sector filter",
+        ]
+    else:
+        mode = "neutral"
+        actions = [
+            "sector_momentum_positive: advisory only",
+            "size normally, no regime-specific tilt",
+        ]
+
+    return {
+        "mode": mode,
+        "spread_pct": round(spread, 2),
+        "mtum_3mo_return_pct": round(mtum_ret, 2),
+        "vlue_3mo_return_pct": round(vlue_ret, 2),
+        "reason": (f"3mo momentum (MTUM) {mtum_ret:+.1f}% vs value (VLUE) {vlue_ret:+.1f}% "
+                   f"= {spread:+.1f}% spread → {mode}"),
+        "suggested_actions": actions,
+    }
+
+
 def check_growth_value_regime() -> Dict[str, Any]:
     """PRIORITY 5: growth-vs-value regime detector.
 
@@ -206,8 +280,10 @@ def evaluate_trend_gates(symbol: str, sector: Optional[str] = None) -> Dict[str,
     # passed_all = both gates returned True
     passed_all = (gate_price.get("pass") is True) and (gate_sector.get("pass") is True)
 
-    # PRIORITY 5: regime overlay
+    # PRIORITY 5: regime overlay (growth vs value)
     regime = check_growth_value_regime()
+    # Post-backtest v3 addition: momentum vs mean-reversion regime
+    mmr_regime = check_momentum_meanreversion_regime()
 
     return {
         "evaluated_at": datetime.now(timezone.utc).isoformat(),
@@ -216,5 +292,6 @@ def evaluate_trend_gates(symbol: str, sector: Optional[str] = None) -> Dict[str,
         "passed_all": passed_all,
         "hard_fail": hard_fail,
         "gates": [gate_price, gate_sector],
-        "regime": regime,
+        "regime_growth_value": regime,
+        "regime_momentum_meanreversion": mmr_regime,
     }
