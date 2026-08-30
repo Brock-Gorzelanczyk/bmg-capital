@@ -359,6 +359,18 @@ export const COMPANY_INFO: Record<string, CompanyMeta> = {
   ARKK:  { name: "ARK Innovation ETF",       sector: "ETF" },
   SQQQ:  { name: "ProShares UltraPro Short QQQ", sector: "ETF" },
   TQQQ:  { name: "ProShares UltraPro QQQ",   sector: "ETF" },
+
+  // ── Added 2026-08-30 (Brock: "company name next to ticker everywhere") ──
+  AAT:   { name: "American Assets Trust",    sector: "Real Estate" },
+  CC:    { name: "Chemours Company",         sector: "Materials" },
+  ELAN:  { name: "Elanco Animal Health",     sector: "Healthcare" },
+  HOG:   { name: "Harley-Davidson",          sector: "Consumer Disc." },
+  KMPR:  { name: "Kemper Corporation",       sector: "Financials" },
+  MTDR:  { name: "Matador Resources",        sector: "Energy" },
+  ONON:  { name: "On Holding",               sector: "Consumer Disc." },
+  PODD:  { name: "Insulet Corporation",      sector: "Healthcare" },
+  REZI:  { name: "Resideo Technologies",     sector: "Industrials" },
+  TSM:   { name: "Taiwan Semiconductor",     sector: "Technology" },
 };
 
 export const SECTOR_COLOR: Record<string, string> = {

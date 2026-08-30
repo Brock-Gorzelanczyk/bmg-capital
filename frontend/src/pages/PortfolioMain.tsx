@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import client from "@/api/client";
 import { getOpenPositions, type OpenPosition } from "@/api/bots";
+import TickerWithName from "@/components/ui/TickerWithName";
 
 const GREEN = "#4ade80";
 const RED = "#f87171";
@@ -369,9 +370,11 @@ export default function PortfolioMain() {
               {armed.sort((a, b) => b.id - a.id).map(p => (
                 <tr key={p.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                   <Td align="left">
-                    <Link to={`/positions/symbol/${p.ticker}`} style={{ color: GREEN, textDecoration: "none" }}>
-                      {p.ticker}
-                    </Link>
+                    <TickerWithName
+                      symbol={p.ticker}
+                      linkTo={`/positions/symbol/${p.ticker}`}
+                      color={GREEN}
+                    />
                   </Td>
                   <Td align="right">${p.entry_price?.toFixed(2)}</Td>
                   <Td align="right" color={p.signals.count >= 4 ? GREEN : "#fbbf24"}>{p.signals.count}/5</Td>
@@ -404,9 +407,11 @@ export default function PortfolioMain() {
                 return (
                   <tr key={p.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <Td align="left">
-                      <Link to={`/positions/symbol/${p.ticker}`} style={{ color: GREEN, textDecoration: "none" }}>
-                        {p.ticker}
-                      </Link>
+                      <TickerWithName
+                        symbol={p.ticker}
+                        linkTo={`/positions/symbol/${p.ticker}`}
+                        color={GREEN}
+                      />
                     </Td>
                     <Td align="right">${p.entry_price?.toFixed(2)}</Td>
                     <Td align="right">${p.closed_price?.toFixed(2)}</Td>
@@ -541,9 +546,11 @@ function PositionRow({ p }: { p: OpenPosition }) {
   return (
     <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
       <Td align="left">
-        <Link to={`/positions/symbol/${p.symbol}`} style={{ color: GREEN, textDecoration: "none", fontWeight: 600 }}>
-          {p.symbol}
-        </Link>
+        <TickerWithName
+          symbol={p.symbol}
+          linkTo={`/positions/symbol/${p.symbol}`}
+          color={GREEN}
+        />
       </Td>
       <Td align="right">{Number(p.qty).toFixed(0)}</Td>
       <Td align="right">${Number(p.entry_price).toFixed(2)}</Td>
