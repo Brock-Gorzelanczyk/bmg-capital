@@ -383,6 +383,24 @@ def arm_confluence_pick(
     except Exception as e:
         logger.warning("[confluence] trend gate eval failed for %s: %s", pick.ticker, e)
 
+    # ── HARD BLOCK: price_above_200sma gate (per backtest v3 2026-08-30) ──
+    # Filtered backtest showed this specific gate adds +5% avg excess vs sector
+    # (baseline +5.71% → trend-only filtered +10.60%). Promoted from advisory
+    # to hard block. Override with payload.force=true.
+    # NOTE: sector_momentum + regime overlay STAY as advisory only — backtest
+    # showed sector gate HURT (-9.64% delta) in the current mean-reversion regime.
+    if not payload.force and trend_gate_result:
+        for g in trend_gate_result.get("gates", []):
+            if g.get("gate") == "price_above_200sma" and g.get("pass") is False:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"BLOCKED by price_above_200sma gate: {g.get('reason')}. "
+                        f"Backtest 2026-08-30 shows this gate adds ~5% excess return. "
+                        f"To override, resubmit with force=true (will be logged)."
+                    ),
+                )
+
     # Merge gate results into rule_compliance JSON (append; don't overwrite)
     if trend_gate_result and pick.rule_compliance:
         try:
