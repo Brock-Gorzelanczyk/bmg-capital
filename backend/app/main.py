@@ -1488,6 +1488,39 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] confluence_hunter scheduler FAILED (non-fatal): %s",
                      _ch_exc, exc_info=True)
 
+    # 2026-08-29 — new sleeves per swing + day-trading research synthesis.
+    # Regime state (Faber+CGH+Moreira-Muir) is the foundation every other
+    # new sleeve subscribes to. Refreshed daily 4:05 PM ET.
+    try:
+        from app.services.regime_state import setup_regime_state_scheduler
+        setup_regime_state_scheduler(scheduler)
+    except Exception as _rs_exc:
+        logger.error("[startup] regime_state scheduler FAILED (non-fatal): %s", _rs_exc, exc_info=True)
+
+    # Long-trend sleeve: sector rotation — 11 SPDR ETFs, 12-1 momentum,
+    # monthly rebalance on 2nd business day 10 AM ET.
+    try:
+        from app.services.sector_rotation import setup_sector_rotation_scheduler
+        setup_sector_rotation_scheduler(scheduler)
+    except Exception as _sr_exc:
+        logger.error("[startup] sector_rotation scheduler FAILED (non-fatal): %s", _sr_exc, exc_info=True)
+
+    # Short-swing sleeve: overnight drift — Lou-Polk-Skouras 2019.
+    # MOC buy 3:58 PM Mon-Thu, MOO sell 9:31 AM Tue-Fri.
+    try:
+        from app.services.overnight_drift import setup_overnight_drift_scheduler
+        setup_overnight_drift_scheduler(scheduler)
+    except Exception as _od_exc:
+        logger.error("[startup] overnight_drift scheduler FAILED (non-fatal): %s", _od_exc, exc_info=True)
+
+    # Day-trading sleeve: ORB Stocks-in-Play — Zarattini 2024.
+    # Entry 9:35 ET, force EOD close 3:55 ET. Rulebook-gated.
+    try:
+        from app.services.orb_sip import setup_orb_sip_scheduler
+        setup_orb_sip_scheduler(scheduler)
+    except Exception as _orb_exc:
+        logger.error("[startup] orb_sip scheduler FAILED (non-fatal): %s", _orb_exc, exc_info=True)
+
     scheduler.start()
 
     # PAUSED 2026-07-16 (cost): startup strategy scan ran full universe on every
