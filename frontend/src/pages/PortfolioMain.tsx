@@ -207,16 +207,48 @@ export default function PortfolioMain() {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{
-                    background: "#0a0a0a",
-                    border: "1px solid rgba(74,222,128,0.35)",
-                    borderRadius: 4,
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 12,
+                  cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                  content={({ active, payload }: any) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const p = payload[0]?.payload;
+                    if (!p) return null;
+                    const v = payload[0]?.value ?? 0;
+                    const color = p.color || "#4ade80";
+                    return (
+                      <div
+                        style={{
+                          background: "rgba(15, 15, 20, 0.98)",
+                          border: `1.5px solid ${color}`,
+                          borderRadius: 6,
+                          padding: "9px 12px",
+                          boxShadow: `0 6px 20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08)`,
+                          fontFamily: "'JetBrains Mono', monospace",
+                          minWidth: 140,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: 11,
+                              height: 11,
+                              borderRadius: 2,
+                              background: color,
+                            }}
+                          />
+                          <span style={{ color: "#ffffff", fontWeight: 700, fontSize: 13, letterSpacing: "0.02em" }}>
+                            {p.symbol || p.name}
+                          </span>
+                        </div>
+                        <div style={{ color: "#f4f8f4", fontWeight: 600, fontSize: 14, fontVariantNumeric: "tabular-nums" }}>
+                          ${v.toFixed(2)}
+                        </div>
+                        <div style={{ color: "#a1a1aa", fontWeight: 400, fontSize: 11, fontVariantNumeric: "tabular-nums", marginTop: 2 }}>
+                          {p.pct.toFixed(1)}% of NAV
+                        </div>
+                      </div>
+                    );
                   }}
-                  formatter={(v: number, name: string, props: any) =>
-                    [`$${v.toFixed(2)} (${props.payload.pct.toFixed(1)}%)`, name]
-                  }
                 />
               </PieChart>
             </ResponsiveContainer>
