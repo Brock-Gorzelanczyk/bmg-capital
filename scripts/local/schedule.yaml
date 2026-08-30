@@ -22,6 +22,11 @@ jobs:
     catchup: true
     description: "Pre-market brief — overnight news + open positions"
 
+  - name: job_regime_snapshot
+    cron: "0 8 * * 1-5"           # 8am ET daily, M-F
+    catchup: true
+    description: "Market regime snapshot: Faber, growth/value, mean-reversion, VIX"
+
   # ── Weekly analytics ──────────────────────────────────────────────
   - name: job_weekly_promotion
     cron: "0 9 * * 1"             # 9am ET Monday
