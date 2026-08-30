@@ -118,16 +118,51 @@ export default function AllocationDonut({
               ))}
             </Pie>
             <Tooltip
-              formatter={(value: number, name: string, props: any) => {
-                const entry = props?.payload;
-                const pct = entry?.pct != null ? entry.pct.toFixed(1) : ((value / (total || 1)) * 100).toFixed(1);
-                const pos = entry?.position_count;
-                const posLabel = pos != null && pos > 0 ? ` · ${pos} position${pos === 1 ? "" : "s"}` : "";
-                return [`${fmtDollars(value)} (${pct}%)${posLabel}`, name];
+              cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              content={({ active, payload }: any) => {
+                if (!active || !payload || !payload.length) return null;
+                const p = payload[0]?.payload;
+                if (!p) return null;
+                const value = p.value ?? 0;
+                const pct = p.pct != null ? p.pct.toFixed(1) : ((value / (total || 1)) * 100).toFixed(1);
+                const pos = p.position_count;
+                const posLabel = pos != null && pos > 0 ? ` · ${pos} pos` : "";
+                return (
+                  <div
+                    style={{
+                      background: "rgba(15, 15, 20, 0.98)",
+                      border: `1px solid ${p.color}`,
+                      borderRadius: 6,
+                      padding: "8px 10px",
+                      boxShadow: `0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)`,
+                      fontSize: 13,
+                      lineHeight: 1.4,
+                      fontFamily: "system-ui, -apple-system, sans-serif",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 10,
+                          height: 10,
+                          borderRadius: 2,
+                          background: p.color,
+                        }}
+                      />
+                      <span style={{ color: "#ffffff", fontWeight: 600, fontSize: 13 }}>
+                        {p.name}
+                      </span>
+                    </div>
+                    <div style={{ color: "#e4e4e7", fontWeight: 500, fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
+                      {fmtDollars(value)}{" "}
+                      <span style={{ color: "#a1a1aa", fontWeight: 400 }}>
+                        ({pct}%{posLabel})
+                      </span>
+                    </div>
+                  </div>
+                );
               }}
-              contentStyle={{ background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 11 }}
-              itemStyle={{ color: "#d4d4d8" }}
-              labelStyle={{ display: "none" }}
             />
           </PieChart>
         </ResponsiveContainer>
