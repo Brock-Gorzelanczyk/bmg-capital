@@ -48,7 +48,10 @@ except ImportError:
     ET = timezone(timedelta(hours=-5))
 
 STATE_FILE = Path.home() / ".bmg-local-jobs.json"
-CATCHUP_WINDOW_HOURS = 24  # if we missed a job in the last 24h, catch it up once
+# 72h covers Fri-close → Mon-open + a day of slack (long weekends etc). Beyond
+# that a stale report is less useful than just opening the live app — so we
+# don't catch up week-old runs when the Mac comes back from vacation.
+CATCHUP_WINDOW_HOURS = 72
 
 logging.basicConfig(
     level=logging.INFO,
