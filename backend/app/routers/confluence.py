@@ -143,6 +143,18 @@ def create_confluence_pick(
         notes=payload.notes,
     )
     db.add(pick)
+    db.flush()  # get pick.id for rule-compliance record
+
+    # Evaluate decision rules from vault:research/decision-rules.md
+    # BEFORE outcome is known — this is the anti-hindsight discipline.
+    try:
+        from app.services.rule_evaluator import evaluate_pick_json
+        pick.rule_compliance = evaluate_pick_json(pick)
+        pick.rule_compliance_evaluated_at = datetime.now(timezone.utc).isoformat()
+    except Exception as e:
+        logger.warning("[confluence] rule evaluation failed for pick %d: %s", pick.id, e)
+        pick.rule_compliance = None
+
     db.commit()
     db.refresh(pick)
 
@@ -433,4 +445,62 @@ def get_confluence_pick(
         "alpaca_bracket_order_id": pick.alpaca_bracket_order_id,
         "filled_at": pick.filled_at,
         "filled_price_cents": pick.filled_price_cents,
+        # m103 — rule-compliance record from vault:research/decision-rules.md
+        "rule_compliance": pick.rule_compliance,
+        "rule_compliance_evaluated_at": pick.rule_compliance_evaluated_at,
     }
+
+
+@router.get("/scorecard")
+def get_rule_scorecard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run the rule scorecard across all closed picks with rule-compliance records.
+
+    Returns per-rule discrimination stats + PROMOTE/HOLD/INVESTIGATE recommendation.
+    See vault:research/decision-rules.md for the rule catalog.
+    """
+    from app.services.rule_scorecard import compute_scorecard
+    return compute_scorecard(db)
+
+
+@router.post("/backfill-rule-compliance")
+def backfill_rule_compliance(
+    dry_run: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """One-time backfill: evaluate rules for existing picks that lack rule_compliance.
+
+    Only backfills rules that are evaluable from pick-time data alone (family
+    diversity, McLean-Pontiff haircut, insider haircut). Rules requiring live
+    external data (SPX SMA, BW sentiment) are marked UNTESTABLE for backfilled
+    picks because their historical values would need to match the ENTRY date,
+    not today's value.
+    """
+    from app.services.rule_evaluator import evaluate_pick_json
+
+    to_backfill = db.query(ConfluencePick).filter(
+        ConfluencePick.rule_compliance.is_(None)
+    ).all()
+
+    if dry_run:
+        return {
+            "status": "dry_run",
+            "would_backfill": len(to_backfill),
+            "pick_ids": [p.id for p in to_backfill],
+        }
+
+    updated = 0
+    errors: list = []
+    for pick in to_backfill:
+        try:
+            pick.rule_compliance = evaluate_pick_json(pick)
+            pick.rule_compliance_evaluated_at = datetime.now(timezone.utc).isoformat()
+            updated += 1
+        except Exception as e:
+            errors.append({"pick_id": pick.id, "error": str(e)})
+
+    db.commit()
+    return {"status": "ok", "updated": updated, "errors": errors}

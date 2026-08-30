@@ -1193,6 +1193,18 @@ async def lifespan(app: FastAPI):
         logger.error("[startup] m102_confluence_arm FAILED: %s",
                      _m102_exc, exc_info=True)
 
+    # m103: rule_compliance JSON column on confluence_picks (Brock 2026-08-30).
+    # Enables the research → decision pipeline: every pick gets an auto-generated
+    # rule-compliance record from `vault:research/decision-rules.md` at log time.
+    try:
+        from app.db.migrations.m103_confluence_rule_compliance import run as _run_m103
+        with engine.begin() as _m103_conn:
+            _m103_result = _run_m103(_m103_conn)
+        logger.warning("[startup] m103 status: %s", _m103_result)
+    except Exception as _m103_exc:
+        logger.error("[startup] m103_confluence_rule_compliance FAILED: %s",
+                     _m103_exc, exc_info=True)
+
     # Phase 2: one-shot backfill of historical bot_trades regime tags.
     # Gated via _gate.already_ran so it runs ONCE per deploy lifetime.
     try:

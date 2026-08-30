@@ -72,3 +72,9 @@ class ConfluencePick(Base):
     alpaca_bracket_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     filled_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     filled_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # m103 rule-compliance record — stored as JSON string. Populated at pick creation
+    # by services/rule_evaluator.py from vault:research/decision-rules.md.
+    # Schema: {rules: {RULE-ID: {verdict, notes}, ...}, rules_version, evaluated_by}
+    rule_compliance: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    rule_compliance_evaluated_at: Mapped[Optional[str]] = mapped_column(String, nullable=True)
