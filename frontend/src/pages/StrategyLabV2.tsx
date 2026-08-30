@@ -14,6 +14,8 @@ import { Link } from "react-router-dom";
 import { getDashboardV2 } from "@/api/dashboard";
 import { getStrategyLabPortfolio, getOpenPositions, type OpenPosition } from "@/api/bots";
 import client from "@/api/client";
+import { COMPANY_INFO } from "@/data/companyInfo";
+import { TICKER_NAMES } from "@/data/tickerNames";
 
 // ─── Types + constants ────────────────────────────────────────────────────────
 
@@ -269,9 +271,25 @@ function PositionRow({ p }: { p: OpenPosition }) {
   const isUp = p.unrealized_pnl_usd >= 0;
   const color = isUp ? GREEN : RED;
   const cells: React.ReactNode[] = [
-    // Symbol + side badge
-    <div key="sym" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ color: "#f4f8f4", fontWeight: 700, fontSize: 14 }}>{p.symbol}</span>
+    // Symbol + company name + side badge
+    <div key="sym" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <span style={{ color: "#f4f8f4", fontWeight: 700, fontSize: 14, flexShrink: 0 }}>{p.symbol}</span>
+      {(COMPANY_INFO[p.symbol]?.name || TICKER_NAMES[p.symbol]) && (
+        <span
+          title={COMPANY_INFO[p.symbol]?.name || TICKER_NAMES[p.symbol]}
+          style={{
+            color: "#71717a",
+            fontSize: 11,
+            fontWeight: 400,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+          }}
+        >
+          {COMPANY_INFO[p.symbol]?.name || TICKER_NAMES[p.symbol]}
+        </span>
+      )}
       <span style={{
         fontSize: 9,
         fontFamily: "'JetBrains Mono', monospace",
@@ -280,6 +298,7 @@ function PositionRow({ p }: { p: OpenPosition }) {
         borderRadius: 3,
         padding: "1px 4px",
         textTransform: "uppercase",
+        flexShrink: 0,
       }}>{p.side}</span>
     </div>,
     // Qty

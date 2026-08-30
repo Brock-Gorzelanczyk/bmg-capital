@@ -287,7 +287,11 @@ export default function PortfolioMain() {
                       }} />
                     </td>
                     <td style={{ padding: "6px 8px", color: slice.name === "CASH" ? MUTED : "#e5e7eb", fontWeight: 600 }}>
-                      {slice.name}
+                      {slice.name === "CASH" ? (
+                        <span>CASH</span>
+                      ) : (
+                        <TickerWithName symbol={slice.name} color="#e5e7eb" />
+                      )}
                     </td>
                     <td style={{ padding: "6px 8px", textAlign: "right", color: "#e5e7eb" }}>
                       ${slice.value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
