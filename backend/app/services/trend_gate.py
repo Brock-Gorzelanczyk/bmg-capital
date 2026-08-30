@@ -124,6 +124,65 @@ def check_sector_momentum_positive(sector: str) -> Dict[str, Any]:
     }
 
 
+def check_growth_value_regime() -> Dict[str, Any]:
+    """PRIORITY 5: growth-vs-value regime detector.
+
+    Compares large-cap growth (IWF = Russell 1000 Growth) to small/mid-cap
+    value (IWD = Russell 1000 Value) over trailing 6 months. When growth
+    heavily beats value, the confluence framework's value-tilt picks
+    struggle (backtest 2026-08-30: current picks -9.74% vs sector).
+
+    Returns:
+        mode: "growth_dominant" | "value_dominant" | "neutral"
+        spread_pct: growth return - value return (6mo)
+        suggested_size_multiplier: 0.5 (growth dominant) | 1.0 (neutral) | 1.2 (value dominant)
+
+    UI/executor can use suggested_size_multiplier to adjust position sizes.
+    Advisory only — does not block or auto-adjust.
+    """
+    iwf_closes = _yahoo_closes("IWF", days_back=200)  # ~130 trading days = 6mo
+    iwd_closes = _yahoo_closes("IWD", days_back=200)
+
+    if not iwf_closes or not iwd_closes or len(iwf_closes) < 100 or len(iwd_closes) < 100:
+        return {
+            "mode": "UNKNOWN",
+            "spread_pct": None,
+            "suggested_size_multiplier": 1.0,
+            "reason": "insufficient IWF/IWD data",
+        }
+
+    # 6-month return proxy: use ~120 trading days back
+    lookback = min(120, len(iwf_closes) - 1, len(iwd_closes) - 1)
+    iwf_ret = (iwf_closes[-1] - iwf_closes[-lookback]) / iwf_closes[-lookback] * 100
+    iwd_ret = (iwd_closes[-1] - iwd_closes[-lookback]) / iwd_closes[-lookback] * 100
+    spread = iwf_ret - iwd_ret
+
+    # Thresholds calibrated for meaningful regime shifts, not noise:
+    # 5%+ growth outperformance over 6mo = growth-dominant regime
+    # -5% or worse (value beats growth) = value-dominant regime
+    if spread > 5.0:
+        mode = "growth_dominant"
+        # Value-tilt picks struggle here — reduce size
+        multiplier = 0.5
+    elif spread < -5.0:
+        mode = "value_dominant"
+        # Value-tilt picks (which is what framework picks) benefit — normal or up-size
+        multiplier = 1.2
+    else:
+        mode = "neutral"
+        multiplier = 1.0
+
+    return {
+        "mode": mode,
+        "spread_pct": round(spread, 2),
+        "iwf_return_6mo_pct": round(iwf_ret, 2),
+        "iwd_return_6mo_pct": round(iwd_ret, 2),
+        "suggested_size_multiplier": multiplier,
+        "reason": (f"6mo growth (IWF) {iwf_ret:+.1f}% vs value (IWD) {iwd_ret:+.1f}% "
+                   f"= {spread:+.1f}% spread → {mode}"),
+    }
+
+
 def evaluate_trend_gates(symbol: str, sector: Optional[str] = None) -> Dict[str, Any]:
     """Evaluate both gates for a symbol. Returns combined result + advisory.
 
@@ -147,6 +206,9 @@ def evaluate_trend_gates(symbol: str, sector: Optional[str] = None) -> Dict[str,
     # passed_all = both gates returned True
     passed_all = (gate_price.get("pass") is True) and (gate_sector.get("pass") is True)
 
+    # PRIORITY 5: regime overlay
+    regime = check_growth_value_regime()
+
     return {
         "evaluated_at": datetime.now(timezone.utc).isoformat(),
         "symbol": symbol,
@@ -154,4 +216,5 @@ def evaluate_trend_gates(symbol: str, sector: Optional[str] = None) -> Dict[str,
         "passed_all": passed_all,
         "hard_fail": hard_fail,
         "gates": [gate_price, gate_sector],
+        "regime": regime,
     }
