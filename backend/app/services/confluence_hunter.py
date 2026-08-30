@@ -190,6 +190,18 @@ Anti-Goodhart rules:
   - **VETO if Days-to-Cover > 8** (crowded short base — Hong et al 2015)
   - Be picky. A day with ZERO picks is fine and expected. Better to skip than force.
 
+DIVERSITY RULES (added 2026-08-30 after diagnostic showed 13/16 picks fired the
+IDENTICAL signal combo — that's not confluence, that's the same trade 13 times):
+  - MAX 2 picks with the exact same signal combination in a single batch
+  - MAX 3 picks per GICS sector (Technology / Healthcare / Consumer Disc. / etc.)
+  - PREFER picks with 4+ signals firing over 3-signal picks — if you have 5+ eligible
+    picks, prioritize the ones with the most signals firing
+  - When multiple candidates in the same sector fire the same combo, pick only the
+    STRONGEST one (highest insider aggregate, most senior roles, cleanest chart)
+  - Reason: real confluence requires INDEPENDENT signals. Signals that always fire
+    together = not independent = fake confluence. A batch of "insider + analyst +
+    fundamentals" 13 times is one trade, not 13.
+
 For each pick you approve, provide:
   ticker, entry_price, target_price, invalidation_price, horizon_months (default 6),
   play_a_trigger (breakout level, above recent range), play_a_stop (below key support),
@@ -282,7 +294,91 @@ def call_llm_for_picks(candidates: List[Dict[str, Any]], excluded_tickers: List[
     if not isinstance(picks, list):
         logger.warning("[confluence_hunter] picks is not a list: %s", type(picks))
         return []
+
+    # ── Diversity filter (safety net; LLM prompt also asks for this) ──
+    # Reason: 2026-08-30 diagnostic showed 13/16 live picks fired the IDENTICAL
+    # signal combo — "fake confluence". Mechanical filter caps concentration.
+    picks = _enforce_diversity(picks, candidates)
+
     return picks
+
+
+def _enforce_diversity(picks: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Cap picks per signal-combo and per sector to force real diversification.
+
+    Rules:
+      - Max 2 picks per unique signal combination
+      - Max 3 picks per sector
+      - Sort remaining by (signals_fired_count desc, insider aggregate desc)
+        so we keep the STRONGEST rep of any given combo/sector
+
+    Returns filtered picks. Logs what was dropped and why.
+    """
+    if not picks:
+        return picks
+
+    # Build ticker → industry map from candidates for sector cap
+    industry_by_ticker = {c["ticker"]: (c.get("industry") or "").lower()
+                          for c in candidates}
+
+    # Helper: extract signal combo key for a pick
+    def combo_key(p):
+        s = p.get("signals", {}) or {}
+        fired = []
+        if s.get("insider_cluster"): fired.append("ic")
+        if s.get("short_surprise_dir") not in (None, 0): fired.append("ss")
+        if s.get("analyst_revisions_dir") not in (None, 0): fired.append("ar")
+        if s.get("fundamental_momentum"): fired.append("fm")
+        if s.get("inst_13f_net_add"): fired.append("13f")
+        return "+".join(sorted(fired))
+
+    def count_signals(p):
+        return len(combo_key(p).split("+")) if combo_key(p) else 0
+
+    # Sort picks by strength — combo cap keeps the strongest reps
+    picks_sorted = sorted(
+        picks,
+        key=lambda p: (
+            count_signals(p),
+            # Prefer picks with more insider $$ if in candidate list
+            sum(c["value_usd"] for c in candidates if c["ticker"] == p.get("ticker", "").upper()),
+        ),
+        reverse=True,
+    )
+
+    combo_counts: Dict[str, int] = {}
+    sector_counts: Dict[str, int] = {}
+    kept = []
+    dropped = []
+
+    for p in picks_sorted:
+        combo = combo_key(p)
+        ticker = p.get("ticker", "").upper()
+        sector = industry_by_ticker.get(ticker, "unknown")[:20]  # first 20 chars as bucket
+
+        # Combo cap: max 2 per combo
+        if combo_counts.get(combo, 0) >= 2:
+            dropped.append((ticker, f"combo_cap:{combo}"))
+            continue
+        # Sector cap: max 3 per sector
+        if sector_counts.get(sector, 0) >= 3:
+            dropped.append((ticker, f"sector_cap:{sector}"))
+            continue
+
+        combo_counts[combo] = combo_counts.get(combo, 0) + 1
+        sector_counts[sector] = sector_counts.get(sector, 0) + 1
+        kept.append(p)
+
+    if dropped:
+        logger.warning(
+            "[confluence_hunter] diversity filter dropped %d picks: %s",
+            len(dropped), dropped[:5],
+        )
+    logger.info(
+        "[confluence_hunter] diversity: kept=%d unique_combos=%d unique_sectors=%d",
+        len(kept), len(combo_counts), len(sector_counts),
+    )
+    return kept
 
 
 # ── Pick creation + arming ────────────────────────────────────────────────────
