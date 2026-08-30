@@ -1,0 +1,34 @@
+# Local job schedule — moved off Railway to save $ (2026-08-30 incident)
+#
+# The runner (scripts/local/run.py) checks this file every 15 min via launchd.
+# For each job, if `cron` matches current time (±15 min tolerance), it runs.
+# Missed runs (Mac was asleep) are picked up on next check via `catchup: true`.
+#
+# Format:
+#   - name: job_daily_recap             # matches scripts/local/<name>.py
+#     cron: "15 16 * * 1-5"             # standard cron (ET timezone)
+#     catchup: true                     # true = run once even if we missed the window
+#     description: human-readable
+
+jobs:
+  # ── Daily reporting ──────────────────────────────────────────────
+  - name: job_daily_recap
+    cron: "15 16 * * 1-5"        # 4:15pm ET, M-F
+    catchup: true
+    description: "After-close daily P&L + trade summary → Obsidian"
+
+  - name: job_morning_brief
+    cron: "30 7 * * 1-5"          # 7:30am ET, M-F
+    catchup: true
+    description: "Pre-market brief — overnight news + open positions"
+
+  # ── Weekly analytics ──────────────────────────────────────────────
+  - name: job_weekly_promotion
+    cron: "0 9 * * 1"             # 9am ET Monday
+    catchup: true
+    description: "Weekly bot promotion/demotion digest"
+
+  # ── On-demand only (not scheduled) ─────────────────────────────────
+  # These can be invoked manually via `python scripts/local/<name>.py`
+  # - job_rule_scorecard       # runs decision-rules scorecard
+  # - job_backtest             # runs a backtest against Railway data

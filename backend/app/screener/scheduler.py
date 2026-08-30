@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 
 import pytz
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+
+# ── COST-CUT 2026-08-30: role-based job skipping ──────────────────────────────
+# When RAILWAY_ROLE=executor_only is set on Railway, we skip registering all
+# Category B jobs (analytics/reports/research). They run on Brock's Mac
+# instead via scripts/local/. See scripts/local/README.md for architecture.
+# Default "full" preserves current behavior for local dev / any other env.
+RAILWAY_ROLE = os.environ.get("RAILWAY_ROLE", "full").lower()
+EXECUTOR_ONLY = RAILWAY_ROLE == "executor_only"
 
 logger = logging.getLogger(__name__)
 
@@ -905,21 +914,24 @@ def setup_scheduler() -> None:
         coalesce=True,
     )
 
-    # offhours_check: every 2 hours, every day (weekends included)
-    scheduler.add_job(
-        run_offhours_check,
-        CronTrigger(minute=0, hour="*/2", timezone=ET),
-        id="offhours_check",
-        replace_existing=True,
-    )
+    # ── COST-CUT: Category B jobs (analytics/reports) skip on executor_only ──
+    if not EXECUTOR_ONLY:
+        # offhours_check: every 2 hours, every day (weekends included)
+        scheduler.add_job(
+            run_offhours_check,
+            CronTrigger(minute=0, hour="*/2", timezone=ET),
+            id="offhours_check",
+            replace_existing=True,
+        )
 
-    # Daily recap: 4:15 PM ET, M-F — runs after automation closes out
-    scheduler.add_job(
-        run_daily_recap_job,
-        CronTrigger(day_of_week="mon-fri", hour=16, minute=15, timezone=ET),
-        id="daily_recap",
-        replace_existing=True,
-    )
+        # Daily recap: 4:15 PM ET, M-F — runs after automation closes out
+        # LOCAL PORT: scripts/local/job_daily_recap.py
+        scheduler.add_job(
+            run_daily_recap_job,
+            CronTrigger(day_of_week="mon-fri", hour=16, minute=15, timezone=ET),
+            id="daily_recap",
+            replace_existing=True,
+        )
 
     # Crypto: every 15 min, 24/7 (no market-hours restriction)
     scheduler.add_job(
@@ -937,21 +949,22 @@ def setup_scheduler() -> None:
         replace_existing=True,
     )
 
-    # TA pattern detection: once daily after close
-    scheduler.add_job(
-        run_ta_pattern_job,
-        CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=ET),
-        id="ta_pattern_daily",
-        replace_existing=True,
-    )
+    if not EXECUTOR_ONLY:
+        # TA pattern detection: once daily after close
+        scheduler.add_job(
+            run_ta_pattern_job,
+            CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=ET),
+            id="ta_pattern_daily",
+            replace_existing=True,
+        )
 
-    # Autonomous digest: 4:30 PM ET, M-F
-    scheduler.add_job(
-        run_autonomous_digest_job,
-        CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=ET),
-        id="autonomous_digest",
-        replace_existing=True,
-    )
+        # Autonomous digest: 4:30 PM ET, M-F
+        scheduler.add_job(
+            run_autonomous_digest_job,
+            CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=ET),
+            id="autonomous_digest",
+            replace_existing=True,
+        )
 
     # Portfolio scan: every hour during market hours (9–16 ET), M-F
     scheduler.add_job(
@@ -961,53 +974,54 @@ def setup_scheduler() -> None:
         replace_existing=True,
     )
 
-    # Tax-loss harvest scan: 4:00 PM ET, M-F
-    scheduler.add_job(
-        run_tax_scan_job,
-        CronTrigger(day_of_week="mon-fri", hour=16, minute=0, timezone=ET),
-        id="tax_scan",
-        replace_existing=True,
-    )
+    if not EXECUTOR_ONLY:
+        # Tax-loss harvest scan: 4:00 PM ET, M-F
+        scheduler.add_job(
+            run_tax_scan_job,
+            CronTrigger(day_of_week="mon-fri", hour=16, minute=0, timezone=ET),
+            id="tax_scan",
+            replace_existing=True,
+        )
 
-    # Research job: 9:00 AM ET, M-F
-    scheduler.add_job(
-        run_research_job,
-        CronTrigger(day_of_week="mon-fri", hour=9, minute=0, timezone=ET),
-        id="research_job",
-        replace_existing=True,
-    )
+        # Research job: 9:00 AM ET, M-F
+        scheduler.add_job(
+            run_research_job,
+            CronTrigger(day_of_week="mon-fri", hour=9, minute=0, timezone=ET),
+            id="research_job",
+            replace_existing=True,
+        )
 
-    # Learning job: 7:00 AM ET, daily (including weekends)
-    scheduler.add_job(
-        run_learning_job,
-        CronTrigger(hour=7, minute=0, timezone=ET),
-        id="learning_job",
-        replace_existing=True,
-    )
+        # Learning job: 7:00 AM ET, daily (including weekends)
+        scheduler.add_job(
+            run_learning_job,
+            CronTrigger(hour=7, minute=0, timezone=ET),
+            id="learning_job",
+            replace_existing=True,
+        )
 
-    # Journal job: 6:00 PM ET, M-F — post-mortem after market close
-    scheduler.add_job(
-        run_journal_job,
-        CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=ET),
-        id="journal_job",
-        replace_existing=True,
-    )
+        # Journal job: 6:00 PM ET, M-F — post-mortem after market close
+        scheduler.add_job(
+            run_journal_job,
+            CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=ET),
+            id="journal_job",
+            replace_existing=True,
+        )
 
-    # Quarterly review: 8:00 AM ET, daily — guard inside fn checks quarter start
-    scheduler.add_job(
-        run_quarterly_review_job,
-        CronTrigger(hour=8, minute=0, timezone=ET),
-        id="quarterly_review_job",
-        replace_existing=True,
-    )
+        # Quarterly review: 8:00 AM ET, daily — guard inside fn checks quarter start
+        scheduler.add_job(
+            run_quarterly_review_job,
+            CronTrigger(hour=8, minute=0, timezone=ET),
+            id="quarterly_review_job",
+            replace_existing=True,
+        )
 
-    # Money job: Monday 10:00 AM ET — weekly money movement simulations
-    scheduler.add_job(
-        run_money_job,
-        CronTrigger(day_of_week="mon", hour=10, minute=0, timezone=ET),
-        id="money_job",
-        replace_existing=True,
-    )
+        # Money job: Monday 10:00 AM ET — weekly money movement simulations
+        scheduler.add_job(
+            run_money_job,
+            CronTrigger(day_of_week="mon", hour=10, minute=0, timezone=ET),
+            id="money_job",
+            replace_existing=True,
+        )
 
     # ── Phase 3: new jobs ─────────────────────────────────────────────────────
 
@@ -1019,21 +1033,23 @@ def setup_scheduler() -> None:
         replace_existing=True,
     )
 
-    # Job 2: Morning brief generation — 7:30 AM ET, M-F
-    scheduler.add_job(
-        run_morning_brief_job,
-        CronTrigger(day_of_week="mon-fri", hour=7, minute=30, timezone=ET),
-        id="morning_brief",
-        replace_existing=True,
-    )
+    if not EXECUTOR_ONLY:
+        # Job 2: Morning brief generation — 7:30 AM ET, M-F
+        # LOCAL PORT: scripts/local/job_morning_brief.py
+        scheduler.add_job(
+            run_morning_brief_job,
+            CronTrigger(day_of_week="mon-fri", hour=7, minute=30, timezone=ET),
+            id="morning_brief",
+            replace_existing=True,
+        )
 
-    # Job 3: Daily autonomous recap — 4:15 PM ET, M-F (after market close)
-    scheduler.add_job(
-        run_daily_autonomous_recap_job,
-        CronTrigger(day_of_week="mon-fri", hour=16, minute=15, timezone=ET),
-        id="daily_autonomous_recap",
-        replace_existing=True,
-    )
+        # Job 3: Daily autonomous recap — 4:15 PM ET, M-F (after market close)
+        scheduler.add_job(
+            run_daily_autonomous_recap_job,
+            CronTrigger(day_of_week="mon-fri", hour=16, minute=15, timezone=ET),
+            id="daily_autonomous_recap",
+            replace_existing=True,
+        )
 
     # Job 4: Bot execution — 10:00 AM ET, M-F (30 min after open)
     from app.screener.bot_executor import run_bot_execution_job
@@ -1066,15 +1082,17 @@ def setup_scheduler() -> None:
         max_instances=1,
     )
 
-    # Weekly promotion digest — Monday 9:00 AM ET
-    from app.jobs.weekly_promotion_digest import run as run_weekly_promotion_digest
-    scheduler.add_job(
-        run_weekly_promotion_digest,
-        CronTrigger(day_of_week="mon", hour=9, minute=0, timezone=ET),
-        id="weekly_promotion_digest",
-        replace_existing=True,
-        max_instances=1,
-    )
+    if not EXECUTOR_ONLY:
+        # Weekly promotion digest — Monday 9:00 AM ET
+        # LOCAL PORT: scripts/local/job_weekly_promotion.py
+        from app.jobs.weekly_promotion_digest import run as run_weekly_promotion_digest
+        scheduler.add_job(
+            run_weekly_promotion_digest,
+            CronTrigger(day_of_week="mon", hour=9, minute=0, timezone=ET),
+            id="weekly_promotion_digest",
+            replace_existing=True,
+            max_instances=1,
+        )
 
     # ── Safety layer jobs ─────────────────────────────────────────────────────
 
@@ -1172,28 +1190,29 @@ def setup_scheduler() -> None:
 
     # ── SHIP 4: LLM infra jobs ────────────────────────────────────────────────
 
-    # Relay health monitor — every 5 minutes, all days.
-    # Alerts after 30 min down (>= 6 consecutive failures); debounces at 60 min.
-    from app.jobs.relay_health_monitor import check_relay_health
-    scheduler.add_job(
-        check_relay_health,
-        CronTrigger(minute="*/5"),
-        id="relay_health_monitor",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
+    if not EXECUTOR_ONLY:
+        # Relay health monitor — every 5 minutes, all days.
+        # Alerts after 30 min down (>= 6 consecutive failures); debounces at 60 min.
+        from app.jobs.relay_health_monitor import check_relay_health
+        scheduler.add_job(
+            check_relay_health,
+            CronTrigger(minute="*/5"),
+            id="relay_health_monitor",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
 
-    # LLM log retention — 3:00 AM ET daily.
-    # Prunes llm_call_log rows older than 90 days.
-    from app.jobs.llm_log_retention import prune_old_llm_logs
-    scheduler.add_job(
-        prune_old_llm_logs,
-        CronTrigger(hour=3, minute=0, timezone=ET),
-        id="llm_log_retention",
-        replace_existing=True,
-        max_instances=1,
-    )
+        # LLM log retention — 3:00 AM ET daily.
+        # Prunes llm_call_log rows older than 90 days.
+        from app.jobs.llm_log_retention import prune_old_llm_logs
+        scheduler.add_job(
+            prune_old_llm_logs,
+            CronTrigger(hour=3, minute=0, timezone=ET),
+            id="llm_log_retention",
+            replace_existing=True,
+            max_instances=1,
+        )
 
     # ── COST-CUT 2026-08-30: memory janitor (Level-1 fix for Railway $107 bill) ──
     # Runs every 15 min, calls gc.collect() + libc.malloc_trim(0) to return
@@ -1205,3 +1224,11 @@ def setup_scheduler() -> None:
         setup_memory_janitor(scheduler)
     except Exception as e:
         logger.warning("[setup_scheduler] memory_janitor register failed: %s", e)
+
+    # Visibility: log the role + registered job count
+    all_jobs = scheduler.get_jobs()
+    logger.warning(
+        "[setup_scheduler] RAILWAY_ROLE=%s → registered %d jobs "
+        "(Category B skipped: %s)",
+        RAILWAY_ROLE, len(all_jobs), EXECUTOR_ONLY,
+    )

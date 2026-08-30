@@ -320,6 +320,47 @@ This encodes intent, not fact. If the order fills at a different price (e.g., op
 
 Detected callers (fixed): `admin.py::admin_close_limit` (removed the write; caller must invoke `/admin/confirm-alpaca-fill-and-close`); `jobs/iwm_trim_2026_08_11.py::_book_bmg_fill` (only called from filled-branch with `filled_avg_price`).
 
+## LOCAL-FIRST BOT ARCHITECTURE (added 2026-08-30 — Railway $107 cost incident)
+
+### L1. New bots default to LOCAL, not Railway.
+
+Any new scheduled job / bot / analyzer defaults to `scripts/local/job_<name>.py`.
+It only lives on Railway if it MUST fire in real-time regardless of Mac state.
+
+**Test — a job goes on Railway ONLY if:**
+- (a) It executes trades in a time-sensitive window (bracket order, fill polling), OR
+- (b) It's a safety invariant that must fire within minutes (capital watchdog, drawdown breaker), OR
+- (c) It requires 24/7 execution regardless of user activity (crypto scanning)
+
+Everything else — reports, digests, analytics, research, LLM calls, screener runs
+that don't execute — goes local.
+
+**Local job pattern (see scripts/local/README.md):**
+```python
+# scripts/local/job_<name>.py
+from _bmg_api import get_client
+from _obsidian import write_job_output
+
+def run() -> str:
+    api = get_client()  # hits Railway API for DB data
+    body = build_markdown(api.get("/api/..."))
+    write_job_output("<name>", body)  # writes to Obsidian vault
+    return "ok"
+```
+
+Then add to `scripts/local/schedule.yaml` with cron expression. `launchd` fires
+`scripts/local/run.py` every 15 min; missed runs (Mac was asleep) catch up
+within 24h via `catchup: true`.
+
+**Railway env `RAILWAY_ROLE=executor_only` skips ALL Category B job registrations**
+even ones not yet ported to local — they simply won't fire on Railway until
+we build local versions. Keeps container small during the migration.
+
+**Reference incident:** Railway bill hit $107 vs $20 target because 72 crons
+kept 20GB RAM resident 24/7. Every added bot compounded cost. Local architecture
+means new bots cost $0 to Railway — Mac already runs, Obsidian vault already
+exists, launchd already fires.
+
 ## MONEY-MATH ACCEPTANCE (added 2026-08-10, Brock regression rule)
 
 Any change touching P&L, valuation, or period-return math must include a **post-deploy acceptance print** of `pnl.{all_time, mtd, wtd, today}` and confirm each field is either a plausible number OR an explicit `null` with a `reason` field. **Zero is neither** — a `.cents == 0` on a live funded fund is always a bug, never a value.

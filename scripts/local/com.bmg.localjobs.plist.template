@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bmg.localjobs</string>
+
+    <!-- Full path to python3 + runner (populated by install_launchd.sh) -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_PATH__</string>
+        <string>__PROJECT_ROOT__/scripts/local/run.py</string>
+    </array>
+
+    <!-- Run every 15 minutes -->
+    <key>StartInterval</key>
+    <integer>900</integer>
+
+    <!-- Working directory so relative imports work -->
+    <key>WorkingDirectory</key>
+    <string>__PROJECT_ROOT__/scripts/local</string>
+
+    <!-- Environment (PATH needed to find railway CLI) -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+    </dict>
+
+    <!-- Logs -->
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/bmg-localjobs.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/bmg-localjobs.err</string>
+
+    <!-- Run at load + on system wake if a scheduled tick was missed -->
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
