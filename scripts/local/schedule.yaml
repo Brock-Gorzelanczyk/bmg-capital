@@ -33,6 +33,11 @@ jobs:
     catchup: true
     description: "Weekly bot promotion/demotion digest"
 
+  - name: job_weekly_scorecard
+    cron: "0 8 * * 0"             # 8am ET Sunday
+    catchup: true
+    description: "Rule discrimination scorecard — which rules actually predict returns"
+
   # ── On-demand only (not scheduled) ─────────────────────────────────
   # These can be invoked manually via `python scripts/local/<name>.py`
   # - job_rule_scorecard       # runs decision-rules scorecard
