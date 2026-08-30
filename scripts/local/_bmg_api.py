@@ -11,6 +11,9 @@ need to debug, use `_debug=True` on init but NEVER paste output.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import subprocess
@@ -20,15 +23,33 @@ import urllib.request
 from typing import Any, Dict, Optional
 
 
+def _b64url(data: bytes) -> str:
+    """Base64url encode (no padding), per JWT RFC 7515."""
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _hs256_jwt(payload: Dict[str, Any], secret: str) -> str:
+    """Mint an HS256 JWT using only stdlib. No pyjwt dep needed."""
+    header = {"alg": "HS256", "typ": "JWT"}
+    header_b64 = _b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+    payload_b64 = _b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
+    sig = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    sig_b64 = _b64url(sig)
+    return f"{header_b64}.{payload_b64}.{sig_b64}"
+
+
 class BMGApiError(Exception):
     pass
 
 
 class BMGApiClient:
+    # Matches scripts/bmg_admin.sh — Railway service name + base URL
+    RAILWAY_SERVICE = "disciplined-intuition"
+    DEFAULT_BASE = "https://disciplined-intuition-production-5207.up.railway.app"
+
     def __init__(self, base_url: Optional[str] = None):
-        self.base_url = base_url or os.environ.get(
-            "BMG_API_URL", "https://bmg-capital.up.railway.app"
-        )
+        self.base_url = base_url or os.environ.get("BMG_API_URL", self.DEFAULT_BASE)
         self._token: Optional[str] = None
         self._token_expires_at: float = 0.0
 
@@ -37,40 +58,44 @@ class BMGApiClient:
         if self._token and time.time() < self._token_expires_at - 60:
             return self._token
 
-        # Get secret via Railway CLI — same path as bmg_admin.sh
-        r = subprocess.run(
-            ["railway", "variables", "--json", "--service", "bmg-capital"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if r.returncode != 0:
-            raise BMGApiError(
-                "railway variables call failed — is Railway CLI installed + "
-                "linked to bmg-capital project? Run `railway link` first."
+        # Allow env override for CI / testing
+        secret = os.environ.get("JWT_SECRET")
+
+        if not secret:
+            # Same path as bmg_admin.sh — --kv format, grep for prefix, strip
+            # (don't split on '=' since some secret values contain padding chars)
+            r = subprocess.run(
+                ["railway", "variables", "--service", self.RAILWAY_SERVICE, "--kv"],
+                capture_output=True,
+                text=True,
+                check=False,
             )
-        try:
-            vars_ = json.loads(r.stdout)
-            secret = vars_.get("JWT_SECRET")
+            if r.returncode != 0:
+                raise BMGApiError(
+                    f"railway variables call failed (service={self.RAILWAY_SERVICE}): "
+                    f"{r.stderr.strip()[:200]}. Run `railway link` first."
+                )
+            for line in r.stdout.splitlines():
+                if line.startswith("JWT_SECRET="):
+                    secret = line[len("JWT_SECRET="):]
+                    break
             if not secret:
-                raise BMGApiError("JWT_SECRET not found in Railway service vars")
-        except json.JSONDecodeError as e:
-            raise BMGApiError(f"parsing railway variables output: {e}")
+                raise BMGApiError(
+                    f"JWT_SECRET not found in Railway service '{self.RAILWAY_SERVICE}' vars"
+                )
 
-        # Mint via stdin — never argv, per §S1
-        py = subprocess.run(
-            ["python3", "-c",
-             "import sys,jwt,time;s=sys.stdin.read().strip();"
-             "print(jwt.encode({'sub':'1','exp':int(time.time())+900},s,algorithm='HS256'))"],
-            input=secret,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if py.returncode != 0:
-            raise BMGApiError(f"jwt encode failed: {py.stderr}")
+        # Mint HS256 JWT in-process using stdlib. Secret stays in the local
+        # variable's scope and is not passed via argv/env — §S1 compliant.
+        try:
+            self._token = _hs256_jwt(
+                {"sub": "1", "exp": int(time.time()) + 900},
+                secret,
+            )
+        except Exception as e:
+            raise BMGApiError(f"jwt mint failed: {type(e).__name__}: {e}")
+        finally:
+            secret = None  # help GC
 
-        self._token = py.stdout.strip()
         self._token_expires_at = time.time() + 900
         return self._token
 
