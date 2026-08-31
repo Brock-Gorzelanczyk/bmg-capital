@@ -43,6 +43,11 @@ jobs:
     catchup: true
     description: "Flag current picks lagging their peer group (leading indicator of failure)"
 
+  - name: job_monday_digest
+    cron: "0 7 * * 1"             # 7am ET Monday
+    catchup: true
+    description: "One-glance Monday morning brief: regime + hygiene + top 3 actions"
+
   # ── On-demand only (not scheduled) ─────────────────────────────────
   # These can be invoked manually via `python scripts/local/<name>.py`
   # - job_rule_scorecard       # runs decision-rules scorecard
