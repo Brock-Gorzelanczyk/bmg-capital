@@ -20,17 +20,35 @@ def run() -> str:
 
     lines = [f"## Daily Recap — {today}", ""]
 
-    # Portfolio summary
+    # Portfolio summary — /api/portfolio/summary exposes total_value_cents +
+    # alpaca_* breakdown; all-time P&L lives on /api/portfolio/snapshot as
+    # total_pnl_alltime_cents. Prior version used made-up field names
+    # (fund_pv_cents / cash_cents / all_time_pnl_cents) that returned dict
+    # defaults of 0, silently printing "$0.00" for a live-funded account.
     try:
         summary = api.get("/api/portfolio/summary")
+        fund_pv_cents = int(summary.get("total_value_cents") or 0)
+        cash_cents = int(summary.get("alpaca_cash_cents") or 0)
+        long_mv = int(summary.get("alpaca_long_mv_cents") or 0)
+        short_mv = int(summary.get("alpaca_short_mv_cents") or 0)
+        position_sum_cents = long_mv + short_mv
+        today_pnl_cents = summary.get("today_pnl_cents")
+        today_label = summary.get("today_pnl_label") or "n/a"
+        try:
+            snap = api.get("/api/portfolio/snapshot")
+            alltime_pnl_cents = int(snap.get("total_pnl_alltime_cents") or 0)
+        except BMGApiError:
+            alltime_pnl_cents = 0
+        today_str = (
+            f"${today_pnl_cents / 100:,.2f}" if today_pnl_cents is not None else "—"
+        )
         lines.extend([
             "### Fund",
-            f"- Fund PV: ${summary.get('fund_pv_cents', 0) / 100:,.2f}",
-            f"- Cash: ${summary.get('cash_cents', 0) / 100:,.2f}",
-            f"- Positions: ${summary.get('position_sum_cents', 0) / 100:,.2f}",
-            f"- Today P&L: ${(summary.get('today_pnl_cents') or 0) / 100:,.2f} "
-            f"({summary.get('today_pnl_label', 'n/a')})",
-            f"- All-time P&L: ${(summary.get('all_time_pnl_cents') or 0) / 100:,.2f}",
+            f"- Fund PV: ${fund_pv_cents / 100:,.2f}",
+            f"- Cash: ${cash_cents / 100:,.2f}",
+            f"- Positions: ${position_sum_cents / 100:,.2f}",
+            f"- Today P&L: {today_str} ({today_label})",
+            f"- All-time P&L: ${alltime_pnl_cents / 100:,.2f}",
             "",
         ])
     except BMGApiError as e:

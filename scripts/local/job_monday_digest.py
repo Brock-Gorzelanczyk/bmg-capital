@@ -135,10 +135,20 @@ def run() -> str:
     portfolio = {}
     try:
         s = api.get("/api/portfolio/summary")
+        # /api/portfolio/summary exposes total_value_cents + alpaca_cash_cents;
+        # all-time P&L lives on /api/portfolio/snapshot as
+        # total_pnl_alltime_cents. Prior code used made-up field names
+        # (fund_pv_cents / cash_cents / all_time_pnl_cents) that silently
+        # returned 0 for a live-funded fund.
+        try:
+            snap = api.get("/api/portfolio/snapshot")
+            _alltime_cents = int(snap.get("total_pnl_alltime_cents") or 0)
+        except BMGApiError:
+            _alltime_cents = 0
         portfolio = {
-            "fund_pv": (s.get("fund_pv_cents") or 0) / 100,
-            "cash": (s.get("cash_cents") or 0) / 100,
-            "all_time_pnl": (s.get("all_time_pnl_cents") or 0) / 100,
+            "fund_pv": (s.get("total_value_cents") or 0) / 100,
+            "cash": (s.get("alpaca_cash_cents") or 0) / 100,
+            "all_time_pnl": _alltime_cents / 100,
         }
     except BMGApiError:
         pass
