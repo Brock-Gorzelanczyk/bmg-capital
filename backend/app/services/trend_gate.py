@@ -257,6 +257,162 @@ def check_growth_value_regime() -> Dict[str, Any]:
     }
 
 
+def check_safety_composite(symbol: str) -> Dict[str, Any]:
+    """QMJ-style Safety sub-composite: beta, idiosyncratic vol, using SPY as market proxy.
+
+    Ships the "S" leg of Asness-Frazzini-Pedersen QMJ (2019, RAS). Their full
+    Safety composite has 6 signals; this MVP ships the 2 that can be computed
+    from Yahoo closes alone (beta + ivol). Leverage + earnings-vol require
+    fundamentals data (yfinance financials, often flaky) — deferred to v2.
+
+    Methodology (per vault research 2026-08-31 QMJ verify note):
+      - Compute daily returns for symbol + SPY over trailing 252 trading days
+      - Beta: slope of stock returns on SPY returns (OLS)
+      - Idiosyncratic vol: annualized stdev of residuals (r_stock - β * r_spy)
+      - Safety score = -z(beta) + -z(ivol), higher = safer
+        (BMG doesn't yet have a scanned-universe context to z-score against;
+         MVP uses fixed academic thresholds: beta < 1.0 = safe, ivol < 25%/yr = safe)
+
+    Returns dict with pass/fail (advisory only — never blocks arming) + numbers.
+    """
+    stock_closes = _yahoo_closes(symbol, days_back=400)
+    spy_closes = _yahoo_closes("SPY", days_back=400)
+    if not stock_closes or not spy_closes or len(stock_closes) < 60 or len(spy_closes) < 60:
+        return {
+            "gate": "safety_composite",
+            "pass": None,
+            "reason": f"insufficient bars (stock={len(stock_closes) if stock_closes else 0}, spy={len(spy_closes) if spy_closes else 0})",
+        }
+
+    # Align to shorter length + compute daily returns
+    n = min(len(stock_closes), len(spy_closes), 252)
+    s = stock_closes[-n:]
+    m = spy_closes[-n:]
+    stock_rets = [(s[i] / s[i - 1]) - 1.0 for i in range(1, n)]
+    spy_rets = [(m[i] / m[i - 1]) - 1.0 for i in range(1, n)]
+
+    # OLS beta: cov(stock, spy) / var(spy)
+    mean_s = sum(stock_rets) / len(stock_rets)
+    mean_m = sum(spy_rets) / len(spy_rets)
+    cov = sum((stock_rets[i] - mean_s) * (spy_rets[i] - mean_m) for i in range(len(stock_rets))) / len(stock_rets)
+    var_m = sum((r - mean_m) ** 2 for r in spy_rets) / len(spy_rets)
+    if var_m <= 0:
+        return {"gate": "safety_composite", "pass": None, "reason": "SPY variance is zero"}
+    beta = cov / var_m
+    alpha = mean_s - beta * mean_m
+
+    # Residuals + annualized idiosyncratic vol (sqrt(252) * daily stdev)
+    residuals = [stock_rets[i] - (alpha + beta * spy_rets[i]) for i in range(len(stock_rets))]
+    residual_var = sum(r * r for r in residuals) / max(1, len(residuals) - 1)
+    ivol_daily = residual_var ** 0.5
+    ivol_annualized = ivol_daily * (252 ** 0.5)
+
+    # Simple pass thresholds: beta < 1.2 AND ivol < 40%/yr
+    beta_ok = beta < 1.2
+    ivol_ok = ivol_annualized < 0.40
+    passed = beta_ok and ivol_ok
+    safety_score = int(beta_ok) + int(ivol_ok)  # 0-2
+
+    return {
+        "gate": "safety_composite",
+        "pass": passed,
+        "beta_252d": round(beta, 3),
+        "ivol_annualized_pct": round(ivol_annualized * 100, 2),
+        "safety_score": safety_score,  # 0=risky, 2=safe
+        "beta_ok": beta_ok,
+        "ivol_ok": ivol_ok,
+        "reason": (
+            f"β={beta:.2f} (<1.2 {'✓' if beta_ok else '✗'}), "
+            f"ivol={ivol_annualized*100:.1f}%/yr (<40 {'✓' if ivol_ok else '✗'})"
+        ),
+    }
+
+
+def check_value_universe(symbol: str) -> Dict[str, Any]:
+    """Piotroski-style value-universe filter: is this a value stock, or growth?
+
+    Ships the universe-filter discipline from Piotroski (2000, JAR) — the F-Score
+    only works INSIDE the value quintile. By extension, our confluence framework
+    (built for value-turnaround setups per current signal mix) should ALSO run
+    only on value-tilted names.
+
+    MVP: uses Yahoo Finance's forwardPE from the free quote endpoint. Value
+    universe = forwardPE < 25 OR forwardPE not available (unknown = assume value
+    for safety since it doesn't hard-block).
+
+    (Full impl would need P/B and cross-sectional ranking, but Yahoo's free
+    endpoint doesn't reliably serve book value. This MVP catches the biggest
+    growth-tilt names — NVDA at PE~60, TSLA at PE~100 — with zero deps.)
+
+    Returns dict with:
+      pass=True → in value universe (or unknown)
+      pass=False → clearly growth (PE > 25 = above ~70th percentile historically)
+
+    Advisory: current wiring will NOT hard-block, just tag in rule_compliance.
+    """
+    # yfinance is already a backend dep. .info returns fundamentals dict
+    # (forwardPE, trailingPE, priceToBook, etc). More reliable than Yahoo's
+    # v7 quote endpoint which now requires cookies (returns 401).
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info or {}
+    except Exception as e:
+        return {"gate": "value_universe", "pass": None, "reason": f"yfinance fetch failed: {e}"}
+
+    fpe = info.get("forwardPE")
+    tpe = info.get("trailingPE")
+    pb = info.get("priceToBook")
+
+    # Piotroski applies to top-30% B/M = bottom-30% P/B. As a rough proxy,
+    # P/B < 3 = value-ish, P/B > 5 = clearly growth.
+    if pb is not None and pb > 0:
+        pb_verdict = pb < 3.0
+    else:
+        pb_verdict = None
+
+    # PE < 25 = roughly bottom-2-terciles historically; PE > 25 = growth-tilt
+    if fpe is not None and fpe > 0:
+        pe_verdict = fpe < 25.0
+        pe_used = fpe
+        pe_kind = "forward"
+    elif tpe is not None and tpe > 0:
+        pe_verdict = tpe < 30.0  # trailing runs slightly higher
+        pe_used = tpe
+        pe_kind = "trailing"
+    else:
+        pe_verdict = None
+        pe_used = None
+        pe_kind = None
+
+    # Pass if BOTH available metrics say value, OR at least one says value and
+    # the other is unavailable
+    verdicts = [v for v in (pb_verdict, pe_verdict) if v is not None]
+    if not verdicts:
+        # No metrics available → don't block; report untestable
+        return {
+            "gate": "value_universe",
+            "pass": None,
+            "reason": "no P/E or P/B available from Yahoo",
+        }
+    passed = all(verdicts)
+
+    return {
+        "gate": "value_universe",
+        "pass": passed,
+        "price_to_book": pb,
+        "pe_ratio": pe_used,
+        "pe_kind": pe_kind,
+        "pb_ok": pb_verdict,
+        "pe_ok": pe_verdict,
+        "reason": (
+            f"P/B={pb} (<3 {pb_verdict if pb_verdict is not None else 'N/A'}), "
+            f"{pe_kind or 'no'} P/E={pe_used} (thresh {'25' if pe_kind == 'forward' else '30'} "
+            f"{pe_verdict if pe_verdict is not None else 'N/A'})"
+        ),
+    }
+
+
 def evaluate_trend_gates(symbol: str, sector: Optional[str] = None) -> Dict[str, Any]:
     """Evaluate both gates for a symbol. Returns combined result + advisory.
 
@@ -285,13 +441,25 @@ def evaluate_trend_gates(symbol: str, sector: Optional[str] = None) -> Dict[str,
     # Post-backtest v3 addition: momentum vs mean-reversion regime
     mmr_regime = check_momentum_meanreversion_regime()
 
+    # Ship #1 (2026-08-31 QMJ): Safety sub-composite (beta + idiosyncratic vol).
+    # Advisory only — never blocks arm. Lands in rule_compliance so scorecard can
+    # measure whether safe picks outperform risky ones over trailing 8wk window.
+    safety = check_safety_composite(symbol)
+
+    # Ship #2 (2026-08-31 Piotroski): value-universe filter (P/B + P/E).
+    # Advisory only — future promotion to hard block after we see whether it
+    # discriminates. Piotroski shows F-Score works INSIDE value only.
+    value_universe = check_value_universe(symbol)
+
     return {
         "evaluated_at": datetime.now(timezone.utc).isoformat(),
         "symbol": symbol,
         "sector": sector,
         "passed_all": passed_all,
         "hard_fail": hard_fail,
-        "gates": [gate_price, gate_sector],
+        "gates": [gate_price, gate_sector, safety, value_universe],
         "regime_growth_value": regime,
         "regime_momentum_meanreversion": mmr_regime,
+        "safety_composite": safety,
+        "value_universe": value_universe,
     }
