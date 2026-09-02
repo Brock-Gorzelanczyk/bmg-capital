@@ -2342,7 +2342,11 @@ def confirm_alpaca_fill_and_close(
         position_id=pos.id,
         is_paper=True,
         alpaca_order_id=order_id,
-        origin="BACKFILL",
+        origin="BROKER_FILL",
+        # A real fill event from Alpaca (order status=filled, real qty+price).
+        # Late-observed but broker-authoritative — same class as position_monitor's
+        # organic fill writes. BACKFILL was semantically wrong here and tripped I20
+        # as a "phantom-trades leak" during market-closed hours.
         # reason goes on the position's exit_reason (BotTrade has no strategy col)
     )
     db.add(trade_row)
