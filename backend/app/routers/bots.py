@@ -168,6 +168,15 @@ _PORTFOLIO_DEFS = [
 
 
 def _ensure_portfolios_for_user(db: Session, user_id: int) -> list:
+    # 2026-09-02 single-tenant gate: BMG is user_1-only per ledger #42
+    # (single_tenant_user1_only migration). This function has been the source
+    # of two auto-re-enable incidents (ledger #30 + today's 44-alloc re-enable
+    # that made LIVE FIRING widget show signals for zero-capital non-user-1
+    # bots). No non-user-1 code path should ever create portfolios/allocations
+    # again. Early-return if user_id != 1 — the caller sees an empty list and
+    # skips the loop. Existing user_1 flow is untouched.
+    if user_id != 1:
+        return []
     """Create missing StrategyPortfolio rows, create/activate BotAllocations, bind them.
 
     2026-08-20 (ledger #42 followup + Brock work order Phase A): single-tenant
