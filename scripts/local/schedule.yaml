@@ -48,6 +48,12 @@ jobs:
     catchup: true
     description: "One-glance Monday morning brief: regime + hygiene + top 3 actions"
 
+  # ── Options setup scanner ─────────────────────────────────────────
+  - name: job_options_setup_scanner
+    cron: "0 10,13 * * 1-5"       # 10am + 1pm ET, M-F
+    catchup: true
+    description: "TA-driven options setup scanner (RSI, MACD, Bollinger). Writes report + JSONL log. No execution."
+
   # ── On-demand only (not scheduled) ─────────────────────────────────
   # These can be invoked manually via `python scripts/local/<name>.py`
   # - job_rule_scorecard       # runs decision-rules scorecard

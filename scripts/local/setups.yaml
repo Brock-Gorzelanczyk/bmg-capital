@@ -1,0 +1,122 @@
+# Technical options setup definitions.
+#
+# Each setup has:
+#   - name: human-readable id
+#   - universe: list of underlyings to scan
+#   - timeframe: 1Day | 1Hour | 15Min | 5Min
+#   - condition: expression (python) on the LATEST bar with indicators available.
+#                Available vars: close, open, high, low, volume, rsi_14, macd, macd_signal,
+#                macd_hist, bb_upper, bb_lower, bb_pct_b, bb_bandwidth, vwap, atr_14,
+#                sma_20, sma_50, ema_20, ema_50, stoch_k, stoch_d.
+#                Also available: prev_close, prev_rsi_14, etc. (one bar back).
+#   - action:
+#       type: buy_call | buy_put | sell_call | sell_put
+#       target_dte: days-to-expiration to target
+#       target_delta: option delta to select (positive for calls, positive input for puts too)
+#       size_usd: max premium to spend (or margin for shorts)
+#       exit_target_pct: profit target as % of premium
+#       exit_stop_pct: stop loss as % of premium
+#       exit_time_stop_hours: time-based stop
+#   - thesis: rationale (for logging + interview prep)
+
+setups:
+
+  - name: rsi_oversold_bull_reversal
+    universe: [SPY, QQQ, IWM, DIA]
+    timeframe: 1Day
+    condition: "rsi_14 < 30 and close > prev_close"
+    action:
+      type: buy_call
+      target_dte: 30
+      target_delta: 0.30
+      size_usd: 200
+      exit_target_pct: 50
+      exit_stop_pct: 40
+      exit_time_stop_hours: 168  # 7 days
+    thesis: |
+      Classic Wilder oversold reversal. When RSI(14) < 30 AND the bar closes higher than
+      previous close, momentum is inflecting. Buy a 30-delta call at ~30 DTE — enough
+      time value to survive a slow rally, moderate delta for participation. Stop 40%
+      (respect prospect theory - loss-aversion), target 50% (positive 1.25R minimum).
+
+  - name: rsi_overbought_bear_reversal
+    universe: [SPY, QQQ, IWM, DIA]
+    timeframe: 1Day
+    condition: "rsi_14 > 70 and close < prev_close"
+    action:
+      type: buy_put
+      target_dte: 30
+      target_delta: 0.30
+      size_usd: 200
+      exit_target_pct: 50
+      exit_stop_pct: 40
+      exit_time_stop_hours: 168
+    thesis: |
+      Mirror of the oversold setup. RSI > 70 with a lower close = distribution.
+      Buy a 30-delta put at 30 DTE. Same risk/reward math (1.25R minimum).
+
+  - name: macd_bullish_cross_above_sma50
+    universe: [SPY, QQQ, IWM, AAPL, MSFT, NVDA, GOOGL, AMZN, META]
+    timeframe: 1Day
+    condition: "macd > macd_signal and prev_macd <= prev_macd_signal and close > sma_50"
+    action:
+      type: buy_call
+      target_dte: 45
+      target_delta: 0.35
+      size_usd: 250
+      exit_target_pct: 60
+      exit_stop_pct: 35
+      exit_time_stop_hours: 240  # 10 days
+    thesis: |
+      MACD histogram flipping positive above the 50-day SMA is a trend-continuation
+      buy signal (Appel 2005). Longer DTE (45) and slightly higher delta (35) for
+      more meaningful directional participation. 60/35 target/stop = 1.7R minimum.
+
+  - name: macd_bearish_cross_below_sma50
+    universe: [SPY, QQQ, IWM, AAPL, MSFT, NVDA, GOOGL, AMZN, META]
+    timeframe: 1Day
+    condition: "macd < macd_signal and prev_macd >= prev_macd_signal and close < sma_50"
+    action:
+      type: buy_put
+      target_dte: 45
+      target_delta: 0.35
+      size_usd: 250
+      exit_target_pct: 60
+      exit_stop_pct: 35
+      exit_time_stop_hours: 240
+    thesis: |
+      Mirror of the bullish MACD cross. Trend-continuation put.
+
+  - name: bollinger_squeeze_breakout_up
+    universe: [SPY, QQQ, IWM]
+    timeframe: 1Day
+    # Squeeze = bandwidth in bottom 20% of trailing 60 days; breakout = close above upper band
+    condition: "bb_bandwidth < bb_bandwidth_pctile20 and close > bb_upper and prev_close <= bb_upper"
+    action:
+      type: buy_call
+      target_dte: 21
+      target_delta: 0.40
+      size_usd: 200
+      exit_target_pct: 80
+      exit_stop_pct: 40
+      exit_time_stop_hours: 96  # 4 days — squeeze breakouts either work fast or fail
+    thesis: |
+      Bollinger squeeze breakouts (Bollinger 2001) — volatility compression followed
+      by a directional break. Higher delta (40) for participation. Wide profit target
+      (80%) because squeezes can produce large moves; tight time stop (4 days) because
+      false breakouts fade quickly.
+
+  - name: bollinger_squeeze_breakout_down
+    universe: [SPY, QQQ, IWM]
+    timeframe: 1Day
+    condition: "bb_bandwidth < bb_bandwidth_pctile20 and close < bb_lower and prev_close >= bb_lower"
+    action:
+      type: buy_put
+      target_dte: 21
+      target_delta: 0.40
+      size_usd: 200
+      exit_target_pct: 80
+      exit_stop_pct: 40
+      exit_time_stop_hours: 96
+    thesis: |
+      Mirror bollinger squeeze breakout to the downside.
