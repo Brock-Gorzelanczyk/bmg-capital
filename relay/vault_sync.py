@@ -101,6 +101,28 @@ def fetch(path: str, *, accept_404: bool = False) -> dict | None:
         return None
 
 
+def post_ping() -> bool:
+    """POST /admin/vault-sync-ping — I28 freshness signal. Returns True on success."""
+    body = json.dumps({"git_commit_sha": None, "git_pushed": False}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{API}/api/admin/vault-sync-ping",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {_get_token()}",
+            "Content-Type": "application/json",
+            "User-Agent": "bmg-vault-sync/1.0",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+            return bool(data.get("ok"))
+    except Exception as exc:
+        sys.stderr.write(f"[vault-sync] ping failed: {type(exc).__name__}: {exc}\n")
+        return False
+
+
 def write_if_changed(dest: Path, content: str) -> bool:
     """Write content to dest; return True if file was created or changed."""
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -242,6 +264,7 @@ def main() -> int:
         f"[vault-sync] starting — api={API[:60]} vault={VAULT_ROOT} interval={POLL_INTERVAL}s\n"
     )
 
+    ping_ok_count = 0
     while True:
         try:
             j = sync_strategy_journals()
@@ -251,6 +274,10 @@ def main() -> int:
                     f"[vault-sync] synced: journals={j['strategy_journal_files_written']} "
                     f"audit={a['daily_audit_files_written']}\n"
                 )
+            if post_ping():
+                ping_ok_count += 1
+                if ping_ok_count % 12 == 1:
+                    sys.stderr.write(f"[vault-sync] I28 ping ok (cycle {ping_ok_count})\n")
         except Exception as exc:
             sys.stderr.write(f"[vault-sync] cycle error: {type(exc).__name__}: {exc}\n")
         time.sleep(POLL_INTERVAL)
