@@ -48,6 +48,11 @@ jobs:
     catchup: true
     description: "One-glance Monday morning brief: regime + hygiene + top 3 actions"
 
+  - name: job_skfolio_hrp_shadow
+    cron: "30 8 * * 0"            # 8:30am ET Sunday
+    catchup: true
+    description: "HRP/HERC/RiskBudgeting shadow allocator — diff vs live risk-parity for judgment"
+
   # ── Options setup scanner ─────────────────────────────────────────
   - name: job_options_setup_scanner
     cron: "0 10,13 * * 1-5"       # 10am + 1pm ET, M-F

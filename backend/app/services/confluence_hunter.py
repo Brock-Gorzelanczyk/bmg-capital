@@ -463,6 +463,10 @@ def _log_and_arm_pick(pick: Dict[str, Any], spy_cents: int, db: Session) -> Dict
     else:
         return {"ticker": ticker, "pick_id": row.id, "action": "SKIP_no_valid_trigger"}
 
+    # Debate size multiplier: 1.0 (APPROVE), 0.5 (APPROVE_REDUCED). 0.0/VETO already dropped upstream.
+    size_mult = float(pick.get("size_multiplier", 1.0))
+    size_usd = int(round(DEFAULT_POSITION_SIZE_USD * size_mult))
+
     row.arm_state = "ARMED"
     row.play_a_trigger_price_cents = ppa
     row.play_a_stop_price_cents = psa
@@ -470,7 +474,7 @@ def _log_and_arm_pick(pick: Dict[str, Any], spy_cents: int, db: Session) -> Dict
     row.play_b_trigger_price_cents = ppb
     row.play_b_stop_price_cents = psb
     row.target_1_cents = target_cents
-    row.size_dollars_cents = DEFAULT_POSITION_SIZE_USD * 100
+    row.size_dollars_cents = size_usd * 100
     db.commit()
 
     return {
@@ -481,7 +485,9 @@ def _log_and_arm_pick(pick: Dict[str, Any], spy_cents: int, db: Session) -> Dict
         "entry_price": entry_price,
         "target": target_price,
         "invalidation": invalidation_price,
-        "size_usd": DEFAULT_POSITION_SIZE_USD,
+        "size_usd": size_usd,
+        "size_multiplier": size_mult,
+        "debate_verdict": pick.get("debate", {}).get("risk_officer_verdict", "N/A"),
     }
 
 
@@ -591,6 +597,21 @@ def run_hunt(dry_run: bool = False) -> Dict[str, Any]:
             result["error"] = f"LLM call failed: {e}"
             return result
         result["llm_picks_returned"] = len(picks)
+
+        # 3b. Multi-agent debate — bull/bear/risk_officer over each pick.
+        # VETO drops the pick; APPROVE_REDUCED halves position size at arm time.
+        # See research/43-vibe-trading-agent.md.
+        try:
+            from app.services.confluence_debate import debate_batch
+            picks_before = len(picks)
+            picks = debate_batch(picks)
+            result["debate_survivors"] = len(picks)
+            result["debate_vetoed"] = picks_before - len(picks)
+        except Exception as e:
+            logger.exception("[confluence_hunter] debate failed — passing raw picks: %s", e)
+            for p in picks:
+                p.setdefault("size_multiplier", 1.0)
+            result["debate_error"] = str(e)[:200]
 
         # 4. Log + arm each pick
         spy_cents = _get_spy_price_cents()
