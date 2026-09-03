@@ -53,6 +53,11 @@ jobs:
     catchup: true
     description: "HRP/HERC/RiskBudgeting shadow allocator — diff vs live risk-parity for judgment"
 
+  - name: job_13d_screener
+    cron: "30 18 * * 1-5"         # 6:30pm ET, M-F (after SEC EDGAR daily index)
+    catchup: true
+    description: "SEC Schedule 13D activist filings from CIK whitelist → candidate list in vault"
+
   # ── Options setup scanner ─────────────────────────────────────────
   - name: job_options_setup_scanner
     cron: "0 10,13 * * 1-5"       # 10am + 1pm ET, M-F
