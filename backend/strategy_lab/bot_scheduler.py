@@ -259,8 +259,110 @@ def setup_bot_scheduler(scheduler) -> None:
       stock_lt     — first Tuesday of each month, 10:00 AM ET
       crypto_swing — every 4 hours (24/7)
       crypto_lt    — Monday 10:00 AM UTC (weekly DCA)
+
+    2026-09-09 COST CUT (Railway $107 spike, redux):
+      When RAILWAY_ROLE=executor_only, only Category A (safety + real-time
+      execution) jobs register. Category B (digests, backtests, analytics,
+      dormant strategy bots) are skipped — they belong on the local Mac
+      per §L1 rule. Implemented as a monkey-patch to avoid touching all
+      93 add_job call sites.
     """
     logger.warning("[startup-trace] setup_bot_scheduler called — registering bot jobs")
+
+    # ------------------------------------------------------------------
+    # 2026-09-09 EXECUTOR_ONLY gate — patch scheduler.add_job with an
+    # allowlist. Any add_job whose id is not in CATEGORY_A_JOBS is a no-op.
+    # ------------------------------------------------------------------
+    RAILWAY_ROLE = os.environ.get("RAILWAY_ROLE", "full").lower()
+    EXECUTOR_ONLY = RAILWAY_ROLE == "executor_only"
+
+    # Category A = must run on Railway (safety, heartbeats, real-time execution,
+    # position monitors, cash/market-open gates, container lifecycle, kill-switches).
+    # Anything not listed here is Category B and should run locally via
+    # scripts/local/run.py + schedule.yaml.
+    CATEGORY_A_JOBS = {
+        # heartbeats & health
+        "bot_heartbeat_stock_rth",
+        "bot_health_watchdog",
+        "fleet_heartbeat",
+        "fleet_sentinel",
+        "data_quality_watcher",
+        "cooldown_storm_check_rth",
+        "resume_check",
+        # safety kill-switches
+        "dead_mans_switch",
+        "defensive_halt_check",
+        "risk_sentinel",
+        "risk_sentinel_premarket",
+        "risk_sentinel_postclose",
+        "execution_auditor",
+        # cash / market-open real-time
+        "cash_floor",
+        "cash_floor_open",
+        "cash_floor_close",
+        "pre_open_readiness",
+        "market_open_check",
+        "pre_market_book",
+        # position monitors (reactive to open positions)
+        "position_monitor",
+        "bot_stock_day_position_monitor",
+        "bot_stock_swing_position_monitor",
+        # real-time price / websockets
+        "alpaca_ws_sync_held",
+        "price_alert_monitor_market",
+        "price_alert_monitor_close",
+        # container lifecycle
+        "nightly_restart",
+        "quiet_mode_startup_notice",
+        # cross-position dedup safety
+        "quarantine_dupes_periodic",
+        # queen orchestrator (drives Category A decisions)
+        "queen",
+        "queen_morning",
+        "queen_regime_alert_check",
+    }
+
+    if EXECUTOR_ONLY:
+        _original_add_job = scheduler.add_job
+        _skipped: list[str] = []
+        _registered: list[str] = []
+
+        def _gated_add_job(*args, **kwargs):
+            job_id = kwargs.get("id", "")
+            if job_id in CATEGORY_A_JOBS:
+                _registered.append(job_id)
+                return _original_add_job(*args, **kwargs)
+            _skipped.append(job_id)
+            return None
+
+        scheduler.add_job = _gated_add_job  # type: ignore[assignment]
+        logger.warning(
+            "[EXECUTOR_ONLY] add_job gate active — Category A allowlist has "
+            "%d entries; Category B jobs will be skipped",
+            len(CATEGORY_A_JOBS),
+        )
+
+        # Sentinel at end of setup — log summary so we can verify from Railway logs.
+        def _emit_gate_summary():
+            logger.warning(
+                "[EXECUTOR_ONLY] setup complete: registered=%d skipped=%d "
+                "registered_ids=%s skipped_ids=%s",
+                len(_registered), len(_skipped),
+                sorted(set(_registered)), sorted(set(_skipped)),
+            )
+        # We'll call _emit_gate_summary at the end of this function via a schedule
+        # trick: register it as a one-shot at now+1s so it fires after everything
+        # else is set up. Using the ORIGINAL add_job so the gate doesn't skip it.
+        from datetime import timedelta as _td
+        _original_add_job(
+            _emit_gate_summary,
+            "date",
+            run_date=datetime.utcnow() + _td(seconds=2),
+            id="executor_only_gate_summary",
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=30,
+        )
 
     # ------------------------------------------------------------------
     # stock_swing: 4:05 PM ET, Mon-Fri
