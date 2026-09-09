@@ -14,6 +14,7 @@ REQUIRED reads every session (non-negotiable):
 - context/09-realized-pnl-rebuild-spec.md (approved active spec — read if session task is realized-P&L or leaderboard math)
 - context/10-roadmap.md (goals, standing decisions, strategy pipeline — WHY the ledger looks the way it does)
 - research/**/*.md (added 2026-08-20 per Brock: distilled academic literature; use these when reasoning about strategy, alpha sources, or bot design. Skim `00-INDEX.md`'s RESEARCH NOTES section for titles+one-liners, then deep-read anything relevant to the current task.)
+- reference/quant-stack/00-index.md (added 2026-09-09: the tools-and-methodology reference layer. Before recommending ANY tooling or methodology, check whether the vault already has a decided position. `gap-analysis.md` ranks methodology holes worst-first; `graveyard.md` lists DEAD entries never to re-evaluate. Every derived note cites the ingest SHA it came from.)
 
 Task-specific reads:
 - Writing a paste-ready → skills/01-paste-ready-format.md
