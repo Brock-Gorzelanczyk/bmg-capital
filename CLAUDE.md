@@ -68,6 +68,80 @@ Adding a stronger rule to a discipline that has already failed twice is doing th
 
 Rules that are load-bearing on human memory are technical debt. Convert them.
 
+## VAULT DISCIPLINE: PROVENANCE AND FRAMEWORK CONTROL (added 2026-09-10)
+
+Applies to every research output, pitch, memo, or analysis containing quantitative claims about a company, market, or security. Non-negotiable. Session-inheriting. Postmortem: `postmortems/2026-09-10-vault-framework-fabrication.md`.
+
+### Rule 1. The vault is not a source of facts.
+The vault MAY supply: methods, frameworks, prior conclusions, reading notes, decision rules, pointers to primary sources. The vault MAY NEVER supply: a number about a company, a market, or a security. Every quantitative claim in any output must trace to a primary source read in THIS session — SEC filing, earnings release, transcript, exchange or data-provider record. If a number cannot be traced to a primary source in the current session, it does not go in the document. Not with a hedge, not with "approximately," not in a range. It is omitted and its absence is noted.
+
+### Rule 2. Every output ships with a provenance table.
+Alongside any research deliverable, produce `<deliverable>-sources.md`:
+```
+| Claim | Value | Source document | Location | Retrieved |
+```
+One row per quantitative claim. "Location" means page/table/section, not just document name. Derived values show the arithmetic and cite every input. Document is not complete until every number in it appears in the table. Automation gate: `scripts/vault_provenance_check.py <path>` — exits non-zero if the sources file is missing OR has fewer rows than the document has numeric literals. Run before shipping.
+
+### Rule 3. Basis consistency.
+Every financial figure carries a basis: GAAP vs adjusted, fiscal vs calendar, consolidated vs proportionate, gross vs net, trailing vs forward. State the basis for every figure. Never mix bases within a comparison or series. A YoY growth rate computed across two different bases is not a conservative estimate, it is a wrong number.
+
+### Rule 4. Frameworks are servants.
+Do not select a framework and then find content for it — that inversion reliably produces documents that feel rigorous and contain nothing. Before applying any structure from the vault, state in one sentence why it fits THIS subject. If you cannot, do not use it. A framework component that does not produce an actionable conclusion must be cut, not padded. Ship test: does this document contain at least one specific claim a knowledgeable reader could disagree with? If no, it has not said anything.
+
+### Rule 5. Never regenerate an existing deliverable.
+When a prior version exists, you EDIT it. Required procedure:
+1. Read the prior version in full before writing anything.
+2. List its load-bearing arguments explicitly. Identify the differentiated insight — the claim not available from consensus.
+3. Any new version must PRESERVE that insight or explicitly argue why it was wrong. Silently dropping it is a defect.
+4. Diff every number against the prior version. Any changed figure is either (a) a correction with source and old-was-wrong statement, or (b) a regression that reverts.
+5. Report the diff before shipping: added, cut, changed, with justification for each.
+
+### Rule 6. Conflicts are the most valuable output.
+When new primary-source reading contradicts something in the vault, surface it explicitly, update the vault note, record what changed and why. Never silently overwrite. Never silently keep the stale version.
+
+### Rule 7. Source hierarchy (added 2026-09-10 postmortem `check-failed-then-narrated-over.md`)
+
+Every provenance row records a source TIER. The check enforces set-equality on markers AND rejects claims sourced only from BANNED or unpaired-TIER3.
+
+- **TIER1** — SEC filings, earnings releases, transcripts, company IR materials, exchange or broker records. Fact.
+- **TIER2** — named third-party research with a dated document (Valens tearsheet, sell-side reports, rating agency releases). Cite as OPINION with attribution, never as fact.
+- **TIER3** — aggregators (stockanalysis.com, Yahoo Finance, Wikipedia). Usable only to LOCATE a TIER1 figure. Any TIER3 claim without a paired TIER1 confirmation row is CUT.
+- **BANNED** — any vault document (v1/v2/case study/CLAUDE.md/prior research notes), model-generated summaries. Rows with BANNED tier fail the check. If a vault note contains a number, go read the filing it came from and cite that.
+
+A document whose surviving claims are majority TIER2 is a summary of other people's work. It must declare `document_type: summary` in its frontmatter or the check fails.
+
+### Rule 8. Banned phrases in completion reports (added 2026-09-10 same postmortem)
+
+The following phrases assert verification. They may not be used unless (a) a specific human is named AND (b) the review is timestamped in the same message:
+
+- "human review confirms"
+- "verified by inspection"
+- "manual audit passed"
+- "checked and correct"
+- equivalents
+
+Otherwise the phrase is treated as fabricated verification — the same class as an uncited number. This rule exists because on 2026-09-10 the phrase "human review confirms" was used to close a failing provenance check that no human had reviewed.
+
+### Rule 9. Provider-export integrity check (added 2026-09-10 after screen 67 failure)
+
+`vault_provenance_check.py` verifies `document ↔ sources` linkage. It does NOT verify `sources ↔ declared filter definition` — i.e., whether an underlying data-provider export actually satisfies the screen it was supposed to apply. That's a distinct check that also has to pass.
+
+Any research note built on a data-provider EXPORT (FactSet screen, Bloomberg download, Sentieo, etc.) must include a passing integrity-check log as part of provenance:
+
+- `scripts/screen_integrity_check.py` — validates that declared FILTERS actually hold in every delivered row, that column coverage meets threshold, that headers are unique, that no column is entirely empty
+- Log saved as `data/<deliverable-slug>-integrity-<date>.log`
+- If integrity check fails, the note ships as `status: DRAFT` in frontmatter and the failures are surfaced in the note itself (like `research/67` after the FactSet screen delivered rows that violated the mcap and FCF filters)
+
+**Reference incident:** 2026-09-10 note 67 shipped with `document ↔ sources` clean (provenance check exit 0) but the underlying FactSet export had 64 mcap-band violations, 21 FCF violations, 50% GICS Sector coverage, and duplicate empty columns. Four of the top 20 candidates in the ranking were not legitimately in the strategy universe. `screen_integrity_check.py` catches this class.
+
+### Enforcement pattern (same three-layer as §W1 provenance)
+1. **Rule (this section)** — discipline text.
+2. **Artifact (`-sources.md` + integrity log)** — required companion files per deliverable, with per-row TIER field and inline marker IDs (`[V14]`) in the document.
+3. **Automation** — TWO gates now:
+   - `scripts/vault_provenance_check.py` — set-equality gate. Every marker in the document must resolve to a row. Every row must be referenced. No BANNED tiers. No unpaired TIER3. Exit 0 or the document is not shippable.
+   - `scripts/screen_integrity_check.py` — filter-satisfaction gate for provider exports. Exit 0 means the export cleanly satisfies the declared screen. Exit non-zero means the deliverable ships as DRAFT with failures surfaced in-note.
+   There is no path where nonzero exit is explained and the work is declared complete.
+
 ## ATTRIBUTION DOCTRINE
 
 ### A1. broker_orphan_catchall is legitimate design — do not remove (added 2026-08-20)
