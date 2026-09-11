@@ -142,6 +142,40 @@ Any research note built on a data-provider EXPORT (FactSet screen, Bloomberg dow
    - `scripts/screen_integrity_check.py` — filter-satisfaction gate for provider exports. Exit 0 means the export cleanly satisfies the declared screen. Exit non-zero means the deliverable ships as DRAFT with failures surfaced in-note.
    There is no path where nonzero exit is explained and the work is declared complete.
 
+## SOURCING DISCIPLINE (added 2026-09-11 — postmortem `postmortems/2026-09-11-note-002-outside-review.md`)
+
+Three claim classes were each falsified by outside review on 2026-09-11, all in one note. Each has a workflow gate; "be more careful" is not one of them (§V8: twice-failed rules become automation, not stronger words).
+
+### Rule S1. Competitive-exposure claims require the subject company's own disclosure.
+
+Any claim about what a company does, does not do, or is exposed to — competitive position, product mix, revenue mix, geographic exposure, customer concentration, segment split — requires a citation to that company's own segment, fleet, or revenue-mix disclosure. **A peer's characterisation, an inference from industry data, or a derived share does not satisfy it.**
+
+Failure mode this closes: FALS-01 (2026-09-11) inferred "GATX does not compete in commodity cars" from FreightCar America's Q2 order share. GATX's own 2026 Company Overview (which was open in the session) reported covered hoppers as 40.2% of the fleet — the single largest freight exposure. The claim inverted the reality.
+
+Gate: for any competitive-exposure sentence, the sources file row must cite the SUBJECT company's own disclosure. If it cites a peer's or an industry aggregate, the sentence does not ship.
+
+### Rule S2. Cross-company metric comparisons require both definitions in the sources file BEFORE the comparison sentence is written.
+
+Any sentence that compares two companies' metrics (renewal rates, utilization, margin, coverage ratios, growth rates, ratios of any kind) requires both metrics' definitions **quoted from the respective filings and written into the sources file before the comparison sentence is written.** The sentence is not written until the definition rows exist.
+
+Failure mode this closes: FALS-02 and FALS-03 (2026-09-11) compared GATX's LPI (12-month trailing average of realized renewals, backward-looking) to Trinity's FLRD (forward-looking implied rate for the next four quarters). Non-overlapping windows, opposite direction of information. Both definitions were in the source documents being cited; neither was quoted in the note.
+
+Gate: cross-company comparison sentence requires two `TIER1` rows in the sources file — one per metric — where the row's Claim field is the metric definition quoted from the filing. If both rows are not present, the sentence does not ship.
+
+### Rule S3. Incentive attributions require a verbatim quote and named speaker in the sources file.
+
+Before characterising any source's incentive, credibility, motive, or agenda ("sponsored research", "conflict of interest", "management guidance is conservative", "analyst is talking their book"), a verbatim quote of the source's claim plus the named speaker/author must be recorded in the sources file. **No incentive argument without an attributed quote.**
+
+Failure mode this closes: FALS-08 (2026-09-11) attributed a 34,000-unit 2027 forecast to "research sponsored by a manufacturer" and a sub-25,000 figure to "a manufacturer with no such incentive". The attribution was inverted — the 34K was Sidoti's own independent estimate; the sub-25K came from Greenbrier management. Both attributions were plainly named in consecutive sentences of the source paragraph.
+
+Gate: incentive-framing sentence requires a `TIER1` or `TIER2` row in the sources file whose Claim field contains the verbatim quote plus attributed speaker. If the row is not present, the incentive framing is cut and only the forecast itself is reported.
+
+### Enforcement pattern (same three-layer as Rule 7)
+
+1. **Rule (this section).** Non-negotiable, session-inheriting.
+2. **Artifact.** The sources file rows required by S1/S2/S3 are the artifact — no separate document.
+3. **Automation.** If any of S1-S3 recurs after this session, the third-instance response is a pre-ship script that greps the note for claim-class markers and refuses the ship if the required companion row is not present in the sources file. §V8 applies.
+
 ## ATTRIBUTION DOCTRINE
 
 ### A1. broker_orphan_catchall is legitimate design — do not remove (added 2026-08-20)

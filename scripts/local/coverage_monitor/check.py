@@ -91,6 +91,29 @@ CLUSTER_WINDOW_DAYS = 30
 CLUSTER_MIN_INSIDERS = 3
 STALE_THESIS_DAYS = 60
 
+# Watch-tier tickers: covered by the monitor's filing-fetch loop but never
+# generate SAFETY alerts. Their filings and insider activity are surfaced in
+# the report so the analyst can read them, but new material filings on these
+# tickers do not fire the individual-alert path. Rationale: these are peers /
+# industry proxies for open calls, not calls themselves.
+#
+# Added 2026-09-11 per the GATX / rail intake:
+#   TRN  — Trinity Industries, peer railcar lessor + manufacturer
+#   GBX  — Greenbrier Companies, peer railcar manufacturer
+#   RAIL — FreightCar America, peer railcar manufacturer (the tank retrofit call)
+#
+# See /research/coverage/rail/ subject notes for the reason each is watched.
+WATCH_TIER_TICKERS = {"TRN", "GBX", "RAIL"}
+
+# Quarterly reminders: printed once per quarter when the monitor runs after
+# the given month-day. Purpose: nudge the analyst to pull specific series
+# that drive kill criteria on OPEN calls but that the monitor cannot auto-
+# fetch. Added 2026-09-11 alongside GATX call kill-criteria replacement.
+QUARTERLY_REMINDERS = [
+    ("GATX", "Pull GATX LPI (Q result) against management-guided range. Kill trigger: LPI < +10% or two consecutive misses of guidance."),
+    ("GATX", "Pull AAR weekly chemicals + petroleum carload series (year-to-date, week 32 baseline). Kill trigger: both negative Y/Y."),
+]
+
 
 @dataclass
 class InsiderTxn:
@@ -118,10 +141,11 @@ class Ticker:
     new_filings: list[dict] = field(default_factory=list)
     insider_txns: list[InsiderTxn] = field(default_factory=list)
     new_insider_txns: list[InsiderTxn] = field(default_factory=list)
+    is_watch_tier: bool = False  # True for peers watched without alerts
 
 
 def load_covered_tickers() -> list[Ticker]:
-    """Read vault research/ for OPEN v2 calls."""
+    """Read vault research/ for OPEN v2 calls, plus watch-tier peer tickers."""
     out = []
     for path in sorted(NOTES_DIR.rglob("*.md")):
         text = path.read_text(encoding="utf-8")
@@ -144,10 +168,26 @@ def load_covered_tickers() -> list[Ticker]:
         pub = fm.get("published_at")
         t.published_at = pub if isinstance(pub, str) else (pub.isoformat() if pub else "")
         out.append(t)
+    # Watch-tier peer tickers: fetched + surfaced but never fire SAFETY alerts.
+    covered_syms = {t.symbol for t in out}
+    for sym in sorted(WATCH_TIER_TICKERS):
+        if sym in covered_syms:
+            continue
+        wt = Ticker(
+            symbol=sym,
+            note_path=Path(f"<watch-tier peer: {sym}>"),
+            thesis=f"Watch-tier peer for the rail coverage cluster. See /research/coverage/rail/.",
+        )
+        wt.is_watch_tier = True
+        out.append(wt)
     return out
 
 
 def fill_git_metadata(t: Ticker) -> None:
+    if t.is_watch_tier:
+        # No vault note → no git history → no staleness signal.
+        t.last_update_at = "(watch-tier peer)"
+        return
     try:
         rel = t.note_path.relative_to(VAULT)
         cmd = ["git", "-C", str(VAULT), "log", "-1", "--format=%aI", "--", str(rel)]
@@ -381,7 +421,16 @@ def build_report(tickers: list[Ticker]) -> tuple[str, list[str]]:
     per_ticker_summary_lines: dict[str, list[str]] = {}
 
     for t in tickers:
-        # Safety-tier filing alerts
+        # Watch-tier peers: filings and insider activity are surfaced in the
+        # report body but never fire individual alerts. The rationale is that
+        # these are peers to open calls, not calls themselves — we want to
+        # read their filings, not be paged by them.
+        if t.is_watch_tier:
+            insider_alerts, insider_summary = summarize_insider_activity(t)
+            # Discard insider_alerts (watch tier) — keep only the summary line
+            per_ticker_summary_lines[t.symbol] = insider_summary
+            continue
+        # Safety-tier filing alerts (open-call tickers only)
         for f in t.new_filings:
             if f["form"] in SAFETY_FORMS:
                 alerts.append(f"NEW {f['form']}: {t.symbol} filed on {f['filed']} — "
@@ -407,9 +456,20 @@ def build_report(tickers: list[Ticker]) -> tuple[str, list[str]]:
         lines.append("## No alerts.")
         lines.append("")
 
-    lines.append(f"## Covered tickers ({len(tickers)})")
+    # Quarterly reminders — printed once at the top of the report so the
+    # analyst sees them alongside alerts and cannot miss them.
+    if QUARTERLY_REMINDERS:
+        lines.append("## Quarterly reminders")
+        lines.append("")
+        for sym, msg in QUARTERLY_REMINDERS:
+            lines.append(f"- **{sym}** — {msg}")
+        lines.append("")
+
+    open_calls = [t for t in tickers if not t.is_watch_tier]
+    watch_tier = [t for t in tickers if t.is_watch_tier]
+    lines.append(f"## Open calls ({len(open_calls)})")
     lines.append("")
-    for t in tickers:
+    for t in open_calls:
         lines.append(f"### {t.symbol} — CIK {t.cik_padded or '(unresolved)'}")
         lines.append(f"- Note: `{t.note_path.relative_to(VAULT)}`")
         thesis_short = t.thesis[:120] + ("…" if len(t.thesis) > 120 else "")
@@ -429,6 +489,23 @@ def build_report(tickers: list[Ticker]) -> tuple[str, list[str]]:
         for line in per_ticker_summary_lines.get(t.symbol, []):
             lines.append(line)
         lines.append("")
+
+    if watch_tier:
+        lines.append(f"## Watch-tier peers ({len(watch_tier)}) — surfaced, not alerted")
+        lines.append("")
+        for t in watch_tier:
+            lines.append(f"### {t.symbol} — CIK {t.cik_padded or '(unresolved)'}")
+            lines.append(f"- Watch-tier peer (see /research/coverage/rail/)")
+            lines.append(f"- Recent safety-tier filings (last 8):")
+            safety_recent = [f for f in t.recent_filings if f["form"] in SAFETY_FORMS][:8]
+            if not safety_recent:
+                lines.append("    (none)")
+            else:
+                for f in safety_recent:
+                    lines.append(f"    - {f['filed']}: {f['form']}")
+            for line in per_ticker_summary_lines.get(t.symbol, []):
+                lines.append(line)
+            lines.append("")
 
     return "\n".join(lines), alerts
 
